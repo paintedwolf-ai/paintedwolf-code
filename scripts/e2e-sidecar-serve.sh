@@ -16,12 +16,12 @@ DB_PATH="${STATE_DIR}/lycaon.db"
 
 SOURCE_CONFIG="${LYCAON_CONFIG_DIR:-}"
 case "${LYCAON_HARNESS_MODE:-}" in
-  mock|manual)
+  manual)
     SOURCE_CONFIG="${DIR}/harness/device-config"
     ;;
-  "")
-    # Mock runs need a provider with static models, not this machine's settings.
-    if [[ -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ]]; then
+  mock|"")
+    # Mock runs need a provider discovery can answer, not this machine's settings.
+    if [[ "${LYCAON_HARNESS_MODE:-}" == mock || ( -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ) ]]; then
       SOURCE_CONFIG="${ROOT}/lycaon/test/fixtures/e2e/config"
       MODEL_FIXTURE=1
     fi
