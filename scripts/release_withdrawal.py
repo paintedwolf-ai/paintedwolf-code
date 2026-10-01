@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.request
 
-from release_distribution import cask_version, require_publishable, wait_for_website
+from release_distribution import PUBLIC_READ_HEADERS, cask_version, require_publishable, wait_for_website
 from release_semver import parse
 
 
@@ -35,7 +35,7 @@ def api(token: str, endpoint: str, method: str = "GET", body: dict | None = None
 
 def download(key: str) -> bytes:
     url = os.environ["DOWNLOAD_BASE_URL"].rstrip("/") + "/" + key
-    request = urllib.request.Request(url, headers={"Cache-Control": "no-cache, no-store"})
+    request = urllib.request.Request(url, headers=PUBLIC_READ_HEADERS)
     with urllib.request.urlopen(request, timeout=30) as response:
         value = response.read(2 * 1024 * 1024 + 1)
         if len(value) > 2 * 1024 * 1024:
