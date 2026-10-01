@@ -510,6 +510,9 @@ tasks:
       - 'src/**/*.{ts,tsx}'
       - eslint.config.js
       - package.json
+    env:
+      # Type-aware linting outgrows Node's default heap on 7 GB hosted runners.
+      NODE_OPTIONS: --max-old-space-size=4096
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
