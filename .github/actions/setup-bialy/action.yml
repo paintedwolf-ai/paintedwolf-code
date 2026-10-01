@@ -11,7 +11,8 @@ runs:
         set -euo pipefail
         SOURCE_DIR="$(mktemp -d "${RUNNER_TEMP}/bialy-download.XXXXXX")"
         trap 'rm -rf -- "${SOURCE_DIR}"' EXIT
-        HEADS_DIR="${RUNNER_TEMP}/bialy-heads"
+        # The default lookup location: verification receives only declared environment.
+        HEADS_DIR="$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")/decide-heads"
         MANIFEST=lycaon/config/packs/painted-wolf/platform/host/decision-release.json
         for HEAD in $(jq -r '.heads | keys[]' "${MANIFEST}"); do
           curl --fail --location --silent --show-error \
