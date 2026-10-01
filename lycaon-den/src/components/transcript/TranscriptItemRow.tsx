@@ -177,6 +177,20 @@ export function TranscriptItemRow(props: {
   const item = () => props.item();
   const layout = () => props.layout;
   const bubbleText = () => messageBubbleItem(item())?.text ?? "";
+  // Keyed host lookups stay memoized in the owner so a streaming update that
+  // leaves this row's message unchanged does not re-render it.
+  const chatKey = createMemo(() => {
+    if (layout() !== "chat") return undefined;
+    return (assistantChatItem(item()) ?? userChatItem(item()))?.key;
+  });
+  const wireRow = createMemo(() => {
+    const key = chatKey();
+    return key === undefined ? undefined : props.messageById().get(key);
+  });
+  const reviewTurn = createMemo(() => {
+    const key = chatKey();
+    return key === undefined ? null : props.reviewTurns().get(key) ?? null;
+  });
   return (
     <Switch>
       <Match when={layout() === "chat" ? draftChatItem(item()) : null}>
@@ -194,8 +208,6 @@ export function TranscriptItemRow(props: {
       </Match>
       <Match when={layout() === "chat" ? assistantChatItem(item()) : null}>
         {(assistant) => {
-          const wireRow = createMemo(() => props.messageById().get(assistant().key));
-          const reviewTurn = createMemo(() => props.reviewTurns().get(assistant().key) ?? null);
           return (
             <>
               <AssistantChatTurn
@@ -227,7 +239,7 @@ export function TranscriptItemRow(props: {
       </Match>
       <Match when={layout() === "chat" ? userChatItem(item()) : null}>
         {(user) => {
-          const wire = createMemo(() => props.messageById().get(user().key));
+          const wire = wireRow;
           const pending = () => {
             const row = user();
             return row.kind === "pending_user" ? row.pending : undefined;
