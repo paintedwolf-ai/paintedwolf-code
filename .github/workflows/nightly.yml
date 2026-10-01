@@ -49,6 +49,8 @@ jobs:
 
       - uses: ./.github/actions/setup-bialy
 
+      - uses: ./.github/actions/cache-decide
+
       - name: Build HEAD sidecar
         run: ./task build:lycaon-dev
 

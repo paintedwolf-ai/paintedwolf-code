@@ -58,6 +58,10 @@ jobs:
         with:
           native: ${{ matrix.native }}
 
+      # Native lanes build the Tauri shell, which stages the decision engine heads.
+      - uses: ./.github/actions/setup-bialy
+        if: ${{ matrix.native }}
+
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}
         env:
