@@ -52,7 +52,10 @@ jobs:
 
       - uses: ./.github/actions/setup-bialy
 
+      - uses: ./.github/actions/cache-decide
+
       - name: Build sidecar
+        timeout-minutes: 60
         run: ./task build:lycaon-dev
 
       - name: Boot upgrade corpus fixtures
@@ -105,6 +108,8 @@ jobs:
         uses: ./.github/actions/setup-opengrep
 
       - uses: ./.github/actions/setup-bialy
+
+      - uses: ./.github/actions/cache-decide
 
       - name: Build sidecar and provision pinned browser
         id: browser

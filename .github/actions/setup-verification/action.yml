@@ -50,6 +50,10 @@ runs:
       with:
         workspaces: lycaon-den/src-tauri
 
+    - name: Restore the decision engine build
+      if: runner.os == 'macOS'
+      uses: ./.github/actions/cache-decide
+
     - name: Set up maintained OpenGrep
       if: runner.os == 'macOS'
       uses: ./.github/actions/setup-opengrep
