@@ -347,12 +347,12 @@ deletion with bounded row counts. `./task test:stress` runs the 100,000-,
 one-million-, and ten-million-row source trees, the 50,000-message session
 tree, and a working year of 25,000 real editor saves with retained source
 history and three recovery captures. Its catalog recipe keeps packages and tests
-serial and allows 90 minutes per package before host-load scaling. Nightly and
-release workflows include this tier. Active fuzz exploration runs through
-`./task test:fuzz` in nightly and release verification, separately from
+serial and allows 90 minutes per package before host-load scaling. The nightly
+workflow includes this tier. Active fuzz exploration runs through
+`./task test:fuzz` in nightly verification, separately from
 `check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
 performance tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly and release verification; normal
+`./task den:test:transcript-scale` in nightly verification; normal
 Den suites exclude elapsed-time assertions while retaining memory and DOM bounds
 as ordinary correctness tests. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
@@ -413,8 +413,9 @@ hosted job partitions alongside the local recipes. The reusable
 into independent jobs with `fail-fast: false`. Each job invokes the existing
 `./task` entry point, preserving queue admission, source capture, and receipts.
 The planner rejects a `check` partition that omits or duplicates any stage of
-the local full gate. Tests require the release profile to contain that complete
-partition plus race, stress, fuzz, transcript scale, and both coverage gates.
+the local full gate. Tests require the release profile to run exactly that
+partition; race, stress, fuzz, transcript scale, and both coverage gates run
+nightly, which keeps a release to the gates that decide whether it ships.
 
 | Profile | Work and required result |
 |---|---|
