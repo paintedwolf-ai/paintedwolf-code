@@ -332,6 +332,28 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 		t.Fatalf("terminal show path must not render without terminal_snapshot; got %q", uiOnly)
 	}
 
+	deferred, err := engine.Render(ctx, ref, map[string]any{
+		"visual_show_available":        true,
+		"visual_show_terminal":         true,
+		"visual_show_needs_request":    true,
+		"profile_has_terminal_capture": true,
+		"agent_skills":                 listedSkills("verify-visual-change", "verify-terminal-change"),
+	})
+	testutil.FailErr(t, "render show partial with deferred page capture", err)
+	for _, want := range []string{"Snapshot the running UI", "Snapshot the terminal", "request_tools"} {
+		if !strings.Contains(deferred, want) {
+			t.Fatalf("deferred page capture path missing %q; got %q", want, deferred)
+		}
+	}
+	if strings.Contains(deferred, "verify-visual-change") {
+		t.Fatalf("deferred page capture must not teach page verification before the tools load; got %q", deferred)
+	}
+
+	none, err := engine.Render(ctx, ref, map[string]any{})
+	testutil.FailErr(t, "render show partial without capture routes", err)
+	if strings.TrimSpace(none) != "" {
+		t.Fatalf("show guidance must stay silent without a capture route; got %q", none)
+	}
 }
 
 func TestVisualShellAndOfferedProceduresKeepTerminalAndFloors(t *testing.T) {
@@ -433,10 +455,12 @@ func TestImplementerPersonaKeepsVisualDiscoveryAndEagerTerminalProcedure(t *test
 			t.Fatalf("implementer persona missing %q", want)
 		}
 	}
-	for _, unloaded := range []string{"Snapshot the running UI", "screenshots are not measurements"} {
-		if strings.Contains(got, unloaded) {
-			t.Fatalf("implementer persona teaches unloaded page tools: %q", unloaded)
-		}
+	if strings.Contains(got, "screenshots are not measurements") {
+		t.Fatal("implementer persona teaches unloaded page tools")
+	}
+	// Loadable page capture is asked for by need, not taught.
+	if !strings.Contains(got, "Snapshot the running UI") || !strings.Contains(got, "open the local page and capture it") {
+		t.Fatal("implementer persona must ask to load page capture for a built page")
 	}
 	// An unloaded page tool is behind the capability map, named and taught nowhere.
 	if strings.Contains(got, "page_open") || !strings.Contains(got, "browser pages") {

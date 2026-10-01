@@ -53,7 +53,7 @@ func MergeCoordinatorPromptVars(
 	for k, v := range CoordinatorSurfaceCardVars(cardLabel, cardRule, offered, requestable).TemplateVars() {
 		into[k] = v
 	}
-	MergeVisualShowVars(offered, into)
+	MergeVisualShowVars(offered, requestable, into)
 	into["more_tools_loadable"] = len(requestable) > 0
 	into["verify_required"] = gates.VerifyRequired
 	into["verify_command"] = strings.TrimSpace(gates.VerifyCommand)
