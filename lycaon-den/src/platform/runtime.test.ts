@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 describe("tauri platform chrome", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.resetModules();
   });
 
@@ -11,6 +12,7 @@ describe("tauri platform chrome", () => {
     for (const platform of ["macos", "linux"] as const) {
       vi.resetModules();
       vi.stubEnv("TAURI_ENV_PLATFORM", platform);
+      vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
       const { usesCustomWindowChrome, tauriDragRegionProps } = await import(
         "./runtime.ts"
       );
@@ -32,6 +34,14 @@ describe("tauri platform chrome", () => {
     const { tauriPlatform, usesCustomWindowChrome } = await import("./runtime.ts");
     expect(tauriPlatform()).toBe("macos");
     expect(usesCustomWindowChrome()).toBe(true);
+  });
+
+  it("does not treat the build target alone as the desktop runtime", async () => {
+    vi.stubEnv("TAURI_ENV_PLATFORM", "macos");
+    vi.stubGlobal("window", {});
+    const { isTauriRuntime, tauriDragRegionProps } = await import("./runtime.ts");
+    expect(isTauriRuntime()).toBe(false);
+    expect(tauriDragRegionProps()).toEqual({});
   });
 
   it("uses native title bar on Windows and web", async () => {
