@@ -1,43 +1,8 @@
 name: dependency inventory
 
-# Keeps docs/operations/dependency-inventory.md current: the page regenerates
-# offline after dependency or policy changes land on main, and the weekly run
-# also re-queries upstream versions. Only generated files are committed.
+# Re-queries upstream versions weekly and commits the regenerated inventory.
+# Pull requests keep the offline inventory current through check:drift.
 on:
-  push:
-    branches: [main]
-    paths:
-      - dependencies/**
-      - .github/workflows/dependency-inventory.yml
-      - lycaon/cmd/codegen-dependency-inventory/**
-      - .bun-version
-      - .node-version
-      - rust-toolchain.toml
-      - lycaon/go.mod
-      - lycaon-den/package.json
-      - lycaon-den/bun.lock
-      - lycaon-den/src-tauri/Cargo.toml
-      - lycaon-den/src-tauri/Cargo.lock
-      - lycaon/internal/documentcore/native/Cargo.toml
-      - lycaon/internal/documentcore/native/Cargo.lock
-      - lycaon/internal/decide/native/Cargo.toml
-      - lycaon/internal/decide/native/Cargo.lock
-      - lycaon/internal/documentcore/core.manifest.json
-      - lycaon/internal/browserengine/chrome_pin.go
-      - lycaon/internal/platformfloor/macos_floor.txt
-      - lycaon/config/gitengine/pin.yaml
-      - lycaon/config/runtime/scanners/bundled-manifest.yaml
-      - lycaon/config/runtime/scanners/rules-provenance.yaml
-      - lycaon/config/packs/painted-wolf/security/host/secret-mint/zxcvbn-provenance.yaml
-      - lycaon/vulndb-provenance.json
-      - schemas/oar/vendor-manifest.json
-      - scripts/commentlint/go.mod
-      - scripts/task.sh
-      - scripts/lint-go.sh
-      - scripts/deadcode-check.sh
-      - scripts/sqlc-version.sh
-      - scripts/diff-openapi.sh
-      - scripts/licenses-notices.sh
   schedule:
     # Mondays 06:00 UTC.
     - cron: "0 6 * * 1"
@@ -62,17 +27,12 @@ jobs:
           go-version-file: lycaon/go.mod
           cache-dependency-path: lycaon/go.sum
 
-      - name: Regenerate from the tree
-        if: ${{ github.event_name == 'push' }}
-        run: ./task codegen:dependency-inventory
-
       - name: Refresh upstream versions and regenerate
-        if: ${{ github.event_name != 'push' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./task codegen:dependency-inventory:upstream
 
-      # Pushes made with GITHUB_TOKEN start no workflows, so this cannot loop.
+      # main-protection lets GitHub Actions push this generated commit.
       - name: Commit generated files
         run: |
           set -euo pipefail
@@ -80,6 +40,6 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -- docs/operations/dependency-inventory.md dependencies/upstream.json .github/dependabot.yml
           git diff --cached --quiet && exit 0
-          git commit -m "deps: refresh dependency inventory"
+          git commit -s -m "deps: refresh dependency inventory"
           git pull --rebase
           git push
