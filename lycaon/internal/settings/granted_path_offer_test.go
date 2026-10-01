@@ -489,6 +489,33 @@ func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
 	}
 }
 
+// The resolver admits an outside path only through the asked action's file
+// access, so a posture that left the read silent would strand it.
+func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
+	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		stageBundledApprovals(t, nil)
+		store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+		testutil.FailErr(t, "NewApprovalStoreAt", err)
+		testutil.FailErr(t, "PutGlobal "+string(posture), store.PutGlobal(settings.ApprovalConfig{Posture: posture}))
+		g := settings.NewRuleApprovalGate(store, settings.NoSources())
+
+		for _, tool := range []string{"list_dir", "read", "grep", "find"} {
+			res, err := g.Evaluate(context.Background(), hitl.ProposedAction{
+				Tool: tool, Files: []string{dir},
+				ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
+			})
+			testutil.FailErr(t, string(posture)+" evaluate "+tool, err)
+			if !res.Required() || res.Decision == nil || res.Decision.Primary != api.GateOutsideRootsRead {
+				t.Fatalf("%s: %s outside the roots must ask outside_roots_read, got %+v", posture, tool, res)
+			}
+			if len(res.FileAccess) != 1 || res.FileAccess[0].Path != grantedpath.Normalize(dir) || res.FileAccess[0].Write {
+				t.Fatalf("%s: %s must carry read access for %s, got %+v", posture, tool, dir, res.FileAccess)
+			}
+		}
+	}
+}
+
 func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
 	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
 	ordinary := filepath.Join(dir, "main.go")

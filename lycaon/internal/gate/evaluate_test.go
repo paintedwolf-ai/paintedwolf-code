@@ -166,7 +166,7 @@ func fixtures() []fixture {
 		{gate: api.GateAuthorityMisuse, posture: PostureBalanced, fires: authorityFires, silent: authoritySilent},
 		{gate: api.GateSensitiveLocation, posture: PostureBalanced, fires: sensitiveFires, silent: sensitiveSilent},
 		{gate: api.GateOutsideRootsWrite, posture: PostureLight, fires: outsideWriteFires, silent: outsideWriteSilent},
-		{gate: api.GateOutsideRootsRead, posture: PostureStrict, fires: outsideReadFires, silent: outsideReadSilent},
+		{gate: api.GateOutsideRootsRead, posture: PostureLight, fires: outsideReadFires, silent: outsideReadSilent},
 		{gate: api.GateAgentChosenOutbound, posture: PostureBalanced, fires: outboundFires, silent: outboundSilent},
 		{gate: api.GateSecretExposedOutbound, posture: PostureStrict, fires: exposedFires, silent: exposedSilent},
 		{gate: api.GateFirstHost, posture: PostureStrict, fires: firstHostFires, silent: firstHostSilent},
@@ -426,18 +426,18 @@ func TestPostureLaddersAreMonotonic(t *testing.T) {
 	}
 }
 
-func TestOutsideRootsLiveAtBalanced(t *testing.T) {
+func TestOutsideRootsLiveAtEveryPosture(t *testing.T) {
 	if !PostureBalanced.Enables(api.GateOutsideRootsWrite) {
 		t.Fatal("balanced must enable outside_roots_write so native outside writes can raise a grant card")
 	}
-	if PostureBalanced.Enables(api.GateOutsideRootsRead) {
-		t.Fatal("balanced must not enable outside_roots_read")
+	if !PostureBalanced.Enables(api.GateOutsideRootsRead) {
+		t.Fatal("balanced must enable outside_roots_read so native outside reads can raise a grant card")
 	}
 	if !PostureLight.Enables(api.GateOutsideRootsWrite) {
 		t.Fatal("light must enable outside_roots_write")
 	}
-	if PostureLight.Enables(api.GateOutsideRootsRead) {
-		t.Fatal("light must not enable outside_roots_read")
+	if !PostureLight.Enables(api.GateOutsideRootsRead) {
+		t.Fatal("light must enable outside_roots_read so native outside reads can raise a grant card")
 	}
 	if !PostureStrict.Enables(api.GateOutsideRootsWrite) || !PostureStrict.Enables(api.GateOutsideRootsRead) {
 		t.Fatal("strict must keep outside_roots")
@@ -695,8 +695,8 @@ func TestNativeToolWithoutAProcessBoundaryIsSilent(t *testing.T) {
 	}
 }
 
-// Light stays silent on crossings; Balanced asks for outside writes and sensitive locations.
-// Outside reads stay silent at Balanced and ask at Strict.
+// Every posture asks on a read or write outside the attached roots; a listed
+// location adds sensitive_location from Balanced up.
 func TestFilesystemPostureSplit(t *testing.T) {
 	unlistedRead := baseFacts(StagePreSpawn)
 	unlistedRead.File = &FileTarget{
@@ -714,14 +714,14 @@ func TestFilesystemPostureSplit(t *testing.T) {
 		OutsideRoots: true, Sensitive: true, CatalogID: "user-documents",
 	}
 
-	if verdict, _ := Evaluate(unlistedRead, PostureLight); verdict != Silent {
-		t.Error("light must not ask about leaving the attached roots for read")
+	if verdict, d := Evaluate(unlistedRead, PostureLight); verdict != Ask || d.Primary != api.GateOutsideRootsRead {
+		t.Errorf("light must ask on an unlisted read crossing, got %s/%v", verdict, d)
 	}
 	if verdict, d := Evaluate(unlistedWrite, PostureLight); verdict != Ask || d.Primary != api.GateOutsideRootsWrite {
 		t.Errorf("light must ask on an unlisted write crossing, got %s/%v", verdict, d)
 	}
-	if verdict, d := Evaluate(unlistedRead, PostureBalanced); verdict != Silent {
-		t.Errorf("balanced must be silent on unlisted read outside roots, got %s/%v", verdict, d)
+	if verdict, d := Evaluate(unlistedRead, PostureBalanced); verdict != Ask || d.Primary != api.GateOutsideRootsRead {
+		t.Errorf("balanced must ask on an unlisted read crossing, got %s/%v", verdict, d)
 	}
 	if verdict, d := Evaluate(unlistedWrite, PostureBalanced); verdict != Ask || d.Primary != api.GateOutsideRootsWrite {
 		t.Errorf("balanced must ask on an unlisted write crossing, got %s/%v", verdict, d)
@@ -732,14 +732,12 @@ func TestFilesystemPostureSplit(t *testing.T) {
 	if verdict, d := Evaluate(unlistedWrite, PostureStrict); verdict != Ask || d.Primary != api.GateOutsideRootsWrite {
 		t.Errorf("strict must ask on unlisted write crossing, got %s/%v", verdict, d)
 	}
-	if verdict, d := Evaluate(listedRead, PostureBalanced); verdict != Ask || d.Primary != api.GateSensitiveLocation ||
-		len(d.Also) != 0 {
-		t.Errorf("balanced: listed read is sensitive_location, outside_roots_read disabled so Also is empty, got %s/%v", verdict, d)
-	}
-	// At Strict, sensitive_location and outside_roots_read both fire and collapse into one card.
-	verdict, d := Evaluate(listedRead, PostureStrict)
-	if verdict != Ask || d.Primary != api.GateSensitiveLocation || len(d.Also) != 1 || d.Also[0] != api.GateOutsideRootsRead {
-		t.Fatalf("strict must collapse both filesystem gates into one card, got %v", d.Gates())
+	// sensitive_location and outside_roots_read both fire and collapse into one card.
+	for _, posture := range []Posture{PostureBalanced, PostureStrict} {
+		verdict, d := Evaluate(listedRead, posture)
+		if verdict != Ask || d.Primary != api.GateSensitiveLocation || len(d.Also) != 1 || d.Also[0] != api.GateOutsideRootsRead {
+			t.Fatalf("%s must collapse both filesystem gates into one card, got %v", posture, d.Gates())
+		}
 	}
 }
 

@@ -140,6 +140,7 @@ var postureGates = map[Posture][]api.ApprovalGate{
 		// Detection severity is filtered by the producer for this posture.
 		api.GateAuthorityMisuse,
 		api.GateOutsideRootsWrite,
+		api.GateOutsideRootsRead,
 		api.GateUnobservedChannel,
 		api.GateUserRule,
 		api.GateExplicitApprovalRequest,
@@ -154,6 +155,7 @@ var postureGates = map[Posture][]api.ApprovalGate{
 		api.GateSensitiveLocation,
 		api.GateAgentChosenOutbound,
 		api.GateOutsideRootsWrite,
+		api.GateOutsideRootsRead,
 		api.GateUnobservedChannel,
 		api.GateUserRule,
 		api.GateExplicitApprovalRequest,
