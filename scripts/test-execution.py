@@ -5,6 +5,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import signal
@@ -167,7 +168,7 @@ def probe_task_request(binary, root, arguments):
         probe = subprocess.run([binary, "-d", root, *resolution, "--dry", "--force", *names,
                                 *(["--", ARGUMENT_PROBE] if cli else [])],
                                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
-        output = probe.stdout + probe.stderr
+        output = re.sub(r"\x1b\[[0-9;]*m", "", probe.stdout + probe.stderr)
         if probe.returncode:
             reasons = [line.removeprefix("task: ") for line in output.splitlines()
                        if line.startswith("task: ") and not line.startswith(("task: [", "task: Available"))]
