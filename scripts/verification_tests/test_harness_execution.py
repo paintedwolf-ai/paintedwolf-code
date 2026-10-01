@@ -74,7 +74,7 @@ class HarnessRuntimeTest(unittest.TestCase):
         self.scripts = self.root / "scripts"
         source = Path(__file__).resolve().parents[1]
         for name in ("e2e-sidecar-bg.sh", "e2e-sidecar-serve.sh", "e2e-sidecar-stop.sh",
-                     "e2e/sidecar-process.sh", "harness/crash-restart.sh"):
+                     "e2e/sidecar-process.sh", "e2e/model-fixture.ts", "harness/crash-restart.sh"):
             target = self.scripts / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / name, target)

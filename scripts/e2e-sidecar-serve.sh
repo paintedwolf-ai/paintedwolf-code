@@ -53,8 +53,10 @@ if [[ "${MODEL_FIXTURE:-0}" == "1" ]]; then
     [[ -s "${FIXTURE_PORT_FILE}" ]] || { echo "error: E2E model fixture did not start" >&2; exit 1; }
   fi
   FIXTURE_PORT="$(tr -d '[:space:]' <"${FIXTURE_PORT_FILE}")"
-  sed -i.bak "s#^\(    base_url:\).*#\1 http://127.0.0.1:${FIXTURE_PORT}#" "${CONFIG_DIR}/providers.local.yaml"
-  rm -f "${CONFIG_DIR}/providers.local.yaml.bak"
+  if [[ -f "${CONFIG_DIR}/providers.local.yaml" ]]; then
+    sed -i.bak "s#^\(    base_url:\).*#\1 http://127.0.0.1:${FIXTURE_PORT}#" "${CONFIG_DIR}/providers.local.yaml"
+    rm -f "${CONFIG_DIR}/providers.local.yaml.bak"
+  fi
 fi
 if [[ "${LYCAON_LLM_MOCK:-1}" != "1" ]]; then
   for f in credential-vault.age .credential-vault-development-identity; do
