@@ -48,7 +48,7 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 		name := fmt.Sprintf("source-%d.ts", index)
 		testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, name), []byte("// revision 000000\n"+body.String()), 0o600))
 		var err error
-		documents[index], err = service.Open(t.Context(), p, name, rootID, "", "window")
+		documents[index], err = service.Open(t.Context(), p, name, rootID, "", "window", nil)
 		testutil.FailErr(t, "open source", err)
 	}
 	for day := 0; day < 250; day++ {
