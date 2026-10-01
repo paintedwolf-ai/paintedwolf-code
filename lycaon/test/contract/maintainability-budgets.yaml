@@ -9533,7 +9533,7 @@ source_directories:
     scripts/harness: 5
 source_files:
     lycaon-den/eslint.config.js: 99
-    lycaon-den/playwright.config.ts: 51
+    lycaon-den/playwright.config.ts: 52
     lycaon-den/shared/app-state-storage.ts: 7
     lycaon-den/shared/app-state-types.ts: 389
     lycaon-den/shared/brand.ts: 13
@@ -15311,8 +15311,8 @@ source_files:
     scripts/e2e-den.sh: 138
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 18
-    scripts/e2e-sidecar-serve.sh: 50
-    scripts/e2e-sidecar-stop.sh: 7
+    scripts/e2e-sidecar-serve.sh: 68
+    scripts/e2e-sidecar-stop.sh: 15
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
     scripts/e2e-wait-health.sh: 14
@@ -16013,7 +16013,7 @@ test_directories:
     scripts: 3
     scripts/commentlint: 2
     scripts/coordinator-benchmark: 68
-    scripts/e2e: 5
+    scripts/e2e: 6
     scripts/harness: 1
     scripts/verification_tests: 23
 test_files:
@@ -22353,6 +22353,7 @@ test_files:
     scripts/e2e/docker-stack-down.sh: 13
     scripts/e2e/docker-stack-up.sh: 32
     scripts/e2e/env.sh: 14
+    scripts/e2e/model-fixture.ts: 19
     scripts/e2e/sidecar-process.sh: 31
     scripts/harness/test_supervise.py: 234
     scripts/test_decide_heads_execution.py: 65
