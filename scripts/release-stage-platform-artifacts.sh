@@ -218,7 +218,7 @@ SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
 bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}"
 
-mkdir -p "${OUTPUT}"
+mkdir -p "${OUTPUT}/opengrep"
 OUTPUT="$(cd "${OUTPUT}" && pwd)"
 STEM="painted-wolf-code_v${VERSION}_${PLATFORM}"
 OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --offline)"
