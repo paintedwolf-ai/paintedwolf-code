@@ -6,13 +6,14 @@ runs:
     - name: Download and verify Bialy heads
       shell: bash
       env:
-        BIALY_REVISION: 39012d0734fd72c1ff1f0abe4fae2e7bb647569b
+        BIALY_REVISION: 49119f9e107aec0e96eeb27873d94fbdb4849191
       run: |
         set -euo pipefail
         SOURCE_DIR="$(mktemp -d "${RUNNER_TEMP}/bialy-download.XXXXXX")"
         trap 'rm -rf -- "${SOURCE_DIR}"' EXIT
         HEADS_DIR="${RUNNER_TEMP}/bialy-heads"
-        for HEAD in turn-load unit-rank code-rank; do
+        MANIFEST=lycaon/config/packs/painted-wolf/platform/host/decision-release.json
+        for HEAD in $(jq -r '.heads | keys[]' "${MANIFEST}"); do
           curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' \
             --retry 3 --connect-timeout 30 --max-time 600 \
@@ -20,7 +21,7 @@ runs:
             --output "${SOURCE_DIR}/${HEAD}.safetensors"
         done
         python3 scripts/stage-decide-heads.py \
-          --manifest lycaon/config/packs/painted-wolf/platform/host/decision-release.json \
+          --manifest "${MANIFEST}" \
           --source "${SOURCE_DIR}" \
           --destination "${HEADS_DIR}"
         printf 'BIALY_HEADS_DIR=%s\n' "${HEADS_DIR}" >> "${GITHUB_ENV}"
