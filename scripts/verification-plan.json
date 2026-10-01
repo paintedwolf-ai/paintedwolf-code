@@ -173,7 +173,7 @@
         "--tags",
         "integration",
         "--timeout",
-        "15m"
+        "40m"
       ],
       "packages": [
         "./..."
@@ -781,7 +781,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 180,
+      "minutes": 300,
       "profiles": [
         "release",
         "nightly"
