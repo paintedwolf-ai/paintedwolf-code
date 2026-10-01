@@ -36,6 +36,33 @@ done
 }
 r2_rest_require_env
 
+# Objects past wrangler's limit go through R2's S3 API; their identity is the
+# SHA-256 recorded in object metadata, since multipart ETags are not MD5s.
+WRANGLER_MAX_BYTES=$((300 * 1024 * 1024))
+FILE_BYTES="$(wc -c < "${FILE}" | tr -d ' ')"
+if (( FILE_BYTES > WRANGLER_MAX_BYTES )); then
+  r2_s3_require_env
+  LOCAL_SHA256="$(r2_rest_file_sha256 "${FILE}")"
+  if [[ -n "$(r2_rest_object_stat "${KEY}")" ]]; then
+    if [[ "$(r2_s3_object_identity "${KEY}")" == "${FILE_BYTES}"$'\t'"${LOCAL_SHA256}" ]]; then
+      echo "release-r2-put: ${KEY} already contains identical bytes — ok" >&2
+      exit 0
+    fi
+    echo "error: immutable R2 object ${KEY} already exists with different bytes" >&2
+    exit 1
+  fi
+  aws s3 cp "${FILE}" "s3://${R2_BUCKET}/${KEY}" --endpoint-url "${R2_S3_ENDPOINT}" \
+    --content-type "${CONTENT_TYPE}" --cache-control "${CACHE_CONTROL}" \
+    --metadata "sha256=${LOCAL_SHA256}" --only-show-errors
+  identity="$(r2_s3_object_identity "${KEY}")"
+  [[ "${identity}" == "${FILE_BYTES}"$'\t'"${LOCAL_SHA256}" ]] || {
+    echo "error: immutable R2 object ${KEY} differs immediately after upload (${identity})" >&2
+    exit 1
+  }
+  echo "release-r2-put: created and verified ${KEY} (${FILE_BYTES} bytes)" >&2
+  exit 0
+fi
+
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/release-r2-put.XXXXXX")"
 cleanup() { rm -rf "${WORKDIR}"; }
 trap cleanup EXIT
