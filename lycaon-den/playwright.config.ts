@@ -23,6 +23,9 @@ const tauriStack = {
   timeout: 300_000,
   stdout: "pipe" as const,
   stderr: "pipe" as const,
+  // The script runs Tauri in its own process group; SIGTERM lets its trap stop
+  // that group and the sidecar, which a group SIGKILL would orphan.
+  gracefulShutdown: { signal: "SIGTERM" as const, timeout: 15_000 },
 };
 
 export default defineConfig({
