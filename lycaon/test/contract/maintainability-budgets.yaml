@@ -21781,7 +21781,7 @@ test_files:
     lycaon/test/contract/providers/provider_live_helpers.go: 42
     lycaon/test/contract/providers/registry_testmain_test.go: 10
     lycaon/test/contract/registry_testmain_test.go: 10
-    lycaon/test/contract/release/hosted_verification_contract_test.go: 158
+    lycaon/test/contract/release/hosted_verification_contract_test.go: 154
     lycaon/test/contract/release/licensing_public_contract_test.go: 78
     lycaon/test/contract/release/opengrep_candidate_release_test.go: 47
     lycaon/test/contract/release/operations_readiness_contract_test.go: 114
@@ -21791,7 +21791,7 @@ test_files:
     lycaon/test/contract/release/release_preparation_test.go: 141
     lycaon/test/contract/release/scan_rules_vendor_pin_contract_test.go: 184
     lycaon/test/contract/release/shipped_go_notices_scope_contract_test.go: 80
-    lycaon/test/contract/release/version_release_contract_test.go: 312
+    lycaon/test/contract/release/version_release_contract_test.go: 310
     lycaon/test/contract/release/zxcvbn_passwords_vendor_pin_contract_test.go: 58
     lycaon/test/contract/runner/argv_whitespace_seam_contract_test.go: 58
     lycaon/test/contract/runner/ast_callee_test.go: 13
