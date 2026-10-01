@@ -64,7 +64,7 @@ class HostedVerificationTests(unittest.TestCase):
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
                     if profile != "check" or row["lane"] == "webkit":
-                        self.assertEqual(row["runner"], "macos-14")
+                        self.assertEqual(row["runner"], "macos-15")
 
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})

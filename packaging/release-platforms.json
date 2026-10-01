@@ -3,7 +3,7 @@
   "platforms": [
     {
       "updater_key": "darwin-aarch64",
-      "runner": "macos-14",
+      "runner": "macos-15",
       "artifact_arch": "aarch64",
       "goos": "darwin",
       "goarch": "arm64",

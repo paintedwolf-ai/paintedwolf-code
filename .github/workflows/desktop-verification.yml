@@ -6,9 +6,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   desktop:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     env:
       LYCAON_LLM_MOCK: '1'

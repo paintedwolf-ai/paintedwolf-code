@@ -140,8 +140,8 @@ func TestReleaseBlastRadiusCiSeatbeltJob(t *testing.T) {
 	if !strings.Contains(ci, "test:seatbelt") {
 		t.Fatal("ci.yml seatbelt job must run test:seatbelt")
 	}
-	if !strings.Contains(ci, "runs-on: macos-14") {
-		t.Fatal("ci.yml must keep macos-14 runners for darwin-gated jobs")
+	if !strings.Contains(ci, "runs-on: macos-15") {
+		t.Fatal("ci.yml must keep macos-15 runners for darwin-gated jobs")
 	}
 }
 

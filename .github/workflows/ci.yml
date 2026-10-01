@@ -13,6 +13,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   verification:
     uses: ./.github/workflows/verification.yml
@@ -21,7 +25,7 @@ jobs:
 
   # Boot last N corpus fixtures with HEAD; named so a corpus failure is distinct.
   upgrade-corpus:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -64,7 +68,7 @@ jobs:
 
   # Applied Seatbelt profiles (darwin; --full).
   seatbelt:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -87,7 +91,7 @@ jobs:
 
   # Managed browser under Seatbelt.
   browser-confinement:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -134,7 +138,7 @@ jobs:
 
   # Owned git engine is darwin-arm64 only.
   git-parity:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
