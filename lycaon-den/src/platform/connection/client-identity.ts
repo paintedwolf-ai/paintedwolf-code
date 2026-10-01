@@ -21,11 +21,22 @@ function remember(value: string): void {
   }
 }
 
+/** The desktop window label, or null where the build targets Tauri but no window exists (a browser on the dev server). */
+function tauriWindowLabel(): string | null {
+  if (!isTauriRuntime()) return null;
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return null;
+  }
+}
+
 /** Identifies this window for host events and document outboxes across reloads. */
 export function clientIdentity(): string {
   if (identity) return identity;
   const previous = stored()?.trim();
-  identity = isTauriRuntime() ? `window:${getCurrentWindow().label}` : previous?.startsWith("browser:") ? previous : `browser:${crypto.randomUUID()}`;
+  const label = tauriWindowLabel();
+  identity = label !== null ? `window:${label}` : previous?.startsWith("browser:") ? previous : `browser:${crypto.randomUUID()}`;
   remember(identity);
   return identity;
 }
