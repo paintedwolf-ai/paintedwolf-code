@@ -9,44 +9,64 @@ import (
 
 func TestMergeVisualShowVarsFollowOfferedTools(t *testing.T) {
 	into := map[string]any{}
-	prompts.MergeVisualShowVars(nil, into)
+	prompts.MergeVisualShowVars(nil, nil, into)
 	if into["visual_show_available"] != false {
 		t.Fatalf("empty names must not advertise show: %#v", into)
 	}
 
 	page := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"capture_page", "read"}, page)
+	prompts.MergeVisualShowVars([]string{"capture_page", "read"}, nil, page)
 	if page["visual_show_available"] != true || page["visual_show_page"] != true || page["visual_show_terminal"] != false {
 		t.Fatalf("offered capture must advertise page show only: %#v", page)
 	}
 
 	terminal := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"command"}, terminal)
+	prompts.MergeVisualShowVars([]string{"command"}, nil, terminal)
 	if terminal["visual_show_available"] != true || terminal["visual_show_terminal"] != true || terminal["visual_show_page"] != false {
 		t.Fatalf("command terminal_capture must advertise terminal show: %#v", terminal)
 	}
 
 	held := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"terminal_snapshot"}, held)
+	prompts.MergeVisualShowVars([]string{"terminal_snapshot"}, nil, held)
 	if held["visual_show_terminal"] != true {
 		t.Fatalf("held capture satisfies terminal show: %#v", held)
 	}
 
 	unrelated := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"render_view", "scan_list"}, unrelated)
+	prompts.MergeVisualShowVars([]string{"render_view", "scan_list"}, nil, unrelated)
 	if unrelated["visual_show_available"] != false {
 		t.Fatalf("render_view authors intent, not a running capture: %#v", unrelated)
 	}
 }
 
-func TestMergeCoordinatorPromptVarsInvestigateFloorHasNoShow(t *testing.T) {
+func TestMergeVisualShowVarsAskForLoadablePageCapture(t *testing.T) {
+	loadable := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"capture_page", "page_open"}, loadable)
+	if loadable["visual_show_needs_request"] != true || loadable["visual_show_available"] != true || loadable["visual_show_page"] != false {
+		t.Fatalf("loadable page capture must ask for the tools without teaching them: %#v", loadable)
+	}
+
+	noRequest := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"read"}, []string{"capture_page"}, noRequest)
+	if noRequest["visual_show_needs_request"] != false || noRequest["visual_show_available"] != false {
+		t.Fatalf("without request_tools a deferred capture cannot load: %#v", noRequest)
+	}
+
+	loaded := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"capture_page", "request_tools"}, []string{"page_open"}, loaded)
+	if loaded["visual_show_needs_request"] != false || loaded["visual_show_page"] != true {
+		t.Fatalf("a loaded capture tool needs no request: %#v", loaded)
+	}
+}
+
+func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) {
 	into := map[string]any{}
 	err := prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
 	}, prompts.CoordinatorPromptGates{}, into)
 	testutil.FailErr(t, "merge investigate prompt vars", err)
-	if into["visual_show_available"] != false || into["more_tools_loadable"] != true {
-		t.Fatalf("the investigate floor carries no capture tool but can load them: %#v", into)
+	if into["visual_show_page"] != false || into["visual_show_needs_request"] != true || into["visual_show_available"] != true {
+		t.Fatalf("the investigate floor carries no capture tool but must ask to load one: %#v", into)
 	}
 	loaded := map[string]any{"surface_offered": []string{"read", "capture_page", "request_tools"}}
 	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{

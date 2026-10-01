@@ -7,17 +7,22 @@ var (
 	visualShowTerminalTools = []string{"command", "terminal_snapshot"}
 )
 
-// MergeVisualShowVars derives visual availability from the offered schemas.
-func MergeVisualShowVars(offered []string, into map[string]any) {
+// MergeVisualShowVars derives visual availability from the offered schemas
+// and the tools request_tools can still load. Page capture that is only
+// loadable sets visual_show_needs_request, not visual_show_page, so the
+// prompt asks for the tools without teaching schemas it does not carry.
+func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
 	if into == nil {
 		return
 	}
 	set := toolNameSet(offered)
 	page := anyPresent(visualShowPageTools, set)
 	terminal := anyPresent(visualShowTerminalTools, set)
+	needsRequest := !page && set["request_tools"] && anyPresent(visualShowPageTools, toolNameSet(requestable))
 	into["visual_show_page"] = page
 	into["visual_show_terminal"] = terminal
-	into["visual_show_available"] = page || terminal
+	into["visual_show_needs_request"] = needsRequest
+	into["visual_show_available"] = page || terminal || needsRequest
 }
 
 func toolNameSet(names []string) map[string]bool {
@@ -32,5 +37,9 @@ func toolNameSet(names []string) map[string]bool {
 }
 
 func mergeVisualShowVarsFromSurface(data AgentToolSurfaceData, into map[string]any) {
-	MergeVisualShowVars(toolViewNames(data.Tools), into)
+	requestable := make([]string, 0, len(data.Requestable))
+	for _, row := range data.Requestable {
+		requestable = append(requestable, row.Name)
+	}
+	MergeVisualShowVars(toolViewNames(data.Tools), requestable, into)
 }

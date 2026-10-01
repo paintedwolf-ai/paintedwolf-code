@@ -5,12 +5,12 @@ description: >-
   as evidence.
 slot: conduct
 order: 40
-attaches: [render_view, capture_page, view_image, view_video, measure_page, page_open, terminal_snapshot]
+needed_with: [render_view, capture_page, view_image, view_video, measure_page, page_open, terminal_snapshot]
 hosts: [coordinator, worker]
 ---
-### Visual evidence
+{% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence
 
-When building or changing a user-facing interface (pages, interactive terminals, CLI reports) or when requested, capture the running result before closing. Routine test/build output alone needs no snapshot. If you author `## Progress`, add a separate{% if visual_show_page %} `Snapshot the running UI`{% endif %}{% if visual_show_page and visual_show_terminal %} or{% endif %}{% if visual_show_terminal %} `Snapshot the terminal`{% endif %} row, not a Verify label.
+When building or changing a user-facing interface (pages, interactive terminals, CLI reports) or when requested, capture the running result before closing. Routine test/build output alone needs no snapshot. If you author `## Progress`, add a separate{% if visual_show_page or visual_show_needs_request %} `Snapshot the running UI`{% if visual_show_terminal %} or{% endif %}{% endif %}{% if visual_show_terminal %} `Snapshot the terminal`{% endif %} row, not a Verify label.{% if visual_show_needs_request %} For a page, load capture with `request_tools`, such as "open the local page and capture it".{% endif %}
 
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}
@@ -22,3 +22,4 @@ When building or changing a user-facing interface (pages, interactive terminals,
 {% endif %}{% if profile_has_view_video %}- Recordings: see the moments a user's screen recording shows with `view_video`.
 {% endif %}
 After edits, exercise the flow via app harness or runner and capture: fix console/runtime errors before final snapshot. Use a still per claim or a filmstrip for async flows; recapture after fixes. Logs or failed captures do not close the row; disclose remaining blockers.
+{% endif %}

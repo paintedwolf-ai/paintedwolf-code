@@ -99,7 +99,7 @@ func MergeForTurn(
 	for k, v := range prompts.CoordinatorSurfaceCardVars(label, rule, surf.ResolvedTools, surf.DeferredTools).TemplateVars() {
 		into[k] = v
 	}
-	prompts.MergeVisualShowVars(surf.ResolvedTools, into)
+	prompts.MergeVisualShowVars(surf.ResolvedTools, surf.DeferredTools, into)
 	into["surface_offered"] = append([]string(nil), surf.ResolvedTools...)
 	for k, v := range prompts.SpawnRosterRoleVars(surf.Roster) {
 		into[k] = v
