@@ -48,6 +48,9 @@ jobs:
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep
 
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+
       - name: Cache the release build
         uses: ./.github/actions/cache-release-build
         with:
