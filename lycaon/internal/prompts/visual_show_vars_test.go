@@ -41,13 +41,19 @@ func TestMergeVisualShowVarsFollowOfferedTools(t *testing.T) {
 
 func TestMergeVisualShowVarsAskForLoadablePageCapture(t *testing.T) {
 	loadable := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"capture_page", "page_open"}, loadable)
+	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"capture_page", "page_open", "write"}, loadable)
 	if loadable["visual_show_needs_request"] != true || loadable["visual_show_available"] != true || loadable["visual_show_page"] != false {
 		t.Fatalf("loadable page capture must ask for the tools without teaching them: %#v", loadable)
 	}
 
+	readOnly := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"capture_page", "page_open"}, readOnly)
+	if readOnly["visual_show_needs_request"] != false || readOnly["visual_show_available"] != false {
+		t.Fatalf("an agent that cannot change files builds nothing to capture: %#v", readOnly)
+	}
+
 	noRequest := map[string]any{}
-	prompts.MergeVisualShowVars([]string{"read"}, []string{"capture_page"}, noRequest)
+	prompts.MergeVisualShowVars([]string{"read", "write"}, []string{"capture_page"}, noRequest)
 	if noRequest["visual_show_needs_request"] != false || noRequest["visual_show_available"] != false {
 		t.Fatalf("without request_tools a deferred capture cannot load: %#v", noRequest)
 	}

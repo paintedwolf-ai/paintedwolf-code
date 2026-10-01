@@ -2,15 +2,15 @@
 # Model ceilings, attachment caps, and the perception window are manual.
 version: 1
 worker_personas:
-    code-reviewer: 15457
+    code-reviewer: 14766
     implementer: 34431
-    path-explorer: 15028
+    path-explorer: 14337
     plan-reviewer: 10653
     plan-reviewer-alt: 10386
     plan-writer: 17150
-    repo-researcher: 14827
-    security-reviewer: 16437
-    skeptic: 14633
+    repo-researcher: 14136
+    security-reviewer: 15746
+    skeptic: 13942
     web-researcher: 8602
 coordinator_tripartite:
     implement_dispatch_workflow_orchestrate: 20929
