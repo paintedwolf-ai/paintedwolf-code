@@ -19,6 +19,7 @@ func FuzzJoinCommandLineRoundTrips(f *testing.F) {
 		"rm x ",
 		"echo a b",
 		"cmd \v",
+		`"A=\""`,
 	}
 	for _, s := range seeds {
 		f.Add(s)

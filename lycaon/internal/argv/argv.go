@@ -95,7 +95,7 @@ func JoinAddressedCommandLine(env map[string]string, name string, args []string,
 	}
 	if eq := strings.IndexByte(name, '='); eq > 0 && IsEnvIdentifier(name[:eq]) {
 		// An unquoted NAME=value would parse back as an assignment.
-		parts = append(parts, `"`+name+`"`)
+		parts = append(parts, doubleQuote(name))
 	} else {
 		parts = append(parts, quoteCommandLineArg(name))
 	}
