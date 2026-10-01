@@ -10,6 +10,7 @@ import tempfile
 import urllib.error
 import urllib.request
 
+from release_distribution import PUBLIC_READ_HEADERS
 from release_semver import compare, parse
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,7 +25,7 @@ def publishes(event: str, ref_type: str) -> bool:
 
 
 def read_public(url: str) -> dict | None:
-    request = urllib.request.Request(url, headers={"Cache-Control": "no-cache, no-store"})
+    request = urllib.request.Request(url, headers=PUBLIC_READ_HEADERS)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read(2 * 1024 * 1024 + 1)

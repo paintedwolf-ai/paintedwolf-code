@@ -18,6 +18,9 @@ import urllib.parse
 
 from release_semver import compare, parse
 
+# Cloudflare refuses Python's default urllib agent on the public release domains.
+PUBLIC_READ_HEADERS = {"Cache-Control": "no-cache, no-store", "User-Agent": "painted-wolf-release/1"}
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -230,7 +233,7 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
     url = f"{base.rstrip('/')}/.well-known/releases/{expected['channel']}.json"
     while True:
         try:
-            request = urllib.request.Request(url, headers={"Cache-Control": "no-cache, no-store"})
+            request = urllib.request.Request(url, headers=PUBLIC_READ_HEADERS)
             with urllib.request.urlopen(request, timeout=20) as response:
                 raw = response.read(16385)
                 if len(raw) > 16384:
@@ -243,7 +246,7 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                     accepted = {key: receipt[key] for key in expected}
                 validate_website_receipt(receipt, accepted)
                 no_store(response.headers)
-            request = urllib.request.Request(base.rstrip("/") + "/download/", headers={"Cache-Control": "no-cache, no-store"})
+            request = urllib.request.Request(base.rstrip("/") + "/download/", headers=PUBLIC_READ_HEADERS)
             with urllib.request.urlopen(request, timeout=20) as response:
                 no_store(response.headers)
                 raw = response.read(2 * 1024 * 1024 + 1)
