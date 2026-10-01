@@ -71,6 +71,14 @@ def require_success(results):
         raise ValueError("required verification did not pass: " + ", ".join(failed))
 
 
+def invocation(targets):
+    """Expand private groups, which Task refuses to run by name, into their members."""
+    plan = catalog()
+    private = set(plan.get("private", []))
+    return [member for target in targets
+            for member in (plan["groups"][target] if target in private else [target])]
+
+
 def run_lane(name):
     targets = lanes()[name]["targets"]
     directory = artifact_root(ROOT) / "ci"
@@ -78,7 +86,7 @@ def run_lane(name):
     path = directory / "run.json"
     record = {"lane": name, "targets": targets, "started_at": time.time(), "status": "running"}
     path.write_text(json.dumps(record, indent=2) + "\n")
-    code = subprocess.call(["./task", *targets], cwd=ROOT)
+    code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT)
     record.update(finished_at=time.time(), exit_code=code,
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")
     path.write_text(json.dumps(record, indent=2) + "\n")
