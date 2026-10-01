@@ -18,11 +18,12 @@ class HostedVerificationTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
-        # Release gates on the check partition; the deep tiers run nightly.
-        self.assertEqual(release, check)
+        # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
+        self.assertLessEqual(release, check)
+        self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
-        for mutation in ("missing", "duplicate", "unknown", "unbounded", "release-gap"):
+        for mutation in ("missing", "duplicate", "unknown", "unbounded"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 if mutation == "missing":
@@ -31,8 +32,6 @@ class HostedVerificationTests(unittest.TestCase):
                     data["ci"]["duplicate"] = data["ci"]["frontend"]
                 elif mutation == "unknown":
                     data["ci"]["frontend"]["targets"] = ["not:a:task"]
-                elif mutation == "release-gap":
-                    data["ci"]["frontend"]["profiles"] = ["check"]
                 else:
                     data["ci"]["frontend"]["minutes"] = 360
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):

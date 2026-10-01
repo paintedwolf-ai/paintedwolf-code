@@ -695,8 +695,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "native": false
@@ -719,8 +718,7 @@
       ],
       "minutes": 60,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "native": false
@@ -770,8 +768,7 @@
       ],
       "minutes": 120,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "native": true,
