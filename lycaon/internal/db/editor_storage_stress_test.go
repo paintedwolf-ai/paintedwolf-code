@@ -45,7 +45,7 @@ func TestStressEditorSnapshotWorkingYear(t *testing.T) {
 	for index := range snapshots {
 		name := fmt.Sprintf("file-%d.ts", index)
 		testutil.FailErr(t, "write source file", os.WriteFile(filepath.Join(root, name), []byte(source.String()), 0o600))
-		document, err := service.Open(t.Context(), p, name, rootID, "", "window")
+		document, err := service.Open(t.Context(), p, name, rootID, "", "window", nil)
 		testutil.FailErr(t, "open source", err)
 		_, err = service.Pin(t.Context(), p.ID, document.ID, document.Revision)
 		testutil.FailErr(t, "pin initial snapshot", err)
