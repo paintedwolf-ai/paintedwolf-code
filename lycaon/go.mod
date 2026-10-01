@@ -16,9 +16,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrock v1.65.1
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.54.1
 	github.com/aws/smithy-go v1.27.7
-	github.com/aymanbagabas/go-udiff v0.2.0
-	github.com/charmbracelet/bubbles v0.21.0
-	github.com/charmbracelet/bubbletea v1.3.5
+	github.com/aymanbagabas/go-udiff v0.3.1
+	github.com/charmbracelet/bubbles v1.0.0
+	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/vt v0.0.0-20260713092006-0d683c34c74b
