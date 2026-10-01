@@ -37,6 +37,10 @@ func markdownTags(src []byte) tagParseResult {
 			return ast.WalkStop, nil
 		}
 		name := strings.TrimSpace(string(heading.Lines().Value(src)))
+		// A heading of only control whitespace, such as "# \v", names nothing to outline.
+		if name == "" {
+			return ast.WalkSkipChildren, nil
+		}
 		start := lines[nameRange.StartPoint.Row]
 		lastContent := last.Stop
 		for lastContent > last.Start && (src[lastContent-1] == '\n' || src[lastContent-1] == '\r') {
