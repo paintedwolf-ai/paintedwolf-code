@@ -421,7 +421,7 @@ nightly, which keeps a release to the gates that decide whether it ships.
 |---|---|
 | PR and main | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these plus upgrade corpus, Seatbelt, browser confinement, and Git parity. |
 | Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
-| Release | Preflight follows source classification. The complete release verification profile, desktop E2E, and upgrade rehearsal then run independently. `ship-gates` requires every result before signing builds can start. |
+| Release | Preflight follows source classification. The complete release verification profile, desktop E2E, and upgrade rehearsal then run independently. Signed builds start after preflight and overlap verification; `ship-gates` requires every result before anything publishes. |
 
 The catalog grants each verification invocation 60–180 minutes and each job an
 additional 30 minutes for setup and evidence collection. These are initial

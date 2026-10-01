@@ -136,8 +136,9 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
+  # Signing overlaps verification; nothing leaves the run until ship-gates passes.
   build-release:
-    needs: [classify, ship-gates]
+    needs: [classify, preflight]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -371,7 +372,7 @@ jobs:
           retention-days: 14
 
   publish-immutable:
-    needs: [classify, build-release, aggregate-release]
+    needs: [classify, ship-gates, build-release, aggregate-release]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication

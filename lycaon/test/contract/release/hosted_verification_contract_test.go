@@ -82,7 +82,7 @@ func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	}
 }
 
-func TestReleaseVerificationPrecedesSigning(t *testing.T) {
+func TestReleaseVerificationPrecedesPublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
 	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "verification", "desktop", "upgrade"})
@@ -91,11 +91,14 @@ func TestReleaseVerificationPrecedesSigning(t *testing.T) {
 	}
 	for name, dependencies := range map[string][]string{
 		"preflight": {"classify"}, "verification": {"preflight"}, "desktop": {"preflight"},
-		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "ship-gates"},
+		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "preflight"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)
 		}
+	}
+	if !slices.Contains(hostedNeeds(t, jobs["publish-immutable"]), "ship-gates") {
+		t.Error("publish-immutable must require ship-gates; signing may overlap verification, publication may not")
 	}
 }
 
