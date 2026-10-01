@@ -13336,7 +13336,7 @@ source_files:
     lycaon/internal/repomap/file_tags.go: 60
     lycaon/internal/repomap/gtsqueries/queries.go: 702
     lycaon/internal/repomap/gtsqueries/register.go: 27
-    lycaon/internal/repomap/markdown_tags.go: 85
+    lycaon/internal/repomap/markdown_tags.go: 88
     lycaon/internal/repomap/repomap.go: 358
     lycaon/internal/repomap/scope.go: 6
     lycaon/internal/repomap/shallow_map.go: 182
