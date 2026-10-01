@@ -10724,7 +10724,7 @@ source_files:
     lycaon-den/src/platform/connection/app-connection.ts: 901
     lycaon-den/src/platform/connection/backend.ts: 214
     lycaon-den/src/platform/connection/boot-fallback.ts: 60
-    lycaon-den/src/platform/connection/client-identity.ts: 42
+    lycaon-den/src/platform/connection/client-identity.ts: 51
     lycaon-den/src/platform/connection/engine-startup.ts: 128
     lycaon-den/src/platform/connection/health.ts: 90
     lycaon-den/src/platform/connection/host-authority-registry.ts: 41
