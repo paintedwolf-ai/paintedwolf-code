@@ -13,7 +13,7 @@ import (
 )
 
 const bundleVerifyUsage = `usage: lycaon-debug bundle-verify --app <path.app> [--dmg <path.dmg>]
-                                  [--require-signed] [--json]
+                                  [--require-signed] [--credential-probe-advisory] [--json]
 
 Structural + signing audit of a built macOS bundle. Expected architecture
 slices and the macOS floor come from lycaon/internal/platformfloor — they are
@@ -39,6 +39,7 @@ func runBundleVerify(args []string) error {
 	appPath := fs.String("app", "", "path to the built .app bundle (required)")
 	dmgPath := fs.String("dmg", "", "path to the notarized .dmg (optional; the staple lives here)")
 	requireSigned := fs.Bool("require-signed", false, "promote signature findings from warn to error")
+	credentialAdvisory := fs.Bool("credential-probe-advisory", false, "report a failed Keychain protection probe as a warning")
 	asJSON := fs.Bool("json", false, "emit the report as JSON")
 
 	if err := parseStrictFlags(fs, args); err != nil {
@@ -52,9 +53,10 @@ func runBundleVerify(args []string) error {
 	}
 
 	report, err := bundleverify.Verify(context.Background(), bundleverify.Options{
-		AppPath:       *appPath,
-		DMGPath:       *dmgPath,
-		RequireSigned: *requireSigned,
+		AppPath:                 *appPath,
+		DMGPath:                 *dmgPath,
+		RequireSigned:           *requireSigned,
+		CredentialProbeAdvisory: *credentialAdvisory,
 	})
 	if err != nil {
 		return exitCodeError{code: 2, err: err}
