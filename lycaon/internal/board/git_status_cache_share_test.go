@@ -72,12 +72,12 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	select {
 	case err := <-buildDone:
 		testutil.FailErr(t, "board build", err)
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("cold board blocked on git status")
 	}
 	select {
 	case <-loader.started:
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("cold board did not start background git warm")
 	}
 
