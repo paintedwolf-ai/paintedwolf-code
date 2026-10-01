@@ -23,6 +23,7 @@ case "${LYCAON_HARNESS_MODE:-}" in
     # Mock runs need a provider with static models, not this machine's settings.
     if [[ -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ]]; then
       SOURCE_CONFIG="${ROOT}/lycaon/test/fixtures/e2e/config"
+      MODEL_FIXTURE=1
     fi
     ;;
 esac
@@ -37,6 +38,24 @@ mkdir -p "${CONFIG_DIR}"
 for f in providers.local.yaml model-policy.yaml; do
   [[ -f "${SOURCE_CONFIG}/${f}" && ! -f "${CONFIG_DIR}/${f}" ]] && cp "${SOURCE_CONFIG}/${f}" "${CONFIG_DIR}/${f}"
 done
+# Model discovery needs a live endpoint even when completions are mocked.
+if [[ "${MODEL_FIXTURE:-0}" == "1" ]]; then
+  FIXTURE_PORT_FILE="${STATE_DIR}/model-fixture.port"
+  FIXTURE_PID_FILE="${STATE_DIR}/model-fixture.pid"
+  if ! { [[ -f "${FIXTURE_PID_FILE}" ]] && kill -0 "$(cat "${FIXTURE_PID_FILE}")" 2>/dev/null; }; then
+    rm -f "${FIXTURE_PORT_FILE}"
+    MODEL_FIXTURE_PORT_FILE="${FIXTURE_PORT_FILE}" bun "${DIR}/e2e/model-fixture.ts" &
+    echo "$!" >"${FIXTURE_PID_FILE}"
+    for _ in {1..100}; do
+      [[ -s "${FIXTURE_PORT_FILE}" ]] && break
+      sleep 0.1
+    done
+    [[ -s "${FIXTURE_PORT_FILE}" ]] || { echo "error: E2E model fixture did not start" >&2; exit 1; }
+  fi
+  FIXTURE_PORT="$(tr -d '[:space:]' <"${FIXTURE_PORT_FILE}")"
+  sed -i.bak "s#^\(    base_url:\).*#\1 http://127.0.0.1:${FIXTURE_PORT}#" "${CONFIG_DIR}/providers.local.yaml"
+  rm -f "${CONFIG_DIR}/providers.local.yaml.bak"
+fi
 if [[ "${LYCAON_LLM_MOCK:-1}" != "1" ]]; then
   for f in credential-vault.age .credential-vault-development-identity; do
     [[ -f "${SOURCE_CONFIG}/${f}" && ! -f "${CONFIG_DIR}/${f}" ]] && cp "${SOURCE_CONFIG}/${f}" "${CONFIG_DIR}/${f}"
