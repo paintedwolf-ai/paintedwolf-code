@@ -17805,7 +17805,7 @@ test_files:
     lycaon/internal/approvals/secret_grant_test.go: 28
     lycaon/internal/approvals/testing_main_test.go: 10
     lycaon/internal/argv/argv_test.go: 416
-    lycaon/internal/argv/roundtrip_test.go: 102
+    lycaon/internal/argv/roundtrip_test.go: 103
     lycaon/internal/argv/sequence_test.go: 180
     lycaon/internal/attention/attention_test.go: 366
     lycaon/internal/authzcontext/canonical_test.go: 51
