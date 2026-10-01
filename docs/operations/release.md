@@ -147,8 +147,12 @@ Packaging, the signed bundle audit, and the release smoke test run
 `pw credentials verify-protection` from the helper. It accesses only randomly
 named disposable Keychain items, verifies their protection and isolation, and
 deletes them; it never reads or resets the user's vault. A failed probe blocks
-the release. These checks need an unlocked interactive macOS user session and
-valid signing inputs; development, test, and performance hosts cannot qualify.
+the release, except on GitHub-hosted runners, where packaging reports it as an
+advisory warning: those VMs lack an interactive session's data-protection
+Keychain. Until a real Mac runs in the pipeline, qualify the published build
+with `bundle-smoke.sh` on a real Mac. These checks need an unlocked interactive
+macOS user session and valid signing inputs; development, test, and performance
+hosts cannot qualify.
 Unsigned development builds (`./task den:app -- --debug`) use the separate
 development identity backend and cannot qualify this boundary.
 
