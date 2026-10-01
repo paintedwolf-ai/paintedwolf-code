@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/jsonshape"
 )
 
-// A closeout arrives as a JSON envelope, as Markdown with one trailing json
+// A closeout arrives as a JSON envelope, as Markdown ending in one report
 // fence of report fields, or, during a repair, as that fence alone for the
 // pinned body. Every form is read against the same report type: members it
 // declares are kept, and every other member is named as unread so a refusal
@@ -130,33 +130,21 @@ func readReportFence(fence string) CloseoutRead {
 // reportFenceMembers are the members a report fence may carry.
 var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[CoordinatorCompletionReport]())
 
-// splitReportFence separates a closeout's Markdown from its trailing json
-// fence. A fence is the report's only when it is a JSON object with at least
-// one report member; any other trailing block is part of the answer.
+// splitReportFence separates a closeout's Markdown from its report fence: the
+// last block, fenced as `json` or untagged, holding a JSON object with at
+// least one report member. Any other trailing block is part of the answer.
 func splitReportFence(content string) (body, fence string, ok bool) {
-	const marker = "```"
-	if !strings.HasSuffix(content, marker) {
-		return "", "", false
-	}
-	inner := content[:len(content)-len(marker)]
-	open := strings.LastIndex(inner, marker)
-	if open < 0 {
-		return "", "", false
-	}
-	info, raw, found := strings.Cut(inner[open+len(marker):], "\n")
-	if !found {
-		return "", "", false
-	}
-	if info = strings.TrimSpace(info); info != "json" && info != "json closeout" {
+	before, block, ok := jsonfence.Trailing(content)
+	if !ok || (block.Language != "" && !strings.EqualFold(block.Language, "json")) {
 		return "", "", false
 	}
 	var members map[string]json.RawMessage
-	if json.Unmarshal([]byte(raw), &members) != nil {
+	if json.Unmarshal([]byte(block.Payload), &members) != nil {
 		return "", "", false
 	}
 	for name := range members {
 		if slices.Contains(reportFenceMembers, name) {
-			return strings.TrimSpace(inner[:open]), raw, true
+			return strings.TrimSpace(before), block.Payload, true
 		}
 	}
 	return "", "", false
