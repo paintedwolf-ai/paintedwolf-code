@@ -48,7 +48,7 @@
     "@tauri-apps/plugin-shell": "^2",
     "@thisbeyond/solid-dnd": "^0.7.5",
     "diff": "^8.0.4",
-    "isomorphic-dompurify": "3.22.0",
+    "isomorphic-dompurify": "4.4.0",
     "marked": "18.0.9",
     "overlayscrollbars": "^2.16.0",
     "semver": "^7.7.3",
