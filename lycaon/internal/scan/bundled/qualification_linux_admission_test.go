@@ -3,6 +3,8 @@ package bundled_test
 import (
 	"encoding/binary"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -64,6 +66,38 @@ func TestLinuxArtifactAdmissionChecksSourceAndExecutable(t *testing.T) {
 				"python_runtime": map[string]string{"source_sha256": strings.Repeat("f", 64)}}))
 			if _, err := bundled.SelectBuildArtifact(f.source, f.directory, f.goos, f.goarch); err == nil {
 				t.Fatal("Linux artifact with a different Python source was admitted")
+			}
+		})
+	}
+}
+
+func TestLinuxArtifactAdmissionAllowsOnlySystemRuntimeLibraries(t *testing.T) {
+	for _, tc := range []struct {
+		library  string
+		admitted bool
+	}{
+		{library: "libgcc_s.so.1", admitted: true},
+		{library: "libstdc++.so.6", admitted: false},
+	} {
+		t.Run(tc.library, func(t *testing.T) {
+			f := linuxBuildFixture(t, "amd64")
+			raw, err := os.ReadFile(filepath.Join(f.directory, "platform-checks.json"))
+			testutil.FailErr(t, "read Linux platform report", err)
+			var report map[string]any
+			testutil.FailErr(t, "decode Linux platform report", json.Unmarshal(raw, &report))
+			for _, key := range []string{"standalone", "extracted"} {
+				images := report[key].([]any)
+				extension := images[0].(map[string]any)
+				extension["dependencies"] = []string{tc.library, "libc.so.6"}
+			}
+			f.replacePayload(t, "platform-checks.json", "platform_checks", buildJSON(t, report))
+			f.writeArchive(t, true)
+			_, err = bundled.SelectBuildArtifact(f.source, f.directory, f.goos, f.goarch)
+			if tc.admitted && err != nil {
+				t.Fatalf("Linux artifact needing %s was refused: %v", tc.library, err)
+			}
+			if !tc.admitted && err == nil {
+				t.Fatalf("Linux artifact needing an unpackaged %s was admitted", tc.library)
 			}
 		})
 	}

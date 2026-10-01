@@ -29,10 +29,14 @@ type linuxPlatformReport struct {
 	Extracted     []linuxImage `json:"extracted"`
 }
 
+// linuxSystemLibrary reports a library every glibc host provides: glibc's own
+// libraries, the loader, and libgcc_s, which glibc loads for thread cancellation
+// and unwinding.
 func linuxSystemLibrary(name string) bool {
 	switch name {
 	case "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
-		"libutil.so.1", "libresolv.so.2", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1":
+		"libutil.so.1", "libresolv.so.2", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
+		"libgcc_s.so.1":
 		return true
 	}
 	return false
