@@ -422,7 +422,7 @@ stress, fuzz, transcript scale, and both coverage gates run nightly.
 |---|---|
 | PR and main | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these plus upgrade corpus, Seatbelt, browser confinement, and Git parity. |
 | Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
-| Release | Preflight follows source classification. The release verification profile and upgrade rehearsal then run independently; desktop E2E runs on every change instead. Signed builds start after preflight and overlap verification; `ship-gates` requires every result before anything publishes. |
+| Release | Push CI verifies every commit, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
 
 The catalog grants each verification invocation 60–180 minutes and each job an
 additional 30 minutes for setup and evidence collection. These are initial

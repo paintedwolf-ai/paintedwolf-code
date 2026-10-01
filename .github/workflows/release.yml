@@ -88,13 +88,6 @@ jobs:
           name: release-preflight-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  verification:
-    needs: preflight
-    uses: ./.github/workflows/verification.yml
-    with:
-      profile: release
-
-
   upgrade:
     needs: [classify, preflight]
     runs-on: macos-15
@@ -123,7 +116,7 @@ jobs:
 
   ship-gates:
     if: always()
-    needs: [classify, preflight, verification, upgrade]
+    needs: [classify, preflight, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -133,9 +126,10 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # Signing overlaps verification; nothing leaves the run until ship-gates passes.
+  # Push CI verifies every commit; the signed build starts with preflight, and
+  # nothing leaves the run until ship-gates passes.
   build-release:
-    needs: [classify, preflight]
+    needs: [classify]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -219,6 +213,10 @@ jobs:
           echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/AuthKey.p8" >> "${GITHUB_ENV}"
           echo "${APPLE_ENGINE_PROVISIONING_PROFILE_BASE64}" | openssl base64 -d -A -out "${RUNNER_TEMP}/engine.provisionprofile"
           echo "APPLE_ENGINE_PROVISIONING_PROFILE=${RUNNER_TEMP}/engine.provisionprofile" >> "${GITHUB_ENV}"
+
+      - name: Restore the decision engine build
+        if: ${{ matrix.goos == 'darwin' }}
+        uses: ./.github/actions/cache-decide
 
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep

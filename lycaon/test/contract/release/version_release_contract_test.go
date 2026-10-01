@@ -279,8 +279,6 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"refs/remotes/origin/main",
 		"./task release:preflight -- --require-corpus",
 		"./task upgrade:rehearse",
-		"profile: release",
-		"uses: ./.github/workflows/verification.yml",
 		"aggregate-release:",
 		"packaging/release-platforms.json",
 		"release-assemble-updater-manifest.py",

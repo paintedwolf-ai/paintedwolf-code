@@ -82,23 +82,21 @@ func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	}
 }
 
-func TestReleaseVerificationPrecedesPublication(t *testing.T) {
+// Push CI verifies every commit; a release gates publication on its own
+// preflight and upgrade rehearsal while the signed build runs alongside them.
+func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
-	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "verification", "upgrade"})
-	if jobs["verification"].Uses != "./.github/workflows/verification.yml" || jobs["verification"].With["profile"] != "release" {
-		t.Fatal("release must run the full catalog release profile")
-	}
+	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade"})
 	for name, dependencies := range map[string][]string{
-		"preflight": {"classify"}, "verification": {"preflight"},
-		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "preflight"},
+		"preflight": {"classify"}, "upgrade": {"classify", "preflight"}, "build-release": {"classify"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)
 		}
 	}
 	if !slices.Contains(hostedNeeds(t, jobs["publish-immutable"]), "ship-gates") {
-		t.Error("publish-immutable must require ship-gates; signing may overlap verification, publication may not")
+		t.Error("publish-immutable must require ship-gates; signing may overlap the gates, publication may not")
 	}
 }
 
@@ -149,7 +147,7 @@ func TestDesktopVerificationHasOneImplementation(t *testing.T) {
 
 func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	t.Parallel()
-	for workflow, profile := range map[string]string{"ci": "check", "nightly": "nightly", "release": "release"} {
+	for workflow, profile := range map[string]string{"ci": "check", "nightly": "nightly"} {
 		job := hostedJobs(t, workflow)["verification"]
 		if job.Uses != "./.github/workflows/verification.yml" || job.With["profile"] != profile {
 			t.Errorf("%s must invoke its catalog verification profile %s", workflow, profile)
