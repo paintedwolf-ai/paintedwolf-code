@@ -11982,7 +11982,7 @@ source_files:
     lycaon/internal/db/store_incompatible.go: 29
     lycaon/internal/db/store_meta.go: 98
     lycaon/internal/db/store_schema.go: 355
-    lycaon/internal/db/table_lifetimes.go: 192
+    lycaon/internal/db/table_lifetimes.go: 194
     lycaon/internal/db/upgrade.go: 133
     lycaon/internal/db/wal_checkpoint.go: 103
     lycaon/internal/debugpaths/debugpaths.go: 187
@@ -13296,7 +13296,7 @@ source_files:
     lycaon/internal/prompts/surface_card.go: 64
     lycaon/internal/prompts/tool_profile_prompt_vars.go: 401
     lycaon/internal/prompts/units.go: 84
-    lycaon/internal/prompts/visual_show_vars.go: 30
+    lycaon/internal/prompts/visual_show_vars.go: 36
     lycaon/internal/prompts/worker_policy_vars.go: 26
     lycaon/internal/prompts/workspace_roots.go: 109
     lycaon/internal/promptunit/catalog.go: 179
@@ -15185,7 +15185,7 @@ source_files:
     scripts/bundle-smoke.sh: 214
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 110
+    scripts/ci_verification.py: 116
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -15311,7 +15311,7 @@ source_files:
     scripts/e2e-den.sh: 138
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 18
-    scripts/e2e-sidecar-serve.sh: 45
+    scripts/e2e-sidecar-serve.sh: 50
     scripts/e2e-sidecar-stop.sh: 7
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
@@ -15357,8 +15357,8 @@ source_files:
     scripts/release-stage-platform-artifacts.sh: 228
     scripts/release-validate-bridge.sh: 30
     scripts/release-validate-updater-manifest.sh: 94
-    scripts/release_control.py: 74
-    scripts/release_distribution.py: 273
+    scripts/release_control.py: 75
+    scripts/release_distribution.py: 274
     scripts/release_pointer_headers.py: 14
     scripts/release_semver.py: 62
     scripts/release_withdrawal.py: 154
@@ -15379,7 +15379,7 @@ source_files:
     scripts/sync-den-versions.sh: 49
     scripts/task.sh: 21
     scripts/test-digest.py: 186
-    scripts/test-execution.py: 513
+    scripts/test-execution.py: 514
     scripts/test-host-capacity.sh: 56
     scripts/test-lycaon-rules.sh: 22
     scripts/test-run-isolation.sh: 42
@@ -15711,7 +15711,7 @@ test_directories:
     lycaon/internal/fsname: 1
     lycaon/internal/fspath: 2
     lycaon/internal/gate: 7
-    lycaon/internal/git: 32
+    lycaon/internal/git: 33
     lycaon/internal/gitargv: 1
     lycaon/internal/gitcredential: 1
     lycaon/internal/gitengine: 1
@@ -18671,8 +18671,9 @@ test_files:
     lycaon/internal/git/manager_file_history_test.go: 210
     lycaon/internal/git/manager_introspection_test.go: 203
     lycaon/internal/git/manager_test.go: 126
+    lycaon/internal/git/operation_fixture_test.go: 35
     lycaon/internal/git/operation_scale_test.go: 64
-    lycaon/internal/git/operation_test.go: 425
+    lycaon/internal/git/operation_test.go: 398
     lycaon/internal/git/option_injection_test.go: 93
     lycaon/internal/git/repo_set_cache_test.go: 145
     lycaon/internal/git/repo_set_scope_test.go: 86
@@ -19503,8 +19504,8 @@ test_files:
     lycaon/internal/prompts/turn_recipe_test.go: 32
     lycaon/internal/prompts/units_helpers_test.go: 19
     lycaon/internal/prompts/validation_execution_test.go: 48
-    lycaon/internal/prompts/visual_partials_test.go: 499
-    lycaon/internal/prompts/visual_show_vars_test.go: 61
+    lycaon/internal/prompts/visual_partials_test.go: 521
+    lycaon/internal/prompts/visual_show_vars_test.go: 78
     lycaon/internal/prompts/worker_policy_vars_test.go: 36
     lycaon/internal/prompts/workspace_root_contract_test.go: 37
     lycaon/internal/prompts/workspace_roots_test.go: 134
