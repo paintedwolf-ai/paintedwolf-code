@@ -21,7 +21,7 @@ function remember(value: string): void {
   }
 }
 
-/** The desktop window label, or null where the build targets Tauri but no window exists (a browser on the dev server). */
+/** The desktop window label, or null in a browser on the Tauri dev server. */
 function tauriWindowLabel(): string | null {
   if (!isTauriRuntime()) return null;
   try {
