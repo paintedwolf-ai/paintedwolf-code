@@ -9525,7 +9525,7 @@ source_directories:
     lycaon/internal/zstdcodec: 1
     lycaon/pkg/api: 31
     lycaon/pkg/pathglob: 2
-    scripts: 151
+    scripts: 152
     scripts/bialy: 10
     scripts/bialy/rerank: 2
     scripts/commentlint: 8
@@ -15291,14 +15291,14 @@ source_files:
     scripts/den-build-app.sh: 77
     scripts/den-build-bundle.sh: 243
     scripts/den-coverage-check.sh: 59
-    scripts/den-dev-app.sh: 67
+    scripts/den-dev-app.sh: 55
     scripts/den-dev-sidecar.sh: 115
     scripts/den-fresh-session-state.sh: 65
     scripts/den-harness-canary.sh: 4
     scripts/den-harness-test.sh: 42
     scripts/den-harness.sh: 15
     scripts/den-sidecar-stop.sh: 107
-    scripts/den-webkit-scroll.sh: 18
+    scripts/den-webkit-scroll.sh: 19
     scripts/dev-signing-config.sh: 2
     scripts/dev-signing-identity.sh: 87
     scripts/diff-openapi.sh: 27
@@ -15316,6 +15316,7 @@ source_files:
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
     scripts/e2e-wait-health.sh: 14
+    scripts/ensure-tauri-binaries.sh: 10
     scripts/eval-agent-live.sh: 182
     scripts/fuzz-short.sh: 61
     scripts/gitengine-ensure.sh: 15
