@@ -37,8 +37,8 @@ test_host_timeout_scale() {
     printf '%s\n' "${PW_TEST_TIMEOUT_SCALE}"
     return
   fi
-  awk -v cpus="${cpus}" -v load="${load}" 'BEGIN {
-    scale = int(load / cpus) + 1
+  awk -v cpus="${cpus}" -v host_load="${load}" 'BEGIN {
+    scale = int(host_load / cpus) + 1
     if (scale < 1) scale = 1
     if (scale > 4) scale = 4
     print scale

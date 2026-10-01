@@ -104,7 +104,8 @@ def main(argv: list[str]) -> int:
 
     for line in sys.stdin:
         line = line.strip()
-        if not line:
+        # Module fetches on a cold cache report progress on the merged stream.
+        if not line or line.startswith("go: downloading "):
             continue
         try:
             ev = json.loads(line)

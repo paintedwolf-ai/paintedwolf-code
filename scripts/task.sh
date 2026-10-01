@@ -21,7 +21,7 @@ if [[ ! -f "${TASKFILE}" ]]; then
 fi
 
 if ! "${TASK_BIN}" --version 2>/dev/null | grep -qF "${TASK_VERSION#v}"; then
-  echo "Installing task ${TASK_VERSION} to ${BIN_DIR}..."
+  echo "Installing task ${TASK_VERSION} to ${BIN_DIR}..." >&2
   mkdir -p "${BIN_DIR}"
   GOBIN="${BIN_DIR}" go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
 fi
