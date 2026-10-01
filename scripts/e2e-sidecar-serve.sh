@@ -19,6 +19,12 @@ case "${LYCAON_HARNESS_MODE:-}" in
   mock|manual)
     SOURCE_CONFIG="${DIR}/harness/device-config"
     ;;
+  "")
+    # Mock runs need the deterministic harness provider, not this machine's settings.
+    if [[ -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ]]; then
+      SOURCE_CONFIG="${DIR}/harness/device-config"
+    fi
+    ;;
 esac
 if [[ -z "${SOURCE_CONFIG}" ]]; then
   # shellcheck source=scripts/config-dir.sh
