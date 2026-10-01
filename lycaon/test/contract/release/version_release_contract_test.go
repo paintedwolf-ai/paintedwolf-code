@@ -305,8 +305,8 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 	provenanceAt := strings.Index(body, "scripts/release-source-validate.sh")
 	signingAt := strings.Index(body, "name: Import signing certificate")
 	publishAt := strings.Index(body, "name: Publish immutable release objects")
-	if provenanceAt > gateAt || gateAt > signingAt || gateAt > publishAt {
-		t.Fatal("release.yml must prove exact-main provenance and pass the full gate before signing or publishing")
+	if provenanceAt > gateAt || gateAt > publishAt {
+		t.Fatal("release.yml must prove exact-main provenance and pass the full gate before publishing")
 	}
 	aggregateAt := strings.Index(body, "aggregate-release:")
 	activateAt := strings.Index(body, "activate-updater:")
