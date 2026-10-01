@@ -177,8 +177,8 @@ export function TranscriptItemRow(props: {
   const item = () => props.item();
   const layout = () => props.layout;
   const bubbleText = () => messageBubbleItem(item())?.text ?? "";
-  // Keyed host lookups stay memoized in the owner so a streaming update that
-  // leaves this row's message unchanged does not re-render it.
+  // Keyed host lookups stay memoized in the component body so a streaming
+  // update that leaves this row's message unchanged does not re-render it.
   const chatKey = createMemo(() => {
     if (layout() !== "chat") return undefined;
     return (assistantChatItem(item()) ?? userChatItem(item()))?.key;

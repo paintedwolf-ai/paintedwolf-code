@@ -1,12 +1,13 @@
 export type TauriPlatform = "macos" | "windows" | "linux";
 
-/** True inside the desktop webview. */
+/**
+ * True inside the desktop webview. The build target alone does not count: a
+ * browser on the Tauri dev server shares it but has no native window or IPC.
+ */
 export function isTauriRuntime(): boolean {
   return (
     typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window ||
-      "__TAURI__" in window ||
-      import.meta.env.TAURI_ENV_PLATFORM != null)
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
   );
 }
 
