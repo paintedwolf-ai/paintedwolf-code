@@ -20,9 +20,9 @@ case "${LYCAON_HARNESS_MODE:-}" in
     SOURCE_CONFIG="${DIR}/harness/device-config"
     ;;
   "")
-    # Mock runs need the deterministic harness provider, not this machine's settings.
+    # Mock runs need a provider with static models, not this machine's settings.
     if [[ -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ]]; then
-      SOURCE_CONFIG="${DIR}/harness/device-config"
+      SOURCE_CONFIG="${ROOT}/lycaon/test/fixtures/e2e/config"
     fi
     ;;
 esac
