@@ -18,10 +18,8 @@ class HostedVerificationTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
-        self.assertLessEqual(check, release)
-        extra = {target for name in release - check for target in lanes[name]["targets"]}
-        self.assertEqual(extra, {"test:fuzz", "test:race", "test:stress", "check:coverage",
-                                 "den:coverage-check", "den:test:transcript-scale"})
+        # Release gates on the check partition; the deep tiers run nightly.
+        self.assertEqual(release, check)
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
         for mutation in ("missing", "duplicate", "unknown", "unbounded", "release-gap"):

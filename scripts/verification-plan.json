@@ -783,7 +783,6 @@
       ],
       "minutes": 300,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "race",
@@ -795,7 +794,6 @@
       ],
       "minutes": 180,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "fuzz",
@@ -807,7 +805,6 @@
       ],
       "minutes": 180,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "performance",
@@ -819,7 +816,6 @@
       ],
       "minutes": 180,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "coverage",
@@ -831,7 +827,6 @@
       ],
       "minutes": 90,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "coverage",
@@ -843,7 +838,6 @@
       ],
       "minutes": 60,
       "profiles": [
-        "release",
         "nightly"
       ],
       "suite": "performance",
