@@ -13296,7 +13296,7 @@ source_files:
     lycaon/internal/prompts/surface_card.go: 64
     lycaon/internal/prompts/tool_profile_prompt_vars.go: 401
     lycaon/internal/prompts/units.go: 84
-    lycaon/internal/prompts/visual_show_vars.go: 36
+    lycaon/internal/prompts/visual_show_vars.go: 49
     lycaon/internal/prompts/worker_policy_vars.go: 26
     lycaon/internal/prompts/workspace_roots.go: 109
     lycaon/internal/promptunit/catalog.go: 179
@@ -13411,7 +13411,7 @@ source_files:
     lycaon/internal/scan/bundled/manifest.go: 165
     lycaon/internal/scan/bundled/qualification.go: 221
     lycaon/internal/scan/bundled/qualification_contracts.go: 130
-    lycaon/internal/scan/bundled/qualification_linux_report.go: 178
+    lycaon/internal/scan/bundled/qualification_linux_report.go: 179
     lycaon/internal/scan/bundled/release_archive.go: 191
     lycaon/internal/scan/bundled/release_attestation.go: 131
     lycaon/internal/scan/bundled/release_audit.go: 120
@@ -18094,7 +18094,7 @@ test_files:
     lycaon/internal/coordinator/batch/wire_phase_map_test.go: 58
     lycaon/internal/coordinator/capability/capability_test.go: 38
     lycaon/internal/coordinator/capability/disclosure_test.go: 31
-    lycaon/internal/coordinator/capability/surface_test.go: 73
+    lycaon/internal/coordinator/capability/surface_test.go: 86
     lycaon/internal/coordinator/coordinator_package_contract_test.go: 83
     lycaon/internal/coordinator/coordinator_session_integration_test.go: 139
     lycaon/internal/coordinator/goleak_test.go: 11
@@ -19505,7 +19505,7 @@ test_files:
     lycaon/internal/prompts/units_helpers_test.go: 19
     lycaon/internal/prompts/validation_execution_test.go: 48
     lycaon/internal/prompts/visual_partials_test.go: 521
-    lycaon/internal/prompts/visual_show_vars_test.go: 78
+    lycaon/internal/prompts/visual_show_vars_test.go: 83
     lycaon/internal/prompts/worker_policy_vars_test.go: 36
     lycaon/internal/prompts/workspace_root_contract_test.go: 37
     lycaon/internal/prompts/workspace_roots_test.go: 134
@@ -19609,7 +19609,7 @@ test_files:
     lycaon/internal/scan/bundled/extract_test.go: 33
     lycaon/internal/scan/bundled/manifest_test.go: 54
     lycaon/internal/scan/bundled/qualification_contracts_internal_test.go: 38
-    lycaon/internal/scan/bundled/qualification_linux_admission_test.go: 65
+    lycaon/internal/scan/bundled/qualification_linux_admission_test.go: 98
     lycaon/internal/scan/bundled/qualification_linux_report_test.go: 66
     lycaon/internal/scan/bundled/release_archive_test.go: 172
     lycaon/internal/scan/bundled/release_attestation_test.go: 133
