@@ -43,20 +43,7 @@ bash "${ROOT}/scripts/den-fresh-session-state.sh" consume
 # shellcheck source=scripts/config-dir.sh
 source "${ROOT}/scripts/config-dir.sh"
 
-# Bundled executables are named for the host target.
-TARGET="$(rustc --print host-tuple)"
-BINARIES_DIR="${DEN_DIR}/src-tauri/binaries"
-NEED_STAGE=0
-for name in pw pw-logs bialy; do
-	if [[ ! -x "${BINARIES_DIR}/${name}-${TARGET}" ]]; then
-		NEED_STAGE=1
-		break
-	fi
-done
-if [[ "${NEED_STAGE}" == "1" ]]; then
-	echo "den:dev — staging missing externalBin (pw / pw-logs / bialy) for ${TARGET}" >&2
-	bash "${ROOT}/scripts/stage-engine.sh" --minimal
-fi
+bash "${ROOT}/scripts/ensure-tauri-binaries.sh"
 
 export LYCAON_ATTACH_ONLY=1
 export LYCAON_DEV="${LYCAON_DEV:-1}"

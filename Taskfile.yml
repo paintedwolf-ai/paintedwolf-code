@@ -586,6 +586,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
+      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
       - cargo test --all-targets --quiet
 
   decide:test:

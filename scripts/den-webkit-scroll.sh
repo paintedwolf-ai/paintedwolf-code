@@ -23,5 +23,6 @@ export LYCAON_E2E_FROZEN=1
 harness_up
 harness_vite_bg
 
+bash "${ROOT}/scripts/ensure-tauri-binaries.sh"
 cd "${ROOT}/lycaon-den/src-tauri"
 cargo run --quiet --example scroll_thread_invariants -- "${LYCAON_E2E_BASE_URL}"
