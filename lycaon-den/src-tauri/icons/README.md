@@ -28,6 +28,24 @@ iconutil -c icns "$work" -o icon.icns
 
 The dock can continue displaying a cached icon after a bundle is rebuilt.
 
+## Regenerating `Assets.car`
+
+`icon.icon` is the Icon Composer source for macOS 26. The bundle ships the
+compiled `Assets.car`, because `actool` cannot compile Icon Composer icons on
+the hosted macOS runners. Recompile it with Xcode 26 whenever `icon.icon`
+changes, using the arguments the Tauri bundler passes:
+
+```bash
+cd lycaon-den/src-tauri/icons
+work="$(mktemp -d)" && cp -R icon.icon "$work/Icon.icon" && mkdir "$work/out"
+actool "$work/Icon.icon" --compile "$work/out" --output-format human-readable-text \
+  --notices --warnings --output-partial-info-plist "$work/out/info.plist" \
+  --app-icon Icon --include-all-app-icons --accent-color AccentColor \
+  --enable-on-demand-resources NO --development-region en --target-device mac \
+  --minimum-deployment-target 26.0 --platform macosx
+cp "$work/out/Assets.car" Assets.car
+```
+
 ## `icon.icon` (macOS 26 and later)
 
 `icon.icon` is the Icon Composer document for the layered icon macOS 26
