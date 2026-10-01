@@ -51,7 +51,7 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			model := "@cf/zai-org/glm-5.3-flash"
 			inner := openaicompat.New("fixture", server.URL, "fixture", []modelinfo.Entry{{ID: model, MaxTokens: 131072}})
 			provider := &responseRetryProvider{inner: inner}
-			req := modelcall.CompletionRequest{Model: model, Tools: []tools.ToolMeta{{Name: "read_file"}}, Debug: modelcall.RequestDebug{SessionID: transport}, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Continue the work"}}}
+			req := modelcall.CompletionRequest{Model: model, Think: modelcall.ThinkHigh, Tools: []tools.ToolMeta{{Name: "read_file"}}, Debug: modelcall.RequestDebug{SessionID: transport}, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Continue the work"}}}
 			var got *modelcall.Completion
 			var err error
 			if transport == "complete" {
@@ -72,7 +72,7 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			if got.Usage.PromptTokens != 200 || got.Usage.CompletionTokens != 24596 {
 				t.Fatalf("lost billed attempts: %+v", got.Usage)
 			}
-			if len(requests) != 2 || requests[0]["max_tokens"] != float64(24576) || requests[1]["max_tokens"] != float64(4096) || requests[0]["reasoning_effort"] != "high" || requests[1]["reasoning_effort"] != "low" {
+			if len(requests) != 2 || requests[0]["max_tokens"] != float64(32768) || requests[1]["max_tokens"] != float64(4096) || requests[0]["reasoning_effort"] != "high" || requests[1]["reasoning_effort"] != "low" {
 				t.Fatalf("unexpected recovery controls: %+v", requests)
 			}
 			if modelcall.SessionStrictBudget(transport) {
@@ -90,7 +90,8 @@ func TestRecoveryRequiresChangedReasoningAndRespectsFixedOverrides(t *testing.T)
 		req     modelcall.CompletionRequest
 		recover bool
 	}{
-		{"medium", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkMedium}, true},
+		{"high", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkHigh}, true},
+		{"medium runs at the floor", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkMedium}, false},
 		{"already low", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkLow}, false},
 		{"fixed", modelcall.CompletionRequest{Model: "glm-5.3-flash", ThinkingOverride: &modelcall.ThinkingOverride{Mode: "fixed", Effort: "high"}}, false},
 		{"no reasoning", modelcall.CompletionRequest{Model: "unknown", Think: modelcall.ThinkOff, ThinkingOverrideStyle: modelinfo.ThinkStyleNone}, false},

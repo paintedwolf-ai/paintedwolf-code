@@ -46,7 +46,7 @@ func TestCloudflareOutputLimitRecoversOnceAndPreservesUsage(t *testing.T) {
 			defer server.Close()
 			inner := openaicompat.NewCloudflare("cf-fixture", server.URL+"/accounts/account/ai/v1", nil, "fixture", nil, server.Client())
 			provider := &responseRetryProvider{inner: inner, policy: retryEmptyOncePolicy()}
-			req := modelcall.CompletionRequest{Model: "@cf/zai-org/glm-5.3-flash", Think: modelcall.ThinkMedium, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}}}
+			req := modelcall.CompletionRequest{Model: "@cf/zai-org/glm-5.3-flash", Think: modelcall.ThinkHigh, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}}}
 			var completion *modelcall.Completion
 			var err error
 			if stream {
