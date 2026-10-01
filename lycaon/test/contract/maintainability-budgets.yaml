@@ -15375,7 +15375,7 @@ source_files:
     scripts/stage-decide-heads.py: 75
     scripts/stage-decide-heads.sh: 8
     scripts/stage-engine.sh: 137
-    scripts/stage-macos-host.py: 110
+    scripts/stage-macos-host.py: 122
     scripts/sync-den-versions.sh: 49
     scripts/task.sh: 21
     scripts/test-digest.py: 186
@@ -22357,7 +22357,7 @@ test_files:
     scripts/e2e/sidecar-process.sh: 31
     scripts/harness/test_supervise.py: 234
     scripts/test_decide_heads_execution.py: 65
-    scripts/test_stage_macos_host.py: 124
+    scripts/test_stage_macos_host.py: 154
     scripts/test_update_keys.py: 137
     scripts/verification_tests/__init__.py: 1
     scripts/verification_tests/support.py: 178
