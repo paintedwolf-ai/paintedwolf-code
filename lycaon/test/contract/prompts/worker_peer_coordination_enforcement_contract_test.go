@@ -62,7 +62,7 @@ func TestDispatchSurfaceIncludesParallelFanoutPartial(t *testing.T) {
 	partialPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "partials", "coordinator-parallel-fanout-dispatch.md")
 	partial, err := os.ReadFile(partialPath)
 	contractcheck.FailErr(t, "read fanout partial", err)
-	for _, want := range []string{"record_finding", "preview_overlay", "leaf", "registry"} {
+	for _, want := range []string{"after_workers", "preview_overlay", "promote_overlay", "shared_context"} {
 		if !strings.Contains(string(partial), want) {
 			t.Fatalf("fanout partial missing %q", want)
 		}
