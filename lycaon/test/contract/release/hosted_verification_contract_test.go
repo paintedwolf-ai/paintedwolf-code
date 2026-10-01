@@ -85,12 +85,12 @@ func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 func TestReleaseVerificationPrecedesPublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
-	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "verification", "desktop", "upgrade"})
+	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "verification", "upgrade"})
 	if jobs["verification"].Uses != "./.github/workflows/verification.yml" || jobs["verification"].With["profile"] != "release" {
 		t.Fatal("release must run the full catalog release profile")
 	}
 	for name, dependencies := range map[string][]string{
-		"preflight": {"classify"}, "verification": {"preflight"}, "desktop": {"preflight"},
+		"preflight": {"classify"}, "verification": {"preflight"},
 		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "preflight"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
@@ -140,7 +140,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 
 func TestDesktopVerificationHasOneImplementation(t *testing.T) {
 	t.Parallel()
-	for workflow, job := range map[string]string{"lycaon-den": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop", "release": "desktop"} {
+	for workflow, job := range map[string]string{"lycaon-den": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop"} {
 		if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/desktop-verification.yml" {
 			t.Errorf("%s must use the shared desktop verification workflow", workflow)
 		}

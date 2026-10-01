@@ -42,8 +42,6 @@ def lanes():
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"CI check partition differs from check: missing={expected - actual}, extra={actual - expected}")
-    if any("release" not in lane["profiles"] for lane in values.values() if "check" in lane["profiles"]):
-        raise ValueError("release verification must include every check partition")
     return values
 
 

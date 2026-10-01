@@ -94,9 +94,6 @@ jobs:
     with:
       profile: release
 
-  desktop:
-    needs: preflight
-    uses: ./.github/workflows/desktop-verification.yml
 
   upgrade:
     needs: [classify, preflight]
@@ -126,7 +123,7 @@ jobs:
 
   ship-gates:
     if: always()
-    needs: [classify, preflight, verification, desktop, upgrade]
+    needs: [classify, preflight, verification, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -413,15 +413,16 @@ hosted job partitions alongside the local recipes. The reusable
 into independent jobs with `fail-fast: false`. Each job invokes the existing
 `./task` entry point, preserving queue admission, source capture, and receipts.
 The planner rejects a `check` partition that omits or duplicates any stage of
-the local full gate. Tests require the release profile to run exactly that
-partition; race, stress, fuzz, transcript scale, and both coverage gates run
-nightly, which keeps a release to the gates that decide whether it ships.
+the local full gate. The release profile runs the subset that decides whether
+the product works: build, contracts, behavior, frontend, native, and
+vulnerabilities. Lint, runner tooling, and WebKit run on every change; race,
+stress, fuzz, transcript scale, and both coverage gates run nightly.
 
 | Profile | Work and required result |
 |---|---|
 | PR and main | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these plus upgrade corpus, Seatbelt, browser confinement, and Git parity. |
 | Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
-| Release | Preflight follows source classification. The complete release verification profile, desktop E2E, and upgrade rehearsal then run independently. Signed builds start after preflight and overlap verification; `ship-gates` requires every result before anything publishes. |
+| Release | Preflight follows source classification. The release verification profile and upgrade rehearsal then run independently; desktop E2E runs on every change instead. Signed builds start after preflight and overlap verification; `ship-gates` requires every result before anything publishes. |
 
 The catalog grants each verification invocation 60–180 minutes and each job an
 additional 30 minutes for setup and evidence collection. These are initial
