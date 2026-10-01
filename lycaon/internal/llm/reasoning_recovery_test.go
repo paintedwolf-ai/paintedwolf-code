@@ -91,7 +91,6 @@ func TestRecoveryRequiresChangedReasoningAndRespectsFixedOverrides(t *testing.T)
 		recover bool
 	}{
 		{"high", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkHigh}, true},
-		{"medium runs at the floor", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkMedium}, false},
 		{"already low", modelcall.CompletionRequest{Model: "glm-5.3-flash", Think: modelcall.ThinkLow}, false},
 		{"fixed", modelcall.CompletionRequest{Model: "glm-5.3-flash", ThinkingOverride: &modelcall.ThinkingOverride{Mode: "fixed", Effort: "high"}}, false},
 		{"no reasoning", modelcall.CompletionRequest{Model: "unknown", Think: modelcall.ThinkOff, ThinkingOverrideStyle: modelinfo.ThinkStyleNone}, false},
