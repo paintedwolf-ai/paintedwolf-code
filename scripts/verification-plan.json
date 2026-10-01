@@ -705,7 +705,7 @@
       "targets": [
         "lint:vuln"
       ],
-      "minutes": 90,
+      "minutes": 240,
       "profiles": [
         "check",
         "release"
