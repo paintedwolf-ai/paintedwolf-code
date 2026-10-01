@@ -58,6 +58,18 @@ runs:
       if: runner.os == 'macOS'
       uses: ./.github/actions/setup-opengrep
 
+    # Source-scanning frontend tests shell out to ripgrep.
+    - name: Install ripgrep
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v rg >/dev/null && exit 0
+        if [[ "${RUNNER_OS}" == macOS ]]; then
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+        else
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ripgrep
+        fi
+
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
       shell: bash
