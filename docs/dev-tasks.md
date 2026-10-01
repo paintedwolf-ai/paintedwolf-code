@@ -51,7 +51,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** choose one gate, `./task check-fast` for handoff or `./task check` for full verification. **CI** (`ci.yml`): `./task check` on `ubuntu-latest`, plus the jobs a host `check` cannot supply — `upgrade-corpus`, `seatbelt`, `browser-confinement`, and `git-parity`, all on `macos-14`. Every PR also runs `lycaon-den.yml` with no `paths:` filter: Vitest, the Tier B Playwright web E2E, and the Tier C Playwright desktop E2E (`playwright-desktop`, `macos-14`); its terminal `e2e` job requires all three. `lycaon-den-nightly.yml` re-runs Tier C desktop on a cron schedule as a supplementary check.
+The repository ships no pre-commit hook. **Closeout:** choose one gate, `./task check-fast` for handoff or `./task check` for full verification. **CI** (`ci.yml`): `./task check` on `ubuntu-latest`, plus the jobs a host `check` cannot supply — `upgrade-corpus`, `seatbelt`, `browser-confinement`, and `git-parity`, all on `macos-15` with Xcode 26.3. Every PR also runs `lycaon-den.yml` with no `paths:` filter: Vitest, the Tier B Playwright web E2E, and the Tier C Playwright desktop E2E (`playwright-desktop`, `macos-15`); its terminal `e2e` job requires all three. `lycaon-den-nightly.yml` re-runs Tier C desktop on a cron schedule as a supplementary check.
 
 ### Where credentials live in development
 

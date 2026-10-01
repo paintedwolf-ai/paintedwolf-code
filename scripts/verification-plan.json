@@ -775,7 +775,7 @@
       ],
       "suite": "all",
       "native": true,
-      "runner": "macos-14"
+      "runner": "macos-15"
     },
     "race": {
       "targets": [

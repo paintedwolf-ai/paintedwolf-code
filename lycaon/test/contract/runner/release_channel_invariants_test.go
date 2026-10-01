@@ -39,7 +39,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	contractcheck.FailErr(t, "parse release platform catalog", json.Unmarshal([]byte(raw), &catalog))
 	want := map[string]releasePlatform{
 		"darwin-aarch64": {
-			UpdaterKey: "darwin-aarch64", Runner: "macos-14", ArtifactArch: "aarch64",
+			UpdaterKey: "darwin-aarch64", Runner: "macos-15", ArtifactArch: "aarch64",
 			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
 			PackageExt: "dmg", UpdaterExt: "app.tar.gz",
 		},

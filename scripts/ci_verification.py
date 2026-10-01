@@ -35,7 +35,7 @@ def lanes():
             raise ValueError(f"invalid CI profiles: {name}")
         if lane["suite"] not in SUITES or type(lane["native"]) is not bool:
             raise ValueError(f"invalid CI setup or suite: {name}")
-        if lane.get("runner", "macos-14") not in {"macos-14", "ubuntu-latest"}:
+        if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"}:
             raise ValueError(f"unsupported CI runner: {name}")
     expected = Counter(stage["name"] for stage in expand(["check"]))
     actual = Counter(stage["name"] for lane in values.values() if "check" in lane["profiles"]
@@ -56,7 +56,7 @@ def matrix(profile, suite="all"):
             continue
         result.append({"lane": name, "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
                        "native": lane["native"],
-                       "runner": lane.get("runner", "ubuntu-latest" if profile == "check" else "macos-14")})
+                       "runner": lane.get("runner", "ubuntu-latest" if profile == "check" else "macos-15")})
     if not result:
         raise ValueError("CI selection contains no verification")
     return {"include": result}
