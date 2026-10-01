@@ -15185,7 +15185,7 @@ source_files:
     scripts/bundle-smoke.sh: 214
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 116
+    scripts/ci_verification.py: 114
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -17483,7 +17483,7 @@ test_files:
     lycaon/cmd/codegen-den-fonts/main_test.go: 131
     lycaon/cmd/codegen-dependency-inventory/render_test.go: 43
     lycaon/cmd/codegen-dependency-inventory/versions_test.go: 137
-    lycaon/cmd/codegen-dependency-inventory/workflow_test.go: 54
+    lycaon/cmd/codegen-dependency-inventory/workflow_test.go: 22
     lycaon/cmd/codegen-detection-packs/structured_cloud_test.go: 125
     lycaon/cmd/codegen-native-tool-contracts/main_test.go: 33
     lycaon/cmd/codegen-operations/dto_test.go: 127
@@ -22368,7 +22368,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 87
+    scripts/verification_tests/test_ci_execution.py: 86
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
