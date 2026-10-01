@@ -75,7 +75,7 @@ func TestBoardOrientationRenderIncludesLegendProse(t *testing.T) {
 	contractcheck.FailErr(t, "render board-orientation", err)
 	for _, want := range []string{
 		"per_scan",
-		"scan_list",
+		"scan_compare",
 		"scan_id",
 		"scan_pack",
 		"Pack board (host)",
