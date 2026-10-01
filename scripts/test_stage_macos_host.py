@@ -92,8 +92,9 @@ class ProfileTests(unittest.TestCase):
                         self.assertEqual((bundle / "Contents/embedded.provisionprofile").read_bytes(), profile.read_bytes())
                         entitlement_path = Path(arguments[arguments.index("--entitlements") + 1])
                         self.assertEqual(plistlib.loads(entitlement_path.read_bytes()), host.profile_entitlements(self.profile))
-                    if "--extract-certificates" in arguments:
-                        prefix = arguments[arguments.index("--extract-certificates") + 1]
+                    extract = [a for a in arguments if a.startswith("--extract-certificates=")]
+                    if extract:
+                        prefix = extract[0].split("=", 1)[1]
                         Path(prefix + "0").write_bytes(b"certificate" if authorized else b"other certificate")
                 environment = {"APPLE_SIGNING_IDENTITY": "synthetic signer", "APPLE_ENGINE_PROVISIONING_PROFILE": str(profile)}
                 with patch.dict("os.environ", environment, clear=True), patch.object(host.subprocess, "check_output", return_value=plistlib.dumps(self.profile)), patch.object(host.subprocess, "run", side_effect=run):

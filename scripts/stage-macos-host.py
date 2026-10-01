@@ -97,7 +97,8 @@ def stage(binary, output, version, release):
         ], check=True)
         certificate_prefix = temporary / "certificate"
         subprocess.run([
-            "/usr/bin/codesign", "--display", "--extract-certificates", str(certificate_prefix), str(bundle),
+            # codesign takes the prefix only in --flag=value form; a separate argument names a file to inspect.
+            "/usr/bin/codesign", "--display", f"--extract-certificates={certificate_prefix}", str(bundle),
         ], check=True)
         certificate = Path(str(certificate_prefix) + "0").read_bytes()
         if certificate not in profile["DeveloperCertificates"]:
