@@ -11,5 +11,11 @@ Write the answer in normal user-facing Markdown, without tools. End with one tra
 {% endif %}- For changed work, include `verification` with one method: `inspection`, `targeted`, `project`, or `blocked`, and your actual reason. Use `blocked` if primary interaction or launch could not be confirmed. Explain scope and outcome in prose. This assessment does not mint a host pass or waive a workflow gate.
 - Only an enabled workflow report phase can request a report document. In every other phase, give an ordinary completion reply without document report fields, and do not offer or generate a report document. The host controls download availability.
 
+For example, after the answer's last line:
+
+```json
+{"cited_evidence": [{"evidence": "read#3"}], "verification": {"method": "targeted", "reason": "The changed behavior's tests passed."}}
+```
+
 Use the user's terms. Unless asked, keep host mechanics, recovered denials, and test-tooling details out of progress updates and the completion reply. Name the observed product behavior, secondary untested paths, and any unresolved resource or required action.
 `Code: COORDINATOR_CLOSEOUT_ENVELOPE_ONLY`

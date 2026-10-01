@@ -14,13 +14,13 @@ worker_personas:
     web-researcher: 8602
 coordinator_tripartite:
     implement_dispatch_workflow_orchestrate: 20929
-    implement_investigate_first_user: 33021
-    implement_investigate_follow_up: 33021
-    implement_investigate_idle: 33021
+    implement_investigate_first_user: 33213
+    implement_investigate_follow_up: 33213
+    implement_investigate_idle: 33213
     implement_overlay_promote_pending_writes: 33797
-    implement_synthesis_implementer_chain: 20729
-    implement_synthesis_path_explorer_chain: 20729
-    implement_synthesis_repo_researcher_chain: 20729
+    implement_synthesis_implementer_chain: 20921
+    implement_synthesis_path_explorer_chain: 20921
+    implement_synthesis_repo_researcher_chain: 20921
     implement_synthesis_with_feedback_overlay: 9293
     plan_research_surface: 13420
     workflow_compose: 7268
@@ -45,7 +45,7 @@ kicks:
     command-jobs: 68
     coordinator-authz-seal-failed: 415
     coordinator-citation-grounding: 824
-    coordinator-closeout: 686
+    coordinator-closeout: 703
     coordinator-compose-done: 101
     coordinator-debate-select: 1221
     coordinator-edit-follow-up-repeat: 320

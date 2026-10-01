@@ -206,18 +206,37 @@ func TestCoordinatorCloseoutTranscriptNarrative(t *testing.T) {
 			`{"cited_urls":["https://example.com"],"artifact_ids":[]}`,
 			`{"verification":{"method":"inspection","reason":"Documentation only."}}`,
 		} {
-			for _, fence := range []string{"json", "json closeout"} {
-				input := "Design note written.\n\n```" + fence + "\n" + metadata + "\n```"
+			for _, info := range []string{"json", "JSON", "json closeout", ""} {
+				input := "Design note written.\n\n```" + info + "\n" + metadata + "\n```"
 				if got := UsableCloseoutSynthesis(input); got != "Design note written." {
-					t.Fatalf("usable synthesis with %s trailer = %q", fence, got)
+					t.Fatalf("usable synthesis with %q trailer = %q", info, got)
 				}
 			}
 		}
-		for _, example := range []string{`{}`, `{"name":"example"}`} {
-			input := "Example configuration:\n\n```json\n" + example + "\n```"
+		for _, example := range []string{
+			"```json\n{}\n```",
+			"```json\n{\"name\":\"example\"}\n```",
+			"```\n{\"name\":\"example\"}\n```",
+			"```yaml\ncited_evidence: []\n```",
+			"```js\n{\"cited_evidence\":[]}\n```",
+		} {
+			input := "Example configuration:\n\n" + example
 			if got := UsableCloseoutSynthesis(input); got != input {
 				t.Fatalf("ordinary code example changed: %q", got)
 			}
+		}
+	})
+
+	t.Run("an untagged report fence is read and hidden", func(t *testing.T) {
+		t.Parallel()
+		answer := "The implementation lives in dedicated packages ([docs/secrets.md:7](docs/secrets.md#L7)).\n\n```sh\n./task check\n```\n\nTools only ever receive a managed reference."
+		trailer := "```\n{\"cited_evidence\":[{\"evidence\":\"read#2\"}],\"verification\":{\"method\":\"inspection\",\"reason\":\"Summary of docs/secrets.md as written; no runtime claims tested\"}}\n```"
+		read, ok := ReadCloseoutReport(answer+"\n\n"+trailer, "")
+		if !ok || read.Report.Synthesis != answer || len(read.Unread) > 0 {
+			t.Fatalf("read = %+v ok=%v, want the answer above the fence and no unread members", read, ok)
+		}
+		if len(read.Report.CitedEvidence) != 1 || read.Report.CitedEvidence[0].Evidence != "read#2" || read.Report.Verification == nil {
+			t.Fatalf("report = %+v, want the fence's citation and verification", read.Report)
 		}
 	})
 
