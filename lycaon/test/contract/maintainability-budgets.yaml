@@ -10334,7 +10334,7 @@ source_files:
     lycaon-den/src/components/transcript/SessionTranscript.tsx: 807
     lycaon-den/src/components/transcript/TranscriptChickletSummary.tsx: 28
     lycaon-den/src/components/transcript/TranscriptDiffGroup.tsx: 154
-    lycaon-den/src/components/transcript/TranscriptItemRow.tsx: 497
+    lycaon-den/src/components/transcript/TranscriptItemRow.tsx: 507
     lycaon-den/src/components/transcript/TranscriptTimeRows.tsx: 110
     lycaon-den/src/components/transcript/TranscriptVisualArtifact.tsx: 308
     lycaon-den/src/components/transcript/TranscriptVisualFilmstrip.tsx: 378
