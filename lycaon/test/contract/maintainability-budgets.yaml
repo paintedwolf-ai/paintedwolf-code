@@ -22368,7 +22368,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 90
+    scripts/verification_tests/test_ci_execution.py: 87
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
