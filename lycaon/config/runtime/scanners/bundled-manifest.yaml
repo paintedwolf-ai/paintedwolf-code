@@ -1,20 +1,20 @@
 opengrep:
-    version: 1.30.0+paintedwolf.36
+    version: 1.30.0+paintedwolf.38
     origin: downstream
     upstream_version: 1.30.0
     base_revision: acf67b45c97c4b63626536605c77064ef536806d
-    revision: 36
-    source_lock_sha256: 1410c20972f715861bbae6efcda6d3a394850f18b08820adcf1a341d4a21cfed
-    source_manifest_sha256: e6c2f19d92cec1afca9a6dccd66b1b7556e52bd0b60262ba6f88e515d5754884
+    revision: 38
+    source_lock_sha256: 87b161a66728b85555ca6daa0c24bd09e6c486e42e0d9d5543e0ef1d9725b0d2
+    source_manifest_sha256: 78ce5b2f4c374008e1104627357a377cbbc642acf7616bd5d242a3e55179ab35
     license: LGPL-2.1
     artifacts:
         - goos: darwin
           goarch: arm64
-          url: https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0+paintedwolf.36/opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz
-          sha256: 3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c
-          bytes: 116736639
+          url: https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0+paintedwolf.38/opengrep-1.30.0+paintedwolf.38-darwin-arm64.tar.gz
+          sha256: 9e5e84e8abf820c80ccff7b09eae5c8fdc6a7a7eec415e3a482890216b91512f
+          bytes: 116814092
 opengrep_selection:
-    tag: v1.30.0+paintedwolf.36
-    producer_commit: 0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c
-    descriptor_sha256: 1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8
-    evidence_sha256: af6780e5ea88ef7de695528577ce12efd89629b78148aa96b3b60a2a0ab5731f
+    tag: v1.30.0+paintedwolf.38
+    producer_commit: 3e8a55fc1cbdc5403bbfa1256797b6c74ee9167d
+    descriptor_sha256: bd5d137fa3181edf9d8abc09fc9eec3a998ceb85d27f87ad23ff122f2ac3011c
+    evidence_sha256: 2bc969b8506ae2df2e2ab0de5c8ae6c73691633ceb0a818a16b9ac9e4d9afad2
