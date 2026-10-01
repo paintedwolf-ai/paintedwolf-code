@@ -21,7 +21,7 @@ const (
 	decideEngineRelPath = "Contents/MacOS/bialy"
 	// decideMetallibRelPath is MLX's compiled kernels, which the engine needs on Apple silicon.
 	decideMetallibRelPath = "Contents/Resources/engine-root/decide/mlx.metallib"
-	engineConfigRelPath   = "Contents/Resources/engine-root/config"
+	engineSchemasRelPath  = "Contents/Resources/engine-root/schemas"
 	engineBrowserRelPath  = "Contents/Resources/engine-root/browser"
 	noticesRelPath        = "Contents/Resources/THIRD-PARTY-NOTICES.md"
 	// noticesMinBytes rejects empty or stub notices.
@@ -52,7 +52,10 @@ type Options struct {
 	AppPath       string
 	DMGPath       string // optional
 	RequireSigned bool
-	Runner        Runner // nil ⇒ execRunner{}
+	// CredentialProbeAdvisory reports a failed Keychain probe as a warning.
+	// Hosted macOS VMs refuse data-protection Keychain items for every build.
+	CredentialProbeAdvisory bool
+	Runner                  Runner // nil ⇒ execRunner{}
 }
 
 // Verify runs the configured bundle audit.
@@ -164,7 +167,7 @@ func checkLayout(appPath string) []Finding {
 	}
 	findings = append(findings, checkDecideModel(appPath)...)
 
-	for _, rel := range []string{engineConfigRelPath, engineBrowserRelPath} {
+	for _, rel := range []string{engineSchemasRelPath, engineBrowserRelPath} {
 		if _, err := os.Stat(filepath.Join(appPath, rel)); err != nil {
 			findings = append(findings, Finding{
 				Code: CodeEngineResourceMissing, Severity: SeverityError, Path: rel,

@@ -103,7 +103,7 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 	app := filepath.Join(t.TempDir(), "Painted Wolf Code.app")
 	mustMkdirAll(t, filepath.Join(app, "Contents", "MacOS"))
 	mustWriteFile(t, filepath.Join(app, filepath.Dir(filepath.Dir(sidecarRelPath)), "embedded.provisionprofile"), []byte("synthetic profile"))
-	mustMkdirAll(t, filepath.Join(app, "Contents", "Resources", "engine-root", "config"))
+	mustMkdirAll(t, filepath.Join(app, "Contents", "Resources", "engine-root", "schemas"))
 
 	if !opts.omitSidecar {
 		writeThinMachOWithExtra(t, filepath.Join(app, sidecarRelPath),
@@ -131,7 +131,7 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 	writeThinMachO(t, filepath.Join(app, "Contents", "MacOS", "Painted Wolf Code"),
 		macho.CpuArm64, "13.0", []string{"/usr/lib/libSystem.B.dylib"})
 
-	mustWriteFile(t, filepath.Join(app, "Contents", "Resources", "engine-root", "config", ".keep"), []byte("x"))
+	mustWriteFile(t, filepath.Join(app, "Contents", "Resources", "engine-root", "schemas", ".keep"), []byte("x"))
 
 	if !opts.omitNotices {
 		stub := strings.Repeat("third-party notices fixture line\n", 200)
