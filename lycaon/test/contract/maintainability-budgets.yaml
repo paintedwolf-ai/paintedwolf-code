@@ -10783,7 +10783,7 @@ source_files:
     lycaon-den/src/platform/persistence/backup-transfer.ts: 53
     lycaon-den/src/platform/persistence/preflight-report.ts: 9
     lycaon-den/src/platform/persistence/preflight-store.ts: 36
-    lycaon-den/src/platform/runtime.ts: 52
+    lycaon-den/src/platform/runtime.ts: 50
     lycaon-den/src/platform/scrolling/overlay-scrollbar-autohide.ts: 111
     lycaon-den/src/platform/scrolling/overlay-scrollbar-input.ts: 179
     lycaon-den/src/platform/scrolling/scroll-activity.ts: 137
@@ -17190,7 +17190,7 @@ test_files:
     lycaon-den/src/platform/persistence/app-state.test.ts: 86
     lycaon-den/src/platform/persistence/backup-transfer.test.ts: 80
     lycaon-den/src/platform/persistence/preflight-store.test.ts: 51
-    lycaon-den/src/platform/runtime.test.ts: 62
+    lycaon-den/src/platform/runtime.test.ts: 71
     lycaon-den/src/platform/scrolling/native-smooth-scroll.test.ts: 94
     lycaon-den/src/platform/scrolling/overlay-scrollbar-autohide.test.ts: 184
     lycaon-den/src/platform/scrolling/overlay-scrollbar-input.test.ts: 168
