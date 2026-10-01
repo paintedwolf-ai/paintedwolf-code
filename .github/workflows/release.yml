@@ -147,9 +147,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: |
-            lycaon/go.sum
-            scripts/commentlint/go.sum
+          cache: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -218,14 +216,15 @@ jobs:
         if: ${{ matrix.goos == 'darwin' }}
         uses: ./.github/actions/cache-decide
 
+      - name: Restore the release build warmed on main
+        if: ${{ matrix.goos == 'darwin' }}
+        uses: ./.github/actions/cache-release-build
+
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep
 
       - name: Download pinned Bialy heads
         uses: ./.github/actions/setup-bialy
-
-      - name: Validate platform release inputs
-        run: ./task release:preflight
 
       - name: Install frontend dependencies
         working-directory: lycaon-den

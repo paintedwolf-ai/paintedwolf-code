@@ -1,0 +1,92 @@
+name: Release build cache
+
+# Compiles what a tag release compiles, with the same flags and no signing
+# credentials, so tag runs restore warm Go and Tauri builds saved on main.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-cache
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+jobs:
+  warm:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      - name: Restore the decision engine build
+        uses: ./.github/actions/cache-decide
+
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+
+      - name: Cache the release build
+        uses: ./.github/actions/cache-release-build
+        with:
+          save: 'true'
+
+      - name: Install the notices tools
+        run: |
+          set -euo pipefail
+          bin="$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")"
+          mkdir -p "${bin}"
+          if [[ ! -x "${bin}/cargo-about" ]]; then
+            version="$(sed -n 's/^CARGO_ABOUT_VERSION="\(.*\)"/\1/p' scripts/licenses-notices.sh)"
+            cargo install cargo-about --version "${version}" --locked --features cli --root "${RUNNER_TEMP}/cargo-about-root"
+            mv -f "${RUNNER_TEMP}/cargo-about-root/bin/cargo-about" "${bin}/cargo-about"
+          fi
+          if [[ ! -x "${bin}/go-licenses" ]]; then
+            version="$(sed -n 's/^GO_LICENSES_VERSION="\(.*\)"/\1/p' scripts/licenses-notices.sh)"
+            (cd lycaon && GOBIN="${bin}" go install "github.com/google/go-licenses/v2@${version}")
+          fi
+
+      # Mirrors scripts/stage-engine.sh --release; link flags do not affect cached packages.
+      - name: Compile the release sidecar
+        working-directory: lycaon
+        run: |
+          set -euo pipefail
+          export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < internal/platformfloor/macos_floor.txt)"
+          export CGO_ENABLED=1
+          go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw" ./cmd/lycaon
+          go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw-logs" ./cmd/pw-logs
+
+      # Mirrors scripts/den-build-bundle.sh up to bundling.
+      - name: Compile the release desktop shell
+        run: |
+          set -euo pipefail
+          export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < lycaon/internal/platformfloor/macos_floor.txt)"
+          bash scripts/sync-den-versions.sh
+          bash scripts/ensure-tauri-binaries.sh
+          mkdir -p lycaon-den/src-tauri/engine-root
+          [[ -f lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md ]] || : > lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
+          cd lycaon-den
+          bun install --frozen-lockfile
+          CI=false bun run tauri build --no-bundle --target "$(rustc --print host-tuple)"
