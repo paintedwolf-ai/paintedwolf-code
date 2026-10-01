@@ -55,7 +55,7 @@ func TestMarkdownDefinitionsHandleProseAndTables(t *testing.T) {
 }
 
 func FuzzMarkdownDefinitionRanges(f *testing.F) {
-	for _, seed := range []string{"# Heading\n", "> ## café 🐺\r\n", "first\nsecond\n===\n", "````\n# hidden\n````\n", "\x00\xff\n# after bytes\n"} {
+	for _, seed := range []string{"# Heading\n", "> ## café 🐺\r\n", "first\nsecond\n===\n", "````\n# hidden\n````\n", "\x00\xff\n# after bytes\n", "# \v", "# \f"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, source string) {
