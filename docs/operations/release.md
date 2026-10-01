@@ -75,8 +75,10 @@ release, update both the host manifest and the action's revision pin together.
    Pre-v1 schema changes redefine revision 1 and refresh its locks; no migration
    is needed ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
-4. Merge the candidate to `main` and wait for CI to pass. Tag that exact commit
-   as `v<VERSION>` and push the tag. This starts
+4. Merge the candidate to `main` and wait for CI and
+   [Release build cache](../../.github/workflows/release-build-cache.yml) to
+   pass; the release build restores the Go and Tauri compiles that run saved.
+   Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml).
 5. The workflow tests, builds, signs, notarizes, publishes the downloads,
    updates the tap and website, and activates the updater feeds. Manual dispatch
