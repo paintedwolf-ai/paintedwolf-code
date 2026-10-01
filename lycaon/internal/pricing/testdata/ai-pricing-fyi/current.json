@@ -1,0 +1,45 @@
+{
+  "data": [
+    {
+      "provider_slug": "openai",
+      "model_name": "gpt-4.1",
+      "canonical_slug": "gpt-4.1",
+      "metric": "input_token",
+      "unit": "per_1m_tokens",
+      "price_numeric": 2.0,
+      "currency": "USD",
+      "latest_observed_at": "2025-04-14T12:00:00Z"
+    },
+    {
+      "provider_slug": "openai",
+      "model_name": "gpt-4.1",
+      "canonical_slug": "gpt-4.1",
+      "metric": "output_token",
+      "unit": "per_1m_tokens",
+      "price_numeric": 8.0,
+      "currency": "USD",
+      "latest_observed_at": "2025-04-14T12:00:00Z"
+    },
+    {
+      "provider_slug": "openai",
+      "model_name": "gpt-4.1",
+      "canonical_slug": "gpt-4.1",
+      "metric": "cached_input_token",
+      "unit": "per_1m_tokens",
+      "price_numeric": 0.5,
+      "currency": "USD",
+      "latest_observed_at": "2025-04-15T12:00:00Z"
+    },
+    {
+      "provider_slug": "openai",
+      "model_name": "whisper",
+      "metric": "per_minute",
+      "unit": "per_minute",
+      "price_numeric": 0.006,
+      "currency": "USD",
+      "latest_observed_at": "2025-04-14T12:00:00Z"
+    }
+  ],
+  "limit": 100,
+  "offset": 0
+}

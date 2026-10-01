@@ -1,0 +1,38 @@
+oar: '1.0'
+id: FETCH_URL_BODY_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bytes
+  - paintedwolf.max_bytes
+  - paintedwolf.resource_limit
+when: paintedwolf.rejection_code == "FETCH_URL_BODY_TOO_LARGE"
+effect: block
+copy:
+  what: fetch_url response exceeded the {{ paintedwolf.max_bytes }}-byte body cap (observed at least {{ paintedwolf.bytes
+    }} bytes).
+  cause: The host refuses oversized responses before returning or writing any partial body.
+  why: Silent truncation would corrupt downloaded assets and make text research look complete when it is not.
+  fix: Choose a genuinely smaller intended resource or a narrower endpoint. This tool does not expose a Range-header
+    argument; do not invent one or treat a partial binary as complete. Report the size limit if the complete
+    resource is required.
+  instead: Branch on Code FETCH_URL_BODY_TOO_LARGE; choose a bounded source
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url response exceeds the body size cap
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    bytes: '5242881'
+    max_bytes: '5242880'
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: FETCH_URL_BODY_TOO_LARGE'

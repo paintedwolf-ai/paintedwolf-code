@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Command unavailable right now
+message: >-
+  The command's conditions do not hold — for example a required MCP provider is
+  not ready or the target no longer matches.
+suggested_action: Check the command's requirements, then try again.

@@ -1,0 +1,147 @@
+components:
+  schemas:
+    HostResourceStatus:
+      type: string
+      enum: [available, unavailable, unknown]
+    HostResourceHostSupport:
+      type: string
+      enum: [supported, unsupported, not_applicable]
+    HostResourceExecutionSurface:
+      type: string
+      enum: [process_exec]
+    HostResourceAccess:
+      type: string
+      enum: [allow, ask, deny]
+    HostResourceAccessSetting:
+      type: string
+      enum: [inherit, ask, deny]
+    HostResourcePromptMode:
+      type: string
+      enum: [omit, advertise, avoid]
+      description: >
+        Ambient prompt posture. `omit` lists the resource on write agents when it
+        is present and host-supported. `advertise` lists it on any agent whose
+        tool profile supplies the required surfaces. `avoid` lists it with a
+        prefer-another-route note.
+    HostResourceConnectionMode:
+      type: string
+      enum: [none, proxy, socks, baseline_loopback, local_service, direct_ip, dynamic]
+    HostResourceLocalServiceTransport:
+      type: string
+      enum: [unix_socket, named_pipe]
+    HostResourceConnection:
+      x-go-generate: true
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: '#/components/schemas/HostResourceConnectionMode'
+        transport:
+          $ref: '#/components/schemas/HostResourceLocalServiceTransport'
+        target:
+          type: string
+      additionalProperties: false
+    HostResource:
+      x-go-generate: true
+      type: object
+      required:
+        - id
+        - family
+        - label
+        - category
+        - description
+        - origin
+        - status
+        - host_support
+        - access
+        - access_setting
+        - prompt
+        - surfaces
+        - connections
+        - checked_at
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9]+([.-][a-z0-9]+)*$'
+        family:
+          type: string
+          pattern: '^[a-z0-9]+([.-][a-z0-9]+)*$'
+        label:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        docs_url:
+          type: string
+          format: uri
+        origin:
+          type: string
+          enum: [built-in, user]
+        status:
+          $ref: '#/components/schemas/HostResourceStatus'
+        host_support:
+          $ref: '#/components/schemas/HostResourceHostSupport'
+        access:
+          $ref: '#/components/schemas/HostResourceAccess'
+        access_setting:
+          $ref: '#/components/schemas/HostResourceAccessSetting'
+        prompt:
+          $ref: '#/components/schemas/HostResourcePromptMode'
+        reason:
+          type: string
+        surfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostResourceExecutionSurface'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostResourceConnection'
+        checked_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+      additionalProperties: false
+    HostResourceDiagnostic:
+      x-go-generate: true
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      additionalProperties: false
+    HostResourcesResponse:
+      x-go-generate: true
+      type: object
+      required: [version, resources, diagnostics, user_catalog_path, checked_at, fingerprint]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostResource'
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostResourceDiagnostic'
+        user_catalog_path:
+          type: string
+        checked_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+      additionalProperties: false
+    UpdateHostResourceRequest:
+      x-go-generate: true
+      type: object
+      properties:
+        access:
+          $ref: '#/components/schemas/HostResourceAccessSetting'
+      additionalProperties: false

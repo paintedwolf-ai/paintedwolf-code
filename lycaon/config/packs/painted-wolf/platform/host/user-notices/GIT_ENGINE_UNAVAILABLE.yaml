@@ -1,0 +1,16 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Bundled git engine unavailable
+message: >-
+  The app's pinned git toolchain did not resolve or does not match the
+  expected version. Reading history, reviewing diffs, and installing
+  extension packs from a repository will fail until the app is reinstalled
+  or repaired.
+suggested_action: >-
+  Reinstall the app (or restore the bundled engine), then reopen it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - pinned git
+      - Reinstall

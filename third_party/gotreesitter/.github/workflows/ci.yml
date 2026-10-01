@@ -1,0 +1,1699 @@
+name: ci
+
+on:
+  push:
+    branches: [main, fix/top50-parity-burndown]
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
+      - 'docs/**'
+      - '.github/*.md'
+  # A workflow that owns a required check must start for every PR or that check
+  # remains pending.
+  # The scope job below keeps docs-only PRs lightweight without suppressing the
+  # required aggregate `build` context.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Repository hygiene
+        run: bash scripts/repository_hygiene_test.sh
+
+      - name: Randomized benchmark driver contracts
+        run: bash scripts/run_randomized_benchmarks_test.sh
+
+      - name: Build
+        run: go build ./...
+
+      - name: Build grammar subsets
+        run: bash scripts/subset_build_sweep.sh
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test Compile
+        run: go test ./... -run '^$' -count=1
+
+  selected_store_admission:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Selected-store internal package (staged and one-pass)
+        run: |
+          set -euo pipefail
+          GOMAXPROCS=1 go test -race ./internal/parsercorephase0 -count=1
+          GOMAXPROCS=1 go test -race -tags gts_parsercorephase0_selectedstore_onepass ./internal/parsercorephase0 -count=1
+
+      - name: Selected-store exact admission (staged and one-pass)
+        run: |
+          set -euo pipefail
+          admission='^TestDiagnosticParserCoreSelectedStore(CanonicalAdmissions|CompletenessFailureReleasesBacking|GoHighlightParity|QueryDirectiveParity)$'
+          GOMAXPROCS=1 go test -tags gts_parsercorephase0 . -run "$admission" -count=1
+          GOMAXPROCS=1 go test -tags 'gts_parsercorephase0 gts_parsercorephase0_selectedstore_onepass' . -run "$admission" -count=1
+
+  compact_admission_ratchet:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate compact admission breadth, route precedence, depth, and incremental bridge
+        # GTS_COMPAT_TAIL_ELISION_EXHAUSTIVE=1 adds the full-registry (206
+        # language) compat-tail elision equivalence gate
+        # (TestCompatTailElisionEquivalenceSmokeExhaustive,
+        # admission_compat_tail_elision_test.go) to this lane. It shares this
+        # lane's own reason for gating a full-registry sweep behind an opt-in
+        # env var instead of running it unconditionally (loading every
+        # registered grammar in one process disturbs
+        # TestArenaGCRetentionAfterRelease elsewhere in this package's
+        # default suite); this lane's own `-run` selection already excludes
+        # that test, so the two do not interact here. Measured added cost is
+        # a few seconds.
+        run: |
+          set -euo pipefail
+          GTS_ADMISSION_SCORECARD=1 \
+          GTS_ADMISSION_SCORECARD_RATCHET=1 \
+          GTS_COMPAT_TAIL_ELISION_EXHAUSTIVE=1 \
+          GOMAXPROCS=1 \
+          go test -tags gts_parsercorephase0 . \
+            -run '^(TestAdmissionCandidateScorecard206|TestAdmissionSwitchRoutePrecedenceRatchet|TestAdmissionCandidateYAMLZeroWidthDepth|TestAdmissionCandidateRepresentativeDepthRatchet|TestAdmissionCompactTreeCarriesIncrementalReuseProof|TestCompactJavaScriptRecoveryIncrementalReuse|TestDiagnosticParserCoreClassifiedBoundaryAndReductionPlanShape|TestDiagnosticParserCoreSummaryReceiptPreservesExactRewrite|TestCompatTailElisionEquivalenceSmokeExhaustive)$' \
+            -count=1 -timeout 10m
+
+  phase0_tagged_suite:
+    # gts_parsercorephase0-tagged root-package tests reachable by no other
+    # CI lane. docs/ci-gate-coverage.md (2026-08-02) found 277 tagged
+    # top-level functions with only about a dozen executed by the two narrow
+    # -run allow-lists above (selected_store_admission,
+    # compact_admission_ratchet) plus the compact-per-version-lexer-scala
+    # docker lane. This job runs most of the remainder (issue #1052).
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Tagged root-package tests outside the narrow allow-lists
+        # The 322 names below passed, or skipped on a missing fixture or
+        # env var, in a full-set local measurement (1 process, 86.6s wall,
+        # 1.5 GiB max RSS). One name per line keeps the diff reviewable; the
+        # script below joins them into one anchored -run regex at run time,
+        # the same allow-list convention the two lanes above use. -timeout
+        # is set to roughly twice the measured wall time.
+        #
+        # Elm and external-payload contracts run in isolated grammar steps below.
+        # 10 tagged tests are excluded, not fixed here (out of scope for
+        # this maintenance lane; see docs/ci-gate-coverage.md Part 4):
+        #   TestDiagnosticParserCoreConflictAllUnchangedPauses: conflict creation sequence overflow
+        #   TestDiagnosticParserCoreConflictFiltersUnchangedArm: conflict creation sequence overflow
+        #   TestDiagnosticParserCoreGenericSchedulerCapsPublishNothing: no_action drop coverage mismatch (before-accept)
+        #   TestDiagnosticParserCoreGenericSchedulerClosesAtRequestedByte: scheduler work-counter mismatch
+        #   TestDiagnosticParserCoreGenericSchedulerContinuesToNextRequestedClosedByte: continuation-result mismatch
+        #   TestDiagnosticParserCoreGenericSchedulerCrossesMultiHeadExtraCohort: brace-baseline mismatch
+        #   TestDiagnosticParserCoreGenericSchedulerCrossesReductionFreshnessCycle: byte-closure mismatch
+        #   TestDiagnosticParserCoreStateDependentRelexKeepsExactSpanBranch: no_action drop coverage mismatch
+        #   TestG18DropPathRejectsForeignInlineRED: RED — foreign inline lineage certified a current-arena drop
+        #   TestG18D6aProducerTelemetry: order-dependent — fails only inside this full set (D3 pool baseline drift)
+        run: |
+          set -euo pipefail
+          tests='
+          TestAdmissionCandidateBoundedRecursiveInsertionCorpus
+          TestAdmissionCandidateCooklangSmokeRatchet
+          TestAdmissionCandidateDFASmokeMatchesPreferredTokenSource
+          TestAdmissionCandidateGraphQLRootFieldsDirect
+          TestAdmissionCandidateNoLookaheadSmokeRatchet
+          TestAdmissionCandidateRealCorpusMatrix
+          TestAdmissionCandidateScorecardExactDenominator
+          TestAdmissionCandidateSvelteButtonDirect
+          TestAdmissionCandidateTokenSourceEntriesExposeDFASmoke
+          TestAdmissionRouteEqualitySwiftCloseAngleDeferralWitnessesStillFallBack
+          TestAdmissionScorecardLabelsProductionErrorTree
+          TestAdmissionSwitchCandidateDigestMatchesProduction
+          TestAdmissionSwitchEligibilityFailsClosedForReuse
+          TestAdmissionSwitchGrammargenLRRoutesCompactByDefault
+          TestAdmissionSwitchParseIncrementalDoesNotCountFullRoute
+          TestCompactIncrementalExecution.*
+          TestCompactBorrowed.*
+          TestCompactNestedReuse.*
+          TestCompactReuseDependency.*
+          TestAdmissionSwitchParseProductionWhenOff
+          TestAdmissionSwitchParseRoutesCandidateWhenOn
+          TestAdmissionSwitchRecoveryDoesNotLeakCompactTree
+          TestB4bV2OptInDeciderDifferentialCanonicalFixtures
+          TestB4bV2OptInDeciderDifferentialCertifiedLanguages
+          TestB4bV2OptInDeciderDifferentialErlangProbes
+          TestB4bV2OptInDeciderDifferentialKotlinWitness
+          TestB4bV2OptInDeciderDifferentialSmokeCorpus
+          TestCompactCheckpointedScannerPrefixFrontierFallbackAvoidsCandidateWalk
+          TestCompactJavaScriptErrorModeKeywordCaptureRequiresArtifact
+          TestCompactJavaScriptErrorModeKeywordCaptureSelectsAbsorbLineage
+          TestCompactJavaScriptRetiresTrailingRecoveryLineage
+          TestCompactJavaScriptSelectedAbsorbAliasRequiresRule
+          TestCompactJavaScriptTrailingRecoveryRetirementRequiresArtifact
+          TestCompactMaterializedFragileBitReachesPublicNode
+          TestCompactMaterializedTreeBarsIncrementalReuse
+          TestCompactRouteSwiftShiftComparisonGapIsNotATilingDefect
+          TestCompactSchedulerDeclinesContextualCloseAngleDeferralWithDistinctDetail
+          TestD2SpanUnlockedDisableOptionMatchesLegacyBehavior
+          TestD2SpanUnlockedRaggedRelexDeclineDetailCarriesWiderTokenSpan
+          TestD2SpanUnlockedRelexTokenForStateFindsRaggedEndOnRealBashWitness
+          TestD2SpanUnlockedSameSpanRelexOnRealJavaScriptDivisionRegexWitness
+          TestD2SpanUnlockedSameSpanRelexStillShiftsRealBashInstallWitness
+          TestD2SpanUnlockedSchedulerActivatesOwnedLexerRequests
+          TestDiagnosticParserCoreB4bShadowCensusCanonicalReport
+          TestDiagnosticParserCoreB4bShadowCensusSmokeCorpusReport
+          TestDiagnosticParserCoreBoundaryIndexCensus
+          TestDiagnosticParserCoreCanonicalAdmissions
+          TestDiagnosticParserCoreCanonicalClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreCanonicalGroupsReleaseSnapshotKeysOnNarrowPaths
+          TestDiagnosticParserCoreCanonicalKeyAndGroupSnapshotsAreAccounted
+          TestDiagnosticParserCoreCanonicalScratchCollapsesCanonicalHeads
+          TestDiagnosticParserCoreCanonicalScratchDoesNotAliasPublishedOutput
+          TestDiagnosticParserCoreCanonicalScratchFreshRunnableDominance
+          TestDiagnosticParserCoreCanonicalScratchMappedSpillPreservesSemantics
+          TestDiagnosticParserCoreCanonicalScratchPreservesLaterWinnerOrder
+          TestDiagnosticParserCoreCanonicalScratchSingleHeaderFailureDoesNotPublish
+          TestDiagnosticParserCoreCanonicalScratchSingleHeaderRemapsAndPublishesFresh
+          TestDiagnosticParserCoreCanonicalScratchSteadyStateDoesNotAllocate
+          TestDiagnosticParserCoreCanonicalScratchSteadyStateSingleHeaderDoesNotAllocate
+          TestDiagnosticParserCoreCanonicalVersionLexerSnapshotIdentity
+          TestDiagnosticParserCoreCanonicalizeRunnableDominatesPaused
+          TestDiagnosticParserCoreCheckpointCompactLayoutsAMD64
+          TestDiagnosticParserCoreConflictPostExecutionFailureRollsBack
+          TestDiagnosticParserCoreConflictScratchClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreConflictSecondaryUpdateAdoptsActiveSibling
+          TestDiagnosticParserCoreConflictUpdatedOutputPreservesSuffixIdentity
+          TestDiagnosticParserCoreConvergedCoverageDropsV1OverflowedDroppedFailsClosed
+          TestDiagnosticParserCoreConvergedCoverageDropsV1Proof
+          TestDiagnosticParserCoreConvergedCoverageDropsV1ProofAllocations
+          TestDiagnosticParserCoreConvergedCoverageDropsV2BlendedVetoFiredDetail
+          TestDiagnosticParserCoreConvergedCoverageDropsV2OverflowedDroppedFailsClosed
+          TestDiagnosticParserCoreConvergedCoverageDropsV2Proof
+          TestDiagnosticParserCoreConvergedCoverageDropsV2ProofAllocations
+          TestDiagnosticParserCoreDescriptorAdmitsZeroWidthOrdinaryShift
+          TestDiagnosticParserCoreDescriptorPreservesUnsupportedOrdinalOrdering
+          TestDiagnosticParserCoreDescriptorValidatesCompleteFrontierBeforeDispatch
+          TestDiagnosticParserCoreDispatchScratchCleansAfterConflictRollback
+          TestDiagnosticParserCoreDispatchScratchCleansAfterPanicAndRetries
+          TestDiagnosticParserCoreDispatchScratchCleansNoActionReturn
+          TestDiagnosticParserCoreDispatchScratchDoesNotAliasFullReceipts
+          TestDiagnosticParserCoreDispatchScratchKeepsGroupElectionPauseAsNoAction
+          TestDiagnosticParserCoreDispatchScratchRejectsReentryBeforeCountersAndRetries
+          TestDiagnosticParserCoreDispatchScratchSteadyStateDoesNotAllocate
+          TestDiagnosticParserCoreElectionPreservesInvalidCheckpointDeclines
+          TestDiagnosticParserCoreElectionSummaryMatchesFullReceipt
+          TestDiagnosticParserCoreExternalShiftCarriesAlternativeSet
+          TestDiagnosticParserCoreExternalShiftInvalidatesLineage
+          TestDiagnosticParserCoreExternalVersionRelexDetectsStateOnlyDivergence
+          TestDiagnosticParserCoreExternalVersionRelexOwnsCheckpoint
+          TestDiagnosticParserCoreExternalVersionRelexRejectsIdentityDrift
+          TestDiagnosticParserCoreExternalVersionRelexRestoresAfterFailedScan
+          TestDiagnosticParserCoreGenericAcceptRequiresSoleFrontierBeforeMutation
+          TestDiagnosticParserCoreGenericConflictArbitraryNOrdering
+          TestDiagnosticParserCoreGenericConflictArenaCapsRollback
+          TestDiagnosticParserCoreGenericConflictIgnoresNoArmsWhenRepetitionDeclinesCell
+          TestDiagnosticParserCoreGenericConflictMultiOutputSequencing
+          TestDiagnosticParserCoreGenericConflictPolicyRequiresExactRow
+          TestDiagnosticParserCoreGenericConflictPolicySelectsRepetitionReduce
+          TestDiagnosticParserCoreGenericConflictPolicySelectsRepetitionShift
+          TestDiagnosticParserCoreGenericConflictRejectsUnsupportedArmBeforeMutation
+          TestDiagnosticParserCoreGenericExtraConflictFailsPreflight
+          TestDiagnosticParserCoreGenericExtraPostExecutionFailureRollsBack
+          TestDiagnosticParserCoreGenericExtraRejectsMixedFrontier
+          TestDiagnosticParserCoreGenericMultiHeadExtraSharesPayload
+          TestDiagnosticParserCoreGenericReductionPauseIsFinite
+          TestDiagnosticParserCoreGenericReductionSequenceOverflowRollsBack
+          TestDiagnosticParserCoreGenericReductionUnchangedDistinctLexerSnapshotFailsClosedBeforePhysicalMerge
+          TestDiagnosticParserCoreGenericReductionUnchangedEqualSnapshotDoesNotDuplicatePhysicalHead
+          TestDiagnosticParserCoreGenericRepetitionFoldMatchesProductionScope
+          TestDiagnosticParserCoreGenericRepetitionFoldReducesWithoutFork
+          TestDiagnosticParserCoreGenericRepetitionForkMatchesProductionOptOut
+          TestDiagnosticParserCoreGenericSchedulerAcceptsAndMaterializesExactRewrite
+          TestDiagnosticParserCoreGenericSchedulerCrossesFirstShallowLinkCap
+          TestDiagnosticParserCoreGenericSchedulerRejectsOvershotClosedByte
+          TestDiagnosticParserCoreGenericSeedConstructorFailsClosed
+          TestDiagnosticParserCoreGenericSingleExtraPreservesPayloadAndState
+          TestDiagnosticParserCoreGenericWorkSaturatesCausalCounters
+          TestDiagnosticParserCoreGenericZeroWidthExternalExtraAdvancesCheckpoint
+          TestDiagnosticParserCoreGenericZeroWidthExtraRequiresProgress
+          TestDiagnosticParserCoreHeaderPathsMarksBoundedObservation
+          TestDiagnosticParserCoreHeaderRollbackScratchRestoresAndReuses
+          TestDiagnosticParserCoreMappedCanonicalErrorReleasesVersionStateKeys
+          TestDiagnosticParserCoreMaterializationScratchPreservesCanonicalMetadataAndReuse
+          TestDiagnosticParserCoreMaterializationScratchPreservesUnaryCollapse
+          TestDiagnosticParserCoreMaterializationScratchRestoresParserAfterError
+          TestDiagnosticParserCoreMaterializationScratchReusesVaryingWidths
+          TestDiagnosticParserCoreNoActionClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreOwnedLexerActivationRollsBackAfterPanic
+          TestDiagnosticParserCoreOwnedLexerBindingRestoresAfterErrorAndPanic
+          TestDiagnosticParserCoreOwnedLexerDropsAuthenticatedPausedVersion
+          TestDiagnosticParserCoreOwnedLexerElectionEnforcesNoLookaheadCap
+          TestDiagnosticParserCoreOwnedLexerElectionEnforcesPostReductionEOF
+          TestDiagnosticParserCoreOwnedLexerNoLookaheadRequiresOneRunnableHead
+          TestDiagnosticParserCoreOwnedLexerRejoinRejectsMissingTokenSource
+          TestDiagnosticParserCoreOwnedLexerRejoinRestoresTokenSourceOnPhaseFailure
+          TestDiagnosticParserCoreOwnedLexerZeroWidthExtraRequiresProgress
+          TestDiagnosticParserCorePerVersionStateCloseDoesNotMutateSnapshot
+          TestDiagnosticParserCorePerVersionStateKeepsHeaderSize
+          TestDiagnosticParserCorePerVersionStatePublishesImmutableCopies
+          TestDiagnosticParserCorePerVersionStateRollbackRestoresCopy
+          TestDiagnosticParserCorePerVersionStateSetNilCloses
+          TestDiagnosticParserCorePointIndexCachesExactArbitraryOffsets
+          TestDiagnosticParserCorePointIndexPollsBeforeScanning
+          TestDiagnosticParserCorePointIndexRejectsCollidingOffset
+          TestDiagnosticParserCoreRecoverEOFAcceptHeaderTopologyRejectsUnsupportedProvenance
+          TestDiagnosticParserCoreRecoverEOFAcceptPayloadShapeAdmitsSingletonAndRejectsFragile
+          TestDiagnosticParserCoreRecoverEOFAcceptPriorityFreeProbesAreReadOnly
+          TestDiagnosticParserCoreRecoveryCollapseClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreRecoveryReductionForkPreservesMarkers
+          TestDiagnosticParserCoreReductionReplacementResetClearsStaleTail
+          TestDiagnosticParserCoreReductionSiblingAdoptionRequiresVersionLexerSnapshotIdentity
+          TestDiagnosticParserCoreReductionUnchangedDistinctLexerSnapshotIsRetained
+          TestDiagnosticParserCoreReplacementClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreRollbackClearsDiscardedVersionStateTail
+          TestDiagnosticParserCoreSameSpanRelexReconstructsExactToken
+          TestDiagnosticParserCoreSameSpanRelexRejectsTokenFieldChanges
+          TestDiagnosticParserCoreSchedulerFootprintCountsWideSharedVersionStates
+          TestDiagnosticParserCoreSeedMatchesImmutableLegacyGolden
+          TestDiagnosticParserCoreSeedPublicationRejectsMaterializationTransactionally
+          TestDiagnosticParserCoreSelectedLineageDropProof
+          TestDiagnosticParserCoreSelectedLineageProofAllocations
+          TestDiagnosticParserCoreSelectedStoreQueryMissingDeclines
+          TestDiagnosticParserCoreSelectedStoreQueryTraversalAllocations
+          TestDiagnosticParserCoreSummaryAcceptsExactQueryCompile
+          TestDiagnosticParserCoreSummaryConflictFailureRollsBack
+          TestDiagnosticParserCoreSummaryFailurePublishesNothing
+          TestDiagnosticParserCoreTokenCellDirectInvalidationLeavesStaleFieldsUntouched
+          TestDiagnosticParserCoreTokenCellMatchesElectedTokenAndCheckpoints
+          TestDiagnosticParserCoreTokenCellStartsInvalidAfterConstruction
+          TestDiagnosticParserCoreUpdatedReductionAdoptsActiveSibling
+          TestDiagnosticParserCoreVersionLexerElectionCaptureReusesScratch
+          TestDiagnosticParserCoreVersionLexerElectionReusesCheckpointSerialization
+          TestDiagnosticParserCoreVersionLexerElectionScratchFootprintAndReset
+          TestDiagnosticParserCoreVersionLexerElectionScratchPreservesZeroPayload
+          TestDiagnosticParserCoreVersionLexerProductionActivation
+          TestDiagnosticParserCoreVersionLexerRequestsOwnRaggedSpans
+          TestDiagnosticParserCoreVersionLexerSidecarFootprintAndReset
+          TestDiagnosticParserCoreVersionLexerSnapshotAcceptsEmptyCheckpointIDs
+          TestDiagnosticParserCoreVersionLexerSnapshotAcceptsSameContractIDZero
+          TestDiagnosticParserCoreVersionLexerSnapshotCloneDoesNotAlias
+          TestDiagnosticParserCoreVersionLexerSnapshotCopiesAllMutableState
+          TestDiagnosticParserCoreVersionLexerSnapshotFootprintDeduplicatesHeaderCopies
+          TestDiagnosticParserCoreVersionLexerSnapshotInterleavedErrorRunRestoration
+          TestDiagnosticParserCoreVersionLexerSnapshotPublicationCopiesPublishedState
+          TestDiagnosticParserCoreVersionLexerSnapshotPublicationPreservesRecoveryRegion
+          TestDiagnosticParserCoreVersionLexerSnapshotRejectsCrossCoreDestination
+          TestDiagnosticParserCoreVersionLexerSnapshotRejectsCrossLanguageDestination
+          TestDiagnosticParserCoreVersionLexerSnapshotRejectsScannerReplacement
+          TestDiagnosticParserCoreVersionLexerSnapshotRejectsUnrepresentableScannerState
+          TestDiagnosticParserCoreVersionLexerSnapshotRequiresOwnedCheckpointAccess
+          TestDiagnosticParserCoreVersionLexerSnapshotResetClearsRetainedHeaderBuffers
+          TestDiagnosticParserCoreVersionLexerSnapshotRestoreRestoresScannerAndGuards
+          TestDiagnosticParserCoreVersionLexerSnapshotRetirementClearsLoser
+          TestDiagnosticParserCoreVersionLexerSnapshotRollbackRestoresImmutablePointer
+          TestDiagnosticParserCoreVersionLexerSnapshotSurvivesPhaseChangesAndRejectsReset
+          TestDiagnosticParserCoreWarmBenchmarkPreflight
+          TestDispatchTokenClearsIsKeywordOnRelexedSymbolOverride
+          TestDispatchTokenPreservesIsKeywordWithoutRelexedSymbolOverride
+          TestG18AuthenticGenericReductionEstablishesProducerCohort
+          TestG18AuthenticProducerCanonicalizationCounters
+          TestG18CertificateActivationCachedParseBoundary
+          TestG18CertificateActivationDefaultOffAndNilSafe
+          TestG18CertificateActivationEligibilityIsolation
+          TestG18CertificateActivationIgnoresProductionRoute
+          TestG18CertificateActivationNestedOutOfOrderRestore
+          TestG18CertificateActivationRestoreIsolation
+          TestG18CertificateActivationRestoresCachedRunner
+          TestG18CertificateAdmissionOptionAdapterCompileContract
+          TestG18CurrentAdoptionAndConflictProducerPaths
+          TestG18CurrentCanonicalizerProducerPaths
+          TestG18D6aIncompletePublicationPreservesNaturalNoActionDecline
+          TestG18D6aKotlinControlsRemainNonCandidate
+          TestG18D6bDriverConsumesSyntheticValidFrontier
+          TestG18D6bDriverRejectsMutatedPublishedToken
+          TestG18D6bDriverRejectsQueryCompileIncompleteFrontier
+          TestG18D6bDriverRejectsZeroAndMixedSequences
+          TestG18D6bDriverVerificationIsDefaultOff
+          TestG18D6bGrammargenLRNoCommonDerivationFallsBack
+          TestG18D6cGrammargenLRFrontierDeclinesOnStateAndPublicProjectionMismatch
+          TestG18DropCohortFrontierDefaultOffHasNoAllocationOrStorage
+          TestG18DropPathRejectsBlendedSurvivor
+          TestG18DropPathRejectsForeignSpill
+          TestG18DropPathRejectsResetStaleSpill
+          TestG18DropPathRejectsUnprovedHistoricalImport
+          TestG18FrontierHeaderReplacementAndRollbackPropagation
+          TestG18FutureAdoptionCertificateTelemetryRED
+          TestG18FutureAtomicPreflightForEveryStoreRED
+          TestG18FutureCanonicalizerCertificateTelemetryRED
+          TestG18FutureConcurrentArenaOwnerAllocationRED
+          TestG18FutureDerivationFullRecordEqualityRED
+          TestG18FutureEveryActionIdentityFieldRED
+          TestG18FutureExactStorageAndFootprintRED
+          TestG18FutureInternalAPICompileContract
+          TestG18FutureRealAtomicEpochWrapRED
+          TestG18FutureRealAtomicOwnerWrapRED
+          TestG18FutureRealAtomicSequenceWrapRED
+          TestG18FutureRealCertificateLifecycleRED
+          TestG18FutureRealDefaultDropCohortMembersRED
+          TestG18FutureRealMaxDropCohortMembersCapOverflowRED
+          TestG18FutureRealMaxDropCohortsCapOverflowRED
+          TestG18FutureRealVerifierAllocationsRED
+          TestG18FutureRealVerifierArenaIdentityRED
+          TestG18FutureRealVerifierCertificateStateReasonsRED
+          TestG18FutureReductionEstablishmentTelemetryRED
+          TestG18FutureSequentialAndNestedCohortsRED
+          TestG18GenericReductionLeavesDropCohortsInertByDefault
+          TestG18RefSetCanonicalGroupsBucketGrowthBoundaries
+          TestG18RefSetCanonicalGroupsDuplicateHintRetention
+          TestG18RefSetHeaderAndCanonicalPropagation
+          TestG18RefSetHeaderPersistenceSiblingAdoptionAndConflictReconciliation
+          TestG18RefSetPoolClearing
+          TestG18RefSetSchedulerMemoryBudgetAccounting
+          TestG18RefSetSchedulerRecordSizeRatchets
+          TestG18ReferenceArenaLifecycleAndAccounting
+          TestG18ReferenceArenaOwnerIdentityInlineAndSpill
+          TestG18ReferenceCompatibleCohortMerge
+          TestG18ReferenceFinalizationAndTerminalStates
+          TestG18ReferencePreflightIsAtomicForEveryStore
+          TestG18ReferenceSequentialAndNestedCohorts
+          TestG18ReferenceVerifierAllocations
+          TestG18ReferenceVerifierIdentityAndImportRules
+          TestParseStateReplayCompactDifferential
+          TestParserCoreActionConversionIsExhaustiveAndLossless
+          TestParserCoreAttributionCapture
+          TestParserCoreCheckpointIDsOwnStatefulScannerScratch
+          TestParserCoreCheckpointPreservesExactEmptyAndNonEmptyIdentity
+          TestParserCoreCorridorCellExhaustiveness
+          TestParserCoreCorridorCompilerIsDeterministic
+          TestParserCoreCorridorDecodeBackPerState
+          TestParserCoreCorridorDefaultOff
+          TestParserCoreCorridorFleetTableShapeReceipt
+          TestParserCoreCorridorPassMixReceipt
+          TestParserCoreCorridorReduceChainIncrementalReceipt
+          TestParserCoreCorridorReduceShiftIncrementalReceipt
+          TestParserCoreCorridorRuntimeEquivalence
+          TestParserCoreCorridorStreamValidation
+          TestParserCoreCorridorTableShapeReceipt
+          TestParserCoreFreshFullAcceptedTailRequiresParserPadding
+          TestParserCoreFreshFullPublicRouteIsSelectedStoreFree
+          TestParserCoreFreshFullRunnerClearsRecoverEOFFinalizationBeforeOrdinaryAcceptance
+          TestParserCoreFreshFullRunnerFailsClosedAtConstruction
+          TestParserCoreFreshFullRunnerRepeatedCanonicalLifecycle
+          TestParserCoreFreshFullRunnerResetsAfterCap
+          TestParserCoreFreshFullRunnerReusesSchedulerStorage
+          TestParserCoreFreshFullRunnerScratchDoesNotAliasLiveTree
+          TestParserCoreFreshFullSelectedStorePollsCancellation
+          TestParserCoreLanguageTablesCacheSharesAcrossParsers
+          TestParserCoreLanguageTablesFootprint
+          TestParserCoreReplayRejectsLanguageTableSwap
+          TestParserCoreRootTablesCacheImmutableConvertedRows
+          TestParserCoreRootTablesIdentityUsesLanguageBlobHash
+          TestParserCoreRootTablesRejectInvalidActionWhileCaching
+          TestParserCoreRootlessTablesRemainUsableWithoutSelectedStorePolicy
+          TestParserCoreSameLookaheadGuardsDeclineBeforeMutation
+          TestPhase0PerVersionLexerScalaOracleWitness
+          TestPhase0PerVersionLexerVersionsOwnWidths
+          TestResetDiagnosticParserCoreGenericSchedulerClearsRecoveryState
+          TestResetDiagnosticParserCoreGenericSchedulerRejectsActiveScratch
+          TestResetDiagnosticParserCoreRetainedSliceBoundsAndClears
+          TestStage2PhysicalHeadMergeCandidatesPreserveDistinctLexerVersionsForClassification
+          TestStage2PhysicalHeadMergeCanonicalizationUnionsLineage
+          TestStage2PhysicalHeadMergeFailsClosedAcrossDistinctLexerOwnership
+          TestStage2PhysicalHeadMergePreservesDistinctErrorRegions
+          TestStage2PhysicalHeadMergePreservesDistinctLexerSnapshots
+          TestStage2PhysicalHeadMergePreservesRecoveryLineage
+          TestStage2PhysicalHeadMergeRejectsClearedRecoveryCostedLineage
+          TestStage2PhysicalHeadMergeRunsThroughGenericReductionDispatch
+          TestStage3OpenRegionVisibleNodeCountRequiresOneAbsorbedChild
+          TestStage3RecoveryCondenseAppendsAcceptedVersionsAfterActivePool
+          TestStage3RecoveryCondenseClampsBaselineAfterGraphPop
+          TestStage3RecoveryCondenseDifferentScoresShareOneVersionKey
+          TestStage3RecoveryCondenseDropsOnlyExcessKeyAfterDuplicate
+          TestStage3RecoveryCondenseEquivalentKeyUsesMergedNodeCountAndPrecedence
+          TestStage3RecoveryCondenseErrorRollsBackConflictAndOwnership
+          TestStage3RecoveryCondenseKeepsSixDistinctVersions
+          TestStage3RecoveryCondenseKeyIgnoresDynamicPrecedence
+          TestStage3RecoveryCondenseOrdersBeforeSixVersionCap
+          TestStage3RecoveryCondensePairwiseDeletesClearlyWorseVersion
+          TestStage3RecoveryCondensePreservesAbsorbBeforeItsMissingSibling
+          TestStage3RecoveryCondenseRetainsDuplicateHistoryOfKeptKey
+          TestStage3RecoveryCondenseScratchIsCountedAndClearedOnReset
+          TestStage3RecoveryCondenseSkipsCostCompetitionWithinRecoveryGroup
+          TestStage3RecoveryCondenseUsesLiveNodeCountForTakeDecision
+          TestStage3RecoveryCondenseUsesScannerCheckpointInsteadOfSnapshotPointer
+          TestStage3RecoveryMetadataSurvivesLexerStateUpdates
+          TestStatefulScannerCompactLeafReauthentication
+          '
+          pattern="^($(printf '%s' "$tests" | tr -s '[:space:]' '\n' | sed '/^$/d' | paste -sd'|'))\$"
+          GOMAXPROCS=1 go test -tags gts_parsercorephase0 . -run "$pattern" -count=1 -timeout 3m
+
+  admission_route_equality_fuzz:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Route-equality seed corpus regression (required)
+        run: |
+          set -euo pipefail
+          GOMAXPROCS=1 go test . -run '^(FuzzAdmissionRouteEquality|TestAdmissionRouteEqualityLockedCExceptions)$' -count=1 -v
+
+      - name: Route-equality bounded live fuzzing, 45s (advisory)
+        # Keep this non-blocking until clean-cache, per-language soaks bound
+        # the workload and reproduce or retire the reported Haskell residual.
+        run: |
+          set +e
+          GOMAXPROCS=1 go test . -run '^$' -fuzz '^FuzzAdmissionRouteEquality$' -fuzztime=45s
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::route-equality live fuzzing found a divergence (status ${status}); informational until the clean-cache promotion gate completes."
+            {
+              echo "### Admission Route-Equality Live Fuzzing"
+              echo
+              echo "\`go test . -run '^\$' -fuzz FuzzAdmissionRouteEquality -fuzztime=45s\` exited with status \`${status}\`."
+              echo
+              echo "This step is informational until clean-cache, per-language promotion soaks complete."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  race_root_shards:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Root Package Race Tests, Examples, and Fuzz Targets (shard ${{ matrix.shard }} of 5)
+        run: |
+          set -euo pipefail
+          mkdir -p harness_out/root-race
+          pattern="$(bash .github/scripts/root_race_shard.sh regex "${{ matrix.shard }}" 5)"
+          go test . -race -count=1 -timeout 15m -run "$pattern" -json |
+            tee "harness_out/root-race/shard-${{ matrix.shard }}.json"
+
+      - name: Preserve completed root-race results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-race-shard-${{ matrix.shard }}
+          path: harness_out/root-race/*.json
+          if-no-files-found: warn
+
+  root_race_plan:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    outputs:
+      isolated: ${{ steps.plan.outputs.isolated }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: plan
+        name: Plan isolated root race gates
+        run: echo "isolated=$(bash .github/scripts/root_race_shard.sh isolated-json)" >> "$GITHUB_OUTPUT"
+
+  race_root_isolated:
+    needs:
+      - exhaustive_parity_scope
+      - root_race_plan
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.root_race_plan.outputs.isolated) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Root Package Isolated Race Gate (${{ matrix.target }})
+        run: |
+          set -euo pipefail
+          mkdir -p harness_out/root-race
+          go test . -race -count=1 -timeout 15m -run '^${{ matrix.target }}$' -json |
+            tee "harness_out/root-race/isolated-${{ matrix.target }}.json"
+
+      - name: Preserve completed isolated root-race result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-race-isolated-${{ matrix.target }}
+          path: harness_out/root-race/*.json
+          if-no-files-found: warn
+
+  # Preserve the existing aggregate job ID consumed by the required `build`
+  # context. The matrix result is successful only when every race shard passes.
+  race_root:
+    needs:
+      - exhaustive_parity_scope
+      - race_root_shards
+      - race_root_isolated
+    if: always() && needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check root race shards
+        env:
+          SHARDS_RESULT: ${{ needs.race_root_shards.result }}
+          ISOLATED_RESULT: ${{ needs.race_root_isolated.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::race_root_shards finished with result=${SHARDS_RESULT}"
+            exit 1
+          fi
+          if [ "$ISOLATED_RESULT" != "success" ]; then
+            echo "::error::race_root_isolated finished with result=${ISOLATED_RESULT}"
+            exit 1
+          fi
+          echo "All root race shards and isolated gates passed"
+
+  race_packages:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cmd
+            package_filter: '/cmd/'
+            test_filter: ''
+          - name: grammars-a-c
+            package_filter: '/grammars$'
+            test_filter: '^(Test[A-C].*)$'
+          - name: grammars-d-j
+            package_filter: '/grammars$'
+            test_filter: '^(Test[D-J].*)$'
+          - name: grammars-k-p
+            package_filter: '/grammars$'
+            test_filter: '^(Test[K-P].*)$'
+          - name: grammars-q-z
+            package_filter: '/grammars$'
+            test_filter: '^(Test[Q-Z].*)$'
+          - name: grammars-other
+            package_filter: '/grammars$'
+            test_filter: '^(Test($|[^A-Z].*))$'
+          - name: grammargen-support
+            package_filter: '/grammargen/'
+            test_filter: ''
+          - name: parser-result
+            package_filter: '/parser_result_test$'
+            test_filter: ''
+          - name: support
+            package_filter: '/grep$|/taproot($|/)'
+            test_filter: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Non-root Race Tests (${{ matrix.name }})
+        # Keep each lane serialized under -race so timing-sensitive tests do
+        # not contend with each other on 2-core hosted runners, but split the
+        # former all-non-root sweep into package groups so the wall clock stays
+        # near the target 10-minute envelope. The grammars package is split by
+        # top-level test name ranges because it is one package with enough
+        # parser-regression coverage to dominate the blocking matrix by itself.
+        # Keep parser-result and grammargen support out of the grammar registry
+        # lane; together they made the aggregate race shard sit near the timeout
+        # cap even for data-only PRs.
+        # ./grammargen stays visibility-only until its enumerated backlog is
+        # burned down and folded back into the blocking suite.
+        run: |
+          set -euo pipefail
+          root="$(go list -m)"
+          pkgs="$(
+            go list ./... |
+              awk -v root="$root" -v pattern="${{ matrix.package_filter }}" '
+                $0 == root { next }
+                $0 ~ /\/grammargen$/ { next }
+                $0 ~ pattern { print }
+              '
+          )"
+          if [ -z "$pkgs" ]; then
+            echo "No non-root packages to test for lane ${{ matrix.name }}"
+            exit 0
+          fi
+          test_filter="${{ matrix.test_filter }}"
+          if [ -n "$test_filter" ]; then
+            go test $pkgs -race -count=1 -timeout 12m -p 1 -run "$test_filter"
+          else
+            go test $pkgs -race -count=1 -timeout 12m -p 1
+          fi
+
+  grammargen_visibility:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test grammargen (non-blocking visibility)
+        # Visibility-only until the enumerated pre-existing backlog is zeroed;
+        # known test failures or timeout exits here are SEEN but do not make
+        # the PR red. Keep this bounded so visibility cannot dominate the PR
+        # check rollup while the blocking build gate has already passed.
+        run: |
+          set +e
+          go test ./grammargen -race -count=1 -timeout 6m
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::grammargen visibility suite exited with status ${status}; this is informational until the known backlog is burned down."
+            {
+              echo "### Grammargen Visibility"
+              echo
+              echo "\`go test ./grammargen -race -count=1 -timeout 6m\` exited with status \`${status}\`."
+              echo
+              echo "This job is informational until the known grammargen backlog is zeroed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  draft_focused_tests:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'pull_request' && github.event.pull_request.draft == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Draft PR Focused Tests
+        run: |
+          go test . -run '^(TestLookupActionIndexSmallUsesDenseTokenRows|TestLookupActionIndexSmallUsesFullTokenRowsForOtherLanguages|TestLookupActionIndexSmallUsesFullSymbolRowsForGo|TestRawShapePropagatesThroughNoTreeAndCollapsedUnary|TestParseRuntimeReportsNoTreeNodeVolume|TestParseRuntimeReportsNoTreeCheckpointLeavesRemainNodes|TestParseNoTreeBenchmarkDropsRetainedExternalCheckpointCapacity|TestSetLexerErrorRunLexStateUsesCRecoveryGate|TestErrorCostCompetitionLanguageRequiresCapabilityByDefault)$' -count=1
+
+  parity_report:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Parity Report (External Blob Mode)
+        # -pgo=pgo/default.pgo: parity_report parses every registered
+        # grammar's smoke sample on every PR, the closest thing this repo
+        # has to a representative production parsing binary run in its own
+        # CI. See pgo/README.md for the profile's provenance, regeneration
+        # recipe, and scoped current receipts. PGO is a codegen-only
+        # optimization; it does not change parity_report's output.
+        run: |
+          GOTREESITTER_GRAMMAR_BLOB_DIR=grammars/grammar_blobs \
+          go run -pgo=pgo/default.pgo -tags grammar_blobs_external ./cmd/parity_report > parity.log
+
+      - name: Upload Parity Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-log
+          path: parity.log
+
+  perf_scan_budget:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cgo_harness/go.mod
+
+      - name: Validate perf scan budget ratchet
+        working-directory: cgo_harness
+        run: |
+          set -euo pipefail
+          GOWORK=off go test ./cmd/perf_scan_budget ./cmd/perf_scan_status -count=1
+          GOWORK=off go run ./cmd/perf_scan_budget \
+            -budget perf_scan/perf_ratio_budgets.json
+
+  # oedit_latency_gate_full runs the full editor-latency gate sweep
+  # (campaign O(edit) workstream W5, spec.campaign.oedit): all five gate
+  # languages at the ~20KB, ~137KB, and ~1MB size tiers, crossed with every
+  # edit class and position. The normal root suite in race_root_shards covers
+  # the ~20KB and ~137KB tiers; GTS_W5_SLOW_TIER adds the ~1MB tier here.
+  # This job also runs the JavaScript-family transient-error edit gate at all
+  # three sizes. It is manual (workflow_dispatch only) and not part of
+  # the required `build` gate so the slow tier remains available on demand
+  # without adding its wall time to every PR.
+  oedit_latency_gate_full:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Full editor-latency gate sweep (20KB/137KB/1MB)
+        run: |
+          GTS_W5_SLOW_TIER=1 \
+          go test . \
+            -run '^(TestW5EditorLatencyGate|TestW5JavaScriptFamilyTransientErrorGate)$' \
+            -count=1 -v -timeout 8m
+
+  exhaustive_parity_scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_code_ci: ${{ steps.scope.outputs.run_code_ci }}
+      run_exhaustive: ${{ steps.scope.outputs.run_exhaustive }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: scope
+        name: Detect CI and exhaustive parity scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          run_code_ci=true
+          run_exhaustive=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            run_exhaustive=true
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            # --no-renames makes a code-to-docs rename expose both paths, so it
+            # cannot accidentally take the lightweight docs-only route.
+            git diff --name-only --no-renames "${PR_BASE_SHA}...HEAD" > /tmp/changed-files.txt
+
+            if [ ! -s /tmp/changed-files.txt ]; then
+              echo "::error::Pull request changed-file list is empty; refusing to skip code CI"
+              exit 1
+            fi
+
+            run_code_ci=false
+            while IFS= read -r path; do
+              if [ "$path" = "LICENSE" ] ||
+                 [[ "$path" =~ ^[^/]+\.md$ ]] ||
+                 [[ "$path" =~ ^docs/ ]] ||
+                 [[ "$path" =~ ^\.github/[^/]+\.md$ ]]; then
+                continue
+              fi
+              run_code_ci=true
+              break
+            done < /tmp/changed-files.txt
+
+            if [ "$run_code_ci" = "false" ]; then
+              git diff --check "${PR_BASE_SHA}...HEAD"
+              {
+                echo "### CI scope"
+                echo
+                echo "Docs-only PR: full code CI is skipped after the changed-file and whitespace checks pass."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "run_code_ci=${run_code_ci}" >> "$GITHUB_OUTPUT"
+              echo "run_exhaustive=${run_exhaustive}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            exhaustive_pattern='^(parser_result_.*\.go|parser_recover_c.*\.go|parser_result_test/.*\.go|cgo_harness/(parity_cgo_test|parity_gate_ratchet_test)\.go)$'
+            if grep -Eq "$exhaustive_pattern" /tmp/changed-files.txt; then
+              run_exhaustive=true
+              {
+                echo "### Exhaustive parity trigger"
+                echo
+                echo "Running exhaustive CGo parity because this PR touches parser-result, C-recovery, or parity-degradation gate files:"
+                echo
+                grep -E "$exhaustive_pattern" /tmp/changed-files.txt | sed 's/^/- `/' | sed 's/$/`/'
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              {
+                echo "### Exhaustive parity trigger"
+                echo
+                echo "No parser-result, C-recovery, or parity-degradation gate files changed; exhaustive CGo parity is skipped."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          echo "run_code_ci=${run_code_ci}" >> "$GITHUB_OUTPUT"
+          echo "run_exhaustive=${run_exhaustive}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs:
+      - compile
+      - selected_store_admission
+      - compact_admission_ratchet
+      - admission_route_equality_fuzz
+      - race_root
+      - race_packages
+      - draft_focused_tests
+      - parity_report
+      - perf_scan_budget
+      - exhaustive_parity_scope
+      - compact-t3-oracle-cgo
+      - merge-event-census-cgo
+      - parity-cgo-exhaustive
+      - freshness
+      - compact-route-lifecycle-history
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Required Build Gate
+        env:
+          IS_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+          RUN_CODE_CI: ${{ needs.exhaustive_parity_scope.outputs.run_code_ci }}
+          COMPILE_RESULT: ${{ needs.compile.result }}
+          SELECTED_STORE_ADMISSION_RESULT: ${{ needs.selected_store_admission.result }}
+          COMPACT_ADMISSION_RATCHET_RESULT: ${{ needs.compact_admission_ratchet.result }}
+          ADMISSION_ROUTE_EQUALITY_FUZZ_RESULT: ${{ needs.admission_route_equality_fuzz.result }}
+          RACE_ROOT_RESULT: ${{ needs.race_root.result }}
+          RACE_PACKAGES_RESULT: ${{ needs.race_packages.result }}
+          DRAFT_FOCUSED_RESULT: ${{ needs.draft_focused_tests.result }}
+          PARITY_REPORT_RESULT: ${{ needs.parity_report.result }}
+          PERF_SCAN_BUDGET_RESULT: ${{ needs.perf_scan_budget.result }}
+          EXHAUSTIVE_PARITY_SCOPE_RESULT: ${{ needs.exhaustive_parity_scope.result }}
+          EXHAUSTIVE_PARITY_SCOPE: ${{ needs.exhaustive_parity_scope.outputs.run_exhaustive }}
+          COMPACT_T3_ORACLE_CGO_RESULT: ${{ needs.compact-t3-oracle-cgo.result }}
+          MERGE_EVENT_CENSUS_CGO_RESULT: ${{ needs.merge-event-census-cgo.result }}
+          EXHAUSTIVE_PARITY_RESULT: ${{ needs.parity-cgo-exhaustive.result }}
+          FRESHNESS_RESULT: ${{ needs.freshness.result }}
+          COMPACT_ROUTE_LIFECYCLE_HISTORY_RESULT: ${{ needs.compact-route-lifecycle-history.result }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          require_success() {
+            local name="$1"
+            local result="$2"
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} finished with result=${result}"
+              failed=1
+            fi
+          }
+
+          require_success "exhaustive_parity_scope" "$EXHAUSTIVE_PARITY_SCOPE_RESULT"
+
+          if [ "$RUN_CODE_CI" = "false" ]; then
+            if [ "$failed" -ne 0 ]; then
+              exit 1
+            fi
+            echo "Docs-only required build gate passed"
+            exit 0
+          fi
+
+          if [ "$RUN_CODE_CI" != "true" ]; then
+            echo "::error::exhaustive_parity_scope emitted invalid run_code_ci=${RUN_CODE_CI}"
+            exit 1
+          fi
+
+          require_success "freshness" "$FRESHNESS_RESULT"
+          require_success "compact-route-lifecycle-history" "$COMPACT_ROUTE_LIFECYCLE_HISTORY_RESULT"
+          require_success "compile" "$COMPILE_RESULT"
+          require_success "selected_store_admission" "$SELECTED_STORE_ADMISSION_RESULT"
+          require_success "compact_admission_ratchet" "$COMPACT_ADMISSION_RATCHET_RESULT"
+          require_success "admission_route_equality_fuzz" "$ADMISSION_ROUTE_EQUALITY_FUZZ_RESULT"
+          require_success "parity_report" "$PARITY_REPORT_RESULT"
+          require_success "perf_scan_budget" "$PERF_SCAN_BUDGET_RESULT"
+          require_success "compact-t3-oracle-cgo" "$COMPACT_T3_ORACLE_CGO_RESULT"
+          require_success "merge-event-census-cgo" "$MERGE_EVENT_CENSUS_CGO_RESULT"
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            require_success "draft_focused_tests" "$DRAFT_FOCUSED_RESULT"
+          else
+            require_success "race_root" "$RACE_ROOT_RESULT"
+            require_success "race_packages" "$RACE_PACKAGES_RESULT"
+          fi
+
+          if [ "$EXHAUSTIVE_PARITY_SCOPE" = "true" ]; then
+            require_success "parity-cgo-exhaustive" "$EXHAUSTIVE_PARITY_RESULT"
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "Required build gate passed"
+
+  # Draft PR correctness visibility (NOT a required check).
+  #
+  # Background: the blocking `race_root` / `race_packages` jobs are
+  # intentionally skipped while a PR is a draft, so draft PRs only run the
+  # small hand-picked `draft_focused_tests` required-check input instead of
+  # the real race suite.
+  #
+  # That blind spot let a real regression go unseen for weeks: on the
+  # codex/glr-parity-buckets campaign PR (#133), root-package RealParser
+  # Kotlin parity silently regressed from 40/40 to 22/40 while the PR sat in
+  # draft (now fixed) — root-package parity tests never ran on that PR at
+  # all, because the focused list didn't cover them and the full suite never
+  # ran while draft. The branch also separately accumulated ~25 root-package
+  # and ~21 grammars-package pre-existing failures that were never visible
+  # in CI for the same reason.
+  #
+  # This job closes that gap: it runs the root + grammars package suite (no
+  # -race, for speed/turnaround) on every draft PR push, so failures are
+  # SEEN as they land instead of discovered after the fact.
+  #
+  # It is intentionally NOT a required check yet (that's a repo
+  # branch-protection setting, not this file). With ~46 known pre-existing
+  # failures on the campaign branch today, requiring this job would make
+  # every draft PR permanently red and block all progress. Once the
+  # pre-existing failure count is driven to zero, promote this job to
+  # required to turn it into a ratchet.
+  draft-correctness:
+    # Only meaningful for draft PRs: non-draft PRs already get the blocking
+    # race suite through `race_root` and `race_packages`.
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'pull_request' && github.event.pull_request.draft == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Draft Correctness Suite (root + grammars, no -race)
+        run: |
+          # No -race: trades race detection for speed so this is cheap
+          # enough to run on every draft push. The full -race suite still
+          # runs once the PR leaves draft (`race_root` / `race_packages`).
+          #
+          # -timeout 25m: the root package alone contains two known
+          # C#-boundedness tests (TestCSharpDesignerStyleBlockStaysBounded,
+          # TestCSharpCJKPartialClassesStayBounded) that currently run
+          # ~130-150s each before hitting their internal parser-level
+          # timeout and failing. The non-draft race suite does not
+          # special-case them either, so mirror that behavior here and give
+          # the whole draft visibility run a generous budget.
+          go test . ./grammars -count=1 -timeout 25m
+
+  freshness:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check linguist_gen.go freshness
+        run: |
+          set -euo pipefail
+          # Regenerate using the vendored languages.yml to keep the check
+          # deterministic (not affected by upstream linguist changes).
+          go run ./cmd/gen_linguist \
+            -manifest grammars/languages.manifest \
+            -languages-yml grammars/languages.yml \
+            -out grammars/linguist_gen.go
+          if ! git diff --exit-code grammars/linguist_gen.go; then
+            echo "::error::grammars/linguist_gen.go is stale. Regenerate:"
+            echo "::error::  go run ./cmd/gen_linguist -manifest grammars/languages.manifest -languages-yml grammars/languages.yml"
+            exit 1
+          fi
+
+      - name: Check selective blob embed freshness
+        run: go run ./cmd/gen_subset_blob_embeds -check
+
+      - name: Check grammar blob coverage matches lock
+        run: |
+          set -euo pipefail
+
+          # Extract grammar names from lock (skip comments and blanks).
+          lock_names=$(grep -v '^#' grammars/languages.lock | grep -v '^$' | awk '{print $1}' | sort)
+          lock_count=$(echo "$lock_names" | wc -l)
+
+          # Extract grammar names from .bin files.
+          blob_names=$(ls grammars/grammar_blobs/*.bin 2>/dev/null | xargs -I{} basename {} .bin | sort)
+          blob_count=$(echo "$blob_names" | wc -l)
+
+          # Extract grammar names from embedded_grammars_gen.go. Most wrappers
+          # call loadEmbeddedLanguage("name.bin"), but a small number use the
+          # preferred-language entrypoint (for override-aware blobs) and pass
+          # the raw grammar name instead.
+          gen_names=$(
+            grep -oP '(?:loadEmbeddedLanguage\("\K[^"]+(?=\.bin"\))|(?:loadPreferredLanguage\("\K[^"]+(?="\))))' \
+              grammars/embedded_grammars_gen.go | sort
+          )
+          gen_count=$(echo "$gen_names" | wc -l)
+
+          echo "lock: $lock_count | blobs: $blob_count | gen functions: $gen_count"
+
+          # Three-way consistency: lock ↔ blobs ↔ gen functions.
+          missing_blobs=$(comm -23 <(echo "$lock_names") <(echo "$blob_names"))
+          if [ -n "$missing_blobs" ]; then
+            echo "::error::Grammar blobs missing for lock entries: $missing_blobs"
+            echo "Run: go run ./cmd/ts2go -manifest grammars/languages.lock -outdir ./grammars -package grammars"
+            exit 1
+          fi
+
+          orphan_blobs=$(comm -13 <(echo "$lock_names") <(echo "$blob_names"))
+          if [ -n "$orphan_blobs" ]; then
+            echo "::warning::Orphan blobs not in lock file: $orphan_blobs"
+          fi
+
+          missing_gen=$(comm -23 <(echo "$lock_names") <(echo "$gen_names"))
+          if [ -n "$missing_gen" ]; then
+            echo "::error::embedded_grammars_gen.go missing functions for: $missing_gen"
+            echo "Run: go run ./cmd/ts2go -manifest grammars/languages.lock -outdir ./grammars -package grammars"
+            exit 1
+          fi
+
+          if [ "$blob_count" -ne "$lock_count" ] || [ "$gen_count" -ne "$lock_count" ]; then
+            echo "::error::Count mismatch — lock: $lock_count, blobs: $blob_count, gen: $gen_count"
+            exit 1
+          fi
+
+  compact-route-lifecycle-history:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate compact route campaign lifecycle history
+        env:
+          GTS_REQUIRE_HISTORICAL_RECEIPT_PROOF: "1"
+        run: go test . -run '^TestCompactRouteCampaignLifecycleRegistry$' -count=1
+
+  # apidiff compares the public API of package `gotreesitter` (the module
+  # root only, not the full module) between the last released tag and this
+  # PR's HEAD, and fails on an incompatible change. No production build or
+  # test dependency runs here, so the job stays fast.
+  #
+  # APIDIFF_BASELINE_TAG is a pinned tag, not a dynamically discovered one
+  # (for example `git describe --tags --abbrev=0`). A pinned tag keeps the
+  # baseline visible in this file and reviewable in a diff, and a new
+  # release cannot silently change what a PR is compared against. Bump it
+  # by hand at each release; today's value matches the release train's own
+  # documented API-compatibility baseline.
+  #
+  # golang.org/x/exp has no tagged releases, so APIDIFF_TOOL_VERSION pins an
+  # exact pseudo-version of the tool instead. It has no relation to
+  # APIDIFF_BASELINE_TAG and can be bumped independently, on its own
+  # schedule.
+  apidiff:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APIDIFF_BASELINE_TAG: v0.49.0
+      APIDIFF_TOOL_VERSION: v0.0.0-20260811152304-ee035b5b010f
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Public API diff vs ${{ env.APIDIFF_BASELINE_TAG }} (package gotreesitter)
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --depth=1 origin \
+            "refs/tags/${APIDIFF_BASELINE_TAG}:refs/tags/${APIDIFF_BASELINE_TAG}"
+
+          OLD_DIR="${RUNNER_TEMP}/apidiff-old"
+          mkdir -p "${OLD_DIR}"
+          git archive "${APIDIFF_BASELINE_TAG}" | tar -x -C "${OLD_DIR}"
+
+          OLD_EXPORT="${RUNNER_TEMP}/apidiff-old.export"
+          NEW_EXPORT="${RUNNER_TEMP}/apidiff-new.export"
+          apidiff_run() {
+            go run "golang.org/x/exp/cmd/apidiff@${APIDIFF_TOOL_VERSION}" "$@"
+          }
+
+          ( cd "${OLD_DIR}" && apidiff_run -w "${OLD_EXPORT}" . )
+          apidiff_run -w "${NEW_EXPORT}" .
+
+          report="${RUNNER_TEMP}/apidiff-report.txt"
+          apidiff_run "${OLD_EXPORT}" "${NEW_EXPORT}" | tee "${report}"
+          {
+            echo "### Public API diff: ${APIDIFF_BASELINE_TAG} -> HEAD"
+            echo
+            if [ -s "${report}" ]; then
+              echo '```'
+              cat "${report}"
+              echo '```'
+            else
+              echo "No public API change in package \`gotreesitter\`."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          incompatible="${RUNNER_TEMP}/apidiff-incompatible.txt"
+          apidiff_run -incompatible "${OLD_EXPORT}" "${NEW_EXPORT}" | tee "${incompatible}"
+          if [ -s "${incompatible}" ]; then
+            echo "::error::incompatible public API change(s) in package gotreesitter against ${APIDIFF_BASELINE_TAG}; see the job log or step summary above"
+            exit 1
+          fi
+
+  compact-t3-oracle-cgo:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compact T3 C-oracle witness contract
+        run: |
+          GTS_PARITY_MODE=smoke \
+          GTS_PARITY_C_REF_BUILD_CACHE=0 \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-t3-oracle \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 20m \
+            --run '^(TestCompactT3OracleAdjudication|TestCompactT3JavaScriptRecoveryProfileCharacterization|TestCompactT3JavaScriptRecoveryRouteSeedOracleParity|TestCompactT3JavaScriptRecoveryMutationDifferential|TestCompactJavaScriptS5RecoveryMutationDifferential|TestCompactRouteLockedCExceptions)$'
+
+      - name: Elm admission contract against locked C
+        run: |
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-admission-elm-contract \
+            --memory 4g \
+            --cpus 2 \
+            --gomemlimit 3GiB \
+            --wall-timeout 5m \
+            -- "cd /workspace && go test . -tags gts_parsercorephase0 -run '^TestAdmissionCandidateElmHighlightDirect$' -count=1 -timeout 2m && cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^TestAdmissionCandidateElmHighlightCOracle$' -count=1 -timeout 2m -v"
+
+      - name: External payload contracts by grammar
+        run: |
+          set -euo pipefail
+          for grammar in kotlin ocaml perl rust; do
+            bash cgo_harness/docker/run_parity_in_docker.sh \
+              --label "ci-admission-external-payload-${grammar}" \
+              --memory 4g \
+              --cpus 2 \
+              --gomemlimit 3GiB \
+              --wall-timeout 5m \
+              -- "cd /workspace && go test . -tags gts_parsercorephase0 -run '^TestAdmissionCandidateExactExternalPayloadCorpus$/${grammar}$' -count=1 -timeout 2m -v"
+          done
+
+      - name: Compact incremental Go execution
+        run: |
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-incremental-go-execution \
+            --memory 4g \
+            --cpus 2 \
+            --gomemlimit 3GiB \
+            --wall-timeout 10m \
+            -- "cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^(TestGoCompactIncrementalExecution.*Parity|TestGoCompactNestedReuse.*LockedC|TestStage6GoCompactCertification)$' -count=1 -parallel 1 -timeout 5m -v"
+
+      - name: Compact recovery incremental JavaScript witnesses
+        run: |
+          GTS_PARITY_MODE=smoke \
+          GTS_PARITY_C_REF_BUILD_CACHE=0 \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-recovery-incremental-javascript \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 20m \
+            -- "cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^(TestCompactRecoveryJavaScriptIncrementalCOracle|TestCompactRecoveryJavaScriptInsertionRegression|TestJavaScriptCompactNestedReuseLookaheadLockedC)$' -count=1 -parallel 1 -timeout 20m -v"
+
+      - name: Compact recovery incremental YAML witness
+        run: |
+          GTS_PARITY_MODE=smoke \
+          GTS_PARITY_C_REF_BUILD_CACHE=0 \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-recovery-incremental-yaml \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 20m \
+            -- "cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^TestCompactRecoveryYAMLRecoverEOFIncrementalCOracle$' -count=1 -parallel 1 -timeout 20m -v"
+
+      - name: Compact per-version lexer package-one witnesses
+        run: |
+          GTS_PARITY_MODE=smoke \
+          GTS_PARITY_C_REF_BUILD_CACHE=0 \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-per-version-lexer-scala \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 20m \
+            -- "cd /workspace && go test . -tags gts_parsercorephase0 -run '^(TestDiagnosticParserCoreVersionLexerSnapshot(BindsCheckpointIdentity|RejectsIncompleteCheckpointIdentity)|TestDiagnosticParserCoreOwnedLexer(SeedingSkipsAcceptedHeader|ActivationRejectsOpenRecoveryRegion)|TestExternalScannerOrderAdapter(PreservesOptionalCapabilities|KeepsLegacyCheckpointIdentityOptional|RequiresTargetGrammarCheckpointIdentity|BindsAuthenticatedTargetAcrossNestedAdapters))$' -count=1 -parallel 1 -timeout 20m -v && cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^TestCompactPerVersionLexerScalaCOracle$' -count=1 -parallel 1 -timeout 20m -v"
+
+      - name: Compact physical graph-head package-two witnesses
+        run: |
+          GTS_PARITY_MODE=smoke \
+          GTS_PARITY_C_REF_BUILD_CACHE=0 \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-compact-physical-head-scala \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 20m \
+            -- "cd /workspace && go test -tags gts_parsercorephase0 ./internal/parsercorephase0 -run '^(TestS5RecoveryDiscontinuityLinkValidation|TestS5DiscontinuityReaderSemantics|TestS5SixHeadPhysicalMergeRetainsPaths)$' -count=1 -parallel 1 -timeout 20m -v && go test . -tags gts_parsercorephase0 -run '^(TestPackage2ScalaStrictReceipt(Composition)?|TestStage6(S5PotentialReductionCollectorTreatsAcceptAsShiftable|ScalaEOFReduction(BeforeMissingInsertion|RequiresExactArtifactCapability)))$' -count=1 -parallel 1 -timeout 20m -v && cd /workspace/cgo_harness && go test . -tags 'treesitter_c_parity gts_parsercorephase0' -run '^TestPackage2Scala(Falsifier(PhysicalMergeMinimal|OwnedLexerComposition|NoSummaryEOF|TrueEOFComposition)|Incremental((EOFComposition)?CleanMissingTransitions|ScannerStateEdits))$' -count=1 -parallel 1 -timeout 20m -v"
+
+  # merge-event-census-cgo runs stage M0 of spec.merge-time-election.v1: the
+  # census that counts stack-merge events on both sides and breaks production's
+  # refusals down by gate. Every cgo parity lane in this file runs a FIXED
+  # --run regex, so a new cgo test runs nowhere unless it is named here; see
+  # docs/ci-gate-coverage.md. This lane names it.
+  #
+  # The census needs its own build tags, so it uses the docker runner's custom
+  # command form rather than --run: gts_merge_census compiles the production
+  # instrument into the library, and the lane is the only place it is compiled
+  # at all (merge_event_census_inert_test.go ratchets its absence everywhere
+  # else). The reference side compiles the repository's own work-count patch
+  # against the pinned runtime source from the module cache, so the lane needs
+  # cc and git, which the harness image already carries.
+  merge-event-census-cgo:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Merge-event census (stage M0 baseline and Foo[int](a) receipt)
+        run: |
+          GTS_PARITY_MODE=smoke \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-merge-event-census \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --c-ref-build-jobs 1 \
+            --timeout 30m \
+            -- "cd /workspace/cgo_harness && GOWORK=off go test \
+              -tags 'cgo treesitter_c_parity gts_merge_census' \
+              -run '^TestMergeEventCensus' -count=1 -v -timeout 30m ."
+
+  parity-cgo:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: CGo Parity Smoke Gate
+        # TestOutlineOracleDifferential (cgo_harness/outline_differential_test.go)
+        # joined this regex next to its query/capture-parity sibling
+        # TestParityHighlight. The Dart live-arm probe and receipt guard are
+        # also named explicitly so their blocker receipt remains executable.
+        # Every cgo parity lane in this file runs a FIXED --run regex, so a
+        # new cgo test runs nowhere unless it is named here; see
+        # docs/ci-gate-coverage.md. Its CoreNine subtest hard-gates the nine
+        # core languages; its FleetCensus subtest only logs a census row, so
+        # naming the whole test is safe.
+        run: |
+          GTS_PARITY_MODE=smoke \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-parity-cgo-smoke \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --timeout 20m \
+            --run '^TestParityFreshParse$|^TestParityIncrementalParse$|^TestParityHasNoErrors$|^TestParityIssue3Repros$|^TestParityGLRCanaryGo$|^TestParityGLRCanarySet$|^TestParityGLRCapPressureTopLanguages$|^TestParityGateCoverageRatchet$|^TestParityHighlight$|^TestOutlineOracleDifferential$|^TestParityJavaScriptAutomaticSemicolonBeforeTrailingComment$|^TestParityJavaScriptAdjacentBlockCommentsDoNotConsumeFollowingToken$|^TestIncludedRangesGoRootParity$|^TestIncludedRangesGoArmGuardsRootSymbol$|^TestIncludedRangesKotlinRootParity$|^TestDartNextLiveArmProbe$|^TestDartNextLiveArmReceiptDocument$'
+
+  parity-cgo-exhaustive:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && needs.exhaustive_parity_scope.outputs.run_exhaustive == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: CGo Structural Parity Exhaustive (Fresh + No Errors + Issue3)
+        run: |
+          GTS_PARITY_MODE=exhaustive \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-parity-cgo-exhaustive-fresh \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --timeout 30m \
+            --run '^TestParityFreshParse$|^TestParityHasNoErrors$|^TestParityIssue3Repros$|^TestParityKnownDegradedStructuralStillDiverges$|^TestParityJavaScriptAutomaticSemicolonBeforeTrailingComment$|^TestParityJavaScriptAdjacentBlockCommentsDoNotConsumeFollowingToken$|^TestIncludedRangesGoRootParity$|^TestIncludedRangesGoArmGuardsRootSymbol$|^TestIncludedRangesKotlinRootParity$'
+
+      - name: CGo Structural Parity Exhaustive (Incremental + GLR)
+        run: |
+          GTS_PARITY_MODE=exhaustive \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-parity-cgo-exhaustive-incremental \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --timeout 30m \
+            --run '^TestParityIncrementalParse$|^TestParityGLRCanaryGo$|^TestParityGLRCanarySet$|^TestParityGLRCapPressureTopLanguages$|^TestParityGateCoverageRatchet$'
+
+      - name: CGo Structural Parity Exhaustive (Corpus)
+        run: |
+          GTS_PARITY_MODE=exhaustive \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-parity-cgo-exhaustive-corpus \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --timeout 30m \
+            --run '^TestParityCorpusFreshParse$'
+
+      - name: CGo Highlight + YAML Parity Exhaustive
+        run: |
+          GTS_PARITY_MODE=exhaustive \
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label ci-parity-cgo-exhaustive-highlight-yaml \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --test-parallel 1 \
+            --timeout 30m \
+            --run '^TestParityHighlight$|^TestParityHighlightAllGrammars$|^TestParityYAMLCorpus$|^TestParityYAMLCorpusStructural$|^TestParityYAMLCorpusSummary$'
+
+  perf-regression:
+    needs: exhaustive_parity_scope
+    if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Benchmark Base vs Head (advisory)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PERF_LEGACY_BASE_SHA: 7a29f591d7fcc54b3d0639b3e38a1bacd8fcb386
+          # Contract rebased after the 2026-07-11 audit proved the old
+          # BenchmarkGoParseFullDFA silently enabled no-tree mode. This floor
+          # is the first commit where that benchmark calls Parser.Parse and
+          # measures a fully materialized tree; parser-core attribution moved
+          # to BenchmarkGoParseCoreDFA. Never compare the corrected public
+          # full-parse lane with the retired parser-core numbers.
+          PERF_BENCH_CONTRACT_BASE_SHA: 1717ce84179a850501ec86684f80a77e24d661a8
+        run: |
+          set -euo pipefail
+
+          BENCH_RE='^(BenchmarkGoParseFullDFA|BenchmarkGoParseIncrementalSingleByteEditDFA|BenchmarkGoParseIncrementalNoEditDFA)$'
+          BENCH_REQUIRED='BenchmarkGoParseFullDFA,BenchmarkGoParseIncrementalSingleByteEditDFA,BenchmarkGoParseIncrementalNoEditDFA'
+          OUT_DIR="${RUNNER_TEMP}/bench-gate"
+          BASE_TREE="${RUNNER_TEMP}/bench-base"
+          mkdir -p "${OUT_DIR}"
+
+          GATE_BASE_SHA="${BASE_SHA}"
+          if git fetch --no-tags origin "${PERF_BENCH_CONTRACT_BASE_SHA}" >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor "${PERF_BENCH_CONTRACT_BASE_SHA}" "${BASE_SHA}"; then
+              GATE_BASE_SHA="${PERF_BENCH_CONTRACT_BASE_SHA}"
+            fi
+          fi
+          if [ "${GATE_BASE_SHA}" = "${BASE_SHA}" ] && git fetch --no-tags origin "${PERF_LEGACY_BASE_SHA}" >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor "${PERF_LEGACY_BASE_SHA}" "${BASE_SHA}"; then
+              GATE_BASE_SHA="${PERF_LEGACY_BASE_SHA}"
+            fi
+          fi
+          echo "perf gate base: ${GATE_BASE_SHA} (pr base: ${BASE_SHA})"
+
+          # The legacy base needs a higher node budget for comparable full-parse
+          # results. The benchmark-contract floor already uses current settings.
+          BENCH_NODE_SCALE=""
+          if [ "${GATE_BASE_SHA}" = "${PERF_LEGACY_BASE_SHA}" ]; then
+            BENCH_NODE_SCALE="3"
+            echo "perf gate: using GOT_PARSE_NODE_LIMIT_SCALE=${BENCH_NODE_SCALE} for benchmark comparability"
+          fi
+
+          git fetch --no-tags origin "${BASE_SHA}" "${GATE_BASE_SHA}"
+          git worktree add "${BASE_TREE}" "${GATE_BASE_SHA}"
+          PR_BASE_TREE=""
+          cleanup_bench_worktrees() {
+            if [ -n "${PR_BASE_TREE}" ]; then
+              git worktree remove --force "${PR_BASE_TREE}" || true
+            fi
+            git worktree remove --force "${BASE_TREE}"
+          }
+          trap cleanup_bench_worktrees EXIT
+
+          export GOMAXPROCS=1
+          run_paired_comparison() {
+            local baseline_root=$1
+            local baseline_output=$2
+            local head_output=$3
+            local args=(
+              --baseline-root "${baseline_root}"
+              --baseline-output "${baseline_output}"
+              --output "${head_output}"
+              --runs 20 --seed-start 1 --benchtime 750ms
+              --bench-regex "${BENCH_RE}" --package . --tags ''
+              --require-benchmarks "${BENCH_REQUIRED}"
+            )
+            if [ -n "${BENCH_NODE_SCALE}" ]; then
+              GOT_PARSE_NODE_LIMIT_SCALE="${BENCH_NODE_SCALE}" \
+                bash scripts/run_randomized_benchmarks.sh "${args[@]}"
+            else
+              bash scripts/run_randomized_benchmarks.sh "${args[@]}"
+            fi
+          }
+          run_paired_comparison "${BASE_TREE}" "${OUT_DIR}/base.txt" "${OUT_DIR}/head.txt"
+          if [ "${GATE_BASE_SHA}" != "${BASE_SHA}" ]; then
+            PR_BASE_TREE="${RUNNER_TEMP}/bench-pr-base"
+            git worktree add "${PR_BASE_TREE}" "${BASE_SHA}"
+            run_paired_comparison "${PR_BASE_TREE}" "${OUT_DIR}/pr_base.txt" "${OUT_DIR}/pr_head.txt"
+            git worktree remove --force "${PR_BASE_TREE}"
+            PR_BASE_TREE=""
+            echo "informational compare vs PR base (non-blocking):"
+            if ! go run ./cmd/benchgate \
+              -base "${OUT_DIR}/pr_base.txt" \
+              -head "${OUT_DIR}/pr_head.txt" \
+              -max-ns-regression 10 \
+              -max-bytes-regression 10 \
+              -max-allocs-regression 10; then
+              echo "informational compare vs PR base unavailable (missing benchmarks/metrics)"
+            fi
+          fi
+
+          BASE_RSS_BIN="${OUT_DIR}/base_rss.test"
+          HEAD_RSS_BIN="${OUT_DIR}/head_rss.test"
+          (cd "${BASE_TREE}" && go test -c -o "${BASE_RSS_BIN}" .)
+          go test -c -o "${HEAD_RSS_BIN}" .
+
+          if [ -n "${BENCH_NODE_SCALE}" ]; then
+            (
+              cd "${BASE_TREE}" && \
+              GOT_BENCH_FUNC_COUNT=5000 GOT_PARSE_NODE_LIMIT_SCALE="${BENCH_NODE_SCALE}" /usr/bin/time -v \
+              "${BASE_RSS_BIN}" -test.run '^$' -test.bench '^BenchmarkGoParseFullDFA$' -test.benchmem -test.count=1 -test.benchtime=3x \
+              > "${OUT_DIR}/base_rss_bench.txt" 2> "${OUT_DIR}/base_rss_time.txt"
+            )
+            GOT_BENCH_FUNC_COUNT=5000 GOT_PARSE_NODE_LIMIT_SCALE="${BENCH_NODE_SCALE}" /usr/bin/time -v \
+              "${HEAD_RSS_BIN}" -test.run '^$' -test.bench '^BenchmarkGoParseFullDFA$' -test.benchmem -test.count=1 -test.benchtime=3x \
+              > "${OUT_DIR}/head_rss_bench.txt" 2> "${OUT_DIR}/head_rss_time.txt"
+          else
+            (
+              cd "${BASE_TREE}" && \
+              GOT_BENCH_FUNC_COUNT=5000 /usr/bin/time -v \
+              "${BASE_RSS_BIN}" -test.run '^$' -test.bench '^BenchmarkGoParseFullDFA$' -test.benchmem -test.count=1 -test.benchtime=3x \
+              > "${OUT_DIR}/base_rss_bench.txt" 2> "${OUT_DIR}/base_rss_time.txt"
+            )
+            GOT_BENCH_FUNC_COUNT=5000 /usr/bin/time -v \
+              "${HEAD_RSS_BIN}" -test.run '^$' -test.bench '^BenchmarkGoParseFullDFA$' -test.benchmem -test.count=1 -test.benchtime=3x \
+              > "${OUT_DIR}/head_rss_bench.txt" 2> "${OUT_DIR}/head_rss_time.txt"
+          fi
+
+          # benchgate applies a minimum +1 alloc/op floor for low-allocation
+          # benches, so we can keep strict ratio thresholds.
+          gate_status=0
+          go run ./cmd/benchgate \
+            -base "${OUT_DIR}/base.txt" \
+            -head "${OUT_DIR}/head.txt" \
+            -base-rss "${OUT_DIR}/base_rss_time.txt" \
+            -head-rss "${OUT_DIR}/head_rss_time.txt" \
+            -max-ns-regression 0.08 \
+            -max-bytes-regression 0.05 \
+            -max-allocs-regression 0.05 \
+            -max-rss-regression 0.10 || gate_status=$?
+
+          if [ "${gate_status}" -ne 0 ]; then
+            echo "::warning::performance thresholds exceeded; keep the result visible as directional evidence"
+            {
+              echo "### Advisory Performance Result"
+              echo ""
+              echo "- outcome: \`REGRESSION_RECORDED\`"
+              echo "- release effect: non-blocking"
+              echo "- required action: document the tradeoff and continue optimization work"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Perf Definitive Outcome Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          OUT_DIR="${RUNNER_TEMP}/bench-gate"
+          if [ "$(tail -n 1 "${OUT_DIR}/base.txt" 2>/dev/null)" != '# status: complete' ] || \
+             [ "$(tail -n 1 "${OUT_DIR}/head.txt" 2>/dev/null)" != '# status: complete' ]; then
+            {
+              echo "### Perf Definitive Outcome"
+              echo ""
+              echo "- outcome: \`INCONCLUSIVE\`"
+              echo "- reason: randomized benchmark campaign is missing or incomplete"
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          go run ./cmd/benchgate \
+            -base "${OUT_DIR}/base.txt" \
+            -head "${OUT_DIR}/head.txt" \
+            -max-ns-regression 0.08 \
+            -max-bytes-regression 0.05 \
+            -max-allocs-regression 0.05 \
+            -exit-on-fail=false \
+            -post-definitive \
+            -definitive-output "${OUT_DIR}/definitive.md" || true
+
+          if [ -f "${OUT_DIR}/definitive.md" ]; then
+            cat "${OUT_DIR}/definitive.md" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            {
+              echo "### Perf Definitive Outcome"
+              echo ""
+              echo "- outcome: \`INCONCLUSIVE\`"
+              echo "- reason: no definitive win/loss from current thresholds"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload Perf Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-gate-artifacts
+          path: ${{ runner.temp }}/bench-gate

@@ -1,0 +1,45 @@
+title: Reached a source-forge API
+id: b43310e5-f6e8-460d-92dc-c3254c31bc4e
+description: >-
+  Connected to a Git forge control API (issues, PRs, releases, Actions, packages).
+  Matches API and upload hosts — not the git-transport apex (github.com /
+  gitlab.com) and not the tarball and raw-file endpoints, so routine clone,
+  fetch, and dependency download stay quiet.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - api.github.com
+      - uploads.github.com
+      - api.gitlab.com
+      - api.bitbucket.org
+      - api.codeberg.org
+      - api.gitea.com
+      - git.sr.ht
+  selection_suffix:
+    DestinationHostname|endswith:
+      # Subdomains (api., uploads., gist.) — not the apex, which is git transport.
+      - .github.com
+      - .gitlab.com
+      - .bitbucket.org
+      - .bitbucket.com
+      - .codeberg.org
+      - .gitea.com
+      - .gitea.io
+      - .sr.ht
+  # codeload is where `go get`, `pip install git+…`, and actions/checkout land.
+  # It is a content fetch under the .github.com suffix, not a control call.
+  filter_content_fetch:
+    DestinationHostname: codeload.github.com
+  condition: (selection_host or selection_suffix) and not filter_content_fetch

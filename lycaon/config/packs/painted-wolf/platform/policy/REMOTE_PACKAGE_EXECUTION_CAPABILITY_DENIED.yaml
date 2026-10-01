@@ -1,0 +1,37 @@
+oar: '1.0'
+id: REMOTE_PACKAGE_EXECUTION_CAPABILITY_DENIED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+  - terminal_open
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+when: paintedwolf.rejection_code == "REMOTE_PACKAGE_EXECUTION_CAPABILITY_DENIED"
+effect: block
+copy:
+  what: the package action `{{ paintedwolf.command }}` asked to widen the remote-package execution boundary.
+  cause: newly downloaded code cannot inherit local services, direct networking, or listener authority.
+  why: downloaded code is intentionally limited to package registries, project files, and ordinary package
+    cache writes; protected reads require a scoped read approval.
+  fix: Run the intended acquisition within its package boundary. A later installed-local-tool invocation may
+    request the specific needed authority through its own approval flow; installation alone does not grant
+    that authority.
+  instead: Separate package acquisition from the later local-tool action that needs the extra capability
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: downloaded package code cannot widen its execution boundary
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    command: npx create-vite app
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: REMOTE_PACKAGE_EXECUTION_CAPABILITY_DENIED'
+  - widen the remote-package execution boundary

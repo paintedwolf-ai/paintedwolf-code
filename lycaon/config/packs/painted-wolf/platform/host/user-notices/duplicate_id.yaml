@@ -1,0 +1,15 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+    - provider_id
+title: That id is already in use
+message: Another entry already uses this id.
+suggested_action: Choose a different id, or edit the existing entry.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - already uses this id
+      - different id

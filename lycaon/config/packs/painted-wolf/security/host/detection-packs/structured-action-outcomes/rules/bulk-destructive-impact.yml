@@ -1,0 +1,21 @@
+title: Destroy or encrypt a collection
+id: 73fc1b90-a706-441b-a416-f04b25d5c3db
+status: stable
+description: Purges, deletes, or encrypts a collection or dataset in bulk.
+references:
+  - https://attack.mitre.org/tactics/TA0040/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection_effect: {ActionEffect: [purge, delete, encrypt]}
+  selection_bulk: {BulkAction: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection_effect and selection_bulk and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

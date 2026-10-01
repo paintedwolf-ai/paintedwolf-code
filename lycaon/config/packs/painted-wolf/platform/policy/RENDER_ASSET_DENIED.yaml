@@ -1,0 +1,42 @@
+oar: '1.0'
+id: RENDER_ASSET_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.forbidden
+  - paintedwolf.path
+  - paintedwolf.render_asset_origin
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "RENDER_ASSET_DENIED"
+effect: block
+copy:
+  what: 'render_view refused project asset {{ paintedwolf.path }} or its content: {{ paintedwolf.rejection_reason
+    }}.'
+  cause: The path escapes the project root or sits under .git/, or the file carries active or external content (SVG
+    scripts/foreignObject, CSS @import or url() beyond http://lycaon.asset/).
+  why: Project assets rasterize offline inside a path jail — nothing outside the project root, no version-control
+    internals, and no content that would script or fetch beyond the hermetic origin.
+  fix: Reference permitted regular project files. Keep asset SVGs passive (no scripts, handlers, or foreignObject)
+    and CSS hermetic (relative references or {{ paintedwolf.render_asset_origin }} only). Do not modify protected
+    assets merely to bypass the refusal.
+  instead: Branch on Code RENDER_ASSET_DENIED; use an allowed path or clean the asset content, then retry render_view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Project asset path or content not allowed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: .git/HEAD
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_ASSET_DENIED'

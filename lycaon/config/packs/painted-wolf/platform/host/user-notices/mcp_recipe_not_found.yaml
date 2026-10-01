@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Unknown MCP recipe
+message: That provider is not in the known-provider catalog.
+suggested_action: Refresh the list, or add a custom provider with its documented URL or command.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - catalog
+      - custom

@@ -1,0 +1,12 @@
+# Inform Binding. Assembly resolves render via Binding.
+'on': inject.active_workflow
+selector:
+  surface: coordinator
+effect: inform
+render: active-workflow
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator pre-history when WorkflowID is set

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-find-in-view
+slot: "app_menu.edit"
+command: painted-wolf/platform:find-in-view
+group: "0"
+order: 1
+label: "Find…"

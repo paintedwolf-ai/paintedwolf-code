@@ -1,0 +1,83 @@
+components:
+  schemas:
+    AttentionClass:
+      type: string
+      enum:
+      - needs_you
+      - finished
+      - running
+      - error
+      description: >-
+        What a session is asking of the human, worst first. `needs_you` means the
+        session is parked on a human answer — a pending checkpoint or an open ask
+        latch — and cannot advance without one. A worker escalation is not in
+        this class: `request_decision` is answered by the coordinator, so it
+        is work in flight, not work waiting on a person. `finished` means an
+        idle session whose newest turn completed after the person last read it:
+        nothing is blocked, but a result is waiting. `running`
+        means a turn is in flight. `error` means the last turn ended in a host
+        failure. Sessions in none of these states are absent from the view — the
+        idle majority is not attention.
+    AttentionReason:
+      type: string
+      enum:
+      - checkpoint
+      - ask
+      - turn_running
+      - turn_finished
+      - turn_error
+      description: >-
+        The machine fact the class was derived from. Present so the client can
+        label a row without re-deriving anything; never inferred from message
+        prose.
+    AttentionRow:
+      x-go-generate: true
+      type: object
+      required:
+      - session_id
+      - project_id
+      - class
+      - reason
+      - since_at
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+          description: Project display name; omitted while the project is still unnamed.
+        title:
+          type: string
+          description: Session display title; omitted until set.
+        class:
+          $ref: '#/components/schemas/AttentionClass'
+        reason:
+          $ref: '#/components/schemas/AttentionReason'
+        since_at:
+          type: string
+          format: date-time
+          description: >-
+            When the session entered this class, as the host best knows it —
+            checkpoint or ask creation time for `needs_you`, the turn's
+            completion time for `finished`, last session update
+            otherwise. Clients sort on class first and use this only to break
+            ties and render an age.
+    AttentionView:
+      x-go-generate: true
+      type: object
+      required:
+      - rows
+      additionalProperties: false
+      properties:
+        rows:
+          type: array
+          description: >-
+            Every non-idle session across every project, worst class first. A
+            device-wide view: it tells the user about the projects they are not
+            currently looking at.
+          items:
+            $ref: '#/components/schemas/AttentionRow'

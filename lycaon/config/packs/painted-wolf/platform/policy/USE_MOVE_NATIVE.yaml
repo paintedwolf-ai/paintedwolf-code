@@ -1,0 +1,37 @@
+oar: '1.0'
+id: USE_MOVE_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.habit_redirect_match
+when: paintedwolf.rejection_code == "USE_MOVE_NATIVE"
+effect: block
+copy:
+  cause: The host parsed the supported command shape and validated the replacement against the tool currently
+    offered.
+  why: The supplied call retains source/destination pairs; native move retains its root and path constraints.
+  fix: Use the supplied replacement_calls entries exactly and in order. Account for each result before continuing;
+    native limits and partial-result receipts still apply.
+  instead: Use the validated move replacement and preserve the intended operation
+  what: The parsed command can be represented by the supplied move call.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: command_habit_redirect:Use native move instead of command mv
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_MOVE_NATIVE'

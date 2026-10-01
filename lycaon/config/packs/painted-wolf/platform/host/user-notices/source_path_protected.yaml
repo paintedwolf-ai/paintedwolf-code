@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Protected project metadata"
+retryable: false
+message: "This file belongs to protected project metadata and cannot be changed here."
+suggested_action: "Use your version control tools or project settings to change this metadata."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "This file belongs to protected project metadata and cannot be changed here"

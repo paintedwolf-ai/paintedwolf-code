@@ -1,0 +1,58 @@
+[
+  {
+    "role": "user",
+    "content": "Let's implement them all now."
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "c1",
+        "name": "edit",
+        "args": {
+          "path": "tests/test_app.py"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": "ok",
+    "tool_result": {
+      "outcome": "completed",
+      "file_edit": {
+        "path": "tests/test_app.py"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "c2",
+        "name": "edit",
+        "args": {
+          "path": "tests/test_scraper.py"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": "ok",
+    "tool_result": {
+      "outcome": "completed",
+      "file_edit": {
+        "path": "tests/test_scraper.py"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": "<task job_id=\"jv-deal-finder\" agent_type=\"command-verifier\" state=\"complete\">\n  <report_json>{\"leg_status\":\"blocked\",\"verify_result\":{\"passed\":false,\"exit_code\":1},\"brief\":\"pytest failed\"}</report_json>\n</task>",
+    "worker_summary": {
+      "job_id": "jv-deal-finder",
+      "status": "complete"
+    }
+  }
+]

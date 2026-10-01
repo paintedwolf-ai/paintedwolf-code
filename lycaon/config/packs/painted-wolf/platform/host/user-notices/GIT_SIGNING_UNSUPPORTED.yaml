@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Signed commits not supported
+message: >-
+  This action asked for a signed commit or tag. Signing is not supported yet —
+  this host has no signing program and brokers no keys, so commit from your
+  terminal for now.
+suggested_action: Create the signed commit in your own terminal, then continue here.
+scenarios:
+  - id: default
+    expect_contains:
+      - signed commit
+      - terminal

@@ -1,0 +1,11 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': turn.spend.soft_stop
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-spend-soft-stop
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - first coordinator iteration after a running task crosses its spend ceiling

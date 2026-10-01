@@ -1,0 +1,9 @@
+id: painted-wolf/platform:files-move-tab-left
+title: "Move tab left"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.moveTabLeft"

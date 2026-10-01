@@ -1,0 +1,222 @@
+{
+  "$comment": "Authoring schema for one Sigma detection-rule file (locked subset). internal/detectionpack enforces the same semantic contract at load time; contract tests keep its closed field projection synchronized. Unsupported subset constructs load as Supported=false with a reason — never silently non-matching. Product rules live in docs/security.md § Detection packs.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.dev/schemas/host/detection-rule.schema.json",
+  "title": "DetectionRule",
+  "description": "One Sigma rule per file (.yml, single YAML document). Accepted top-level keys only; any other key ⇒ rule unsupported (unknown key). Field modifiers and condition grammar are enforced by the loader — see detection.propertyNames / description notes and the detection-pack SSOT.",
+  "x-paintedwolf-fields-by-service": {
+    "tool_exec": [
+      "ActionEffect",
+      "ActionId",
+      "AmountPresent",
+      "ApiAction",
+      "Argv",
+      "BulkAction",
+      "CommandLine",
+      "Contained",
+      "CredentialPersistence",
+      "DeclaredDestination",
+      "DirectIp",
+      "EffectiveAuthority",
+      "EffectReach",
+      "EgressMode",
+      "FSJailed",
+      "Image",
+      "LoopbackAccess",
+      "PipelineCommandLine",
+      "PrincipalScope",
+      "ProjectDir",
+      "RootsDigest",
+      "SessionId",
+      "SocketApprovedPath",
+      "SocketCapability",
+      "SocketCount",
+      "SocketGrantState",
+      "SocketResolvedPath",
+      "SocketScope",
+      "TargetFile",
+      "TargetPresent",
+      "TargetScope",
+      "Tool",
+      "ToolArg",
+      "Visibility"
+    ],
+    "egress_observed": [
+      "ActionId",
+      "DecisionStage",
+      "DestinationHostname",
+      "DestinationIp",
+      "DestinationPort",
+      "Image",
+      "Initiated",
+      "Origin",
+      "RequestMethod",
+      "RequestPath",
+      "SessionId",
+      "Transport"
+    ]
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "id",
+    "description",
+    "logsource",
+    "detection",
+    "level"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "Shown on the approval card and in Settings."
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "RFC 4122 UUID, globally unique across all packs. Hand-authored rules use v4; generated rules use deterministic v5. Duplicate id anywhere in the merged catalog ⇒ both rules unsupported."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One or two sentences; shown in Settings."
+    },
+    "logsource": {
+      "$ref": "#/$defs/logsource"
+    },
+    "detection": {
+      "$ref": "#/$defs/detection"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "informational",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "Sigma severity. Escalation is posture-aware: informational/low always inert; Light escalates critical; Balanced escalates high|critical; Strict also escalates medium."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "stable",
+        "test",
+        "experimental"
+      ],
+      "default": "experimental",
+      "description": "Optional. Default experimental when omitted."
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Optional list of URLs (provenance for generated rules)."
+    },
+    "author": {
+      "type": "string",
+      "description": "Carried, not interpreted."
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Rule creation date in Sigma ISO YYYY-MM-DD form."
+    },
+    "modified": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Most recent material rule revision in Sigma ISO YYYY-MM-DD form."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Carried, not interpreted (e.g. attack.impact)."
+    },
+    "falsepositives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Carried, not interpreted."
+    }
+  },
+  "$defs": {
+    "logsource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "service"
+      ],
+      "properties": {
+        "product": {
+          "type": "string",
+          "const": "lycaon",
+          "description": "Pinned. Any other product ⇒ rule unsupported."
+        },
+        "service": {
+          "type": "string",
+          "enum": [
+            "tool_exec",
+            "egress_observed"
+          ],
+          "description": "tool_exec = pre-exec ask subject; egress_observed = CONNECT hold subject. Any other service ⇒ unsupported."
+        }
+      },
+      "description": "Closed pair only. A rule may reference only the event fields of its declared service; cross-source fields ⇒ unsupported (unknown field)."
+    },
+    "detection": {
+      "type": "object",
+      "required": [
+        "condition"
+      ],
+      "minProperties": 2,
+      "properties": {
+        "condition": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Boolean expression over selection names. Grammar (or loosest, then and, then not): expr := orExpr; orExpr := andExpr (\"or\" andExpr)*; andExpr := notExpr (\"and\" notExpr)*; notExpr := \"not\" notExpr | primary; primary := \"(\" expr \")\" | \"1 of \" selectorGlob | \"all of \" selectorGlob | selectionName; selectorGlob := \"them\" | IDENT \"*\". Aggregation (|), near, and timeframe ⇒ unsupported."
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/selection"
+      },
+      "description": "≥1 named selection plus condition. Selection names must match [A-Za-z_][A-Za-z0-9_]*; unknown names in condition ⇒ unsupported."
+    },
+    "selection": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/fieldValue"
+      },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Field key form: <Field>[|<modifier>...]. Bare field = exact case-insensitive equality."
+      },
+      "description": "Map of field matchers. Every entry must match (AND). A list value matches any element (OR) unless |all is present. Values compared as strings; all comparisons case-insensitive except |re.\n\nClosed field sets are machine-listed in x-paintedwolf-fields-by-service and contract-checked against internal/detectionpack.SupportedFields. Unknown field ⇒ unsupported.\n\nField modifiers (exhaustive allowlist): (none), contains, startswith, endswith, re, all. |all combines only with contains/startswith/endswith (list must match all elements). |re is Go RE2, case-sensitive unless the pattern begins with (?i); compile failure ⇒ unsupported.\n\nRejected modifiers (rule loads unsupported): base64, base64offset, utf16, wide, cidr, expand, windash, fieldref, cased, lt, gt, lte, gte, exists — and any other name."
+    },
+    "fieldValue": {
+      "description": "Scalar string or list of strings. Booleans/numbers are not used; compare as strings at match time.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    }
+  }
+}

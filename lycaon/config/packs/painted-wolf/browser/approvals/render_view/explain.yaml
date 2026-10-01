@@ -1,0 +1,18 @@
+# render_view — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    render_view:
+        tool: render_view
+        tier_hint: recoverable
+        what_changes: Rasterize authored HTML or SVG into a visual mockup.
+        who_affected: This session — a sandboxed headless browser renders markup to an image artifact.
+        if_wrong: No project files change; the mockup is session-scoped and can be discarded.
+        allow_line: rendering visual mockups
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Rasterize
+                - mockup

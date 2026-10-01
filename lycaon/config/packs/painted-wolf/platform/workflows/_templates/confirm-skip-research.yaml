@@ -1,0 +1,29 @@
+id: confirm-skip-research-template
+description: Ask user to confirm skipping research (decision phase), then build
+parameters:
+  workflow_id:
+    type: string
+    required: true
+manifest:
+  id: "${params.workflow_id}"
+  version: "1.0.0"
+  extends: plan@1.0.0
+  initial_posture: spec
+  phases:
+    - id: research
+      activity_label: Understanding the request
+      next: confirm_skip
+    - id: confirm_skip
+      activity_label: Waiting for your decision
+      on_enter:
+        request_user_feedback:
+          prompt: "Skip the research phase and go straight to implementation?"
+          response_type: single_choice
+          options: [yes, no]
+      complete_when: user_decision:confirm_skip,yes
+      next: build
+    - id: build
+      activity_label: Building the changes
+      on_enter:
+        set_posture: build
+      complete_when: delegation_closeout_complete

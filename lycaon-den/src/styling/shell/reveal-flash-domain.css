@@ -1,0 +1,28 @@
+/* Arrival flash for revealed targets; the class comes from ui/reveal-flash.ts. */
+.den-reveal-flash {
+  border-radius: var(--den-radius-lg);
+  /* Matches REVEAL_FLASH_MS. */
+  animation: reveal-flash 2.2s ease-out;
+}
+
+@keyframes reveal-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--den-accent-signal);
+    background: color-mix(in srgb, var(--den-accent-signal) 18%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 2px var(--den-accent-signal);
+    background: color-mix(in srgb, var(--den-accent-signal) 12%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-reveal-flash {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--den-accent-signal);
+  }
+}

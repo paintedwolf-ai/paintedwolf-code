@@ -1,0 +1,14 @@
+id: painted-wolf/platform:view-open-in-new-window
+title: "Open in new window"
+scope: "global"
+keywords:
+  - "detach"
+  - "pop out"
+  - "window"
+  - "peer"
+  - "view"
+when:
+  fact: "peer_open_available"
+action:
+  kind: native_ui
+  handler: "view.openInNewWindow"

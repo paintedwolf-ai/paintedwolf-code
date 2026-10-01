@@ -1,0 +1,10 @@
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 'API client token from `LYCAON_API_TOKEN` at serve time or `~/.config/paintedwolf/api.token` (mode 0600).
+
+        Not stored in `daemon.json`. Required on all `/v1/*` routes.
+
+        '

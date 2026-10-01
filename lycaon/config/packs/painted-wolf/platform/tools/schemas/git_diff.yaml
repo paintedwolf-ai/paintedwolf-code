@@ -1,0 +1,42 @@
+tags: [git, inspection]
+description: "Git diff JSON, one page of files in git's order (`available`, `files` with per-file insertions/deletions and, unless `stat`, that file's hunks in `diff`; `available:false` on non-git projects). Pages hold up to 80 files and 5 KiB of hunks by default: read `files_total`, use `next_offset` for more files when needed; exhaust the selection for tasks requiring complete coverage. `wire_spill_path` retains the captured page. A clipped file has `diff_lines` and `diff_spill_path`: read that path with offset/limit to recover its original hunks; file offsets do not continue within a file. `paths` narrows to repo-relative paths or directories; `base_ref` compares against a commit or branch; `untracked` adds new files as additions. Replaces command: git diff."
+schema:
+  type: object
+  properties:
+    head_ref:
+      type: string
+      description: "Compare two committed trees: base_ref to head_ref, independent of the index and worktree. Requires base_ref; incompatible with staged or untracked."
+    paths:
+      type: array
+      items:
+        type: string
+      description: Restrict selection to these repository locations
+    stat:
+      type: boolean
+      description: When true, return per-path insertion/deletion counts only (no hunks) — the survey view of a large change
+    staged:
+      type: boolean
+      description: When true, diff staged changes (index vs HEAD) — replaces git diff --cached
+    base_ref:
+      type: string
+      description: Optional commit, branch, or tag to compare against instead of the index (or HEAD when staged) — replaces git diff <ref>
+    untracked:
+      type: boolean
+      description: When true, include untracked files as whole-file additions, so new files appear beside modified ones
+    offset:
+      type: integer
+      description: Skip this many files (use with files_truncated/next_offset)
+    limit:
+      type: integer
+      description: Files per page (default 80, max 80 — the model-wire window)
+    max_bytes:
+      type: integer
+      description: Hunk text per page (default 5120; up to 262144 — large pages may be compacted with recovery pointers). Whole files are kept in order until the budget is spent; a single file over budget is cut at a line and marked diff_truncated, with its complete screened hunks retained at diff_spill_path
+  allOf:
+    - if: {required: [head_ref]}
+      then:
+        required: [base_ref]
+        properties:
+          staged: {const: false}
+          untracked: {const: false}
+  additionalProperties: false

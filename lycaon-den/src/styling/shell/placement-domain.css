@@ -1,0 +1,72 @@
+/* Shared placement glyph. */
+.den-layout-glyph {
+  display: inline-flex;
+  gap: 1px;
+  align-items: stretch;
+  width: 15px;
+  height: 11px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  overflow: hidden;
+  opacity: 0.85;
+}
+/* Fill width distinguishes inline and split placement. */
+.den-layout-glyph i {
+  display: block;
+  flex: 0 0 var(--den-layout-glyph-fill, 100%);
+  background: currentColor;
+  opacity: 0.55;
+}
+.den-layout-glyph--split {
+  --den-layout-glyph-fill: 58%;
+}
+.den-layout-glyph--window {
+  position: relative;
+}
+.den-layout-glyph--window::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  box-sizing: border-box;
+  width: 9px;
+  height: 7px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: var(--den-surface);
+}
+/* Placement modifiers are generated dynamically by FirstTimeTipsLayer. */
+.den-first-time-tip--bottom .den-first-time-tip__arrow {
+  left: calc(var(--den-first-time-tip-arrow-offset) - 6px);
+  top: -7px;
+  border-top: 1px solid var(--den-border);
+  border-left: 1px solid var(--den-border);
+}
+
+.den-first-time-tip--top .den-first-time-tip__arrow {
+  left: calc(var(--den-first-time-tip-arrow-offset) - 6px);
+  bottom: -7px;
+  border-right: 1px solid var(--den-border);
+  border-bottom: 1px solid var(--den-border);
+}
+
+.den-first-time-tip--right .den-first-time-tip__arrow {
+  left: -7px;
+  top: calc(var(--den-first-time-tip-arrow-offset) - 6px);
+  border-bottom: 1px solid var(--den-border);
+  border-left: 1px solid var(--den-border);
+}
+
+.den-first-time-tip--left .den-first-time-tip__arrow {
+  right: -7px;
+  top: calc(var(--den-first-time-tip-arrow-offset) - 6px);
+  border-top: 1px solid var(--den-border);
+  border-right: 1px solid var(--den-border);
+}
+
+/* A refused width claim moves toward the column's edge. */
+@keyframes den-fit-refused {
+  50% {
+    transform: translateX(var(--den-fit-refused-shift));
+  }
+}

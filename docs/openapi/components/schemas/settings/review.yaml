@@ -1,0 +1,51 @@
+components:
+  schemas:
+    ContentReviewRule:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        tool:
+          type: string
+        path:
+          type: string
+        reason:
+          type: string
+        disabled_until_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: >-
+            Optional pause on this rule. While this instant is in the future,
+            edits matching the rule apply without content review; afterwards the
+            rule asks again. Set by the edit-review card's time-boxed skip.
+    ReviewSettingsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - review_paths
+      - merged_from
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: preferences.yaml#/components/schemas/SettingsScope
+        review_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContentReviewRule"
+        merged_from:
+          type: array
+          items:
+            type: string
+    UpdateReviewSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        review_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContentReviewRule"

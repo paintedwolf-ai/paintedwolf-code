@@ -1,0 +1,188 @@
+@utility den-task-card {
+align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-lg);
+  padding: 12px 14px;
+  background: var(--den-tint-1);
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+}
+
+@utility den-transcript-fallback {
+  color: var(--den-text-muted);
+}
+
+
+@utility den-task-card--clickable {
+cursor: pointer;
+  text-align: left;
+  &:hover {
+    background: var(--den-tint-2);
+  }
+}
+
+
+@utility den-task-card--running {
+border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-line));
+}
+
+
+@utility den-task-card-activity {
+margin: 4px 0 0;
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+
+@utility den-task-card-body {
+margin: 6px 0 0;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+  line-height: 1.5;
+}
+
+
+@utility den-task-card-header {
+display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: max(24px, calc(var(--text-den-body) * 1.25 + 0.5em));
+  font-size: var(--text-den-body);
+}
+
+
+@utility den-task-card-progress {
+margin-top: 10px;
+}
+
+
+@utility den-task-card-progress-fill {
+height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--den-text-muted) 55%, transparent);
+  transition: width 220ms var(--den-ease);
+}
+
+
+@utility den-task-card-progress-track {
+height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--den-text-muted) 18%, transparent);
+  overflow: hidden;
+}
+
+
+/* Batch progress shares the budget track. */
+@utility den-task-card-progress-track--batch {
+margin-top: 3px;
+  background: color-mix(in srgb, var(--den-text-muted) 10%, transparent);
+}
+
+
+@utility den-task-card-progress-fill--batch {
+background: color-mix(in srgb, var(--den-text-muted) 34%, transparent);
+}
+
+
+@utility den-task-card-tags {
+display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+
+@utility den-task-card-title {
+font-weight: 600;
+}
+
+
+@utility den-tool-chicklet-caret {
+flex: 0 0 auto;
+  align-self: center;
+  width: 0;
+  height: 0;
+  border-top: calc(var(--den-disclosure-mark-height) / 2) solid transparent;
+  border-bottom: calc(var(--den-disclosure-mark-height) / 2) solid transparent;
+  border-left: var(--den-disclosure-mark-width) solid var(--den-text-muted);
+  transition: transform var(--den-duration) var(--den-ease);
+  transform-origin: 22% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-tool-chicklet-caret {
+    transition: none;
+  }
+}
+
+
+@utility den-worker-group {
+  position: relative;
+  container-type: inline-size;
+  container-name: den-worker-group;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  overflow: hidden;
+  /* Keeps the outline above row hover fills. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--den-line);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+}
+
+
+@utility den-worker-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: max(20px, calc(var(--text-den-caption) * 1.25 + 0.35em));
+  padding: 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+}
+
+
+@utility den-worker-group-title {
+  min-width: 0;
+  font-size: var(--text-den-compact);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+
+@utility den-worker-group-count {
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+
+@utility den-worker-group-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+
+@utility den-worker-group-item {
+  min-width: 0;
+}
+
+

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:files-walk-prev-step
+title: "Walk: previous step"
+scope: "files"
+keywords:
+  - "walk previous"
+  - "step backward"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.walkPrevStep"

@@ -1,0 +1,8 @@
+name: ElevatedAccessEffect
+go_const_prefix: ElevatedAccessEffect
+description: Authority beyond a major confinement boundary.
+values:
+  - id: direct_network
+  - id: host_execution
+  - id: process_control
+  - id: local_service

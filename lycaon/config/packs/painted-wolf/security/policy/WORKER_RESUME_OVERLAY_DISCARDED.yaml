@@ -1,0 +1,55 @@
+oar: '1.0'
+id: WORKER_RESUME_OVERLAY_DISCARDED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.child_session_id
+  - paintedwolf.merge_status
+  - paintedwolf.prior_job_id
+when: paintedwolf.rejection_code == "WORKER_RESUME_OVERLAY_DISCARDED"
+effect: block
+copy:
+  what: This child session's most recent write leg ({{ paintedwolf.prior_job_id }}) is {{ paintedwolf.merge_status
+    }}; rejecting or aborting an overlay tears down its sandbox, so resuming reuses an empty overlay and
+    lands no work.
+  cause: reject_overlay / abort is terminal — it destroys the leg's isolated sandbox. A `task(child_session_id=…)`
+    resume after that point starts from primary with nothing to build on, so the worker reports progress
+    against files that no longer exist in its overlay.
+  why: A resumed leg with a destroyed overlay has no branch changes to promote, so the next preview has
+    no deliverable.
+  fix: Dispatch a fresh `task(agent_type=…, brief={…}, scope=…)` WITHOUT child_session_id so the host
+    creates a new overlay and the worker re-applies the charter. To fix a partial without losing work,
+    resume the live (pending) overlay instead of rejecting it first.
+  instead: Branch on Code; redispatch a fresh `task()` without child_session_id rather than resuming a
+    discarded overlay
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Cannot resume child_session_id {{ paintedwolf.child_session_id }} — its last write
+  leg {{ paintedwolf.prior_job_id }} ended {{ paintedwolf.merge_status }} and its overlay was destroyed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    child_session_id: c4888a67
+    merge_status: rejected
+    prior_job_id: f1168996
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_RESUME_OVERLAY_DISCARDED'
+  - f1168996
+  - rejected
+- id: aborted
+  vars:
+    child_session_id: 724c5815
+    merge_status: aborted
+    prior_job_id: 98b48050
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_RESUME_OVERLAY_DISCARDED'
+  - aborted
+selector:
+  tool:
+  - task

@@ -1,0 +1,22 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: This repository's git config runs its own programs
+message: >-
+  This repository's configuration names programs for git to run ({{ keys }}) —
+  a content filter or network proxy defined by the repository itself. The app
+  runs git with hooks and behavior settings switched off, and it will not run
+  these, so reading history and making commits here are unavailable.
+suggested_action: >-
+  Review the repository's .git/config. If those programs are expected, use git
+  in your own terminal for this repository.
+scenarios:
+  - id: filter
+    vars: { keys: filter.crypt }
+    expect_contains:
+      - filter.crypt
+      - terminal
+  - id: proxy
+    vars: { keys: core.gitProxy }
+    expect_contains:
+      - core.gitProxy
+      - terminal

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-files
+command: painted-wolf/platform:go-context-files
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader F"
+  windows:
+    - "Leader F"
+  linux:
+    - "Leader F"

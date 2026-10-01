@@ -1,0 +1,38 @@
+oar: '1.0'
+id: SKILL_TEMPLATE_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - skills_read
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.name
+  - paintedwolf.missing
+when: paintedwolf.rejection_code == "SKILL_TEMPLATE_INVALID"
+effect: block
+copy:
+  what: Skill {{ paintedwolf.name }} failed to render.
+  cause: The pack skill body failed pongo render under host policy vars.
+  why: Pack skill bodies are rendered at skills_read.
+  fix: 'Report the broken skill {{ paintedwolf.name }} and template diagnostic: {{ paintedwolf.detail }}. Installed
+    pack templates are host-managed; do not edit the active host control plane. Use another skill only if it
+    actually covers the required task.'
+  instead: Branch on Code SKILL_TEMPLATE_INVALID; open a different skill or report the broken pack skill
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:skills_read
+x-paintedwolf-message: Skill {{ paintedwolf.name }} failed to render. {{ paintedwolf.detail }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    name: orchestrate-a-large-task
+    detail: 'template: unexpected end of tag'
+    profile: implement
+    tool: skills_read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SKILL_TEMPLATE_INVALID'

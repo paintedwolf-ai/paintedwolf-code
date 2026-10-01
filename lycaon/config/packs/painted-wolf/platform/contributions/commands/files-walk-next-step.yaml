@@ -1,0 +1,12 @@
+id: painted-wolf/platform:files-walk-next-step
+title: "Walk: next step"
+scope: "files"
+keywords:
+  - "walk next"
+  - "step forward"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.walkNextStep"

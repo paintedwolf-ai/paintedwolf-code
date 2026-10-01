@@ -1,0 +1,29 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_ITERATION_CAP
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.review_attempt
+    - paintedwolf.review_expected_call
+    - paintedwolf.review_iteration_cap
+    - paintedwolf.review_terminal_value
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_ITERATION_CAP"
+effect: block
+copy:
+  what: "The review is at attempt {{ paintedwolf.review_attempt }} of {{ paintedwolf.review_iteration_cap }}; another non-terminal verdict cannot open a round."
+  cause: "The active review has reached its declared iteration cap."
+  why: "The cap bounds review rounds; it does not establish that the work merits a terminal verdict."
+  fix: "Evaluate the evidence already gathered. Submit the declared terminal value {{ paintedwolf.review_terminal_value }} only if it is supported, using {{ paintedwolf.review_expected_call }} and grounded citations."
+  instead: "If the evidence cannot support a terminal ruling, report the unresolved issue and seek a user decision through the available channel. Do not invent approval or reset the review to evade the cap."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: The review iteration cap is reached; another non-terminal verdict cannot open a new round.
+x-paintedwolf-scenarios:
+  - id: cap
+    vars: { review_attempt: 3, review_iteration_cap: 3, review_terminal_value: APPROVED }
+    expect_contains: ['Code: SUBMIT_VERDICT_ITERATION_CAP', 'APPROVED']
+x-paintedwolf-emit: guard:workflow

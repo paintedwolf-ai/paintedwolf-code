@@ -1,0 +1,33 @@
+title: Delete a Salesforce org
+id: 81975c24-3178-4c86-bc79-332ceb26735e
+description: Deletes a scratch or sandbox org, including everything built in it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - sf
+      - sfdx
+  verbs_org_delete:
+    CommandLine|contains:
+      - ' org delete scratch'
+      - ' org delete sandbox'
+      - ' force:org:delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_org_delete and not filter_rehearsal and not filter_local

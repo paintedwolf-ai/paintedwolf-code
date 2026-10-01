@@ -1,0 +1,12 @@
+tags: [scans]
+description: >-
+  List recent code scans for the active project (read-only). Returns a slim id
+  roster with no guidance bodies — use it to resolve a scan_id for scan_summary,
+  scan_query, or scan_compare when the board does not already show one.
+schema:
+  type: object
+  properties:
+    limit:
+      type: integer
+      description: Maximum scans to return (default 20, max 100).
+  additionalProperties: false

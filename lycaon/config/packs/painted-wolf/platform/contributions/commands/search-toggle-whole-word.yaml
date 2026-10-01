@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-toggle-whole-word
+title: "Toggle search whole word"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "search.toggleWholeWord"

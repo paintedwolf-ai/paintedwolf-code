@@ -1,0 +1,752 @@
+{
+  "tag": "v1.30.0+paintedwolf.36",
+  "expected_commit": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+  "descriptor_bytes": "ewogICJvcGVuZ3JlcCI6IHsKICAgICJhcnRpZmFjdHMiOiBbCiAgICAgIHsKICAgICAgICAiYnl0ZXMiOiAxMTY3MzY2MzksCiAgICAgICAgImdvYXJjaCI6ICJhcm02NCIsCiAgICAgICAgImdvb3MiOiAiZGFyd2luIiwKICAgICAgICAic2hhMjU2IjogIjNlODJhMmRkNzQ3MzFhYjM0M2Q2ZWNhYTAzZTMyZWJiNTllZWQyOWIwNjU5MmNiZDZmY2ZiNDk0YjNjNzA2NGMiLAogICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjMwLjArcGFpbnRlZHdvbGYuMzYvb3BlbmdyZXAtMS4zMC4wK3BhaW50ZWR3b2xmLjM2LWRhcndpbi1hcm02NC50YXIuZ3oiCiAgICAgIH0KICAgIF0sCiAgICAiYmFzZV9yZXZpc2lvbiI6ICJhY2Y2N2I0NWM5N2M0YjYzNjI2NTM2NjA1Yzc3MDY0ZWY1MzY4MDZkIiwKICAgICJsaWNlbnNlIjogIkxHUEwtMi4xIiwKICAgICJvcmlnaW4iOiAiZG93bnN0cmVhbSIsCiAgICAicmV2aXNpb24iOiAzNiwKICAgICJzb3VyY2VfbG9ja19zaGEyNTYiOiAiMTQxMGMyMDk3MmY3MTU4NjFiYmFlNmVmY2RhNmQzYTM5NDg1MGYxOGIwODgyMGFkY2YxYTM0MWQ0YTIxY2ZlZCIsCiAgICAic291cmNlX21hbmlmZXN0X3NoYTI1NiI6ICJlNmMyZjE5ZDkyY2VjMWFmY2E5YTZkY2NkNjZiMWI3NTU2ZTUyYmQwYjYwMjYyYmE2Zjg4ZTUxNWQ1NzU0ODg0IiwKICAgICJ1cHN0cmVhbV92ZXJzaW9uIjogIjEuMzAuMCIsCiAgICAidmVyc2lvbiI6ICIxLjMwLjArcGFpbnRlZHdvbGYuMzYiCiAgfQp9Cg==",
+  "descriptor_evidence": {
+    "sha256": "1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8",
+    "workflow_verification": [
+      {
+        "attestation": {
+          "bundle": {
+            "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "verificationMaterial": {
+              "certificate": {
+                "rawBytes": "MIIIJDCCB6mgAwIBAgIUKUAej8QS6nXhD9hEXGdrBwUd1mUwCgYIKoZIzj0EAwMwNzEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MR4wHAYDVQQDExVzaWdzdG9yZS1pbnRlcm1lZGlhdGUwHhcNMjYwOTEwMDMyMjMwWhcNMjYwOTEwMDMzMjMwWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+AGdN7p/UBE8K2FAqvn3POfO2fn/AgiyQbAxLZVJxHF908OUnc4HZ+akdi2BxW3ddM8PkrOkZeN2FmfKn0HbkaOCBsgwggbEMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQUZCxNXIpNseI4Jy2HZsUtpB6voZcwHwYDVR0jBBgwFoAU39Ppz1YkEZb5qNjpKFWixi4YZD8wgYsGA1UdEQEB/wSBgDB+hnxodHRwczovL2dpdGh1Yi5jb20vcGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAvLmdpdGh1Yi93b3JrZmxvd3MvbmF0aXZlLXJlbGVhc2UueW1sQHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MDkGCisGAQQBg78wAQEEK2h0dHBzOi8vdG9rZW4uYWN0aW9ucy5naXRodWJ1c2VyY29udGVudC5jb20wHwYKKwYBBAGDvzABAgQRd29ya2Zsb3dfZGlzcGF0Y2gwNgYKKwYBBAGDvzABAwQoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAcBgorBgEEAYO/MAEEBA5OYXRpdmUgcmVsZWFzZTAxBgorBgEEAYO/MAEFBCNwYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcDAuBgorBgEEAYO/MAEGBCByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNjA7BgorBgEEAYO/MAEIBC0MK2h0dHBzOi8vdG9rZW4uYWN0aW9ucy5naXRodWJ1c2VyY29udGVudC5jb20wgYwGCisGAQQBg78wAQkEfgx8aHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwLy5naXRodWIvd29ya2Zsb3dzL25hdGl2ZS1yZWxlYXNlLnltbEByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNjA4BgorBgEEAYO/MAEKBCoMKDBhM2NjZTBmOTJlOWMwNjBlNGViNmFjOWY1Y2Y2MjlhNTA5Njk0MmMwHQYKKwYBBAGDvzABCwQPDA1naXRodWItaG9zdGVkMEYGCisGAQQBg78wAQwEOAw2aHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwMDgGCisGAQQBg78wAQ0EKgwoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAwBgorBgEEAYO/MAEOBCIMIHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MBoGCisGAQQBg78wAQ8EDAwKMTM2Mjc1ODkwODAxBgorBgEEAYO/MAEQBCMMIWh0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haTAZBgorBgEEAYO/MAERBAsMCTI4OTIxMTI3ODCBjAYKKwYBBAGDvzABEgR+DHxodHRwczovL2dpdGh1Yi5jb20vcGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAvLmdpdGh1Yi93b3JrZmxvd3MvbmF0aXZlLXJlbGVhc2UueW1sQHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MDgGCisGAQQBg78wARMEKgwoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAhBgorBgEEAYO/MAEUBBMMEXdvcmtmbG93X2Rpc3BhdGNoMGoGCisGAQQBg78wARUEXAxaaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwL2FjdGlvbnMvcnVucy8zNDQxNjY0NTg3OC9hdHRlbXB0cy8xMBYGCisGAQQBg78wARYECAwGcHVibGljMBcGCisGAQQBg78wARcECQwHcmVsZWFzZTBhBgorBgEEAYO/MAEYBFMMUXJlcG86cGFpbnRlZHdvbGYtYWlAMjg5MjExMjc4L3BhaW50ZWR3b2xmLW9wZW5ncmVwQDEzNjI3NTg5MDg6ZW52aXJvbm1lbnQ6cmVsZWFzZTCBigYKKwYBBAHWeQIEAgR8BHoAeAB2AN09MGrGxxEyYxkeHJlnNwKiSl643jyt/4eKcoAvKe6OAAABoIlWnfAAAAQDAEcwRQIgA8rsbKFDCxDHoAztE3RBtlPZwIRCQV37F2vCFsEAAs4CIQC7nW+lrsOlMkEdTd+DfOO3VnppG7h720pk8chSk0I8gTAKBggqhkjOPQQDAwNpADBmAjEA+ENRo7RMRHGQox7psz/U24HL7Wf+ZhcCDmXrQZBjph43wqomzrFMtC0dBFsNp3rjAjEA39Uu3/gC5Y4rtEWLI2QohUixYToNVP+kklkslng1puaHJDphMdGtEzzGx6BoH+ON"
+              },
+              "tlogEntries": [
+                {
+                  "logIndex": "2776946495",
+                  "logId": {
+                    "keyId": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0="
+                  },
+                  "kindVersion": {
+                    "kind": "dsse",
+                    "version": "0.0.1"
+                  },
+                  "integratedTime": "1789010550",
+                  "inclusionPromise": {
+                    "signedEntryTimestamp": "MEUCIHN9IUCr2UtfkMGaf0sTgpjY307pjoahItRJOa4k7RyAAiEA6ePMInWMbFXn+so2phqs8GmtJF24Ogw4bMPJ/9wioVA="
+                  },
+                  "inclusionProof": {
+                    "logIndex": "2655042233",
+                    "rootHash": "fvuXQFR9mZ08jmPiPQqgE+K30H3fJ/N4hgFZqAsecXg=",
+                    "treeSize": "2655042234",
+                    "hashes": [
+                      "dwx3abPKoH253Jz/xekY/MVjuaQdnQGGoPwyu+kQe+Q=",
+                      "aQVFQgkQKydMmqgpotn76akWA2DVORMO51fl77R7fkQ=",
+                      "01D6k5Jw6iLIsIxW96VpywEBhymCFtyySqVuSH8459E=",
+                      "jrGGD7rbdOLbeJpr0VEJIcbPPp6KZE0KCGqyiAbXMHU=",
+                      "Xxr3a4EhhintCIAFq4iGaAmGUQCZ+L0lzHBbOMg2oSI=",
+                      "cWxIs5nAjIkqelnpBFkihM0T0VAbBCk5J4kgIEq1xCw=",
+                      "zCDHxQokel/788+6R1D0uHOehdZTBKyBgXBjUly70xU=",
+                      "8NLdiX3JeKgeoFacCixNUZ/qqQuDcQluWhViXZmw3zU=",
+                      "zbRKInuXF5rR7csCZdrdxxP405mErmcM43+vYWwSdY4=",
+                      "CONu3y2XLc2duGicW091/QJykCnqaXm7BhqQr3W2k5E=",
+                      "tJUBi888NN6SVPOTCKaiGWyZHSIkcPJVRXxY2dbWeJc=",
+                      "4SexKjDhe33uQFmbzX5SUsB0SyhTm14ObSvNGPpKDFk=",
+                      "7tD2K8mAqGTMENrP2YXWz71BeTWQPCiYd3CESAgQLz8=",
+                      "eXSLrLqKSxRTixSP/k4YimriB2lufao6trqTrsxxlyg=",
+                      "SndbMKVtcTenAkwi2JBfGzD+mhexp1qJbRIY+A1JRIU=",
+                      "xH/DCseLHr9eKoYT8qsORZK7zVdEGYWHuVtsVrD95wY="
+                    ],
+                    "checkpoint": {
+                      "envelope": "rekor.sigstore.dev - 1193050959916656506\n2655042234\nfvuXQFR9mZ08jmPiPQqgE+K30H3fJ/N4hgFZqAsecXg=\n\n— rekor.sigstore.dev wNI9ajBFAiEA4LK+K1LDkIdd7VGYsVzIjxOTkflgpzz5wcm8ixr1X6UCIFUfPPQYhn64Mhyp1Uw4WZ/N3U342jYTFG1PhE25ScM1\n"
+                    }
+                  },
+                  "canonicalizedBody": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiZHNzZSIsInNwZWMiOnsiZW52ZWxvcGVIYXNoIjp7ImFsZ29yaXRobSI6InNoYTI1NiIsInZhbHVlIjoiZDNhNWVkZjVjMGFiMmYxMDUxN2YyYzEyYmVkODg1M2I2ZmI1YmJhNGQwZmZlOWNiZDc2YmZkZWM2MmRlZTJjYSJ9LCJwYXlsb2FkSGFzaCI6eyJhbGdvcml0aG0iOiJzaGEyNTYiLCJ2YWx1ZSI6ImYxYTc1MGQyOTcxNjkyYWI1NmQ2OGU4OWYyYjJjNTE0ZTVjNDVmMGMyY2QwYzNhNGUxZmU4ZTVmOTI4NWE5NDcifSwic2lnbmF0dXJlcyI6W3sic2lnbmF0dXJlIjoiTUVRQ0lBRGZ2S3hXZmhxMlFId0oxMUZjZEZZa3FMWHVkN0VnWFRPcFhPQVlLRXBoQWlBd1JlcS9CbE5DcWhNdFgwU29LSG0zMERVV3dnaDZoNkdPRFZEWURXRHZGdz09IiwidmVyaWZpZXIiOiJMUzB0TFMxQ1JVZEpUaUJEUlZKVVNVWkpRMEZVUlMwdExTMHRDazFKU1VsS1JFTkRRalp0WjBGM1NVSkJaMGxWUzFWQlpXbzRVVk0yYmxob1JEbG9SVmhIWkhKQ2QxVmtNVzFWZDBObldVbExiMXBKZW1vd1JVRjNUWGNLVG5wRlZrMUNUVWRCTVZWRlEyaE5UV015Ykc1ak0xSjJZMjFWZFZwSFZqSk5ValIzU0VGWlJGWlJVVVJGZUZaNllWZGtlbVJIT1hsYVV6RndZbTVTYkFwamJURnNXa2RzYUdSSFZYZElhR05PVFdwWmQwOVVSWGROUkUxNVRXcE5kMWRvWTA1TmFsbDNUMVJGZDAxRVRYcE5hazEzVjJwQlFVMUdhM2RGZDFsSUNrdHZXa2w2YWpCRFFWRlpTVXR2V2tsNmFqQkVRVkZqUkZGblFVVXJRVWRrVGpkd0wxVkNSVGhMTWtaQmNYWnVNMUJQWms4eVptNHZRV2RwZVZGaVFYZ0tURnBXU25oSVJqa3dPRTlWYm1NMFNGb3JZV3RrYVRKQ2VGY3paR1JOT0ZCcmNrOXJXbVZPTWtadFprdHVNRWhpYTJGUFEwSnpaM2RuWjJKRlRVRTBSd3BCTVZWa1JIZEZRaTkzVVVWQmQwbElaMFJCVkVKblRsWklVMVZGUkVSQlMwSm5aM0pDWjBWR1FsRmpSRUY2UVdSQ1owNVdTRkUwUlVablVWVmFRM2hPQ2xoSmNFNXpaVWswU25reVNGcHpWWFJ3UWpaMmIxcGpkMGgzV1VSV1VqQnFRa0puZDBadlFWVXpPVkJ3ZWpGWmEwVmFZalZ4VG1wd1MwWlhhWGhwTkZrS1drUTRkMmRaYzBkQk1WVmtSVkZGUWk5M1UwSm5SRUlyYUc1NGIyUklVbmRqZW05MlRESmtjR1JIYURGWmFUVnFZakl3ZG1OSFJuQmlibEpzV2toa2RncGlSMWwwV1ZkcmRtTkhSbkJpYmxKc1draGtkbUpIV1hSaU0wSnNZbTFrZVZwWVFYWk1iV1J3WkVkb01WbHBPVE5pTTBweVdtMTRkbVF6VFhaaWJVWXdDbUZZV214TVdFcHNZa2RXYUdNeVZYVmxWekZ6VVVoS2JGcHVUWFprUjBadVkzazVNazFUTkhwTlF6UjNTek5DYUdGWE5UQmFWMUl6WWpKNGJVeHFUVElLVFVSclIwTnBjMGRCVVZGQ1p6YzRkMEZSUlVWTE1tZ3daRWhDZWs5cE9IWmtSemx5V2xjMGRWbFhUakJoVnpsMVkzazFibUZZVW05a1Ywb3hZekpXZVFwWk1qbDFaRWRXZFdSRE5XcGlNakIzU0hkWlMwdDNXVUpDUVVkRWRucEJRa0ZuVVZKa01qbDVZVEphYzJJelpHWmFSMng2WTBkR01Ga3laM2RPWjFsTENrdDNXVUpDUVVkRWRucEJRa0YzVVc5TlIwVjZXVEpPYkUxSFdUVk5iVlUxV1hwQk1rMUhWVEJhVjBreVdWZE5OVnBxVm1wYWFsbDVUMWRGTVUxRWF6SUtUMVJSZVZsNlFXTkNaMjl5UW1kRlJVRlpUeTlOUVVWRlFrRTFUMWxZVW5Ca2JWVm5ZMjFXYzFwWFJucGFWRUY0UW1kdmNrSm5SVVZCV1U4dlRVRkZSZ3BDUTA1M1dWZHNkV1JIVm10a01qbHpXbWt4YUdGVE9YZFpWMngxWkVkV2EyUXlPWE5hYVRGMlkwZFdkVm96U214alJFRjFRbWR2Y2tKblJVVkJXVTh2Q2sxQlJVZENRMEo1V2xkYWVrd3pVbWhhTTAxMlpHcEZkVTE2UVhWTlEzUjNXVmRzZFdSSFZtdGtNamx6V21rMGVrNXFRVGRDWjI5eVFtZEZSVUZaVHk4S1RVRkZTVUpETUUxTE1tZ3daRWhDZWs5cE9IWmtSemx5V2xjMGRWbFhUakJoVnpsMVkzazFibUZZVW05a1Ywb3hZekpXZVZreU9YVmtSMVoxWkVNMWFncGlNakIzWjFsM1IwTnBjMGRCVVZGQ1p6YzRkMEZSYTBWbVozZzRZVWhTTUdOSVRUWk1lVGx1WVZoU2IyUlhTWFZaTWpsMFRETkNhR0ZYTlRCYVYxSXpDbUl5ZUcxTVYwWndURE5DYUdGWE5UQmFWMUl6WWpKNGJVeFhPWGRhVnpWdVkyMVdkMHg1Tlc1aFdGSnZaRmRKZG1ReU9YbGhNbHB6WWpOa2Vrd3lOV2dLWkVkc01scFRNWGxhVjNoc1dWaE9iRXh1YkhSaVJVSjVXbGRhZWt3elVtaGFNMDEyWkdwRmRVMTZRWFZOUTNSM1dWZHNkV1JIVm10a01qbHpXbWswZWdwT2FrRTBRbWR2Y2tKblJVVkJXVTh2VFVGRlMwSkRiMDFMUkVKb1RUSk9hbHBVUW0xUFZFcHNUMWROZDA1cVFteE9SMVpwVG0xR2FrOVhXVEZaTWxreUNrMXFiR2hPVkVFMVRtcHJNRTF0VFhkSVVWbExTM2RaUWtKQlIwUjJla0ZDUTNkUlVFUkJNVzVoV0ZKdlpGZEpkR0ZIT1hwa1IxWnJUVVZaUjBOcGMwY0tRVkZSUW1jM09IZEJVWGRGVDBGM01tRklVakJqU0UwMlRIazVibUZZVW05a1YwbDFXVEk1ZEV3elFtaGhWelV3V2xkU00ySXllRzFNVjBad1RETkNhQXBoVnpVd1dsZFNNMkl5ZUcxTVZ6bDNXbGMxYm1OdFZuZE5SR2RIUTJselIwRlJVVUpuTnpoM1FWRXdSVXRuZDI5TlIwVjZXVEpPYkUxSFdUVk5iVlUxQ2xsNlFUSk5SMVV3V2xkSk1sbFhUVFZhYWxacVdtcFplVTlYUlRGTlJHc3lUMVJSZVZsNlFYZENaMjl5UW1kRlJVRlpUeTlOUVVWUFFrTkpUVWxJU213S1dtNU5kbVJIUm01amVUa3lUVk0wZWsxRE5IZExNMEpvWVZjMU1GcFhVak5pTW5odFRHcE5NazFDYjBkRGFYTkhRVkZSUW1jM09IZEJVVGhGUkVGM1N3cE5WRTB5VFdwak1VOUVhM2RQUkVGNFFtZHZja0puUlVWQldVOHZUVUZGVVVKRFRVMUpWMmd3WkVoQ2VrOXBPSFphTW13d1lVaFdhVXh0VG5aaVV6bDNDbGxYYkhWa1IxWnJaREk1YzFwcE1XaGhWRUZhUW1kdmNrSm5SVVZCV1U4dlRVRkZVa0pCYzAxRFZFazBUMVJKZUUxVVNUTlBSRU5DYWtGWlMwdDNXVUlLUWtGSFJIWjZRVUpGWjFJclJFaDRiMlJJVW5kamVtOTJUREprY0dSSGFERlphVFZxWWpJd2RtTkhSbkJpYmxKc1draGtkbUpIV1hSWlYydDJZMGRHY0FwaWJsSnNXa2hrZG1KSFdYUmlNMEpzWW0xa2VWcFlRWFpNYldSd1pFZG9NVmxwT1ROaU0wcHlXbTE0ZG1RelRYWmliVVl3WVZoYWJFeFlTbXhpUjFab0NtTXlWWFZsVnpGelVVaEtiRnB1VFhaa1IwWnVZM2s1TWsxVE5IcE5RelIzU3pOQ2FHRlhOVEJhVjFJellqSjRiVXhxVFRKTlJHZEhRMmx6UjBGUlVVSUtaemM0ZDBGU1RVVkxaM2R2VFVkRmVsa3lUbXhOUjFrMVRXMVZOVmw2UVRKTlIxVXdXbGRKTWxsWFRUVmFhbFpxV21wWmVVOVhSVEZOUkdzeVQxUlJlUXBaZWtGb1FtZHZja0puUlVWQldVOHZUVUZGVlVKQ1RVMUZXR1IyWTIxMGJXSkhPVE5ZTWxKd1l6TkNhR1JIVG05TlIyOUhRMmx6UjBGUlVVSm5OemgzQ2tGU1ZVVllRWGhoWVVoU01HTklUVFpNZVRsdVlWaFNiMlJYU1hWWk1qbDBURE5DYUdGWE5UQmFWMUl6WWpKNGJVeFhSbkJNTTBKb1lWYzFNRnBYVWpNS1lqSjRiVXhYT1hkYVZ6VnVZMjFXZDB3eVJtcGtSMngyWW01TmRtTnVWblZqZVRoNlRrUlJlRTVxV1RCT1ZHY3pUME01YUdSSVVteGlXRUl3WTNrNGVBcE5RbGxIUTJselIwRlJVVUpuTnpoM1FWSlpSVU5CZDBkalNGWnBZa2RzYWsxQ1kwZERhWE5IUVZGUlFtYzNPSGRCVW1ORlExRjNTR050Vm5OYVYwWjZDbHBVUW1oQ1oyOXlRbWRGUlVGWlR5OU5RVVZaUWtaTlRWVllTbXhqUnpnMlkwZEdjR0p1VW14YVNHUjJZa2RaZEZsWGJFRk5hbWMxVFdwRmVFMXFZelFLVEROQ2FHRlhOVEJhVjFJellqSjRiVXhYT1hkYVZ6VnVZMjFXZDFGRVJYcE9ha2t6VGxSbk5VMUVaelphVnpVeVlWaEtkbUp0TVd4aWJsRTJZMjFXY3dwYVYwWjZXbFJEUW1sbldVdExkMWxDUWtGSVYyVlJTVVZCWjFJNFFraHZRV1ZCUWpKQlRqQTVUVWR5UjNoNFJYbFplR3RsU0Vwc2JrNTNTMmxUYkRZMENqTnFlWFF2TkdWTFkyOUJka3RsTms5QlFVRkNiMGxzVjI1bVFVRkJRVkZFUVVWamQxSlJTV2RCT0hKellrdEdSRU40UkVodlFYcDBSVE5TUW5Sc1VGb0tkMGxTUTFGV016ZEdNblpEUm5ORlFVRnpORU5KVVVNM2JsY3JiSEp6VDJ4TmEwVmtWR1FyUkdaUFR6TldibkJ3Unpkb056SXdjR3M0WTJoVGF6QkpPQXBuVkVGTFFtZG5jV2hyYWs5UVVWRkVRWGRPY0VGRVFtMUJha1ZCSzBWT1VtODNVazFTU0VkUmIzZzNjSE42TDFVeU5FaE1OMWRtSzFwb1kwTkViVmh5Q2xGYVFtcHdhRFF6ZDNGdmJYcHlSazEwUXpCa1FrWnpUbkF6Y21wQmFrVkJNemxWZFRNdlowTTFXVFJ5ZEVWWFRFa3lVVzlvVldsNFdWUnZUbFpRSzJzS2EyeHJjMnh1WnpGd2RXRklTa1J3YUUxa1IzUkZlbnBIZURaQ2IwZ3JUMDRLTFMwdExTMUZUa1FnUTBWU1ZFbEdTVU5CVkVVdExTMHRMUW89In1dfX0="
+                }
+              ],
+              "timestampVerificationData": {}
+            },
+            "dsseEnvelope": {
+              "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoiYnVpbGQtZXZpZGVuY2UuanNvbiIsImRpZ2VzdCI6eyJzaGEyNTYiOiIzYmE0ZWVkMDhhOTc1YWEwNTRkMDQwN2RiNzIxZDgxYjhmZGZiODJkZDdiNDM5ZWEyNTJkMjQ2NzVhYzMwZWYxIn19LHsibmFtZSI6Im9wZW5ncmVwLTEuMzAuMCtwYWludGVkd29sZi4zNi1kYXJ3aW4tYXJtNjQudGFyLmd6IiwiZGlnZXN0Ijp7InNoYTI1NiI6IjNlODJhMmRkNzQ3MzFhYjM0M2Q2ZWNhYTAzZTMyZWJiNTllZWQyOWIwNjU5MmNiZDZmY2ZiNDk0YjNjNzA2NGMifX0seyJuYW1lIjoicmVsZWFzZS5qc29uIiwiZGlnZXN0Ijp7InNoYTI1NiI6IjFjOGI3MTNmZjNjZDZiZDRlNjBkNjQyY2VkNzY3N2I1OWVjZDdiZWEyODljMTRmZGI3ZjY3NzY2ZmJjODRkYTgifX1dLCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9zbHNhLmRldi9wcm92ZW5hbmNlL3YxIiwicHJlZGljYXRlIjp7ImJ1aWxkRGVmaW5pdGlvbiI6eyJidWlsZFR5cGUiOiJodHRwczovL2FjdGlvbnMuZ2l0aHViLmlvL2J1aWxkdHlwZXMvd29ya2Zsb3cvdjEiLCJleHRlcm5hbFBhcmFtZXRlcnMiOnsid29ya2Zsb3ciOnsicmVmIjoicmVmcy90YWdzL3YxLjMwLjArcGFpbnRlZHdvbGYuMzYiLCJyZXBvc2l0b3J5IjoiaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwIiwicGF0aCI6Ii5naXRodWIvd29ya2Zsb3dzL25hdGl2ZS1yZWxlYXNlLnltbCJ9fSwiaW50ZXJuYWxQYXJhbWV0ZXJzIjp7ImdpdGh1YiI6eyJldmVudF9uYW1lIjoid29ya2Zsb3dfZGlzcGF0Y2giLCJyZXBvc2l0b3J5X2lkIjoiMTM2Mjc1ODkwOCIsInJlcG9zaXRvcnlfb3duZXJfaWQiOiIyODkyMTEyNzgiLCJydW5uZXJfZW52aXJvbm1lbnQiOiJnaXRodWItaG9zdGVkIn19LCJyZXNvbHZlZERlcGVuZGVuY2llcyI6W3sidXJpIjoiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcEByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNiIsImRpZ2VzdCI6eyJnaXRDb21taXQiOiIwYTNjY2UwZjkyZTljMDYwZTRlYjZhYzlmNWNmNjI5YTUwOTY5NDJjIn19XX0sInJ1bkRldGFpbHMiOnsiYnVpbGRlciI6eyJpZCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcC8uZ2l0aHViL3dvcmtmbG93cy9uYXRpdmUtcmVsZWFzZS55bWxAcmVmcy90YWdzL3YxLjMwLjArcGFpbnRlZHdvbGYuMzYifSwibWV0YWRhdGEiOnsiaW52b2NhdGlvbklkIjoiaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwL2FjdGlvbnMvcnVucy8zNDQxNjY0NTg3OC9hdHRlbXB0cy8xIn19fX0=",
+              "payloadType": "application/vnd.in-toto+json",
+              "signatures": [
+                {
+                  "sig": "MEQCIADfvKxWfhq2QHwJ11FcdFYkqLXud7EgXTOpXOAYKEphAiAwReq/BlNCqhMtX0SoKHm30DUWwgh6h6GODVDYDWDvFw=="
+                }
+              ]
+            }
+          },
+          "bundle_url": "",
+          "initiator": ""
+        },
+        "verificationResult": {
+          "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+          "signature": {
+            "certificate": {
+              "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+              "subjectAlternativeName": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+              "issuer": "https://token.actions.githubusercontent.com",
+              "githubWorkflowTrigger": "workflow_dispatch",
+              "githubWorkflowSHA": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+              "githubWorkflowName": "Native release",
+              "githubWorkflowRepository": "paintedwolf-ai/paintedwolf-opengrep",
+              "githubWorkflowRef": "refs/tags/v1.30.0+paintedwolf.36",
+              "buildSignerURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+              "buildSignerDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+              "runnerEnvironment": "github-hosted",
+              "sourceRepositoryURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep",
+              "sourceRepositoryDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+              "sourceRepositoryRef": "refs/tags/v1.30.0+paintedwolf.36",
+              "sourceRepositoryIdentifier": "1362758908",
+              "sourceRepositoryOwnerURI": "https://github.com/paintedwolf-ai",
+              "sourceRepositoryOwnerIdentifier": "289211278",
+              "buildConfigURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+              "buildConfigDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+              "buildTrigger": "workflow_dispatch",
+              "runInvocationURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/actions/runs/34416645878/attempts/1",
+              "sourceRepositoryVisibilityAtSigning": "public"
+            }
+          },
+          "verifiedTimestamps": [
+            {
+              "type": "Tlog",
+              "uri": "https://rekor.sigstore.dev",
+              "timestamp": "2026-09-09T20:22:30-07:00"
+            }
+          ],
+          "verifiedIdentity": {
+            "subjectAlternativeName": {
+              "subjectAlternativeName": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36"
+            },
+            "issuer": {
+              "issuer": "",
+              "regexp": ".*"
+            },
+            "runnerEnvironment": "github-hosted"
+          },
+          "statement": {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "name": "build-evidence.json",
+                "digest": {
+                  "sha256": "3ba4eed08a975aa054d0407db721d81b8fdfb82dd7b439ea252d24675ac30ef1"
+                }
+              },
+              {
+                "name": "opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz",
+                "digest": {
+                  "sha256": "3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c"
+                }
+              },
+              {
+                "name": "release.json",
+                "digest": {
+                  "sha256": "1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8"
+                }
+              }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+              "buildDefinition": {
+                "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+                "externalParameters": {
+                  "workflow": {
+                    "path": ".github/workflows/native-release.yml",
+                    "ref": "refs/tags/v1.30.0+paintedwolf.36",
+                    "repository": "https://github.com/paintedwolf-ai/paintedwolf-opengrep"
+                  }
+                },
+                "internalParameters": {
+                  "github": {
+                    "event_name": "workflow_dispatch",
+                    "repository_id": "1362758908",
+                    "repository_owner_id": "289211278",
+                    "runner_environment": "github-hosted"
+                  }
+                },
+                "resolvedDependencies": [
+                  {
+                    "digest": {
+                      "gitCommit": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c"
+                    },
+                    "uri": "git+https://github.com/paintedwolf-ai/paintedwolf-opengrep@refs/tags/v1.30.0+paintedwolf.36"
+                  }
+                ]
+              },
+              "runDetails": {
+                "builder": {
+                  "id": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36"
+                },
+                "metadata": {
+                  "invocationId": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/actions/runs/34416645878/attempts/1"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "release_verification": {
+      "attestation": {
+        "bundle": {
+          "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+          "verificationMaterial": {
+            "certificate": {
+              "rawBytes": "MIICKzCCAbCgAwIBAgIUFEsbikF1pCGydxjUbs+jmoS800MwCgYIKoZIzj0EAwMwODEVMBMGA1UEChMMR2l0SHViLCBJbmMuMR8wHQYDVQQDExZGdWxjaW8gSW50ZXJtZWRpYXRlIGwxMB4XDTI2MDYxMjAwMDAwMFoXDTI3MDYxMjAwMDAwMFowKjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMREwDwYDVQQDEwhBdHRlc3RlcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABGUVEVNqcSQmA0J45gqVHzCQkSWaZn4DucVDFhO4Q5OWgVdOP4WF44OUvFXQm9lDfRrHMsIVHEbvMfL7SHOVuVWjgaUwgaIwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFDrgKNmcXl2HuRedxYt9HulXf/9IMB8GA1UdIwQYMBaAFMDhuFKkS08+3no4EQbPSY6hRZszMC0GA1UdEQQmMCSGImh0dHBzOi8vZG90Y29tLnJlbGVhc2VzLmdpdGh1Yi5jb20wCgYIKoZIzj0EAwMDaQAwZgIxAJnC2khPGWJqZiEFvgyv0rktYBinUh6AkDn43wYSgUhzm8aRUa+rF25Qk1ZeoGi3IAIxAIgIBMwOkMqDQ1DVCJydaIZu1bxtvgX9Anva7kRDZrboNxsAllbdnorYRTm9mxkZaQ=="
+            },
+            "timestampVerificationData": {
+              "rfc3161Timestamps": [
+                {
+                  "signedTimestamp": "MIIC0DADAgEAMIICxwYJKoZIhvcNAQcCoIICuDCCArQCAQMxDTALBglghkgBZQMEAgIwgbsGCyqGSIb3DQEJEAEEoIGrBIGoMIGlAgEBBgkrBgEEAYO/MAIwMTANBglghkgBZQMEAgEFAAQgXlf2CFM4er2OBr3VjOUG6Uqj7xCouXguECqO9eKsu0ICFHLE/s7sZ+n5QO46wEnOM9ndDm21GA8yMDI2MDkxMTAxMTE0MFowAwIBAaA2pDQwMjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMRkwFwYDVQQDExBUU0EgVGltZXN0YW1waW5noAAxggHeMIIB2gIBATBKMDIxFTATBgNVBAoTDEdpdEh1YiwgSW5jLjEZMBcGA1UEAxMQVFNBIGludGVybWVkaWF0ZQIUFzPb1un+DvofqFPzAXiB5slHM1IwCwYJYIZIAWUDBAICoIIBBTAaBgkqhkiG9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTI2MDkxMTAxMTE0MFowPwYJKoZIhvcNAQkEMTIEMHE2DuFCOXdEAU0IK2fQAE81yPyPFj+Jom1PrX1u9QE5kOUvgshH6MrKJkrA8Ua1/jCBhwYLKoZIhvcNAQkQAi8xeDB2MHQwcgQgRBbIrnMUamOhN8LlW+jecOPJrzBzvzmLqrqo2wgXztcwTjA2pDQwMjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMRkwFwYDVQQDExBUU0EgaW50ZXJtZWRpYXRlAhQXM9vW6f4O+h+oU/MBeIHmyUczUjAKBggqhkjOPQQDAwRnMGUCMBOPxwRMuFepN60TS0FRTg7EOBPhXCDmfqcBulXUO4X7QcOrnaJhpWfVL/Fe/E9EowIxAM6O38MW6Xh0UBY4BWqFK9pD5ZrrH30bjh+GRq616VvW9+S1eo7h0pXpycjg2Ubh/Q=="
+                }
+              ]
+            }
+          },
+          "dsseEnvelope": {
+            "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCAic3ViamVjdCI6W3sidXJpIjoicGtnOmdpdGh1Yi9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcEB2MS4zMC4wJTJCcGFpbnRlZHdvbGYuMzYiLCAiZGlnZXN0Ijp7InNoYTEiOiJiYWRjMTU4NDhiNjY5YWE0MTQzODFkODY4OGI2ZGM4YTI5YWQzN2I4In19LCB7Im5hbWUiOiJidWlsZC1ldmlkZW5jZS5qc29uIiwgImRpZ2VzdCI6eyJzaGEyNTYiOiIzYmE0ZWVkMDhhOTc1YWEwNTRkMDQwN2RiNzIxZDgxYjhmZGZiODJkZDdiNDM5ZWEyNTJkMjQ2NzVhYzMwZWYxIn19LCB7Im5hbWUiOiJvcGVuZ3JlcC0xLjMwLjArcGFpbnRlZHdvbGYuMzYtZGFyd2luLWFybTY0LnRhci5neiIsICJkaWdlc3QiOnsic2hhMjU2IjoiM2U4MmEyZGQ3NDczMWFiMzQzZDZlY2FhMDNlMzJlYmI1OWVlZDI5YjA2NTkyY2JkNmZjZmI0OTRiM2M3MDY0YyJ9fSwgeyJuYW1lIjoicHJvdmVuYW5jZS5zaWdzdG9yZS5qc29uIiwgImRpZ2VzdCI6eyJzaGEyNTYiOiJiNzE5OWQwMzlmMGVlMzQ0N2I4NTFiODEzNzQyNzY4OWVhN2I0OTI3MDNlMDU5MjkyZjM5MzZmNDU4YzkyMTViIn19LCB7Im5hbWUiOiJyZWxlYXNlLmpzb24iLCAiZGlnZXN0Ijp7InNoYTI1NiI6IjFjOGI3MTNmZjNjZDZiZDRlNjBkNjQyY2VkNzY3N2I1OWVjZDdiZWEyODljMTRmZGI3ZjY3NzY2ZmJjODRkYTgifX1dLCAicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9hdHRlc3RhdGlvbi9yZWxlYXNlL3YwLjIiLCAicHJlZGljYXRlIjp7ImRhdGFiYXNlSWQiOiIzODU5ODI1OTAiLCAib3duZXJJZCI6IjI4OTIxMTI3OCIsICJwYWNrYWdlSWQiOiIxMzYyNzU4OTA4IiwgInB1cmwiOiJwa2c6Z2l0aHViL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwQHYxLjMwLjAlMkJwYWludGVkd29sZi4zNiIsICJyZXBvc2l0b3J5IjoicGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAiLCAicmVwb3NpdG9yeUlkIjoiMTM2Mjc1ODkwOCIsICJ0YWciOiJ2MS4zMC4wK3BhaW50ZWR3b2xmLjM2In19",
+            "payloadType": "application/vnd.in-toto+json",
+            "signatures": [
+              {
+                "sig": "MEUCIFb9rjJbXplPlhcLu5h5PFByYeG03RMKfU0Rx1Mg1vTTAiEAifMstRmQAg8yeFXq30ylMtRM/ygWswzQVmEeBsGAxlI="
+              }
+            ]
+          }
+        },
+        "bundle_url": "",
+        "initiator": ""
+      },
+      "verificationResult": {
+        "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+        "signature": {
+          "certificate": {
+            "certificateIssuer": "CN=Fulcio Intermediate l1,O=GitHub\\, Inc.",
+            "subjectAlternativeName": "https://dotcom.releases.github.com"
+          }
+        },
+        "verifiedTimestamps": [
+          {
+            "type": "TimestampAuthority",
+            "uri": "timestamp.githubapp.com",
+            "timestamp": "2026-09-11T01:11:40Z"
+          }
+        ],
+        "verifiedIdentity": {
+          "subjectAlternativeName": {
+            "subjectAlternativeName": "",
+            "regexp": "^https://dotcom\\.releases\\.github\\.com$"
+          },
+          "issuer": {
+            "issuer": "",
+            "regexp": ".*"
+          }
+        },
+        "statement": {
+          "_type": "https://in-toto.io/Statement/v1",
+          "subject": [
+            {
+              "uri": "pkg:github/paintedwolf-ai/paintedwolf-opengrep@v1.30.0%2Bpaintedwolf.36",
+              "digest": {
+                "sha1": "badc15848b669aa414381d8688b6dc8a29ad37b8"
+              }
+            },
+            {
+              "name": "build-evidence.json",
+              "digest": {
+                "sha256": "3ba4eed08a975aa054d0407db721d81b8fdfb82dd7b439ea252d24675ac30ef1"
+              }
+            },
+            {
+              "name": "opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz",
+              "digest": {
+                "sha256": "3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c"
+              }
+            },
+            {
+              "name": "provenance.sigstore.json",
+              "digest": {
+                "sha256": "b7199d039f0ee3447b851b8137427689ea7b492703e059292f3936f458c9215b"
+              }
+            },
+            {
+              "name": "release.json",
+              "digest": {
+                "sha256": "1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8"
+              }
+            }
+          ],
+          "predicateType": "https://in-toto.io/attestation/release/v0.2",
+          "predicate": {
+            "databaseId": "385982590",
+            "ownerId": "289211278",
+            "packageId": "1362758908",
+            "purl": "pkg:github/paintedwolf-ai/paintedwolf-opengrep@v1.30.0%2Bpaintedwolf.36",
+            "repository": "paintedwolf-ai/paintedwolf-opengrep",
+            "repositoryId": "1362758908",
+            "tag": "v1.30.0+paintedwolf.36"
+          }
+        }
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "sha256": "3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c",
+      "workflow_verification": [
+        {
+          "attestation": {
+            "bundle": {
+              "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+              "verificationMaterial": {
+                "certificate": {
+                  "rawBytes": "MIIIJDCCB6mgAwIBAgIUKUAej8QS6nXhD9hEXGdrBwUd1mUwCgYIKoZIzj0EAwMwNzEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MR4wHAYDVQQDExVzaWdzdG9yZS1pbnRlcm1lZGlhdGUwHhcNMjYwOTEwMDMyMjMwWhcNMjYwOTEwMDMzMjMwWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+AGdN7p/UBE8K2FAqvn3POfO2fn/AgiyQbAxLZVJxHF908OUnc4HZ+akdi2BxW3ddM8PkrOkZeN2FmfKn0HbkaOCBsgwggbEMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQUZCxNXIpNseI4Jy2HZsUtpB6voZcwHwYDVR0jBBgwFoAU39Ppz1YkEZb5qNjpKFWixi4YZD8wgYsGA1UdEQEB/wSBgDB+hnxodHRwczovL2dpdGh1Yi5jb20vcGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAvLmdpdGh1Yi93b3JrZmxvd3MvbmF0aXZlLXJlbGVhc2UueW1sQHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MDkGCisGAQQBg78wAQEEK2h0dHBzOi8vdG9rZW4uYWN0aW9ucy5naXRodWJ1c2VyY29udGVudC5jb20wHwYKKwYBBAGDvzABAgQRd29ya2Zsb3dfZGlzcGF0Y2gwNgYKKwYBBAGDvzABAwQoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAcBgorBgEEAYO/MAEEBA5OYXRpdmUgcmVsZWFzZTAxBgorBgEEAYO/MAEFBCNwYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcDAuBgorBgEEAYO/MAEGBCByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNjA7BgorBgEEAYO/MAEIBC0MK2h0dHBzOi8vdG9rZW4uYWN0aW9ucy5naXRodWJ1c2VyY29udGVudC5jb20wgYwGCisGAQQBg78wAQkEfgx8aHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwLy5naXRodWIvd29ya2Zsb3dzL25hdGl2ZS1yZWxlYXNlLnltbEByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNjA4BgorBgEEAYO/MAEKBCoMKDBhM2NjZTBmOTJlOWMwNjBlNGViNmFjOWY1Y2Y2MjlhNTA5Njk0MmMwHQYKKwYBBAGDvzABCwQPDA1naXRodWItaG9zdGVkMEYGCisGAQQBg78wAQwEOAw2aHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwMDgGCisGAQQBg78wAQ0EKgwoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAwBgorBgEEAYO/MAEOBCIMIHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MBoGCisGAQQBg78wAQ8EDAwKMTM2Mjc1ODkwODAxBgorBgEEAYO/MAEQBCMMIWh0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haTAZBgorBgEEAYO/MAERBAsMCTI4OTIxMTI3ODCBjAYKKwYBBAGDvzABEgR+DHxodHRwczovL2dpdGh1Yi5jb20vcGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAvLmdpdGh1Yi93b3JrZmxvd3MvbmF0aXZlLXJlbGVhc2UueW1sQHJlZnMvdGFncy92MS4zMC4wK3BhaW50ZWR3b2xmLjM2MDgGCisGAQQBg78wARMEKgwoMGEzY2NlMGY5MmU5YzA2MGU0ZWI2YWM5ZjVjZjYyOWE1MDk2OTQyYzAhBgorBgEEAYO/MAEUBBMMEXdvcmtmbG93X2Rpc3BhdGNoMGoGCisGAQQBg78wARUEXAxaaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwL2FjdGlvbnMvcnVucy8zNDQxNjY0NTg3OC9hdHRlbXB0cy8xMBYGCisGAQQBg78wARYECAwGcHVibGljMBcGCisGAQQBg78wARcECQwHcmVsZWFzZTBhBgorBgEEAYO/MAEYBFMMUXJlcG86cGFpbnRlZHdvbGYtYWlAMjg5MjExMjc4L3BhaW50ZWR3b2xmLW9wZW5ncmVwQDEzNjI3NTg5MDg6ZW52aXJvbm1lbnQ6cmVsZWFzZTCBigYKKwYBBAHWeQIEAgR8BHoAeAB2AN09MGrGxxEyYxkeHJlnNwKiSl643jyt/4eKcoAvKe6OAAABoIlWnfAAAAQDAEcwRQIgA8rsbKFDCxDHoAztE3RBtlPZwIRCQV37F2vCFsEAAs4CIQC7nW+lrsOlMkEdTd+DfOO3VnppG7h720pk8chSk0I8gTAKBggqhkjOPQQDAwNpADBmAjEA+ENRo7RMRHGQox7psz/U24HL7Wf+ZhcCDmXrQZBjph43wqomzrFMtC0dBFsNp3rjAjEA39Uu3/gC5Y4rtEWLI2QohUixYToNVP+kklkslng1puaHJDphMdGtEzzGx6BoH+ON"
+                },
+                "tlogEntries": [
+                  {
+                    "logIndex": "2776946495",
+                    "logId": {
+                      "keyId": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0="
+                    },
+                    "kindVersion": {
+                      "kind": "dsse",
+                      "version": "0.0.1"
+                    },
+                    "integratedTime": "1789010550",
+                    "inclusionPromise": {
+                      "signedEntryTimestamp": "MEUCIHN9IUCr2UtfkMGaf0sTgpjY307pjoahItRJOa4k7RyAAiEA6ePMInWMbFXn+so2phqs8GmtJF24Ogw4bMPJ/9wioVA="
+                    },
+                    "inclusionProof": {
+                      "logIndex": "2655042233",
+                      "rootHash": "fvuXQFR9mZ08jmPiPQqgE+K30H3fJ/N4hgFZqAsecXg=",
+                      "treeSize": "2655042234",
+                      "hashes": [
+                        "dwx3abPKoH253Jz/xekY/MVjuaQdnQGGoPwyu+kQe+Q=",
+                        "aQVFQgkQKydMmqgpotn76akWA2DVORMO51fl77R7fkQ=",
+                        "01D6k5Jw6iLIsIxW96VpywEBhymCFtyySqVuSH8459E=",
+                        "jrGGD7rbdOLbeJpr0VEJIcbPPp6KZE0KCGqyiAbXMHU=",
+                        "Xxr3a4EhhintCIAFq4iGaAmGUQCZ+L0lzHBbOMg2oSI=",
+                        "cWxIs5nAjIkqelnpBFkihM0T0VAbBCk5J4kgIEq1xCw=",
+                        "zCDHxQokel/788+6R1D0uHOehdZTBKyBgXBjUly70xU=",
+                        "8NLdiX3JeKgeoFacCixNUZ/qqQuDcQluWhViXZmw3zU=",
+                        "zbRKInuXF5rR7csCZdrdxxP405mErmcM43+vYWwSdY4=",
+                        "CONu3y2XLc2duGicW091/QJykCnqaXm7BhqQr3W2k5E=",
+                        "tJUBi888NN6SVPOTCKaiGWyZHSIkcPJVRXxY2dbWeJc=",
+                        "4SexKjDhe33uQFmbzX5SUsB0SyhTm14ObSvNGPpKDFk=",
+                        "7tD2K8mAqGTMENrP2YXWz71BeTWQPCiYd3CESAgQLz8=",
+                        "eXSLrLqKSxRTixSP/k4YimriB2lufao6trqTrsxxlyg=",
+                        "SndbMKVtcTenAkwi2JBfGzD+mhexp1qJbRIY+A1JRIU=",
+                        "xH/DCseLHr9eKoYT8qsORZK7zVdEGYWHuVtsVrD95wY="
+                      ],
+                      "checkpoint": {
+                        "envelope": "rekor.sigstore.dev - 1193050959916656506\n2655042234\nfvuXQFR9mZ08jmPiPQqgE+K30H3fJ/N4hgFZqAsecXg=\n\n— rekor.sigstore.dev wNI9ajBFAiEA4LK+K1LDkIdd7VGYsVzIjxOTkflgpzz5wcm8ixr1X6UCIFUfPPQYhn64Mhyp1Uw4WZ/N3U342jYTFG1PhE25ScM1\n"
+                      }
+                    },
+                    "canonicalizedBody": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiZHNzZSIsInNwZWMiOnsiZW52ZWxvcGVIYXNoIjp7ImFsZ29yaXRobSI6InNoYTI1NiIsInZhbHVlIjoiZDNhNWVkZjVjMGFiMmYxMDUxN2YyYzEyYmVkODg1M2I2ZmI1YmJhNGQwZmZlOWNiZDc2YmZkZWM2MmRlZTJjYSJ9LCJwYXlsb2FkSGFzaCI6eyJhbGdvcml0aG0iOiJzaGEyNTYiLCJ2YWx1ZSI6ImYxYTc1MGQyOTcxNjkyYWI1NmQ2OGU4OWYyYjJjNTE0ZTVjNDVmMGMyY2QwYzNhNGUxZmU4ZTVmOTI4NWE5NDcifSwic2lnbmF0dXJlcyI6W3sic2lnbmF0dXJlIjoiTUVRQ0lBRGZ2S3hXZmhxMlFId0oxMUZjZEZZa3FMWHVkN0VnWFRPcFhPQVlLRXBoQWlBd1JlcS9CbE5DcWhNdFgwU29LSG0zMERVV3dnaDZoNkdPRFZEWURXRHZGdz09IiwidmVyaWZpZXIiOiJMUzB0TFMxQ1JVZEpUaUJEUlZKVVNVWkpRMEZVUlMwdExTMHRDazFKU1VsS1JFTkRRalp0WjBGM1NVSkJaMGxWUzFWQlpXbzRVVk0yYmxob1JEbG9SVmhIWkhKQ2QxVmtNVzFWZDBObldVbExiMXBKZW1vd1JVRjNUWGNLVG5wRlZrMUNUVWRCTVZWRlEyaE5UV015Ykc1ak0xSjJZMjFWZFZwSFZqSk5ValIzU0VGWlJGWlJVVVJGZUZaNllWZGtlbVJIT1hsYVV6RndZbTVTYkFwamJURnNXa2RzYUdSSFZYZElhR05PVFdwWmQwOVVSWGROUkUxNVRXcE5kMWRvWTA1TmFsbDNUMVJGZDAxRVRYcE5hazEzVjJwQlFVMUdhM2RGZDFsSUNrdHZXa2w2YWpCRFFWRlpTVXR2V2tsNmFqQkVRVkZqUkZGblFVVXJRVWRrVGpkd0wxVkNSVGhMTWtaQmNYWnVNMUJQWms4eVptNHZRV2RwZVZGaVFYZ0tURnBXU25oSVJqa3dPRTlWYm1NMFNGb3JZV3RrYVRKQ2VGY3paR1JOT0ZCcmNrOXJXbVZPTWtadFprdHVNRWhpYTJGUFEwSnpaM2RuWjJKRlRVRTBSd3BCTVZWa1JIZEZRaTkzVVVWQmQwbElaMFJCVkVKblRsWklVMVZGUkVSQlMwSm5aM0pDWjBWR1FsRmpSRUY2UVdSQ1owNVdTRkUwUlVablVWVmFRM2hPQ2xoSmNFNXpaVWswU25reVNGcHpWWFJ3UWpaMmIxcGpkMGgzV1VSV1VqQnFRa0puZDBadlFWVXpPVkJ3ZWpGWmEwVmFZalZ4VG1wd1MwWlhhWGhwTkZrS1drUTRkMmRaYzBkQk1WVmtSVkZGUWk5M1UwSm5SRUlyYUc1NGIyUklVbmRqZW05MlRESmtjR1JIYURGWmFUVnFZakl3ZG1OSFJuQmlibEpzV2toa2RncGlSMWwwV1ZkcmRtTkhSbkJpYmxKc1draGtkbUpIV1hSaU0wSnNZbTFrZVZwWVFYWk1iV1J3WkVkb01WbHBPVE5pTTBweVdtMTRkbVF6VFhaaWJVWXdDbUZZV214TVdFcHNZa2RXYUdNeVZYVmxWekZ6VVVoS2JGcHVUWFprUjBadVkzazVNazFUTkhwTlF6UjNTek5DYUdGWE5UQmFWMUl6WWpKNGJVeHFUVElLVFVSclIwTnBjMGRCVVZGQ1p6YzRkMEZSUlVWTE1tZ3daRWhDZWs5cE9IWmtSemx5V2xjMGRWbFhUakJoVnpsMVkzazFibUZZVW05a1Ywb3hZekpXZVFwWk1qbDFaRWRXZFdSRE5XcGlNakIzU0hkWlMwdDNXVUpDUVVkRWRucEJRa0ZuVVZKa01qbDVZVEphYzJJelpHWmFSMng2WTBkR01Ga3laM2RPWjFsTENrdDNXVUpDUVVkRWRucEJRa0YzVVc5TlIwVjZXVEpPYkUxSFdUVk5iVlUxV1hwQk1rMUhWVEJhVjBreVdWZE5OVnBxVm1wYWFsbDVUMWRGTVUxRWF6SUtUMVJSZVZsNlFXTkNaMjl5UW1kRlJVRlpUeTlOUVVWRlFrRTFUMWxZVW5Ca2JWVm5ZMjFXYzFwWFJucGFWRUY0UW1kdmNrSm5SVVZCV1U4dlRVRkZSZ3BDUTA1M1dWZHNkV1JIVm10a01qbHpXbWt4YUdGVE9YZFpWMngxWkVkV2EyUXlPWE5hYVRGMlkwZFdkVm96U214alJFRjFRbWR2Y2tKblJVVkJXVTh2Q2sxQlJVZENRMEo1V2xkYWVrd3pVbWhhTTAxMlpHcEZkVTE2UVhWTlEzUjNXVmRzZFdSSFZtdGtNamx6V21rMGVrNXFRVGRDWjI5eVFtZEZSVUZaVHk4S1RVRkZTVUpETUUxTE1tZ3daRWhDZWs5cE9IWmtSemx5V2xjMGRWbFhUakJoVnpsMVkzazFibUZZVW05a1Ywb3hZekpXZVZreU9YVmtSMVoxWkVNMWFncGlNakIzWjFsM1IwTnBjMGRCVVZGQ1p6YzRkMEZSYTBWbVozZzRZVWhTTUdOSVRUWk1lVGx1WVZoU2IyUlhTWFZaTWpsMFRETkNhR0ZYTlRCYVYxSXpDbUl5ZUcxTVYwWndURE5DYUdGWE5UQmFWMUl6WWpKNGJVeFhPWGRhVnpWdVkyMVdkMHg1Tlc1aFdGSnZaRmRKZG1ReU9YbGhNbHB6WWpOa2Vrd3lOV2dLWkVkc01scFRNWGxhVjNoc1dWaE9iRXh1YkhSaVJVSjVXbGRhZWt3elVtaGFNMDEyWkdwRmRVMTZRWFZOUTNSM1dWZHNkV1JIVm10a01qbHpXbWswZWdwT2FrRTBRbWR2Y2tKblJVVkJXVTh2VFVGRlMwSkRiMDFMUkVKb1RUSk9hbHBVUW0xUFZFcHNUMWROZDA1cVFteE9SMVpwVG0xR2FrOVhXVEZaTWxreUNrMXFiR2hPVkVFMVRtcHJNRTF0VFhkSVVWbExTM2RaUWtKQlIwUjJla0ZDUTNkUlVFUkJNVzVoV0ZKdlpGZEpkR0ZIT1hwa1IxWnJUVVZaUjBOcGMwY0tRVkZSUW1jM09IZEJVWGRGVDBGM01tRklVakJqU0UwMlRIazVibUZZVW05a1YwbDFXVEk1ZEV3elFtaGhWelV3V2xkU00ySXllRzFNVjBad1RETkNhQXBoVnpVd1dsZFNNMkl5ZUcxTVZ6bDNXbGMxYm1OdFZuZE5SR2RIUTJselIwRlJVVUpuTnpoM1FWRXdSVXRuZDI5TlIwVjZXVEpPYkUxSFdUVk5iVlUxQ2xsNlFUSk5SMVV3V2xkSk1sbFhUVFZhYWxacVdtcFplVTlYUlRGTlJHc3lUMVJSZVZsNlFYZENaMjl5UW1kRlJVRlpUeTlOUVVWUFFrTkpUVWxJU213S1dtNU5kbVJIUm01amVUa3lUVk0wZWsxRE5IZExNMEpvWVZjMU1GcFhVak5pTW5odFRHcE5NazFDYjBkRGFYTkhRVkZSUW1jM09IZEJVVGhGUkVGM1N3cE5WRTB5VFdwak1VOUVhM2RQUkVGNFFtZHZja0puUlVWQldVOHZUVUZGVVVKRFRVMUpWMmd3WkVoQ2VrOXBPSFphTW13d1lVaFdhVXh0VG5aaVV6bDNDbGxYYkhWa1IxWnJaREk1YzFwcE1XaGhWRUZhUW1kdmNrSm5SVVZCV1U4dlRVRkZVa0pCYzAxRFZFazBUMVJKZUUxVVNUTlBSRU5DYWtGWlMwdDNXVUlLUWtGSFJIWjZRVUpGWjFJclJFaDRiMlJJVW5kamVtOTJUREprY0dSSGFERlphVFZxWWpJd2RtTkhSbkJpYmxKc1draGtkbUpIV1hSWlYydDJZMGRHY0FwaWJsSnNXa2hrZG1KSFdYUmlNMEpzWW0xa2VWcFlRWFpNYldSd1pFZG9NVmxwT1ROaU0wcHlXbTE0ZG1RelRYWmliVVl3WVZoYWJFeFlTbXhpUjFab0NtTXlWWFZsVnpGelVVaEtiRnB1VFhaa1IwWnVZM2s1TWsxVE5IcE5RelIzU3pOQ2FHRlhOVEJhVjFJellqSjRiVXhxVFRKTlJHZEhRMmx6UjBGUlVVSUtaemM0ZDBGU1RVVkxaM2R2VFVkRmVsa3lUbXhOUjFrMVRXMVZOVmw2UVRKTlIxVXdXbGRKTWxsWFRUVmFhbFpxV21wWmVVOVhSVEZOUkdzeVQxUlJlUXBaZWtGb1FtZHZja0puUlVWQldVOHZUVUZGVlVKQ1RVMUZXR1IyWTIxMGJXSkhPVE5ZTWxKd1l6TkNhR1JIVG05TlIyOUhRMmx6UjBGUlVVSm5OemgzQ2tGU1ZVVllRWGhoWVVoU01HTklUVFpNZVRsdVlWaFNiMlJYU1hWWk1qbDBURE5DYUdGWE5UQmFWMUl6WWpKNGJVeFhSbkJNTTBKb1lWYzFNRnBYVWpNS1lqSjRiVXhYT1hkYVZ6VnVZMjFXZDB3eVJtcGtSMngyWW01TmRtTnVWblZqZVRoNlRrUlJlRTVxV1RCT1ZHY3pUME01YUdSSVVteGlXRUl3WTNrNGVBcE5RbGxIUTJselIwRlJVVUpuTnpoM1FWSlpSVU5CZDBkalNGWnBZa2RzYWsxQ1kwZERhWE5IUVZGUlFtYzNPSGRCVW1ORlExRjNTR050Vm5OYVYwWjZDbHBVUW1oQ1oyOXlRbWRGUlVGWlR5OU5RVVZaUWtaTlRWVllTbXhqUnpnMlkwZEdjR0p1VW14YVNHUjJZa2RaZEZsWGJFRk5hbWMxVFdwRmVFMXFZelFLVEROQ2FHRlhOVEJhVjFJellqSjRiVXhYT1hkYVZ6VnVZMjFXZDFGRVJYcE9ha2t6VGxSbk5VMUVaelphVnpVeVlWaEtkbUp0TVd4aWJsRTJZMjFXY3dwYVYwWjZXbFJEUW1sbldVdExkMWxDUWtGSVYyVlJTVVZCWjFJNFFraHZRV1ZCUWpKQlRqQTVUVWR5UjNoNFJYbFplR3RsU0Vwc2JrNTNTMmxUYkRZMENqTnFlWFF2TkdWTFkyOUJka3RsTms5QlFVRkNiMGxzVjI1bVFVRkJRVkZFUVVWamQxSlJTV2RCT0hKellrdEdSRU40UkVodlFYcDBSVE5TUW5Sc1VGb0tkMGxTUTFGV016ZEdNblpEUm5ORlFVRnpORU5KVVVNM2JsY3JiSEp6VDJ4TmEwVmtWR1FyUkdaUFR6TldibkJ3Unpkb056SXdjR3M0WTJoVGF6QkpPQXBuVkVGTFFtZG5jV2hyYWs5UVVWRkVRWGRPY0VGRVFtMUJha1ZCSzBWT1VtODNVazFTU0VkUmIzZzNjSE42TDFVeU5FaE1OMWRtSzFwb1kwTkViVmh5Q2xGYVFtcHdhRFF6ZDNGdmJYcHlSazEwUXpCa1FrWnpUbkF6Y21wQmFrVkJNemxWZFRNdlowTTFXVFJ5ZEVWWFRFa3lVVzlvVldsNFdWUnZUbFpRSzJzS2EyeHJjMnh1WnpGd2RXRklTa1J3YUUxa1IzUkZlbnBIZURaQ2IwZ3JUMDRLTFMwdExTMUZUa1FnUTBWU1ZFbEdTVU5CVkVVdExTMHRMUW89In1dfX0="
+                  }
+                ],
+                "timestampVerificationData": {}
+              },
+              "dsseEnvelope": {
+                "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoiYnVpbGQtZXZpZGVuY2UuanNvbiIsImRpZ2VzdCI6eyJzaGEyNTYiOiIzYmE0ZWVkMDhhOTc1YWEwNTRkMDQwN2RiNzIxZDgxYjhmZGZiODJkZDdiNDM5ZWEyNTJkMjQ2NzVhYzMwZWYxIn19LHsibmFtZSI6Im9wZW5ncmVwLTEuMzAuMCtwYWludGVkd29sZi4zNi1kYXJ3aW4tYXJtNjQudGFyLmd6IiwiZGlnZXN0Ijp7InNoYTI1NiI6IjNlODJhMmRkNzQ3MzFhYjM0M2Q2ZWNhYTAzZTMyZWJiNTllZWQyOWIwNjU5MmNiZDZmY2ZiNDk0YjNjNzA2NGMifX0seyJuYW1lIjoicmVsZWFzZS5qc29uIiwiZGlnZXN0Ijp7InNoYTI1NiI6IjFjOGI3MTNmZjNjZDZiZDRlNjBkNjQyY2VkNzY3N2I1OWVjZDdiZWEyODljMTRmZGI3ZjY3NzY2ZmJjODRkYTgifX1dLCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9zbHNhLmRldi9wcm92ZW5hbmNlL3YxIiwicHJlZGljYXRlIjp7ImJ1aWxkRGVmaW5pdGlvbiI6eyJidWlsZFR5cGUiOiJodHRwczovL2FjdGlvbnMuZ2l0aHViLmlvL2J1aWxkdHlwZXMvd29ya2Zsb3cvdjEiLCJleHRlcm5hbFBhcmFtZXRlcnMiOnsid29ya2Zsb3ciOnsicmVmIjoicmVmcy90YWdzL3YxLjMwLjArcGFpbnRlZHdvbGYuMzYiLCJyZXBvc2l0b3J5IjoiaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwIiwicGF0aCI6Ii5naXRodWIvd29ya2Zsb3dzL25hdGl2ZS1yZWxlYXNlLnltbCJ9fSwiaW50ZXJuYWxQYXJhbWV0ZXJzIjp7ImdpdGh1YiI6eyJldmVudF9uYW1lIjoid29ya2Zsb3dfZGlzcGF0Y2giLCJyZXBvc2l0b3J5X2lkIjoiMTM2Mjc1ODkwOCIsInJlcG9zaXRvcnlfb3duZXJfaWQiOiIyODkyMTEyNzgiLCJydW5uZXJfZW52aXJvbm1lbnQiOiJnaXRodWItaG9zdGVkIn19LCJyZXNvbHZlZERlcGVuZGVuY2llcyI6W3sidXJpIjoiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcEByZWZzL3RhZ3MvdjEuMzAuMCtwYWludGVkd29sZi4zNiIsImRpZ2VzdCI6eyJnaXRDb21taXQiOiIwYTNjY2UwZjkyZTljMDYwZTRlYjZhYzlmNWNmNjI5YTUwOTY5NDJjIn19XX0sInJ1bkRldGFpbHMiOnsiYnVpbGRlciI6eyJpZCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcC8uZ2l0aHViL3dvcmtmbG93cy9uYXRpdmUtcmVsZWFzZS55bWxAcmVmcy90YWdzL3YxLjMwLjArcGFpbnRlZHdvbGYuMzYifSwibWV0YWRhdGEiOnsiaW52b2NhdGlvbklkIjoiaHR0cHM6Ly9naXRodWIuY29tL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwL2FjdGlvbnMvcnVucy8zNDQxNjY0NTg3OC9hdHRlbXB0cy8xIn19fX0=",
+                "payloadType": "application/vnd.in-toto+json",
+                "signatures": [
+                  {
+                    "sig": "MEQCIADfvKxWfhq2QHwJ11FcdFYkqLXud7EgXTOpXOAYKEphAiAwReq/BlNCqhMtX0SoKHm30DUWwgh6h6GODVDYDWDvFw=="
+                  }
+                ]
+              }
+            },
+            "bundle_url": "",
+            "initiator": ""
+          },
+          "verificationResult": {
+            "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+            "signature": {
+              "certificate": {
+                "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+                "subjectAlternativeName": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+                "issuer": "https://token.actions.githubusercontent.com",
+                "githubWorkflowTrigger": "workflow_dispatch",
+                "githubWorkflowSHA": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+                "githubWorkflowName": "Native release",
+                "githubWorkflowRepository": "paintedwolf-ai/paintedwolf-opengrep",
+                "githubWorkflowRef": "refs/tags/v1.30.0+paintedwolf.36",
+                "buildSignerURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+                "buildSignerDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+                "runnerEnvironment": "github-hosted",
+                "sourceRepositoryURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep",
+                "sourceRepositoryDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+                "sourceRepositoryRef": "refs/tags/v1.30.0+paintedwolf.36",
+                "sourceRepositoryIdentifier": "1362758908",
+                "sourceRepositoryOwnerURI": "https://github.com/paintedwolf-ai",
+                "sourceRepositoryOwnerIdentifier": "289211278",
+                "buildConfigURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36",
+                "buildConfigDigest": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+                "buildTrigger": "workflow_dispatch",
+                "runInvocationURI": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/actions/runs/34416645878/attempts/1",
+                "sourceRepositoryVisibilityAtSigning": "public"
+              }
+            },
+            "verifiedTimestamps": [
+              {
+                "type": "Tlog",
+                "uri": "https://rekor.sigstore.dev",
+                "timestamp": "2026-09-09T20:22:30-07:00"
+              }
+            ],
+            "verifiedIdentity": {
+              "subjectAlternativeName": {
+                "subjectAlternativeName": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36"
+              },
+              "issuer": {
+                "issuer": "",
+                "regexp": ".*"
+              },
+              "runnerEnvironment": "github-hosted"
+            },
+            "statement": {
+              "_type": "https://in-toto.io/Statement/v1",
+              "subject": [
+                {
+                  "name": "build-evidence.json",
+                  "digest": {
+                    "sha256": "3ba4eed08a975aa054d0407db721d81b8fdfb82dd7b439ea252d24675ac30ef1"
+                  }
+                },
+                {
+                  "name": "opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz",
+                  "digest": {
+                    "sha256": "3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c"
+                  }
+                },
+                {
+                  "name": "release.json",
+                  "digest": {
+                    "sha256": "1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8"
+                  }
+                }
+              ],
+              "predicateType": "https://slsa.dev/provenance/v1",
+              "predicate": {
+                "buildDefinition": {
+                  "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+                  "externalParameters": {
+                    "workflow": {
+                      "path": ".github/workflows/native-release.yml",
+                      "ref": "refs/tags/v1.30.0+paintedwolf.36",
+                      "repository": "https://github.com/paintedwolf-ai/paintedwolf-opengrep"
+                    }
+                  },
+                  "internalParameters": {
+                    "github": {
+                      "event_name": "workflow_dispatch",
+                      "repository_id": "1362758908",
+                      "repository_owner_id": "289211278",
+                      "runner_environment": "github-hosted"
+                    }
+                  },
+                  "resolvedDependencies": [
+                    {
+                      "digest": {
+                        "gitCommit": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c"
+                      },
+                      "uri": "git+https://github.com/paintedwolf-ai/paintedwolf-opengrep@refs/tags/v1.30.0+paintedwolf.36"
+                    }
+                  ]
+                },
+                "runDetails": {
+                  "builder": {
+                    "id": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/.github/workflows/native-release.yml@refs/tags/v1.30.0+paintedwolf.36"
+                  },
+                  "metadata": {
+                    "invocationId": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/actions/runs/34416645878/attempts/1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "release_verification": {
+        "attestation": {
+          "bundle": {
+            "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "verificationMaterial": {
+              "certificate": {
+                "rawBytes": "MIICKzCCAbCgAwIBAgIUFEsbikF1pCGydxjUbs+jmoS800MwCgYIKoZIzj0EAwMwODEVMBMGA1UEChMMR2l0SHViLCBJbmMuMR8wHQYDVQQDExZGdWxjaW8gSW50ZXJtZWRpYXRlIGwxMB4XDTI2MDYxMjAwMDAwMFoXDTI3MDYxMjAwMDAwMFowKjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMREwDwYDVQQDEwhBdHRlc3RlcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABGUVEVNqcSQmA0J45gqVHzCQkSWaZn4DucVDFhO4Q5OWgVdOP4WF44OUvFXQm9lDfRrHMsIVHEbvMfL7SHOVuVWjgaUwgaIwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFDrgKNmcXl2HuRedxYt9HulXf/9IMB8GA1UdIwQYMBaAFMDhuFKkS08+3no4EQbPSY6hRZszMC0GA1UdEQQmMCSGImh0dHBzOi8vZG90Y29tLnJlbGVhc2VzLmdpdGh1Yi5jb20wCgYIKoZIzj0EAwMDaQAwZgIxAJnC2khPGWJqZiEFvgyv0rktYBinUh6AkDn43wYSgUhzm8aRUa+rF25Qk1ZeoGi3IAIxAIgIBMwOkMqDQ1DVCJydaIZu1bxtvgX9Anva7kRDZrboNxsAllbdnorYRTm9mxkZaQ=="
+              },
+              "timestampVerificationData": {
+                "rfc3161Timestamps": [
+                  {
+                    "signedTimestamp": "MIIC0DADAgEAMIICxwYJKoZIhvcNAQcCoIICuDCCArQCAQMxDTALBglghkgBZQMEAgIwgbsGCyqGSIb3DQEJEAEEoIGrBIGoMIGlAgEBBgkrBgEEAYO/MAIwMTANBglghkgBZQMEAgEFAAQgXlf2CFM4er2OBr3VjOUG6Uqj7xCouXguECqO9eKsu0ICFHLE/s7sZ+n5QO46wEnOM9ndDm21GA8yMDI2MDkxMTAxMTE0MFowAwIBAaA2pDQwMjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMRkwFwYDVQQDExBUU0EgVGltZXN0YW1waW5noAAxggHeMIIB2gIBATBKMDIxFTATBgNVBAoTDEdpdEh1YiwgSW5jLjEZMBcGA1UEAxMQVFNBIGludGVybWVkaWF0ZQIUFzPb1un+DvofqFPzAXiB5slHM1IwCwYJYIZIAWUDBAICoIIBBTAaBgkqhkiG9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTI2MDkxMTAxMTE0MFowPwYJKoZIhvcNAQkEMTIEMHE2DuFCOXdEAU0IK2fQAE81yPyPFj+Jom1PrX1u9QE5kOUvgshH6MrKJkrA8Ua1/jCBhwYLKoZIhvcNAQkQAi8xeDB2MHQwcgQgRBbIrnMUamOhN8LlW+jecOPJrzBzvzmLqrqo2wgXztcwTjA2pDQwMjEVMBMGA1UEChMMR2l0SHViLCBJbmMuMRkwFwYDVQQDExBUU0EgaW50ZXJtZWRpYXRlAhQXM9vW6f4O+h+oU/MBeIHmyUczUjAKBggqhkjOPQQDAwRnMGUCMBOPxwRMuFepN60TS0FRTg7EOBPhXCDmfqcBulXUO4X7QcOrnaJhpWfVL/Fe/E9EowIxAM6O38MW6Xh0UBY4BWqFK9pD5ZrrH30bjh+GRq616VvW9+S1eo7h0pXpycjg2Ubh/Q=="
+                  }
+                ]
+              }
+            },
+            "dsseEnvelope": {
+              "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCAic3ViamVjdCI6W3sidXJpIjoicGtnOmdpdGh1Yi9wYWludGVkd29sZi1haS9wYWludGVkd29sZi1vcGVuZ3JlcEB2MS4zMC4wJTJCcGFpbnRlZHdvbGYuMzYiLCAiZGlnZXN0Ijp7InNoYTEiOiJiYWRjMTU4NDhiNjY5YWE0MTQzODFkODY4OGI2ZGM4YTI5YWQzN2I4In19LCB7Im5hbWUiOiJidWlsZC1ldmlkZW5jZS5qc29uIiwgImRpZ2VzdCI6eyJzaGEyNTYiOiIzYmE0ZWVkMDhhOTc1YWEwNTRkMDQwN2RiNzIxZDgxYjhmZGZiODJkZDdiNDM5ZWEyNTJkMjQ2NzVhYzMwZWYxIn19LCB7Im5hbWUiOiJvcGVuZ3JlcC0xLjMwLjArcGFpbnRlZHdvbGYuMzYtZGFyd2luLWFybTY0LnRhci5neiIsICJkaWdlc3QiOnsic2hhMjU2IjoiM2U4MmEyZGQ3NDczMWFiMzQzZDZlY2FhMDNlMzJlYmI1OWVlZDI5YjA2NTkyY2JkNmZjZmI0OTRiM2M3MDY0YyJ9fSwgeyJuYW1lIjoicHJvdmVuYW5jZS5zaWdzdG9yZS5qc29uIiwgImRpZ2VzdCI6eyJzaGEyNTYiOiJiNzE5OWQwMzlmMGVlMzQ0N2I4NTFiODEzNzQyNzY4OWVhN2I0OTI3MDNlMDU5MjkyZjM5MzZmNDU4YzkyMTViIn19LCB7Im5hbWUiOiJyZWxlYXNlLmpzb24iLCAiZGlnZXN0Ijp7InNoYTI1NiI6IjFjOGI3MTNmZjNjZDZiZDRlNjBkNjQyY2VkNzY3N2I1OWVjZDdiZWEyODljMTRmZGI3ZjY3NzY2ZmJjODRkYTgifX1dLCAicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9hdHRlc3RhdGlvbi9yZWxlYXNlL3YwLjIiLCAicHJlZGljYXRlIjp7ImRhdGFiYXNlSWQiOiIzODU5ODI1OTAiLCAib3duZXJJZCI6IjI4OTIxMTI3OCIsICJwYWNrYWdlSWQiOiIxMzYyNzU4OTA4IiwgInB1cmwiOiJwa2c6Z2l0aHViL3BhaW50ZWR3b2xmLWFpL3BhaW50ZWR3b2xmLW9wZW5ncmVwQHYxLjMwLjAlMkJwYWludGVkd29sZi4zNiIsICJyZXBvc2l0b3J5IjoicGFpbnRlZHdvbGYtYWkvcGFpbnRlZHdvbGYtb3BlbmdyZXAiLCAicmVwb3NpdG9yeUlkIjoiMTM2Mjc1ODkwOCIsICJ0YWciOiJ2MS4zMC4wK3BhaW50ZWR3b2xmLjM2In19",
+              "payloadType": "application/vnd.in-toto+json",
+              "signatures": [
+                {
+                  "sig": "MEUCIFb9rjJbXplPlhcLu5h5PFByYeG03RMKfU0Rx1Mg1vTTAiEAifMstRmQAg8yeFXq30ylMtRM/ygWswzQVmEeBsGAxlI="
+                }
+              ]
+            }
+          },
+          "bundle_url": "",
+          "initiator": ""
+        },
+        "verificationResult": {
+          "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+          "signature": {
+            "certificate": {
+              "certificateIssuer": "CN=Fulcio Intermediate l1,O=GitHub\\, Inc.",
+              "subjectAlternativeName": "https://dotcom.releases.github.com"
+            }
+          },
+          "verifiedTimestamps": [
+            {
+              "type": "TimestampAuthority",
+              "uri": "timestamp.githubapp.com",
+              "timestamp": "2026-09-11T01:11:40Z"
+            }
+          ],
+          "verifiedIdentity": {
+            "subjectAlternativeName": {
+              "subjectAlternativeName": "",
+              "regexp": "^https://dotcom\\.releases\\.github\\.com$"
+            },
+            "issuer": {
+              "issuer": "",
+              "regexp": ".*"
+            }
+          },
+          "statement": {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "uri": "pkg:github/paintedwolf-ai/paintedwolf-opengrep@v1.30.0%2Bpaintedwolf.36",
+                "digest": {
+                  "sha1": "badc15848b669aa414381d8688b6dc8a29ad37b8"
+                }
+              },
+              {
+                "name": "build-evidence.json",
+                "digest": {
+                  "sha256": "3ba4eed08a975aa054d0407db721d81b8fdfb82dd7b439ea252d24675ac30ef1"
+                }
+              },
+              {
+                "name": "opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz",
+                "digest": {
+                  "sha256": "3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c"
+                }
+              },
+              {
+                "name": "provenance.sigstore.json",
+                "digest": {
+                  "sha256": "b7199d039f0ee3447b851b8137427689ea7b492703e059292f3936f458c9215b"
+                }
+              },
+              {
+                "name": "release.json",
+                "digest": {
+                  "sha256": "1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8"
+                }
+              }
+            ],
+            "predicateType": "https://in-toto.io/attestation/release/v0.2",
+            "predicate": {
+              "databaseId": "385982590",
+              "ownerId": "289211278",
+              "packageId": "1362758908",
+              "purl": "pkg:github/paintedwolf-ai/paintedwolf-opengrep@v1.30.0%2Bpaintedwolf.36",
+              "repository": "paintedwolf-ai/paintedwolf-opengrep",
+              "repositoryId": "1362758908",
+              "tag": "v1.30.0+paintedwolf.36"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "release_state": {
+    "url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/385982590",
+    "assets_url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/385982590/assets",
+    "upload_url": "https://uploads.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/385982590/assets{?name,label}",
+    "html_url": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/tag/v1.30.0%2Bpaintedwolf.36",
+    "id": 385982590,
+    "author": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+      "html_url": "https://github.com/apps/github-actions",
+      "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "node_id": "RE_kwDOUToM_M4XAaB-",
+    "tag_name": "v1.30.0+paintedwolf.36",
+    "target_commitish": "0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c",
+    "name": "v1.30.0+paintedwolf.36",
+    "draft": false,
+    "immutable": true,
+    "prerelease": false,
+    "created_at": "2026-09-09T23:22:23Z",
+    "updated_at": "2026-09-11T01:11:40Z",
+    "published_at": "2026-09-11T01:11:40Z",
+    "assets": [
+      {
+        "url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/assets/554130789",
+        "id": 554130789,
+        "node_id": "RA_kwDOUToM_M4hB11l",
+        "name": "build-evidence.json",
+        "label": "",
+        "uploader": {
+          "login": "github-actions[bot]",
+          "id": 41898282,
+          "node_id": "MDM6Qm90NDE4OTgyODI=",
+          "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+          "html_url": "https://github.com/apps/github-actions",
+          "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+          "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+          "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+          "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+          "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+          "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+          "type": "Bot",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "content_type": "application/json",
+        "state": "uploaded",
+        "size": 1639,
+        "digest": "sha256:3ba4eed08a975aa054d0407db721d81b8fdfb82dd7b439ea252d24675ac30ef1",
+        "download_count": 0,
+        "created_at": "2026-09-10T03:22:42Z",
+        "updated_at": "2026-09-10T03:22:42Z",
+        "browser_download_url": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0%2Bpaintedwolf.36/build-evidence.json"
+      },
+      {
+        "url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/assets/554130791",
+        "id": 554130791,
+        "node_id": "RA_kwDOUToM_M4hB11n",
+        "name": "opengrep-1.30.0+paintedwolf.36-darwin-arm64.tar.gz",
+        "label": "",
+        "uploader": {
+          "login": "github-actions[bot]",
+          "id": 41898282,
+          "node_id": "MDM6Qm90NDE4OTgyODI=",
+          "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+          "html_url": "https://github.com/apps/github-actions",
+          "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+          "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+          "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+          "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+          "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+          "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+          "type": "Bot",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "content_type": "application/x-gtar",
+        "state": "uploaded",
+        "size": 116736639,
+        "digest": "sha256:3e82a2dd74731ab343d6ecaa03e32ebb59eed29b06592cbd6fcfb494b3c7064c",
+        "download_count": 0,
+        "created_at": "2026-09-10T03:22:42Z",
+        "updated_at": "2026-09-10T03:22:47Z",
+        "browser_download_url": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0%2Bpaintedwolf.36/opengrep-1.30.0%2Bpaintedwolf.36-darwin-arm64.tar.gz"
+      },
+      {
+        "url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/assets/554130787",
+        "id": 554130787,
+        "node_id": "RA_kwDOUToM_M4hB11j",
+        "name": "provenance.sigstore.json",
+        "label": "",
+        "uploader": {
+          "login": "github-actions[bot]",
+          "id": 41898282,
+          "node_id": "MDM6Qm90NDE4OTgyODI=",
+          "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+          "html_url": "https://github.com/apps/github-actions",
+          "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+          "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+          "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+          "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+          "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+          "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+          "type": "Bot",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "content_type": "application/json",
+        "state": "uploaded",
+        "size": 12184,
+        "digest": "sha256:b7199d039f0ee3447b851b8137427689ea7b492703e059292f3936f458c9215b",
+        "download_count": 0,
+        "created_at": "2026-09-10T03:22:42Z",
+        "updated_at": "2026-09-10T03:22:42Z",
+        "browser_download_url": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0%2Bpaintedwolf.36/provenance.sigstore.json"
+      },
+      {
+        "url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/releases/assets/554130788",
+        "id": 554130788,
+        "node_id": "RA_kwDOUToM_M4hB11k",
+        "name": "release.json",
+        "label": "",
+        "uploader": {
+          "login": "github-actions[bot]",
+          "id": 41898282,
+          "node_id": "MDM6Qm90NDE4OTgyODI=",
+          "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+          "html_url": "https://github.com/apps/github-actions",
+          "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+          "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+          "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+          "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+          "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+          "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+          "type": "Bot",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "content_type": "application/json",
+        "state": "uploaded",
+        "size": 802,
+        "digest": "sha256:1c8b713ff3cd6bd4e60d642ced7677b59ecd7bea289c14fdb7f67766fbc84da8",
+        "download_count": 0,
+        "created_at": "2026-09-10T03:22:42Z",
+        "updated_at": "2026-09-10T03:22:42Z",
+        "browser_download_url": "https://github.com/paintedwolf-ai/paintedwolf-opengrep/releases/download/v1.30.0%2Bpaintedwolf.36/release.json"
+      }
+    ],
+    "tarball_url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/tarball/v1.30.0+paintedwolf.36",
+    "zipball_url": "https://api.github.com/repos/paintedwolf-ai/paintedwolf-opengrep/zipball/v1.30.0+paintedwolf.36",
+    "body": "Qualified Developer ID macOS arm64 engine.\n\nSource commit: 0a3cce0f92e9c060e4eb6ac9f5cf629a5096942c\nBuild run: https://github.com/paintedwolf-ai/paintedwolf-opengrep/actions/runs/34416645878/attempts/1\n\nArchive, release descriptor, and build evidence have GitHub-hosted provenance attestations. Confirm that immutable releases are enabled before publishing this complete draft.\n"
+  }
+}

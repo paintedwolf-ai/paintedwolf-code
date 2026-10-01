@@ -1,0 +1,5 @@
+code: boolexpr_parse
+message: |
+  Boolean expression parse error: {{detail}}.
+replacement: |
+  Fix the complete_when / entry_when / when expression syntax.

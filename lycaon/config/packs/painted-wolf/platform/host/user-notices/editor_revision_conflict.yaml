@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Editor changed
+message: The editor document changed before this action could finish.
+suggested_action: Retry the action against the current file.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - editor document changed

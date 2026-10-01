@@ -1,0 +1,10 @@
+# SourceSymbolKind — closed set of per-file outline symbols for navigation.
+name: SourceSymbolKind
+go_const_prefix: SourceSymbolKind
+values:
+  - id: function
+  - id: method
+  - id: type
+  - id: class
+  - id: constant
+  - id: heading

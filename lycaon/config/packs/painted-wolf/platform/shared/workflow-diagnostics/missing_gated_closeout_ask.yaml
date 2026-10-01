@@ -1,0 +1,5 @@
+code: missing_gated_closeout_ask
+message: |
+  Phase {{phase}} declares controls.closeout: gated but surface {{surface}} does not offer ask_user.
+replacement: |
+  Add ask_user to the resolved surface tools, or drop controls.closeout from {{phase}}. A gated phase holds a bare-prose finish, so it must leave the coordinator a way to raise a human fork.

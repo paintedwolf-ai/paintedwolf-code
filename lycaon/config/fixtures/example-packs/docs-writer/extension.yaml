@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/docs-writer
+name: Example — Docs Writer
+version: 1.0.0
+description: A worker that reads anything and writes only prose. The agent + profile pair.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

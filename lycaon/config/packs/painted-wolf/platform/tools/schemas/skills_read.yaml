@@ -1,0 +1,12 @@
+description: Read the most relevant skill for a described need, or a referenced file from that skill.
+schema:
+  type: object
+  properties:
+    need:
+      type: string
+      description: "Describe the procedure and target, not the whole task. Local AI selects a skill; check its relevance. An exact skill ID also works. Reuse that ID for resources."
+    resource:
+      type: string
+      description: Listed resource path from the resolved skill.
+  required: [need]
+  additionalProperties: false

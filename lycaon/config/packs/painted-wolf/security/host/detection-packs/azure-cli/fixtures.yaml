@@ -1,0 +1,102 @@
+fixtures:
+- rule: audit-disable
+  positive:
+  - az monitor diagnostic-settings delete --name audit --resource-id /subscriptions/x
+  - az policy assignment delete --name require-tags
+  negative:
+  - az monitor activity-log list
+  - az policy assignment list
+  - az monitor diagnostic-settings delete --name audit --help
+- rule: group-delete
+  positive:
+  - az group delete --name prod-rg --yes
+  negative:
+  - az group list
+  - az group show --name prod-rg
+  - az group delete --name prod-rg --help
+  - az group delete --name prod-rg -h
+  - az ad group delete --group contractors
+- rule: keyvault-purge
+  positive:
+  - az keyvault purge --name old-vault
+  negative:
+  - az keyvault delete --name old-vault
+  - az keyvault list
+  - az keyvault purge --name old-vault -h
+- rule: public-exposure
+  positive:
+  - az storage account update --name s --allow-blob-public-access true
+  - az sql server firewall-rule create --start-ip-address 0.0.0.0 --end-ip-address
+    255.255.255.255
+  negative:
+  - az storage account show --name s
+  - az network nsg rule list
+  - az storage account update --name s --allow-blob-public-access true --help
+- rule: iam-grant
+  positive:
+  - az ad sp create-for-rbac --name deploy-bot
+  - az role assignment create --assignee x --role Owner --scope /subscriptions/s
+  negative:
+  - az role assignment list
+  - az ad sp list --display-name deploy-bot
+- rule: secret-read
+  positive:
+  - az keyvault secret show --vault-name v --name prod-db
+  - az storage account keys list --account-name s
+  negative:
+  - az keyvault secret list --vault-name v
+  - az keyvault list
+- rule: resource-destroy
+  positive:
+  - az sql db delete --name prod --server s --resource-group rg --yes
+  - az disk delete --name olddisk --resource-group rg --yes
+  negative:
+  - az sql db list --server s --resource-group rg
+  - az disk list --resource-group rg
+- rule: service-disrupt
+  positive:
+  - az vm deallocate --name web-1 --resource-group rg
+  - az webapp stop --name api --resource-group rg
+  negative:
+  - az vm start --name web-1 --resource-group rg
+  - az vm show --name web-1 --resource-group rg
+- rule: session-credentials
+  positive:
+  - az account get-access-token
+  - az aks get-credentials --name c --resource-group rg
+  negative:
+  - az account list
+  - az aks show --name c --resource-group rg
+- rule: remote-execution
+  positive:
+  - az vm run-command invoke -g rg -n web --command-id RunShellScript --scripts "id"
+  - az aks command invoke -g rg -n prod --command "kubectl get pods"
+  - az container exec -g rg -n app --exec-command "/bin/sh"
+  negative:
+  - az vm list
+  - az vm run-command list -g rg -n web
+  - az vm run-command invoke --help
+- rule: protection-removal
+  positive:
+  - az lock delete --name protect-prod -g rg
+  - az backup protection disable --vault-name v -g rg --container-name c --item-name i --delete-backup-data true
+  negative:
+  - az lock list -g rg
+  - az lock create --name protect-prod -g rg --lock-type CanNotDelete
+  # Suspending protection without deleting the recovery points leaves them intact.
+  - az backup protection disable --vault-name v -g rg --container-name c --item-name i --delete-backup-data false
+- rule: deployment-apply
+  positive:
+  - az deployment group create -g rg --template-file main.bicep
+  - az deployment sub create --location eastus --template-file main.bicep
+  negative:
+  - az deployment group list -g rg
+  - az deployment group what-if -g rg --template-file main.bicep
+  - az deployment group create -g rg --template-file main.bicep --what-if
+- rule: credential-mint
+  positive:
+  - az ad app credential reset --id 00000000-0000-0000-0000-000000000000
+  - az ad sp credential reset --id 00000000-0000-0000-0000-000000000000
+  negative:
+  - az ad app credential list --id 00000000-0000-0000-0000-000000000000
+  - az ad app list

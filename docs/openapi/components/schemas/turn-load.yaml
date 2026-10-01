@@ -1,0 +1,281 @@
+openapi: 3.1.0
+info:
+  title: Turn load decisions
+  version: 0.0.0
+paths: {}
+components:
+  schemas:
+    TurnLoadTrigger:
+      type: string
+      description: >-
+        What asked the decision engine. A turn decision runs before the
+        model's first call of a visible user turn or a worker leg; a request
+        resolves request_tools text; a lookup resolves skills_read text; a
+        tool_event ranks the skills against the request and the first
+        loadable tool the turn called, and reads or points to the best one.
+      enum:
+        - turn
+        - request
+        - lookup
+        - tool_event
+
+    TurnLoadMatchBy:
+      type: string
+      description: >-
+        How a request or lookup resolved its text to names: the engine ranked
+        the candidates, the text spelled names out, or nothing matched.
+      enum:
+        - engine
+        - name
+        - none
+
+    TurnLoadEngine:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: The local decision model that answered.
+      properties:
+        name:
+          type: string
+          description: Engine name.
+        model:
+          type: string
+          description: Backbone model identifier.
+        head:
+          type: string
+          description: Decision head the answer came from.
+        label:
+          type: string
+          description: The receipt's one-line engine label, name/model#head.
+      required:
+        - name
+        - label
+
+    TurnLoadKind:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: The turn kind the engine chose, with its calibrated confidence.
+      properties:
+        value:
+          type: string
+        confidence:
+          type: number
+          format: double
+      required:
+        - value
+        - confidence
+
+    TurnLoadToolSource:
+      type: string
+      description: >-
+        Why a tool stands loaded: a turn decision predicted it, the model asked
+        for it through request_tools, or it is a declared companion of a
+        predicted tool.
+      enum:
+        - predicted
+        - requested
+        - companion
+
+    TurnLoadTool:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        One tool the chat's standing set offered beyond the surface floor when
+        the turn opened.
+      properties:
+        tool:
+          type: string
+        source:
+          $ref: "#/components/schemas/TurnLoadToolSource"
+        p:
+          type: number
+          format: double
+          description: The engine's P(true) that the request needed the tool, for a predicted tool.
+        need:
+          type: string
+          description: The request_tools text that loaded the tool, for a requested tool.
+        with:
+          type: string
+          description: The predicted tool this one loaded with, for a companion.
+        carried:
+          type: boolean
+          description: True when the tool joined on an earlier turn and stayed because the provider still held the prompt prefix.
+      required:
+        - tool
+        - source
+        - carried
+
+    TurnLoadCacheState:
+      type: string
+      description: >-
+        Whether the chat's standing prompt prefix is expected to be reusable when
+        the turn opened. Warm decisions retain tools and can restore needed
+        instructions; cold decisions can replace the standing surface.
+      enum:
+        - warm
+        - cold
+
+    TurnLoadColdReason:
+      type: string
+      description: >-
+        The recorded fact that made a turn cold: the chat's first decided turn,
+        a route that caches nothing, an idle gap past the prefix's lifetime, a
+        different provider or model, or a local runner
+        that no longer holds the model.
+      enum:
+        - first_turn
+        - uncached
+        - idle
+        - model_changed
+        - not_resident
+
+    TurnLoadBoundary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Expected reuse of the standing prefix when the turn opened; history compaction does not expire this tier.
+      properties:
+        cache:
+          $ref: "#/components/schemas/TurnLoadCacheState"
+        reason:
+          $ref: "#/components/schemas/TurnLoadColdReason"
+        idle_ms:
+          type: integer
+          format: int64
+          description: Time since the chat's last model call started, when there was one.
+        cold_after_ms:
+          type: integer
+          format: int64
+          description: How long the route keeps an idle prefix; omitted when the provider documents no figure.
+      required:
+        - cache
+
+    TurnLoadGuides:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: How many loadable instruction units the turn rendered and left out of the prompt.
+      properties:
+        rendered:
+          type: integer
+        omitted:
+          type: integer
+      required:
+        - rendered
+        - omitted
+
+    TurnLoadMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: How a request_tools or skills_read text resolved to names.
+      properties:
+        need:
+          type: string
+          description: The text the model wrote.
+        by:
+          $ref: "#/components/schemas/TurnLoadMatchBy"
+        names:
+          type: array
+          items:
+            type: string
+          description: The tools or skills the text resolved to, best first.
+      required:
+        - need
+        - by
+        - names
+
+    TurnLoadSkill:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: The skill automatically read for this turn.
+      properties:
+        name:
+          type: string
+        score:
+          type: number
+          format: double
+      required: [name, score]
+
+    TurnLoad:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        One decision the local decision engine recorded for a chat: what it
+        offered a turn before the model's first call, or how it
+        matched a request the model made. The transcript
+        page carries the decisions of the turns it shows; the turn_load event
+        carries each one as it lands. An abstained decision is recorded like
+        any other, with its reason.
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        trigger:
+          $ref: "#/components/schemas/TurnLoadTrigger"
+        opening_message_id:
+          type: string
+          format: uuid
+          description: The user message that opened the turn the decision belongs to.
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >-
+            The model call that asked: the request_tools or skills_read call, or the
+            loadable tool call of a tool_event. Omitted for a turn decision.
+        engine:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadEngine"
+          description: Present when an engine answered.
+        abstained:
+          type: boolean
+          description: True when no engine answered; reason says why.
+        reason:
+          type: string
+        elapsed_ms:
+          type: integer
+          format: int64
+          description: Wall time of the decision.
+        kind:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadKind"
+        floor:
+          type: array
+          items:
+            type: string
+          description: Tools the surface offers on every call of the turn, sorted by name; empty outside a turn decision.
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/TurnLoadTool"
+          description: >-
+            The standing tools beyond the floor once a turn decision applied,
+            sorted by name; empty outside a turn decision.
+        boundary:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadBoundary"
+          description: Present on a turn decision.
+        preloaded_skill:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadSkill"
+          description: >-
+            The skill whose body the turn carries: read at the turn decision, or by
+            the tool_event that this receipt records.
+        guides:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadGuides"
+        match:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TurnLoadMatch"
+      required:
+        - session_id
+        - trigger
+        - opening_message_id
+        - abstained
+        - elapsed_ms
+        - floor
+        - tools

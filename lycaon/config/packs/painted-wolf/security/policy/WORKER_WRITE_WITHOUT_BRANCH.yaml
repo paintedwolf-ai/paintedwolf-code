@@ -1,0 +1,34 @@
+oar: '1.0'
+id: WORKER_WRITE_WITHOUT_BRANCH
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "WORKER_WRITE_WITHOUT_BRANCH"
+effect: block
+copy:
+  what: Worker mutation on **{{ paintedwolf.path }}** blocked — no private write branch for this job.
+  cause: This worker job has no active private write branch.
+  why: Mutations require a claimed write branch; otherwise they would hit the live project tree.
+  fix: Stop mutations and report the missing write workspace through an available finding or completion channel.
+    The coordinator or host must establish a valid write workspace before mutation can resume; changing a tool
+    argument cannot repair this state.
+  instead: Report the missing worker write workspace
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_write
+x-paintedwolf-message: worker mutation blocked — no write branch is active
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    agent_type: implementer
+    job_id: abc123
+    path: src/main.go
+    profile: implement
+    tool: write
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_WRITE_WITHOUT_BRANCH'

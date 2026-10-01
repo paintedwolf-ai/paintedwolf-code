@@ -1,0 +1,38 @@
+oar: '1.0'
+id: JQ_DOCUMENT_DEPTH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - jq
+  - jq_edit
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_depth
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "JQ_DOCUMENT_DEPTH"
+effect: block
+copy:
+  what: jq path {{ paintedwolf.path }} exceeds max_depth {{ paintedwolf.max_depth }}.
+  cause: Deeply nested YAML or TOML exceeds the bounded decoder limit.
+  why: Depth caps prevent runaway parse cost on hostile or accidental config towers.
+  fix: The full input must decode before a jq selector can run. Use an offered raw-text read for inspection,
+    or select a genuinely shallower intended document. Do not mutate or flatten the source merely to bypass
+    the decoder limit.
+  instead: Choose valid bounded input or inspect raw text; a shallower query does not repair decode depth
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq document exceeds max depth
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    max_depth: '32'
+    path: deep.yaml
+    profile: implement
+    tool: jq
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: JQ_DOCUMENT_DEPTH'

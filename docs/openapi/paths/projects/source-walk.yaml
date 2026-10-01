@@ -1,0 +1,123 @@
+paths:
+  /v1/projects/{id}/source/walk-summary:
+    get:
+      tags: [projects]
+      operationId: getProjectSourceWalkSummary
+      summary: Read complete Walk chapter counts for visible transcript turns
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: session_id
+        in: query
+        required: true
+        schema: {type: string, format: uuid}
+      - name: message_ids
+        in: query
+        required: true
+        description: Comma-separated opening user message ids, at most 100.
+        schema: {type: string}
+      responses:
+        '200':
+          description: Complete grouped step and distinct item counts for requested turns
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-walk.yaml#/components/schemas/SourceWalkSummary
+        '400':
+          description: Missing or invalid session_id or message_ids
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/source/walk:
+    get:
+      tags:
+      - projects
+      operationId: listProjectSourceWalk
+      x-multi-stream-list: true
+      summary: List Walk effects by lens baseline
+      description: |
+        File-first cross-session groups. baseline is a query parameter only
+        (presentation default; turn:session; turn:session,turn; session:id;
+        commit; pin:id). `turn:{session_id}` names that chat's current user
+        turn; the host resolves the ordinal in the same read, and the
+        response's baseline spells it, so later pages and per-file
+        comparisons address the turn this page listed.
+        A chat baseline (turn or session) reads that chat's workspace:
+        session_id may be omitted and, when sent, must name the same chat.
+        The presentation baseline lists what is new since the reader last
+        looked at each file: every visible primary-tree effect above the file's
+        watermark. Files whose latest look is still current are listed by
+        GET /source/seen instead.
+        Commit mode pages Git status paths, including paths without recorded
+        history; other modes page observed effects, newest first. Both page
+        with cursor/next_cursor. A cursor continues only the baseline,
+        workspace, and filters of the page that issued it; a turn baseline
+        continues the turn the response spelled. Commit rows carry current
+        comparison metadata and at most 100 recent recorded effects.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: baseline
+        in: query
+        required: false
+        schema: {type: string, default: presentation}
+      - name: cursor
+        in: query
+        required: false
+        description: Opaque next_cursor from the preceding page. Omit for the newest page.
+        schema: {type: string}
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      - name: include_outside_changes
+        in: query
+        required: false
+        description: |
+          Session baseline only. Widens the page to the outside changes no
+          chat owns within the session's span, from its creation until it was
+          archived. Other chats' operations stay out. Rejected on any other
+          baseline.
+        schema: {type: boolean, default: false}
+      - name: mark_user_edits
+        in: query
+        required: false
+        description: |
+          False leaves the person's own writes out of the range, so a file only
+          they changed is not listed and the rows carry no user effects. The
+          next_cursor still pages the unfiltered range. Rejected
+          on a commit baseline, because Git records no author.
+        schema: {type: boolean, default: true}
+      responses:
+        '200':
+          description: Walk lens
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-walk.yaml#/components/schemas/SourceWalkResponse
+        '400':
+          description: Invalid baseline or pagination
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict

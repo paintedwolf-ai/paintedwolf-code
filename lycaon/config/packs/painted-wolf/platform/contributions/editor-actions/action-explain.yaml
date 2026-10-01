@@ -1,0 +1,8 @@
+id: painted-wolf/platform:action-explain
+title: "Explain selection"
+target:
+  kind: "selection"
+  required: true
+execution:
+  preset: "inspect_file"
+  prompt_ref: "guidance/editor/explain"

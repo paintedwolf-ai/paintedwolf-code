@@ -1,0 +1,63 @@
+fixtures:
+- rule: job-node-delete
+  positive:
+  - java -jar jenkins-cli.jar -s http://jenkins.internal delete-job legacy-pipeline
+  - java -jar jenkins-cli.jar -s http://jenkins.internal delete-node build-agent-3
+  - java -jar jenkins-cli.jar -s http://jenkins.internal delete-builds legacy-pipeline 1-50
+  - java -jar /opt/jenkins/jenkins-cli.jar -s http://jenkins.internal delete-job legacy-pipeline
+  - sudo java -jar jenkins-cli.jar -s http://jenkins.internal delete-job legacy-pipeline
+  negative:
+  - java -jar jenkins-cli.jar -s http://jenkins.internal list-jobs
+  - java -jar jenkins-cli.jar -s http://jenkins.internal get-job legacy-pipeline
+  - java -jar app.jar delete-job
+  - java -jar jenkins-cli.jar -s http://jenkins.internal console legacy-pipeline
+  - java -jar jenkins-cli.jar -s http://jenkins.internal delete-job legacy-pipeline --help
+  - python jenkins_cli.py delete-job legacy-pipeline
+  - java -version
+- rule: azure-devops-delete
+  positive:
+  - az repos delete --id 0d58f562-4a10-495d-94d7-7ac61a22d7cc --yes
+  - az pipelines delete --id 42 --yes
+  - az pipelines delete --name legacy-pipeline --yes
+  - az repos delete --id 0d58f562-4a10-495d-94d7-7ac61a22d7cc
+  - sudo az repos delete --id 0d58f562-4a10-495d-94d7-7ac61a22d7cc --yes
+  negative:
+  - az repos list
+  - az pipelines list
+  - az repos show --id 0d58f562-4a10-495d-94d7-7ac61a22d7cc
+  - az repos delete --id 0d58f562-4a10-495d-94d7-7ac61a22d7cc --help
+  - az pipelines delete --id 42 --yes -h
+- rule: secret-store-delete
+  positive:
+  - circleci context delete my-context
+  - circleci context rm my-context
+  - circleci context secret delete my-context
+  - bk secret delete --cluster-uuid abc --secret-id def --yes
+  - sudo circleci context delete my-context
+  negative:
+  - circleci context list
+  - circleci context secret list my-context
+  - circleci context create my-context
+  - bk secret delete --cluster-uuid abc --secret-id def
+  - bk secret list --cluster-uuid abc
+  - circleci context delete my-context --help
+- rule: runner-token-mint
+  positive:
+  - circleci runner token create my-namespace/my-class
+  - sudo circleci runner token create my-namespace/my-class
+  negative:
+  - circleci runner token list my-namespace/my-class
+  - circleci runner instance list
+  - circleci runner token create my-namespace/my-class --help
+- rule: namespace-cluster-delete
+  positive:
+  - circleci namespace delete my-namespace
+  - circleci namespace rm my-namespace
+  - bk cluster delete my-cluster-uuid --yes
+  - sudo circleci namespace delete my-namespace
+  negative:
+  - circleci namespace create my-namespace my-org
+  - circleci namespace get my-namespace
+  - bk cluster delete my-cluster-uuid
+  - bk cluster list
+  - circleci namespace delete my-namespace --help

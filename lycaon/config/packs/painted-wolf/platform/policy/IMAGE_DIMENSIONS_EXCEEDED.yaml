@@ -1,0 +1,40 @@
+oar: '1.0'
+id: IMAGE_DIMENSIONS_EXCEEDED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_image
+  - fetch_url
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.width
+  - paintedwolf.height
+  - paintedwolf.max_dimension
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "IMAGE_DIMENSIONS_EXCEEDED"
+effect: block
+copy:
+  what: '{{ tool }} cannot display {{ paintedwolf.path }} because its dimensions ({{ paintedwolf.width }}x{{ paintedwolf.height }}) exceed {{ paintedwolf.max_dimension }}px.'
+  cause: Image dimensions exceed the maximum perceivable ceiling.
+  why: Visual perception models have bounded input dimensions.
+  fix: Scale down the image before viewing.
+  instead: Branch on Code IMAGE_DIMENSIONS_EXCEEDED; resize the image to fit within {{ paintedwolf.max_dimension }}px
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
+x-paintedwolf-message: view_image dimensions exceeded ceiling
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    height: 6000
+    max_dimension: 4096
+    path: assets/huge.png
+    profile: coordinator
+    tool: view_image
+    width: 5000
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: IMAGE_DIMENSIONS_EXCEEDED'

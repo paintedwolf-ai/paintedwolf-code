@@ -1,0 +1,5 @@
+id: backup-recovery
+label: Backups
+description: >-
+  Backup tooling (restic, Borg, Velero, Time Machine) that deletes stored
+  snapshots or stops new backups from being taken.

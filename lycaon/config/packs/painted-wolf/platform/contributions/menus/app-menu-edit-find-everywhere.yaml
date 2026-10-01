@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-find-everywhere
+slot: "app_menu.edit"
+command: painted-wolf/platform:find-everywhere
+group: "0"
+order: 4
+label: "Find everywhere"

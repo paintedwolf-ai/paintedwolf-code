@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-undo-lifecycle
+command: painted-wolf/platform:files-undo-lifecycle
+scope: "files"
+allow_in_input: false
+bindings:
+  macos:
+    - "Mod+Z"
+  windows:
+    - "Mod+Z"
+  linux:
+    - "Mod+Z"

@@ -1,0 +1,38 @@
+language: ocaml
+comment:
+- (*
+- '*)'
+limits: No default security model; target selection and silent context-only examples are regression-tested.
+cases:
+- name: shell-input-context-only
+  file: sample.ml
+  source: |
+    let run () = Sys.command (read_line ())
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.ocaml
+- name: shell-input-safe
+  file: sample.ml
+  source: |
+    let run () = Sys.command "echo ready"
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.ocaml
+- name: unsafe-marshal-context-only
+  file: sample.ml
+  source: |
+    let decode data = Marshal.from_string data 0
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.ocaml
+- name: unsafe-marshal-safe
+  file: sample.ml
+  source: |
+    let decode data = Yojson.Basic.from_string data
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.ocaml

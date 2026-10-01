@@ -1,0 +1,112 @@
+components:
+  schemas:
+    FileBriefingRequest:
+      x-go-generate: true
+      type: object
+      required: [root_id, path, presentation, trigger]
+      additionalProperties: false
+      description: Exact file revision to brief; presentation fields are mutually exclusive.
+      properties:
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        presentation:
+          type: string
+          enum: [current, document, version]
+        trigger:
+          type: string
+          enum: [automatic, manual]
+        worker_id: {type: string, format: uuid}
+        document_id: {type: string, format: uuid}
+        document_revision: {type: integer, minimum: 1}
+        version_id:
+          type: string
+          format: uuid
+          description: Required for version; the host validates the project, root, and path association.
+    FileBriefingPreview:
+      x-go-generate: true
+      type: object
+      required: [line_count]
+      additionalProperties: false
+      description: Deterministic file facts available before AI generation completes.
+      properties:
+        language: {type: string}
+        line_count: {type: integer, minimum: 0}
+    FileBriefingLocation:
+      x-go-generate: true
+      type: object
+      required: [line, name]
+      additionalProperties: false
+      description: Host-derived declaration location used for exact inline code navigation.
+      properties:
+        line: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1}
+        kind: {type: string}
+    FileBriefingSection:
+      x-go-generate: true
+      type: object
+      required: [kind, text]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [purpose, structure, key_behavior]
+        text: {type: string, maxLength: 8192}
+    FileBriefingResponse:
+      x-go-generate: true
+      type: object
+      required: [target_key, attempt_id, root_id, path, presentation, source_sha256, status, preview, locations, sections, fallback_text, truncated, updated_at]
+      additionalProperties: false
+      properties:
+        target_key: {type: string}
+        attempt_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        presentation:
+          type: string
+          enum: [current, document, version]
+        source_sha256: {type: string}
+        status: {type: string, enum: [preview, pending, complete, failed]}
+        preview: {$ref: '#/components/schemas/FileBriefingPreview'}
+        locations:
+          type: array
+          description: Bounded declaration inventory supplied to the summarizer; exact unique names may navigate inline.
+          items: {$ref: '#/components/schemas/FileBriefingLocation'}
+        sections:
+          type: array
+          items: {$ref: '#/components/schemas/FileBriefingSection'}
+        fallback_text:
+          type: string
+          maxLength: 8192
+          description: Bounded terminal explanation when structured sections are unavailable.
+        truncated: {type: boolean}
+        error: {type: string}
+        updated_at: { x-go-type: "string", type: string, format: date-time}
+    FileBriefingEvent:
+      x-go-generate: true
+      type: object
+      required: [project_id, target_key, attempt_id, root_id, path, presentation, source_sha256, status, fallback_text, truncated, updated_at]
+      additionalProperties: false
+      description: Revision-keyed briefing update with delta, result, or error.
+      properties:
+        project_id: {type: string, format: uuid}
+        target_key: {type: string}
+        attempt_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        presentation:
+          type: string
+          enum: [current, document, version]
+        source_sha256: {type: string}
+        status: {type: string, enum: [preview, pending, streaming, complete, failed]}
+        preview: { x-go-pointer: true, $ref: '#/components/schemas/FileBriefingPreview'}
+        locations:
+          type: array
+          items: {$ref: '#/components/schemas/FileBriefingLocation'}
+        sections:
+          type: array
+          items: {$ref: '#/components/schemas/FileBriefingSection'}
+        fallback_text: {type: string, maxLength: 8192}
+        delta: {type: string, maxLength: 8192}
+        truncated: {type: boolean}
+        error: {type: string}
+        updated_at: { x-go-type: "string", type: string, format: date-time}

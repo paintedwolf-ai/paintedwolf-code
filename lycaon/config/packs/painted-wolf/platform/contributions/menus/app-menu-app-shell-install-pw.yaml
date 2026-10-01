@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-app-shell-install-pw
+slot: "app_menu.app"
+command: painted-wolf/platform:shell-install-pw
+group: "0"
+order: 2

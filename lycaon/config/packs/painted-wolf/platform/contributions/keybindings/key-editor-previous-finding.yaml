@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-previous-finding
+command: painted-wolf/platform:editor-previous-finding
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Shift+F8"
+  windows:
+    - "Shift+F8"
+  linux:
+    - "Shift+F8"

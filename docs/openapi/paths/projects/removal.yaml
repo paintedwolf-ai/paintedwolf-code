@@ -1,0 +1,86 @@
+paths:
+  /v1/projects/{id}/removal-assessment:
+    get:
+      tags: [projects]
+      operationId: assessProjectRemoval
+      summary: Assess optional extension cleanup for project deletion
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '200':
+          description: Host-owned removal evidence or outcome
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/removal.yaml#/components/schemas/ProjectRemovalAssessment
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+
+  /v1/projects/{id}/removals:
+    post:
+      tags: [projects]
+      operationId: createProjectRemoval
+      x-person-action: record
+      summary: Delete a project and settle reviewed optional extension cleanup
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/removal.yaml#/components/schemas/ProjectRemovalRequest
+      responses:
+        '202':
+          description: Host-owned removal evidence or outcome
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/removal.yaml#/components/schemas/ProjectRemovalResult
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/projects/{id}/removals/{operation_id}:
+    get:
+      tags: [projects]
+      operationId: getProjectRemoval
+      summary: Read the recorded project removal outcome
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: operation_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Host-owned removal evidence or outcome
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/removal.yaml#/components/schemas/ProjectRemovalResult
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

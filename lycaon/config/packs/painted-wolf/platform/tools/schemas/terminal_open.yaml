@@ -1,0 +1,160 @@
+tags: [terminal]
+description: >-
+  Live host terminal (pty): run a command-class argv command. Prefer command when you
+  only need exit code/tail for yourself. Use this tool when the session must be
+  held or the user should see the screen — then terminal_snapshot. Returns an id
+  held across turns plus the requested observation (screen by default). Never
+  supply known plaintext via later terminal_send — use env/credential helpers.
+  An opaque {{paintedwolf-secret:…}} reference may be sent when an interactive prompt is the
+  only supported input; the host resolves and screens it without showing the value.
+  Takes the
+  same capability_request as command except network destinations: a held session cannot hold
+  one-action direct network authority, so run that under command.
+schema:
+  type: object
+  properties:
+    secret_use:
+      type: object
+      additionalProperties: false
+      required: [services]
+      description: >-
+        Request one reusable permission for the managed secrets used by this
+        process and their later use with the named HTTP services. The person
+        reviews both process access and these declared service addresses.
+        This does not claim the process or a daemon sends only to those services.
+        Put connection and socket requirements in capability_request as usual.
+      properties:
+        services:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 1024
+          description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
+    command:
+      type: string
+      description: >-
+        Single argv command line — one program, no shell. A `&&`/`||`/`;`
+        sequence is rejected here: a pty holds one process.
+    cwd:
+      type: string
+      description: >-
+        Repo-relative working directory for this call. Use `@label` or
+        `@label/sub/path` for a non-primary project root. On a write worker,
+        resolved under the private branch (subdir allowed). Empty = branch root
+        (or active root when not on a worker). Must be a directory in read scope.
+        Do not use `cd <directory> && <command>` — pass the directory here and
+        keep the command bare. Initial Dir for the pty; then it tracks cwd.
+    winsize:
+      type: object
+      properties:
+        cols:
+          description: "Pty column count."
+          type: integer
+          minimum: 1
+          maximum: 240
+        rows:
+          description: "Pty row count."
+          type: integer
+          minimum: 1
+          maximum: 120
+      required: [cols, rows]
+      additionalProperties: false
+      description: Optional window size; default 80x24.
+    env:
+      type: object
+      additionalProperties:
+        type: string
+      description: Optional inline env (sanitized; cannot set blocked keys).
+    observe:
+      type: string
+      enum: [ack, delta, screen]
+      default: screen
+      description: "Observation returned after opening: ack only, one output delta, or the settled VT screen."
+    socks_proxy:
+      type: boolean
+      description: >-
+        Inject ALL_PROXY for mediated non-HTTP TCP (SOCKS5h). HTTP(S) already uses
+        HTTP_PROXY under default confinement — omit this unless the client needs
+        SOCKS. Does not widen the sandbox.
+    capability_request:
+      type: object
+      description: >-
+        Declares confinement this invocation needs. A dev server or TUI that binds
+        a named port needs local_listen on this call — the pty gets no listener
+        authority by default and the bind fails as the child's own errno. Other
+        fields: host_resources, socket_paths, loopback_connect, write_root,
+        read_path. Network destinations are not available here; run them under command.
+        Omit for ordinary execution.
+      properties:
+        host_resources:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: string
+          description: Available host-resource ids; the host resolves their connection routes.
+        socket_paths:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+          description: Absolute AF_UNIX socket paths (exact, not globs).
+        local_listen:
+          type: object
+          description: >-
+            Listener authority (bind + accept) for a dev server, watcher, or TUI
+            this terminal holds. Put it on the terminal_open that binds a named
+            port; a bind naming no port is a raw socket, not a server. Egress
+            stays mediated. Declare ports to narrow; {} asks for any local port.
+            The bind address is not bounded, so this is "a local server", not
+            "loopback only".
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact local ports to narrow the profile to.
+          additionalProperties: false
+        loopback_connect:
+          type: object
+          description: >-
+            Authority to connect to services on this machine, without widening
+            external egress. Use with local_listen when this terminal both
+            serves and calls a port. Binding does not imply connecting.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact destination ports on this machine.
+          additionalProperties: false
+        write_root:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute root this terminal must write outside its project and
+            default cache roots. Reviewed before spawn; a credential-store path
+            grants exactly that file, not sibling temp or lock names. Files
+            agents load as instructions or settings (AGENTS.md, project skills,
+            `.paintedwolf` settings) take a `command` invocation instead.
+        read_path:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute protected path this terminal must read (SSH or signing
+            key). Reviewed before spawn; covers exactly the declared file.
+      additionalProperties: false
+      minProperties: 1
+  required: [command]
+  additionalProperties: false

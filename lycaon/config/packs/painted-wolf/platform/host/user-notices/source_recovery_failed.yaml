@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Couldn\u2019t preserve or restore recovery data"
+retryable: true
+message: "The file operation could not complete because recovery data is unavailable. {{ reason }}"
+suggested_action: "Check available disk space and file permissions, then retry."
+scenarios:
+  - id: default
+    vars: {reason: "The disk is full."}
+    expect_contains:
+      - "The file operation could not complete because recovery data is unavailable"

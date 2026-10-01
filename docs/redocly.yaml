@@ -1,0 +1,28 @@
+extends:
+  - recommended
+
+rules:
+  operation-4xx-response: warn
+  no-unused-components: warn
+  rule/json-properties-snake-case:
+    subject:
+      type: Schema
+      property: properties
+    assertions:
+      casing: snake_case
+    severity: warn
+    message: JSON wire properties must use snake_case (see AGENTS.md).
+  rule/stub-operation-marked:
+    subject:
+      type: Operation
+      filterInParentKeys:
+        - x-paintedwolf-status
+    assertions:
+      enum:
+        - stub
+    severity: warn
+    message: x-paintedwolf-status must be stub when present on stub routes.
+
+apis:
+  lycaon@v1:
+    root: docs/openapi/root.yaml

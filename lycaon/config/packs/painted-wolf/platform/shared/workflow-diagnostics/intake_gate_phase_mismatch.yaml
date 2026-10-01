@@ -1,0 +1,5 @@
+code: intake_gate_phase_mismatch
+message: |
+  Intake gate {{leaf}} does not match phase {{phase}}.
+replacement: |
+  Align hitl_consulted / intake keys with the phase id.

@@ -1,0 +1,15 @@
+components:
+  schemas:
+    FindingExportFormat:
+      type: string
+      enum: [sarif, openvex]
+    FindingExportRequest:
+      x-go-generate: true
+      type: object
+      required: [format]
+      additionalProperties: false
+      properties:
+        format:
+          $ref: "#/components/schemas/FindingExportFormat"
+        query:
+          $ref: ledger.yaml#/components/schemas/FindingLedgerQueryRequest

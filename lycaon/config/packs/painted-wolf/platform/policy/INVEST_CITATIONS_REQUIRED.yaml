@@ -1,0 +1,37 @@
+oar: '1.0'
+id: INVEST_CITATIONS_REQUIRED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.observed_paths_count
+    - paintedwolf.observed_paths_omitted
+    - paintedwolf.observed_paths_sample
+    - paintedwolf.observed_urls_count
+    - paintedwolf.observed_urls_sample
+    - paintedwolf.reject_observation
+    - paintedwolf.surface
+when: paintedwolf.surface == "implement_investigate" && paintedwolf.reject_observation == "citations_required"
+effect: warn
+copy:
+  what: The report has no cited_evidence or cited_urls although recorded tool observations are available.
+  cause: The report omitted typed references to observed tool evidence.
+  why: 'Observed sample: {{ paintedwolf.observed_paths_sample }}{% if paintedwolf.observed_paths_omitted %} +{{ paintedwolf.observed_paths_omitted }} more path(s){% endif %}{% if paintedwolf.observed_urls_sample %}; URLs: {{ paintedwolf.observed_urls_sample }}{% endif %}'
+  fix: The host preserves the report and attaches a bounded sample of observed paths or URLs when available, without requesting another model turn.
+  instead: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_investigate
+x-paintedwolf-evidence:
+  ui_label: Typed citations
+  ui_check_id: typed_citations
+x-paintedwolf-message: Investigate closeout cited nothing — host binds observed evidence
+x-paintedwolf-scenarios:
+  - id: missing_citations
+    vars:
+      observed_paths_count: 3
+      observed_paths_omitted: 2
+      observed_paths_sample: README.md
+      observed_urls_count: 0
+    expect_contains:
+      - 'Tool feedback'
+      - 'Code: INVEST_CITATIONS_REQUIRED'

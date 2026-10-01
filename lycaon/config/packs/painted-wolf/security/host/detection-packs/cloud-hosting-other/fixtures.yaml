@@ -1,0 +1,49 @@
+fixtures:
+- rule: resource-destroy
+  positive:
+  - doctl kubernetes cluster delete prod --force
+  - hcloud server delete web-1
+  - linode-cli linodes delete 123456
+  - scw instance server terminate 11111111-1111-1111-1111-111111111111
+  - vultr-cli instance destroy 2b511614-fb2f-46b1-8dbd-9df1b8f3b58a
+  - exo compute instance delete build-runner
+  - civo instance rm build-runner
+  - upctl server delete 00838afc-1c15-4a6d-b0c3-c4d0d5f8c1a1
+  - upctl storage delete 01d4fcd4-e446-433b-8a9c-551a1284952e
+  - sudo /usr/local/bin/doctl kubernetes cluster delete prod --force
+  negative:
+  - doctl kubernetes cluster list
+  - hcloud server describe web-1
+  - linode-cli linodes list
+  - scw instance server list
+  - vultr-cli instance list
+  - doctl kubernetes cluster delete prod --force --help
+  - civo instance show build-runner
+  - kubectl delete pod app-1
+  - doctl compute droplet undelete-protection status
+  - doctl apps spec get rmspec
+  - upctl server list
+  # The binary is `upctl`; `upcloud` is not a program.
+  - upcloud server destroy 00838afc-1c15-4a6d-b0c3-c4d0d5f8c1a1
+- rule: access-token-issue
+  positive:
+  - doctl registry login
+  - scw iam api-key create
+  - linode-cli profile token-create --scopes '*' --label ci
+  - hcloud ssh-key create --name id-ed25519 --public-key-from-file id_ed25519.pub
+  - exo iam api-key create ci-key sos-read
+  - env CI=true doctl registry login
+  negative:
+  - doctl account get
+  - scw iam api-key list
+  - doctl registry login --help
+  - linode-cli profile tokens-list
+  - hcloud ssh-key list
+  - doctl kubernetes cluster kubeconfig token-cache-clear
+  - scw iam api-key update abc123 --name ci
+  # linode-cli has no `token` group — tokens live under `profile`, hyphenated.
+  - linode-cli token create --label ci
+  # vultr-cli mints no API keys; Vultr issues them in the customer portal.
+  - vultr-cli tokens create --name ci-token
+  # civo has no `registry` command group and no `kubernetes-manifest` verb.
+  - civo registry kubernetes-manifest my-registry

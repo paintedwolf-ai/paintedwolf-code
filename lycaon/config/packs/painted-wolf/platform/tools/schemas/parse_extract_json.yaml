@@ -1,0 +1,12 @@
+description: Extract JSON.
+schema:
+  type: object
+  properties:
+    raw:
+      type: string
+      description: Text containing JSON.
+    schema:
+      type: string
+      description: Optional JSON Schema.
+  required: [raw]
+  additionalProperties: false

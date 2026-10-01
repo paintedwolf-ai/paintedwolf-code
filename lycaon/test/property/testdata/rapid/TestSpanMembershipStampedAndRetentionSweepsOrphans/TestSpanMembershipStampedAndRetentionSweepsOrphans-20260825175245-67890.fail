@@ -1,0 +1,23 @@
+# 2026/08/25 17:52:45.808307 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw run_count: 1
+# 2026/08/25 17:52:45.808549 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw msg_count: 1
+# 2026/08/25 17:52:45.808552 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw run_idx: 0
+# 2026/08/25 17:52:45.808554 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw role: "user"
+# 2026/08/25 17:52:45.808558 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw kind: ""
+# 2026/08/25 17:52:45.808565 [TestSpanMembershipStampedAndRetentionSweepsOrphans] [rapid] draw content: ""
+# 2026/08/25 17:52:45.808675 [TestSpanMembershipStampedAndRetentionSweepsOrphans] append message: load evidence ledger: SQL logic error: no such column: body (1)
+# 
+v0.4.8#9317919897219480450
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

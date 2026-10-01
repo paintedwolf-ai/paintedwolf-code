@@ -1,0 +1,12 @@
+tags: [workers]
+description: Cancel a pending or running worker job; running workers get a prose-only cancellation report before the leg ends
+schema:
+  type: object
+  properties:
+    job_id:
+      type: string
+      description: Worker job id from task() enqueue or pulse roster
+    reason:
+      type: string
+      description: Optional cancellation reason for the transcript
+  required: [job_id]

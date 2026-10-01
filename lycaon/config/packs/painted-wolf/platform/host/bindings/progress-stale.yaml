@@ -1,0 +1,13 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': progress.stale
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-progress-stale
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - user abort left open checklist steps
+  required:
+  - update_progress

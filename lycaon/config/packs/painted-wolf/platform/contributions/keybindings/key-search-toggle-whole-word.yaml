@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-toggle-whole-word
+command: painted-wolf/platform:search-toggle-whole-word
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+W"
+  windows:
+    - "Alt+W"
+  linux:
+    - "Alt+W"

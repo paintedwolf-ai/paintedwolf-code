@@ -1,0 +1,67 @@
+{
+  "id": "ops-on-error-substitutes-another-rules-identifiers",
+  "title": "on_error naming a rule blocks under that rule's identifiers, and the effect is still block",
+  "covers": [
+    "OAR-OPS-5"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "tool.pre_invoke",
+      "id": "A_DETECTOR",
+      "effect": "warn",
+      "detector": {
+        "ref": "detector://error"
+      },
+      "on_error": "FALLBACK"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "FALLBACK",
+      "effect": "nudge"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "block",
+    "code": "FALLBACK",
+    "rule": "oar.test/FALLBACK",
+    "applied": [
+      "oar.test/FALLBACK:fired",
+      "oar.test/A_DETECTOR:errored"
+    ]
+  }
+}

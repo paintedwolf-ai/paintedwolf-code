@@ -1,0 +1,2286 @@
+rules:
+- id: lycaon.rust.tls-verification-disabled
+  languages:
+  - rust
+  severity: ERROR
+  message: TLS peer verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - rust
+    references:
+    - https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html
+    - https://docs.rs/reqwest/latest/reqwest/blocking/struct.ClientBuilder.html
+    notes: Requires imported reqwest builder types or Client::builder and ClientBuilder::new factories.
+      Models the documented fluent APIs separately for asynchronous and blocking builders, including
+      current TLS-prefixed methods. Borrowing ends owned-builder provenance; traits on borrowed builders
+      cannot acquire native method authority. Unknown transformations produce a bounded coverage
+      diagnostic instead of a security finding.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'fn $FUNC(..., $BUILDER: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: reqwest
+        symbol:
+        - ClientBuilder
+    - focus-metavariable: $BUILDER
+    exact: true
+    model-type: reqwest.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest
+        symbol:
+        - Client
+        - builder
+    exact: true
+    model-type: reqwest.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest
+        symbol:
+        - ClientBuilder
+        - new
+    exact: true
+    model-type: reqwest.ClientBuilder
+  - patterns:
+    - pattern-either:
+      - pattern: $BUILDER.add_crl(...)
+      - pattern: $BUILDER.add_crls(...)
+      - pattern: $BUILDER.add_root_certificate(...)
+      - pattern: $BUILDER.brotli(...)
+      - pattern: $BUILDER.connect_timeout(...)
+      - pattern: $BUILDER.connection_verbose(...)
+      - pattern: $BUILDER.connector_layer(...)
+      - pattern: $BUILDER.cookie_provider(...)
+      - pattern: $BUILDER.cookie_store(...)
+      - pattern: $BUILDER.danger_accept_invalid_certs(...)
+      - pattern: $BUILDER.danger_accept_invalid_hostnames(...)
+      - pattern: $BUILDER.default_headers(...)
+      - pattern: $BUILDER.deflate(...)
+      - pattern: $BUILDER.dns_resolver(...)
+      - pattern: $BUILDER.gzip(...)
+      - pattern: $BUILDER.hickory_dns(...)
+      - pattern: $BUILDER.http09_responses(...)
+      - pattern: $BUILDER.http1_allow_obsolete_multiline_headers_in_responses(...)
+      - pattern: $BUILDER.http1_allow_spaces_after_header_name_in_responses(...)
+      - pattern: $BUILDER.http1_ignore_invalid_headers_in_responses(...)
+      - pattern: $BUILDER.http1_only(...)
+      - pattern: $BUILDER.http1_title_case_headers(...)
+      - pattern: $BUILDER.http2_adaptive_window(...)
+      - pattern: $BUILDER.http2_initial_connection_window_size(...)
+      - pattern: $BUILDER.http2_initial_stream_window_size(...)
+      - pattern: $BUILDER.http2_keep_alive_interval(...)
+      - pattern: $BUILDER.http2_keep_alive_timeout(...)
+      - pattern: $BUILDER.http2_keep_alive_while_idle(...)
+      - pattern: $BUILDER.http2_max_frame_size(...)
+      - pattern: $BUILDER.http2_max_header_list_size(...)
+      - pattern: $BUILDER.http2_prior_knowledge(...)
+      - pattern: $BUILDER.http3_congestion_bbr(...)
+      - pattern: $BUILDER.http3_conn_receive_window(...)
+      - pattern: $BUILDER.http3_max_field_section_size(...)
+      - pattern: $BUILDER.http3_max_idle_timeout(...)
+      - pattern: $BUILDER.http3_prior_knowledge(...)
+      - pattern: $BUILDER.http3_send_grease(...)
+      - pattern: $BUILDER.http3_send_window(...)
+      - pattern: $BUILDER.http3_stream_receive_window(...)
+      - pattern: $BUILDER.https_only(...)
+      - pattern: $BUILDER.identity(...)
+      - pattern: $BUILDER.interface(...)
+      - pattern: $BUILDER.local_address(...)
+      - pattern: $BUILDER.max_tls_version(...)
+      - pattern: $BUILDER.min_tls_version(...)
+      - pattern: $BUILDER.no_brotli(...)
+      - pattern: $BUILDER.no_deflate(...)
+      - pattern: $BUILDER.no_gzip(...)
+      - pattern: $BUILDER.no_hickory_dns(...)
+      - pattern: $BUILDER.no_proxy(...)
+      - pattern: $BUILDER.no_zstd(...)
+      - pattern: $BUILDER.pool_idle_timeout(...)
+      - pattern: $BUILDER.pool_max_idle_per_host(...)
+      - pattern: $BUILDER.proxy(...)
+      - pattern: $BUILDER.read_timeout(...)
+      - pattern: $BUILDER.redirect(...)
+      - pattern: $BUILDER.referer(...)
+      - pattern: $BUILDER.resolve(...)
+      - pattern: $BUILDER.resolve_to_addrs(...)
+      - pattern: $BUILDER.retry(...)
+      - pattern: $BUILDER.tcp_keepalive(...)
+      - pattern: $BUILDER.tcp_keepalive_interval(...)
+      - pattern: $BUILDER.tcp_keepalive_retries(...)
+      - pattern: $BUILDER.tcp_nodelay(...)
+      - pattern: $BUILDER.tcp_user_timeout(...)
+      - pattern: $BUILDER.timeout(...)
+      - pattern: $BUILDER.tls_backend_native(...)
+      - pattern: $BUILDER.tls_backend_preconfigured(...)
+      - pattern: $BUILDER.tls_backend_rustls(...)
+      - pattern: $BUILDER.tls_certs_merge(...)
+      - pattern: $BUILDER.tls_certs_only(...)
+      - pattern: $BUILDER.tls_crls_only(...)
+      - pattern: $BUILDER.tls_danger_accept_invalid_certs(...)
+      - pattern: $BUILDER.tls_danger_accept_invalid_hostnames(...)
+      - pattern: $BUILDER.tls_early_data(...)
+      - pattern: $BUILDER.tls_info(...)
+      - pattern: $BUILDER.tls_sni(...)
+      - pattern: $BUILDER.tls_sslkeylogfile(...)
+      - pattern: $BUILDER.tls_version_max(...)
+      - pattern: $BUILDER.tls_version_min(...)
+      - pattern: $BUILDER.unix_socket(...)
+      - pattern: $BUILDER.use_native_tls(...)
+      - pattern: $BUILDER.use_preconfigured_tls(...)
+      - pattern: $BUILDER.use_rustls_tls(...)
+      - pattern: $BUILDER.user_agent(...)
+      - pattern: $BUILDER.zstd(...)
+    exact: true
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.ClientBuilder
+    model-type: reqwest.ClientBuilder
+  - patterns:
+    - pattern: 'fn $FUNC(..., $BUILDER: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: reqwest.blocking
+        symbol:
+        - ClientBuilder
+    - focus-metavariable: $BUILDER
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern: 'fn $FUNC(..., $BUILDER: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: reqwest
+        symbol:
+        - blocking
+        - ClientBuilder
+    - focus-metavariable: $BUILDER
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest.blocking
+        symbol:
+        - Client
+        - builder
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest
+        symbol:
+        - blocking
+        - Client
+        - builder
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest.blocking
+        symbol:
+        - ClientBuilder
+        - new
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern: $FACTORY()
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: reqwest
+        symbol:
+        - blocking
+        - ClientBuilder
+        - new
+    exact: true
+    model-type: reqwest.blocking.ClientBuilder
+  - patterns:
+    - pattern-either:
+      - pattern: $BUILDER.add_crl(...)
+      - pattern: $BUILDER.add_crls(...)
+      - pattern: $BUILDER.add_root_certificate(...)
+      - pattern: $BUILDER.brotli(...)
+      - pattern: $BUILDER.connect_timeout(...)
+      - pattern: $BUILDER.connection_verbose(...)
+      - pattern: $BUILDER.connector_layer(...)
+      - pattern: $BUILDER.cookie_provider(...)
+      - pattern: $BUILDER.cookie_store(...)
+      - pattern: $BUILDER.danger_accept_invalid_certs(...)
+      - pattern: $BUILDER.danger_accept_invalid_hostnames(...)
+      - pattern: $BUILDER.default_headers(...)
+      - pattern: $BUILDER.deflate(...)
+      - pattern: $BUILDER.dns_resolver(...)
+      - pattern: $BUILDER.gzip(...)
+      - pattern: $BUILDER.hickory_dns(...)
+      - pattern: $BUILDER.http09_responses(...)
+      - pattern: $BUILDER.http1_allow_obsolete_multiline_headers_in_responses(...)
+      - pattern: $BUILDER.http1_allow_spaces_after_header_name_in_responses(...)
+      - pattern: $BUILDER.http1_ignore_invalid_headers_in_responses(...)
+      - pattern: $BUILDER.http1_only(...)
+      - pattern: $BUILDER.http1_title_case_headers(...)
+      - pattern: $BUILDER.http2_adaptive_window(...)
+      - pattern: $BUILDER.http2_initial_connection_window_size(...)
+      - pattern: $BUILDER.http2_initial_stream_window_size(...)
+      - pattern: $BUILDER.http2_keep_alive_interval(...)
+      - pattern: $BUILDER.http2_keep_alive_timeout(...)
+      - pattern: $BUILDER.http2_keep_alive_while_idle(...)
+      - pattern: $BUILDER.http2_max_frame_size(...)
+      - pattern: $BUILDER.http2_max_header_list_size(...)
+      - pattern: $BUILDER.http2_prior_knowledge(...)
+      - pattern: $BUILDER.http3_congestion_bbr(...)
+      - pattern: $BUILDER.http3_conn_receive_window(...)
+      - pattern: $BUILDER.http3_max_field_section_size(...)
+      - pattern: $BUILDER.http3_max_idle_timeout(...)
+      - pattern: $BUILDER.http3_prior_knowledge(...)
+      - pattern: $BUILDER.http3_send_grease(...)
+      - pattern: $BUILDER.http3_send_window(...)
+      - pattern: $BUILDER.http3_stream_receive_window(...)
+      - pattern: $BUILDER.https_only(...)
+      - pattern: $BUILDER.identity(...)
+      - pattern: $BUILDER.interface(...)
+      - pattern: $BUILDER.local_address(...)
+      - pattern: $BUILDER.max_tls_version(...)
+      - pattern: $BUILDER.min_tls_version(...)
+      - pattern: $BUILDER.no_brotli(...)
+      - pattern: $BUILDER.no_deflate(...)
+      - pattern: $BUILDER.no_gzip(...)
+      - pattern: $BUILDER.no_hickory_dns(...)
+      - pattern: $BUILDER.no_proxy(...)
+      - pattern: $BUILDER.no_zstd(...)
+      - pattern: $BUILDER.pool_idle_timeout(...)
+      - pattern: $BUILDER.pool_max_idle_per_host(...)
+      - pattern: $BUILDER.proxy(...)
+      - pattern: $BUILDER.redirect(...)
+      - pattern: $BUILDER.referer(...)
+      - pattern: $BUILDER.resolve(...)
+      - pattern: $BUILDER.resolve_to_addrs(...)
+      - pattern: $BUILDER.retry(...)
+      - pattern: $BUILDER.tcp_keepalive(...)
+      - pattern: $BUILDER.tcp_keepalive_interval(...)
+      - pattern: $BUILDER.tcp_keepalive_retries(...)
+      - pattern: $BUILDER.tcp_nodelay(...)
+      - pattern: $BUILDER.tcp_user_timeout(...)
+      - pattern: $BUILDER.timeout(...)
+      - pattern: $BUILDER.tls_backend_native(...)
+      - pattern: $BUILDER.tls_backend_preconfigured(...)
+      - pattern: $BUILDER.tls_backend_rustls(...)
+      - pattern: $BUILDER.tls_certs_merge(...)
+      - pattern: $BUILDER.tls_certs_only(...)
+      - pattern: $BUILDER.tls_crls_only(...)
+      - pattern: $BUILDER.tls_danger_accept_invalid_certs(...)
+      - pattern: $BUILDER.tls_danger_accept_invalid_hostnames(...)
+      - pattern: $BUILDER.tls_info(...)
+      - pattern: $BUILDER.tls_sni(...)
+      - pattern: $BUILDER.tls_sslkeylogfile(...)
+      - pattern: $BUILDER.tls_version_max(...)
+      - pattern: $BUILDER.tls_version_min(...)
+      - pattern: $BUILDER.unix_socket(...)
+      - pattern: $BUILDER.use_native_tls(...)
+      - pattern: $BUILDER.use_preconfigured_tls(...)
+      - pattern: $BUILDER.use_rustls_tls(...)
+      - pattern: $BUILDER.user_agent(...)
+      - pattern: $BUILDER.zstd(...)
+    exact: true
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.blocking.ClientBuilder
+    model-type: reqwest.blocking.ClientBuilder
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $BUILDER.danger_accept_invalid_certs(true)
+      - pattern: $BUILDER.danger_accept_invalid_hostnames(true)
+      - pattern: $BUILDER.tls_danger_accept_invalid_certs(true)
+      - pattern: $BUILDER.tls_danger_accept_invalid_hostnames(true)
+    - focus-metavariable: $BUILDER
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.ClientBuilder
+  - patterns:
+    - pattern-either:
+      - pattern: $BUILDER.danger_accept_invalid_certs(true)
+      - pattern: $BUILDER.danger_accept_invalid_hostnames(true)
+      - pattern: $BUILDER.tls_danger_accept_invalid_certs(true)
+      - pattern: $BUILDER.tls_danger_accept_invalid_hostnames(true)
+    - focus-metavariable: $BUILDER
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.blocking.ClientBuilder
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: '&$BUILDER'
+    - pattern: '&mut $BUILDER'
+    exact: true
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.ClientBuilder
+  - pattern-either:
+    - pattern: '&$BUILDER'
+    - pattern: '&mut $BUILDER'
+    exact: true
+    requires-model-type:
+      metavariable: $BUILDER
+      type: reqwest.blocking.ClientBuilder
+- id: lycaon.rust.zeroed-reference
+  languages:
+  - rust
+  severity: ERROR
+  message: Zero initialization cannot create a valid Rust reference
+  metadata:
+    category: security
+    cwe: CWE-843
+    confidence: HIGH
+    technology:
+    - rust
+    references:
+    - https://doc.rust-lang.org/std/mem/fn.zeroed.html
+    notes: Requires native or imported std::mem::zeroed identity and an explicit reference result type.
+      Shared and mutable references are covered; nullable raw pointers and Option values remain quiet.
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - pattern: 'let $REF: &$TYPE = $CALL();'
+      - pattern: 'let $REF: &mut $TYPE = $CALL();'
+      - pattern: 'let $REF: &$TYPE = unsafe { $CALL() };'
+      - pattern: 'let $REF: &mut $TYPE = unsafe { $CALL() };'
+    - metavariable-name:
+        metavariable: $CALL
+        module: std.mem
+        symbol:
+        - zeroed
+  - patterns:
+    - pattern-either:
+      - pattern: 'let $REF: &$TYPE = $CALL();'
+      - pattern: 'let $REF: &mut $TYPE = $CALL();'
+      - pattern: 'let $REF: &$TYPE = unsafe { $CALL() };'
+      - pattern: 'let $REF: &mut $TYPE = unsafe { $CALL() };'
+    - metavariable-name:
+        metavariable: $CALL
+        module: std
+        symbol:
+        - mem
+        - zeroed
+- id: lycaon.rust.actix-command-injection
+  languages:
+  - rust
+  severity: ERROR
+  message: Request input reaches an explicit shell command
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $REQ: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: actix_web
+        symbol:
+        - HttpRequest
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: actix_web.HttpRequest
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.query_string()
+      - pattern: $REQ.match_info()[...]
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: actix_web.HttpRequest
+    model-type: rust.primitive.str
+  - patterns:
+    - pattern: $REQ.match_info().get(...)
+    exact: true
+    label: HTTP_OPTION
+    requires: HTTP_REQUEST
+    model-type: actix_web.RequestParameterOption
+    requires-model-type:
+      metavariable: $REQ
+      type: actix_web.HttpRequest
+  - patterns:
+    - pattern-either:
+      - pattern: $OPTION.unwrap()
+      - pattern: $OPTION.expect(...)
+      - pattern: $OPTION.unwrap_or(...)
+      - pattern: $OPTION.unwrap_or_default()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_OPTION
+    requires-model-type:
+      metavariable: $OPTION
+      type: actix_web.RequestParameterOption
+    model-type: rust.primitive.str
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: $TEXT.len()
+      - pattern: $TEXT.is_empty()
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - usize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - isize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std.process.Command
+        symbol: &id001
+        - new
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std.process
+        symbol: &id002
+        - Command
+        - new
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std
+        symbol: &id003
+        - process
+        - Command
+        - new
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - rust
+    - actix
+    references:
+    - https://doc.rust-lang.org/std/process/struct.Command.html
+    notes: Requires imported request extractor types and native or imported std::process::Command
+      constructor identity. Models a freshly constructed Unix shell with an explicit -c command argument,
+      including argument arrays. Ordinary process arguments and shell positional arguments remain quiet;
+      mutable command-builder state requires additional analysis.
+- id: lycaon.rust.actix-sql-injection
+  languages:
+  - rust
+  severity: ERROR
+  message: Request input reaches SQL query text
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $REQ: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: actix_web
+        symbol:
+        - HttpRequest
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: actix_web.HttpRequest
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.query_string()
+      - pattern: $REQ.match_info()[...]
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: actix_web.HttpRequest
+    model-type: rust.primitive.str
+  - patterns:
+    - pattern: $REQ.match_info().get(...)
+    exact: true
+    label: HTTP_OPTION
+    requires: HTTP_REQUEST
+    model-type: actix_web.RequestParameterOption
+    requires-model-type:
+      metavariable: $REQ
+      type: actix_web.HttpRequest
+  - patterns:
+    - pattern-either:
+      - pattern: $OPTION.unwrap()
+      - pattern: $OPTION.expect(...)
+      - pattern: $OPTION.unwrap_or(...)
+      - pattern: $OPTION.unwrap_or_default()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_OPTION
+    requires-model-type:
+      metavariable: $OPTION
+      type: actix_web.RequestParameterOption
+    model-type: rust.primitive.str
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - query
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - query_scalar
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - raw_sql
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - rust
+    - actix
+    references:
+    - https://docs.rs/actix-web/latest/actix_web/struct.HttpRequest.html
+    - https://docs.rs/sqlx/0.8.6/sqlx/fn.query.html
+    notes: Requires imported HttpRequest and SQLx API provenance. Query strings and unwrapped route
+      values retain borrowed string identity through aliases and fields. Length, emptiness, and numeric
+      parsing sanitize only proven borrowed strings; numeric type arguments must resolve to native
+      primitives. Bound values are separate from query text. Queries must reach an awaited execution or
+      fetch operation. SQLx 0.8 accepts strings; SQLx 0.9 requires an explicit unsafe SQL assertion.
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: $TEXT.len()
+      - pattern: $TEXT.is_empty()
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - usize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - isize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+- id: lycaon.rust.axum-sql-injection
+  languages:
+  - rust
+  severity: ERROR
+  message: Request input reaches SQL query text
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - focus-metavariable: $VALUE
+    exact: true
+    label: HTTP_VALUE
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: std.string
+        symbol:
+        - String
+    - focus-metavariable: $VALUE
+    exact: true
+    label: HTTP_VALUE
+    model-type: rust.std.String
+  - pattern: $TEXT.as_str()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_VALUE
+    model-type: rust.primitive.str
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.std.String
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - query
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - query_scalar
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $CALL($VALUE, ...).execute(...).await
+      - pattern: $CALL($VALUE, ...).fetch_one(...).await
+      - pattern: $CALL($VALUE, ...).fetch_optional(...).await
+      - pattern: $CALL($VALUE, ...).fetch_all(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_next(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).collect(...).await
+      - pattern: $CALL($VALUE, ...).fetch(...).try_collect(...).await
+    - metavariable-name:
+        metavariable: $CALL
+        module: sqlx
+        symbol:
+        - raw_sql
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - rust
+    - axum
+    references:
+    - https://docs.rs/axum/latest/axum/extract/struct.Path.html
+    - https://docs.rs/sqlx/0.8.6/sqlx/fn.query.html
+    notes: Requires imported Axum Path constructors and declared extractor types plus imported SQLx query
+      APIs. Native numeric and Boolean extractor values are safe. Standard String identity must be
+      established before length, emptiness, or as_str are modeled; local types and aliases cannot gain
+      that identity by spelling. Numeric parsing requires a proven borrowed string because traits can
+      override parse on owned String. Bound values and queries without awaited execution remain quiet.
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: $TEXT.len()
+      - pattern: $TEXT.is_empty()
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.std.String
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - usize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - isize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u8
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u16
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u128
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - usize
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i8
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i16
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i128
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - isize
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - f32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - f64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - bool
+    - focus-metavariable: $VALUE
+    exact: true
+- id: lycaon.rust.axum-command-injection
+  languages:
+  - rust
+  severity: ERROR
+  message: Request input reaches an explicit shell command
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - focus-metavariable: $VALUE
+    exact: true
+    label: HTTP_VALUE
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: std.string
+        symbol:
+        - String
+    - focus-metavariable: $VALUE
+    exact: true
+    label: HTTP_VALUE
+    model-type: rust.std.String
+  - pattern: $TEXT.as_str()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_VALUE
+    model-type: rust.primitive.str
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.std.String
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: $TEXT.len()
+      - pattern: $TEXT.is_empty()
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.std.String
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - u128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - usize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i8
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i16
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - i128
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - isize
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f32
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: $TEXT.parse::<$NUMBER>()
+    - metavariable-name:
+        metavariable: $NUMBER
+        module: core.primitive
+        symbol:
+        - f64
+    exact: true
+    requires-model-type:
+      metavariable: $TEXT
+      type: rust.primitive.str
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u8
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u16
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - u128
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - usize
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i8
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i16
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - i128
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - isize
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - f32
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - f64
+    - focus-metavariable: $VALUE
+    exact: true
+  - patterns:
+    - pattern: 'fn $HANDLER(..., $EXTRACT($VALUE): $TYPE<$INNER>, ...) { ... }'
+    - metavariable-name:
+        metavariable: $EXTRACT
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $TYPE
+        module: axum.extract
+        symbol:
+        - Path
+    - metavariable-name:
+        metavariable: $INNER
+        module: core.primitive
+        symbol:
+        - bool
+    - focus-metavariable: $VALUE
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std.process.Command
+        symbol: *id001
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std.process
+        symbol: *id002
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern-either:
+      - pattern: $FACTORY("sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/bin/ksh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/sh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/sh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/bash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/bash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/zsh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/zsh").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/dash").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/dash").args(&["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").arg("-c").arg($VALUE)
+      - pattern: $FACTORY("/usr/bin/ksh").args(["-c", $VALUE, ...])
+      - pattern: $FACTORY("/usr/bin/ksh").args(&["-c", $VALUE, ...])
+    - metavariable-name:
+        metavariable: $FACTORY
+        module: std
+        symbol: *id003
+    - focus-metavariable: $VALUE
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - rust
+    - axum
+    references:
+    - https://doc.rust-lang.org/std/process/struct.Command.html
+    notes: Requires imported request extractor types and native or imported std::process::Command
+      constructor identity. Models a freshly constructed Unix shell with an explicit -c command argument,
+      including argument arrays. Ordinary process arguments and shell positional arguments remain quiet;
+      mutable command-builder state requires additional analysis.

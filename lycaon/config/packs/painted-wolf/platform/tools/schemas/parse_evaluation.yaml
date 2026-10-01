@@ -1,0 +1,9 @@
+description: Validate evaluation.
+schema:
+  type: object
+  properties:
+    raw:
+      type: string
+      description: Evaluation JSON.
+  required: [raw]
+  additionalProperties: false

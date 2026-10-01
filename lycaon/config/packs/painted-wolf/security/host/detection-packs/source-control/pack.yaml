@@ -1,0 +1,5 @@
+id: source-control
+label: Source control
+description: >-
+  Local repository operations that discard uncommitted work, rewrite history, or
+  remove the reflog that would otherwise let it be recovered.

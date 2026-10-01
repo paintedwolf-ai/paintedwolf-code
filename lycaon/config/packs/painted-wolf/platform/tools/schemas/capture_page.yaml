@@ -1,0 +1,165 @@
+tags: [visual, browser]
+description: >-
+  One-shot open→act→snapshot→close; prefer page_* for live/authenticated state. Use project_dir
+  for a static tree or url plus process_handle for a loopback app. Targets are exclusive.
+  Returns structure, requests, errors, console, and a screenshot; use filmstrip for settled
+  sequence claims and timeline for anything that happens while the page is painting.
+schema:
+  type: object
+  properties:
+    project_dir:
+      type: string
+      description: >-
+        Static site/export root served in-process under the sandbox. Mount the tree root so
+        site-absolute assets resolve. Use url when dev/SSR/HMR or remote assets must run for real.
+    path:
+      type: string
+      description: >-
+        Site-relative page within project_dir. Keep project_dir at the tree root.
+    url:
+      type: string
+      description: >-
+        Loopback URL of a running app. Host-local TCP is on the browser floor.
+        Start its server with command background:true and pass process_handle.
+        Use project_dir for static trees; file:// and remote hosts are refused.
+    process_handle:
+      type: string
+      description: Running handle from command background:true for the loopback app.
+    actions:
+      type: array
+      description: >-
+        Up to 20 steps sent as trusted pointer and keyboard input. Locator precedence: testid,
+        selector, role+(label|text), label, text. A step carries only the fields its type reads.
+        Each input step's result has an effect: attribute changes, nodes, requests, navigation,
+        and the target afterwards. An effect with no changes means the page ignored the input.
+      maxItems: 20
+      items:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [click, hover, drag, scroll, fill, type, select, press, wait_for, wait]
+            description: "Step kind. click, hover, drag, and scroll move the pointer; fill, type, select, and press use keys or a control; wait_for and wait pause."
+          testid: {type: string, description: "data-testid of the target."}
+          selector: {type: string, description: "CSS selector of the target."}
+          role: {type: string, description: "ARIA role or implicit native role (button, link); pair with label or text."}
+          label: {type: string, description: "Accessible name (button text, aria-label, labelled-by, or an associated form label); pair with role, or use alone."}
+          text: {type: string, description: "Visible or accessible name; pair with role, or use alone."}
+          value: {type: string, description: "Text for fill or type; option value or label for select."}
+          key: {type: string, description: "Key or chord for press, e.g. Enter or Mod+K (Mod is Meta on macOS, else Control)."}
+          modifiers:
+            type: array
+            maxItems: 4
+            description: "Keys held during a click."
+            items: {type: string, enum: [Alt, Control, Meta, Shift, Mod]}
+          button: {type: string, enum: [left, right, middle], description: "Mouse button; default left."}
+          count: {type: integer, minimum: 1, maximum: 3, description: "Click count; 2 double-clicks."}
+          to:
+            type: object
+            description: "Drag drop target, located like the step's target."
+            properties:
+              testid: {type: string, description: "data-testid."}
+              selector: {type: string, description: "CSS selector."}
+              role: {type: string, description: "ARIA role."}
+              label: {type: string, description: "Accessible name."}
+              text: {type: string, description: "Visible name."}
+            additionalProperties: false
+          by:
+            type: object
+            description: "CSS-pixel offset: a drag without a drop target, or a scroll (positive y is down)."
+            properties:
+              x: {type: number, description: "Horizontal pixels."}
+              "y": {type: number, description: "Vertical pixels."}
+            required: [x, "y"]
+            additionalProperties: false
+          hold_ms: {type: integer, minimum: 0, maximum: 5000, description: "Hover dwell, or hold before a drag moves."}
+          timeout_ms: {type: integer, minimum: 1, description: "Per-step timeout in milliseconds."}
+          wait: {type: string, enum: [idle], description: "Settle after the step: network-quiet and DOM-stable."}
+        required: [type]
+        additionalProperties: false
+    selector:
+      type: string
+      description: Optional element to scroll into view before screenshot.
+    viewport:
+      description: "Optional CSS-pixel viewport size for the capture/open."
+      type: object
+      properties:
+        width:
+          description: "Viewport width in CSS pixels."
+          type: integer
+          minimum: 1
+        height:
+          description: "Viewport height in CSS pixels."
+          type: integer
+          minimum: 1
+      required: [width, height]
+      additionalProperties: false
+    wait:
+      type: string
+      enum: [idle]
+      description: Default settle after navigate (network-quiet + DOM-stable).
+    caption:
+      type: string
+      description: >-
+        Short label for this capture. Without one its card shows only the tool
+        name.
+    capture:
+      type: string
+      enum: [screenshot, filmstrip, timeline]
+      description: >-
+        screenshot (default) = one settled frame. filmstrip = the frame after navigate idle
+        plus after each action (N actions → N+1 frames) as one ordered artifact. timeline =
+        every painted frame of the drive with its events, for motion, flicker, layout shift,
+        and timing claims.
+    routes:
+      type: array
+      maxItems: 16
+      description: "Request fixtures installed before the page loads."
+      items:
+        type: object
+        description: "Answers matching requests instead of the network."
+        properties:
+          url: {type: string, description: "Full URL, or a path starting with / that matches any origin; * matches any run of characters."}
+          method: {type: string, description: "Method to match; default any."}
+          status: {type: integer, minimum: 100, maximum: 599, description: "Response status; default 200 when a body is given."}
+          body: {type: string, description: "Response body text."}
+          body_path: {type: string, description: "Workspace file served as the body."}
+          content_type: {type: string, description: "Response Content-Type; default from body_path's extension, else application/json."}
+          headers: {type: object, additionalProperties: {type: string}, description: "Extra response headers."}
+          delay_ms: {type: integer, minimum: 0, maximum: 30000, description: "Wait before answering; given alone, it slows a request that still reaches the network."}
+          fail: {type: string, enum: [failed, aborted, timed_out, connection_refused, connection_reset, name_not_resolved, internet_disconnected, blocked], description: "Fail the request with this network error instead of answering it."}
+          times: {type: integer, minimum: 1, description: "Answer only the first N matching requests, then let later ones through."}
+        required: [url]
+        additionalProperties: false
+    record:
+      type: object
+      description: "With capture timeline: record the drive as a timeline of frames, layout shifts, long tasks, requests, and errors."
+      properties:
+        watch:
+          type: array
+          maxItems: 8
+          description: "Selectors whose box and scroll offset are sampled, to catch jumps."
+          items: {type: string}
+        tail_ms: {type: integer, minimum: 0, maximum: 5000, description: "Recording after the last step; default 1000."}
+      additionalProperties: false
+    capability_request:
+      type: object
+      description: >-
+        Loopback authority for a url target. Not needed for project_dir, which
+        serves from disk and opens no socket.
+      properties:
+        loopback_connect:
+          type: object
+          description: Loopback authority for exact ports.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              uniqueItems: true
+              description: Loopback TCP ports this target may connect to.
+              items: {type: integer, minimum: 1, maximum: 65535}
+          additionalProperties: false
+      required: [loopback_connect]
+      additionalProperties: false
+  additionalProperties: false

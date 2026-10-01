@@ -1,0 +1,65 @@
+{
+  "id": "expr-ternary-branches-must-share-a-type",
+  "title": "The ternary condition is bool and its branches share a type",
+  "covers": [
+    "OAR-EXPR-8"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "MIXED_BRANCHES",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "when": "(true ? tool : 1) == \"read\""
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "error": "OAR-EXPR-8"
+  }
+}

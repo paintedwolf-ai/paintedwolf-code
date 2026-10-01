@@ -1,0 +1,56 @@
+{
+  "id": "eval-flow-is-tested-before-when",
+  "title": "when is not evaluated when flow did not match, so a rule the flow excluded cannot raise",
+  "covers": [
+    "OAR-EVAL-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "GUARDED_BY_FLOW",
+      "effect": "warn",
+      "flow": [
+        "deploy"
+      ],
+      "when": "1 / 0 == 0"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 8,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "recent_activity": [
+      "read",
+      "write"
+    ]
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/GUARDED_BY_FLOW:passed"
+    ]
+  }
+}

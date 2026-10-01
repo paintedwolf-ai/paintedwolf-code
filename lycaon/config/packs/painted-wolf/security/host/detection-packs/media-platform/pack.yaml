@@ -1,0 +1,5 @@
+id: media-platform
+label: Media platforms
+description: >-
+  Cloudinary operations that delete uploaded images, video, or other media
+  assets.

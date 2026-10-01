@@ -1,0 +1,61 @@
+# EDITORCONFIG_MISMATCH — advisory when a landed write breaks declared
+# .editorconfig rules.
+
+oar: '1.0'
+id: EDITORCONFIG_MISMATCH
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [write, edit, replace_lines, restore_version, code_rewrite, jq_edit]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.editorconfig_mismatch
+    - paintedwolf.path
+    - paintedwolf.editorconfig_rules
+    - paintedwolf.editorconfig_lines
+when: paintedwolf.editorconfig_mismatch
+effect: warn
+copy:
+  what: >-
+    lines written to {{ paintedwolf.path }} break the project's EditorConfig
+    rules ({{ paintedwolf.editorconfig_rules }}).
+  cause: >-
+    Offending lines, as path:line numbers followed by the rule:
+    {{ paintedwolf.editorconfig_lines }}. Only lines this write inserted or
+    changed are listed; a count in parentheses adds lines past the listed ones.
+  why: >-
+    The write itself succeeded. The project declared these rules in
+    .editorconfig, and the host does not rewrite agent text to satisfy them, so
+    the file keeps exactly what was written until it is corrected.
+  fix: >-
+    Correct the listed lines in your next edit. trim_trailing_whitespace forbids
+    spaces or tabs at line end, including on blank lines; indent_style names
+    the character that indents a line; end_of_line names the line terminator;
+    insert_final_newline says whether the file ends with a newline.
+  instead: >-
+    Leave the lines as written only when the whitespace is content the rule
+    cannot know about, such as a string literal or a Markdown hard break
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:editorconfig
+x-paintedwolf-message: written text breaks declared EditorConfig rules
+x-paintedwolf-scenarios:
+  - id: blank_line_indent
+    vars:
+      tool: write
+      path: tests/test_image.py
+      editorconfig_rules: [trim_trailing_whitespace, indent_style]
+      editorconfig_lines: tests/test_image.py:16,28,30 trim_trailing_whitespace; tests/test_image.py:16,28,30 indent_style
+    expect_contains:
+      - 'Code: EDITORCONFIG_MISMATCH'
+      - tests/test_image.py:16,28,30 indent_style
+      - trim_trailing_whitespace, indent_style
+  - id: final_newline_edit
+    vars:
+      tool: edit
+      path: README.md
+      editorconfig_rules: [insert_final_newline]
+      editorconfig_lines: README.md:40 insert_final_newline
+    expect_contains:
+      - 'Code: EDITORCONFIG_MISMATCH'
+      - README.md:40 insert_final_newline

@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': edit.follow_up.repeat
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-edit-follow-up-repeat
+tier: builtin
+invariants:
+  trigger_class: observed_history
+  fires_in:
+  - Prompt turn after two consecutive user-visible turns each answered with coordinator
+    inline file edits (tool_result.file_edit present)
+  required:
+  - model of the change
+  - audit the whole change
+  forbidden:
+  - workflow_advance

@@ -1,0 +1,14 @@
+id: painted-wolf/platform:files-open-version-history
+title: "Open version history"
+scope: files
+keywords:
+  - "version history"
+  - "file history"
+  - "revisions"
+  - "versions"
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.openVersionHistory"

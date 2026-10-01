@@ -1,0 +1,30 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - detail
+title: Couldn't finish that prompt
+message: >-
+  {% if detail -%}
+  The last prompt stopped before a reply was ready. Detail: {{ detail }}
+  {%- else -%}
+  The last prompt stopped before a reply was ready.
+  {%- endif %}
+suggested_action: >-
+  Send it again. If it keeps stopping, more detail is available from Settings → Advanced →
+  Diagnostics.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: with_detail
+    vars:
+      detail: "dial tcp 127.0.0.1:11434: connection refused"
+    expect_contains:
+      - stopped before a reply
+      - connection refused
+  - id: generic
+    vars: {}
+    expect_contains:
+      - stopped before a reply

@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SANDBOX_LOOPBACK_CONNECT_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.user_guidance
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_LOOPBACK_CONNECT_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} was not granted the requested connection to the local service.'
+  cause: Local client authority is not on this invocation.
+  why: Retrying loopback_connect loops on the same refusal.
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue
+    without that client connection, or wait for new user direction.'
+  instead: Do not retry loopback_connect; continue without that local client
+x-paintedwolf-category: user-decision
+x-paintedwolf-emit: guard:sandbox_loopback_connect
+x-paintedwolf-message: local service connection authority declined
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_LOOPBACK_CONNECT_DENIED'
+  - local service

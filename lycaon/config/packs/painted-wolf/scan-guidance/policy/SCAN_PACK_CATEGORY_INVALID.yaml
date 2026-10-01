@@ -1,0 +1,34 @@
+oar: '1.0'
+id: SCAN_PACK_CATEGORY_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.valid_categories
+when: paintedwolf.rejection_code == "SCAN_PACK_CATEGORY_INVALID"
+effect: block
+copy:
+  what: 'scan_pack received an invalid category: {{ paintedwolf.detail }}.'
+  cause: 'Valid host categories: {{ paintedwolf.valid_categories }} (or "all"). Categories are defined by registered
+    scanners — see the scan_pack tool schema.'
+  why: A requested category must belong to the current host scanner vocabulary; an invalid category cannot
+    be treated as an empty clean scan.
+  fix: Retry with a valid category list or omit categories for the default security+secret pack.
+  instead: Branch on Code; fix categories per tool schema — do not invent lint/types/container names
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_pack
+x-paintedwolf-message: scan_pack category not recognized
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_PACK_CATEGORY_INVALID'

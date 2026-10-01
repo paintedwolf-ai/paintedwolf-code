@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-artifacts
+command: painted-wolf/platform:go-context-artifacts
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader A"
+  windows:
+    - "Leader A"
+  linux:
+    - "Leader A"

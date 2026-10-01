@@ -1,0 +1,35 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - code
+title: Requested model unavailable
+message: >-
+  {% if provider_id and model -%}
+  {{ provider_id }} cannot serve {{ model }} for this session.
+  {%- elif model -%}
+  {{ model }} is unavailable for this session.
+  {%- else -%}
+  The selected model is unavailable for this session.
+  {%- endif %}
+suggested_action: Choose another model in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: named_pair
+    vars:
+      provider_id: local
+      model: example-model
+      code: model_not_found
+    expect_contains:
+      - local
+      - example-model
+  - id: generic
+    vars: {}
+    expect_contains:
+      - selected model

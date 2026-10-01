@@ -1,0 +1,122 @@
+title: Delete a managed cloud resource
+id: bffa9c50-4fd8-4f50-b409-1234eb15d05c
+description: >-
+  Deletes or terminates a database, cluster, filesystem, function, stack, or other
+  managed resource along with whatever it holds.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  svc_stateful:
+    ApiAction|startswith:
+      - 'rds:'
+      - 'dynamodb:'
+      - 'elasticache:'
+      - 'redshift:'
+      - 'redshift-serverless:'
+      - 'docdb:'
+      - 'neptune:'
+      - 'efs:'
+      - 'fsx:'
+      - 'backup:'
+      - 's3:'
+      - 's3api:'
+      - 's3control:'
+      - 'ebs:'
+      - 'ec2:'
+      - 'emr:'
+      - 'glacier:'
+      - 'cloudformation:'
+      - 'eks:'
+      - 'ecs:'
+      - 'ecr:'
+      - 'lambda:'
+      - 'opensearch:'
+      - 'es:'
+      - 'elbv2:'
+      - 'autoscaling:'
+      - 'cloudfront:'
+      - 'sqs:'
+      - 'sns:'
+      - 'kinesis:'
+      - 'memorydb:'
+      - 'elasticbeanstalk:'
+      - 'apprunner:'
+      - 'batch:'
+      - 'sagemaker:'
+      - 'kafka:'
+      - 'qldb:'
+      - 'timestream-write:'
+      - 'glue:'
+      - 'athena:'
+      - 'ssm:'
+      - 'acm:'
+      - 'cognito-idp:'
+      - 'wafv2:'
+  # Stop and reboot are reversible disruption and live in service-disrupt.
+  verbs_resource_destroy:
+    ApiAction|contains:
+      - ':delete-'
+      - ':terminate-'
+      - ':destroy-'
+      - ':purge-'
+  # A label, parameter group, row, or single object is not the resource.
+  filter_subresource:
+    ApiAction|endswith:
+      - '-tags'
+      - '-tagging'
+      - '-parameter-group'
+      - '-subnet-group'
+      - '-option-group'
+      - '-security-group'
+      - '-key-pair'
+      - '-flow-logs'
+      - '-launch-template'
+      - '-lifecycle-configuration'
+      - '-cors'
+      - '-website'
+      - '-replication'
+      - '-inventory-configuration'
+      - '-metrics-configuration'
+      - '-analytics-configuration'
+      - '-notification-configuration'
+      - ':delete-item'
+      - ':delete-object'
+      - ':delete-message'
+      - ':delete-message-batch'
+      - ':delete-alarms'
+      - ':delete-dashboards'
+  # These remove a protection rather than a resource; protection-removal owns them.
+  filter_protection:
+    ApiAction|endswith:
+      - ':delete-public-access-block'
+      - ':delete-bucket-encryption'
+      - ':delete-bucket-policy'
+      - ':delete-account-password-policy'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and svc_stateful and verbs_resource_destroy
+    and not filter_subresource and not filter_protection
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

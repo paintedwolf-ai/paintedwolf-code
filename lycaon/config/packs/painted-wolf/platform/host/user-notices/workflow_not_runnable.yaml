@@ -1,0 +1,31 @@
+surfaces:
+  - host_error
+  - http
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - reason
+    - status
+    - run_id
+title: Workflow cannot run
+message: >-
+  {% if reason -%}
+  The workflow cannot run right now ({{ reason }}).
+  {%- else -%}
+  The workflow is paused or already finished.
+  {%- endif %}
+suggested_action: Resume or exit the workflow, then try again.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: paused
+    vars:
+      reason: paused
+    expect_contains:
+      - paused
+      - cannot run
+  - id: generic
+    vars: {}
+    expect_contains:
+      - paused or already finished

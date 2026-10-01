@@ -1,0 +1,28 @@
+name: SourceGitHistoryState
+description: >-
+  What the Git lineage lane can say about this file. The states separate an
+  absent lane from a lane that was asked and could not answer: an empty commits
+  list means "no history" only under available.
+go_const_prefix: SourceGitHistoryState
+values:
+  - id: not_requested
+    comment: The caller excluded the Git lane from this response.
+  - id: not_tracked
+    comment: >-
+      The file has no tracked path for Git to answer about — a worker-only or
+      never-committed file. The repository was not asked.
+  - id: no_repository
+    comment: >-
+      The file's root is not a Git checkout, so there is no lineage to read.
+  - id: available
+    comment: >-
+      The repository answered. commits carries that answer, and an empty list
+      means the file genuinely has no commits under its tracked path.
+  - id: timed_out
+    comment: >-
+      The repository was still walking when the page's budget elapsed. Says
+      nothing about whether the file has history; the query may succeed later.
+  - id: failed
+    comment: >-
+      Git was asked and reported an error. Says nothing about whether the file
+      has history.

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-search-replace-in-project
+slot: "app_menu.edit"
+command: painted-wolf/platform:search-replace-in-project
+group: "0"
+order: 6
+label: "Replace in project…"

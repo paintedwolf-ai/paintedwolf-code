@@ -1,0 +1,220 @@
+paths:
+  /v1/settings/web-research:
+    get:
+      tags:
+      - web-research
+      operationId: getWebResearchSettings
+      summary: Web research mode and enablement preferences
+      responses:
+        '200':
+          description: Web research settings
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchSettings
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+    patch:
+      tags:
+      - web-research
+      operationId: updateWebResearchSettings
+      x-person-action: record
+      summary: Update web research mode and enablement preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/web-research.yaml#/components/schemas/UpdateWebResearchSettingsRequest
+      responses:
+        '200':
+          description: Updated web research settings
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchSettings
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/web-research/providers:
+    get:
+      tags:
+      - web-research
+      operationId: getWebResearchProviders
+      summary: Web research direct status and catalog provider rows
+      responses:
+        '200':
+          description: Provider status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchProvidersResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+  /v1/web-research/providers/{provider_id}:
+    patch:
+      tags:
+      - web-research
+      operationId: updateWebResearchProvider
+      x-person-action: record
+      summary: Store non-secret provider config (endpoint, cx, …)
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/web-research.yaml#/components/schemas/UpdateWebResearchProviderRequest
+      responses:
+        '200':
+          description: Updated provider meta
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/web-research/providers/{provider_id}/credential:
+    put:
+      tags:
+      - web-research
+      operationId: replaceWebResearchCredential
+      x-person-action: record
+      summary: Store web research API key (write-only)
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/providers.yaml#/components/schemas/SetProviderCredentialRequest
+      responses:
+        '200':
+          description: Credential stored
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - web-research
+      operationId: deleteWebResearchCredential
+      x-person-action: record
+      summary: Remove stored web research API key
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '204':
+          description: Credential removed
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/web-research/providers/{provider_id}/test:
+    post:
+      tags:
+      - web-research
+      operationId: testWebResearchProvider
+      x-person-action: none
+      summary: Run a canned search against one web research provider
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '200':
+          description: Provider probe result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderProbeResult
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/web-research/index:
+    get:
+      tags:
+      - web-research
+      operationId: getWebResearchIndex
+      summary: Local web index snapshot and recent background-warming activity
+      responses:
+        '200':
+          description: Index status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/web-research.yaml#/components/schemas/WebResearchIndexStatus
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized

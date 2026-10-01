@@ -1,0 +1,5 @@
+version: 1
+# Per source snapshot. Mutation validation and worker promotion share this limit.
+validation_timeout_ms: 30000
+# Outlines, structural search, pattern compilation, and source classification.
+analysis_timeout_ms: 5000

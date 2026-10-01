@@ -1,0 +1,46 @@
+# FindingLedgerState — a finding's current ledger state.
+#
+# open, reopened, and fixed are stored; not_observed, unverified, and ignored
+# are derived at read time. Ignored displaces only open and reopened.
+name: FindingLedgerState
+go_const_prefix: FindingLedger
+description: >-
+  Whether a finding is currently reported, and when it is not, whether its
+  absence is evidence of anything.
+ts_labels:
+  path: lycaon-den/src/lib/finding-ledger-state.generated.ts
+  const: FINDING_LEDGER_STATE_LABELS
+  type_import: ../api/types.ts
+  doc: >-
+    Chip labels for the ledger's state vocabulary.
+values:
+  - id: open
+    comment: >-
+      the scanner's authoritative set still reports the finding.
+    label: Open
+  - id: reopened
+    comment: >-
+      the series recorded the finding as fixed and then observed it again.
+    label: Reopened
+  - id: fixed
+    comment: >-
+      the finding left under complete coverage and an unchanged scanner
+      execution identity. Engine evidence of a change, never proof of
+      correctness.
+    label: Fixed
+  - id: not_observed
+    comment: >-
+      the finding left under bounded or partial coverage, so its absence
+      establishes nothing.
+    label: Not observed
+  - id: ignored
+    comment: >-
+      an entry in the project's ignore file matches the finding and has not
+      expired. The scanner still reports it; the project decided not to act.
+    label: Ignored
+  - id: unverified
+    comment: >-
+      the finding left while the scanner's execution identity was moving, so
+      the pass behind its absence no longer applies. The next full pass
+      restores authority.
+    label: Unverified

@@ -1,0 +1,33 @@
+title: Move a consumer group's position
+id: 976bc18b-9bf0-4f9b-9e22-920a3f899c9d
+description: Resets consumer offsets, so messages are reprocessed or skipped.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image:
+      - kafka-consumer-groups
+      - kafka-consumer-groups.sh
+      - rpk
+      - nats
+  verbs_offset_move:
+    CommandLine|contains:
+      - ' --reset-offsets'
+      - ' group seek'
+      - ' group offset-delete'
+      - ' consumer reset'
+  filter_rehearsal:
+    Argv|re: '^(--help|--describe|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_offset_move and not filter_rehearsal and not filter_local

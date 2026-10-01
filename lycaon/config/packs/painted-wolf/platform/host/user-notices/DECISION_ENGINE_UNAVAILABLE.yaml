@@ -1,0 +1,41 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Local decision model unavailable
+message: >-
+  The local model that ranks code for the agent and trims each turn's context is
+  not answering. Everything still works; the agent reads a little more and finds
+  a little less on its own.
+suggested_action: >-
+  {% if reason == "model_missing" -%}
+  The model that ships with the app is missing or incomplete. Reinstall the
+  app, then reopen it.
+  {%- elif reason == "disabled" -%}
+  The engine is switched off by configuration. Remove the override to turn it
+  back on.
+  {%- elif reason == "unusable" -%}
+  Restart the app. If it stays unavailable, open diagnostics and save a
+  diagnostics bundle.
+  {%- else -%}
+  Reinstall the app, then reopen it.
+  {%- endif %}
+scenarios:
+  - id: model_missing
+    vars:
+      reason: model_missing
+    expect_contains:
+      - Reinstall
+  - id: disabled
+    vars:
+      reason: disabled
+    expect_contains:
+      - switched off
+  - id: unusable
+    vars:
+      reason: unusable
+    expect_contains:
+      - diagnostics
+  - id: binary_missing
+    vars:
+      reason: binary_missing
+    expect_contains:
+      - Reinstall

@@ -1,0 +1,41 @@
+oar: '1.0'
+id: CAPTURE_ROUTE_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  - paintedwolf.max
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_ROUTE_INVALID"
+effect: block
+copy:
+  what: '{{ tool }} received a request fixture it cannot install{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.'
+  cause: A route needs a url that is a full URL or a path starting with /, at most one of body or body_path, a
+    status from 100 to 599, and either a response or a fail reason, within the host's size and count bounds.
+  why: Fixtures answer the page's requests in place of the network, so each must describe one answer the host can
+    give exactly.
+  fix: Correct the route named in the rejection details. A body_path must be a readable file inside the workspace.
+    Split large fixtures into smaller bodies{% if paintedwolf.max %}; the bound here is {{ paintedwolf.max }}{% endif
+    %}.
+  instead: Branch on Code CAPTURE_ROUTE_INVALID; correct the fixture and retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: A page request fixture is invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: page_open
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_ROUTE_INVALID'
+- id: unreadable_body
+  vars:
+    reason: body_path_unreadable
+    tool: page_act
+  expect_contains:
+  - 'Code: CAPTURE_ROUTE_INVALID'
+  - body_path

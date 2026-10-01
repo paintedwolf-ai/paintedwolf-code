@@ -1,0 +1,22 @@
+title: Cancel a customer subscription
+id: 2f63e115-6f54-4d20-8ed4-93c3387f9feb
+status: stable
+description: Cancels or deletes a customer subscription through a structured tool.
+references:
+  - https://github.com/stripe/openapi
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    ActionEffect: cancel
+    TargetScope: subscription
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable]

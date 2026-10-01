@@ -1,0 +1,34 @@
+oar: '1.0'
+id: HELD_CALL_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - held_result
+    - held_stop
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.handle
+when: paintedwolf.rejection_code == "HELD_CALL_NOT_FOUND"
+effect: block
+copy:
+  what: Handle {{ paintedwolf.handle }} is not a held call in this session.
+  cause: The handle was never issued to a call, was evicted after later calls settled, or the host restarted, which ends held calls.
+  why: A held call lives in memory only. A missing handle does not say what the call would have returned.
+  fix: Use a handle from a result that returned one. Command handles belong to command_output and command_stop. To recover the answer, repeat the original call.
+  instead: Repeat the original call; do not poll a handle that no longer exists
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: held call handle {{ paintedwolf.handle }} was not found
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handle: held-1
+      profile: coordinator
+      tool: held_result
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: HELD_CALL_NOT_FOUND'

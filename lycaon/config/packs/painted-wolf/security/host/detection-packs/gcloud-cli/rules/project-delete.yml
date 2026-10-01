@@ -1,0 +1,30 @@
+title: Delete a GCP project and everything in it
+id: 5414e880-d1e2-402f-950e-581384e67624
+description: Deletes a GCP project and all resources within it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: gcloud
+  selection_project:
+    CommandLine|contains|all:
+      - ' projects '
+      - ' delete'
+  # `gcloud help projects delete` renders documentation; the subcommand form is
+  # pinned to the program so a resource literally named "help" still matches.
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|help)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_project and not filter_rehearsal and not filter_local

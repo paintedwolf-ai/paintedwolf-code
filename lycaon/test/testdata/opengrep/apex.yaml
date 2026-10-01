@@ -1,0 +1,84 @@
+language: apex
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: soql-injection-vulnerable
+  file: sample.cls
+  source: 'public class Audit { public static void run() { Database.query(''SELECT Id FROM Account WHERE Name =
+    '' + ApexPages.currentPage().getParameters().get(''name'')); } }
+
+    '
+  want:
+  - lycaon.apex.soql-injection
+  covers: []
+- name: soql-injection-safe
+  file: sample.cls
+  source: 'public class Audit { public static void run() { String name = ApexPages.currentPage().getParameters().get(''name'');
+    Database.query(''SELECT Id FROM Account WHERE Name = :name''); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.apex.soql-injection
+- name: weak-digest-context-only
+  file: sample.cls
+  source: 'public class Audit { public static void run() { Crypto.generateDigest(''MD5'', data); } }
+
+    '
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.cls
+  source: 'public class Audit { public static void run() { Crypto.generateDigest(''SHA256'', data); } }
+
+    '
+  want: []
+  covers: []
+- name: precision-safe-conversion
+  file: sample.cls
+  source: 'public class Query { public void f(){ Integer id=Integer.valueOf(ApexPages.currentPage().getParameters().get(''id''));
+    Database.query(''SELECT Id FROM Account LIMIT '' + id); } }
+
+    '
+  want: []
+  covers: []
+- name: rest-query-text
+  file: app.cls
+  source: class Handler { static void handle() { String query = RestContext.request.params.get('query'); Database.query(query);
+    } }
+  want:
+  - lycaon.apex.soql-injection
+  covers:
+  - lycaon.apex.soql-injection
+- name: rest-bound-value
+  file: app.cls
+  source: class Handler { static void handle() { String name = RestContext.request.params.get('name'); Database.queryWithBinds('SELECT
+    Id FROM Account WHERE Name = :name', new Map<String, Object>{'name' => name}, AccessLevel.USER_MODE); } }
+  want: []
+  covers:
+  - lycaon.apex.soql-injection
+- name: rest-binds-unsafe-text
+  file: app.cls
+  source: class Handler { static void handle() { String query = RestContext.request.params.get('query'); Database.queryWithBinds(query,
+    new Map<String, Object>(), AccessLevel.USER_MODE); } }
+  want:
+  - lycaon.apex.soql-injection
+  covers:
+  - lycaon.apex.soql-injection
+- name: rest-count-query
+  file: app.cls
+  source: class Handler { static void handle() { String query = RestContext.request.params.get('query'); Database.countQuery(query);
+    } }
+  want:
+  - lycaon.apex.soql-injection
+  covers:
+  - lycaon.apex.soql-injection
+- name: rest-query-locator
+  file: app.cls
+  source: class Handler { static void handle() { String query = RestContext.request.params.get('query'); Database.getQueryLocator(query);
+    } }
+  want:
+  - lycaon.apex.soql-injection
+  covers:
+  - lycaon.apex.soql-injection

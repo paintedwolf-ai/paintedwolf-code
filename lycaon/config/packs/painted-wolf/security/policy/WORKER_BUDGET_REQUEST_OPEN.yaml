@@ -1,0 +1,36 @@
+oar: '1.0'
+id: WORKER_BUDGET_REQUEST_OPEN
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - request_budget
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_tool_loops
+  - paintedwolf.requested_max
+when: paintedwolf.rejection_code == "WORKER_BUDGET_REQUEST_OPEN"
+effect: block
+copy:
+  what: Your earlier budget request is still with the coordinator.
+  cause: This leg already asked for a ceiling of {{ paintedwolf.requested_max }}; its current ceiling is {{
+    paintedwolf.max_tool_loops }}.
+  why: One request is open per leg so the coordinator answers each ask once.
+  fix: Keep working on the remaining goal. A raised ceiling arrives as a host notice; if none arrives, finish
+    with an honest partial report at the current ceiling.
+  instead: Continue the leg; do not repeat request_budget
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_budget
+x-paintedwolf-message: A budget request is already open for this leg
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    max_tool_loops: 20
+    requested_max: 32
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_BUDGET_REQUEST_OPEN'
+  - partial report

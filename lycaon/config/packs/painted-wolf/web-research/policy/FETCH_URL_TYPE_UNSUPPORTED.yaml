@@ -1,0 +1,37 @@
+oar: '1.0'
+id: FETCH_URL_TYPE_UNSUPPORTED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.content_type
+  - paintedwolf.unsupported
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "FETCH_URL_TYPE_UNSUPPORTED"
+effect: block
+copy:
+  what: mode=raw refused Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }}).
+  cause: Raw ingest allows textual MIME and allowlisted image/font assets only.
+  why: Archives, video, and opaque blobs are out of scope for fetch_url — use other tools after a supported path.
+  fix: Use a supported resource only if it satisfies the task. Text mode may extract a genuinely textual documentation
+    page; it does not convert an unsupported archive or binary into supported content. Report the unsupported resource
+    requirement when the original bytes are necessary.
+  instead: Branch on Code FETCH_URL_TYPE_UNSUPPORTED; choose a supported MIME
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url raw does not support this content type
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    content_type: application/zip
+    reason: archive
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: FETCH_URL_TYPE_UNSUPPORTED'

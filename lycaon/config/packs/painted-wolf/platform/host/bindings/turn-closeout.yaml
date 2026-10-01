@@ -1,0 +1,14 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': turn.closeout
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-turn-closeout
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - host limit forces a final prose-only turn on a non-closeout coordinator surface
+  required:
+  - final turn
+  - closing summary

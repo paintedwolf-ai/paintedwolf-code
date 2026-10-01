@@ -1,0 +1,32 @@
+oar: '1.0'
+id: FETCH_URL_MODE_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - fetch_url
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.mode
+when: paintedwolf.rejection_code == "FETCH_URL_MODE_INVALID"
+effect: block
+copy:
+  what: fetch_url mode {{ paintedwolf.mode }} is not text or raw.
+  cause: Only mode=text (research extract) and mode=raw (verbatim / asset ingest) are valid.
+  why: The host routes HTML extraction versus byte ingest from the mode field alone.
+  fix: Omit mode for the default text extract, or pass mode=raw for verbatim resources.
+  instead: Branch on Code FETCH_URL_MODE_INVALID; use text or raw
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url mode must be text or raw
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      mode: html
+      tool: fetch_url
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: FETCH_URL_MODE_INVALID'

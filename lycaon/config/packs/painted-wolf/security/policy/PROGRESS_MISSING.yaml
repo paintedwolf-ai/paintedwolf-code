@@ -1,0 +1,48 @@
+oar: '1.0'
+id: PROGRESS_MISSING
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  profiles:
+    - tool
+    - session
+  facts:
+    - paintedwolf.progress_gated_tool
+    - paintedwolf.progress_missing
+    - paintedwolf.review_loop_active
+when: paintedwolf.progress_gated_tool && paintedwolf.progress_missing && !paintedwolf.review_loop_active && session_posture != "spec"
+effect: block
+copy:
+  what: You called **`{{ tool }}`** but no session **`## Progress`** checklist exists yet.
+  cause: Product edits or delegated work started before deliverables were recorded in update_progress
+  why: Each checklist row is a commitment — workers and the final report turn rely on it; author deliverables before mutate, dispatch, or synthesis.
+  fix: Call **`update_progress`** with a **`## Progress`** checklist — one **`- [ ]`** row per deliverable you will hand back (use **`- [>]`** for optional report-only rows). If the user will see a page/UI or interactive terminal change, also add `- [ ] Snapshot the running UI` (or `Snapshot the terminal`) after the deliverable. Then retry **`{{ tool }}`** for the **same arc** — do not switch to a different mutate/dispatch path to bypass the gate (after `task`, retry `task`; do not fall through to solo `write`/`edit` unless you re-chose inline).
+  instead: Call **`update_progress`**, then retry **`{{ tool }}`** for the same arc
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Progress-gated tools require a progress checklist first
+x-paintedwolf-scenarios:
+  - id: missing_checklist_task
+    vars:
+      session_posture: build
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PROGRESS_MISSING'
+      - update_progress
+      - '## Progress'
+      - Snapshot the running UI
+      - retry
+      - same arc
+  - id: missing_checklist_write
+    vars:
+      session_posture: build
+      tool: write
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PROGRESS_MISSING'
+      - update_progress
+      - '## Progress'
+      - Snapshot the running UI
+      - retry
+      - same arc

@@ -1,0 +1,3 @@
+#!/bin/bash
+# A closed stdin descriptor can yield success without an asset catalog.
+exec xcrun actool "$@" </dev/null

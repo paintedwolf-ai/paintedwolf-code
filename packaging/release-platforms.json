@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "platforms": [
+    {
+      "updater_key": "darwin-aarch64",
+      "runner": "macos-14",
+      "artifact_arch": "aarch64",
+      "goos": "darwin",
+      "goarch": "arm64",
+      "publication": "public",
+      "package_extension": "dmg",
+      "updater_extension": "app.tar.gz"
+    },
+    {
+      "updater_key": "linux-x86_64",
+      "runner": "ubuntu-22.04",
+      "artifact_arch": "x86_64",
+      "goos": "linux",
+      "goarch": "amd64",
+      "publication": "candidate",
+      "package_extension": "AppImage",
+      "updater_extension": "AppImage.tar.gz"
+    },
+    {
+      "updater_key": "linux-aarch64",
+      "runner": "ubuntu-22.04-arm",
+      "artifact_arch": "aarch64",
+      "goos": "linux",
+      "goarch": "arm64",
+      "publication": "candidate",
+      "package_extension": "AppImage",
+      "updater_extension": "AppImage.tar.gz"
+    },
+    {
+      "updater_key": "windows-x86_64",
+      "runner": "windows-2025",
+      "artifact_arch": "x86_64",
+      "goos": "windows",
+      "goarch": "amd64",
+      "publication": "candidate",
+      "package_extension": "exe",
+      "updater_extension": "nsis.zip"
+    }
+  ]
+}

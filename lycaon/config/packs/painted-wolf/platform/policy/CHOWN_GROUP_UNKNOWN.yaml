@@ -1,0 +1,39 @@
+oar: '1.0'
+id: CHOWN_GROUP_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chown
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ownership_target
+  - paintedwolf.ownership_field
+  - paintedwolf.ownership_uid
+  - paintedwolf.ownership_gid
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CHOWN_GROUP_UNKNOWN"
+effect: block
+copy:
+  cause: Host account lookup could not resolve this group.
+  why: This host permits only its current user ID {{ paintedwolf.ownership_uid }} and group ID {{ paintedwolf.ownership_gid
+    }}.
+  fix: Use current or the exact permitted identity only when that matches the requested ownership change. Otherwise
+    report the limitation; do not guess another account, elevate the host, or switch tools to bypass it.
+  instead: Branch on Code CHOWN_GROUP_UNKNOWN; retain the current-identity boundary
+  what: The requested group {{ paintedwolf.ownership_target }} is unavailable for chown.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
+x-paintedwolf-message: chown:chown group name not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: scripts/run.sh
+    profile: implement
+    tool: chown
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHOWN_GROUP_UNKNOWN'

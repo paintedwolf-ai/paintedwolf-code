@@ -1,0 +1,134 @@
+language: scala
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: sql-injection-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { stmt.executeQuery("SELECT * FROM users WHERE name = " + req.getParameter("input")) } }
+  want:
+  - lycaon.scala.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { stmt.executeQuery("SELECT 1") } }
+  want: []
+  covers:
+  - lycaon.scala.sql-injection
+- name: command-injection-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { Runtime.getRuntime().exec(req.getParameter("input")) } }
+  want:
+  - lycaon.scala.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { Runtime.getRuntime().exec("echo ready") } }
+  want: []
+  covers:
+  - lycaon.scala.command-injection
+- name: path-traversal-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { FileInputStream(req.getParameter("input")) } }
+  want:
+  - lycaon.scala.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { FileInputStream("config.json") } }
+  want: []
+  covers:
+  - lycaon.scala.path-traversal
+- name: open-redirect-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { res.sendRedirect(req.getParameter("input")) } }
+  want:
+  - lycaon.scala.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { res.sendRedirect("/home") } }
+  want: []
+  covers:
+  - lycaon.scala.open-redirect
+- name: weak-digest-context-only
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { MessageDigest.getInstance("MD5") } }
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { MessageDigest.getInstance("SHA-256") } }
+  want: []
+  covers: []
+- name: weak-cipher-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { Cipher.getInstance("DES") } }
+  want:
+  - lycaon.scala.weak-cipher
+  covers: []
+- name: weak-cipher-safe
+  file: sample.scala
+  source: |
+    object Audit { def handle(req: HttpServletRequest) = { Cipher.getInstance("AES/GCM/NoPadding") } }
+  want: []
+  covers:
+  - lycaon.scala.weak-cipher
+- name: ecb-encryption-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def run() = { Cipher.getInstance("AES/ECB/PKCS5Padding") } }
+  want:
+  - lycaon.scala.ecb-encryption
+  covers: []
+- name: ecb-encryption-safe
+  file: sample.scala
+  source: |
+    object Audit { def run() = { Cipher.getInstance("AES/GCM/NoPadding") } }
+  want: []
+  covers:
+  - lycaon.scala.ecb-encryption
+- name: rsa-without-padding-vulnerable
+  file: sample.scala
+  source: |
+    object Audit { def run() = { Cipher.getInstance("RSA/ECB/NoPadding") } }
+  want:
+  - lycaon.scala.rsa-without-padding
+  covers: []
+- name: rsa-without-padding-safe
+  file: sample.scala
+  source: |
+    object Audit { def run() = { Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding") } }
+  want: []
+  covers:
+  - lycaon.scala.rsa-without-padding
+- name: xml-external-entities-enabled-context-only
+  file: sample.scala
+  source: |
+    object Audit { def run() = { factory.setFeature("http://xml.org/sax/features/external-general-entities",true) } }
+  want: []
+  covers: []
+- name: xml-external-entities-enabled-safe
+  file: sample.scala
+  source: |
+    object Audit { def run() = { factory.setFeature("http://xml.org/sax/features/external-general-entities",false) } }
+  want: []
+  covers: []
+- name: precision-exec-argument-array
+  file: sample.scala
+  source: 'object Test { def f(req: HttpServletRequest) = Runtime.getRuntime().exec(Array("printf", "%s", req.getParameter("text")))
+    }'
+  want: []
+  covers:
+  - lycaon.scala.command-injection

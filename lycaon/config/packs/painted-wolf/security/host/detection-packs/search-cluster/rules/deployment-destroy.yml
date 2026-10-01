@@ -1,0 +1,31 @@
+title: Shut down or delete an Elastic Cloud deployment
+id: 32623436-1310-4f18-aa74-c17e304d5d8b
+description: Shuts down a hosted Elasticsearch deployment or deletes one already shut down.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: ecctl
+    CommandLine|contains:
+      - ' deployment shutdown'
+      - ' deployment delete'
+      - ' deployment resource delete'
+      - ' deployment resource shutdown'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and not filter_rehearsal and not filter_local

@@ -1,0 +1,23 @@
+id: painted-wolf/platform:go-context-cost
+title: "Show cost"
+scope: "global"
+keywords:
+  - "cost"
+  - "spend"
+  - "usage"
+  - "budget"
+  - "budgets"
+  - "guardrails"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "cost"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.cost"

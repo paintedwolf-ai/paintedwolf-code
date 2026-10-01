@@ -1,0 +1,50 @@
+oar: '1.0'
+id: CAPTURE_TARGET_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.capture_actions_required
+  - paintedwolf.capture_held_target
+  - paintedwolf.path
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_TARGET_INVALID"
+effect: block
+copy:
+  what: '{{ tool }} received invalid page arguments{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.'
+  cause: '{% if paintedwolf.capture_actions_required %}The held-page operation has no actions to execute.{% else
+    %}{% if paintedwolf.capture_held_target %}A held page ID was combined with a new navigation target.{% else %}The
+    arguments did not identify one valid navigation binding and relative entry path.{% endif %}{% endif %}'
+  why: Held-page actions use the existing page; new navigation needs one supported binding mode.
+  fix: '{% if paintedwolf.capture_actions_required %}Supply the required actions for the existing page ID. Resume
+    from its current state; do not repeat previously completed steps.{% else %}{% if paintedwolf.capture_held_target
+    %}Use the held page ID alone for its current state, or omit it when opening a new navigation target.{% else
+    %}Prefer project_dir for a static file-tree probe; use a relative path for nested pages without traversal, query,
+    or fragment syntax. Use url with the project’s loopback server when running fidelity matters. Never combine
+    url with project_dir. process_handle requires url, and path requires project_dir.{% endif %}{% endif %}'
+  instead: Branch on Code CAPTURE_TARGET_INVALID; correct the indicated binding or actions without restarting unrelated
+    work
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page requires exactly one of project_dir or url
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_TARGET_INVALID'
+- id: mixed_targets
+  vars:
+    reason: url_and_project_dir
+    tool: capture_page
+  expect_contains:
+  - 'Code: CAPTURE_TARGET_INVALID'
+  - project_dir

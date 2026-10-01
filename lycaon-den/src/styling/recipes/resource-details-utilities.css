@@ -1,0 +1,441 @@
+@utility den-managed-secrets-panel {
+  height: 35rem;
+  flex: 0 0 auto;
+
+  & > .den-settings-list-inbox {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  & .den-settings-list-inbox__list,
+  & .den-settings-list-inbox__detail {
+    height: 100%;
+  }
+}
+
+@utility den-settings-list-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-4);
+  margin: 0;
+  width: 100%;
+  min-height: var(--den-settings-card-chrome-height);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--den-line);
+  background: var(--den-background);
+  box-sizing: border-box;
+}
+
+@utility den-settings-list-chrome__count {
+  min-width: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+}
+
+@utility den-settings-list-chrome__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+@utility den-settings-list-back {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  width: 100%;
+  min-height: var(--den-settings-card-chrome-height);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--den-line);
+  background: var(--den-background);
+  box-sizing: border-box;
+}
+
+@utility den-settings-list-back__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 550;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--den-text);
+    background: var(--den-selection-hover);
+  }
+}
+
+/** List OR detail body inside the white list panel (navigate, not split). */
+@utility den-settings-list-inbox {
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--den-background);
+}
+
+@utility den-settings-list-inbox__list {
+  min-width: 0;
+  background: var(--den-background);
+}
+
+/* A scrolling list's extent; empty copy fills it. */
+@utility den-settings-list-inbox__list-content {
+  display: flex;
+  flex-direction: column;
+
+  & > .den-settings-list-inbox__empty {
+    flex: 1 0 auto;
+  }
+}
+
+/* Empty copy fills and centers in the list body. */
+@utility den-settings-list-inbox__empty {
+  margin: 0;
+  padding: 28px 16px;
+  min-height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  text-align: center;
+
+  /* Override the shared prose measure. */
+  &.den-settings-hint {
+    max-width: none;
+  }
+}
+
+@utility den-settings-list-inbox__detail {
+  min-width: 0;
+  background: var(--den-background);
+}
+
+@utility den-settings-list-inbox__detail-content {
+  padding: 16px;
+}
+
+@utility den-resource-diagnostic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-1);
+  padding: var(--spacing-den-4) var(--spacing-den-5);
+  border: 1px solid color-mix(in srgb, var(--den-warning) 35%, var(--den-line));
+  border-radius: var(--den-radius-sm);
+  color: var(--den-text);
+  background: color-mix(in srgb, var(--den-warning) 8%, var(--den-background));
+  font-size: var(--text-den-hint);
+
+  & strong {
+    color: var(--den-warning-text);
+    font-size: var(--text-den-caption);
+  }
+}
+
+@utility den-resource-catalog-path {
+  margin: calc(-1 * var(--spacing-den-3)) 0 0;
+}
+
+@utility den-resource-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--den-text-muted);
+  background: color-mix(in srgb, var(--den-text-muted) 12%, transparent);
+
+  &[data-status="available"] {
+    color: var(--den-status-positive-text);
+    background: color-mix(in srgb, var(--den-status-positive) 14%, transparent);
+  }
+
+  &[data-status="unknown"] {
+    color: var(--den-warning-text);
+    background: color-mix(in srgb, var(--den-warning) 14%, transparent);
+  }
+}
+
+/* Detail pane inside a settings list card — shared by Host resources, Secrets. */
+@utility den-settings-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+
+  & h3,
+  & h4,
+  & p,
+  & dl,
+  & dd {
+    margin: 0;
+  }
+
+  & h4 {
+    font-size: var(--text-den-body);
+    font-weight: 550;
+  }
+}
+
+@utility den-settings-detail__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-den-5);
+
+  & > div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-den-2);
+  }
+
+  & p {
+    color: var(--den-text-muted);
+    font-size: var(--text-den-hint);
+    line-height: 1.45;
+  }
+}
+
+@utility den-settings-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-den-5) var(--spacing-den-7);
+
+  & > div {
+    min-width: 0;
+  }
+
+  & dt {
+    margin-bottom: var(--spacing-den-1);
+    color: var(--den-text-muted);
+    font-size: var(--text-den-caption);
+  }
+
+  & dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--text-den-body);
+  }
+}
+
+@utility den-resource-connections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+
+  & > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spacing-den-4);
+    padding: var(--spacing-den-3) 0;
+    border-bottom: 1px solid var(--den-line);
+    font-size: var(--text-den-hint);
+  }
+
+  & code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+}
+
+@utility den-resource-docs {
+  align-self: flex-start;
+  margin-left: 0;
+  font-size: var(--text-den-hint);
+}
+
+@container den-settings-col (max-width: 34rem) {
+  .den-settings-facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Danger close-out of a detail pane — separated from the facts above it. */
+@utility den-settings-detail__danger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-den-3);
+  padding-top: var(--spacing-den-5);
+  border-top: 1px solid var(--den-line);
+}
+
+@utility den-secret-reference {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+}
+
+@utility den-secret-reference__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-4);
+}
+
+@utility den-secret-reveal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-den-3);
+  padding: var(--spacing-den-4);
+  border: 1px solid var(--den-line);
+  border-radius: var(--radius-den);
+  background: var(--den-surface-inset);
+
+  & > .den-secret-reference__head {
+    width: 100%;
+  }
+}
+
+@utility den-secret-reveal__value {
+  width: 100%;
+  max-height: 10rem;
+  border-radius: var(--radius-den);
+  background: var(--den-surface);
+}
+
+@utility den-secret-reveal__content {
+  padding: var(--spacing-den-3);
+}
+
+/* Long values wrap, so the value scrolls only vertically. */
+@utility den-secret-reveal__code {
+  display: block;
+  color: var(--den-text);
+  font-family: var(--font-den-mono);
+  font-size: var(--text-den-compact);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: all;
+}
+
+/* Text-weight control that sits inside a label or count line. */
+@utility den-settings-inline-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-caption);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--den-text);
+  }
+}
+
+/* State, source, and search across the top of the secrets list. */
+@utility den-secret-filters {
+  display: grid;
+  grid-template-columns: minmax(8rem, 10rem) minmax(8rem, 10rem) minmax(14rem, 1fr);
+  gap: var(--spacing-den-3);
+  padding: var(--spacing-den-3) var(--spacing-den-4);
+  border-bottom: 1px solid var(--den-line);
+
+  & > .den-select {
+    width: 100%;
+  }
+}
+
+@container den-settings-col (max-width: 34rem) {
+  .den-secret-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@utility den-secret-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-4);
+}
+
+@utility den-secret-promote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-den-3);
+  padding-top: var(--spacing-den-4);
+  border-top: 1px solid var(--den-line);
+}
+
+@utility den-secret-uses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+}
+
+/* One row per recorded substitution attempt: tool, outcome, when. */
+@utility den-secret-use-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  & > li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--spacing-den-4);
+    align-items: baseline;
+    padding: var(--spacing-den-2) 0;
+    border-bottom: 1px solid var(--den-line);
+    font-size: var(--text-den-hint);
+  }
+
+  & .den-secret-use-list__tool {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-family: var(--font-den-mono);
+  }
+
+  & .den-secret-use-list__outcome {
+    color: var(--den-text-muted);
+  }
+
+  /* A refusal is the row most worth noticing. */
+  & > li:not([data-outcome="resolved"]) .den-secret-use-list__outcome,
+  & > li[data-delivery="withheld"] .den-secret-use-list__outcome {
+    color: var(--den-warning-text);
+  }
+
+  & .den-secret-use-list__when {
+    color: var(--den-text-muted);
+    white-space: nowrap;
+  }
+
+  & .den-secret-use-list__call {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--den-text-muted);
+  }
+}
+
+/* An action's form takes the place of the action row it came from. */
+@utility den-settings-detail__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-4);
+  padding-top: var(--spacing-den-4);
+  border-top: 1px solid var(--den-line);
+}
+

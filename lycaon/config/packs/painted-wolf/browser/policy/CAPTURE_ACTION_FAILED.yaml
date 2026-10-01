@@ -1,0 +1,56 @@
+oar: '1.0'
+id: CAPTURE_ACTION_FAILED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.error
+  - paintedwolf.index
+  - paintedwolf.interactive
+  - paintedwolf.locators
+  - paintedwolf.type
+when: paintedwolf.rejection_code == "CAPTURE_ACTION_FAILED"
+effect: block
+copy:
+  what: '{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[]
+    step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}.'
+  cause: '{% if paintedwolf.locators %}The step targeting {{ paintedwolf.locators }} could not complete.{%
+    else %}The browser action or its settling step could not complete.{% endif %} {% if paintedwolf.interactive
+    %}Visible interactive: {{ paintedwolf.interactive }}.{% endif %}'
+  why: Structured actions must succeed before the final assertable snapshot.
+  fix: 'Inspect completed_actions in the rejection details and the current state before retrying: completed steps remain applied, and the failing
+    action may also have taken effect before a navigation or settling failure. For a missing control, retarget from the interactive inventory (testid, selector, or
+    role + label/text as accessible name), or add wait_for / wait=idle. label and text match accessible name
+    (button text, aria-label, labelled-by, or an associated form label). Input is sent where a reader''s pointer
+    would land, so an obscured or clipped target is one a reader could not reach either; measure_page reports what
+    covers or clips it. A recorded drive still returns its recording: the rejection carries the timeline and the
+    archive is attached, so what the page did before the step failed remains readable.'
+  instead: Branch on Code CAPTURE_ACTION_FAILED; fix the failing action
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: A capture_page drive action failed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_ACTION_FAILED'
+- id: role_label_miss
+  vars:
+    index: 0
+    type: click
+    error: target not found
+    locators: role=button label="Check configuration"
+    interactive: button "Check configuration"
+    tool: capture_page
+  expect_contains:
+  - 'Code: CAPTURE_ACTION_FAILED'
+  - target not found
+  - accessible name

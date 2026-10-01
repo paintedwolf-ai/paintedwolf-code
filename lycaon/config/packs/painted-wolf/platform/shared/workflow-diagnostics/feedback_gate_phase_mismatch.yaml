@@ -1,0 +1,5 @@
+code: feedback_gate_phase_mismatch
+message: |
+  Feedback gate {{leaf}} does not match phase {{phase}} feedback key.
+replacement: |
+  Align gate leaf and on_enter.request_user_feedback.

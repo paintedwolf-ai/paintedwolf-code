@@ -1,0 +1,5 @@
+code: missing_gate_feedback
+message: |
+  Gate leaf {{leaf}} has no gate-feedback YAML.
+replacement: |
+  Add config/packs/painted-wolf/platform/guidance/gate-feedback for this leaf.

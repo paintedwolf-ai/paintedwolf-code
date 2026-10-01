@@ -1,0 +1,10 @@
+id: painted-wolf/platform:help-third-party-software
+title: "Third-party software"
+scope: "global"
+keywords:
+  - "licenses"
+  - "notices"
+  - "open source"
+action:
+  kind: native_ui
+  handler: "help.thirdPartyNotices"

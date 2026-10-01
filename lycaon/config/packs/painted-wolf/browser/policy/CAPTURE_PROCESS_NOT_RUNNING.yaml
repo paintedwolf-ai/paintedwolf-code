@@ -1,0 +1,38 @@
+oar: '1.0'
+id: CAPTURE_PROCESS_NOT_RUNNING
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.not_running
+  - paintedwolf.handle
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "CAPTURE_PROCESS_NOT_RUNNING"
+effect: block
+copy:
+  what: The process_handle {{ paintedwolf.handle }} is not usable{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.
+  cause: The handle is unknown, finished, or the background registry is unavailable.
+  why: When process_handle is supplied, url capture must target a host-tracked live process (session teardown kills
+    it).
+  fix: Inspect the existing process and its recorded output with the controls currently offered. Use its running
+    handle, or omit process_handle only for an independently running user-owned loopback server. Start a replacement
+    only when the task requires it and the current surface permits it; do not launch a duplicate server to clear
+    this refusal.
+  instead: Branch on Code CAPTURE_PROCESS_NOT_RUNNING; verify the actual process before changing its binding
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page process_handle is not a running background process
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_PROCESS_NOT_RUNNING'

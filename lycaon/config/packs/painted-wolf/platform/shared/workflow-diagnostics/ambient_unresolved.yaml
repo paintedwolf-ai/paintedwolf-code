@@ -1,0 +1,5 @@
+code: ambient_unresolved
+message: |
+  default_ambient_workflow {{workflow_id}}@{{version}} is not in the registry.
+replacement: |
+  Fix registry.yaml to point at a shipped ambient workflow.

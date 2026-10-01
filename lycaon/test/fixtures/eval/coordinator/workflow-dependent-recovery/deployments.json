@@ -1,0 +1,44 @@
+[
+  {
+    "release": "R17",
+    "component": "core",
+    "current": "core-v3",
+    "previous": "core-v2",
+    "result": "failed"
+  },
+  {
+    "release": "R17",
+    "component": "api",
+    "current": "api-v3",
+    "previous": "api-v2",
+    "result": "passed"
+  },
+  {
+    "release": "R16",
+    "component": "core",
+    "current": "core-v2",
+    "previous": "core-v1",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "search",
+    "current": "search-v3",
+    "previous": "search-v2",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "current": "web-v3",
+    "previous": "web-v2",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "jobs",
+    "current": "jobs-v3",
+    "previous": "jobs-v2",
+    "result": "passed"
+  }
+]

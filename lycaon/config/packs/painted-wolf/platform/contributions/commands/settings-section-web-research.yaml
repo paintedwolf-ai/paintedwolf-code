@@ -1,0 +1,10 @@
+id: painted-wolf/platform:settings-section-web-research
+title: "Settings: web research"
+scope: "global"
+keywords:
+  - "web research"
+  - "search providers"
+  - "crawl"
+action:
+  kind: native_ui
+  handler: "settings.section.web-research"

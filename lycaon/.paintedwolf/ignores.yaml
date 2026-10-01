@@ -1,0 +1,15 @@
+version: 1
+findings:
+  - id: fixture-hostile-project-aws-keys
+    path: test/fixtures/e2e/hostile-project/**
+    kind: secret
+    reason: Intentional fixture — the published AWS documentation example keys in bait-aws-env.sh, used by e2e hostile-project tests.
+  - id: fixture-gitleaks-secrets-env
+    path: test/testdata/scan/secrets.env
+    kind: secret
+    reason: Intentional fixture — synthetic GITHUB_TOKEN used by gitleaks integration tests.
+  - id: fixture-opengrep-sample-projects
+    path: test/testdata/opengrep-projects/**
+    kind: secret
+    reason: Intentional fixtures — synthetic tokens and passwords embedded in scanner eval sample projects.
+secrets: []

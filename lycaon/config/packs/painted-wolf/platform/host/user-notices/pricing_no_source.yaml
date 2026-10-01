@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Pricing source not found
+message: >-
+  The pricing feed you asked to refresh is not one of the configured
+  sources, so there is nothing to fetch.
+suggested_action: Pick a source from Settings → Cost and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not one of the configured

@@ -1,0 +1,551 @@
+{
+  "$schema": "./workflow_vocabulary.schema.json",
+  "entries": [
+    {
+      "id": "agent_is:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "agent_is_plan_writer",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "all_legs_complete",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "baseline_scan_complete",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "blueprint_materialized",
+      "layer": "domain",
+      "domain": "blueprint",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "breaking_missing",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "closeout_gates_passed",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "completion_criteria_met",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delegation_active",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delegation_closeout_complete",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delegation_phase_done",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delegation_phase_setup",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delegation_phase_worker",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "delivery_gates_passed",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "disallowed_agent",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "doom_loop_exceeded",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "evidence_missing:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "evidence_passed:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "file_modified_since_base",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "findings_triaged",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "catalog",
+      "parameterized": false
+    },
+    {
+      "id": "gate_passed:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "gate_satisfied:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "gates_satisfied",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "grounding_blocked",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "high_risk_tool",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "hitl_consulted:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "human_approval",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "implement_workflow_ready",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "iteration_cap_near",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "leg_failed",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "leg_pending",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "lint_gate_passed",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "no_critical_findings",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "options_selection_valid",
+      "layer": "domain",
+      "domain": "blueprint",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "orchestration_complete",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "parallel_stages_complete",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "permission_denied",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "phase_is:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "phase_skipped:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "plan_awaiting_approval",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "plan_stub_valid",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "posture_is:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "posture_is_build",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "posture_is_orchestrate",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "posture_is_spec",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "posture_is_vet",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "posture_unresolved",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "remediation_complete",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "catalog",
+      "parameterized": false
+    },
+    {
+      "id": "required_scans_enqueued",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "research_required",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "research_satisfied",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "review_depth_missing",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "review_loop_active",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "scan_pending",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "scan_stale",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "scope_missing",
+      "layer": "domain",
+      "domain": "plan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "security_evidence_fresh",
+      "layer": "domain",
+      "domain": "scan",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "stub_invalid",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "stub_valid",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_command",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_delegation",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_handoff",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_scan_pack",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_state",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_task",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "tool_is_write",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "topology_stage_complete",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "user_decision:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "user_decision_pending:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "user_decision_received:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "user_feedback_pending:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "user_feedback_received:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "var_equals:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "var_truthy:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": true
+    },
+    {
+      "id": "worker_jobs_pending",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "workflow_active",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "workflow_not_runnable",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    },
+    {
+      "id": "workflow_paused",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false
+    }
+  ]
+}

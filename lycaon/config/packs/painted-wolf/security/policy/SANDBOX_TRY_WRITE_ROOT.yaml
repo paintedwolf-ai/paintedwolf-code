@@ -1,0 +1,78 @@
+oar: '1.0'
+id: SANDBOX_TRY_WRITE_ROOT
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_write_paths
+    - paintedwolf.refused_write_grants
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.refused_write_grants) > 0
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused writes to
+    {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %}
+    while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}.
+  cause: >-
+    The kernel refused them because this invocation's boundary does not
+    include those paths. A refused write can still leave a stage's exit status
+    at 0, and command output cannot widen the boundary.
+  why: >-
+    Repeating the command without the declaration is refused again.
+  fix: >-
+    {% if paintedwolf.process_running %}If the job cannot finish without the
+    write, stop it with `command_stop`, then reissue{% else %}Reissue{% endif %}
+    the same command with `capability_request.write_root` set to the matching
+    entry of {{ paintedwolf.refused_write_grants }}; approval follows the
+    project posture before it runs. Declare one path per invocation.
+  instead: Reissue with capability_request.write_root naming the refused path's
+    grant — do not relocate the write to scratch or /tmp
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a write this invocation needed
+x-paintedwolf-scenarios:
+  - id: instruction_file
+    vars:
+      tool: command
+      failed_stages: [touch AGENTS.md]
+      refused_write_paths: [/work/project/AGENTS.md]
+      refused_write_grants: [/work/project/AGENTS.md]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_WRITE_ROOT'
+      - touch AGENTS.md
+      - capability_request.write_root
+      - /work/project/AGENTS.md
+  - id: running_job
+    vars:
+      tool: command
+      process_running: true
+      refused_write_paths: [/Users/person/.colima/default/colima.yaml]
+      refused_write_grants: [/Users/person/.colima/default]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_WRITE_ROOT'
+      - while the job runs
+      - command_stop
+      - /Users/person/.colima/default
+  - id: outside_roots
+    vars:
+      tool: verify
+      failed_stages: [./task check]
+      refused_write_paths: [/etc/hosts]
+      refused_write_grants: [/etc]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_WRITE_ROOT'
+      - /etc/hosts

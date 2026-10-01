@@ -1,0 +1,25 @@
+description: "Locate repository areas with {\"path\":\".\"}. A named directory or explicit listing controls return entries instead. Use summarize to explain the area. Replaces command: ls -la."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Relative or absolute directory; the host checks access. Use . for a map.
+    cursor:
+      type: string
+      description: Map continuation; copy the returned args unchanged.
+    include_hidden:
+      type: boolean
+      description: Listings include hidden entries (default false).
+    max_depth:
+      type: integer
+      description: Listing depth (default 1, max 8).
+      minimum: 1
+    offset:
+      type: integer
+      description: Listing offset; use the returned next_offset.
+    max_entries:
+      type: integer
+      description: Listing page size (default and max 2000).
+  required: [path]
+  additionalProperties: false

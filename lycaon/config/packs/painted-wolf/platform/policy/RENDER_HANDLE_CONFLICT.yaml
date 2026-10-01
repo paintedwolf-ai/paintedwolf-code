@@ -1,0 +1,33 @@
+oar: '1.0'
+id: RENDER_HANDLE_CONFLICT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.handle
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RENDER_HANDLE_CONFLICT"
+effect: block
+copy:
+  what: '{{ tool }} did not store render handle "{{ paintedwolf.handle }}" because it changed during this render.'
+  cause: Another render_view call committed a newer revision of "{{ paintedwolf.handle }}" after this call read it.
+  why: Committing this render would silently discard the other revision.
+  fix: Apply the change again as a patch; it applies to the newer stored revision.
+  instead: Branch on Code RENDER_HANDLE_CONFLICT; serialize edits to one handle
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:render_view
+x-paintedwolf-message: render handle changed during the render
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: mockup-1
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_HANDLE_CONFLICT'

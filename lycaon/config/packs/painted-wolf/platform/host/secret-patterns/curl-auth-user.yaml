@@ -1,0 +1,5 @@
+id: curl-auth-user
+upstream_id: curl-auth-user
+title: curl basic-auth credentials
+severity: critical
+enabled: false

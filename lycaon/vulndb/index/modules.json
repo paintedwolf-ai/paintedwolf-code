@@ -1,0 +1,3011 @@
+[
+ {
+  "path": "filippo.io/age",
+  "vulns": [
+   {
+    "fixed": "1.2.1",
+    "id": "GO-2024-3344",
+    "modified": "2024-12-20T20:37:29Z"
+   }
+  ]
+ },
+ {
+  "path": "filippo.io/edwards25519",
+  "vulns": [
+   {
+    "fixed": "1.1.1",
+    "id": "GO-2026-4503",
+    "modified": "2026-02-17T21:58:22Z"
+   }
+  ]
+ },
+ {
+  "path": "filippo.io/nistec",
+  "vulns": [
+   {
+    "fixed": "0.0.2",
+    "id": "GO-2023-1595",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/Azure/azure-sdk-for-go/sdk/azidentity",
+  "vulns": [
+   {
+    "fixed": "1.6.0",
+    "id": "GO-2024-2918",
+    "modified": "2024-07-01T21:50:42Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/Masterminds/goutils",
+  "vulns": [
+   {
+    "fixed": "1.1.1",
+    "id": "GO-2022-0411",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream",
+  "vulns": [
+   {
+    "fixed": "1.7.8",
+    "id": "GO-2026-5764",
+    "modified": "2026-07-07T16:52:19Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/aws/aws-sdk-go-v2/service/bedrockruntime",
+  "vulns": [
+   {
+    "fixed": "1.50.4",
+    "id": "GO-2026-5764",
+    "modified": "2026-07-07T16:52:19Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/aws/aws-sdk-go-v2/service/s3",
+  "vulns": [
+   {
+    "fixed": "1.97.3",
+    "id": "GO-2026-5764",
+    "modified": "2026-07-07T16:52:19Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/cilium/ebpf",
+  "vulns": [
+   {
+    "fixed": "0.22.0",
+    "id": "GO-2026-6238",
+    "modified": "2026-08-18T16:38:10Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/cloudflare/circl",
+  "vulns": [
+   {
+    "fixed": "1.3.3",
+    "id": "GO-2023-1765",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.3.7",
+    "id": "GO-2024-2453",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2025-3754",
+    "modified": "2025-06-11T17:45:49Z"
+   },
+   {
+    "fixed": "1.6.3",
+    "id": "GO-2026-4550",
+    "modified": "2026-02-27T02:17:00Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/compose-spec/compose-go/v2",
+  "vulns": [
+   {
+    "fixed": "2.4.1",
+    "id": "GO-2025-3412",
+    "modified": "2025-01-29T00:02:38Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/containerd/containerd",
+  "vulns": [
+   {
+    "fixed": "1.5.9",
+    "id": "GO-2022-0278",
+    "modified": "2024-08-21T14:30:26Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0344",
+    "modified": "2024-08-21T14:30:29Z"
+   },
+   {
+    "fixed": "1.5.8",
+    "id": "GO-2022-0360",
+    "modified": "2024-08-21T14:30:29Z"
+   },
+   {
+    "fixed": "1.6.6",
+    "id": "GO-2022-0482",
+    "modified": "2024-08-21T15:11:33Z"
+   },
+   {
+    "fixed": "1.4.3",
+    "id": "GO-2022-0784",
+    "modified": "2024-08-21T15:28:59Z"
+   },
+   {
+    "fixed": "1.2.14",
+    "id": "GO-2022-0803",
+    "modified": "2024-08-21T15:29:02Z"
+   },
+   {
+    "fixed": "1.5.4",
+    "id": "GO-2022-0921",
+    "modified": "2024-08-21T15:29:08Z"
+   },
+   {
+    "fixed": "1.5.7",
+    "id": "GO-2022-0938",
+    "modified": "2024-08-21T16:03:21Z"
+   },
+   {
+    "fixed": "1.6.12",
+    "id": "GO-2022-1147",
+    "modified": "2024-08-21T16:03:26Z"
+   },
+   {
+    "fixed": "1.6.18",
+    "id": "GO-2023-1573",
+    "modified": "2024-08-21T21:16:43Z"
+   },
+   {
+    "fixed": "1.6.18",
+    "id": "GO-2023-1574",
+    "modified": "2024-08-21T21:16:43Z"
+   },
+   {
+    "fixed": "1.7.11",
+    "id": "GO-2023-2412",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.2",
+    "id": "GO-2024-2846",
+    "modified": "2024-07-01T19:59:51Z"
+   },
+   {
+    "fixed": "1.7.27",
+    "id": "GO-2025-3528",
+    "modified": "2025-03-18T18:14:48Z"
+   },
+   {
+    "fixed": "1.7.29",
+    "id": "GO-2025-4100",
+    "modified": "2025-11-17T19:11:23Z"
+   },
+   {
+    "fixed": "1.7.29",
+    "id": "GO-2025-4108",
+    "modified": "2025-11-17T19:11:23Z"
+   },
+   {
+    "id": "GO-2026-5064",
+    "modified": "2026-06-22T19:28:57Z"
+   },
+   {
+    "id": "GO-2026-5338",
+    "modified": "2026-06-25T18:43:19Z"
+   },
+   {
+    "fixed": "1.7.32",
+    "id": "GO-2026-5378",
+    "modified": "2026-06-25T18:43:19Z"
+   },
+   {
+    "fixed": "1.7.33",
+    "id": "GO-2026-5475",
+    "modified": "2026-06-25T22:34:31Z"
+   },
+   {
+    "id": "GO-2026-5622",
+    "modified": "2026-06-25T22:34:34Z"
+   },
+   {
+    "fixed": "1.7.33",
+    "id": "GO-2026-5758",
+    "modified": "2026-06-25T22:34:41Z"
+   },
+   {
+    "fixed": "1.7.35",
+    "id": "GO-2026-6444",
+    "modified": "2026-09-16T16:56:22Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/containerd/containerd/v2",
+  "vulns": [
+   {
+    "fixed": "2.0.4",
+    "id": "GO-2025-3528",
+    "modified": "2025-03-18T18:14:48Z"
+   },
+   {
+    "fixed": "2.1.1",
+    "id": "GO-2025-3699",
+    "modified": "2025-05-27T20:47:13Z"
+   },
+   {
+    "fixed": "2.0.5",
+    "id": "GO-2025-3701",
+    "modified": "2025-05-27T20:47:17Z"
+   },
+   {
+    "fixed": "2.2.0",
+    "id": "GO-2025-4100",
+    "modified": "2025-11-17T19:11:23Z"
+   },
+   {
+    "fixed": "2.2.0",
+    "id": "GO-2025-4108",
+    "modified": "2025-11-17T19:11:23Z"
+   },
+   {
+    "fixed": "2.3.2",
+    "id": "GO-2026-5064",
+    "modified": "2026-06-22T19:28:57Z"
+   },
+   {
+    "fixed": "2.3.2",
+    "id": "GO-2026-5338",
+    "modified": "2026-06-25T18:43:19Z"
+   },
+   {
+    "fixed": "2.3.1",
+    "id": "GO-2026-5378",
+    "modified": "2026-06-25T18:43:19Z"
+   },
+   {
+    "fixed": "2.3.2",
+    "id": "GO-2026-5475",
+    "modified": "2026-06-25T22:34:31Z"
+   },
+   {
+    "fixed": "2.3.2",
+    "id": "GO-2026-5622",
+    "modified": "2026-06-25T22:34:34Z"
+   },
+   {
+    "fixed": "2.3.2",
+    "id": "GO-2026-5758",
+    "modified": "2026-06-25T22:34:41Z"
+   },
+   {
+    "fixed": "2.3.5",
+    "id": "GO-2026-6444",
+    "modified": "2026-09-16T16:56:22Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/containerd/imgcrypt",
+  "vulns": [
+   {
+    "fixed": "1.1.4",
+    "id": "GO-2021-0412",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/containernetworking/cni",
+  "vulns": [
+   {
+    "fixed": "0.8.1",
+    "id": "GO-2022-0230",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/containernetworking/plugins",
+  "vulns": [
+   {
+    "fixed": "0.8.6",
+    "id": "GO-2023-1915",
+    "modified": "2024-08-20T20:31:38Z"
+   },
+   {
+    "fixed": "1.9.0",
+    "id": "GO-2025-4222",
+    "modified": "2025-12-15T20:15:46Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/cyphar/filepath-securejoin",
+  "vulns": [
+   {
+    "fixed": "0.2.4",
+    "id": "GO-2023-2048",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/docker/cli",
+  "vulns": [
+   {
+    "fixed": "20.10.9+incompatible",
+    "id": "GO-2024-2912",
+    "modified": "2024-07-19T16:04:58Z"
+   },
+   {
+    "fixed": "29.2.0+incompatible",
+    "id": "GO-2026-4610",
+    "modified": "2026-03-10T18:28:25Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/docker/distribution",
+  "vulns": [
+   {
+    "fixed": "2.7.0-rc.0+incompatible",
+    "id": "GO-2021-0072",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "2.8.0+incompatible",
+    "id": "GO-2022-0379",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/docker/docker",
+  "vulns": [
+   {
+    "fixed": "20.10.14+incompatible",
+    "id": "GO-2022-0390",
+    "modified": "2024-08-21T14:30:31Z"
+   },
+   {
+    "fixed": "1.3.2",
+    "id": "GO-2022-0625",
+    "modified": "2024-08-21T15:11:40Z"
+   },
+   {
+    "fixed": "1.3.2",
+    "id": "GO-2022-0630",
+    "modified": "2024-08-21T15:11:40Z"
+   },
+   {
+    "fixed": "1.3.1",
+    "id": "GO-2022-0636",
+    "modified": "2024-08-21T15:11:40Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0638",
+    "modified": "2024-08-21T15:11:40Z"
+   },
+   {
+    "fixed": "1.3.3",
+    "id": "GO-2022-0640",
+    "modified": "2024-08-21T15:11:40Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0647",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0649",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "1.3.2",
+    "id": "GO-2022-0705",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0708",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "1.3.3",
+    "id": "GO-2022-0751",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "1.0.1",
+    "id": "GO-2022-0752",
+    "modified": "2024-08-21T15:21:45Z"
+   },
+   {
+    "fixed": "20.10.18+incompatible",
+    "id": "GO-2022-0985",
+    "modified": "2024-08-21T16:03:24Z"
+   },
+   {
+    "fixed": "20.10.20+incompatible",
+    "id": "GO-2022-1107",
+    "modified": "2024-08-21T16:03:26Z"
+   },
+   {
+    "fixed": "23.0.3+incompatible",
+    "id": "GO-2023-1699",
+    "modified": "2024-08-20T20:29:17Z"
+   },
+   {
+    "fixed": "23.0.3+incompatible",
+    "id": "GO-2023-1700",
+    "modified": "2024-08-20T20:29:19Z"
+   },
+   {
+    "fixed": "23.0.3+incompatible",
+    "id": "GO-2023-1701",
+    "modified": "2024-08-20T20:29:19Z"
+   },
+   {
+    "fixed": "20.10.9+incompatible",
+    "id": "GO-2024-2500",
+    "modified": "2024-07-01T19:59:51Z"
+   },
+   {
+    "fixed": "25.0.2+incompatible",
+    "id": "GO-2024-2512",
+    "modified": "2024-07-01T19:59:51Z"
+   },
+   {
+    "fixed": "20.10.0-beta1+incompatible",
+    "id": "GO-2024-2521",
+    "modified": "2024-07-15T19:00:13Z"
+   },
+   {
+    "fixed": "26.0.0-rc3+incompatible",
+    "id": "GO-2024-2659",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "26.0.2+incompatible",
+    "id": "GO-2024-2737",
+    "modified": "2024-06-05T15:10:52Z"
+   },
+   {
+    "fixed": "20.10.9+incompatible",
+    "id": "GO-2024-2913",
+    "modified": "2024-07-01T19:59:51Z"
+   },
+   {
+    "fixed": "20.10.11+incompatible",
+    "id": "GO-2024-2914",
+    "modified": "2024-07-01T19:59:51Z"
+   },
+   {
+    "fixed": "27.1.1+incompatible",
+    "id": "GO-2024-3005",
+    "modified": "2024-07-29T18:08:44Z"
+   },
+   {
+    "fixed": "25.0.13+incompatible",
+    "id": "GO-2025-3829",
+    "modified": "2025-12-16T16:23:27Z"
+   },
+   {
+    "fixed": "28.3.3+incompatible",
+    "id": "GO-2025-3830",
+    "modified": "2025-08-11T17:24:51Z"
+   },
+   {
+    "id": "GO-2026-4883",
+    "modified": "2026-04-02T18:42:30Z"
+   },
+   {
+    "id": "GO-2026-4887",
+    "modified": "2026-04-02T18:42:30Z"
+   },
+   {
+    "id": "GO-2026-5617",
+    "modified": "2026-07-27T20:14:16Z"
+   },
+   {
+    "id": "GO-2026-5668",
+    "modified": "2026-08-11T23:21:33Z"
+   },
+   {
+    "id": "GO-2026-5746",
+    "modified": "2026-07-23T17:09:44Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/elazarl/goproxy",
+  "vulns": [
+   {
+    "fixed": "0.0.0-20230731152917-f99041a5c027",
+    "id": "GO-2023-1941",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/emicklei/go-restful/v3",
+  "vulns": [
+   {
+    "fixed": "3.8.0",
+    "id": "GO-2022-0619",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/getkin/kin-openapi",
+  "vulns": [
+   {
+    "fixed": "0.131.0",
+    "id": "GO-2025-3533",
+    "modified": "2025-03-26T17:24:24Z"
+   },
+   {
+    "fixed": "0.144.0",
+    "id": "GO-2026-6095",
+    "modified": "2026-08-18T16:38:10Z"
+   },
+   {
+    "fixed": "0.144.0",
+    "id": "GO-2026-6112",
+    "modified": "2026-08-18T16:38:10Z"
+   },
+   {
+    "fixed": "0.141.0",
+    "id": "GO-2026-6274",
+    "modified": "2026-08-25T15:00:08Z"
+   },
+   {
+    "fixed": "0.142.0",
+    "id": "GO-2026-6275",
+    "modified": "2026-08-25T15:00:08Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-chi/chi/v5",
+  "vulns": [
+   {
+    "fixed": "5.2.2",
+    "id": "GO-2025-3770",
+    "modified": "2025-11-20T22:03:19Z"
+   },
+   {
+    "fixed": "5.2.4",
+    "id": "GO-2026-4316",
+    "modified": "2026-01-23T02:28:11Z"
+   },
+   {
+    "fixed": "5.3.0",
+    "id": "GO-2026-5774",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.3.0",
+    "id": "GO-2026-5775",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.3.0",
+    "id": "GO-2026-5777",
+    "modified": "2026-07-24T18:35:55Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-git/go-billy/v5",
+  "vulns": [
+   {
+    "fixed": "5.9.0",
+    "id": "GO-2026-5490",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.9.0",
+    "id": "GO-2026-5597",
+    "modified": "2026-07-24T18:35:55Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-git/go-git/v5",
+  "vulns": [
+   {
+    "fixed": "5.11.0",
+    "id": "GO-2024-2456",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "5.11.0",
+    "id": "GO-2024-2466",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "5.13.0",
+    "id": "GO-2025-3367",
+    "modified": "2025-01-07T16:03:20Z"
+   },
+   {
+    "fixed": "5.13.0",
+    "id": "GO-2025-3368",
+    "modified": "2026-04-20T16:19:21Z"
+   },
+   {
+    "fixed": "5.16.5",
+    "id": "GO-2026-4473",
+    "modified": "2026-02-19T17:28:55Z"
+   },
+   {
+    "fixed": "5.17.1",
+    "id": "GO-2026-4909",
+    "modified": "2026-04-07T14:58:41Z"
+   },
+   {
+    "fixed": "5.17.1",
+    "id": "GO-2026-4910",
+    "modified": "2026-04-07T14:58:41Z"
+   },
+   {
+    "fixed": "5.19.0",
+    "id": "GO-2026-5074",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.18.0",
+    "id": "GO-2026-5105",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.19.1",
+    "id": "GO-2026-5336",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.19.1",
+    "id": "GO-2026-5496",
+    "modified": "2026-07-07T16:52:19Z"
+   },
+   {
+    "fixed": "5.19.1",
+    "id": "GO-2026-5693",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "5.19.2",
+    "id": "GO-2026-6213",
+    "modified": "2026-08-18T16:38:10Z"
+   },
+   {
+    "fixed": "5.19.2",
+    "id": "GO-2026-6214",
+    "modified": "2026-08-18T16:38:10Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-jose/go-jose/v3",
+  "vulns": [
+   {
+    "fixed": "3.0.1",
+    "id": "GO-2023-2334",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "3.0.3",
+    "id": "GO-2024-2631",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "3.0.4",
+    "id": "GO-2025-3485",
+    "modified": "2025-03-03T16:11:01Z"
+   },
+   {
+    "fixed": "3.0.5",
+    "id": "GO-2026-4945",
+    "modified": "2026-05-26T22:49:18Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-jose/go-jose/v4",
+  "vulns": [
+   {
+    "fixed": "4.0.1",
+    "id": "GO-2024-2631",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "4.0.5",
+    "id": "GO-2025-3485",
+    "modified": "2025-03-03T16:11:01Z"
+   },
+   {
+    "fixed": "4.1.4",
+    "id": "GO-2026-4945",
+    "modified": "2026-05-26T22:49:18Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/go-viper/mapstructure/v2",
+  "vulns": [
+   {
+    "fixed": "2.3.0",
+    "id": "GO-2025-3787",
+    "modified": "2025-07-28T19:56:54Z"
+   },
+   {
+    "fixed": "2.4.0",
+    "id": "GO-2025-3900",
+    "modified": "2025-08-29T14:52:35Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/gogo/protobuf",
+  "vulns": [
+   {
+    "fixed": "1.3.2",
+    "id": "GO-2021-0053",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/golang-jwt/jwt/v5",
+  "vulns": [
+   {
+    "fixed": "5.2.2",
+    "id": "GO-2025-3553",
+    "modified": "2025-04-08T21:04:08Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/golang/glog",
+  "vulns": [
+   {
+    "fixed": "1.2.4",
+    "id": "GO-2025-3372",
+    "modified": "2025-01-29T00:01:36Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/google/osv-scalibr",
+  "vulns": [
+   {
+    "fixed": "0.2.1",
+    "id": "GO-2025-3767",
+    "modified": "2025-07-28T19:57:13Z"
+   },
+   {
+    "fixed": "0.3.4",
+    "id": "GO-2025-4149",
+    "modified": "2025-11-25T18:12:18Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/hashicorp/go-retryablehttp",
+  "vulns": [
+   {
+    "fixed": "0.7.7",
+    "id": "GO-2024-2947",
+    "modified": "2024-06-25T19:47:45Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/in-toto/in-toto-golang",
+  "vulns": [
+   {
+    "fixed": "0.3.0",
+    "id": "GO-2022-0936",
+    "modified": "2024-08-21T16:03:21Z"
+   },
+   {
+    "fixed": "0.11.0",
+    "id": "GO-2026-5547",
+    "modified": "2026-06-25T22:34:34Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/klauspost/compress",
+  "vulns": [
+   {
+    "fixed": "1.18.7",
+    "id": "GO-2026-5841",
+    "modified": "2026-07-27T16:16:22Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/lestrrat-go/jwx",
+  "vulns": [
+   {
+    "fixed": "1.2.26",
+    "id": "GO-2023-1859",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.2.27",
+    "id": "GO-2023-2379",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.2.28",
+    "id": "GO-2024-2454",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.2.29",
+    "id": "GO-2024-2632",
+    "modified": "2024-05-20T19:46:23Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/moby/buildkit",
+  "vulns": [
+   {
+    "fixed": "0.12.5",
+    "id": "GO-2024-2492",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.12.5",
+    "id": "GO-2024-2493",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.12.5",
+    "id": "GO-2024-2494",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.12.5",
+    "id": "GO-2024-2497",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.28.1",
+    "id": "GO-2026-4858",
+    "modified": "2026-03-27T18:39:44Z"
+   },
+   {
+    "fixed": "0.28.1",
+    "id": "GO-2026-4859",
+    "modified": "2026-03-27T18:39:44Z"
+   },
+   {
+    "fixed": "0.31.1",
+    "id": "GO-2026-6255",
+    "modified": "2026-08-25T15:00:08Z"
+   },
+   {
+    "fixed": "0.31.1",
+    "id": "GO-2026-6256",
+    "modified": "2026-08-25T15:00:08Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/moby/go-archive",
+  "vulns": [
+   {
+    "fixed": "0.3.0",
+    "id": "GO-2026-6253",
+    "modified": "2026-08-25T19:43:10Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/moby/spdystream",
+  "vulns": [
+   {
+    "fixed": "0.5.1",
+    "id": "GO-2026-4958",
+    "modified": "2026-05-26T22:49:05Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/modelcontextprotocol/go-sdk",
+  "vulns": [
+   {
+    "fixed": "1.3.1",
+    "id": "GO-2026-4569",
+    "modified": "2026-03-10T18:28:01Z"
+   },
+   {
+    "fixed": "1.4.1",
+    "id": "GO-2026-4770",
+    "modified": "2026-03-23T18:14:51Z"
+   },
+   {
+    "fixed": "1.4.1",
+    "id": "GO-2026-4773",
+    "modified": "2026-03-23T18:14:51Z"
+   },
+   {
+    "fixed": "1.4.0",
+    "id": "GO-2026-5771",
+    "modified": "2026-06-25T22:34:41Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/nats-io/nkeys",
+  "vulns": [
+   {
+    "fixed": "0.4.6",
+    "id": "GO-2023-2163",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/nwaples/rardecode/v2",
+  "vulns": [
+   {
+    "fixed": "2.2.0",
+    "id": "GO-2025-4020",
+    "modified": "2025-11-05T18:41:15Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/open-policy-agent/opa",
+  "vulns": [
+   {
+    "fixed": "0.37.2",
+    "id": "GO-2022-0316",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.42.0",
+    "id": "GO-2022-0574",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.40.0",
+    "id": "GO-2022-0587",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.44.0",
+    "id": "GO-2022-0978",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.68.0",
+    "id": "GO-2024-3141",
+    "modified": "2024-09-20T18:51:34Z"
+   },
+   {
+    "fixed": "1.4.0",
+    "id": "GO-2025-3660",
+    "modified": "2025-05-05T16:14:33Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/opencontainers/runc",
+  "vulns": [
+   {
+    "fixed": "0.1.0",
+    "id": "GO-2021-0070",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.0.0-rc8.0.20190930145003-cad42f6e0932",
+    "id": "GO-2021-0085",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.0.0-rc9.0.20200122160610-2fc03cc11c77",
+    "id": "GO-2021-0087",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.1.0",
+    "id": "GO-2022-0274",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.0.0-rc91",
+    "id": "GO-2022-0396",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.1.2",
+    "id": "GO-2022-0452",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.0.0-rc3",
+    "id": "GO-2022-0835",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.0.0-rc95",
+    "id": "GO-2022-0914",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.1.5",
+    "id": "GO-2023-1627",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.1.5",
+    "id": "GO-2023-1682",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.1.5",
+    "id": "GO-2023-1683",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "fixed": "1.1.12",
+    "id": "GO-2024-2491",
+    "modified": "2024-07-01T21:50:42Z"
+   },
+   {
+    "fixed": "1.2.0-rc.3",
+    "id": "GO-2024-3110",
+    "modified": "2025-08-05T19:57:40Z"
+   },
+   {
+    "id": "GO-2025-3543",
+    "modified": "2025-03-26T20:15:20Z"
+   },
+   {
+    "fixed": "1.4.0-rc.3",
+    "id": "GO-2025-4096",
+    "modified": "2025-11-18T15:44:15Z"
+   },
+   {
+    "fixed": "1.4.0-rc.3",
+    "id": "GO-2025-4097",
+    "modified": "2025-11-18T15:44:15Z"
+   },
+   {
+    "fixed": "1.4.0-rc.3",
+    "id": "GO-2025-4098",
+    "modified": "2025-11-18T15:44:15Z"
+   },
+   {
+    "fixed": "1.5.0-rc.3",
+    "id": "GO-2026-5761",
+    "modified": "2026-07-07T16:52:19Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/opencontainers/selinux",
+  "vulns": [
+   {
+    "fixed": "1.3.1-0.20190929122143-5215b1806f52",
+    "id": "GO-2021-0085",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.13.0",
+    "id": "GO-2025-4098",
+    "modified": "2025-11-18T15:44:15Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/pandatix/go-cvss",
+  "vulns": [
+   {
+    "fixed": "0.4.0",
+    "id": "GO-2022-1002",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/prometheus/client_golang",
+  "vulns": [
+   {
+    "fixed": "1.11.1",
+    "id": "GO-2022-0322",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/sigstore/rekor",
+  "vulns": [
+   {
+    "fixed": "1.1.1",
+    "id": "GO-2023-1754",
+    "modified": "2024-08-20T20:29:19Z"
+   },
+   {
+    "fixed": "1.2.0",
+    "id": "GO-2023-1795",
+    "modified": "2024-08-20T20:31:32Z"
+   },
+   {
+    "fixed": "1.5.0",
+    "id": "GO-2026-4354",
+    "modified": "2026-02-02T21:05:55Z"
+   },
+   {
+    "fixed": "1.5.0",
+    "id": "GO-2026-4355",
+    "modified": "2026-02-02T21:05:55Z"
+   },
+   {
+    "fixed": "1.5.2",
+    "id": "GO-2026-5778",
+    "modified": "2026-07-07T15:26:32Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/sigstore/sigstore",
+  "vulns": [
+   {
+    "fixed": "1.10.4",
+    "id": "GO-2026-4358",
+    "modified": "2026-02-25T20:15:11Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/sigstore/sigstore-go",
+  "vulns": [
+   {
+    "fixed": "0.6.1",
+    "id": "GO-2024-3116",
+    "modified": "2024-09-06T20:43:50Z"
+   },
+   {
+    "fixed": "1.2.0",
+    "id": "GO-2026-5952",
+    "modified": "2026-07-17T19:42:05Z"
+   },
+   {
+    "fixed": "1.2.1",
+    "id": "GO-2026-6162",
+    "modified": "2026-08-18T14:32:29Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/sigstore/timestamp-authority/v2",
+  "vulns": [
+   {
+    "fixed": "2.0.3",
+    "id": "GO-2025-4192",
+    "modified": "2025-12-08T21:31:36Z"
+   },
+   {
+    "fixed": "2.0.6",
+    "id": "GO-2026-5763",
+    "modified": "2026-06-25T22:34:41Z"
+   },
+   {
+    "fixed": "2.1.0",
+    "id": "GO-2026-5851",
+    "modified": "2026-07-07T15:26:32Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/sirupsen/logrus",
+  "vulns": [
+   {
+    "fixed": "1.9.3",
+    "id": "GO-2025-4188",
+    "modified": "2026-01-20T16:59:56Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/theupdateframework/go-tuf/v2",
+  "vulns": [
+   {
+    "fixed": "2.0.1",
+    "id": "GO-2024-3166",
+    "modified": "2024-10-14T19:05:04Z"
+   },
+   {
+    "fixed": "2.3.1",
+    "id": "GO-2026-4348",
+    "modified": "2026-02-26T18:26:44Z"
+   },
+   {
+    "fixed": "2.3.1",
+    "id": "GO-2026-4349",
+    "modified": "2026-02-26T18:26:44Z"
+   },
+   {
+    "fixed": "2.4.1",
+    "id": "GO-2026-4377",
+    "modified": "2026-02-26T18:26:44Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/tidwall/gjson",
+  "vulns": [
+   {
+    "fixed": "1.6.6",
+    "id": "GO-2021-0054",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.4",
+    "id": "GO-2021-0059",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.9.3",
+    "id": "GO-2021-0265",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.5",
+    "id": "GO-2022-0957",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/ulikunitz/xz",
+  "vulns": [
+   {
+    "fixed": "0.5.8",
+    "id": "GO-2020-0016",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.5.15",
+    "id": "GO-2025-3922",
+    "modified": "2025-09-17T17:03:38Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/vbatts/tar-split",
+  "vulns": [
+   {
+    "fixed": "0.10.2",
+    "id": "GO-2025-3640",
+    "modified": "2025-04-24T18:14:02Z"
+   }
+  ]
+ },
+ {
+  "path": "github.com/yuin/goldmark",
+  "vulns": [
+   {
+    "fixed": "1.7.17",
+    "id": "GO-2026-5320",
+    "modified": "2026-07-07T16:52:19Z"
+   }
+  ]
+ },
+ {
+  "path": "go.etcd.io/bbolt",
+  "vulns": [
+   {
+    "id": "GO-2026-4923",
+    "modified": "2026-04-08T15:08:18Z"
+   }
+  ]
+ },
+ {
+  "path": "go.etcd.io/etcd/client/pkg/v3",
+  "vulns": [
+   {
+    "fixed": "3.7.1",
+    "id": "GO-2026-6107",
+    "modified": "2026-08-18T16:38:10Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc",
+  "vulns": [
+   {
+    "fixed": "0.46.0",
+    "id": "GO-2023-2331",
+    "modified": "2025-11-20T22:03:19Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace",
+  "vulns": [
+   {
+    "fixed": "0.44.0",
+    "id": "GO-2023-2113",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+  "vulns": [
+   {
+    "fixed": "0.39.0",
+    "id": "GO-2023-1546",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.44.0",
+    "id": "GO-2023-2113",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/otel",
+  "vulns": [
+   {
+    "fixed": "1.44.0",
+    "id": "GO-2026-5158",
+    "modified": "2026-07-24T18:35:55Z"
+   },
+   {
+    "fixed": "1.41.0",
+    "id": "GO-2026-5506",
+    "modified": "2026-07-24T18:35:55Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+  "vulns": [
+   {
+    "fixed": "1.43.0",
+    "id": "GO-2026-4985",
+    "modified": "2026-05-26T22:48:49Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+  "vulns": [
+   {
+    "fixed": "1.43.0",
+    "id": "GO-2026-4985",
+    "modified": "2026-05-26T22:48:49Z"
+   }
+  ]
+ },
+ {
+  "path": "go.opentelemetry.io/otel/sdk",
+  "vulns": [
+   {
+    "fixed": "1.40.0",
+    "id": "GO-2026-4394",
+    "modified": "2026-02-25T20:15:11Z"
+   },
+   {
+    "fixed": "1.43.0",
+    "id": "GO-2026-5426",
+    "modified": "2026-07-24T18:35:55Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/crypto",
+  "vulns": [
+   {
+    "fixed": "0.0.0-20200220183623-bac4c82f6975",
+    "id": "GO-2020-0012",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20170330155735-e4e2799dd7aa",
+    "id": "GO-2020-0013",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20201216223049-8b5274cf687f",
+    "id": "GO-2021-0227",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20220314234659-1baeb1ce4c0b",
+    "id": "GO-2021-0356",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20190320223903-b7391e95e576",
+    "id": "GO-2022-0209",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20200124225646-8b5121be2f68",
+    "id": "GO-2022-0229",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20211202192323-5770296d904e",
+    "id": "GO-2022-0968",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20190424203555-c05e17bb3b2d",
+    "id": "GO-2023-1992",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.17.0",
+    "id": "GO-2023-2402",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20220525230936-793ad666bf5e",
+    "id": "GO-2024-2961",
+    "modified": "2024-07-02T19:27:52Z"
+   },
+   {
+    "fixed": "0.31.0",
+    "id": "GO-2024-3321",
+    "modified": "2025-02-18T20:32:01Z"
+   },
+   {
+    "fixed": "0.35.0",
+    "id": "GO-2025-3487",
+    "modified": "2025-02-26T02:51:51Z"
+   },
+   {
+    "fixed": "0.43.0",
+    "id": "GO-2025-4116",
+    "modified": "2025-12-16T16:23:22Z"
+   },
+   {
+    "fixed": "0.45.0",
+    "id": "GO-2025-4134",
+    "modified": "2025-11-20T16:52:31Z"
+   },
+   {
+    "fixed": "0.45.0",
+    "id": "GO-2025-4135",
+    "modified": "2025-11-20T16:52:31Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5005",
+    "modified": "2026-08-11T21:06:47Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5006",
+    "modified": "2026-08-11T21:06:47Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5013",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5014",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5015",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5016",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5017",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5018",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5019",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5020",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5021",
+    "modified": "2026-08-14T16:22:54Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5023",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "fixed": "0.52.0",
+    "id": "GO-2026-5033",
+    "modified": "2026-05-22T02:08:34Z"
+   },
+   {
+    "id": "GO-2026-5932",
+    "modified": "2026-07-07T22:15:29Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-6303",
+    "modified": "2026-08-28T14:47:45Z"
+   },
+   {
+    "fixed": "0.56.0",
+    "id": "GO-2026-6354",
+    "modified": "2026-09-02T19:12:04Z"
+   },
+   {
+    "fixed": "0.56.0",
+    "id": "GO-2026-6355",
+    "modified": "2026-09-02T19:12:04Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/image",
+  "vulns": [
+   {
+    "fixed": "0.5.0",
+    "id": "GO-2023-1572",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.10.0",
+    "id": "GO-2023-1989",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.10.0",
+    "id": "GO-2023-1990",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.18.0",
+    "id": "GO-2024-2937",
+    "modified": "2024-06-26T23:00:22Z"
+   },
+   {
+    "fixed": "0.38.0",
+    "id": "GO-2026-4815",
+    "modified": "2026-04-06T20:49:01Z"
+   },
+   {
+    "fixed": "0.42.0",
+    "id": "GO-2026-4961",
+    "modified": "2026-06-18T22:34:50Z"
+   },
+   {
+    "fixed": "0.39.0",
+    "id": "GO-2026-4962",
+    "modified": "2026-04-21T18:59:51Z"
+   },
+   {
+    "fixed": "0.41.0",
+    "id": "GO-2026-5031",
+    "modified": "2026-05-29T18:17:10Z"
+   },
+   {
+    "fixed": "0.41.0",
+    "id": "GO-2026-5032",
+    "modified": "2026-05-29T19:17:56Z"
+   },
+   {
+    "fixed": "0.43.0",
+    "id": "GO-2026-5061",
+    "modified": "2026-06-18T22:46:58Z"
+   },
+   {
+    "fixed": "0.43.0",
+    "id": "GO-2026-5062",
+    "modified": "2026-06-18T22:50:55Z"
+   },
+   {
+    "fixed": "0.43.0",
+    "id": "GO-2026-5066",
+    "modified": "2026-06-26T20:04:13Z"
+   },
+   {
+    "fixed": "0.45.0",
+    "id": "GO-2026-6222",
+    "modified": "2026-08-14T16:22:50Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/mod",
+  "vulns": [
+   {
+    "fixed": "0.40.0",
+    "id": "GO-2026-6179",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "0.40.0",
+    "id": "GO-2026-6180",
+    "modified": "2026-08-13T21:43:54Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/net",
+  "vulns": [
+   {
+    "fixed": "0.0.0-20190125091013-d26f9f9a57f3",
+    "id": "GO-2020-0014",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20180816102801-aaf60122140d",
+    "id": "GO-2021-0078",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20210520170846-37e1c6afe023",
+    "id": "GO-2021-0238",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20180925071336-cf3bd585ca2a",
+    "id": "GO-2022-0192",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20180921000356-2f5d2388922f",
+    "id": "GO-2022-0193",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20190125002852-4b62a64f59f7",
+    "id": "GO-2022-0197",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20210428140749-89ef3d95e781",
+    "id": "GO-2022-0236",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20211209124913-491a49abca63",
+    "id": "GO-2022-0288",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20190813141303-74dc4d7220e7",
+    "id": "GO-2022-0536",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.0.0-20220906165146-f3363e06e74c",
+    "id": "GO-2022-0969",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.4.0",
+    "id": "GO-2022-1144",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.1.1-0.20221104162952-702349b0e862",
+    "id": "GO-2023-1495",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.7.0",
+    "id": "GO-2023-1571",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.13.0",
+    "id": "GO-2023-1988",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.17.0",
+    "id": "GO-2023-2102",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.23.0",
+    "id": "GO-2024-2687",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.33.0",
+    "id": "GO-2024-3333",
+    "modified": "2024-12-20T20:37:27Z"
+   },
+   {
+    "fixed": "0.36.0",
+    "id": "GO-2025-3503",
+    "modified": "2026-04-16T20:42:32Z"
+   },
+   {
+    "fixed": "0.38.0",
+    "id": "GO-2025-3595",
+    "modified": "2025-04-16T16:54:55Z"
+   },
+   {
+    "fixed": "0.45.0",
+    "id": "GO-2026-4440",
+    "modified": "2026-02-05T17:23:14Z"
+   },
+   {
+    "fixed": "0.45.0",
+    "id": "GO-2026-4441",
+    "modified": "2026-02-05T17:23:17Z"
+   },
+   {
+    "fixed": "0.51.0",
+    "id": "GO-2026-4559",
+    "modified": "2026-02-26T18:24:17Z"
+   },
+   {
+    "fixed": "0.53.0",
+    "id": "GO-2026-4918",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5025",
+    "modified": "2026-05-22T02:46:43Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5026",
+    "modified": "2026-08-21T20:38:00Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5027",
+    "modified": "2026-05-22T02:46:43Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5028",
+    "modified": "2026-05-22T02:46:43Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5029",
+    "modified": "2026-05-22T02:46:43Z"
+   },
+   {
+    "fixed": "0.55.0",
+    "id": "GO-2026-5030",
+    "modified": "2026-05-22T02:46:43Z"
+   },
+   {
+    "fixed": "0.56.0",
+    "id": "GO-2026-5942",
+    "modified": "2026-08-14T15:30:22Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/oauth2",
+  "vulns": [
+   {
+    "fixed": "0.27.0",
+    "id": "GO-2025-3488",
+    "modified": "2025-02-26T02:51:51Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/sys",
+  "vulns": [
+   {
+    "fixed": "0.0.0-20220412211240-33da011f77ad",
+    "id": "GO-2022-0493",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.44.0",
+    "id": "GO-2026-5024",
+    "modified": "2026-05-22T18:28:47Z"
+   }
+  ]
+ },
+ {
+  "path": "golang.org/x/text",
+  "vulns": [
+   {
+    "fixed": "0.3.3",
+    "id": "GO-2020-0015",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.3.7",
+    "id": "GO-2021-0113",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.3.8",
+    "id": "GO-2022-1059",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.39.0",
+    "id": "GO-2026-5970",
+    "modified": "2026-08-10T22:42:36Z"
+   }
+  ]
+ },
+ {
+  "path": "google.golang.org/grpc",
+  "vulns": [
+   {
+    "fixed": "1.58.3",
+    "id": "GO-2023-2153",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.64.1",
+    "id": "GO-2024-2978",
+    "modified": "2024-07-09T16:55:06Z"
+   },
+   {
+    "fixed": "1.79.3",
+    "id": "GO-2026-4762",
+    "modified": "2026-03-27T18:39:44Z"
+   },
+   {
+    "fixed": "1.82.1",
+    "id": "GO-2026-6061",
+    "modified": "2026-07-27T15:30:50Z"
+   },
+   {
+    "fixed": "1.83.1",
+    "id": "GO-2026-6348",
+    "modified": "2026-09-15T18:39:25Z"
+   },
+   {
+    "fixed": "1.83.1",
+    "id": "GO-2026-6441",
+    "modified": "2026-09-15T18:39:25Z"
+   },
+   {
+    "fixed": "1.85.0-dev.0.20260825072537-93e31b48545e",
+    "id": "GO-2026-6443",
+    "modified": "2026-09-15T18:39:25Z"
+   }
+  ]
+ },
+ {
+  "path": "google.golang.org/protobuf",
+  "vulns": [
+   {
+    "fixed": "1.29.1",
+    "id": "GO-2023-1631",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.33.0",
+    "id": "GO-2024-2611",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "gopkg.in/yaml.v2",
+  "vulns": [
+   {
+    "fixed": "2.2.8",
+    "id": "GO-2020-0036",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "2.2.3",
+    "id": "GO-2021-0061",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "2.2.4",
+    "id": "GO-2022-0956",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "gopkg.in/yaml.v3",
+  "vulns": [
+   {
+    "fixed": "3.0.0-20220521103104-8f96da9f5d5e",
+    "id": "GO-2022-0603",
+    "modified": "2024-05-20T16:03:47Z"
+   }
+  ]
+ },
+ {
+  "path": "k8s.io/apimachinery",
+  "vulns": [
+   {
+    "fixed": "0.0.0-20190927203648-9ce6eca90e73",
+    "id": "GO-2022-0965",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "0.18.7-rc.0",
+    "id": "GO-2024-2748",
+    "modified": "2024-05-20T19:46:32Z"
+   }
+  ]
+ },
+ {
+  "path": "k8s.io/client-go",
+  "vulns": [
+   {
+    "fixed": "0.20.0-alpha.2",
+    "id": "GO-2021-0064",
+    "modified": "2024-07-19T16:04:58Z"
+   },
+   {
+    "fixed": "0.17.0",
+    "id": "GO-2021-0065",
+    "modified": "2024-07-19T16:04:58Z"
+   }
+  ]
+ },
+ {
+  "path": "stdlib",
+  "vulns": [
+   {
+    "fixed": "1.16.1",
+    "id": "GO-2021-0067",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.15.5",
+    "id": "GO-2021-0069",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.14.7",
+    "id": "GO-2021-0142",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.3.2",
+    "id": "GO-2021-0154",
+    "modified": "2024-06-03T20:51:31Z"
+   },
+   {
+    "fixed": "1.4.3",
+    "id": "GO-2021-0159",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.5.3",
+    "id": "GO-2021-0160",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2021-0163",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.7.4",
+    "id": "GO-2021-0172",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.9.1",
+    "id": "GO-2021-0178",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.14.5",
+    "id": "GO-2021-0223",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.14.5",
+    "id": "GO-2021-0224",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.15.1",
+    "id": "GO-2021-0226",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.1",
+    "id": "GO-2021-0234",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.15.7",
+    "id": "GO-2021-0235",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.5",
+    "id": "GO-2021-0239",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.5",
+    "id": "GO-2021-0240",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.5",
+    "id": "GO-2021-0241",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.5",
+    "id": "GO-2021-0242",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.6",
+    "id": "GO-2021-0243",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.7",
+    "id": "GO-2021-0245",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.3",
+    "id": "GO-2021-0263",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.3",
+    "id": "GO-2021-0264",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.7",
+    "id": "GO-2021-0317",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.7",
+    "id": "GO-2021-0319",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.8",
+    "id": "GO-2021-0347",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.1",
+    "id": "GO-2022-0166",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.7.4",
+    "id": "GO-2022-0171",
+    "modified": "2024-06-03T20:51:31Z"
+   },
+   {
+    "fixed": "1.8.2",
+    "id": "GO-2022-0187",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.11.3",
+    "id": "GO-2022-0191",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.12.8",
+    "id": "GO-2022-0211",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.13.1",
+    "id": "GO-2022-0212",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.13.2",
+    "id": "GO-2022-0213",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.11.5",
+    "id": "GO-2022-0217",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.12.2",
+    "id": "GO-2022-0220",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.13.7",
+    "id": "GO-2022-0229",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.16.4",
+    "id": "GO-2022-0236",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.1",
+    "id": "GO-2022-0273",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.5",
+    "id": "GO-2022-0288",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.5",
+    "id": "GO-2022-0289",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.1",
+    "id": "GO-2022-0433",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.1",
+    "id": "GO-2022-0434",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.1",
+    "id": "GO-2022-0435",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.3",
+    "id": "GO-2022-0477",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.2",
+    "id": "GO-2022-0493",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0515",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0520",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0521",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0522",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0523",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0524",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0525",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0526",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.4",
+    "id": "GO-2022-0527",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.3",
+    "id": "GO-2022-0531",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.3",
+    "id": "GO-2022-0532",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.3",
+    "id": "GO-2022-0533",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.13.7",
+    "id": "GO-2022-0535",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.12.8",
+    "id": "GO-2022-0536",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.18.5",
+    "id": "GO-2022-0537",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.6.3",
+    "id": "GO-2022-0761",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.1",
+    "id": "GO-2022-0969",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.1",
+    "id": "GO-2022-0988",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.2",
+    "id": "GO-2022-1037",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.2",
+    "id": "GO-2022-1038",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.2",
+    "id": "GO-2022-1039",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.3",
+    "id": "GO-2022-1095",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.4",
+    "id": "GO-2022-1143",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.19.4",
+    "id": "GO-2022-1144",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.1",
+    "id": "GO-2023-1568",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.1",
+    "id": "GO-2023-1569",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.1",
+    "id": "GO-2023-1570",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.1",
+    "id": "GO-2023-1571",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.2",
+    "id": "GO-2023-1621",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.3",
+    "id": "GO-2023-1702",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.3",
+    "id": "GO-2023-1703",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.3",
+    "id": "GO-2023-1704",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.3",
+    "id": "GO-2023-1705",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.4",
+    "id": "GO-2023-1751",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.4",
+    "id": "GO-2023-1752",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.4",
+    "id": "GO-2023-1753",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.5",
+    "id": "GO-2023-1840",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.6",
+    "id": "GO-2023-1878",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.0-rc.4",
+    "id": "GO-2023-1987",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.1",
+    "id": "GO-2023-2041",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.1",
+    "id": "GO-2023-2043",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.1",
+    "id": "GO-2023-2044",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.1",
+    "id": "GO-2023-2045",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.3",
+    "id": "GO-2023-2102",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.4",
+    "id": "GO-2023-2185",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.5",
+    "id": "GO-2023-2185",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.4",
+    "id": "GO-2023-2186",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.0",
+    "id": "GO-2023-2375",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.5",
+    "id": "GO-2023-2382",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.1",
+    "id": "GO-2024-2598",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.1",
+    "id": "GO-2024-2599",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.1",
+    "id": "GO-2024-2600",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.1",
+    "id": "GO-2024-2609",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.1",
+    "id": "GO-2024-2610",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.2",
+    "id": "GO-2024-2687",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.3",
+    "id": "GO-2024-2824",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.4",
+    "id": "GO-2024-2887",
+    "modified": "2024-06-04T22:48:55Z"
+   },
+   {
+    "fixed": "1.22.4",
+    "id": "GO-2024-2888",
+    "modified": "2024-06-04T22:48:55Z"
+   },
+   {
+    "fixed": "1.22.5",
+    "id": "GO-2024-2963",
+    "modified": "2024-07-02T20:11:00Z"
+   },
+   {
+    "fixed": "1.23.1",
+    "id": "GO-2024-3105",
+    "modified": "2024-09-06T19:15:23Z"
+   },
+   {
+    "fixed": "1.23.1",
+    "id": "GO-2024-3106",
+    "modified": "2024-09-06T19:15:23Z"
+   },
+   {
+    "fixed": "1.23.1",
+    "id": "GO-2024-3107",
+    "modified": "2024-09-06T19:15:23Z"
+   },
+   {
+    "fixed": "1.24.0-rc.2",
+    "id": "GO-2025-3373",
+    "modified": "2025-01-30T18:58:58Z"
+   },
+   {
+    "fixed": "1.24.0-rc.2",
+    "id": "GO-2025-3420",
+    "modified": "2025-01-30T18:58:58Z"
+   },
+   {
+    "fixed": "1.24.0-rc.2",
+    "id": "GO-2025-3421",
+    "modified": "2025-01-30T18:58:58Z"
+   },
+   {
+    "fixed": "1.24.0-rc.3",
+    "id": "GO-2025-3447",
+    "modified": "2025-02-06T16:38:14Z"
+   },
+   {
+    "fixed": "1.24.1",
+    "id": "GO-2025-3503",
+    "modified": "2026-04-16T20:42:32Z"
+   },
+   {
+    "fixed": "1.24.2",
+    "id": "GO-2025-3563",
+    "modified": "2025-04-08T19:46:23Z"
+   },
+   {
+    "fixed": "1.24.4",
+    "id": "GO-2025-3749",
+    "modified": "2025-06-16T20:08:41Z"
+   },
+   {
+    "fixed": "1.24.4",
+    "id": "GO-2025-3750",
+    "modified": "2025-06-11T16:59:06Z"
+   },
+   {
+    "fixed": "1.24.4",
+    "id": "GO-2025-3751",
+    "modified": "2025-06-11T16:23:58Z"
+   },
+   {
+    "fixed": "1.24.6",
+    "id": "GO-2025-3849",
+    "modified": "2025-08-07T15:07:27Z"
+   },
+   {
+    "fixed": "1.25.1",
+    "id": "GO-2025-3955",
+    "modified": "2025-09-22T20:48:35Z"
+   },
+   {
+    "fixed": "1.24.6",
+    "id": "GO-2025-3956",
+    "modified": "2025-09-18T18:21:44Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4006",
+    "modified": "2025-12-09T17:20:47Z"
+   },
+   {
+    "fixed": "1.25.3",
+    "id": "GO-2025-4007",
+    "modified": "2025-11-20T22:03:19Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4008",
+    "modified": "2025-10-29T21:49:53Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4009",
+    "modified": "2025-10-29T21:49:55Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4010",
+    "modified": "2025-10-29T21:49:58Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4011",
+    "modified": "2025-10-29T21:50:00Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4012",
+    "modified": "2025-10-29T21:50:05Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4013",
+    "modified": "2025-10-29T21:50:08Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4014",
+    "modified": "2025-10-29T21:51:04Z"
+   },
+   {
+    "fixed": "1.25.2",
+    "id": "GO-2025-4015",
+    "modified": "2025-10-29T21:51:07Z"
+   },
+   {
+    "fixed": "1.25.5",
+    "id": "GO-2025-4155",
+    "modified": "2025-12-03T17:43:24Z"
+   },
+   {
+    "fixed": "1.25.5",
+    "id": "GO-2025-4175",
+    "modified": "2025-12-02T20:55:55Z"
+   },
+   {
+    "fixed": "1.26.0-rc.3",
+    "id": "GO-2026-4337",
+    "modified": "2026-02-05T17:23:09Z"
+   },
+   {
+    "fixed": "1.25.6",
+    "id": "GO-2026-4340",
+    "modified": "2026-01-28T19:08:09Z"
+   },
+   {
+    "fixed": "1.25.6",
+    "id": "GO-2026-4341",
+    "modified": "2026-01-28T19:08:18Z"
+   },
+   {
+    "fixed": "1.25.6",
+    "id": "GO-2026-4342",
+    "modified": "2026-01-28T19:08:28Z"
+   },
+   {
+    "fixed": "1.24.3",
+    "id": "GO-2026-4403",
+    "modified": "2026-02-04T22:42:26Z"
+   },
+   {
+    "fixed": "1.26.1",
+    "id": "GO-2026-4599",
+    "modified": "2026-03-07T17:04:32Z"
+   },
+   {
+    "fixed": "1.26.1",
+    "id": "GO-2026-4600",
+    "modified": "2026-03-07T17:04:32Z"
+   },
+   {
+    "fixed": "1.26.1",
+    "id": "GO-2026-4601",
+    "modified": "2026-03-06T21:03:42Z"
+   },
+   {
+    "fixed": "1.26.1",
+    "id": "GO-2026-4602",
+    "modified": "2026-03-06T21:03:42Z"
+   },
+   {
+    "fixed": "1.26.1",
+    "id": "GO-2026-4603",
+    "modified": "2026-03-06T21:03:42Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4864",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4865",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4866",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4869",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4870",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4918",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4946",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4947",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.27.0-rc.2",
+    "id": "GO-2026-4970",
+    "modified": "2026-07-07T21:34:47Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4971",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4976",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4977",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4980",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4981",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4982",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4986",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-5026",
+    "modified": "2026-08-21T20:38:00Z"
+   },
+   {
+    "fixed": "1.26.4",
+    "id": "GO-2026-5037",
+    "modified": "2026-06-02T21:39:47Z"
+   },
+   {
+    "fixed": "1.26.4",
+    "id": "GO-2026-5038",
+    "modified": "2026-06-02T21:39:47Z"
+   },
+   {
+    "fixed": "1.26.4",
+    "id": "GO-2026-5039",
+    "modified": "2026-06-02T21:39:47Z"
+   },
+   {
+    "fixed": "1.27.0-rc.2",
+    "id": "GO-2026-5856",
+    "modified": "2026-07-07T21:34:47Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-5942",
+    "modified": "2026-08-14T15:30:22Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-5972",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6088",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6089",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6090",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6091",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6218",
+    "modified": "2026-08-13T21:43:54Z"
+   }
+  ]
+ },
+ {
+  "path": "toolchain",
+  "vulns": [
+   {
+    "fixed": "1.15.7",
+    "id": "GO-2021-0068",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.9.1",
+    "id": "GO-2022-0177",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.11.3",
+    "id": "GO-2022-0189",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.11.3",
+    "id": "GO-2022-0190",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.9.4",
+    "id": "GO-2022-0201",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.10.1",
+    "id": "GO-2022-0203",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.2",
+    "id": "GO-2022-0247",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.17.7",
+    "id": "GO-2022-0318",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.15.5",
+    "id": "GO-2022-0475",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.15.5",
+    "id": "GO-2022-0476",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.5",
+    "id": "GO-2023-1839",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.5",
+    "id": "GO-2023-1841",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.20.5",
+    "id": "GO-2023-1842",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.1",
+    "id": "GO-2023-2042",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.2",
+    "id": "GO-2023-2095",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.5",
+    "id": "GO-2023-2383",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.22.3",
+    "id": "GO-2024-2825",
+    "modified": "2024-05-20T16:03:47Z"
+   },
+   {
+    "fixed": "1.21.0-0",
+    "id": "GO-2024-2962",
+    "modified": "2024-07-02T19:27:52Z"
+   },
+   {
+    "fixed": "1.24.0-rc.2",
+    "id": "GO-2025-3383",
+    "modified": "2025-01-30T18:58:58Z"
+   },
+   {
+    "fixed": "1.24.0-rc.3",
+    "id": "GO-2025-3428",
+    "modified": "2025-02-06T16:54:38Z"
+   },
+   {
+    "fixed": "1.24.5",
+    "id": "GO-2025-3828",
+    "modified": "2025-07-29T21:02:00Z"
+   },
+   {
+    "fixed": "1.25.6",
+    "id": "GO-2026-4338",
+    "modified": "2026-01-28T19:07:48Z"
+   },
+   {
+    "fixed": "1.25.6",
+    "id": "GO-2026-4339",
+    "modified": "2026-01-28T19:07:59Z"
+   },
+   {
+    "fixed": "1.25.7",
+    "id": "GO-2026-4433",
+    "modified": "2026-02-05T03:10:52Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4867",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4868",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.2",
+    "id": "GO-2026-4871",
+    "modified": "2026-04-07T22:53:49Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4978",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4979",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.26.3",
+    "id": "GO-2026-4984",
+    "modified": "2026-05-07T19:21:40Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6179",
+    "modified": "2026-08-13T21:43:54Z"
+   },
+   {
+    "fixed": "1.27.0-rc.3",
+    "id": "GO-2026-6180",
+    "modified": "2026-08-13T21:43:54Z"
+   }
+  ]
+ }
+]

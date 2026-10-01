@@ -1,0 +1,275 @@
+analyze-a-profiler-trace:
+  should_not_trigger:
+  - The build got slower this week, find out when
+  - Profile the columns in this exported dataset
+  should_trigger:
+  - What does this Safari timeline recording actually show?
+  - "I exported a performance trace \u2014 where did the time go?"
+  - Parse this .cpuprofile and name the hot functions
+analyze-local-data-files:
+  should_not_trigger:
+  - Query the production postgres database for user counts
+  - Chart this data in the app's UI
+  should_trigger:
+  - What's the average order value in orders.csv?
+  - Join these two parquet files and count rows by region
+  - Profile the columns in this exported dataset
+build-and-test-mobile-apps:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  should_trigger:
+  - Build the android app and run the instrumented tests
+  - Install the debug apk on the emulator
+  - Why does the gradle build fail with a JDK error?
+  - Run the flutter tests
+  - Build the flutter app for the emulator
+  - "flutter doctor is complaining \u2014 sort out the setup"
+  - Run the iOS app's unit tests
+  - Build the app for the iPhone simulator
+  - Why does xcodebuild fail on this scheme?
+convert-documents:
+  should_not_trigger:
+  - Write the documentation for this module
+  - Render the markdown in the app
+  should_trigger:
+  - Convert this markdown doc to PDF
+  - Turn the README into a Word document
+  - Convert these docs from rst to markdown
+deploy-to-a-hosting-platform:
+  should_not_trigger:
+  - Push this image to our registry
+  - What does our AWS bill break down into?
+  should_trigger:
+  - Ship this to a preview on Vercel
+  - Why did the Netlify build fail but it works locally?
+  - Roll back the last fly.io deploy
+emulate-aws-locally:
+  should_not_trigger:
+  - What EC2 instances are running in prod?
+  - Write terraform for the new queue
+  should_trigger:
+  - Run the S3 integration tests without a real bucket
+  - Test the SQS consumer offline
+  - Point the test suite at localstack
+inspect-a-database:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  - Add a redis client library to the project
+  should_trigger:
+  - What tables are in this app's .sqlite file?
+  - Read the local store.db and tell me what's in it
+  - Is it safe to vacuum this database file while the app is running?
+  - What shape are the documents in the events collection?
+  - Is this mongo query using an index?
+  - How many documents match this filter in MongoDB?
+  - Why is this MySQL query doing a full table scan?
+  - Show me the CREATE TABLE for the orders table in MariaDB
+  - Is it safe to ALTER this table on the live MySQL database?
+  - What does the schema of the accounts table look like?
+  - How many orders have a null customer id?
+  - Why is this postgres query slow?
+  - Why is the cache hit rate so low?
+  - Check the TTLs on the session keys in redis
+  - How much memory are the feed keys using?
+inspect-a-kafka-topic:
+  should_not_trigger:
+  - Add a kafka client to the service
+  - Why is the redis cache slow?
+  should_trigger:
+  - What's on the events topic right now?
+  - Is the consumer group lagging?
+  - Peek at the last few messages on the orders topic
+inspect-and-transcode-media:
+  should_not_trigger:
+  - Generate a thumbnail grid in the UI
+  - Convert this markdown file to PDF
+  should_trigger:
+  - Convert this mov file to mp4 for the web
+  - Trim the first 30 seconds off this video
+  - What codec and resolution is this recording?
+inspect-cloud-services:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  should_trigger:
+  - Why is the deployed lambda erroring in prod?
+  - Pull the cloud logs for the checkout service
+  - "The service has returned 500s since the last deploy \u2014 investigate"
+  - List the VMs in our Azure subscription
+  - Check the access policy on the key vault
+  - What app service plans do we have?
+  - What compute instances are running in our GCP project?
+  - Check the IAM bindings on this GCS bucket
+  - Which service account does the Cloud Run service use?
+  - Why did the cloud bill spike this month?
+  - Which service is driving our AWS spend?
+  - Break down last week's cloud costs by service
+  - What EC2 instances are running in us-east-1?
+  - Check the S3 bucket policy on the uploads bucket
+  - Which IAM role does this lambda run as?
+plan-infrastructure-changes:
+  should_not_trigger:
+  - What EC2 instances are running right now?
+  - Update the deployment image tag with kubectl
+  should_trigger:
+  - Add an S3 bucket to our terraform config
+  - What would change if we applied this terraform diff?
+  - Is there drift between our config and the real infrastructure?
+query-local-observability:
+  should_not_trigger:
+  - Add a metrics endpoint to the app
+  - Pull the cloud logs for the checkout service
+  should_trigger:
+  - Query prometheus for the error rate
+  - Check that the alert rules are valid
+  - What does p99 latency look like in the local metrics?
+run-a-local-model:
+  should_not_trigger:
+  - Add an LLM provider setting to the app
+  - Call the hosted model API from our backend
+  should_trigger:
+  - Compare the installed llama and mistral models on this prompt
+  - Run this prompt against the local model, fully offline
+  - Which of my ollama models handles summarization best?
+run-a-notebook-headlessly:
+  should_not_trigger:
+  - What's the median value in this parquet file?
+  - Write a pandas script for this analysis
+  should_trigger:
+  - Execute the analysis notebook and give me the results
+  - Re-run all the cells to check the notebook still works
+  - The notebook works for me but fails in CI
+run-a-throwaway-service:
+  should_not_trigger:
+  - Run the project's docker-compose stack
+  - Why is the production redis slow?
+  should_trigger:
+  - Spin up a postgres to rehearse this migration against
+  - The integration tests need a redis instance
+  - Test this against a real queue without touching staging
+run-browser-e2e-tests:
+  should_not_trigger:
+  - Write a unit test for this function
+  - Check the page layout in the browser
+  should_trigger:
+  - Run the playwright suite
+  - "The e2e tests are flaky \u2014 figure out why"
+  - Update the visual snapshots for the checkout page
+run-the-project-stack:
+  should_not_trigger:
+  - Spin up a throwaway postgres for the tests
+  - Reproduce this CI failure in a clean container
+  should_trigger:
+  - Bring up the app's services and check the logs
+  - Rebuild just the api service in compose
+  - Why won't the worker container start when I run the stack?
+test-stripe-webhooks:
+  should_not_trigger:
+  - Add a stripe checkout button to the pricing page
+  - Reconcile last month's real payouts
+  should_trigger:
+  - Test the stripe webhook handler locally
+  - Simulate a payment success event against my endpoint
+  - Why isn't my webhook signature validation passing?
+upgrade-dependencies:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  should_trigger:
+  - Clear the vulnerable transitive NuGet package
+  - Bump Newtonsoft.Json in this .NET project
+  - Why is NuGet resolving an older version than I asked for?
+  - Bump jackson to clear the CVE in our Maven build
+  - Which version of guava does gradle actually resolve?
+  - A transitive dependency is overriding the version we declared
+  - Bump this composer package to clear the advisory
+  - "composer install fails but update works \u2014 what's wrong?"
+  - Upgrade laravel to the next major version
+  - Bump nokogiri to fix the advisory
+  - The bundle resolves differently in CI than locally
+  - Gemfile.lock is missing the linux platform
+  - Bump tokio to the new major version
+  - "cargo audit flags a vulnerable crate \u2014 fix it"
+  - Why do we have two versions of rand in the tree?
+  - Bump golang.org/x/net to fix the CVE
+  - Move our grpc module to the new major version
+  - "go.sum flags a vulnerable module \u2014 fix it"
+  - Upgrade react to 19
+  - npm audit is failing, clean it up
+  - "The lockfile is conflicted after the merge \u2014 fix the packages"
+  - Bump pydantic to v2
+  - uv lock reports a resolution conflict, sort it out
+  - requirements.txt pins a vulnerable version of requests
+work-in-a-dev-container:
+  should_not_trigger:
+  - Create a devcontainer config for this repo
+  - Reproduce the CI failure in a clean container
+  - "The sandbox keeps blocking the test command \u2014 run the suite in docker"
+  should_trigger:
+  - Build this repo inside its devcontainer
+  - "My host node version doesn't match the project \u2014 use the dev container"
+  - Run the tests in the devcontainer
+work-with-containers:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  should_trigger:
+  - Add a redis service to the compose file
+  - The app starts before the database is ready
+  - Why is my .env value being ignored?
+  - Why is this Dockerfile build failing on the COPY step?
+  - "Our image is 2GB \u2014 can you make it smaller?"
+  - Write a Dockerfile for this service
+  - The app container can't reach the database container
+  - Connection refused on localhost:5432 from inside the container
+  - How do I reach a service running on my host from a container?
+  - The container starts and immediately exits
+  - Why does this container keep restarting?
+  - My container was killed with exit code 137
+  - docker stop always takes ten seconds
+  - The container ignores SIGTERM
+  - Rolling updates are slow and drop requests
+  - The database lost its data when I restarted the container
+  - My bind mount is hiding node_modules from the image
+  - Permission denied writing to a mounted directory
+  - Push this image to our registry
+  - Tag the build and publish it to ghcr
+  - Make this image available to CI
+  - What memory limit should this container have?
+  - The pod keeps getting OOMKilled
+  - Is this service being CPU throttled?
+  - "This test passes locally but fails in CI \u2014 why?"
+  - Does the build actually work from a clean checkout?
+  - This bug only happens on Linux, can you reproduce it?
+  - "The sandbox keeps blocking the test command \u2014 run the suite in docker"
+  - Host mediation is fighting our verify script; test in a container instead
+  - "I can't get the project's tests to run under confinement \u2014 use docker"
+work-with-github:
+  should_not_trigger:
+  - Commit my local changes
+  - Reproduce the CI failure locally in a container
+  should_trigger:
+  - Why is CI failing on my PR?
+  - What did the reviewers ask for on the open pull request?
+  - Check whether the release workflow succeeded
+work-with-kubernetes:
+  should_not_trigger:
+  - Explain the sorting algorithm in this source file
+  should_trigger:
+  - This pod is stuck in CrashLoopBackOff
+  - Why is my pod Pending?
+  - The deployment rolled out but the pods are never Ready
+  - Test this helm chart on a local cluster
+  - Spin up kubernetes locally to try the operator
+  - I need a disposable cluster for the e2e run
+  - Why is my pod crash-looping in staging?
+  - The rollout is stuck, can you take a look?
+  - Grab the logs from the failing deployment
+  - What chart version is the api release running?
+  - Roll back the api release to the previous revision
+  - Diff the values between the current release and this proposal
+work-with-supabase:
+  should_not_trigger:
+  - Ship this to a preview on Vercel
+  - How many rows have a null email in postgres?
+  should_trigger:
+  - Write a supabase migration for this table
+  - Start the local supabase stack
+  - Should this table have RLS enabled?

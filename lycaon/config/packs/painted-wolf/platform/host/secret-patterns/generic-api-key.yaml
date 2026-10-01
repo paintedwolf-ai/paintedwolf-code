@@ -1,0 +1,5 @@
+id: generic-api-key
+upstream_id: generic-api-key
+enabled: false
+# Entropy-driven generic shape fires on ordinary opaque URL parameters; declined
+# for the outbound screen, still active for scans at rest.

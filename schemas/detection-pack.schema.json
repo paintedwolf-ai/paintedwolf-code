@@ -1,0 +1,127 @@
+{
+  "$comment": "Host schema for a detection pack manifest (pack.yaml). Shipped packs, packs contributed by an extension under host/detection-packs/, and imported device folders share this shape. Directory name must equal id. Product rules live in docs/detection-packs.md; the contribution surface in docs/extend.md.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.dev/schemas/host/detection-pack.schema.json",
+  "title": "DetectionPackManifest",
+  "description": "Manifest for one detection pack directory: pack.yaml beside rules/*.yml (and optional fixtures.yaml). id must equal the directory name (kebab-case). equivalents is authoring metadata only — the matcher never expands aliases.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "label",
+    "description"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,39}$",
+      "description": "Pack id. Must equal the containing directory name. Used as the import destination name (never the source folder name)."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human label for Settings and cards."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One or two sentences explaining what the pack covers."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "bundled",
+        "generated",
+        "extension",
+        "device"
+      ],
+      "description": "Optional. Provenance is inferred from where the pack loaded — a shipped pack, an installed extension pack's host/detection-packs/, or the device folder — and a manifest may only narrow within what its location already proved. Generated packs under the bundled tree set source: generated; any other claim stronger than the load path is reported and held at the location's own provenance."
+    },
+    "equivalents": {
+      "type": "object",
+      "description": "Authoring metadata (not read by the matcher). Maps a canonical binary name to drop-in alternatives that every Image list naming the canonical must also name. Feeds the Settings \"also covers\" line and a drift contract test.",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._+-]*$",
+          "description": "Lowercase binary basename."
+        },
+        "uniqueItems": true
+      },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._+-]*$"
+      }
+    },
+    "generated_from": {
+      "type": "array",
+      "description": "Provenance for source: generated packs. Each entry records an upstream URL, retrieval date, and licence. Required in practice for generated packs; omitted for hand-authored packs.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/generatedFrom"
+      }
+    }
+  },
+  "$defs": {
+    "generatedFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url",
+        "retrieved"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "description": "Stable source name."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Upstream source URL."
+        },
+        "retrieved": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "ISO date the snapshot was retrieved (YYYY-MM-DD)."
+        },
+        "licence": {
+          "type": "string",
+          "description": "Licence as recorded by the fetch step."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Immutable upstream commit the snapshot was fetched at. Present only for git-hosted sources; a live provider endpoint has none."
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "True when the source is addressed by an immutable commit and its sha256 is enforced on every refresh. False for a live provider endpoint, whose digest is a record of what arrived rather than a guarantee."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Digest of the fetched source."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "pinned": { "const": true } },
+            "required": ["pinned"]
+          },
+          "then": {
+            "required": ["commit", "sha256"]
+          }
+        }
+      ]
+    }
+  }
+}

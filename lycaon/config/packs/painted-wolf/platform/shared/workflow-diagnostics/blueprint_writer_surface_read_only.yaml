@@ -1,0 +1,5 @@
+code: blueprint_writer_surface_read_only
+message: |
+  Blueprint writer phase {{phase}} in workflow {{workflow}} binds read-only surface {{surface}}.
+replacement: |
+  Bind the phase to a surface that exposes write, edit, or replace_lines.

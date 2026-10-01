@@ -1,0 +1,72 @@
+{
+  "id": "mcp-result-projection-accessors",
+  "title": "The mcp projection accessors carry declared return types, so a condition over them checks at load",
+  "covers": [
+    "OAR-FACT-9"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.post_invoke",
+      "id": "MCP_RESULT",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "mcp"
+        ]
+      },
+      "when": "mcp_call_ok && mcp_has_field(\"status\") && mcp_field_string(\"status\") == \"degraded\" && mcp_field_int(\"retries\") > 2"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.post_invoke",
+    "facts": {
+      "mcp_call_ok": true,
+      "mcp_has_field": true,
+      "mcp_field_string": "degraded",
+      "mcp_field_int": 3
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "MCP_RESULT"
+  }
+}

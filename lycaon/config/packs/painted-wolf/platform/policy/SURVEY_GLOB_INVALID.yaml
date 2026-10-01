@@ -1,0 +1,34 @@
+oar: '1.0'
+id: SURVEY_GLOB_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - grep
+    - find
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+when: paintedwolf.rejection_code == "SURVEY_GLOB_INVALID"
+effect: block
+copy:
+  what: 'Invalid discovery glob: {{ paintedwolf.detail }}.'
+  cause: The file selection pattern could not be compiled.
+  why: An invalid filter must not be reported as an empty search.
+  fix: "Use *, ?, character classes, ** for directories, and comma-separated brace alternatives such as **/*.{go,ts}. Escape literal metacharacters."
+  instead: Branch on Code; correct the glob and retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: Discovery glob is invalid
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: grep
+      detail: unmatched brace
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SURVEY_GLOB_INVALID'

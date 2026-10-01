@@ -1,0 +1,40 @@
+name: Desktop verification
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      LYCAON_LLM_MOCK: '1'
+      LYCAON_E2E_HEALTH_TRIES: '300'
+      LYCAON_E2E_KEEP_ARTIFACTS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-verification
+        with:
+          native: 'true'
+      - uses: ./.github/actions/setup-bialy
+      - name: Stage desktop engine
+        timeout-minutes: 45
+        run: ./task den:stage-engine
+      - name: Desktop end-to-end tests
+        timeout-minutes: 90
+        run: ./task e2e:den:desktop
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: desktop-verification-${{ github.run_attempt }}
+          status: ${{ job.status }}
+      - name: Clean up desktop test resources
+        if: always()
+        timeout-minutes: 5
+        run: ./task e2e:cleanup

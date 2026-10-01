@@ -1,0 +1,57 @@
+# Structured reject for an approval-rule deny.
+
+oar: '1.0'
+id: APPROVAL_RULE_DENIED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.command
+    - paintedwolf.profile
+    - paintedwolf.rule_category
+    - paintedwolf.rule_pack_id
+    - paintedwolf.rule_pattern
+    - paintedwolf.rule_scope
+    - paintedwolf.rule_unit_id
+when: paintedwolf.rejection_code == "APPROVAL_RULE_DENIED"
+effect: block
+copy:
+  what: >-
+    {% if paintedwolf.command %}`{{ paintedwolf.command }}`{% else %}This {{ tool }} call{% endif %}
+    was refused by an approval rule before it ran.
+  cause: >-
+    {% if paintedwolf.rule_unit_id %}Rule `{{ paintedwolf.rule_unit_id }}`{% if paintedwolf.rule_pack_id %} from
+    pack `{{ paintedwolf.rule_pack_id }}`{% endif %}{% if paintedwolf.rule_scope %} ({{ paintedwolf.rule_scope }}
+    scope){% endif %} matches {{ paintedwolf.rule_category }} `{{ paintedwolf.rule_pattern }}` with effect
+    deny.{% else %}An approval rule denied this action.{% endif %}
+  why: >-
+    A deny is enforcement, not a question. There is no card and no grant that clears it — the
+    person who installed the rule decided this action does not run here.
+  fix: >-
+    Do not retry this call, and do not reach for a different tool to do the same thing. Report
+    that the action is denied by policy and name the rule. If the work genuinely needs it, ask
+    the user to change the rule.
+  instead: >-
+    Branch on Code APPROVAL_RULE_DENIED. Say what was denied and which rule denied it, then
+    continue with the part of the task that does not need this action.
+x-paintedwolf-category: blocked
+x-paintedwolf-message: Approval rule denied this action
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+      profile: implement
+      command: npm publish
+      rule_unit_id: approvals/rules/deny-npm-publish
+      rule_pack_id: foxden/watchdog
+      rule_scope: device
+      rule_category: command
+      rule_pattern: npm publish*
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: APPROVAL_RULE_DENIED'
+      - 'approvals/rules/deny-npm-publish'
+      - 'foxden/watchdog'

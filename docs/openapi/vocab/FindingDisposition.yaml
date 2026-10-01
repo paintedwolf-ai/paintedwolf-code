@@ -1,0 +1,10 @@
+# FindingDisposition — optional triage state on finding properties.
+name: FindingDisposition
+go_const_prefix: FindingDisposition
+values:
+  - id: fix
+  - id: fp
+    go: FP
+  - id: defer
+  - id: accepted_risk
+  - id: human

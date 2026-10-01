@@ -1,0 +1,4 @@
+id: gcp-api-key
+upstream_id: gcp-api-key
+title: Google API key
+severity: critical

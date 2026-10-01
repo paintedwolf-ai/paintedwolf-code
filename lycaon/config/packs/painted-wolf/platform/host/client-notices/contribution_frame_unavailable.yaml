@@ -1,0 +1,11 @@
+scope: app
+title: Commands and shortcuts are unavailable
+message: >-
+  The app could not load its command surface, so keyboard shortcuts, menus and
+  Crossbar are empty. Everything else keeps working.
+suggested_action: Retry, or restart the app if it keeps failing.
+action: retry_contribution_frame
+scenarios:
+  - id: default
+    expect_contains:
+      - shortcuts

@@ -1,0 +1,46 @@
+# Code scanner catalog.
+# Labels are user-facing; ids stay internal.
+
+scanners:
+  - id: lycaon-sca
+    driver: library
+    impl: osv_scalibr
+    engine: osv-scalibr
+    scope_kind: dependencies
+    categories: [sca, security]
+    runtime:
+      soft_limit_sec: 900
+      hard_limit_sec: 0
+      cpu_units: 2
+      parallelism: 1
+    label: OSV-Scalibr
+    description: Reads your lockfiles and checks each dependency against the OSV advisory database for known vulnerabilities. Built on Google's OSV-Scalibr, linked in as a library.
+
+  - id: lycaon-secrets
+    driver: library
+    impl: gitleaks
+    engine: gitleaks
+    scope_kind: secrets
+    categories: [secret, security]
+    runtime:
+      soft_limit_sec: 900
+      hard_limit_sec: 0
+      cpu_units: 2
+      parallelism: 2
+    label: Gitleaks — bundled rules
+    description: Looks for credentials and tokens committed to the repo. Built on the Gitleaks engine, linked in as a library, running vendored Kingfisher rules.
+
+  - id: lycaon-sast
+    driver: bundled
+    impl: opengrep
+    engine: opengrep
+    scope_kind: source_host_floor
+    categories: [sast, security]
+    config: config/runtime/scanners/opengrep-gates.yaml
+    runtime:
+      soft_limit_sec: 900
+      hard_limit_sec: 0
+      cpu_units: 2
+      parallelism: 2
+    label: OpenGrep — bundled rules
+    description: Static analysis that flags insecure patterns in your code across your supported languages. Built on the OpenGrep engine, shipped as a bundled binary, running our rule set.

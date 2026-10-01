@@ -1,0 +1,37 @@
+language: commonlisp
+comment:
+- ;
+limits: No default security model; target selection and silent context-only examples are regression-tested.
+cases:
+- name: eval-reader-context-only
+  file: sample.lisp
+  source: |
+    (defun run (code) (eval (read-from-string code)))
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.commonlisp
+- name: eval-reader-safe
+  file: sample.lisp
+  source: |
+    (defun data (code) (json:decode-json-from-string code))
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.commonlisp
+- name: reader-eval-enabled-context-only
+  file: sample.lisp
+  source: |
+    (setq *read-eval* t) (read-from-string data)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.commonlisp
+- name: reader-eval-enabled-safe
+  file: sample.lisp
+  source: |
+    (setq *read-eval* nil) (read-from-string data)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.commonlisp

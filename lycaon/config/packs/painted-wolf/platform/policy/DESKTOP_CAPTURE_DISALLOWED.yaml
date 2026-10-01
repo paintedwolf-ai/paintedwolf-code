@@ -1,0 +1,34 @@
+oar: '1.0'
+id: DESKTOP_CAPTURE_DISALLOWED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "DESKTOP_CAPTURE_DISALLOWED"
+effect: block
+copy:
+  what: 'Desktop screen capture command {{ paintedwolf.command }} is disallowed.'
+  cause: OS-level screen capture tools require ambient display permissions and capture external desktop clutter.
+  why: Grounded visual evidence requires in-process offscreen rendering via the application snapshot contract.
+  fix: Equip the target app with an in-process snapshot trigger (APP_SNAPSHOT) and execute using command's snapshot_capture field or standalone execution followed by view_image.
+  instead: Use app self-snapshotting with APP_SNAPSHOT rather than OS screencapture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command
+x-paintedwolf-message: desktop screen capture commands are disallowed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    command: screencapture -x build/screen.png
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DESKTOP_CAPTURE_DISALLOWED'

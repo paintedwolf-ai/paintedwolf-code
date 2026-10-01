@@ -1,0 +1,79 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "archive/tar",
+      "symbols": [
+       "Reader.Next",
+       "Reader.readOldGNUSparseMap",
+       "readGNUSparseMap1x0"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "stdlib"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.9"
+      },
+      {
+       "introduced": "1.26.0-0"
+      },
+      {
+       "fixed": "1.26.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32288"
+ ],
+ "credits": [
+  {
+   "name": "Colin Walters (walters@verbum.org)"
+  },
+  {
+   "name": "Uuganbayar Lkhamsuren (https://github.com/uug4na)"
+  },
+  {
+   "name": "Jakub Ciolek"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4869"
+ },
+ "details": "tar.Reader can allocate an unbounded amount of memory when reading a maliciously-crafted archive containing a large number of sparse regions encoded in the \"old GNU sparse map\" format.",
+ "id": "GO-2026-4869",
+ "modified": "2026-04-07T22:53:49Z",
+ "published": "2026-04-07T22:53:49Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/763766"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/78301"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/0uYbvbPZRWU"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Unbounded allocation for old GNU sparse in archive/tar"
+}

@@ -1,0 +1,61 @@
+oar: '1.0'
+id: SURFACE_CLAIM_UNGROUNDED
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.profile
+    - paintedwolf.surface_claim_ungrounded
+when: paintedwolf.profile == "worker" && paintedwolf.surface_claim_ungrounded
+effect: block
+copy:
+  what: 'A claim about how a running UI or app behaves has no surface_snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  cause: 'Authored render mockups establish design intent, and flat command stdout establishes output; neither establishes a running screen state.'
+  why: Structural snapshot + console/log from a surface capture are the groundable floor for running-app claims.
+  fix: 'Cite an existing page# or tui# surface_snapshot that supports the finding. If absent, obtain the observation with the capture or terminal controls offered on this turn, or remove the unsupported runtime claim before calling complete_leg.'
+  instead: 'Return partial through complete_leg and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-evidence:
+  in_session_retry: true
+x-paintedwolf-message: Observed-runtime claim lacks a surface_snapshot
+x-paintedwolf-scenarios:
+  - id: page_claim_without_snapshot
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#1
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - surface_snapshot
+      - complete_leg
+  - id: visual_intent_cannot_ground_runtime
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#2
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - render
+  - id: tui_claim_without_snapshot
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#1
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - surface_snapshot
+      - complete_leg
+      - complete_leg
+  - id: tui_stdout_cannot_ground_screen
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#2
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - command stdout
+      - complete_leg
+      - complete_leg

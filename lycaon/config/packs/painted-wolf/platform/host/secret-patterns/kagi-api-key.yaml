@@ -1,0 +1,10 @@
+id: kagi-api-key
+title: Kagi API key
+regex: '(?i)\bkagi_api_key\b[''" ]*[:=][ ''"]*([A-Za-z0-9._~+/-]{28,})'
+keywords:
+  - kagi_api_key
+severity: critical
+secret_group: 1
+entropy: 3.5
+allowlist_stopwords:
+  - your_token_here

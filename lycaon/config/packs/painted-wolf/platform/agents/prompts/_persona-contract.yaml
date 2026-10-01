@@ -1,0 +1,90 @@
+# Machine-readable persona contract — enforced by agent_persona_contract_test.go.
+# Rendered output is truth: golden tests hash FileTemplateEngine output per agent id.
+# Coordinator personas are assembled separately and are not listed here.
+#
+# Archetypes and required headings are platform-wide. Agent rows live in the
+# pack that ships the agent; the loader merges every contributing pack's copy.
+
+version: 2
+
+required_headings_rendered:
+  - "## Focus"
+  - "## Process"
+  - "## Tools"
+  - "## Finish"
+  - "## Non-goals"
+
+# Archetype bodies: {pack}/shared/archetypes/{id}.md
+archetypes:
+  implement_shell:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/tool-turn-batch.md
+      - partials/agent-tool-surface.md
+      - partials/finish-handoff.md
+
+  plan_write:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/agent-tool-surface.md
+      - partials/finish-handoff.md
+
+  explore_readonly:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/tool-turn-batch.md
+      - partials/agent-tool-surface.md
+      - partials/finish-handoff.md
+
+  web_research:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/agent-tool-surface.md
+      - partials/finish-handoff.md
+
+  advisory_gate:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/agent-tool-surface.md
+      - partials/advisory-vs-gates.md
+      - partials/finish-handoff.md
+
+  security_scan_survey:
+    shell: agents/_shell.md
+    required_partials:
+      - partials/coordination-loop.md
+      - partials/tool-turn-batch.md
+      - partials/agent-tool-surface.md
+      - partials/finish-handoff.md
+
+agents:
+  code-reviewer:
+    archetype: advisory_gate
+    advisory: true
+    playbook_ids: [worker-leg-default, review-addenda]
+    must_substrings_rendered:
+      - "advisory"
+    delta:
+      role_title: Code Reviewer
+      focus: "Review diffs after implement; advisory only."
+      process:
+        - "Read changed files; do not rewrite product code unless leg allows."
+        - "Cite issues; inspector gates decide merge readiness."
+
+  skeptic:
+    archetype: advisory_gate
+    advisory: true
+    playbook_ids: [worker-leg-default, review-addenda]
+    must_substrings_rendered:
+      - "advisory"
+    delta:
+      role_title: Skeptic
+      focus: "Argue the strongest evidence-backed case against the proposition under review."
+      process:
+        - "Read the artifact and the evidence it rests on before arguing."
+        - "Cite path:line for every counter-claim; an unsupported objection is not a challenge."

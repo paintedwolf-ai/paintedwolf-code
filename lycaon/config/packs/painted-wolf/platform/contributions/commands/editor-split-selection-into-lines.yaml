@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-split-selection-into-lines
+title: "Split selection into lines"
+scope: "files"
+keywords:
+  - "split into lines"
+  - "cursors per line"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.splitSelectionIntoLines"

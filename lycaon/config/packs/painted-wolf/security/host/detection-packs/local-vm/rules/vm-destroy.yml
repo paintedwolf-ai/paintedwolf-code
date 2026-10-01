@@ -1,0 +1,48 @@
+title: Delete a virtual machine and its disks
+id: 34931e34-ed41-4c57-a6ed-d81f24771945
+description: Removes a virtual machine definition along with the storage it was using.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_virsh:
+    Image: virsh
+    CommandLine|contains: ' undefine'
+  # vagrant and multipass both prompt without their confirm flag.
+  selection_vagrant:
+    Image: vagrant
+    CommandLine|contains|all:
+      - ' destroy'
+      - ' -f'
+  selection_vagrant_long:
+    Image: vagrant
+    CommandLine|contains|all:
+      - ' destroy'
+      - ' --force'
+  selection_multipass:
+    Image: multipass
+    CommandLine|contains|all:
+      - ' delete'
+      - ' --purge'
+  selection_vbox:
+    Image:
+      - VBoxManage
+      - vboxmanage
+    CommandLine|contains|all:
+      - ' unregistervm'
+      - ' --delete'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_virsh or selection_vagrant or selection_vagrant_long or selection_multipass or selection_vbox) and not filter_rehearsal and not filter_local

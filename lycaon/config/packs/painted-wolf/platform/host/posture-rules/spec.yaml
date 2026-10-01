@@ -1,0 +1,307 @@
+# Spec posture scaffold rules. Runtime authority: internal/rules/config.go.
+
+rules:
+  - id: spec_posture_unresolved
+    when:
+      posture_unresolved: true
+      high_risk_tool: true
+    then:
+      deny:
+        code: SPEC_POSTURE_UNRESOLVED
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: establish spec posture via /plan or write a blueprint file first
+        message: establish spec posture via /plan or write a blueprint file first
+
+  - id: spec_posture_state_forbidden_stub_invalid
+    when:
+      posture_is: spec
+      tool_is_state: true
+      stub_invalid: true
+    then:
+      deny:
+        tools: [state_start, state_close, state_update]
+        code: SPEC_POSTURE_STATE_FORBIDDEN
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "write `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions, ## Approach — state tracking tools do not create blueprint files"
+        message: "write `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions, ## Approach — state tracking tools do not create blueprint files"
+
+  - id: spec_posture_state_forbidden_stub_valid
+    when:
+      posture_is: spec
+      tool_is_state: true
+      stub_valid: true
+    then:
+      deny:
+        tools: [state_start, state_close]
+        code: SPEC_POSTURE_STATE_FORBIDDEN
+        phase_required: "2"
+        phase_required_name: Research tasks
+        min_required: Plan stub exists — next edit the plan or Task(repo-researcher); state tracking tools are build-only
+        message: Plan stub exists — next edit the plan or Task(repo-researcher); state tracking tools are build-only
+
+  - id: spec_posture_disallowed_agent
+    when:
+      posture_is: spec
+      tool_is_task: true
+      disallowed_agent: true
+    then:
+      deny:
+        code: DISALLOWED_AGENT
+        message: agent_type is not in the workflow allowed_agents allowlist
+
+  - id: spec_posture_delegation_awaiting_approval
+    when:
+      posture_is: spec
+      tool_is_delegation: true
+      plan_awaiting_approval: true
+    then:
+      deny:
+        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        code: SPEC_POSTURE_NOT_APPROVED
+        phase_required: "6"
+        phase_required_name: Plan approval
+        min_required: the plan is complete and awaiting the user's approval — they approve via the plan card (Yes); do not delegate or implement, just wait
+        message: the plan is complete and awaiting the user's approval — they approve via the plan card (Yes); do not delegate or implement, just wait
+
+  - id: spec_posture_no_delegation_dispatch
+    when:
+      posture_is: spec
+      tool_is_delegation: true
+      plan_awaiting_approval: false
+    then:
+      deny:
+        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        code: SPEC_POSTURE_DELEGATION_FORBIDDEN
+        phase_required: "1"
+        min_required: complete the plan workflow before delegation tools
+        message: complete the plan workflow before delegation tools
+
+  - id: spec_posture_stub_required_plan_writer
+    when:
+      posture_is: spec
+      tool_is_task: true
+      stub_invalid: true
+      agent_is_plan_writer: true
+    then:
+      deny:
+        code: SPEC_POSTURE_STUB_REQUIRED
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "Phase 1: use native `write` on `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
+        message: "Phase 1: use native `write` on `${overlay_dir}/blueprints/<slug>.md` — do not Task(plan-writer)"
+
+  - id: spec_posture_research_stub_required
+    when:
+      posture_is: spec
+      research_task: true
+      stub_invalid: true
+    then:
+      deny:
+        code: SPEC_POSTURE_STUB_REQUIRED
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "write plan stub declaring research_depth in frontmatter before research Tasks"
+        message: "write plan stub declaring research_depth in frontmatter before research Tasks"
+
+  - id: spec_posture_critic_stub_required
+    when:
+      posture_is: spec
+      critic_task: true
+      stub_invalid: true
+    then:
+      deny:
+        code: SPEC_POSTURE_STUB_REQUIRED
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "write plan stub declaring research_depth in frontmatter before critic Tasks"
+        message: "write plan stub declaring research_depth in frontmatter before critic Tasks"
+
+  - id: spec_posture_stub_required_task
+    when:
+      posture_is: spec
+      tool_is_task: true
+      stub_invalid: true
+    then:
+      deny:
+        code: SPEC_POSTURE_STUB_REQUIRED
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "native `write` on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
+        message: "native `write` on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal, ## Assumptions"
+
+  - id: spec_posture_pack_runner_forbidden
+    when:
+      posture_is: spec
+      pack_runner_task: true
+    then:
+      deny:
+        code: SPEC_POSTURE_IMPLEMENT_FORBIDDEN
+        phase_required: "6"
+        phase_required_name: Handoff -> implement
+        min_required: complete plan critics and handoff before implementer Task
+        message: complete plan critics and handoff before implementer Task
+
+  - id: spec_posture_handoff_early_stub_invalid
+    when:
+      posture_is: spec
+      tool_is_handoff: true
+      stub_invalid: true
+    then:
+      deny:
+        code: SPEC_POSTURE_HANDOFF_FORBIDDEN
+        phase_required: "1"
+        phase_required_name: Research depth (stub blueprint)
+        min_required: "write plan stub declaring research_depth in frontmatter before handoff tools"
+        message: "write plan stub declaring research_depth in frontmatter before handoff tools"
+
+  - id: spec_posture_handoff_not_approved
+    when:
+      posture_is: spec
+      tool_is_handoff: true
+      plan_awaiting_approval: true
+    then:
+      deny:
+        code: SPEC_POSTURE_NOT_APPROVED
+        phase_required: "6"
+        phase_required_name: Handoff -> implement
+        min_required: obtain plan approval before handing off to implement
+        message: obtain plan approval before handing off to implement
+
+  - id: spec_posture_task_forbidden_awaiting_approval
+    when:
+      posture_is: spec
+      tool_is_task: true
+      plan_awaiting_approval: true
+    then:
+      deny:
+        code: SPEC_POSTURE_NOT_APPROVED
+        phase_required: "6"
+        phase_required_name: Plan approval
+        min_required: obtain plan approval before dispatching workers
+        message: obtain plan approval before task() — approval gate still open
+
+  - id: spec_posture_handoff_early_stub_valid
+    when:
+      posture_is: spec
+      tool_is_handoff: true
+      stub_valid: true
+      handoff_not_ready: true
+      plan_awaiting_approval: false
+    then:
+      deny:
+        code: SPEC_POSTURE_HANDOFF_FORBIDDEN
+        phase_required: "6"
+        phase_required_name: Handoff -> implement
+        min_required: handoff tools are for Phase 6 after plan approval and technical readiness
+        message: handoff tools are for Phase 6 after plan approval and technical readiness
+
+  - id: spec_posture_scope_required_research
+    when:
+      posture_is: spec
+      research_task: true
+      research_required: true
+      scope_missing: true
+    then:
+      deny:
+        code: SPEC_POSTURE_SCOPE_REQUIRED
+        phase_required: "0"
+        phase_required_name: Infer
+        min_required: "Set scope in frontmatter or add ## Plan implementation scope with **Size:**"
+        message: "Set scope in frontmatter or add ## Plan implementation scope with **Size:**"
+
+  - id: spec_posture_breaking_required_research
+    when:
+      posture_is: spec
+      research_task: true
+      research_required: true
+      breaking_missing: true
+    then:
+      deny:
+        code: SPEC_POSTURE_BREAKING_REQUIRED
+        phase_required: "0"
+        phase_required_name: Infer
+        min_required: "Set breaking policy in frontmatter or add ## Plan breaking changes"
+        message: "Set breaking policy in frontmatter or add ## Plan breaking changes"
+
+  - id: spec_posture_scope_required_critic
+    when:
+      posture_is: spec
+      critic_task: true
+      scope_missing: true
+    then:
+      deny:
+        code: SPEC_POSTURE_SCOPE_REQUIRED
+        phase_required: "0"
+        phase_required_name: Infer
+        min_required: Set scope before critic Tasks
+        message: Set scope before critic Tasks
+
+  - id: spec_posture_breaking_required_critic
+    when:
+      posture_is: spec
+      critic_task: true
+      breaking_missing: true
+    then:
+      deny:
+        code: SPEC_POSTURE_BREAKING_REQUIRED
+        phase_required: "0"
+        phase_required_name: Infer
+        min_required: Set breaking policy before critic Tasks
+        message: Set breaking policy before critic Tasks
+
+  - id: spec_posture_research_phase_skipped
+    when:
+      posture_is: spec
+      research_task: true
+      "phase_skipped:research": true
+    then:
+      deny:
+        code: SPEC_POSTURE_PHASE_SKIPPED
+        phase_required: "2"
+        phase_required_name: Research tasks
+        min_required: Tier skips research — advance per phase path; do not spawn researchers
+        message: Tier skips research — advance per phase path; do not spawn researchers
+
+  - id: spec_posture_research_required
+    when:
+      posture_is: spec
+      critic_task: true
+      research_required: true
+      research_satisfied: false
+      review_loop_active: false
+    then:
+      deny:
+        code: SPEC_POSTURE_RESEARCH_REQUIRED
+        phase_required: "2"
+        phase_required_name: Research tasks
+        min_required: "Dispatch task(repo-researcher|path-explorer), then leave research per Phase exit when facts are enough."
+        max_playbook: one research dispatch is enough; parallel scouts optional
+        message: "Research is still open — finish research and leave research per Phase exit before other milestones."
+
+  - id: spec_posture_review_depth_required
+    when:
+      posture_is: spec
+      critic_task: true
+      review_depth_missing: true
+    then:
+      deny:
+        code: SPEC_POSTURE_REVIEW_DEPTH_REQUIRED
+        phase_required: "4"
+        phase_required_name: Review depth
+        min_required: "add ## Plan review depth to the blueprint file"
+        message: "add ## Plan review depth to the blueprint file"
+
+  - id: spec_posture_critic_phase_skipped
+    when:
+      posture_is: spec
+      critic_task: true
+      "phase_skipped:review": true
+    then:
+      deny:
+        code: SPEC_POSTURE_PHASE_SKIPPED
+        phase_required: "5"
+        phase_required_name: Critics
+        min_required: Tier skips critics — advance per phase path
+        message: Tier skips critics — advance per phase path

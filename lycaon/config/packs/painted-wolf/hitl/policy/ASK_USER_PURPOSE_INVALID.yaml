@@ -1,0 +1,24 @@
+oar: '1.0'
+id: ASK_USER_PURPOSE_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [ask_user]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.ask_purpose, paintedwolf.ask_purposes, paintedwolf.ask_artifact_count]
+when: paintedwolf.rejection_code == "ASK_USER_PURPOSE_INVALID"
+effect: block
+copy:
+  what: "The ask purpose {{ paintedwolf.ask_purpose }} does not fit an ask with {{ paintedwolf.ask_artifact_count }} artifacts."
+  cause: "Purpose must be one of {{ paintedwolf.ask_purposes }}: clarify carries no artifacts, review carries one to four, and compare carries two to four."
+  why: The purpose selects the card the user answers, so it has to match what the ask attaches.
+  fix: "Omit purpose to let artifacts select review, or pass the purpose that matches the attached artifacts."
+  instead: Branch on Code ASK_USER_PURPOSE_INVALID; correct purpose or artifacts
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: "The ask purpose {{ paintedwolf.ask_purpose }} does not fit its artifacts."
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {"ask_purpose": "clarify", "ask_purposes": ["clarify", "review", "compare"], "ask_artifact_count": 2, "profile": "coordinator", "tool": "ask_user"}
+    expect_contains: ['Rejected:', 'Code: ASK_USER_PURPOSE_INVALID']

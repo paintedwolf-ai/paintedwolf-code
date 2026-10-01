@@ -1,0 +1,448 @@
+paths:
+  /v1/settings/limits:
+    get:
+      tags:
+      - settings
+      operationId: getLimitsSettings
+      summary: Get effective session and budget limits for scope
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Settings limits
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/SettingsLimitsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    patch:
+      tags:
+      - settings
+      operationId: updateLimitsSettings
+      x-person-action: record
+      summary: Update session and budget limits for global or project scope
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/SettingsLimitsPatch
+      responses:
+        '200':
+          description: Updated settings limits
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/SettingsLimitsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/review:
+    get:
+      tags:
+      - settings
+      operationId: getReviewSettings
+      summary: Get effective edit review settings for scope
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Edit review settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/review.yaml#/components/schemas/ReviewSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    patch:
+      tags:
+      - settings
+      operationId: updateReviewSettings
+      x-person-action: record
+      summary: Update edit review settings for global or project scope
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/review.yaml#/components/schemas/UpdateReviewSettingsRequest
+      responses:
+        '200':
+          description: Updated edit review settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/review.yaml#/components/schemas/ReviewSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/verify:
+    get:
+      tags:
+      - settings
+      operationId: getVerifySettings
+      summary: Get effective verify (test command) settings for scope
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Verify settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/verification.yaml#/components/schemas/VerifySettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    patch:
+      tags:
+      - settings
+      operationId: updateVerifySettings
+      x-person-action: record
+      summary: Update project verify settings
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/verification.yaml#/components/schemas/UpdateVerifySettingsRequest
+      responses:
+        '200':
+          description: Updated verify settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/verification.yaml#/components/schemas/VerifySettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/verify/dismiss:
+    post:
+      tags:
+      - settings
+      operationId: dismissVerifySettings
+      x-person-action: record
+      summary: Dismiss (or un-dismiss) the project verify-command suggestion
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/verification.yaml#/components/schemas/DismissVerifySettingsRequest
+      responses:
+        '200':
+          description: Updated verify settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/verification.yaml#/components/schemas/VerifySettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/file-summaries:
+    get:
+      tags:
+      - settings
+      operationId: getFileSummariesSettings
+      summary: Get the device-wide File summaries setting
+      responses:
+        '200':
+          description: File summaries setting
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/FileSummariesSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+    patch:
+      tags:
+      - settings
+      operationId: updateFileSummariesSettings
+      x-person-action: record
+      summary: Enable or fully disable File summaries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/UpdateFileSummariesSettingsRequest
+      responses:
+        '200':
+          description: Updated File summaries setting
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/FileSummariesSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/power:
+    get:
+      tags:
+      - settings
+      operationId: getPowerSettings
+      summary: Get the device power preference and live assertion status
+      responses:
+        '200':
+          description: Power setting and live status
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/PowerSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+    patch:
+      tags:
+      - settings
+      operationId: updatePowerSettings
+      x-person-action: record
+      summary: Set whether active sessions prevent macOS idle sleep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/UpdatePowerSettingsRequest
+      responses:
+        '200':
+          description: Updated power setting and live status
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/PowerSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/security-scanners:
+    get:
+      tags:
+      - settings
+      operationId: getSecurityScannersSettings
+      summary: Get global Security scanners settings
+      responses:
+        '200':
+          description: Security scanners settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/SecurityScannersSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+    patch:
+      tags:
+      - settings
+      operationId: updateSecurityScannersSettings
+      x-person-action: record
+      summary: Update global Security scanners settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/UpdateSecurityScannersSettingsRequest
+      responses:
+        '200':
+          description: Updated Security scanners settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/preferences.yaml#/components/schemas/SecurityScannersSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/settings/project-trust:
+    get:
+      tags:
+      - rules
+      operationId: getTrustSettings
+      summary: Get device-wide off switches for what projects may supply
+      responses:
+        '200':
+          description: Device trust settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/trust.yaml#/components/schemas/TrustSettingsResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+    patch:
+      tags:
+      - rules
+      operationId: updateTrustSettings
+      x-person-action: record
+      summary: Update device-wide off switches for what projects may supply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/settings/trust.yaml#/components/schemas/UpdateTrustSettingsRequest
+      responses:
+        '200':
+          description: Updated device trust settings
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/settings/trust.yaml#/components/schemas/TrustSettingsResponse
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

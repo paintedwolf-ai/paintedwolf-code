@@ -1,0 +1,424 @@
+language: yaml
+comment:
+- '#'
+limits: Explicit Kubernetes privilege and direct reviewed GitHub event string interpolation. Workflow expression transforms and indirect values require additional analysis.
+cases:
+- name: privileged-container-vulnerable
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example
+    spec:
+      containers:
+        - name: app
+          image: example:1
+          securityContext:
+            privileged: true
+  want:
+  - lycaon.yaml.privileged-container
+  covers: []
+- name: privileged-container-safe
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example
+    spec:
+      containers:
+        - name: app
+          image: example:1
+          securityContext:
+            privileged: false
+  want: []
+  covers:
+  - lycaon.yaml.privileged-container
+- name: privilege-escalation-context-only
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example
+    spec:
+      containers:
+        - name: app
+          image: example:1
+          securityContext:
+            allowPrivilegeEscalation: true
+  want: []
+  covers: []
+- name: privilege-escalation-safe
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example
+    spec:
+      containers:
+        - name: app
+          image: example:1
+          securityContext:
+            allowPrivilegeEscalation: false
+  want: []
+  covers: []
+- name: host-process-namespace-context-only
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      hostPID: true
+  want: []
+  covers: []
+- name: host-process-namespace-safe
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      hostPID: false
+  want: []
+  covers: []
+- name: host-network-context-only
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      hostNetwork: true
+  want: []
+  covers: []
+- name: host-network-safe
+  file: sample.yaml
+  source: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      hostNetwork: false
+  want: []
+  covers: []
+- name: network-policy-open-ingress-context-only
+  file: sample.yaml
+  source: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    spec:
+      podSelector: {}
+      ingress:
+        - {}
+  want: []
+  covers: []
+- name: network-policy-open-ingress-safe
+  file: sample.yaml
+  source: |
+    kind: ProductExample
+    spec:
+      ingress:
+        - {}
+  want: []
+  covers: []
+- name: actions-injection
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: echo "${{ github.event.issue.title }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+  evidence:
+  - rule: lycaon.yaml.actions-script-injection
+    primary: {line: 7, column: 20, end_line: 7, end_column: 51}
+- name: actions-environment
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: echo "$TITLE"
+            env:
+              TITLE: ${{ github.event.issue.title }}
+  want: []
+  covers:
+  - lycaon.yaml.actions-script-injection
+- name: precision-actions-issue-number
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.issue.number }}"
+  want: []
+  covers: []
+- name: precision-actions-pull-request-draft
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.pull_request.draft }}"
+  want: []
+  covers: []
+- name: precision-actions-title-equality
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.issue.title == 'safe' }}"
+  want: []
+  covers: []
+- name: precision-actions-title-comparison
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.issue.title != 'safe' }}"
+  want: []
+  covers: []
+- name: precision-actions-title-contains
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ contains(github.event.issue.title, 'safe') }}"
+  want: []
+  covers: []
+- name: precision-actions-literal-context-name
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ 'github.event.issue.title' }}"
+  want: []
+  covers: []
+- name: precision-actions-issue-body
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.issue.body }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-pull-request-title
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.pull_request.title }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-pull-request-body
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.pull_request.body }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-discussion-title
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.discussion.title }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-discussion-body
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.discussion.body }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-comment-body
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.comment.body }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+  evidence:
+  - rule: lycaon.yaml.actions-script-injection
+    primary: {line: 8, column: 17, end_line: 8, end_column: 49}
+- name: precision-actions-review-body
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.review.body }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-commit-message
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.head_commit.message }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-pull-request-head-ref
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.pull_request.head.ref }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-pull-request-head-label
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.pull_request.head.label }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+- name: precision-actions-safe-and-unsafe-expressions
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues, pull_request]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              echo "${{ github.event.issue.number }}"
+              echo "${{ github.event.issue.title }}"
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+  evidence:
+  - rule: lycaon.yaml.actions-script-injection
+    primary: {line: 9, column: 17, end_line: 9, end_column: 48}
+- name: precision-actions-shell-comment-interpolation
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              # ${{ github.event.issue.title }}
+              echo ready
+  want:
+  - lycaon.yaml.actions-script-injection
+  covers: []
+  evidence:
+  - rule: lycaon.yaml.actions-script-injection
+    primary: {line: 8, column: 13, end_line: 8, end_column: 44}
+- name: precision-actions-yaml-comment-interpolation
+  file: .github/workflows/check.yaml
+  source: |
+    name: Check
+    on: [issues]
+    jobs:
+      check:
+        runs-on: ubuntu-latest
+        steps:
+          # run: echo "${{ github.event.issue.title }}"
+          - run: echo ready
+  want: []
+  covers: []

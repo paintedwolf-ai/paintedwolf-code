@@ -1,0 +1,1149 @@
+{
+  "id": "coordinator-operations",
+  "unattended": {
+    "approval_guidance": "I cannot grant that access. Please continue with the project files and the access already authorized.",
+    "answer": "I have no additional information. Please use your judgment within the requirements I supplied.",
+    "max_interventions": 3
+  },
+  "cases": [
+    {
+      "id": "current-verification",
+      "project": "coordinator-focused/verification",
+      "prompt": "Check that the existing report passes its supplied unit tests. Leave the files unchanged.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "verify"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "baseline-verification",
+          "tool": "verify",
+          "args": {
+            "command": "python3 -B -m unittest discover"
+          },
+          "outcome": "completed",
+          "json": {
+            "outcome": "passed"
+          }
+        }
+      ],
+      "follow_ups": [
+        {
+          "prompt": "Change the default limit in select to 3."
+        }
+      ],
+      "prelude_final": "The supplied unit tests pass. The existing files are unchanged."
+    },
+    {
+      "id": "workspace-conflict",
+      "project": "coordinator-focused/merge",
+      "prompt": "Integrate the filtering and pagination changes. Keep my current violet theme preference.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Prefix filtering",
+            "verify": "python3 -B -m unittest test_filter",
+            "files": {
+              "catalog.py": "def select_records(records, prefix=\"\", offset=0, limit=None):\n    return [r for r in records if r[\"name\"].casefold().startswith(prefix.casefold())]\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          },
+          {
+            "label": "Pagination",
+            "verify": "python3 -B -m unittest test_page",
+            "files": {
+              "catalog.py": "def select_records(records, prefix=\"\", offset=0, limit=None):\n    if type(offset) is not int or offset < 0 or (limit is not None and (type(limit) is not int or limit < 0)):\n        raise ValueError(\"invalid pagination\")\n    return list(records[offset:] if limit is None else records[offset:offset + limit])\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          }
+        ],
+        "integration_files": {
+          "preferences.json": "{\"owner_note\":\"Preserve this user preference\",\"theme\":\"violet\"}\n"
+        }
+      }
+    },
+    {
+      "id": "worker-complete",
+      "project": "coordinator-focused/worker",
+      "prompt": "Finish the status-label change using the attached worker result. Keep the existing checklist item names.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Status label change",
+            "verify": "python3 -B -m unittest discover",
+            "files": {
+              "status.py": "def display_status(status):\n    return {'pending': 'Waiting', 'active': 'Running', 'done': 'Complete'}[status]\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          }
+        ],
+        "integration_files": {}
+      },
+      "prelude": [
+        {
+          "id": "inspect-README-md",
+          "tool": "read",
+          "args": {
+            "path": "README.md"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-status-py",
+          "tool": "read",
+          "args": {
+            "path": "status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-settings-json",
+          "tool": "read",
+          "args": {
+            "path": "settings.json"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-test_status-py",
+          "tool": "read",
+          "args": {
+            "path": "test_status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        }
+      ]
+    },
+    {
+      "id": "worker-partial",
+      "project": "coordinator-focused/worker",
+      "prompt": "Have the existing worker finish the status-label change.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Status label change with an unresolved done label",
+            "verify": "python3 -B -m unittest discover",
+            "files": {
+              "status.py": "def display_status(status):\n    return {'pending': 'Waiting', 'active': 'Running', 'done': 'Done'}[status]\n"
+            },
+            "verification_verdict": "failed",
+            "result_status": "partial",
+            "script": {
+              "stages": [
+                {
+                  "kind": "complete",
+                  "files": {
+                    "status.py": "def display_status(status):\n    return {'pending': 'Waiting', 'active': 'Running', 'done': 'Complete'}[status]\n"
+                  },
+                  "verify": "python3 -B -m unittest discover"
+                }
+              ]
+            }
+          }
+        ],
+        "integration_files": {}
+      },
+      "prelude": [
+        {
+          "id": "inspect-README-md",
+          "tool": "read",
+          "args": {
+            "path": "README.md"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-status-py",
+          "tool": "read",
+          "args": {
+            "path": "status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-settings-json",
+          "tool": "read",
+          "args": {
+            "path": "settings.json"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-test_status-py",
+          "tool": "read",
+          "args": {
+            "path": "test_status.py"
+          },
+          "outcome": "completed"
+        }
+      ]
+    },
+    {
+      "id": "changed-intent",
+      "project": "coordinator-focused/changed-intent",
+      "prompt": "Check that the existing report passes its supplied unit tests. Leave the files unchanged.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "verify"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "baseline-verification",
+          "tool": "verify",
+          "args": {
+            "command": "python3 -B -m unittest discover"
+          },
+          "outcome": "completed",
+          "json": {
+            "outcome": "passed"
+          }
+        }
+      ],
+      "follow_ups": [
+        {
+          "prompt": "Update summarize and the CLI to omit inactive accounts before applying the limit."
+        }
+      ],
+      "prelude_final": "The supplied unit tests pass. The existing files are unchanged."
+    },
+    {
+      "id": "fresh-service",
+      "project": "coordinator-focused/fresh-service",
+      "prompt": "Refresh receipt.json from the current service with a minimum balance of 100.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "loopback",
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "command"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "local-connection-authority",
+          "tool": "command",
+          "args": {
+            "command": "python3 -B -c \"import socket; socket.create_connection(('127.0.0.1', ${sandbox_port})).close()\"",
+            "capability_request": {
+              "loopback_connect": {
+                "ports": [
+                  "${sandbox_port_number}"
+                ]
+              }
+            }
+          },
+          "outcome": "completed"
+        }
+      ],
+      "sandbox_step": "local-connection-authority"
+    },
+    {
+      "id": "permission-approved",
+      "project": "coordinator-focused/permission",
+      "prompt": "Finish the receipt handoff after my decision on the pending input access.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "approve_read",
+      "prelude": [
+        {
+          "id": "input-access",
+          "tool": "read",
+          "args": {
+            "path": "${sandbox_path}"
+          },
+          "outcome": "completed",
+          "checkpoint_status": "approved"
+        }
+      ],
+      "sandbox_step": "input-access"
+    },
+    {
+      "id": "permission-denied",
+      "project": "coordinator-focused/permission",
+      "prompt": "Finish the receipt handoff after my decision on the pending input access.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "deny_read",
+      "prelude": [
+        {
+          "id": "input-access",
+          "tool": "read",
+          "args": {
+            "path": "${sandbox_path}"
+          },
+          "outcome": "rejected",
+          "checkpoint_status": "rejected",
+          "code": "approval_denied"
+        }
+      ],
+      "sandbox_step": "input-access"
+    },
+    {
+      "id": "current-verification-ties",
+      "project": "coordinator-focused/current-verification-ties",
+      "prompt": "Check that the existing report passes its supplied unit tests. Leave the files unchanged.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "verify"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "baseline-verification",
+          "tool": "verify",
+          "args": {
+            "command": "python3 -B -m unittest discover"
+          },
+          "outcome": "completed",
+          "json": {
+            "outcome": "passed"
+          }
+        }
+      ],
+      "follow_ups": [
+        {
+          "prompt": "Break equal scores by name in ascending order."
+        }
+      ],
+      "prelude_final": "The supplied unit tests pass. The existing files are unchanged."
+    },
+    {
+      "id": "workspace-conflict-normalize-deduplicate",
+      "project": "coordinator-focused/workspace-conflict-normalize-deduplicate",
+      "prompt": "Integrate both catalog changes. Keep my current violet theme preference.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "First catalog feature",
+            "verify": "python3 -B -m unittest test_first",
+            "files": {
+              "catalog.py": "def select_records(names):\n    return [n.strip().casefold() for n in names]\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          },
+          {
+            "label": "Second catalog feature",
+            "verify": "python3 -B -m unittest test_second",
+            "files": {
+              "catalog.py": "def select_records(names):\n    return list(dict.fromkeys(names))\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          }
+        ],
+        "integration_files": {
+          "preferences.json": "{\"owner_note\":\"Preserve this user preference\",\"theme\":\"violet\"}\n"
+        }
+      }
+    },
+    {
+      "id": "worker-complete-normalized",
+      "project": "coordinator-focused/worker-complete-normalized",
+      "prompt": "Finish the status-label change using the attached worker result. Keep my paused label as On hold. Drop the export task. Keep the existing checklist item names.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Requested change",
+            "verify": "python3 -B -m unittest discover",
+            "files": {
+              "status.py": "def display_status(status):\n    key=status.strip().casefold()\n    return {\"pending\":\"Waiting\",\"active\":\"Running\",\"done\":\"Complete\"}.get(key,\"Unknown\")\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          }
+        ],
+        "integration_files": {
+          "status.py": "def display_status(status):\n    if status.strip().casefold() == \"paused\":\n        return \"On hold\"\n    return status\n"
+        }
+      },
+      "prelude": [
+        {
+          "id": "inspect-README-md",
+          "tool": "read",
+          "args": {
+            "path": "README.md"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-status-py",
+          "tool": "read",
+          "args": {
+            "path": "status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-settings-json",
+          "tool": "read",
+          "args": {
+            "path": "settings.json"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-test_status-py",
+          "tool": "read",
+          "args": {
+            "path": "test_status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels\n- [ ] Export status report"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        }
+      ]
+    },
+    {
+      "id": "changed-intent-input-order",
+      "project": "coordinator-focused/changed-intent-input-order",
+      "prompt": "Check that the existing report passes its supplied unit tests. Leave the files unchanged.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "verify"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "baseline-verification",
+          "tool": "verify",
+          "args": {
+            "command": "python3 -B -m unittest discover"
+          },
+          "outcome": "completed",
+          "json": {
+            "outcome": "passed"
+          }
+        }
+      ],
+      "follow_ups": [
+        {
+          "prompt": "Preserve the input order instead of sorting, in both summarize and the CLI. Keep the limits."
+        }
+      ],
+      "prelude_final": "The supplied unit tests pass. The existing files are unchanged."
+    },
+    {
+      "id": "fresh-service-denied",
+      "project": "coordinator-focused/fresh-service-denied",
+      "prompt": "Finish refreshing receipt.json with a minimum balance of 100 after my decision on service access.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "deny_loopback",
+      "prelude": [
+        {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "command"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "local-connection-authority",
+          "tool": "command",
+          "args": {
+            "command": "python3 -B -c \"import socket; socket.create_connection(('127.0.0.1', ${sandbox_port})).close()\"",
+            "capability_request": {
+              "loopback_connect": {
+                "ports": [
+                  "${sandbox_port_number}"
+                ]
+              }
+            }
+          },
+          "outcome": "rejected",
+          "checkpoint_status": "rejected"
+        }
+      ],
+      "sandbox_step": "local-connection-authority"
+    },
+    {
+      "id": "targeted-repair",
+      "project": "agent-project",
+      "prompt": "Fix the service report to show the highest score first, breaking ties by name, and add regression tests.",
+      "outcomes": [
+        "Independent ranking and CLI checks pass for the stated ordering, limits, record preservation, layout, and input validation.",
+        "Supplied test statements and definitions remain unchanged; discovered tests pass without skips; added regression tests reject the two specified broken orderings.",
+        "The documented full test suite passes against the delivered source bytes, recorded by the coordinator or a delegated session, and the coordinator supplies a nonempty final handoff."
+      ]
+    },
+    {
+      "id": "worker-integration",
+      "project": "agent-project",
+      "prompt": "Have a worker fix the service report's score ordering and name ties and add regression tests. Integrate the change and have a different worker review it.",
+      "outcomes": [
+        "Independent ranking and CLI checks pass for the stated ordering, limits, record preservation, layout, and input validation.",
+        "Supplied test statements and definitions remain unchanged; discovered tests pass without skips; added regression tests reject the two specified broken orderings.",
+        "The documented full test suite passes against the delivered source bytes, recorded by the coordinator or a delegated session, and the coordinator supplies a nonempty final handoff.",
+        "A completed write child lands both implementation and regression changes; a different read-only child completes the review; no job or overlay remains pending."
+      ]
+    },
+    {
+      "id": "wave-review",
+      "project": "coordinator-orchestration/wave-review",
+      "prompt": "Implement the ranked status report, then have the review worker inspect the integrated changes.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [],
+        "dispatches": [
+          {
+            "label": "Ranking fix",
+            "mode": "write",
+            "paths": [
+              "ranking.py"
+            ],
+            "stages": [
+              {
+                "kind": "complete",
+                "files": {
+                  "ranking.py": "def rank(records):\n    return sorted(records, key=lambda r: (-r[\"score\"], r[\"name\"]))\n"
+                },
+                "verify": "python3 -B -m unittest test_ranking"
+              }
+            ]
+          },
+          {
+            "label": "Status labels",
+            "mode": "write",
+            "paths": [
+              "labels.py"
+            ],
+            "stages": [
+              {
+                "kind": "complete",
+                "files": {
+                  "labels.py": "def display_status(status):\n    return {\"pending\":\"Waiting\",\"active\":\"Running\",\"done\":\"Complete\"}.get(status,\"Unknown\")\n"
+                },
+                "verify": "python3 -B -m unittest test_labels"
+              }
+            ]
+          },
+          {
+            "label": "Report review",
+            "mode": "read",
+            "paths": [
+              "ranking.py",
+              "labels.py"
+            ],
+            "stages": [
+              {
+                "kind": "complete",
+                "findings": [
+                  {
+                    "path": "ranking.py",
+                    "line": 2,
+                    "note": "Ranking sorts by descending score then ascending name."
+                  },
+                  {
+                    "path": "labels.py",
+                    "line": 2,
+                    "note": "Status labels include the Unknown fallback."
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "integration_files": {},
+        "policy": "scripted"
+      }
+    },
+    {
+      "id": "conflict-superseded",
+      "project": "coordinator-orchestration/conflict-superseded",
+      "prompt": "I already applied the pagination change myself. Preserve that behavior, integrate the filtering worker, and discard the pagination worker\u2019s overlay.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Prefix filtering",
+            "verify": "python3 -B -m unittest test_filter",
+            "files": {
+              "catalog.py": "def select_records(records, prefix=\"\", offset=0, limit=None):\n    return [r for r in records if r[\"name\"].casefold().startswith(prefix.casefold())]\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          },
+          {
+            "label": "Pagination",
+            "verify": "python3 -B -m unittest test_page",
+            "files": {
+              "catalog.py": "def select_records(records, prefix=\"\", offset=0, limit=None):\n    if type(offset) is not int or offset < 0 or (limit is not None and (type(limit) is not int or limit < 0)):\n        raise ValueError(\"invalid pagination\")\n    return list(records[offset:] if limit is None else records[offset:offset + limit])\n"
+            },
+            "verification_verdict": "passed",
+            "result_status": "complete"
+          }
+        ],
+        "integration_files": {
+          "catalog.py": "def select_records(records, prefix=\"\", offset=0, limit=None):\n    if type(offset) is not int or offset < 0 or (limit is not None and (type(limit) is not int or limit < 0)):\n        raise ValueError(\"invalid pagination\")\n    return list(records[offset:] if limit is None else records[offset:offset + limit])\n"
+        },
+        "policy": "scripted"
+      },
+      "prelude": [
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [x] Read catalog requirements\n- [ ] Integrate prefix filtering\n- [ ] Integrate worker pagination\n"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        }
+      ]
+    },
+    {
+      "id": "leg-failed",
+      "project": "coordinator-orchestration/leg-failed",
+      "prompt": "Run each worker assignment once and integrate the successful returns.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [],
+        "dispatches": [
+          {
+            "label": "Status labels",
+            "mode": "write",
+            "paths": [
+              "status.py"
+            ],
+            "stages": [
+              {
+                "kind": "failed",
+                "code": "FIXTURE_LEG_FAILED"
+              }
+            ]
+          },
+          {
+            "label": "Prefix filtering",
+            "mode": "write",
+            "paths": [
+              "catalog.py"
+            ],
+            "stages": [
+              {
+                "kind": "complete",
+                "files": {
+                  "catalog.py": "def select_records(records, prefix=\"\"):\n    return [r for r in records if r[\"name\"].casefold().startswith(prefix.casefold())]\n"
+                },
+                "verify": "python3 -B -m unittest test_catalog"
+              }
+            ]
+          }
+        ],
+        "integration_files": {},
+        "policy": "scripted"
+      },
+      "prelude": [
+        {
+          "id": "inspect-README-md",
+          "tool": "read",
+          "args": {
+            "path": "README.md"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-status-py",
+          "tool": "read",
+          "args": {
+            "path": "status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-test_status-py",
+          "tool": "read",
+          "args": {
+            "path": "test_status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels\n- [ ] Apply prefix filtering"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        }
+      ]
+    },
+    {
+      "id": "denied-no-fallback",
+      "project": "coordinator-orchestration/denied-no-fallback",
+      "prompt": "Finish the public and private receipt handoff after my access decision.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "deny_read",
+      "prelude": [
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [ ] Public receipt\n- [ ] Private receipt\n"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        },
+        {
+          "id": "input-access",
+          "tool": "read",
+          "args": {
+            "path": "${sandbox_path}"
+          },
+          "outcome": "rejected",
+          "checkpoint_status": "rejected",
+          "code": "approval_denied"
+        }
+      ],
+      "sandbox_step": "input-access",
+      "setup": {
+        "overlays": [],
+        "integration_files": {},
+        "policy": "scripted"
+      }
+    },
+    {
+      "id": "capability-write-root",
+      "project": "coordinator-orchestration/capability-write-root",
+      "prompt": "Export the report to ${sandbox_path}/report.json with export.py.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "sandbox": "write_root",
+      "approvals": [
+        {
+          "subject": "write_root_set",
+          "decision": "approve",
+          "rung": "task"
+        }
+      ],
+      "setup": {
+        "overlays": [],
+        "integration_files": {},
+        "policy": "scripted"
+      },
+      "prelude": [
+        {
+          "id": "output-inspection",
+          "tool": "stat",
+          "args": {
+            "paths": [
+              "${sandbox_path}"
+            ]
+          },
+          "outcome": "completed",
+          "checkpoint_status": "approved"
+        }
+      ],
+      "sandbox_step": "output-inspection"
+    },
+    {
+      "id": "capability-background-service",
+      "project": "coordinator-orchestration/capability-background-service",
+      "prompt": "Refresh receipt.json from serve.py.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "approvals": [
+        {
+          "subject": "local_listen",
+          "decision": "approve",
+          "rung": "task"
+        },
+        {
+          "subject": "loopback_connect",
+          "decision": "approve",
+          "rung": "task"
+        }
+      ],
+      "setup": {
+        "overlays": [],
+        "integration_files": {},
+        "policy": "scripted"
+      }
+    },
+    {
+      "id": "closeout-blocked",
+      "project": "coordinator-orchestration/closeout-blocked",
+      "prompt": "Change the default select limit to 3 and validate.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "approvals": [
+        {
+          "subject": "direct_ip",
+          "decision": "reject"
+        }
+      ],
+      "setup": {
+        "overlays": [],
+        "integration_files": {},
+        "policy": "scripted"
+      },
+      "prelude": [
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [ ] Change default limit\n- [ ] Run local tests\n- [ ] Run required network check\n"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        },
+        {
+          "id": "load-local-check",
+          "tool": "request_tools",
+          "args": {
+            "requests": [
+              "verify"
+            ]
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "old-local-verification",
+          "tool": "verify",
+          "args": {
+            "command": "python3 -B -m unittest discover"
+          },
+          "outcome": "completed"
+        }
+      ]
+    },
+    {
+      "id": "wave-join",
+      "project": "coordinator-orchestration/wave-join",
+      "prompt": "Implement name selection using the three worker assignments in the README.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [],
+        "dispatches": [
+          {
+            "label": "Name normalization",
+            "mode": "write",
+            "paths": [
+              "library.py"
+            ],
+            "stages": [
+              {
+                "kind": "needs_decision",
+                "question": "Enable case folding?",
+                "options": [
+                  "Enable",
+                  "Disable"
+                ],
+                "outcomes": {
+                  "Enable": {
+                    "files": {
+                      "library.py": "def normalize(name):\n    return name.strip().casefold()\n"
+                    },
+                    "verify": "python3 -B -m unittest test_library"
+                  },
+                  "Disable": {
+                    "files": {
+                      "library.py": "def normalize(name):\n    return name.strip()\n"
+                    },
+                    "verify": "python3 -B -m unittest test_library"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Stable deduplication",
+            "mode": "write",
+            "paths": [
+              "distinct.py"
+            ],
+            "stages": [
+              {
+                "kind": "needs_decision",
+                "question": "Enable sorting of the unique values?",
+                "options": [
+                  "Enable",
+                  "Disable"
+                ],
+                "outcomes": {
+                  "Enable": {
+                    "files": {
+                      "distinct.py": "def unique(values):\n    return sorted(set(values))\n"
+                    },
+                    "verify": "python3 -B -m unittest test_distinct"
+                  },
+                  "Disable": {
+                    "files": {
+                      "distinct.py": "def unique(values):\n    return list(dict.fromkeys(values))\n"
+                    },
+                    "verify": "python3 -B -m unittest test_distinct"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Consumer selection",
+            "mode": "write",
+            "paths": [
+              "consumer.py"
+            ],
+            "stages": [
+              {
+                "kind": "complete",
+                "files": {
+                  "consumer.py": "from library import normalize\nfrom distinct import unique\ndef select(names):\n    return unique(normalize(n) for n in names)\n"
+                },
+                "verify": "python3 -B -m unittest test_consumer"
+              }
+            ]
+          }
+        ],
+        "integration_files": {},
+        "policy": "scripted"
+      }
+    },
+    {
+      "id": "closeout-resumed",
+      "project": "coordinator-orchestration/closeout-resumed",
+      "prompt": "Have the existing worker finish the status-label change and cite the resulting mapping.",
+      "outcomes": [
+        "The explicitly requested behavior and protected inputs satisfy the independent contract.",
+        "The application completes the current request with its required source evidence."
+      ],
+      "setup": {
+        "overlays": [
+          {
+            "label": "Status label change with an unresolved done label",
+            "verify": "python3 -B -m unittest discover",
+            "files": {
+              "status.py": "def display_status(status):\n    return {'pending': 'Waiting', 'active': 'Running', 'done': 'Done'}[status]\n"
+            },
+            "verification_verdict": "failed",
+            "result_status": "partial",
+            "script": {
+              "stages": [
+                {
+                  "kind": "complete",
+                  "files": {
+                    "status.py": "def display_status(status):\n    return {'pending': 'Waiting', 'active': 'Running', 'done': 'Complete'}[status]\n"
+                  },
+                  "verify": "python3 -B -m unittest discover"
+                }
+              ]
+            }
+          }
+        ],
+        "integration_files": {},
+        "policy": "scripted"
+      },
+      "prelude": [
+        {
+          "id": "existing-progress",
+          "tool": "update_progress",
+          "args": {
+            "content": "## Progress\n- [x] Read status requirements\n- [ ] Finish status labels\n- [ ] Verify integrated status labels\n"
+          },
+          "outcome": "completed",
+          "json": {
+            "status": "updated"
+          }
+        },
+        {
+          "id": "inspect-README-md",
+          "tool": "read",
+          "args": {
+            "path": "README.md"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-status-py",
+          "tool": "read",
+          "args": {
+            "path": "status.py"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-settings-json",
+          "tool": "read",
+          "args": {
+            "path": "settings.json"
+          },
+          "outcome": "completed"
+        },
+        {
+          "id": "inspect-test_status-py",
+          "tool": "read",
+          "args": {
+            "path": "test_status.py"
+          },
+          "outcome": "completed"
+        }
+      ]
+    },
+    {
+      "id": "workflow-revision-reapproval",
+      "project": "coordinator/workflow-revision-reapproval",
+      "prompt": "Process release R17 using README.md.",
+      "workflow_id": "workflow-revision-reapproval",
+      "workflow_version": "1.0.0",
+      "outcomes": [
+        "The committed workflow records satisfy the release contract."
+      ]
+    },
+    {
+      "id": "workflow-scoped-exception",
+      "project": "coordinator/workflow-scoped-exception",
+      "prompt": "Process release R17 using README.md.",
+      "workflow_id": "workflow-scoped-exception",
+      "workflow_version": "1.0.0",
+      "outcomes": [
+        "The committed workflow records satisfy the release contract."
+      ]
+    },
+    {
+      "id": "workflow-reopen-branch",
+      "project": "coordinator/workflow-reopen-branch",
+      "prompt": "Process release R17 using README.md.",
+      "workflow_id": "workflow-reopen-branch",
+      "workflow_version": "1.0.0",
+      "outcomes": [
+        "The committed workflow records satisfy the release contract."
+      ]
+    },
+    {
+      "id": "workflow-dependent-recovery",
+      "project": "coordinator/workflow-dependent-recovery",
+      "prompt": "Process release R17 using README.md.",
+      "workflow_id": "workflow-dependent-recovery",
+      "workflow_version": "1.0.0",
+      "outcomes": [
+        "The committed workflow records satisfy the release contract."
+      ]
+    }
+  ],
+  "task_allowance": 256
+}

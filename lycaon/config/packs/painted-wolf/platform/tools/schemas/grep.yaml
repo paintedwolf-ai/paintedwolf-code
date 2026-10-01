@@ -1,0 +1,36 @@
+description: "Search files with RE2 text patterns or tree-sitter structural patterns. Recurses under path with optional path_glob, searches gitignored files, and skips engine/VCS metadata. Wide results may return a view digest. Replaces command: rg / grep -r."
+schema:
+  type: object
+  properties:
+    pattern:
+      type: string
+      description: "RE2 regex for text search. Structural patterns are complete code nodes using $VAR for one node and $$$VAR for sequences; either placeholder enables structural matching. Quoted \"$VAR\" binds any string. Maximum 512 characters."
+    path:
+      type: string
+      description: Project-relative directory or file to search, or an absolute path (default "."). Walk root only — does not override path_glob. Host enforces attached roots — do not refuse an absolute path in prose without calling the tool.
+    structural:
+      type: boolean
+      description: Use syntax-tree matching. $VAR or $$$VAR enables it automatically; false forces text. Unsupported files are skipped and matches include captures.
+    lang:
+      type: string
+      description: Grammar override for structural search (e.g. go, typescript).
+    case_insensitive:
+      type: boolean
+      description: Case-insensitive matching (default false)
+    max_matches:
+      type: integer
+      description: Page size for literal matches[] (view literal). Omit on the first wide search — the host returns view digest with highlights; set max_matches or offset when paging after narrowing.
+    offset:
+      type: integer
+      description: Skip this many matching lines before returning results (use with truncated/next_offset)
+    context_lines:
+      type: integer
+      description: Lines before/after each match in output (0–5, default 0)
+    path_glob:
+      type: string
+      description: "Optional glob filter applied before file reads, including ignored and generated files. Supports *, ?, character classes, ** directories, and brace alternatives (e.g. **/*.{go,ts}). Applied to repo-relative paths within path; patterns without a slash match basenames. Invalid patterns are rejected."
+    include_hidden:
+      type: boolean
+      description: Walk dotfiles and dot-directories (default true, as find). Does not change .git / ${overlay_dir} pruning.
+  required: [pattern]
+  additionalProperties: false

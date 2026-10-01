@@ -1,0 +1,154 @@
+.worklog-panel__progress,
+.worklog-panel__findings,
+.worklog-panel__reservations,
+.worklog-panel__approvals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.worklog-panel__approval-link {
+  width: 100%;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-border));
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  color: var(--den-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.worklog-panel__approval-link:hover {
+  border-color: var(--den-accent-signal);
+}
+
+.worklog-panel__approval-label {
+  color: var(--den-accent-text);
+  font-size: var(--text-den-compact);
+  font-weight: 600;
+}
+
+.worklog-panel__approval-command {
+  overflow: hidden;
+  color: var(--den-text-muted);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-overline);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worklog-panel__progress-row,
+.worklog-panel__finding,
+.worklog-panel__reservation-group {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--text-den-body);
+}
+
+.worklog-panel__progress-row,
+.worklog-panel__finding {
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.worklog-panel__reservation-group {
+  padding: 8px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-tint-1);
+}
+
+.worklog-panel__reservation-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: var(--text-den-body);
+}
+
+.worklog-panel__reservation-agent {
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.worklog-panel__reservation-job {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.worklog-panel__reservation-paths {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.worklog-panel__reservation-path {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  word-break: break-all;
+}
+
+.worklog-panel__progress-kind,
+.worklog-panel__progress-state,
+.worklog-panel__finding-agent {
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.worklog-panel__progress-kind {
+  padding-top: 2px;
+}
+
+.worklog-panel__progress-body,
+.worklog-panel__finding-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.worklog-panel__progress-label {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.worklog-panel__progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.worklog-panel__finding-summary {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.worklog-panel__finding-ref,
+.worklog-panel__finding-ts,
+.worklog-panel__progress-ref {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+
+
+.worklog-panel__finding-detail {
+  white-space: pre-wrap;
+}

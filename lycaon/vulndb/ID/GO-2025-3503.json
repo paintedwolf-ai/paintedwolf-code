@@ -1,0 +1,115 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "net/http",
+      "symbols": [
+       "ProxyFromEnvironment",
+       "envProxyFunc"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "stdlib"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.23.7"
+      },
+      {
+       "introduced": "1.24.0-0"
+      },
+      {
+       "fixed": "1.24.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "golang.org/x/net/http/httpproxy",
+      "symbols": [
+       "config.useProxy",
+       "domainMatch.match"
+      ]
+     },
+     {
+      "path": "golang.org/x/net/proxy",
+      "symbols": [
+       "Dial",
+       "FromEnvironment",
+       "FromEnvironmentUsing",
+       "PerHost.AddFromString",
+       "PerHost.Dial",
+       "PerHost.DialContext",
+       "PerHost.dialerForRequest"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "golang.org/x/net"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.36.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-22870",
+  "GHSA-qxp5-gwg8-xv66"
+ ],
+ "credits": [
+  {
+   "name": "Juho Fors\u00e9n of Mattermost"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3503"
+ },
+ "details": "Matching of hosts against proxy patterns can improperly treat an IPv6 zone ID as a hostname component. For example, when the NO_PROXY environment variable is set to \"*.example.com\", a request to \"[::1%25.example.com]:80` will incorrectly match and not be proxied.",
+ "id": "GO-2025-3503",
+ "modified": "2026-04-16T20:42:32Z",
+ "published": "2025-03-12T18:17:07Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/654697"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/71984"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/4t3lzH3I0eI/m/b42ImqrBAQAJ"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "HTTP Proxy bypass using IPv6 Zone IDs in golang.org/x/net"
+}

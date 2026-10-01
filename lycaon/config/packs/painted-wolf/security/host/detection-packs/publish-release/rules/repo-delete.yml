@@ -1,0 +1,33 @@
+title: Delete a repository
+id: fd8d59ca-7ab0-408c-915b-54b4afbdb4ee
+description: Deletes a remote repository and everything it holds.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - gh
+      - glab
+      - tea
+  selection_repo_delete:
+    CommandLine|contains|all:
+      - ' repo '
+      - ' delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_repo_delete and not filter_rehearsal and not filter_local

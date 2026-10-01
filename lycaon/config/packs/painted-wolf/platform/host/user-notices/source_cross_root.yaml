@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Paths must stay in one folder
+message: >-
+  That rename or copy would move between attached folders, which isn't
+  supported — both paths must stay under the same project root.
+suggested_action: Pick a destination inside the same attached folder as the source.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - attached folders
+      - same

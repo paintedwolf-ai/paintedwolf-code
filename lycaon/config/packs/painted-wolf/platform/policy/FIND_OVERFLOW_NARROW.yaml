@@ -1,0 +1,28 @@
+emit: banner
+category: expected_behavior
+severity: warning
+selector:
+  tool:
+  - find
+message: >-
+  Find returned a distribution digest with selected=0. Use name_glob or a concrete path for literal results; use an offered summary tool if the question needs a briefing.
+what: >-
+  Find returned a distribution digest with selected=0. Use name_glob or a concrete path with max_results/offset for literal results. If the question needs a briefing, use summarize when offered; preserve this digest as a successful observation.
+cause: >-
+  The request produced a distribution view rather than a literal result page.
+why: >-
+  A digest describes the searched scope without enumerating matching paths; selected=0 does not mean no files matched.
+fix: >-
+  Choose name_glob when a filename pattern is known, or a concrete path with max_results/offset for a literal page. Use summarize when offered for an open question over unfamiliar scope.
+instead: >-
+  Use the actual digest and current tool schema to refine scope; do not repeat identical arguments or invent a continuation cursor.
+scenarios:
+- id: default
+  vars:
+    path: .
+    profile: coordinator
+    tool: find
+  expect_contains:
+  - 'Code: FIND_OVERFLOW_NARROW'
+  - name_glob
+id: FIND_OVERFLOW_NARROW

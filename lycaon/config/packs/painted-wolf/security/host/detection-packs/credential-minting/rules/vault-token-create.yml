@@ -1,0 +1,23 @@
+title: Mint a Vault token
+id: 7cbc9c98-ae45-4b8b-8d39-7e8f9a0b1c27
+description: Creates a new Vault token and prints its accessor and secret to stdout.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: vault
+    CommandLine|contains:
+      - ' token create'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

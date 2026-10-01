@@ -1,0 +1,40 @@
+components:
+  schemas:
+    SessionBackgroundDirectStatus:
+      type: string
+      enum:
+      - active
+      - unknown
+    SessionBackgroundDirectJob:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - process_id
+      - status
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        status:
+          $ref: "#/components/schemas/SessionBackgroundDirectStatus"
+    SessionBackgroundExecutionJob:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [process_id, capability, status]
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        capability:
+          type: string
+          enum: [process_control, host_execution]
+        status:
+          $ref: "#/components/schemas/SessionBackgroundDirectStatus"

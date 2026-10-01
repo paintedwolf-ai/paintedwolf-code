@@ -1,0 +1,2041 @@
+language: clojure
+comment:
+- ;
+limits: Registered Ring/Jetty handlers with one or three parameters, including named functions, static namespace aliases, lexical aliases,
+  and parameter middleware. Arbitrary callback producers and other frameworks are outside this contract. Shell rules model explicit POSIX
+  interpreter command text; SQL rules model next.jdbc query vectors. HTTP destination rules select URL arguments to clj-http methods and
+  request-map :url fields; decomposed request URLs and arbitrary validators are outside the model. File serving models Ring file-response
+  and its root option; general filesystem APIs and custom path validators are outside the model.
+cases:
+- name: eval-reader-context-only
+  file: sample.clj
+  source: "(defn run [code] (eval (read-string code)))\n"
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.clojure
+- name: eval-reader-safe
+  file: sample.clj
+  source: "(defn read-data [code] (clojure.edn/read-string code))\n"
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.clojure
+- name: reader-eval-enabled-context-only
+  file: sample.clj
+  source: "(binding [*read-eval* true] (read-string data))\n"
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.clojure
+- name: reader-eval-enabled-safe
+  file: sample.clj
+  source: "(binding [*read-eval* false] (read-string data))\n"
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.clojure
+- name: unregistered-map-is-not-http-input
+  file: app.clj
+  source: "(ns app (:require [ring.middleware.params]))\n(defn handler [request] (let [code (get (:query-params request) \"code\")] (clojure.core/load-string
+    code)))\n"
+  want: []
+  covers: &id001
+  - lycaon.clojure.ring-code-injection
+  coverage: &id002
+  - lycaon.coverage.clojure
+- name: ring-code-injection-constant
+  file: app.clj
+  source: "(ns app (:require [ring.middleware.params]))\n(defn handler [request] (let [code (get (:query-params request) \"code\")] (clojure.core/load-string
+    \"(+ 1 2)\")))\n"
+  want: []
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: ring-code-injection-safe-api
+  file: app.clj
+  source: "(ns app (:require [ring.middleware.params]))\n(defn handler [request] (let [code (get (:query-params request) \"code\")] (clojure.edn/read-string
+    code)))\n"
+  want: []
+  covers: *id001
+  coverage: *id002
+- name: registered-params-flow
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [code (get (:query-params request) "code")]
+            (clojure.core/load-string code))))
+      {:port 8080})
+  want:
+  - lycaon.clojure.ring-code-injection
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-constant
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [code (get (:query-params request) "code")]
+            (clojure.core/load-string "(+ 1 2)"))))
+      {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-edn-data-reader
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [code (get (:query-params request) "code")]
+            (clojure.edn/read-string code))))
+      {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-request-alias
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [incoming request code (get (:query-params incoming) "code")]
+            (clojure.core/load-string code))))
+      {:port 8080})
+  want:
+  - lycaon.clojure.ring-code-injection
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-local-map-shadow
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [request {:query-params {"code" "(+ 1 2)"}} code (get (:query-params request) "code")]
+            (clojure.core/load-string code))))
+      {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-unrelated-request-field
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [code (get (:server-name request) "code")]
+            (clojure.core/load-string code))))
+      {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: registered-query-string
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty (fn [request] (clojure.core/load-string (:query-string request))) {:port 8080})
+  want:
+  - lycaon.clojure.ring-code-injection
+  covers:
+  - lycaon.clojure.ring-code-injection
+  coverage:
+  - lycaon.coverage.clojure
+- name: shell-command-input
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (clojure.java.shell/sh "sh" "-c" input))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-shell-command]
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-command-concatenation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (clojure.java.shell/sh "/bin/bash" "-c" (str "echo " input)))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-shell-command]
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-constant-command
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (clojure.java.shell/sh "sh" "-c" "echo fixed"))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-fixed-program-arguments
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (clojure.java.shell/sh "printf" "%s" input))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-script-positional-arguments
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (clojure.java.shell/sh "sh" "-c" "printf %s \"$1\"" "--" input))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-input-overwritten
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [input "fixed"] (clojure.java.shell/sh "sh" "-c" input)))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-unrelated-api
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (local/sh "sh" "-c" input))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-query-text
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (next.jdbc/execute! db [input]))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-query-concatenation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (next.jdbc/execute-one! db [(str "SELECT * FROM users WHERE name = '" input "'")]))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-bound-value
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (next.jdbc/execute! db ["SELECT * FROM users WHERE name = ?" input]))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-bound-value-with-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (next.jdbc/execute-one! db ["SELECT * FROM users WHERE name = ?" input] {:return-keys true}))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-constant-query
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (next.jdbc/execute! db ["SELECT 1"]))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-query-overwritten
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [input "SELECT 1"] (next.jdbc/execute! db [input])))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-unrelated-api
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (local/execute! db [input]))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-query-vector-variable
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query [input]] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-bound-vector-variable
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query ["SELECT * FROM users WHERE name = ?" input]] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-unregistered-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (defn handler [request] (let [input (get (:query-params request) "input")] (clojure.java.shell/sh "sh" "-c" input)))
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-quoted-operation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [input (get (:query-params request) "input")] '(clojure.java.shell/sh "sh" "-c" input))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-overwritten-request-field
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [request (assoc request :query-params {"input" "fixed"})] (let [input (get (:query-params request) "input")] (clojure.java.shell/sh "sh" "-c" input)))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-shadowed-request
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [request {:query-params {"input" "fixed"}}] (let [input (get (:query-params request) "input")] (clojure.java.shell/sh "sh" "-c" input)))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: shell-unreachable-operation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [input (get (:query-params request) "input")] (if false (clojure.java.shell/sh "sh" "-c" input) nil))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-unregistered-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (defn handler [request] (let [input (get (:query-params request) "input")] (next.jdbc/execute! db [input])))
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-quoted-operation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [input (get (:query-params request) "input")] '(next.jdbc/execute! db [input]))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-overwritten-request-field
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [request (assoc request :query-params {"input" "fixed"})] (let [input (get (:query-params request) "input")] (next.jdbc/execute! db [input])))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-shadowed-request
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [request {:query-params {"input" "fixed"}}] (let [input (get (:query-params request) "input")] (next.jdbc/execute! db [input])))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-unreachable-operation
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [clojure.java.shell] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty (fn [request] (let [input (get (:query-params request) "input")] (if false (next.jdbc/execute! db [input]) nil))) {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-replaced-query-text
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query [input] query (assoc query 0 "SELECT ?")] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-original-query-retained
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query [input] safe-query (assoc query 0 "SELECT ?")] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-tainted-binding-update
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query ["SELECT ?" "fixed"] query (assoc query 1 input)] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: jdbc-tainted-query-update
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty] [ring.middleware.params] [next.jdbc]))
+    (ring.adapter.jetty/run-jetty
+      (ring.middleware.params/wrap-params
+        (fn [request]
+          (let [input (get (:query-params request) "input")]
+            (let [query ["SELECT ?" "fixed"] query (assoc query 0 input)] (next.jdbc/execute! db query)))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: code-overwritten-request-field
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty
+      (fn [request]
+        (let [request (assoc request :query-params {"input" "fixed"})]
+          (clojure.core/load-string (get (:query-params request) "input"))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: code-empty-string-default
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty
+      (fn [request] (clojure.core/load-string (or "" (:query-string request))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: code-empty-string-selects-input
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty
+      (fn [request] (clojure.core/load-string (and "" (:query-string request))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: code-nil-selects-input
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty
+      (fn [request] (clojure.core/load-string (or nil (:query-string request))))
+      {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: code-nil-skips-input
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (ring.adapter.jetty/run-jetty
+      (fn [request] (clojure.core/load-string (and nil (:query-string request))))
+      {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: named-code-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: namespace-alias-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: named-wrapped-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (get (:query-params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: lexical-handler-alias
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [registered handler] (jetty/run-jetty registered {:port 8080}))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: shadowed-handler-binding
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [handler (fn [request] {:status 200 :body "fixed"})] (jetty/run-jetty handler {:port 8080}))
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: overwritten-handler-definition
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (def handler (fn [request] {:status 200 :body "fixed"}))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: unrelated-registration-function
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [run-jetty (fn [handler options] nil)] (run-jetty handler {:port 8080}))
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: wrong-handler-arity
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request unrelated] (clojure.core/load-string (:query-string request)))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: async-handler-request
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (jetty/run-jetty handler {:port 8080 :async? true})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: async-completion-is-not-request
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string respond)))
+    (jetty/run-jetty handler {:port 8080 :async? true})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: multi-arity-request
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler ([request] {:status 200 :body "fixed"}) ([request respond raise] (clojure.core/load-string (:query-string request))))
+    (jetty/run-jetty handler {:port 8080 :async? true})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: multi-arity-excluded-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler ([request] {:status 200 :body "fixed"}) ([request ignored] (clojure.core/load-string (:query-string request))))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: destructured-request-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [{:keys [query-string]}] (clojure.core/load-string query-string))
+    (jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: collection-handler-binding
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [handlers {:main handler}] (jetty/run-jetty (get handlers :main) {:port 8080}))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: named-shell-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (shell/sh "sh" "-c" (:query-string request)))
+    (jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-shell-command]
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: named-fixed-program-arguments
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (shell/sh "printf" "%s" (:query-string request)))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-shell-command]
+  coverage: [lycaon.coverage.clojure]
+- name: named-sql-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (jdbc/execute! db [(:query-string request)]))
+    (jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-sql-injection]
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: named-bound-sql-values
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params] [clojure.java.shell :as shell] [next.jdbc :as jdbc]))
+    (defn handler [request] (jdbc/execute! db ["SELECT ?" (:query-string request)]))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-sql-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: sync-mode-does-not-call-async-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: async-mode-does-not-call-sync-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080 :async? true})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: false-async-mode-does-not-call-async-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080 :async? false})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: bound-default-options-ignore-async-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: bound-async-options-ignore-sync-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080 :async? true}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: bound-false-options-ignore-async-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080 :async? false}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: bound-async-options-call-async-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080 :async? true}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: bound-default-options-call-sync-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: unknown-async-options-retain-sync-flow
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080 :async? (runtime-mode)}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: unknown-async-options-retain-async-flow
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request respond raise] (clojure.core/load-string (:query-string request)))
+    (let [options {:port 8080 :async? (runtime-mode)}]
+      (ring.adapter.jetty/run-jetty handler options))
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-not-true-skips-code-loading
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-not true (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-not-false-loads-code
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-not false (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-let-nil-skips-code-loading
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-let [enabled nil] (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-some-false-loads-code
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-some [enabled false] (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: if-let-false-loads-else-code
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (if-let [enabled false] "safe" (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: if-let-true-skips-else-code
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (if-let [enabled true] "safe" (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-first-empty-skips-code-loading
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-first [value []] (clojure.core/load-string (:query-string request))))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-first-later-input-is-not-first-value
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-first [value ["safe" (:query-string request)]] (clojure.core/load-string value)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: when-first-request-first-value-loads-code
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty]))
+    (defn handler [request] (when-first [value [(:query-string request) "safe"]] (clojure.core/load-string value)))
+    (ring.adapter.jetty/run-jetty handler {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: query-params-raw-jetty
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:query-params request) "code")))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: query-params-wrapped
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:query-params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: query-params-wrapped-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:query-params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler {:encoding "UTF-8"}) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: form-params-raw-jetty
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:form-params request) "code")))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: form-params-wrapped
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:form-params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: form-params-wrapped-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:form-params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler {:encoding "UTF-8"}) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: params-raw-jetty
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:params request) "code")))
+    (jetty/run-jetty handler {:port 8080})
+  want: []
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: params-wrapped
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: params-wrapped-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty] [ring.middleware.params :as params]))
+    (defn handler [request]
+      (clojure.core/load-string (get (:params request) "code")))
+    (jetty/run-jetty (params/wrap-params handler {:encoding "UTF-8"}) {:port 8080})
+  want: [lycaon.clojure.ring-code-injection]
+  covers: [lycaon.clojure.ring-code-injection]
+  coverage: [lycaon.coverage.clojure]
+- name: ssrf-get-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-head-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/head value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-post-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/post value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-put-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/put value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-delete-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/delete value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-patch-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/patch value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-options-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/options value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-copy-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/copy value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-move-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/move value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-fixed-query-params
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get "https://api.example/search" {:query-params {"q" value}})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-fixed-form-params
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/post "https://api.example/submit" {:form-params {"q" value}})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-fixed-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/post "https://api.example/submit" {:body value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-fixed-headers
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get "https://api.example/" {:headers {"X-Trace" value}})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-literal-path-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://api.example/files/" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-literal-query-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://api.example/?q=" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-literal-port-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "http://api.example:8080/" value "/status"))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-bound-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [base "https://api.example/"] (http/get (str base value)))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-scheme-only-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-host-without-slash
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://api.example" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-userinfo-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://api.example@" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-dynamic-host
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (str "https://" value "/status"))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-request-alias
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [url value] (http/get url))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-overwritten-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [url "https://api.example/" url value] (http/get url))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-clean-overwrite
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [url value url "https://api.example/"] (http/get url))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-fixed-map-selection
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (get {"primary" "https://primary.example/" "secondary" "https://secondary.example/"} value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-unregistered-handler
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get value)))
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-same-named-local-function
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [get (fn [x] x)] (get value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-unrelated-client
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (require '[app.other :as other])
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (other/get value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-qualified-beside-shadow
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [get (fn [x] x)] (clj-http.client/get value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-response-data-only
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        {:status 200 :body value}))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-async-client-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get value {:async? true} (fn [response] response) (fn [error] error))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-async-client-query
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get "https://api.example/" {:async? true :query-params {"q" value}} (fn [response] response) (fn [error] error))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-no-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-empty-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value {})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-unrelated-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value {:index-files? false})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-nil-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value {:root nil})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-false-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value {:root false})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-nil-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value nil)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-trusted-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value {:root "/srv/public"})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-bound-trusted-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [root "/srv/public"] (response/file-response value {:root root}))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-bound-trusted-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {:root "/srv/public"}] (response/file-response value options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-bound-empty-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {}] (response/file-response value options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-bound-nil-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {:root nil}] (response/file-response value options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-tainted-root
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "secret.txt" {:root value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-bound-tainted-options
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {:root value}] (response/file-response "secret.txt" options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-fixed-file
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "/srv/public/index.html")))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-fixed-map-selection
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response (get {"help" "/srv/public/help.html" "home" "/srv/public/index.html"} value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-path-prefix-not-containment
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response (str "/srv/public/" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-data-response
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/response value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-unregistered
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response value)))
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-shadowed-function
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [file-response (fn [x] {:body x})] (file-response value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-qualified-fixed-prefix
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/get (clojure.core/str "https://api.example/" value))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-shadowed-str
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [str (fn [prefix x] x)] (http/get (str "https://api.example/" value)))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/request {:method :get :url value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-bound-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [options {:method :get :url value}] (http/request options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-fixed-url-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (http/request {:method :post :url "https://api.example/" :body value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-fixed-url-query
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [options {:url "https://api.example/" :query-params {"q" value}}] (http/request options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-overwritten-url
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [options {:url value} options (assoc options :url "https://api.example/")] (http/request options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-tainted-overwrite
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [options {:url "https://api.example/"} options (assoc options :url value)] (http/request options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-ssrf
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: ssrf-raw-taint-moved-to-body
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "url")]
+        (let [options {:url value} options (assoc options :body (:url options) :url "https://api.example/")] (http/request options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-root-overwrite
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {:root value} options (assoc options :root "/srv/public")] (response/file-response value options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-taint-in-unrelated-option
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "index.html" {:root "/srv/public" :unused value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-taint-moved-to-unrelated-option
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (let [options {:root value} options (assoc options :unused (:root options) :root "/srv/public")] (response/file-response value options))))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-string-root-after-keyword
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "index.html" {:root "/srv/public" ":root" value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-string-root-before-keyword
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "index.html" {":root" value :root "/srv/public"})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-tainted-keyword-before-string
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "index.html" {:root value ":root" "/srv/public"})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: file-response-tainted-keyword-after-string
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [ring.util.response :as response]))
+    (defn handler [request]
+      (let [value (get (:query-params request) "path")]
+        (response/file-response "index.html" {":root" "/srv/public" :root value})))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want:
+  - lycaon.clojure.ring-file-response
+  covers:
+  - lycaon.clojure.ring-file-response
+  coverage:
+  - lycaon.coverage.clojure
+- name: request-string-key-is-not-keyword
+  file: app.clj
+  source: |
+    (ns app (:require [ring.adapter.jetty :as jetty]
+                      [ring.middleware.params :as params]
+                      [clj-http.client :as http]))
+    (defn handler [request]
+      (let [value (get (get request ":query-params") "url")]
+        (http/get value)))
+    (jetty/run-jetty (params/wrap-params handler) {:port 8080})
+  want: []
+  covers:
+  - lycaon.clojure.ring-ssrf
+  coverage:
+  - lycaon.coverage.clojure

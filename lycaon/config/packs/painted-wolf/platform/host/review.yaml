@@ -1,0 +1,13 @@
+# Edit review defaults (content_apply). Project overlay: ${overlay_dir}/review.yaml
+#
+# Targeted, not blanket: only edits whose path matches a review_paths rule pause for human
+# review before applying; everything else applies directly (writes are already sandbox-confined
+# and git-revertible). Empty = no edit review.
+#
+# Example (review every edit under infra/, plus a specific file):
+#   review_paths:
+#     - path: "infra/**"
+#       reason: "infra changes are high-blast-radius"
+#     - tool: edit
+#       path: "src/auth/tokens.go"
+review_paths: []

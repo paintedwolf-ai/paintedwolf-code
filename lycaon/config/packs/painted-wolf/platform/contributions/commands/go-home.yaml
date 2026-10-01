@@ -1,0 +1,11 @@
+id: painted-wolf/platform:go-home
+title: "Go home"
+scope: "global"
+keywords:
+  - "home"
+  - "projects"
+  - "project grid"
+  - "start"
+action:
+  kind: native_ui
+  handler: "go.home"

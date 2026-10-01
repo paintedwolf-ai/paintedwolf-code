@@ -1,0 +1,30 @@
+title: Delete an alerting monitor
+id: fe595701-8e8d-4a2c-9132-fe4c1b4a2bce
+description: Removes a monitor outright, so the condition it watched for stops being noticed at all.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # Muting is reversible and lives in paging-disable; deleting the monitor
+  # removes the detection itself, which is the band this pack shares with
+  # cloud alarm deletion.
+  selection_datadog:
+    Image: dog
+    CommandLine|contains: ' monitor delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_datadog and not filter_rehearsal and not filter_local

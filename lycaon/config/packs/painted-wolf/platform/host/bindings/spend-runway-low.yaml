@@ -1,0 +1,11 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': turn.spend.runway_low
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-spend-runway-low
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - session first crosses the spend-ceiling warning point (one-shot)

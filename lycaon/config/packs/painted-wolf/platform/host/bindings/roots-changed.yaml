@@ -1,0 +1,15 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': project.roots.changed
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-roots-changed
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - POST /projects/{id}/roots when a project crosses from one folder to two or more
+  required:
+  - folder
+  forbidden:
+  - workflow_advance

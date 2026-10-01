@@ -1,0 +1,404 @@
+@utility den-approval-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  container: den-approval-card / inline-size;
+  /* Intrinsic content cannot widen the card. */
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-lg);
+  padding: 14px 16px;
+  background: var(--den-tint-1);
+}
+
+@utility den-approval-card-body {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Subject and context scroll; header and actions stay fixed. */
+@utility den-approval-card-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-height: max(7rem, min(55vh - 9rem, 22rem));
+}
+
+/* Risk is the chip and impact line; card surface stays neutral. */
+@utility den-approval-card-high-risk-icon {
+  flex: none;
+  opacity: 0.9;
+}
+
+/* The heading's font sets the strip's first line. */
+@utility den-approval-card-header {
+  flex: none;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: var(--text-den-caption);
+}
+
+/* Items center their first line in the strip's row, so wrapped items stay level. */
+@utility den-approval-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 5px 8px;
+  min-width: 0;
+}
+
+/* Minimized: the card retracts to the header strip above the composer. */
+.den-approval-card[data-minimized] {
+  padding: 8px 12px;
+}
+
+.den-approval-card[data-minimized] .den-approval-card-header {
+  margin-bottom: 0;
+}
+
+@utility den-approval-card-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+  animation: den-approval-dot-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-approval-card-dot {
+    animation: none;
+  }
+}
+
+@utility den-approval-card-heading {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  margin: 0;
+  min-width: 0;
+  min-block-size: var(--den-dock-collapse-row);
+  padding-block-start: calc((var(--den-dock-collapse-row) - 1lh) / 2);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+@utility den-approval-card-heading-action {
+  color: var(--den-text);
+}
+
+@utility den-approval-card-heading-sep {
+  opacity: 0.6;
+}
+
+@utility den-approval-card-chips {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px 6px;
+  margin-left: auto;
+  min-width: 0;
+  min-block-size: var(--den-dock-collapse-row);
+}
+
+/* Long labels truncate; the chip's tip carries the full value. */
+@utility den-approval-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-compact);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+  padding: 1px 8px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  white-space: nowrap;
+
+  & > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@utility den-approval-card-chip--risk {
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-approval-card-chip--elevated {
+  font-family: inherit;
+}
+
+/* The model provider is the one destination that reads the credential. */
+@utility den-approval-card-chip--reader {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+  color: var(--den-accent-text);
+}
+
+@utility den-approval-card-chip--reason {
+  font-family: inherit;
+  color: var(--den-text);
+  border-color: var(--den-accent);
+}
+
+
+@utility den-approval-card-command {
+  margin: 0;
+  padding: 9px 12px;
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-label);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--den-text);
+}
+
+
+@utility den-approval-card-command-code {
+  display: block;
+  min-width: 0;
+}
+
+
+/* Secondary fact beneath the grant subject. */
+@utility den-approval-card-subject-fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 7px 0 0;
+  font-size: var(--text-den-label);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+
+  & span {
+    font-weight: 600;
+  }
+
+  & code {
+    font-family: var(--den-font-mono);
+    color: var(--den-text);
+    overflow-wrap: anywhere;
+  }
+}
+
+
+@utility den-approval-card-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin: 7px 0 0;
+  font-size: var(--text-den-label);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+@utility den-approval-card-location-origin {
+  min-width: 0;
+  max-width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-family: var(--den-font-mono);
+  color: var(--den-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--den-text);
+  }
+}
+
+@utility den-approval-card-location-sep {
+  color: var(--den-text-muted);
+}
+
+
+@utility den-approval-card-context {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+@utility den-approval-card-impact {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text);
+}
+
+@utility den-approval-card-impact--risk {
+  font-weight: 500;
+}
+
+/* Shape distinguishes consequence from neutral context. */
+@utility den-approval-card-impact-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--den-text-muted);
+  opacity: 0.85;
+}
+
+@utility den-approval-card-note {
+  margin: 0;
+  padding-left: 20px;
+}
+
+@utility den-approval-card-agent {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--text-den-label);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+@utility den-approval-card-agent-icon {
+  flex: none;
+  color: var(--den-accent-text);
+  cursor: help;
+}
+
+@utility den-approval-card-agent-label {
+  font-weight: 600;
+}
+
+@utility den-approval-card-agent-text {
+  min-width: 0;
+}
+
+@utility den-approval-card-agent-body {
+  margin: 0;
+  font-size: var(--text-den-label);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--den-text-muted);
+}
+
+@utility den-approval-card-agent-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+@utility den-approval-card-agent-skeleton {
+  height: 9px;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--den-text-muted) 14%, transparent);
+  /* Transforming the overlay avoids repainting the gradient each frame. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 25%,
+      color-mix(in srgb, var(--den-text-muted) 14%, transparent) 37%,
+      transparent 63%
+    );
+    transform: translateX(-100%);
+    will-change: transform;
+    animation: den-ai-rationale-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-approval-card-agent-skeleton::after {
+    animation: none;
+  }
+}
+
+@utility den-approval-card-agent-skeleton--short {
+  width: 62%;
+}
+
+/* Short target sets remain beside the decision controls. */
+@utility den-approval-card-declared {
+  margin: 2px 0 0;
+  /* Code and preformatted text inherit the card scale. */
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-label);
+  line-height: 1.5;
+  color: var(--den-text);
+
+  & code,
+  & pre {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  & code {
+    overflow-wrap: anywhere;
+  }
+
+  /* Wrapping keeps preview text inside the horizontal clip. */
+  & pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  /* Targets stack as one box; neighbors share a single rule. */
+  & .den-approval-card-command {
+    border-radius: 0;
+  }
+
+  & .den-approval-card-command + .den-approval-card-command,
+  & > * + * > .den-approval-card-command:first-child {
+    margin-top: -1px;
+  }
+
+  & > :first-child > .den-approval-card-command:first-child {
+    border-start-start-radius: var(--den-radius-shell);
+    border-start-end-radius: var(--den-radius-shell);
+  }
+
+  & > :last-child > .den-approval-card-command:last-of-type {
+    border-end-start-radius: var(--den-radius-shell);
+    border-end-end-radius: var(--den-radius-shell);
+  }
+}
+
+/* One boundary the whole set shares. */
+@utility den-approval-card-declared-shared {
+  margin: 6px 0 0;
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+

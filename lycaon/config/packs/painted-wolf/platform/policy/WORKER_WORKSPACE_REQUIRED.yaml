@@ -1,0 +1,27 @@
+oar: '1.0'
+id: WORKER_WORKSPACE_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKER_WORKSPACE_REQUIRED"
+effect: block
+copy:
+  what: The requested worker type requires an attached workspace.
+  cause: The requested work needs a project root, but this session has none.
+  why: A workspace-bound worker cannot safely resolve scope or persist project changes without a root.
+  fix: Attach or select a project workspace before dispatching this worker.
+  instead: Ask the user to attach a root, then dispatch again
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker type requires a workspace
+x-paintedwolf-scenarios:
+- id: no_workspace
+  vars:
+    agent_type: implementer
+  expect_contains:
+  - 'Code: WORKER_WORKSPACE_REQUIRED'
+  - workspace

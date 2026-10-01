@@ -1,0 +1,927 @@
+language: typescript
+comment:
+- //
+limits: Selected typed Next.js App Router handlers expose request URLs, nextUrl search parameters, awaited bodies, headers, cookies, and awaited context params, including typed destructuring. Typed NextApiRequest Pages Router handlers and imported Fastify plugin types are modeled with lexical type provenance. Local type declarations and generic parameters do not inherit imported request identities. Server actions, cross-file handlers, and params reads without await remain unmodeled.
+cases:
+- name: command-injection-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { exec(req.query.command); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { execFile("printf", ["%s",req.query.text]); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: sql-injection-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { db.query("SELECT * FROM users WHERE name = " + req.query.name); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { db.query("SELECT * FROM users WHERE name = ?", [req.query.name]); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: path-traversal-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { readFileSync(req.query.path); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { readFileSync("config.json"); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.path-traversal
+- name: ssrf-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { fetch(req.query.url); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ssrf-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { fetch("https://example.com"); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: code-injection-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { eval(req.query.code); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { JSON.parse(req.query.data); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+- name: dom-xss-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { node.innerHTML = req.query.html; }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.dom-xss
+  covers: []
+- name: dom-xss-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { node.textContent = req.query.html; }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.dom-xss
+- name: open-redirect-vulnerable
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { res.redirect(req.query.next); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want:
+  - lycaon.javascript.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req: any,res: any) { res.redirect("/home"); }
+
+    _pw_fixture_app.get("/fixture", route);
+  want: []
+  covers:
+  - lycaon.javascript.open-redirect
+- name: destructured-request-path
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {readFileSync} from "node:fs"; function run(req: any) { const {path} = req.query; readFileSync(path); }
+
+    _pw_fixture_app.get("/fixture", run);
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: destructured-bound-sql
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function run(req: any) { const {name} = req.query; db.query("SELECT * FROM users WHERE name=?", [name]); }
+
+    _pw_fixture_app.get("/fixture", run);
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: ordinary-ssrf-safe-query
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/search?q=${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-multiple
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/?a=${input}&b=${req.query.second}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-nested
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${`${input}`}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-authority-host
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-authority-port
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example:${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-compound-and
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch((`https://fixed.example/${input}` && `${input}`));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-template-prefix-stripped
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${input}`.slice(22));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-tagged-return-substitution
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(first`https://fixed.example/${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-inner-fetch
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch(`https://fixed.example/${await fetch(req.query.url)}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-alias-template-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-alias-template-reassigned
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; url = req.query.other; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-alias-template-branch
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; if(flag) url = req.query.other; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-concat-alias-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = "https://fixed.example/" + req.query.url; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-concat-prefix-stripped
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = "https://fixed.example/" + req.query.url; return fetch(url.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-axios-template-safe
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.get(`https://fixed.example/?q=${req.query.url}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-axios-post-template-prefix-stripped
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.post(`https://fixed.example/${req.query.url}`.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-captured-function-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-captured-arrow-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; const change = () => { url = req.query.other; }; change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-argument-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change(value) { url = value; } change(req.query.other); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-alias-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { url = req.query.other; } const alias = change; alias(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-forward-named-helper-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { function change() { url = req.query.other; } let url = `https://fixed.example/${req.query.url}`; change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-conditional-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; function change() { if(flag) url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-return-write
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { return url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-inner-block-shadow
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; { let url = req.query.other; return fetch(url); } }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-function-parameter-shadow
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; function send(url) { return fetch(url); } return send(req.query.other); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-nested-local-shadow
+  file: sample.ts
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; function send() { const url = req.query.other; return fetch(url); } return send(); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: next-searchparams-command
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      exec(request.nextUrl.searchParams.get("target"));
+    }
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-request-url-searchparams-path
+  file: sample.ts
+  source: |
+    import { readFileSync } from "node:fs";
+    export async function GET(request: Request) {
+      const url = new URL(request.url);
+      readFileSync(url.searchParams.get("name"));
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-async-json-body-sql
+  file: sample.ts
+  source: |
+    export async function POST(request: Request) {
+      const body = await request.json();
+      await db.query("SELECT * FROM t WHERE n = '" + body.name + "'");
+    }
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: next-async-text-body-command
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    export async function PUT(request: Request) {
+      exec(await request.text());
+    }
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-headers-command
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    import { NextRequest } from "next/server";
+    export async function PATCH(request: NextRequest) {
+      exec(request.headers.get("x-target"));
+    }
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-cookies-command
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    import { NextRequest } from "next/server";
+    export async function DELETE(request: NextRequest) {
+      exec(request.cookies.get("target"));
+    }
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-awaited-params-path
+  file: sample.ts
+  source: |
+    import { readFileSync } from "node:fs";
+    export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }) {
+      const { name } = await params;
+      readFileSync(name);
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-awaited-context-params-path
+  file: sample.ts
+  source: |
+    import { readFileSync } from "node:fs";
+    export async function GET(request: Request, context: { params: Promise<{ name: string }> }) {
+      const { name } = await context.params;
+      readFileSync(name);
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-fs-promises-specifier-path
+  file: sample.ts
+  source: |
+    import { readFile } from "node:fs/promises";
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      await readFile(request.nextUrl.searchParams.get("name"));
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-bare-fs-promises-specifier-path
+  file: sample.ts
+  source: |
+    import { readFile } from "fs/promises";
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      await readFile(request.nextUrl.searchParams.get("name"));
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-variable-authority-ssrf
+  file: sample.ts
+  source: |
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      await fetch(request.nextUrl.searchParams.get("url"));
+    }
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: next-replaced-fixed-authority-ssrf
+  file: sample.ts
+  source: |
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      let url = "https://api.example.com/v1/";
+      url = request.nextUrl.searchParams.get("url");
+      await fetch(url);
+    }
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: next-fixed-authority-template-ssrf-quiet
+  file: sample.ts
+  source: |
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      await fetch(`https://api.example.com/v1/${request.nextUrl.searchParams.get("id")}`);
+    }
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: next-fixed-authority-concat-ssrf-quiet
+  file: sample.ts
+  source: |
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      const url = "https://api.example.com/v1/" + request.nextUrl.searchParams.get("id");
+      await fetch(url);
+    }
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: next-unexported-handler-quiet
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    import { NextRequest } from "next/server";
+    async function GET(request: NextRequest) {
+      exec(request.nextUrl.searchParams.get("target"));
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-unrelated-export-name-quiet
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    import { NextRequest } from "next/server";
+    export async function runMigration(request: NextRequest) {
+      exec(await request.text());
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-awaited-database-call-quiet
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    export async function GET(request: Request) {
+      const rows = await store.select("select 1");
+      exec(rows);
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-locally-declared-request-type-quiet
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    class NextRequest {
+      nextUrl = { searchParams: new Map<string, string>() };
+    }
+    function build(request: NextRequest) {
+      exec(request.nextUrl.searchParams.get("target"));
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-parameterized-sql-quiet
+  file: sample.ts
+  source: |
+    export async function POST(request: Request) {
+      const body = await request.json();
+      await db.query("SELECT * FROM t WHERE n = ?", [body.name]);
+    }
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: next-execfile-argument-list-quiet
+  file: sample.ts
+  source: |
+    import { execFile } from "node:child_process";
+    export async function GET(request: Request) {
+      execFile("printf", ["%s", await request.text()]);
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-local-wrapper-followed
+  file: sample.ts
+  source: |
+    import { exec } from "node:child_process";
+    function spawn(value: string) {
+      exec(value);
+    }
+    export async function GET(request: Request) {
+      spawn(await request.text());
+    }
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-searchparams-bound-then-read-path
+  file: sample.ts
+  source: |
+    import { readFileSync } from "node:fs";
+    import { NextRequest } from "next/server";
+    export async function GET(request: NextRequest) {
+      const searchParams = request.nextUrl.searchParams;
+      const name = searchParams.get("name");
+      readFileSync(name);
+    }
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: next-pages-imported-type
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextApiRequest,NextApiResponse} from "next";
+    export default function handler(req: NextApiRequest,res: NextApiResponse) {exec(req.query.command);}
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-pages-aliased-type
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextApiRequest as Input,NextApiResponse} from "next";
+    export default async function handler(req: Input,res: NextApiResponse) {exec(req.body.command);}
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-app-exported-arrow
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextRequest} from "next/server";
+    export const GET = async (req: NextRequest) => {exec(req.nextUrl.searchParams.get("command"));};
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-app-web-request
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    export async function POST(req: Request) {exec(await req.text());}
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-typed-exported-plugin
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {FastifyPluginAsync} from "fastify";
+    export const plugin: FastifyPluginAsync = async (app,options) => {app.get("/",(req,res)=>exec(req.query.command));};
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-typed-default-plugin
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {FastifyPluginAsync as Plugin} from "fastify";
+    const plugin: Plugin = async (app,options) => {app.get("/",(req,res)=>exec(req.query.command));};
+    export default plugin;
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: next-pages-unrelated-type-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    type NextApiRequest = {query: {command: string}};
+    export default function handler(req: NextApiRequest,res: any) {exec(req.query.command);}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-pages-import-type-shadowed-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextApiRequest} from "next";
+    function create<NextApiRequest>() {function handler(req: NextApiRequest,res: any) {exec(req.query.command);} return handler;}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-app-request-replaced-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextRequest} from "next/server";
+    export function GET(req: NextRequest) {req = {url:"https://fixed.invalid"} as NextRequest; exec(req.url);}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-app-body-method-replaced-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {NextRequest} from "next/server";
+    export async function POST(req: NextRequest) {req.text=async()=>"echo fixed"; exec(await req.text());}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: next-app-unrelated-request-type-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    class Request {url="echo fixed";}
+    export function GET(req: Request) {exec(req.url);}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-typed-options-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    import type {FastifyPluginAsync} from "fastify";
+    export const plugin: FastifyPluginAsync = async (app,options) => {exec(options.command);};
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-unrelated-plugin-type-quiet
+  file: sample.ts
+  source: |
+    import {exec} from "node:child_process";
+    type FastifyPluginAsync = (app:any)=>Promise<void>;
+    export const plugin: FastifyPluginAsync = async (app) => {app.get("/",(req,res)=>exec(req.query.command));};
+  want: []
+  covers:
+  - lycaon.javascript.command-injection

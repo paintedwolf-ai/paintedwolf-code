@@ -1,0 +1,19 @@
+title: Disable an automation workflow
+id: 6ae58e98-bf48-4a2a-ad8f-2625cea53e62
+status: stable
+description: Disables, archives, deletes, removes, or pauses a specifically named workflow or pipeline.
+references: [https://attack.mitre.org/techniques/T1489/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:workflow-disable', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: medium
+tags: [lycaon.effect.external, attack.impact]

@@ -1,0 +1,4 @@
+# Runtime invoke guards evaluated before posture rules (coordinator profile).
+profiles:
+  coordinator:
+    runtime_rules: []

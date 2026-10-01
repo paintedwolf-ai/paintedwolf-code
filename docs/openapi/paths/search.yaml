@@ -1,0 +1,185 @@
+paths:
+  /v1/search:
+    post:
+      tags:
+      - search
+      operationId: search
+      x-person-action: none
+      summary: Global federated search across all projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/search.yaml#/components/schemas/SearchRequest
+      responses:
+        '200':
+          description: Ranked typed hits with facets and histogram
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/search.yaml#/components/schemas/SearchResponse
+        '400':
+          description: Invalid DSL query (search_query_invalid)
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/search/replace/preview:
+    post:
+      tags:
+      - search
+      operationId: previewSearchReplacement
+      x-person-action: none
+      summary: Preview a replace-across-files operation
+      description: |
+        Runs the code search match pipeline and returns per-file hunks with
+        sha256 guards. Capped at 500 files / 5 000 hunks with truncated set
+        when the cap is hit. Binary and oversize files are omitted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/search.yaml#/components/schemas/SearchReplacePreviewRequest
+      responses:
+        '200':
+          description: Replace preview
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/search.yaml#/components/schemas/SearchReplacePreviewResponse
+        '400':
+          description: Invalid query or pattern
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/search/replace/apply:
+    post:
+      tags:
+      - search
+      operationId: applySearchReplacement
+      x-person-action: record
+      summary: Apply a previewed replace-across-files operation
+      description: |
+        Applies kept hunk indices per file only when the on-disk sha256 still
+        matches the preview. Mismatches are skipped with a reason; remaining
+        files continue. Never force-applies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/search.yaml#/components/schemas/SearchReplaceApplyRequest
+      responses:
+        '200':
+          description: Per-file apply outcomes
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/search.yaml#/components/schemas/SearchReplaceApplyResponse
+        '400':
+          description: Invalid request or pattern
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/search/export:
+    post:
+      tags:
+      - search
+      operationId: exportSearchResults
+      x-person-action: none
+      summary: Export global search results as JSONL, CSV, or SARIF
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/search.yaml#/components/schemas/SearchExportRequest
+      responses:
+        '200':
+          description: Streamed export attachment
+          headers:
+            X-Export-Truncated:
+              schema:
+                type: boolean
+              description: True when the export hit a result limit or an executor failed
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/sarif+json:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid query, format, or SARIF scope (search_query_invalid, search_export_invalid_format,
+            search_export_sarif_scope)
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge

@@ -1,0 +1,55 @@
+oar: '1.0'
+id: ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.inherited_blueprint_approved
+  - paintedwolf.inherited_blueprint_status
+  - paintedwolf.inherited_parent_run
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN"
+effect: block
+copy:
+  what: An invoked workflow cannot open ask_user for an inherited Blueprint.
+  cause: Blueprint status is {{ paintedwolf.inherited_blueprint_status }}; its review belongs to parent run {{ paintedwolf.inherited_parent_run
+    }}.
+  why: The inherited Blueprint has one review path.
+  fix: '{% if paintedwolf.inherited_blueprint_approved %}Execute the inherited approved Blueprint without reconfirming
+    it.{% else %}Stop mutations and return the unresolved approval state to the parent workflow.{% endif %} Do not
+    manufacture a replacement approval in chat.'
+  instead: Branch on Code ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN; never replace the parent Blueprint card with a
+    chat approval
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: the parent workflow handles this Blueprint decision
+x-paintedwolf-scenarios:
+- id: approved
+  vars:
+    profile: coordinator
+    tool: ask_user
+    inherited_blueprint_status: approved
+    inherited_parent_run: parent-run
+    inherited_blueprint_approved: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN'
+  - parent-run
+  - approved
+- id: invalid
+  vars:
+    profile: coordinator
+    tool: ask_user
+    inherited_blueprint_status: invalid
+    inherited_parent_run: parent-run
+    inherited_blueprint_approved: false
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN'
+  - parent-run
+  - invalid

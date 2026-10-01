@@ -1,0 +1,31 @@
+oar: '1.0'
+id: DECISION_SESSION_MISMATCH
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "DECISION_SESSION_MISMATCH"
+effect: block
+copy:
+  what: Worker {{ paintedwolf.job_id }} was not dispatched from this session.
+  cause: Only the session that dispatched a worker can answer its decision.
+  why: A decision answer steers the worker, so it stays with the coordinator that owns the work.
+  fix: Answer decisions only for job_ids from needs_decision envelopes in this session.
+  instead: Leave another session's worker to that session.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker {{ paintedwolf.job_id }} was not dispatched from this session.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: worker-1
+  expect_contains:
+  - 'Code: DECISION_SESSION_MISMATCH'
+  - worker-1
+selector:
+  tool:
+  - answer_decision

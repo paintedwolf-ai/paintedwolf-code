@@ -1,0 +1,27 @@
+id: bugbash
+pattern: pipeline
+iteration_cap: 8
+task: |
+  Run the Bugbash pipeline against the user's request and current project.
+  Hunt stages report only evidence-backed defects. In the triage stage, synthesize
+  the findings into a concise fix recommendation for the coordinator. Do not modify
+  the project: the coordinator writes the bound blueprint after this pipeline ends.
+pipeline:
+  stages:
+    - name: hunt_correctness
+      label: Correctness hunt
+      profile: code-reviewer
+      output_format: markdown
+    - name: hunt_edges
+      label: Edge case hunt
+      profile: path-explorer
+      output_format: markdown
+    - name: hunt_races
+      label: Concurrency hunt
+      profile: code-reviewer
+      output_format: markdown
+    - name: triage
+      label: Triage
+      profile: code-reviewer
+      input_from: [hunt_correctness, hunt_edges, hunt_races]
+      output_format: markdown

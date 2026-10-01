@@ -1,0 +1,235 @@
+paths:
+  /v1/projects/{id}/security:
+    get:
+      tags: [projects]
+      operationId: getProjectSecurity
+      summary: Get the project's scan coverage, baseline, and running full pass
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      responses:
+        '200':
+          description: Security overview for the Security stage
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/scan/overview.yaml#/components/schemas/SecurityOverview}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+
+  /v1/projects/{id}/findings/query:
+    post:
+      tags: [projects]
+      operationId: queryProjectFindings
+      x-person-action: none
+      summary: Page the project's finding ledger across every selected scanner
+      description: >-
+        What the project has open and what has left, folded across the
+        authoritative set of each selected scanner. Filtering, ordering, and
+        paging happen in the store, so a page is a page of the project's set
+        rather than a slice the client reorders. Drill down to the run that
+        recorded an entry's last event with POST /v1/projects/{id}/scans/{scan_id}/query.
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/scan/ledger.yaml#/components/schemas/FindingLedgerQueryRequest}
+      responses:
+        '200':
+          description: One page of the ledger with the project's totals
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/scan/ledger.yaml#/components/schemas/FindingLedgerResponse}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/projects/{id}/findings/ignores:
+    get:
+      tags: [projects]
+      operationId: listProjectFindingIgnores
+      summary: List the project's cross-engine finding ignores
+      description: >-
+        Every entry in force, bundled and project, with how many ledger rows
+        each one covers now. Entries that could not be honoured are reported
+        separately: a mistyped decision disables itself, never the file.
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      responses:
+        '200':
+          description: The project's ignore catalog as it now stands
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/scan/ignores.yaml#/components/schemas/FindingIgnoreListResponse}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags: [projects]
+      operationId: createProjectFindingIgnore
+      x-person-action: record
+      summary: Record one ignore decision in the project's ignore file
+      description: >-
+        Appends the entry to the project's committed overlay file, so the
+        decision is the same artifact a person could have written by hand and
+        is reviewable like any other change to the repository. The predicates
+        conjoin; an entry naming none is refused.
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/scan/ignores.yaml#/components/schemas/FindingIgnoreEntry}
+      responses:
+        '201':
+          description: The project's ignore catalog with the new entry in it
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/scan/ignores.yaml#/components/schemas/FindingIgnoreListResponse}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/projects/{id}/findings/ignores/{entry_id}:
+    delete:
+      tags: [projects]
+      operationId: deleteProjectFindingIgnore
+      x-person-action: record
+      summary: Withdraw one ignore decision
+      description: >-
+        Takes effect on the next read: findings the entry covered return to the
+        open list without a rescan.
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+      responses:
+        '204':
+          description: The project's ignore catalog without the entry
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+
+  /v1/projects/{id}/findings/export:
+    post:
+      tags: [projects]
+      operationId: exportProjectFindings
+      x-person-action: none
+      summary: Export what a ledger query matches as SARIF or OpenVEX
+      description: >-
+        The query runs in the store, so the document contains what the query
+        matched rather than the page the client happened to hold. SARIF carries
+        each project decision as a suppression on the result it covers;
+        OpenVEX carries the advisory judgements as statements. Absences that
+        established nothing are omitted from OpenVEX rather than published as
+        good news.
+      parameters:
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/scan/export.yaml#/components/schemas/FindingExportRequest}
+      responses:
+        '200':
+          description: The export document
+          content:
+            application/sarif+json:
+              schema: {type: string, format: binary}
+            application/json:
+              schema: {type: string, format: binary}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

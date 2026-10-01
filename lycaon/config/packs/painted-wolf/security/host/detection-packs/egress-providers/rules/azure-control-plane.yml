@@ -1,0 +1,66 @@
+title: Reached an Azure control-plane API
+id: 6f263710-c664-4500-8d4f-840ddf489b66
+description: >-
+  Connected to an Azure management, identity, secrets, or storage control host.
+  A hostname cannot tell a read from a destructive call, so this is a coarse
+  signal for scripts and SDKs that never show a CLI on the command line.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # Public / government / China ARM and data-plane suffixes from Azure environment
+  # endpoint catalogs (MIT via azure-cli / azure-rest-api-specs). Not *.azure.com —
+  # that suffix is too broad for consumer Microsoft hosts.
+  selection_host:
+    DestinationHostname:
+      - management.azure.com
+      - management.core.windows.net
+      - management.usgovcloudapi.net
+      - management.chinacloudapi.cn
+      - graph.microsoft.com
+      - graph.windows.net
+      # Token endpoints include sovereign-cloud aliases.
+      - login.microsoftonline.com
+      - login.microsoftonline.us
+      - login.chinacloudapi.cn
+      - login.partner.microsoftonline.cn
+      - login.windows.net
+      - login.microsoft.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .vault.azure.net
+      - .managedhsm.azure.net
+      - .database.windows.net
+      - .blob.core.windows.net
+      - .file.core.windows.net
+      - .queue.core.windows.net
+      - .table.core.windows.net
+      - .dfs.core.windows.net
+      - .azurecr.io
+      - .servicebus.windows.net
+      - .cosmos.azure.com
+      - .documents.azure.com
+      - .azurewebsites.net
+      - .azurecontainer.io
+      - .azurefd.net
+      - .trafficmanager.net
+      - .cloudapp.azure.com
+      - .redis.cache.windows.net
+      - .search.windows.net
+      - .azure-api.net
+      - .azmk8s.io
+      - .postgres.database.azure.com
+      - .mysql.database.azure.com
+      - .mariadb.database.azure.com
+      - .cognitiveservices.azure.com
+      - .openai.azure.com
+  condition: selection_host or selection_suffix

@@ -1,0 +1,51 @@
+oar: '1.0'
+id: HELD_CALL_CAP_REACHED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - find
+    - grep
+    - wc
+    - list_dir
+    - summarize
+    - survey_repo
+    - diff
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_compare
+    - git_branches
+    - git_ref
+    - git_stash_list
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.limit
+    - paintedwolf.handles_text
+when: paintedwolf.rejection_code == "HELD_CALL_CAP_REACHED"
+effect: block
+copy:
+  what: This session already holds {{ paintedwolf.limit }} running calls ({{ paintedwolf.handles_text }}).
+  cause: Earlier calls outlived their foreground wait and have not settled.
+  why: The limit bounds background work one session can leave running.
+  fix: Wait on a held call, read it with held_result, or cancel one with held_stop. Then repeat this call.
+  instead: Free a held call before starting another
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:held_call
+x-paintedwolf-message: held call cap reached
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      limit: 4
+      handles_text: held-1, held-2, held-3, held-4
+      profile: coordinator
+      tool: find
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: HELD_CALL_CAP_REACHED'
+      - held_stop

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-sidebar
+slot: "app_menu.go"
+command: painted-wolf/platform:go-sidebar
+group: "3"
+order: 13
+label: "Sidebar"

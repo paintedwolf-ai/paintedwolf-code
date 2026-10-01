@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html><head><title>Multi-step</title></head>
+<body>
+<label for="email">Email</label>
+<input id="email" />
+<button id="next" type="button">Next</button>
+<label for="code" hidden id="code-label">Code</label>
+<input id="code" hidden />
+<button id="finish" type="button" hidden>Finish</button>
+<div id="status">step:1</div>
+<script>
+const email = document.getElementById("email");
+const next = document.getElementById("next");
+const code = document.getElementById("code");
+const codeLabel = document.getElementById("code-label");
+const finish = document.getElementById("finish");
+const status = document.getElementById("status");
+next.addEventListener("click", () => {
+  if (!(email.value && email.value.trim())) return;
+  email.hidden = true;
+  next.hidden = true;
+  document.querySelector("label[for=email]").hidden = true;
+  code.hidden = false;
+  codeLabel.hidden = false;
+  finish.hidden = false;
+  status.textContent = "step:2";
+});
+finish.addEventListener("click", () => {
+  if (!(code.value && code.value.trim())) return;
+  status.textContent = "done:" + email.value + ":" + code.value;
+});
+</script>
+</body></html>

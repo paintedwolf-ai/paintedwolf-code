@@ -1,0 +1,536 @@
+/* First-run onboarding gate: layout recipes. Paint and state that must win
+   unlayered live in onboarding-domain.css. */
+
+/* Everything below the logomark — auto margins center it vertically without
+   clipping the top when the step is taller than the window. */
+@utility onboarding-gate__stack {
+  margin-block: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@utility onboarding-gate__page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@utility onboarding-gate__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+@utility onboarding-gate__card {
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-lg);
+  background: var(--den-background);
+  padding: 22px 24px;
+  box-shadow: var(--den-shadow-sm);
+
+  & .den-settings-editor {
+    gap: 16px;
+  }
+  /* The card supplies bottom padding. */
+  & .den-settings-providers {
+    margin: 0;
+  }
+  & .den-settings-default-model {
+    padding-bottom: 4px;
+    border-bottom: none;
+    margin-bottom: 0;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--den-border);
+  }
+}
+
+@utility onboarding-gate__card--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@utility onboarding-gate__add-provider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  text-align: center;
+
+  /* Outranks the button recipe's box rather than racing it for order. */
+  & .onboarding-gate__add-provider-btn {
+    min-width: 220px;
+    justify-content: center;
+  }
+}
+
+@utility onboarding-gate__add-provider-hint {
+  margin: 8px 0 0;
+  max-width: 28rem;
+}
+
+@utility onboarding-gate__action-error {
+  flex: 1 1 100%;
+  margin: 0;
+  order: -1;
+}
+
+@utility onboarding-gate__actions--split {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* Provider annotation connector. */
+@utility onboarding-gate__teach-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  /* Dock pad (10px) + General row + half Providers row ≈ Providers centerline */
+  margin-top: calc(
+    10px + max(24px, calc(var(--text-den-hint) * 1.25 + 0.5em)) * 1.5 - 0.7em
+  );
+  padding: 0 4px 0 10px;
+  min-width: 0;
+}
+
+@utility onboarding-gate__teach-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* === Starting layout ================================================ */
+@utility onboarding-layout {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  /* Stacks once two cards can no longer keep a readable width. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 14px;
+}
+
+@utility onboarding-layout__option {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-lg);
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-border));
+  }
+  &:has(.den-radio:checked) {
+    border-color: var(--den-accent-signal);
+    box-shadow:
+      0 0 0 1px var(--den-accent-signal),
+      var(--den-shadow-sm);
+  }
+}
+
+@utility onboarding-layout__art {
+  display: block;
+  padding: 14px 14px 0;
+  border-bottom: 1px solid var(--den-line);
+  background: color-mix(in srgb, var(--den-text) 3.5%, var(--den-background));
+  transition: background var(--den-duration) var(--den-ease);
+
+  .onboarding-layout__option:has(.den-radio:checked) & {
+    background: color-mix(in srgb, var(--den-accent-signal) 7%, var(--den-background));
+  }
+}
+
+@utility onboarding-layout__label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  padding: 14px 16px 16px;
+
+  /* Card scale: the mark sits on the name's first line. */
+  & .den-radio {
+    width: 1.1429rem;
+    height: 1.1429rem;
+    margin-top: 0.1em;
+  }
+}
+
+@utility onboarding-layout__name {
+  display: block;
+  font-size: var(--text-den-section);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--den-text);
+}
+
+@utility onboarding-layout__desc {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+/* === Layout previews ================================================ */
+/* Drawn from the theme's own tokens, so every theme repaints them. */
+@utility onboarding-layout-preview {
+  --olp-ink: color-mix(in srgb, var(--den-text) 22%, var(--den-background));
+  --olp-ink-soft: color-mix(in srgb, var(--den-text) 12%, var(--den-background));
+  --olp-line: color-mix(in srgb, var(--den-border) 75%, transparent);
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--olp-line);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: var(--den-background);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--den-shadow) 8%, transparent);
+
+  & [data-w="10"] { width: 10%; }
+  & [data-w="15"] { width: 15%; }
+  & [data-w="20"] { width: 20%; }
+  & [data-w="25"] { width: 25%; }
+  & [data-w="30"] { width: 30%; }
+  & [data-w="40"] { width: 40%; }
+  & [data-w="55"] { width: 55%; }
+  & [data-w="65"] { width: 65%; }
+  & [data-w="75"] { width: 75%; }
+  & [data-w="85"] { width: 85%; }
+  & [data-w="95"] { width: 95%; }
+}
+
+@utility onboarding-layout-preview__titlebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 12px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--olp-line);
+
+  & > i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--olp-ink-soft);
+  }
+}
+
+/* Column separators come from the gap, so mirroring needs no border swap. */
+@utility onboarding-layout-preview__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--olp-line);
+
+  & > * {
+    min-width: 0;
+    background: var(--den-background);
+  }
+  & > .onboarding-layout-preview__tree {
+    background: color-mix(in srgb, var(--den-text) 3.5%, var(--den-background));
+  }
+  .onboarding-layout-preview--chat & {
+    grid-template-columns: 24% minmax(0, 1fr);
+  }
+  .onboarding-layout-preview--split & {
+    grid-template-columns: 15% 17% minmax(0, 1fr) 27%;
+  }
+  .onboarding-layout-preview--split.onboarding-layout-preview--chat-first & {
+    grid-template-columns: 15% 27% 17% minmax(0, 1fr);
+  }
+  .onboarding-layout-preview--mirrored & {
+    direction: rtl;
+  }
+  .onboarding-layout-preview--mirrored & > * {
+    direction: ltr;
+  }
+}
+
+@utility onboarding-layout-preview__bar {
+  display: block;
+  flex: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--olp-ink);
+
+  &[data-tone="soft"] {
+    background: var(--olp-ink-soft);
+  }
+}
+
+@utility onboarding-layout-preview__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 6px 6px;
+}
+
+@utility onboarding-layout-preview__brand {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+}
+
+@utility onboarding-layout-preview__glyph {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-brand-field)) 0 25%,
+        color-mix(in srgb, var(--den-accent-signal) 60%, var(--den-brand-field)) 25% 50%,
+        color-mix(in srgb, var(--den-accent-signal) 80%, var(--den-brand-field)) 50% 75%,
+        var(--den-accent-signal) 75%
+      )
+      center / 70% 56% no-repeat,
+    var(--den-brand-field);
+}
+
+@utility onboarding-layout-preview__new {
+  height: 9px;
+  margin-bottom: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--den-text) 8%, var(--den-background));
+}
+
+@utility onboarding-layout-preview__row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 9px;
+  padding: 0 3px;
+  border-radius: 3px;
+
+  &[data-depth="1"] {
+    padding-left: 8px;
+  }
+  &[data-depth="2"] {
+    padding-left: 13px;
+  }
+  &.onboarding-layout-preview__row--on {
+    background: color-mix(in srgb, var(--den-accent-signal) 14%, transparent);
+  }
+  &.onboarding-layout-preview__row--on > .onboarding-layout-preview__bar {
+    background: color-mix(in srgb, var(--den-text) 45%, var(--den-background));
+  }
+}
+
+@utility onboarding-layout-preview__tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+}
+
+@utility onboarding-layout-preview__twisty {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--olp-ink-soft);
+}
+
+@utility onboarding-layout-preview__editor {
+  display: flex;
+  flex-direction: column;
+}
+
+@utility onboarding-layout-preview__tabs {
+  flex: none;
+  display: flex;
+  height: 11px;
+  border-bottom: 1px solid var(--olp-line);
+}
+
+@utility onboarding-layout-preview__tab {
+  display: flex;
+  align-items: center;
+  width: 34%;
+  padding: 0 5px;
+  border-right: 1px solid var(--olp-line);
+
+  &.onboarding-layout-preview__tab--on {
+    box-shadow: inset 0 -1.5px 0 var(--den-accent-signal);
+  }
+  &.onboarding-layout-preview__tab--on > .onboarding-layout-preview__bar {
+    background: color-mix(in srgb, var(--den-text) 45%, var(--den-background));
+  }
+}
+
+@utility onboarding-layout-preview__code {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0;
+  overflow: hidden;
+}
+
+@utility onboarding-layout-preview__line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 5px;
+  padding-left: 12px;
+
+  /* Line-number gutter tick. */
+  &::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    width: 4px;
+    height: 2.5px;
+    border-radius: 1px;
+    background: var(--olp-ink-soft);
+  }
+  &[data-indent="1"] {
+    padding-left: 19px;
+  }
+  &[data-indent="2"] {
+    padding-left: 26px;
+  }
+  &.onboarding-layout-preview__line--added {
+    background: var(--den-diff-add-line);
+    box-shadow: inset 1.5px 0 0 var(--den-diff-add-hue);
+  }
+}
+
+@utility onboarding-layout-preview__token {
+  display: block;
+  flex: none;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--olp-ink);
+
+  &[data-tone="keyword"] {
+    background: color-mix(in srgb, var(--den-code-keyword) 75%, transparent);
+  }
+  &[data-tone="function"] {
+    background: color-mix(in srgb, var(--den-code-function) 75%, transparent);
+  }
+  &[data-tone="string"] {
+    background: color-mix(in srgb, var(--den-code-string) 60%, transparent);
+  }
+  &[data-tone="type"] {
+    background: color-mix(in srgb, var(--den-code-type) 75%, transparent);
+  }
+}
+
+@utility onboarding-layout-preview__convo {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0 7px;
+}
+
+@utility onboarding-layout-preview__thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 72%;
+  margin: 0 auto;
+  padding-top: 4px;
+
+  /* The conversation column is narrower beside a stage. */
+  .onboarding-layout-preview--split & {
+    width: 84%;
+  }
+}
+
+@utility onboarding-layout-preview__ask {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 58%;
+  padding: 4px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--den-text) 8%, var(--den-background));
+
+  .onboarding-layout-preview--split & {
+    width: 78%;
+  }
+}
+
+@utility onboarding-layout-preview__reply {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@utility onboarding-layout-preview__task {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 5px;
+  border: 1px solid var(--olp-line);
+  border-radius: 4px;
+}
+
+@utility onboarding-layout-preview__step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@utility onboarding-layout-preview__check {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--den-status-positive);
+
+  &.onboarding-layout-preview__check--running {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--den-status-running);
+  }
+}
+
+@utility onboarding-layout-preview__composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 72%;
+  height: 16px;
+  margin: 0 auto;
+  padding: 0 3px 0 6px;
+  border: 1px solid var(--den-border);
+  border-radius: 5px;
+
+  .onboarding-layout-preview--split & {
+    width: 84%;
+  }
+}
+
+@utility onboarding-layout-preview__send {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--den-accent);
+}
+
+.onboarding-layout-preview--chat-first .onboarding-layout-preview__rail { order: -2; }
+.onboarding-layout-preview--chat-first .onboarding-layout-preview__convo { order: -1; }

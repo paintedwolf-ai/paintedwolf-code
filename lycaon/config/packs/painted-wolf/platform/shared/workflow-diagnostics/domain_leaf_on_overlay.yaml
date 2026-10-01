@@ -1,0 +1,5 @@
+code: domain_leaf_on_overlay
+message: |
+  Domain leaf {{leaf}} is bundled-only and cannot appear in custom overlays.
+replacement: |
+  Use a generic gate-kit leaf such as evidence_passed:verify, hitl_consulted:<phase>, or human_approval. See docs/workflows.md#custom-workflows.

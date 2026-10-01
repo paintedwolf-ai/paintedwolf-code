@@ -1,0 +1,19 @@
+tags: [git, inspection]
+description: "Per-line blame JSON (`available`, `lines` with commit/author/date/content). Replaces command: git blame."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Repo-relative file path (required)
+    start_line:
+      type: integer
+      description: Optional start line (default 1)
+    end_line:
+      type: integer
+      description: Optional end line
+    max_lines:
+      type: integer
+      description: Max lines to blame (default 500)
+  required: [path]
+  additionalProperties: false

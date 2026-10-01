@@ -1,0 +1,23 @@
+description: Create a delegation for the current coordinator session
+schema:
+  type: object
+  properties:
+    task:
+      description: "Human-readable delegation task summary."
+      type: string
+    blueprint_path:
+      description: "Optional blueprint path tied to the delegation."
+      type: string
+    strategy:
+      description: "Optional decomposition strategy label."
+      type: string
+    workflow_id:
+      description: "Optional workflow id when delegating under a run."
+      type: string
+    workflow_version:
+      description: "Optional workflow version paired with workflow_id."
+      type: string
+    workflow_run_id:
+      description: "Optional active workflow run id."
+      type: string
+  required: [task]

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-launcher-open
+slot: "app_menu.go"
+command: painted-wolf/platform:launcher-open
+group: "0"
+order: 2
+label: "Switch project…"

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:session-next
+title: "Next session"
+icon: arrow-down
+scope: "global"
+keywords:
+  - "next session"
+  - "later session"
+when:
+  fact: "project_open"
+action:
+  kind: native_ui
+  handler: "session.next"

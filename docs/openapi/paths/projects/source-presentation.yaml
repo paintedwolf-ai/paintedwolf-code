@@ -1,0 +1,120 @@
+paths:
+  /v1/projects/{id}/source/seen:
+    post:
+      tags: [projects]
+      operationId: completeProjectSourcePresentation
+      x-person-action: none
+      summary: Record that the reader looked at a file
+      description: |
+        Advances the file's watermark through the displayed effect and records
+        the range the look covered, so the file moves from new to seen. Any
+        primary-tree effect is a valid token; an earlier or repeated look
+        changes nothing. Agent effects at or below the token leave the
+        new-from-AI count.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/source-presentation.yaml#/components/schemas/SourcePresentationCompletion}
+      responses:
+        '204': {description: Presentation watermark advanced}
+        '409':
+          description: The effect token does not match the displayed file
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+    get:
+      tags: [projects]
+      operationId: listProjectSourceSeen
+      summary: List the files the reader has looked at
+      description: |
+        Files whose latest look is still current, newest look first, each with
+        the effects that look covered. A file with anything new since its look
+        is listed by the presentation walk instead, never here.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: cursor
+        in: query
+        required: false
+        schema: {type: string}
+        description: Opaque next_cursor from the preceding page. Omit for the newest look.
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+      - name: mark_user_edits
+        in: query
+        required: false
+        description: |
+          False ignores the person's own writes: one made since a look does not
+          make the file new again, and none are listed among a look's effects.
+        schema: {type: boolean, default: true}
+      responses:
+        '200':
+          description: Seen files
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-presentation.yaml#/components/schemas/SourceSeenList}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/source/seen/{file_id}:
+    delete:
+      tags: [projects]
+      operationId: withdrawProjectSourcePresentation
+      x-person-action: none
+      summary: Mark a file unseen
+      description: |
+        Withdraws the file's latest look: the watermark returns to where that
+        look began, so everything it covered counts as new again, and its agent
+        effects rejoin the new-from-AI count.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: file_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: through_ordinal
+        in: query
+        required: true
+        description: The look being withdrawn, as the Seen list reported it.
+        schema: {type: integer, format: int64, minimum: 1}
+      responses:
+        '204': {description: The look was withdrawn}
+        '404':
+          description: The file has no look left to withdraw
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}
+        '409':
+          description: A newer look replaced the one named by through_ordinal
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest

@@ -1,0 +1,28 @@
+title: Stop a running Modal app
+id: fb7332e1-aeb9-4d8e-8b8f-16e4c8b42583
+description: Permanently stops a Modal App and terminates its running containers.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_verb:
+    Image: modal
+    CommandLine|contains: ' app stop'
+  selection_confirm:
+    CommandLine|contains:
+      - ' -y'
+      - ' --yes'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and selection_confirm and not filter_rehearsal and not filter_local

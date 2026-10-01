@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "notes": "Sample bad updater manifest for halt rehearsal.",
+  "pub_date": "2026-02-01T00:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNhbXBsZQov",
+      "url": "https://downloads.paintedwolf.dev/releases/v0.2.0/painted-wolf-code_v0.2.0_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "update_keys": {
+    "signing_generation": 1,
+    "embedded_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  }
+}

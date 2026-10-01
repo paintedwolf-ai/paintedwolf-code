@@ -1,0 +1,50 @@
+oar: '1.0'
+id: SANDBOX_TRY_PROCESS_CONTROL
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_signals
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.refused_signals) > 0
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused signals to processes outside the
+    command's boundary: {{ paintedwolf.refused_signals }}.
+  cause: >-
+    A confined command signals only its own descendants unless it declares
+    `capability_request.process_control`.
+  why: >-
+    Repeating the command without the declaration is refused again.
+  fix: >-
+    Prefer the host's reviewed process tools when they express the operation.
+    Otherwise reissue the same command with `capability_request.process_control`;
+    the person reviews it before it runs.
+  instead: Declare capability_request.process_control — a retry without it is
+    refused again
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a signal to a process outside the boundary
+x-paintedwolf-scenarios:
+  - id: stop_server
+    vars:
+      tool: command
+      failed_stages: [kill 4121]
+      refused_signals: [signal (kill)]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_PROCESS_CONTROL'
+      - capability_request.process_control

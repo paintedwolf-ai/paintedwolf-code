@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_REVIEW_DEPTH_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED"
+effect: block
+copy:
+  cause: '## Plan review depth required before critic Tasks'
+  why: 'Add ## Plan review depth to the blueprint file'
+  fix: 'Add ## Plan review depth to the blueprint file'
+  instead: Complete Phase 4 review depth before critics
+  what: '## Plan review depth required before critic Tasks'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: '## Plan review depth required before critic Tasks'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_REVIEW_DEPTH_REQUIRED'
+x-paintedwolf-audience:
+- coordinator

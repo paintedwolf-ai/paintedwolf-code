@@ -1,0 +1,17 @@
+id: options_selection_valid
+kind: blueprint-content
+purpose: |
+  Options approval must bind the durable selection report, never the empty
+  Blueprint marker created when the workflow starts.
+missing_signals:
+  - id: selection_report_missing
+    when: "true"
+    detail: "The bound options-selection Blueprint is empty, lacks criterion, winner, or rationale, or claims a host-set approval status."
+    fix: "Write the researched decision with status draft, non-empty criterion and winner frontmatter, and a grounded rationale body, then submit or replay the terminal verdict."
+satisfy_auto:
+  - "Write `${overlay_dir}/blueprints/options-selection.md` before `submit_verdict`."
+  - "YAML frontmatter must contain non-empty `criterion:` and `winner:` values."
+  - "Keep `status: draft`; only the host records approval."
+  - "The Markdown body must explain the skeptic's strongest objection and why the winner survived it."
+satisfy:
+  - "Materialize the bound selection Blueprint with criterion, winner, and rationale before approval."

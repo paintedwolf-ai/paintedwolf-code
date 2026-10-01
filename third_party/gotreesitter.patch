@@ -1,0 +1,94 @@
+--- a/parser_result_swift_conditions.go
++++ b/parser_result_swift_conditions.go
+@@ -133,7 +133,7 @@
+ 		}
+ 		switch {
+ 		case (typ == "if" || typ == "while") && resultChildCount(n) == 0:
+-			if parentType != "if_statement" && parentType != "while_statement" {
++			if (parentType != "if_statement" && parentType != "while_statement") || (parent != nil && parent.HasError()) {
+ 				// Bracket this header's condition, then follow any `else if`
+ 				// continuation (#131): the chained `if` keyword is swallowed into
+ 				// an ERROR node, so it never surfaces as its own `if` token for the
+--- a/parser_result_compat.go
++++ b/parser_result_compat.go
+@@ -169,6 +169,7 @@
+ 		dispatcherArmCensus(ctx, "dispatch.powershell", func() {
+ 			normalizePowerShellProgramShape(ctx.root, ctx.source, ctx.lang)
+ 			normalizePowerShellErrorProgramRoot(ctx.root, ctx.lang)
++			normalizePowerShellCommentOnlyProgram(ctx.root, ctx.source, ctx.lang)
+ 			normalizePowerShellPathCommandNameVariables(ctx.root, ctx.source, ctx.lang)
+ 			normalizePowerShellEnumStatementKeywordSpans(ctx.root, ctx.source, ctx.lang)
+ 		})
+--- a/parser_result_powershell.go
++++ b/parser_result_powershell.go
+@@ -1069,3 +1069,55 @@
+ 	}
+ 	return newParentNodeInArena(arena, pipelineSym, pipelineNamed, pipelineChildren, nil, 0)
+ }
++
++// The grammar requires a statement even in an empty script. Only parser-proven
++// comments and whitespace can establish the missing empty-program production.
++func normalizePowerShellCommentOnlyProgram(root *Node, source []byte, lang *Language) {
++	if root == nil || lang == nil || lang.Name != "powershell" || !root.hasError() {
++		return
++	}
++	program, ok := symbolByName(lang, "program")
++	if !ok {
++		return
++	}
++	var comments []*Node
++	cursor := uint32(0)
++	var collect func(*Node) bool
++	collect = func(node *Node) bool {
++		if node == nil || node.isMissing() || node.endByte > uint32(len(source)) {
++			return false
++		}
++		switch node.Type(lang) {
++		case "comment":
++			if node.hasError() || node.startByte < cursor || !bytesAreTrivia(source[cursor:node.startByte]) {
++				return false
++			}
++			comments = append(comments, node)
++			cursor = node.endByte
++			return true
++		case "program", "ERROR":
++			if len(node.children) == 0 {
++				return node.startByte <= node.endByte && bytesAreTrivia(source[node.startByte:node.endByte])
++			}
++			for _, child := range node.children {
++				if !collect(child) {
++					return false
++				}
++			}
++			return true
++		default:
++			return false
++		}
++	}
++	if !collect(root) || !bytesAreTrivia(source[cursor:]) {
++		return
++	}
++	root.children = cloneNodeSliceInArena(root.ownerArena, comments)
++	root.clearFieldMetadata()
++	retagResultRoot(root, program, symbolIsNamed(lang, program))
++	populateParentNode(root, root.children)
++	root.setHasError(false)
++	root.startByte, root.endByte = 0, uint32(len(source))
++	root.startPoint = Point{}
++	root.endPoint = advancePointByBytes(Point{}, source)
++}
+--- a/parser_result_root_build.go
++++ b/parser_result_root_build.go
+@@ -1517,6 +1517,12 @@
+ 	if p == nil || p.language == nil || root == nil || p.noResultCompatibilityBenchmarkOnly || p.noTreeBenchmarkOnly {
+ 		return false
+ 	}
++	// Deferred finalization creates a new parser without the caller's limits.
++	// Bounded parses must finish compatibility under their active budget.
++	if p.timeoutMicros != 0 || p.cancellationFlag != nil {
++		return false
++	}
++
+ 	if !parseTypeScriptLazyResultCompatibilityEnabled() {
+ 		return false
+ 	}

@@ -1,0 +1,275 @@
+@utility den-chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 var(--den-chat-gutter-x) var(--den-chat-padding-bottom);
+  gap: 10px;
+  /* Scrollbar offset within the chat gutter. */
+  --chat-scrollbar-shift: var(--den-chat-scrollbar-shift);
+  --chat-scrollbar-size: var(--den-scrollbar-size);
+  /* Edge caps end under the scrollbar thumb, which paints above them. */
+  --chat-fade-right-inset: calc(var(--chat-scrollbar-size) / 2);
+}
+
+/* An open drawer keeps transcript fades below tab chrome. */
+.den-shell-stage--chat
+  .den-shell-main
+  > .den-chat.den-chat--context-drawer-open {
+  position: static;
+  overflow: visible;
+  z-index: auto;
+}
+
+.den-shell-main:has(.den-chat--context-drawer-open) {
+  position: static;
+  overflow: visible;
+}
+
+
+@utility den-chat-composer-dock {
+position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  flex-grow: 0;
+  min-width: 0;
+  width: 100%;
+  z-index: var(--den-z-composer-dock);
+}
+
+
+@utility den-chat-conversation {
+position: relative;
+  z-index: var(--den-z-content);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+
+@utility den-chat-transcript-log {
+position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+
+@utility den-chat-transcript-visual {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  --den-transcript-card-width: min(100%, 32rem);
+}
+
+@utility den-transcript-disclosure-card {
+  align-self: flex-start;
+  width: var(--den-transcript-card-width, 100%);
+  max-width: 100%;
+  min-width: 0;
+
+  & > summary {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  &[open],
+  &[data-expanded="true"] {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  &[open] > summary .den-tool-chicklet-caret {
+    transform: rotate(90deg);
+  }
+
+  &[data-closing] > summary .den-tool-chicklet-caret {
+    transform: rotate(0);
+  }
+}
+
+
+/* Hosts the transcript scrollbar outside the scrolled content. */
+@utility den-chat-stream-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* The scrollbar sits in the chat gutter. */
+  margin-right: calc(-1 * var(--chat-scrollbar-shift));
+  padding: 0;
+}
+
+
+@utility den-chat-stream {
+  flex: 1;
+  border: 0;
+  min-height: 0;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  /* Transcript delivery controls scroll anchoring. */
+  overflow-anchor: none;
+  display: flex;
+  flex-direction: column;
+  /* Reveal targets clear the bottom fade. */
+  scroll-padding-bottom: calc(var(--chat-stream-edge-fade) + 0.75em);
+  /* Reveal targets clear the top fade. */
+  scroll-padding-top: calc(var(--chat-stream-edge-fade) + 0.75em);
+}
+
+
+/* Transcript rows own all stream seams. */
+@utility den-chat-stream-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  /* The body fills the viewport and never shrinks below its content, so retained range extends it. */
+  flex: 1 0 auto;
+  box-sizing: border-box;
+  /* Stream padding keeps content clear of edges and the gutter scrollbar. */
+  padding-top: var(--chat-stream-padding-top);
+  padding-left: var(--chat-stream-padding-x);
+  padding-right: calc(
+    var(--chat-stream-padding-x) + var(--chat-scrollbar-shift)
+  );
+  /* Tail clearance protects the last row from the bottom fade. */
+  padding-bottom: var(--chat-stream-tail-clearance);
+}
+
+
+@utility den-chat-stream-inner {
+display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+
+@utility den-chat-stream-jump {
+position: absolute;
+  /* The jump control aligns with the composer action column. */
+  right: 6px;
+  bottom: calc(var(--chat-stream-edge-solid) + 8px);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max(24px, 1.5em);
+  height: max(24px, 1.5em);
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 260ms var(--den-ease),
+    visibility 0ms linear 260ms,
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+  &:hover {
+    background: color-mix(in srgb, var(--den-tint-2) 75%, transparent);
+    color: var(--den-text);
+  }
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--den-accent-signal) 40%, transparent);
+    outline-offset: 1px;
+  }
+  &:hover .den-chat-stream-jump-icon {
+    opacity: 0.85;
+  }
+}
+
+
+/* Names the reader's day in a multi-day chat. */
+@utility den-transcript-day-chip {
+position: absolute;
+  top: calc(var(--chat-stream-edge-solid) + 6px);
+  left: 50%;
+  z-index: 5;
+  translate: -50% -4px;
+  padding: 3px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-pill);
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-sm);
+  color: var(--den-text);
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 200ms var(--den-ease),
+    translate 200ms var(--den-ease),
+    visibility 0ms linear 200ms;
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+
+@utility den-transcript-day-chip--visible {
+opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  translate: -50% 0;
+  transition:
+    opacity 160ms var(--den-ease),
+    translate 160ms var(--den-ease),
+    visibility 0ms;
+}
+
+
+@utility den-chat-stream-jump--visible {
+opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 220ms var(--den-ease),
+    visibility 0ms,
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+
+
+@utility den-chat-stream-jump-icon {
+display: block;
+  width: 7px;
+  height: 7px;
+  margin-top: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.55;
+  transition: opacity var(--den-duration) var(--den-ease);
+}
+
+
+@utility den-chat-stream-wrap {
+position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+
+

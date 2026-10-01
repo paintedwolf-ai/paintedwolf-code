@@ -1,0 +1,91 @@
+components:
+  schemas:
+    ProjectRemovalCheck:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, name, state, revision]
+      properties:
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        state: {type: string, enum: [checked, unknown]}
+        revision: {type: string}
+        reason:
+          type: string
+          description: Why an unknown check could not read the project's references. Absent when checked.
+          enum: [suggestions_disabled, overlay_unavailable, overlay_incompatible, root_unavailable, manifest_unreadable, manifest_invalid]
+    ProjectRemovalReason:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [code, subject_id]
+      properties:
+        code:
+          type: string
+          enum: [project_suggestion, extension_dependency, device_selection, device_configuration, stock_extension, incomplete_project_evidence]
+        subject_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+    ProjectRemovalExtension:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [pack_id, disposition, reasons]
+      properties:
+        pack_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        disposition: {type: string, enum: [eligible, retained, unknown]}
+        reasons:
+          type: array
+          items: {$ref: '#/components/schemas/ProjectRemovalReason'}
+    ProjectRemovalAssessment:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, assessment_token, extension_revision, complete, checks, extensions]
+      properties:
+        project_id: {type: string, format: uuid}
+        assessment_token: {type: string}
+        extension_revision: {type: string}
+        complete: {type: boolean}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ProjectRemovalCheck'}
+        extensions:
+          type: array
+          items: {$ref: '#/components/schemas/ProjectRemovalExtension'}
+    ProjectRemovalRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [operation_id, assessment_token, remove_extensions, force]
+      properties:
+        operation_id: {type: string, format: uuid}
+        assessment_token: {type: string}
+        remove_extensions:
+          type: array
+          uniqueItems: true
+          maxItems: 256
+          items: {type: string}
+        force: {type: boolean}
+    ProjectRemovalResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [operation_id, project_id, project_state, cleanup_state, extensions, reason, failure_code, documents, sessions, workers, overlays]
+      properties:
+        assessment:
+          x-go-type: "*ProjectRemovalAssessment"
+          oneOf:
+          - $ref: "#/components/schemas/ProjectRemovalAssessment"
+          - type: "null"
+        operation_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        project_state: {type: string, enum: [deleted, retained, unknown]}
+        cleanup_state: {type: string, enum: [not_requested, removed, retained, failed, interrupted]}
+        extensions:
+          type: array
+          items: {type: string}
+        reason: {type: string}
+        failure_code: {type: string}
+        documents: {type: integer, minimum: 0}
+        sessions: {type: integer, minimum: 0}
+        workers: {type: integer, minimum: 0}
+        overlays: {type: integer, minimum: 0}

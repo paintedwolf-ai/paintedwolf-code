@@ -1,0 +1,211 @@
+fixtures:
+- rule: namespace-delete
+  positive:
+  - kubectl delete namespace prod
+  - oc delete ns staging
+  - kubecolor delete namespace prod
+  - kubectl delete ns prod
+  - kubectl delete ns/prod
+  - kubectl delete namespace/prod
+  - kubectl delete namespaces prod
+  - oc delete project prod
+  - oc delete project/prod
+  - sudo kubectl delete namespace prod
+  negative:
+  - kubectl get namespaces
+  - kubectl get ns
+  - kubectl get ns/prod
+  - oc get projects
+  - kubectl delete namespace prod --dry-run=client
+  - kubectl delete configmap ns-checker
+  - kubectl delete configmap myapp --namespace prod
+  - kubectl delete configmap myapp -n prod
+  - kubectl delete namespace prod -h
+  # A resource whose name merely starts with the word is not the namespace.
+  - kubectl delete configmap namespace-config
+  - kubectl delete configmap project-settings
+- rule: namespace-sweep
+  positive:
+  - kubectl delete all --all
+  - kubectl delete all --all -n prod
+  - oc delete all --all
+  - kubectl -n prod delete all --all
+  negative:
+  - kubectl get all
+  - kubectl get all -n prod
+  - kubectl delete all --all --dry-run=client
+- rule: rbac-grant
+  positive:
+  - kubectl create clusterrolebinding admin-binding --clusterrole=cluster-admin --user=bot
+  - oc adm policy add-cluster-role-to-user cluster-admin bot
+  - oc adm policy add-cluster-role-to-group cluster-admin builders
+  - kubectl create rolebinding dev-binding --role=edit --user=bot -n dev
+  - kubectl create clusterrole custom-admin --verb=* --resource=*
+  - kubectl create role pod-reader --verb=get,list --resource=pods -n dev
+  - oc adm policy add-role-to-user edit bot -n dev
+  - oc adm policy add-role-to-group edit builders -n dev
+  - oc adm policy add-scc-to-user privileged bot
+  - sudo kubectl create clusterrolebinding admin-binding --clusterrole=cluster-admin --user=bot
+  negative:
+  - kubectl get clusterrolebindings
+  - kubectl describe clusterrole view
+  - kubectl create rolebinding --dry-run=client -o yaml dev-binding --role=edit --user=bot
+  - kubectl create configmap app-config --from-literal=key=value
+  - kubectl create clusterrolebinding admin-binding --clusterrole=cluster-admin --user=bot --help
+- rule: rbac-revoke
+  positive:
+  - kubectl delete clusterrolebinding admin-binding
+  - kubectl delete clusterrole custom-admin
+  - kubectl delete rolebinding dev-binding -n dev
+  - kubectl delete role pod-reader -n dev
+  - kubectl delete clusterrolebindings admin-binding
+  - kubectl delete clusterrole/custom-admin
+  - oc adm policy remove-cluster-role-from-user cluster-admin bot
+  - oc adm policy remove-role-from-user edit bot -n dev
+  - oc adm policy remove-scc-from-user privileged bot
+  - kubecolor delete rolebinding dev-binding -n dev
+  negative:
+  - kubectl get roles -n dev
+  - kubectl describe rolebinding dev-binding -n dev
+  - kubectl delete clusterrolebinding admin-binding --dry-run=client
+  - oc adm policy who-can delete pods
+  - kubectl delete configmap role-manager-config
+- rule: rbac-manifest-apply
+  positive:
+  - kubectl auth reconcile -f rbac.yaml
+  - oc auth reconcile -f manifests/rbac.yaml
+  - kubectl auth reconcile -f rbac.yaml --remove-extra-permissions
+  negative:
+  - kubectl auth can-i create deployments
+  - kubectl auth whoami
+  - kubectl auth reconcile -f rbac.yaml --dry-run=client
+  - kubectl apply -f rbac.yaml
+- rule: secret-read
+  positive:
+  - kubectl get secret db-credentials -o yaml
+  - kubectl describe secret db-credentials
+  - kubectl get secrets db-credentials -o json
+  - kubectl get secret db-credentials --output yaml
+  - kubectl get secret db-credentials -o jsonpath='{.data.password}'
+  - oc get secret db-credentials -o yaml
+  - kubecolor get secret db-credentials -o yaml
+  negative:
+  - kubectl get secrets
+  - kubectl get secret db-credentials --help
+  - kubectl get secret db-credentials
+  - kubectl get secret db-credentials -o wide
+  - kubectl get configmap app-config -o yaml
+- rule: secret-delete
+  positive:
+  - kubectl delete secret db-credentials
+  - kubectl delete secrets db-credentials
+  - kubectl delete secret/db-credentials
+  - kubectl delete -n prod secret db-credentials
+  - oc delete secret db-credentials
+  negative:
+  - kubectl delete secret db-credentials --dry-run=client
+  - kubectl delete configmap secret-scanner-config
+  - kubectl delete configmap app-secrets-map
+- rule: workload-delete
+  positive:
+  - kubectl delete deployment api
+  - kubectl delete pvc postgres-data
+  - kubectl delete statefulset postgres
+  - kubectl delete daemonset fluentd
+  - kubectl delete persistentvolumeclaim data-pvc
+  - kubectl delete crd widgets.example.com
+  - kubectl delete customresourcedefinition widgets.example.com
+  - oc delete deployment api
+  - kubectl delete pv pv-0001
+  negative:
+  - kubectl get deployments
+  - kubectl delete deployment api --dry-run=server
+  - kubectl delete configmap app-config
+  - kubectl delete deployment api --help
+- rule: pod-delete
+  positive:
+  - kubectl delete pod api-7d9f
+  - kubectl rollout restart deployment/api
+  - kubectl delete po api-7d9f
+  - kubectl rollout undo deployment/api
+  - oc rollout restart deployment/api
+  negative:
+  - kubectl get pods
+  - kubectl rollout status deployment/api
+  - kubectl rollout history deployment/api
+  - kubectl rollout restart deployment/api --dry-run=client
+- rule: workload-scale-zero
+  positive:
+  - kubectl scale deployment/api --replicas=0
+  - kubectl scale --replicas=0 statefulset/web
+  - oc scale deployment/api --replicas 0
+  - kubectl scale --current-replicas=2 --replicas=0 deployment/mysql
+  negative:
+  - kubectl scale deployment/api --replicas=3
+  - kubectl scale deployment/api --replicas=1
+  - kubectl scale --replicas=10 rs/foo
+  - kubectl scale deployment/api --replicas=0 --dry-run=client
+- rule: pod-exec
+  positive:
+  - kubectl exec api-7d9f -- date
+  - kubectl exec -it api-7d9f -c app -- bash
+  - oc rsh api-7d9f
+  - kubecolor exec api-7d9f -- date
+  negative:
+  - kubectl logs api-7d9f
+  - kubectl describe pod api-7d9f
+  - kubectl exec --help
+  - kubectl port-forward pod/api-7d9f 8080:80
+- rule: node-drain
+  positive:
+  - kubectl drain node-3 --ignore-daemonsets
+  - kubectl cordon node-3
+  - kubectl taint node node-3 key=value:NoSchedule
+  - oc drain node-3 --ignore-daemonsets --delete-emptydir-data
+  - sudo kubectl drain node-3 --ignore-daemonsets
+  negative:
+  - kubectl get nodes
+  - kubectl uncordon node-3
+  - kubectl describe node node-3
+  - kubectl drain node-3 --dry-run=client
+- rule: kubeconfig-credential-write
+  positive:
+  - kubectl config set-credentials ci-bot --token=eyJhbGciOiJSUzI1NiJ9
+  - oc config set-credentials ci-bot --token=eyJhbGciOiJSUzI1NiJ9
+  - kubectl config set-credentials ci-bot --token eyJhbGciOiJSUzI1NiJ9
+  negative:
+  - kubectl config view
+  - kubectl config use-context prod
+  - kubectl config get-contexts
+  - kubectl config set-credentials dev --client-key=admin.key
+  - kubectl config set-credentials ci-bot --token=eyJhbGciOiJSUzI1NiJ9 --help
+- rule: helm-release-delete
+  positive:
+  - helm uninstall prometheus --namespace monitoring
+  - helm rollback api 3
+  - sudo helm uninstall prometheus --namespace monitoring
+  negative:
+  - helm list --all-namespaces
+  - helm uninstall prometheus --dry-run
+  - helm history api
+  - helm uninstall prometheus --help
+- rule: helm-chart-deploy
+  positive:
+  - helm upgrade --install api ./charts/api
+  - helm install prometheus prometheus-community/prometheus --namespace monitoring
+  - helm upgrade api ./charts/api
+  - sudo helm upgrade --install api ./charts/api
+  negative:
+  - helm template api ./charts/api
+  - helm upgrade --install api ./charts/api --dry-run
+  - helm install prometheus prometheus-community/prometheus --help
+  - helm status api
+- rule: helm-repo-add
+  positive:
+  - helm repo add bitnami https://charts.bitnami.com/bitnami
+  - helm repo add internal https://charts.example.test
+  negative:
+  - helm repo list
+  - helm repo update
+  - helm repo add bitnami https://charts.bitnami.com/bitnami --help
+  - helm search repo nginx

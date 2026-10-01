@@ -1,0 +1,1 @@
+Search (`find`, `grep`, `list_dir`) with no path or `.` covers every folder in this project. `@<label>/<path>` addresses a specific folder and always works — prefer it, and reuse the `@<label>/` forms shown in results. Bare relative paths and command cwd resolve in the session folder (marked above). Pass `cwd="@<label>"` to run commands in another folder.

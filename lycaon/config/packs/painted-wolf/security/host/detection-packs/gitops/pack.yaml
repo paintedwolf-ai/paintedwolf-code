@@ -1,0 +1,6 @@
+id: gitops
+label: GitOps controllers
+description: >-
+  Argo CD and Flux operations that delete a deployed application, tear down the
+  controller that reconciles a cluster, hand out a token, or widen who may
+  deploy where.

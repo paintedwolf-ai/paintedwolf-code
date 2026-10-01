@@ -1,0 +1,38 @@
+oar: '1.0'
+id: JQ_PARSE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+    - paintedwolf.format
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "JQ_PARSE"
+effect: block
+copy:
+  what: jq could not parse {{ paintedwolf.path }} as {{ paintedwolf.format }} — {{ paintedwolf.detail }}.
+  cause: File is not valid for the selected format, or format auto-detection failed.
+  why: Queries run on a parsed document tree — malformed configs must be fixed or read raw.
+  fix: Fix the file, set format explicitly (json|yaml|toml), or use read — then retry.
+  instead: Branch on Code; fix format or use read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq could not parse the document
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: invalid character
+      format: json
+      path: package.json
+      profile: implement
+      tool: jq
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_PARSE'

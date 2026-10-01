@@ -1,0 +1,38 @@
+oar: '1.0'
+id: STRUCTURAL_APPLY_FAILED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - code_rewrite
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "STRUCTURAL_APPLY_FAILED"
+effect: block
+copy:
+  what: code_rewrite could not prepare a rewrite for {{ paintedwolf.path }}; that file was not changed.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: An incomplete parse is not evidence that a file has no matches. Multi-file results retain blocked paths separately
+    from applied changes.
+  fix: Inspect the reported path and reason using available tools. A whole-file parser limit is not repaired by
+    requesting a smaller replacement. Preserve successful sibling changes and report any path that cannot be safely
+    rewritten.
+  instead: Account for blocked files separately from completed changes
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:code_rewrite
+x-paintedwolf-message: structural rewrite could not be applied to one file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: internal/foo.go
+    profile: implement
+    tool: code_rewrite
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: STRUCTURAL_APPLY_FAILED'

@@ -1,0 +1,49 @@
+oar: '1.0'
+id: OVERLAY_BASE_NOT_PENDING
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.merge_status
+  - paintedwolf.base_overlay_id
+  - paintedwolf.base_overlay_checked
+  - paintedwolf.base_overlay_pending
+  - paintedwolf.base_overlay_resolves
+  - paintedwolf.tool_is_task
+  - paintedwolf.rejection_reason
+when: paintedwolf.tool_is_task && paintedwolf.base_overlay_checked && paintedwolf.base_overlay_id != "" && paintedwolf.base_overlay_resolves
+  && !paintedwolf.base_overlay_pending
+effect: block
+copy:
+  what: '`task()` base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }} — cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
+  cause: The observed base state does not permit stacking a new worker.
+  why: The worker needs an eligible base whose changes remain available as its starting tree.
+  fix: If the base is merged, start from primary with scope.base_overlay_id unset. If it is rejected, orphaned, or aborted, inspect the retained work before choosing an eligible replacement base or an independent task on primary. For another state, refresh the roster and resolve eligibility before retrying.
+  instead: Use the observed merge_status and current roster to preserve required base changes; do not assume a closed base was merged.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: '`task()` scope.base_overlay_id={{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status
+  }}{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %} — can no longer be stacked
+  on'
+x-paintedwolf-scenarios:
+- id: merged
+  vars:
+    base_overlay_id: ov-grep-impl
+    merge_status: merged
+    reason: already_promoted
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_BASE_NOT_PENDING'
+  - ov-grep-impl
+  - merged
+- id: rejected
+  vars:
+    base_overlay_id: ov-grep-impl
+    merge_status: rejected
+    reason: base_closed
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_BASE_NOT_PENDING'
+  - rejected

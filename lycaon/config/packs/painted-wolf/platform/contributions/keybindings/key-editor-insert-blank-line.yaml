@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-insert-blank-line
+command: painted-wolf/platform:editor-insert-blank-line
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Enter"
+  windows:
+    - "Mod+Enter"
+  linux:
+    - "Mod+Enter"

@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-restore-version
+command: painted-wolf/platform:files-restore-version
+scope: files
+bindings:
+  macos:
+    - "Mod+Alt+R"
+  windows:
+    - "Mod+Alt+R"
+  linux:
+    - "Mod+Alt+R"

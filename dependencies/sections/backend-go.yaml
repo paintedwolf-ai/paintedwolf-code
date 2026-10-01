@@ -1,0 +1,194 @@
+title: Backend Go modules (`lycaon`)
+intro: |
+  Direct requirements in `lycaon/go.mod`, run in the host process. After any change, re-vendor
+  the vulnerability database.
+manifest:
+  kind: gomod
+  path: lycaon/go.mod
+  dependabot_group: go-dependencies
+groups:
+  - title: Architecture-critical modules
+    packages:
+      modernc.org/sqlite:
+        urgency: high
+        urgency_reason: |
+          The single SQL driver: pure Go, FTS5, no CGO. It stores sessions, ledgers, and
+          history.
+        friction: moderate
+        friction_reason: |
+          Verify with `./task test:integration` (randomized SQLite lifecycle properties) and
+          `./task test:stress`.
+      filippo.io/age:
+        urgency: critical
+        friction: moderate
+        notes: |
+          Encrypts credential vaults in `internal/credentialstore`. Before any change, prove
+          existing vaults still decrypt.
+      github.com/tetratelabs/wazero:
+        urgency: high
+        friction: moderate
+        notes: |
+          Runs `core.wasm` in-process. Preserve memory bounds and deterministic execution.
+      github.com/flosch/pongo2/v6:
+        urgency: moderate
+        friction: moderate
+        notes: |
+          The single template engine. `internal/pongoplain` enforces the bounded dialect, and
+          engine changes must not widen it.
+      github.com/getkin/kin-openapi:
+        urgency: low
+        friction: low
+        notes: |
+          Test-only (`test/openapi`, `test/contract`, `test/security`).
+      github.com/tiktoken-go/tokenizer:
+        urgency: low
+        friction: low
+        notes: |
+          Embedded offline token estimator (`internal/tokenest`).
+      github.com/odvcencio/gotreesitter:
+        notes: |
+          Replaced by the vendored copy; see the vendored catalogs section.
+
+  - title: Protocols, providers, and security engines
+    packages:
+      github.com/modelcontextprotocol/go-sdk:
+        urgency: critical
+        friction: moderate
+        notes: |
+          Talks to untrusted MCP servers, and the spec moves quickly. Expect API deprecations;
+          `test/security` and `test/wiring` cover it.
+      github.com/sashabaranov/go-openai:
+        urgency: high
+        friction: low
+        notes: |
+          Provider wire API (`internal/llm`).
+      github.com/aws/aws-sdk-go-v2:
+        urgency: high
+        friction: low
+        notes: |
+          Bedrock streaming and Converse API. Bump the AWS modules together.
+      github.com/aws/aws-sdk-go-v2/config:
+        urgency: high
+        friction: low
+      github.com/aws/aws-sdk-go-v2/credentials:
+        urgency: high
+        friction: low
+      github.com/aws/aws-sdk-go-v2/service/bedrock:
+        urgency: high
+        friction: low
+      github.com/aws/aws-sdk-go-v2/service/bedrockruntime:
+        urgency: high
+        friction: low
+      github.com/aws/smithy-go:
+        urgency: high
+        friction: low
+      golang.org/x/oauth2:
+        urgency: high
+        friction: low
+        notes: |
+          Provider and MCP OAuth.
+      github.com/google/osv-scalibr:
+        urgency: high
+        friction: moderate
+        notes: |
+          SCA extraction. Pulls the legacy `docker/docker` module, which carries reviewed
+          suppressions in `lycaon/govulncheck-allowlist.yaml`; re-check them after a bump.
+      github.com/zricethezav/gitleaks/v8:
+        urgency: high
+        friction: low
+        notes: |
+          Secret-detection patterns (`internal/scan`, `internal/secretmatch`).
+      github.com/go-chi/chi/v5:
+        urgency: high
+        friction: low
+        notes: |
+          Sidecar HTTP routing.
+      github.com/go-rod/rod:
+        urgency: high
+        friction: moderate
+        notes: |
+          CDP driver for the managed browser. Its protocol bindings age as the Chrome pin
+          advances.
+
+  - title: Parsers of untrusted content
+    packages:
+      github.com/go-git/go-git/v5:
+        urgency: high
+        friction: low
+        notes: |
+          Reads repository state in `internal/sourcescope`.
+      golang.org/x/net:
+        urgency: high
+        friction: low
+        notes: |
+          HTML, HTTP/2, and proxy code used by web research, egress, and scanning.
+      codeberg.org/readeck/go-readability/v2:
+        urgency: high
+        friction: low
+        notes: |
+          Extracts articles from fetched web pages.
+      github.com/yuin/goldmark:
+        urgency: high
+        friction: low
+        notes: |
+          Markdown parsing for reports, repo maps, and navigation.
+      github.com/tsawler/tabula:
+        urgency: high
+        friction: low
+        notes: |
+          Document extraction for prompt attachments.
+      github.com/ulikunitz/xz:
+        urgency: high
+        friction: low
+        notes: |
+          Decompression of attachments.
+      github.com/klauspost/compress:
+        urgency: high
+        friction: low
+        notes: |
+          Decompression of attachments and blobs.
+      github.com/santhosh-tekuri/jsonschema/v6:
+        urgency: moderate
+        friction: low
+        notes: |
+          Schema validation for MCP, OAR, and tools.
+      github.com/itchyny/gojq:
+        urgency: moderate
+        friction: low
+        notes: |
+          Native query tool.
+      github.com/mikefarah/yq/v4:
+        urgency: moderate
+        friction: low
+        notes: |
+          Native query tool.
+
+  - title: Terminal UI
+    rows:
+      - id: charm-v2
+        name: Charm v2 (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`)
+        upstream:
+          - label: bubbletea
+            from: go-module charm.land/bubbletea/v2
+          - label: bubbles
+            from: go-module charm.land/bubbles/v2
+        urgency: low
+        friction: high
+        notes: |
+          New import paths and a breaking redesign. Migrate the whole log browser at once, and
+          only when it is scheduled.
+    packages:
+      github.com/charmbracelet/bubbles:
+        urgency: low
+        friction: low
+        notes: |
+          The interactive log browser (`./task logs:tui`, `internal/logview`). v1.0.0 on this
+          path is a ceremonial release; the breaking line is Charm v2.
+      github.com/charmbracelet/bubbletea:
+        urgency: low
+        friction: low
+        notes: |
+          The v1 line is in maintenance.
+      github.com/charmbracelet/lipgloss:
+        urgency: low
+        friction: low

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><title>Populate after tick</title></head>
+<body>
+<button id="load" type="button">Load</button>
+<ul id="list" data-testid="list"></ul>
+<script>
+document.getElementById("load").addEventListener("click", () => {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  list.dataset.state = "loading";
+  setTimeout(() => {
+    for (const name of ["alpha", "beta", "gamma"]) {
+      const li = document.createElement("li");
+      li.textContent = name;
+      list.appendChild(li);
+    }
+    list.dataset.state = "ready";
+  }, 200);
+});
+</script>
+</body></html>

@@ -1,0 +1,5 @@
+code: required_gate_missing
+message: |
+  Posture {{posture}} requires gate {{gate}}.
+replacement: |
+  Add the required gate to the closeout or terminal phase.

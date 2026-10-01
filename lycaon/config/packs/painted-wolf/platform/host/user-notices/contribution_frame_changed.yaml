@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Command changed
+message: >-
+  This command changed since the view loaded, so it was not run. Nothing
+  happened.
+suggested_action: The updated command is already loaded — run it again to use it.

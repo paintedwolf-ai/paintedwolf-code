@@ -1,0 +1,39 @@
+oar: '1.0'
+id: PAGE_MEASURE_UNGROUNDED
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.page_measure_ungrounded
+    - paintedwolf.profile
+when: paintedwolf.profile == "worker" && paintedwolf.page_measure_ungrounded
+effect: block
+copy:
+  what: 'A quantitative layout or style finding lacks matching page_geometry evidence.'
+  cause: 'The cited evidence does not establish the asserted measurement.'
+  why: A page capture grounds qualitative observed-runtime claims; quantitative layout/style facts require a page_geometry measurement report.
+  fix: 'Cite an existing page_geometry evidence handle with its verbatim measurement excerpt. If the needed observation is absent, remove the unsupported quantitative claim or obtain it using an offered measurement tool before calling complete_leg.'
+  instead: 'Return partial through complete_leg and name the missing measurement in remaining_risk when observation is unavailable; do not estimate it from a raster.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-evidence:
+  in_session_retry: true
+x-paintedwolf-message: Quantitative layout claim lacks page_geometry evidence
+x-paintedwolf-scenarios:
+  - id: px_claim_without_geometry
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: page#1
+    expect_contains:
+      - 'Code: PAGE_MEASURE_UNGROUNDED'
+      - page_geometry
+      - complete_leg
+  - id: cite_page_when_geometry_exists
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: page#2
+    expect_contains:
+      - 'Code: PAGE_MEASURE_UNGROUNDED'
+      - complete_leg

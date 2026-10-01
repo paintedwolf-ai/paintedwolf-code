@@ -1,0 +1,41 @@
+oar: '1.0'
+id: DELEGATE_DISPATCH_LEG_NOT_PENDING
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.leg_id
+when: paintedwolf.rejection_code == "DELEGATE_DISPATCH_LEG_NOT_PENDING"
+effect: block
+copy:
+  what: No pending leg to dispatch{% if paintedwolf.leg_id %} — leg `{{ paintedwolf.leg_id }}`{% else %} —
+    the targeted leg{% endif %} was already dispatched, is running, or reached a terminal state.
+  cause: dispatch targeted a leg whose status is no longer pending.
+  why: Each delegation leg dispatches exactly once; re-dispatching a taken leg would enqueue a second worker for
+    the same work and orphan the first.
+  fix: Check leg status on the delegation before dispatching. If the leg is dispatched or running → wait
+    for its worker_summary; if complete or failed → act on its result instead of re-dispatching.
+  instead: Branch on leg status; dispatch only legs whose status is pending
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: No pending leg to dispatch{% if paintedwolf.leg_id %} — leg {{ paintedwolf.leg_id }}
+  already left pending{% endif %}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    delegation_id: dep-1
+    leg_id: leg-taken
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELEGATE_DISPATCH_LEG_NOT_PENDING'
+  - leg-taken
+- id: no_pending_leg
+  vars:
+    delegation_id: dep-1
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELEGATE_DISPATCH_LEG_NOT_PENDING'
+  - No pending leg

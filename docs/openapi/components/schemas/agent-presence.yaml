@@ -1,0 +1,235 @@
+components:
+  schemas:
+    AgentActivityKind:
+      type: string
+      enum:
+      - reading
+      - editing
+      description: >-
+        What a running tool call is doing to its file target. `reading` is a
+        read-family tool; `editing` is a write-family tool. Derived from the
+        tool's catalog identity, never from arguments or prose.
+    AgentPresenceExtent:
+      type: string
+      enum:
+      - range
+      - whole_file
+      - matches
+      - insertion
+      description: >-
+        How the ranges of a presence item cover its file. `range` ranges are
+        whole-line spans, with empty ranges where lines go in. `whole_file` has
+        no ranges; the item covers the file. `matches` ranges are single-line
+        character spans returned by a search. `insertion` ranges are all empty
+        points where lines go in.
+    AgentIntentOperation:
+      type: string
+      enum:
+      - edit
+      - write
+      - create
+      - delete
+      - move
+      description: The mutation a pending write-family tool call will perform on its target.
+    AgentIntentState:
+      type: string
+      enum:
+      - pending
+      - awaiting_approval
+      description: >-
+        `pending` means the host has resolved the mutation against the current
+        document and is applying it. `awaiting_approval` means the same resolved
+        mutation is held by an approval checkpoint.
+    AgentWorkerDraftState:
+      type: string
+      enum:
+      - reserved
+      - drafting
+      - ready
+      - landing
+      description: >-
+        Where a worker's change to a primary file stands. `reserved` is a
+        declared path reservation with no draft yet; `drafting` means the worker
+        has written the file in its private branch; `ready` means the job
+        completed and its draft waits to land; `landing` means the coordinator
+        is promoting it.
+    AgentTextRange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [start_line, end_line]
+      description: >-
+        One span of a document. Lines are 1-based and inclusive and describe the
+        document at the revision the item was recorded against. Characters are
+        UTF-16 offsets within their line and appear only for search matches and
+        for empty ranges where lines go in. Anchor and head are CRDT relative positions in the
+        item's editor document epoch; clients resolve them in their replica so
+        a span follows later edits, and fall back to lines only when the item
+        has no document.
+      properties:
+        start_line: {type: integer, minimum: 1}
+        end_line: {type: integer, minimum: 1}
+        start_character: {type: integer, minimum: 0, x-go-pointer: true}
+        end_character: {type: integer, minimum: 0, x-go-pointer: true}
+        anchor: {type: string, format: byte, x-go-type: "[]byte", maxLength: 1024}
+        head: {type: string, format: byte, x-go-type: "[]byte", maxLength: 1024}
+    AgentActivity:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [tool_call_id, tool, root_id, path, kind]
+      description: A running tool call with one file target, from call start until its result commits.
+      properties:
+        tool_call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        worker_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Worker job that made the call; omitted for the chat itself.}
+        tool: {type: string, minLength: 1}
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, description: Root-relative path.}
+        kind: {$ref: '#/components/schemas/AgentActivityKind'}
+    AgentRead:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, sequence, tool_call_id, tool, root_id, path, extent, ranges, stale]
+      description: >-
+        Text a read-family tool call returned to the model in this turn, after
+        host output limits. Output that spilled to a preview records no ranges.
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        worker_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Worker job that made the read; omitted for the chat itself.}
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Order within the session's turn; higher is newer.
+        tool_call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        tool: {type: string, minLength: 1}
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, description: Root-relative path.}
+        document_id:
+          type: string
+          format: uuid
+          description: Editor document the text came from; omitted when no document served the read.
+        epoch: {type: integer, format: int64, minimum: 1, description: Document epoch the anchors belong to.}
+        revision: {type: integer, format: int64, minimum: 1, description: Document revision the model read.}
+        extent: {$ref: '#/components/schemas/AgentPresenceExtent'}
+        ranges:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/AgentTextRange'}
+        stale:
+          type: boolean
+          description: True when text inside a range changed after the read by someone other than this session.
+    AgentIntent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, tool_call_id, tool, operation, state, root_id, path, extent, ranges]
+      description: >-
+        A write-family tool call whose mutation the host has resolved but not
+        yet landed. Ranges are the resolved targets in the current document.
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        worker_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Worker job that made the call; omitted for the chat itself.}
+        tool_call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        tool: {type: string, minLength: 1}
+        operation: {$ref: '#/components/schemas/AgentIntentOperation'}
+        state: {$ref: '#/components/schemas/AgentIntentState'}
+        checkpoint_id:
+          type: string
+          format: uuid
+          description: Approval checkpoint holding the mutation; present only while awaiting approval.
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, description: Root-relative target path.}
+        to_path: {type: string, description: Root-relative destination for move and copy.}
+        document_id: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        extent: {$ref: '#/components/schemas/AgentPresenceExtent'}
+        ranges:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/AgentTextRange'}
+    AgentWorkerDraft:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [worker_id, state, root_id, path, extent, ranges]
+      description: >-
+        A worker job's pending change to one primary-tree file. Ranges are the
+        changed lines of the current document and appear once the draft is ready.
+      properties:
+        worker_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        state: {$ref: '#/components/schemas/AgentWorkerDraftState'}
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, description: Root-relative path.}
+        document_id: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        insertions: {type: integer, minimum: 0, x-go-pointer: true}
+        deletions: {type: integer, minimum: 0, x-go-pointer: true}
+        extent: {$ref: '#/components/schemas/AgentPresenceExtent'}
+        ranges:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/AgentTextRange'}
+    AgentSessionPresence:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [session_id, turn, activities, reads, intents, worker_drafts]
+      description: >-
+        Everything one chat is doing in the project's files right now, including
+        the workers it dispatched. A chat is its root session; worker child
+        sessions fold into it and are identified per item by worker_id. Every list
+        empty means the chat has no presence.
+      properties:
+        session_id: {type: string, format: uuid, description: Root chat session.}
+        title: {type: string, description: Chat title; omitted until set.}
+        turn:
+          type: integer
+          minimum: 0
+          description: User-turn ordinal of the chat the activities, reads, and intents belong to.
+        activities:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/AgentActivity'}
+        reads:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/AgentRead'}
+        intents:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/AgentIntent'}
+        worker_drafts:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/AgentWorkerDraft'}
+    AgentPresenceSnapshot:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, revision, sessions]
+      description: >-
+        The host's ephemeral view of agent sessions in a project's files. It is
+        held in memory, bounded per session, and empty after the host restarts.
+      properties:
+        project_id: {type: string, format: uuid}
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Project presence revision; events with a revision at or below it are already reflected.
+        sessions:
+          type: array
+          items: {$ref: '#/components/schemas/AgentSessionPresence'}
+    AgentPresenceEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, session_id, revision, presence]
+      description: One session's complete presence, replacing any earlier value for that session.
+      properties:
+        project_id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        presence: {$ref: '#/components/schemas/AgentSessionPresence'}

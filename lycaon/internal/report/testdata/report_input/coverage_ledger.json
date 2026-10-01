@@ -1,0 +1,209 @@
+{
+  "title": "Security survey",
+  "headline": "Dependency applicability and one survey leg remain unresolved.",
+  "summary": "No confirmed exploitable vulnerability was established. This is not a clean bill of health: some work remains incomplete.",
+  "run_id": "coverage-regression",
+  "project": "example/service",
+  "completed_at": "2026-09-04T12:00:00Z",
+  "head_sha": "0123456789abcdef",
+  "synthesis": "Scanner inventory is separate from review judgment. Unknown severity remains unknown; a published fix boundary requires an applicability check.",
+  "coverage": [
+    {
+      "subject": "execute/leg-1 · security-reviewer",
+      "status": "complete",
+      "detail": "One attempt: 65b4760a-4000-4000-8000-100000000001"
+    },
+    {
+      "subject": "execute/leg-2 · security-reviewer",
+      "status": "partial",
+      "detail": "Two attempts: 65b4760a-4000-4000-8000-100000000002, 65b4760a-4000-4000-8000-100000000003"
+    },
+    {
+      "subject": "Scanner inventory",
+      "status": "Accounting",
+      "detail": "1 of 3 groups assessed by a claim or finding; 0 set aside; 2 unaccounted"
+    }
+  ],
+  "findings": [
+    {
+      "id": "c1",
+      "title": "The proposed authentication bypass was refuted.",
+      "disposition": "held"
+    },
+    {
+      "id": "c2",
+      "title": "Dependency applicability remains unresolved.",
+      "disposition": "act"
+    }
+  ],
+  "scan": {
+    "total": 1002,
+    "stored": 1002,
+    "listed": 3,
+    "represented": 1002,
+    "groups": 3,
+    "listed_groups": 3,
+    "by_level": {
+      "high": 1001,
+      "unknown": 1
+    },
+    "scanners": [
+      "sast",
+      "sca"
+    ],
+    "executions": [
+      {
+        "id": "scan-sast",
+        "scanner": "sast",
+        "status": "complete",
+        "coverage": "complete"
+      },
+      {
+        "id": "scan-sca",
+        "scanner": "sca",
+        "status": "complete",
+        "coverage": "complete"
+      },
+      {
+        "id": "scan-failed",
+        "scanner": "secrets",
+        "status": "failed",
+        "coverage": "unavailable",
+        "error": "Scanner unavailable"
+      }
+    ]
+  },
+  "scan_rules": [
+    {
+      "id": "repeated-rule",
+      "group_id": "group:11111111111111111111111111111111",
+      "scanner": "sast",
+      "description": "A repeated scanner observation, not a thousand confirmed vulnerabilities.",
+      "occurrences": 1000,
+      "location_count": 1000
+    },
+    {
+      "id": "GHSA-2345-6789-cfgh",
+      "group_id": "group:22222222222222222222222222222222",
+      "scanner": "sca",
+      "package": "go:example.org/service/dependency@1.0.0",
+      "occurrences": 1,
+      "location_count": 1,
+      "details": [
+        "Severity source: osv.cvss",
+        "CVSS_V3 (7.5): CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+        "Published fixed boundaries: 1.2.3. Applicability and upgrade compatibility require assessment."
+      ]
+    },
+    {
+      "id": "GHSA-2345-6789-cfgh",
+      "group_id": "group:33333333333333333333333333333333",
+      "scanner": "sca",
+      "package": "go:example.org/another/dependency@2.0.0",
+      "occurrences": 1,
+      "location_count": 1
+    }
+  ],
+  "scan_rows": [
+    {
+      "rule_id": "repeated-rule",
+      "group_id": "group:11111111111111111111111111111111",
+      "severity": "high",
+      "file": "src/representative.go",
+      "line": 12,
+      "message": ""
+    },
+    {
+      "rule_id": "GHSA-2345-6789-cfgh",
+      "group_id": "group:22222222222222222222222222222222",
+      "severity": "high",
+      "file": "go.mod",
+      "line": 3,
+      "message": ""
+    },
+    {
+      "rule_id": "GHSA-2345-6789-cfgh",
+      "group_id": "group:33333333333333333333333333333333",
+      "severity": "unknown",
+      "file": "go.mod",
+      "line": 5,
+      "message": ""
+    }
+  ],
+  "ask": {
+    "do": "Allow one more pass to settle whether the flagged dependency is used.",
+    "effort": "small",
+    "why": "Until then the scan result cannot be confirmed or cleared."
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "title": "An unauthenticated caller can bypass sign-in",
+      "class": "failed",
+      "status": "refuted"
+    },
+    {
+      "id": "c2",
+      "title": "The flagged dependency is reachable",
+      "class": "open",
+      "dropped": true
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "inventory_unaccounted",
+      "count": 2,
+      "of": 3
+    },
+    {
+      "kind": "claims_open",
+      "count": 1,
+      "of": 2,
+      "names": [
+        "The flagged dependency is reachable"
+      ]
+    },
+    {
+      "kind": "legs_partial",
+      "count": 1,
+      "of": 2,
+      "names": [
+        "Service API"
+      ]
+    },
+    {
+      "kind": "scans_failed",
+      "count": 1,
+      "of": 3,
+      "names": [
+        "secrets"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "kind": "area",
+      "subject": "Sign-in",
+      "state": "checked"
+    },
+    {
+      "kind": "area",
+      "subject": "Service API",
+      "state": "partial"
+    },
+    {
+      "kind": "scans",
+      "state": "partial",
+      "ran": 3,
+      "scans_failed": 1,
+      "used": 1,
+      "total": 3
+    }
+  ],
+  "inventory": {
+    "total": 3,
+    "linked": 1,
+    "set_aside": 0,
+    "unaccounted": 2
+  }
+}

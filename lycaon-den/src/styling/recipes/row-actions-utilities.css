@@ -1,0 +1,50 @@
+@utility den-list-row__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: var(--spacing-den-1);
+}
+
+@utility den-row-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: max(1.7143rem, 1.5em);
+  width: max(1.7143rem, 1.5em);
+  border-radius: var(--den-radius-sm);
+  opacity: 0;
+  transition:
+    opacity var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:focus-visible {
+    outline: 2px solid var(--den-accent-signal);
+    outline-offset: 1px;
+    opacity: 1;
+  }
+}
+
+@utility den-row-action--danger {
+  &:hover {
+    background: color-mix(in srgb, var(--den-danger) 12%, var(--den-tint-1));
+    color: var(--den-danger-text);
+  }
+}
+
+.den-list-row:hover .den-row-action,
+.den-list-row:focus-within .den-row-action {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .den-row-action {
+    opacity: 1;
+  }
+}
+
+/* Settings domain */
+

@@ -1,0 +1,2381 @@
+language: dart
+comment:
+- //
+limits: Local data flow with verified Dart, Shelf, Dart Frog and PostgreSQL import provenance. PostgreSQL query text is distinct from connection URLs and bound parameters; prepared statements require execution or direct stream consumption. Request change/copyWith fields, opaque wrappers, injected connections, pools, transaction callbacks, competing wildcard exports, conditional imports selecting different libraries, and cross-file identities remain unresolved.
+cases:
+- name: shell-interpolation-context-only
+  file: sample.dart
+  source: "void run(String user) { Process.run(\"sh\", [\"-c\", \"echo ${user}\"]); }\n"
+  want: []
+  covers: []
+- name: shell-interpolation-safe
+  file: sample.dart
+  source: "void run(String user) { Process.run(\"printf\", [\"%s\",user]); }\n"
+  want: []
+  covers: []
+- name: sql-interpolation-context-only
+  file: sample.dart
+  source: "void run(String user) { db.rawQuery(\"SELECT * FROM users WHERE name = ${user}\"); }\n"
+  want: []
+  covers: []
+- name: sql-interpolation-safe
+  file: sample.dart
+  source: "void run(String user) { db.rawQuery(\"SELECT * FROM users WHERE name = ?\", [user]); }\n"
+  want: []
+  covers: []
+- name: tls-verification-disabled-vulnerable
+  file: sample.dart
+  source: |
+    import 'dart:io';
+    void run() { final client = HttpClient(); client.badCertificateCallback = (cert, host, port) => true; }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.dart
+  source: |
+    import 'dart:io';
+    void run() { final client = HttpClient(); client.badCertificateCallback = (cert, host, port) => false; }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: html-sanitizer-disabled-context-only
+  file: sample.dart
+  source: "void run(String html) { node.setInnerHtml(html, treeSanitizer: NodeTreeSanitizer.trusted); }\n"
+  want: []
+  covers: []
+- name: html-sanitizer-disabled-safe
+  file: sample.dart
+  source: "void run(String html) { node.text = html; }\n"
+  want: []
+  covers: []
+- name: ordinary-callback
+  file: sample.dart
+  source: "void invoke(Function callback) { (callback as Function).call(); }\n"
+  want: []
+  covers: []
+- name: shelf-command-injection-flow
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want:
+  - lycaon.dart.server-command-injection
+  covers: &id001
+  - lycaon.dart.server-command-injection
+- name: shelf-command-injection-constant
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', 'date']); return shelf.Response.ok('ok'); }\n"
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-command-injection-safe-api
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('printf', ['%s', cmd]); return shelf.Response.ok('ok'); }\n"
+  want: []
+  covers: *id001
+- name: shelf-command-injection-unrelated-receiver
+  file: app.dart
+  source: "import 'dart:io' as io;\nclass Request { final url = Uri.parse(\"https://example.test/?cmd=date\"); }\nFuture<Response> handler(Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return Response.ok('ok'); }\n"
+  want: []
+  covers: *id001
+- name: shelf-competing-wildcard-imports-unresolved
+  file: app.dart
+  source: "import 'dart:io';\nimport 'package:shelf/shelf.dart';\nFuture<Response> handler(Request request) async { final cmd = request.url.queryParameters['cmd']!; await Process.run('sh', ['-c', cmd]); return Response.ok('ok'); }\n"
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-import-alias
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as web;\nFuture<web.Response> handler(web.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return web.Response.ok('ok'); }\n"
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-request-overwrite
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { request = shelf.Request('GET', Uri.parse('https://example.test/?cmd=date')); final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-local-request-with-import
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nclass Request { final url = Uri.parse(\"https://example.test/?cmd=date\"); }\nFuture<shelf.Response> handler(Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-process-start
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.start('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-request-alias
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final incoming = request; final cmd = incoming.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-unrelated-request-field
+  file: app.dart
+  source: "import 'dart:io' as io;\nimport 'package:shelf/shelf.dart' as shelf;\nFuture<shelf.Response> handler(shelf.Request request) async { final cmd = request.protocolVersion; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }\n"
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: tls-provenance-alias-overwrite
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     dynamic client = HttpClient();
+     final alias = client;
+     client = Object();
+     alias.badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-assigned
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    void run() {
+     final client = HttpClient();
+     client.badCertificateCallback = (cert, host, port) => true;
+     final other = new HttpClient();
+     other.badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-cascade-prefix
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    void run() {
+     final client = io.HttpClient()..badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-cascade
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     final client = HttpClient()..badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-comment-and-string
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     final client = HttpClient();
+     // client.badCertificateCallback = (cert, host, port) => true;
+     final example = 'client.badCertificateCallback = (cert, host, port) => true;';
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-competing-hidden
+  file: app.dart
+  source: |
+    import 'dart:io';
+    import 'other.dart' hide HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-competing-show
+  file: app.dart
+  source: |
+    import 'dart:io';
+    import 'other.dart' show Platform;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-competing
+  file: app.dart
+  source: |
+    import 'dart:io';
+    import 'other.dart';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-conditional-same
+  file: app.dart
+  source: |
+    import 'dart:io' if (dart.library.html) 'dart:io';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-conditional
+  file: app.dart
+  source: |
+    import 'dart:io' if (dart.library.html) 'other.dart';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-deferred-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' deferred as io hide HttpClient;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-deferred
+  file: app.dart
+  source: |
+    import 'dart:io' deferred as io show HttpClient;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-duplicate
+  file: app.dart
+  source: |
+    import 'dart:io';
+    import 'dart:io';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-false-callback
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     final client = HttpClient();
+     client.badCertificateCallback = (cert, host, port) => false;
+     client.badCertificateCallback = null;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-forward
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+    class HttpClient {}
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-function
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+    Object HttpClient() { return Object(); }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' hide HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-local-alias
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     final client = HttpClient();
+     final alias = client;
+     alias.badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-local-overwrite
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     dynamic client = HttpClient();
+     client = Object();
+     client.badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-local
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    class HttpClient {}
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-conditional
+  file: app.dart
+  source: |
+    import 'dart:io' if (dart.library.html) 'other.dart' as io;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' as io hide HttpClient;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-intersection
+  file: app.dart
+  source: |
+    import 'dart:io' as io show HttpClient, Platform show Platform;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-local
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    class io { static HttpClient() => Object(); }
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-merged-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'other.dart' as io hide HttpClient;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-merged
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'other.dart' as io;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix-show
+  file: app.dart
+  source: |
+    import 'dart:io' as io show HttpClient;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-prefix
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    void run() {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+    void shadow(dynamic io) {
+      io.HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-show-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient hide HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-show-intersection
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient, Platform show Platform;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-show
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+      Other().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-validated-callback
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+     final client = HttpClient();
+     client.badCertificateCallback = (cert, host, port) => host == 'known.example';
+     client.badCertificateCallback = (cert, host, port) { if (host != 'known.example') return false; return true; };
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-wildcard-forward
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+    class HttpClient {}
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-wildcard-local
+  file: app.dart
+  source: |
+    import 'dart:io';
+    class HttpClient {}
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-wildcard
+  file: app.dart
+  source: |
+    import 'dart:io';
+    void run() {
+      HttpClient().badCertificateCallback = (cert, host, port) => true;
+      new HttpClient().badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-untyped-unrelated-client
+  file: app.dart
+  source: |
+    void run(dynamic client) { client.badCertificateCallback = (cert, host, port) => true; }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: shelf-provenance-show-types
+  file: app.dart
+  source: |
+    import 'dart:io' show Process;
+    import 'package:shelf/shelf.dart' show Request, Response;
+    Future<Response> handler(Request request) async { final cmd = request.url.queryParameters['cmd']!; await Process.run('sh', ['-c', cmd]); return Response.ok('ok'); }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-provenance-hidden-request
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:shelf/shelf.dart' as shelf hide Request;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-provenance-hidden-process
+  file: app.dart
+  source: |
+    import 'dart:io' as io hide Process;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-provenance-process-local-prefix
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request, dynamic io) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-provenance-conditional-request
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:shelf/shelf.dart' if (dart.library.html) 'local.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-provenance-conditional-process
+  file: app.dart
+  source: |
+    import 'dart:io' if (dart.library.html) 'local.dart' as io;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-context-receiver-unresolved
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final other = request.context['other'] as dynamic;
+     final cmd = other.url.queryParameters['cmd'];
+     await io.Process.run('sh', ['-c', cmd]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 5
+    column: 14
+- name: tls-provenance-named-competing
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    import 'other.dart';
+    void run() {
+     final client = HttpClient();
+     client.badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-provenance-named-competing-hidden
+  file: app.dart
+  source: |
+    import 'dart:io' show HttpClient;
+    import 'other.dart' hide HttpClient;
+    void run() {
+     final client = HttpClient();
+     client.badCertificateCallback = (cert, host, port) => true;
+    }
+  want:
+  - lycaon.dart.tls-verification-disabled
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-relative-uri-is-not-sdk
+  file: app.dart
+  source: |
+    import 'dart.io' as io;
+    void run() {
+     final client = io.HttpClient();
+     client.badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: tls-conditional-uri-collision
+  file: app.dart
+  source: |
+    import 'dart:io' if (dart.library.html) 'dart.io' as io;
+    void run() {
+     final client = io.HttpClient();
+     client.badCertificateCallback = (cert, host, port) => true;
+    }
+  want: []
+  covers:
+  - lycaon.dart.tls-verification-disabled
+- name: shelf-relative-uri-is-not-package
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package.shelf.shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-conditional-uri-collision
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:shelf/shelf.dart' if (dart.library.html) 'package.shelf.shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async { final cmd = request.url.queryParameters['cmd']!; await io.Process.run('sh', ['-c', cmd]); return shelf.Response.ok('ok'); }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: shelf-postgres-execute
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-execute-no-await
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     connection.execute("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute(r'SELECT * FROM users WHERE name = $1', parameters: [user]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-named-bound
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute(pg.Sql.named('SELECT * FROM users WHERE name = @name'), parameters: {'name': user});
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-named-text
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute(pg.Sql.named("SELECT * FROM users WHERE name = '$user'"));
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-unused-sql
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     final query = pg.Sql.named("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-unknown-receiver
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = getConnection();
+     await connection.execute(user);
+     return shelf.Response.ok('ok');
+    }
+
+    class FakeConnection {
+     Future<void> execute(String text) async {}
+    }
+    FakeConnection getConnection() => FakeConnection();
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-alias
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     final db = connection;
+     await db.execute(user);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-overwrite
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     final query = "constant";
+     await connection.execute(query);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-only
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     final statement = await connection.prepare(user);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-field
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connections = {"primary": await pg.Connection.openFromUrl("postgresql://localhost/test")};
+     await connections["primary"]!.execute(user);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-inline
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     await (await pg.Connection.openFromUrl("postgresql://localhost/test")).execute(user);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-run
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     final statement = await connection.prepare(user);
+     await statement.run([]);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-run-bound
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     final statement = await connection.prepare(pg.Sql.named("SELECT * FROM items WHERE id = @id"));
+     await statement.run({"id": user});
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-run-inline
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     await (await connection.prepare(user)).run([]);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-bound-only
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     final statement = await connection.prepare(user);
+     final bound = statement.bind([]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-connection-url-is-not-sql
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl(user);
+     final statement = await connection.prepare("SELECT 1");
+     await statement.run([]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-field
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     final statements = {"unsafe": await connection.prepare(user)};
+     await statements["unsafe"]!.run([]);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-alias
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl("postgresql://localhost/test");
+     final statement = await connection.prepare(user);
+     final alias = statement;
+     await alias.run([]);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-listen
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     statement.bind([]).listen((row) {});
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-to-list
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     await statement.bind([]).toList();
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-first
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     await statement.bind([]).first;
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-local
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     final results = statement.bind([]);
+     await results.drain<void>();
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-safe-parameters
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(pg.Sql.named("SELECT * FROM items WHERE id = @id"));
+     await statement.bind({"id": user}).toList();
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-unused-filter
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     final rows = statement.bind([]).where((row) => true);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-bound-unused-broadcast
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    final statement = await connection.prepare(user);
+     final rows = statement.bind([]).asBroadcastStream();
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-inline-bound
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    await (await connection.prepare(user)).bind([]).toList();
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-prepared-query-overwrite
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+    var query = user;
+     query = "SELECT 1";
+     final statement = await connection.prepare(query);
+     await statement.run([]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-import-alias
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as database;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await database.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-import-show
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' show Connection;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-open-endpoint
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.open(pg.Endpoint(host: "localhost", database: "test"));
+     await connection.execute("SELECT * FROM users WHERE name = '$user'");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-query-alias
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     final query = user;
+     await connection.execute(query);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-query-interpolation
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute("SELECT * FROM items WHERE id = $user");
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-query-concat
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute("SELECT " + user);
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-query-named-interpolation
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute(pg.Sql.named("SELECT * FROM items WHERE id = $user"));
+     return shelf.Response.ok('ok');
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: shelf-postgres-query-fixed-indexed
+  file: app.dart
+  source: |
+    import 'package:shelf/shelf.dart' as shelf;
+    import 'package:postgres/postgres.dart' as pg;
+    Future<shelf.Response> handler(shelf.Request request) async {
+     final user = request.url.queryParameters['value']!;
+     final connection = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await connection.execute(pg.Sql.indexed(r'SELECT * FROM items WHERE id = $1'), parameters: [user]);
+     return shelf.Response.ok('ok');
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-body-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.readAsString();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-body-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.readAsString();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-body-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.readAsString();
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-body-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.readAsString();
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-header-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headers['x-user']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-header-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headers['x-user']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-header-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headers['x-user']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-header-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headers['x-user']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-headers-all-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headersAll['x-user']![0];
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-headers-all-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headersAll['x-user']![0];
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-headers-all-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headersAll['x-user']![0];
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-headers-all-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.headersAll['x-user']![0];
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-path-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.path;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-path-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.path;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-path-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.path;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-path-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.path;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-path-segment-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.pathSegments[0];
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-path-segment-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.pathSegments[0];
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-path-segment-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.pathSegments[0];
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-path-segment-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.pathSegments[0];
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-requested-query-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.requestedUri.queryParameters['value']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-requested-query-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.requestedUri.queryParameters['value']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-requested-query-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.requestedUri.queryParameters['value']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-requested-query-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.requestedUri.queryParameters['value']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-query-all-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.queryParametersAll['value']![0];
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-query-all-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.queryParametersAll['value']![0];
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-query-all-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.queryParametersAll['value']![0];
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-query-all-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.url.queryParametersAll['value']![0];
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-body-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-body-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-body-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-body-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-json-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = (await context.request.json())['value'] as String;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-json-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = (await context.request.json())['value'] as String;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-json-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = (await context.request.json())['value'] as String;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-json-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = (await context.request.json())['value'] as String;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-header-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.headers['x-user']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-header-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.headers['x-user']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-header-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.headers['x-user']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-header-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.headers['x-user']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-path-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.url.path;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-path-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.url.path;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-path-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.url.path;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-path-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.url.path;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-query-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.uri.queryParameters['value']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-query-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.uri.queryParameters['value']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-query-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.uri.queryParameters['value']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-query-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.uri.queryParameters['value']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-route-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.params['id']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-route-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.params['id']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-route-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.params['id']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-route-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.request.params['id']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-mounted-route-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.mountedParams['id']!;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-mounted-route-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.mountedParams['id']!;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-mounted-route-overwrite-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.mountedParams['id']!;
+     value = 'fixed';
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-mounted-route-overwrite-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = context.mountedParams['id']!;
+     value = 'fixed';
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-request-param-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.Request request) async {
+     var value = await request.body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-request-param-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.Request request) async {
+     var value = await request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-request-alias-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     final request = context.request;
+     var value = await request.body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want:
+  - lycaon.dart.server-command-injection
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-request-alias-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     final request = context.request;
+     var value = await request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want:
+  - lycaon.dart.server-postgres-sql-injection
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-custom-context-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    class Request { Future<String> body() async => 'fixed'; }
+    class RequestContext { final request = Request(); }
+    Future<void> handler(RequestContext context) async {
+     var value = await context.request.body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-type-shadow-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as actual;
+    class Request { Future<String> body() async => 'fixed'; }
+    class RequestContext { final request = Request(); }
+    Future<void> handler<frog>(RequestContext context) async {
+     var value = await context.request.body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-literal-request-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler() async {
+     var value = await frog.Request.post(Uri.parse('https://example.test'), body: 'fixed').body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-literal-copy-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.copyWith(body: 'fixed').body();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 5
+    column: 20
+- name: http-input-shelf-custom-request-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    class Request { Future<String> readAsString() async => 'fixed'; }
+    Future<void> handler(Request request) async {
+     var value = await request.readAsString();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-literal-request-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler() async {
+     var value = await shelf.Request('POST', Uri.parse('https://example.test'), body: 'fixed').readAsString();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-shelf-literal-copy-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.change(body: 'fixed').readAsString();
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 5
+    column: 20
+- name: http-input-shelf-context-value-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.context['internal'] as String;
+     await io.Process.run('sh', ['-c', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-request-ordinary-argument-command
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     await io.Process.run('printf', ['%s', value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-command-injection
+- name: http-input-frog-custom-context-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    class Request { Future<String> body() async => 'fixed'; }
+    class RequestContext { final request = Request(); }
+    Future<void> handler(RequestContext context) async {
+     var value = await context.request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-type-shadow-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as actual;
+    class Request { Future<String> body() async => 'fixed'; }
+    class RequestContext { final request = Request(); }
+    Future<void> handler<frog>(RequestContext context) async {
+     var value = await context.request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-literal-request-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler() async {
+     var value = await frog.Request.post(Uri.parse('https://example.test'), body: 'fixed').body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-literal-copy-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.copyWith(body: 'fixed').body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 5
+    column: 20
+- name: http-input-shelf-custom-request-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    class Request { Future<String> readAsString() async => 'fixed'; }
+    Future<void> handler(Request request) async {
+     var value = await request.readAsString();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-literal-request-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler() async {
+     var value = await shelf.Request('POST', Uri.parse('https://example.test'), body: 'fixed').readAsString();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-shelf-literal-copy-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = await request.change(body: 'fixed').readAsString();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 5
+    column: 20
+- name: http-input-shelf-context-value-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:shelf/shelf.dart' as shelf;
+    Future<void> handler(shelf.Request request) async {
+     var value = request.context['internal'] as String;
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(value);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection
+- name: http-input-frog-request-ordinary-argument-sql
+  file: app.dart
+  source: |
+    import 'dart:io' as io;
+    import 'package:postgres/postgres.dart' as pg;
+    import 'package:dart_frog/dart_frog.dart' as frog;
+    Future<void> handler(frog.RequestContext context) async {
+     var value = await context.request.body();
+     final db = await pg.Connection.openFromUrl('postgresql://localhost/test');
+     await db.execute(r'SELECT $1', parameters: [value]);
+    }
+  want: []
+  covers:
+  - lycaon.dart.server-postgres-sql-injection

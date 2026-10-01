@@ -1,0 +1,40 @@
+title: Reached an AWS API
+id: 1da72f72-30ee-4a9c-a9d6-a1c2a23519e9
+description: >-
+  Connected to an AWS service endpoint. A hostname cannot tell a read from a
+  destructive call, so this is a coarse signal for scripts and SDKs that never
+  show a CLI on the command line.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # Partition dnsSuffix values from botocore (Apache-2.0), not a per-service list.
+  selection_host:
+    DestinationHostname:
+      - amazonaws.com
+      - amazonaws.com.cn
+      - api.aws
+      - amazonaws-fips.com
+      - aws.amazon.com
+      # The identity portal is outside the partition suffixes.
+      - awsapps.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .awsapps.com
+      - .amazonaws.com
+      - .amazonaws.com.cn
+      - .api.aws
+      - .api.amazonwebservices.com.cn
+      - .amazonaws-fips.com
+      - .aws.amazon.com
+      - .amazonwebservices.com
+  condition: selection_host or selection_suffix

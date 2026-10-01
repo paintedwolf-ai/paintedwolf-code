@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-composer-newline
+command: painted-wolf/platform:composer-newline
+scope: "composer"
+allow_in_input: true
+bindings:
+  macos:
+    - "Shift+Enter"
+  windows:
+    - "Shift+Enter"
+  linux:
+    - "Shift+Enter"

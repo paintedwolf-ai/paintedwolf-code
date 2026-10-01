@@ -1,0 +1,25 @@
+title: Mint AWS short-lived credentials
+id: 0b4a2b21-3f7e-4a1a-9c62-0d1e2f3a4b50
+description: Issues temporary AWS credentials whose secret and session token are printed to stdout.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: aws
+    CommandLine|contains:
+      - ' sts get-session-token'
+      - ' sts assume-role'
+      - ' sts assume-role-with-web-identity'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

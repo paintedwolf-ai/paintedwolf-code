@@ -1,0 +1,31 @@
+oar: '1.0'
+id: CAPTURE_URL_UNREACHABLE
+kind: schema
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.navigation_url, paintedwolf.navigation_error]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "CAPTURE_URL_UNREACHABLE"
+effect: block
+copy:
+  what: 'The managed browser could not navigate to {{ paintedwolf.navigation_url }}.'
+  cause: 'Navigation reported: {{ paintedwolf.navigation_error }}'
+  why: 'This attempt produced no loadable page. The error does not by itself establish whether the service is stopped, the address is wrong, or another navigation failure occurred.'
+  fix: 'Inspect the existing service or process result and confirm that the requested URL matches its observed listening address. Preserve any running process and retry only after a relevant change. Use project_dir for static content only when that target is offered by the current tool.'
+  instead: 'Report the observed navigation failure without starting a replacement service or claiming page evidence that was not captured.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page could not navigate to the target URL
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: capture_page
+      navigation_url: http://127.0.0.1:5678/
+      navigation_error: net::ERR_CONNECTION_REFUSED
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: CAPTURE_URL_UNREACHABLE'

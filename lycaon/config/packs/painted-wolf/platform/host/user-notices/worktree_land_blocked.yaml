@@ -1,0 +1,90 @@
+surfaces: [http]
+notification:
+  discriminator: reason
+  resolutions:
+    - { id: base_dirty, when: base_dirty, tier: non_catastrophic, scope: session }
+    - { id: base_on_other_branch, when: base_on_other_branch, tier: non_catastrophic, scope: session }
+    - { id: base_branch_missing, when: base_branch_missing, tier: non_catastrophic, scope: session }
+    - { id: base_missing, when: base_missing, tier: non_catastrophic, scope: session }
+    - { id: detached_head, when: detached_head, tier: non_catastrophic, scope: session }
+    - { id: conflict, when: conflict, tier: non_catastrophic, scope: session }
+context_schema:
+  required:
+    - reason
+  optional:
+    - base_branch
+    - current
+    - conflicts
+    - landed
+    - commits
+title: Cannot land
+message: >-
+  {% if reason == "base_dirty" -%}
+  Your project folder has uncommitted changes. Commit or stash them, then land again.
+  {%- elif reason == "base_on_other_branch" -%}
+  Your project folder is on {{ current }}, not {{ base_branch }}. Switch back, then land again.
+  {%- elif reason == "base_branch_missing" -%}
+  {{ base_branch }} no longer exists.
+  {%- elif reason == "base_missing" -%}
+  The project folder is no longer a git repository.
+  {%- elif reason == "detached_head" -%}
+  This repository is in a detached HEAD state. Check out a branch, then create a worktree.
+  {%- elif reason == "conflict" -%}
+  The merge conflicts and was not applied. Nothing changed.
+  {%- else -%}
+  Landing this worktree is blocked.
+  {%- endif %}
+suggested_action: >-
+  {% if reason == "conflict" -%}
+  Resolve the listed paths in the project folder, or continue on the session branch.
+  {%- elif reason == "detached_head" -%}
+  Check out a branch in the project folder, then try again.
+  {%- else -%}
+  Fix the project folder state, then land again.
+  {%- endif %}
+scenarios:
+  - id: base_dirty
+    resolution: base_dirty
+    vars:
+      reason: base_dirty
+      base_branch: main
+    expect_contains:
+      - uncommitted changes
+  - id: base_on_other_branch
+    resolution: base_on_other_branch
+    vars:
+      reason: base_on_other_branch
+      base_branch: main
+      current: feature
+    expect_contains:
+      - on feature
+      - not main
+  - id: base_branch_missing
+    resolution: base_branch_missing
+    vars:
+      reason: base_branch_missing
+      base_branch: main
+    expect_contains:
+      - main no longer exists
+  - id: base_missing
+    resolution: base_missing
+    vars:
+      reason: base_missing
+      base_branch: main
+    expect_contains:
+      - no longer a git repository
+  - id: detached_head
+    resolution: detached_head
+    vars:
+      reason: detached_head
+      base_branch: main
+    expect_contains:
+      - detached HEAD
+  - id: conflict
+    resolution: conflict
+    vars:
+      reason: conflict
+      base_branch: main
+      conflicts: ["README.md"]
+    expect_contains:
+      - conflicts and was not applied

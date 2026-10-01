@@ -1,0 +1,11 @@
+id: painted-wolf/platform:session-recent
+title: "Recent chats"
+scope: "global"
+keywords:
+  - "switch chat"
+  - "last chat"
+  - "back and forth"
+  - "recent chats"
+action:
+  kind: native_ui
+  handler: "session.recent"

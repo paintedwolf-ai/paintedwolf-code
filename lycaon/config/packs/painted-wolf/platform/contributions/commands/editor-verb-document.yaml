@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-verb-document
+title: "Document selection"
+scope: "files"
+keywords:
+  - "document"
+  - "docstring"
+  - "comment"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-document

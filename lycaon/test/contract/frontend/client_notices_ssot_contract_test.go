@@ -1,0 +1,166 @@
+package contract
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/clientnotice"
+	"github.com/lycaon/lycaon/internal/testutil"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+)
+
+// generatedClientNotices is the one file Den may read this copy from.
+const generatedClientNotices = "lycaon-den/src/notices/client-notices.generated.ts"
+
+func loadClientNotices(t *testing.T) *clientnotice.Catalog {
+	t.Helper()
+	cat, err := clientnotice.Load()
+	testutil.FailErr(t, "load client notices", err)
+	return cat
+}
+
+// Every notice's scenarios pin what its copy must say; the wording around those
+// phrases stays editable.
+func TestClientNoticeScenariosHold(t *testing.T) {
+	t.Parallel()
+	for _, n := range loadClientNotices(t).Notices {
+		if len(n.Scenarios) == 0 {
+			t.Errorf("%s: no scenarios — copy with nothing pinned can drift silently", n.Kind)
+			continue
+		}
+		rendered := n.Rendered()
+		for _, sc := range n.Scenarios {
+			for _, want := range sc.ExpectContains {
+				if !strings.Contains(rendered, want) {
+					t.Errorf("%s[%s]: copy no longer contains %q\n--- rendered ---\n%s",
+						n.Kind, sc.ID, want, rendered)
+				}
+			}
+		}
+	}
+}
+
+// Named start failures carry their own copy because the generic offline advice is
+// wrong for them: reopening lands on the same held lock, or the same absent engine.
+func TestNamedStartFailuresStayDistinctFromOffline(t *testing.T) {
+	t.Parallel()
+	byKind := map[string]clientnotice.Notice{}
+	for _, n := range loadClientNotices(t).Notices {
+		byKind[n.Kind] = n
+	}
+	offline, ok := byKind["offline"]
+	if !ok {
+		t.Fatal("offline notice missing")
+	}
+	for _, kind := range []string{"engine_already_running", "engine_not_started"} {
+		named, ok := byKind[kind]
+		if !ok {
+			t.Errorf("%s notice missing", kind)
+			continue
+		}
+		if named.Message == offline.Message {
+			t.Errorf("%s shares the offline message — it exists because that one is wrong for it", kind)
+		}
+		if strings.Contains(strings.ToLower(named.Rendered()), "reopen") {
+			t.Errorf("%s suggests reopening, which cannot work:\n%s", kind, named.Rendered())
+		}
+		if named.SuggestedAction == "" {
+			t.Errorf("%s needs its own suggested_action, or the stop falls through to the offline escalation that offers reopening", kind)
+		}
+	}
+}
+
+// The offline message names the first move and its suggested_action names the
+// next one, so the escalation appears only after a retry fails.
+func TestOfflineMessageDoesNotPreAnnounceItsEscalation(t *testing.T) {
+	t.Parallel()
+	for _, n := range loadClientNotices(t).Notices {
+		if n.Kind != "offline" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(n.Message), "reopen") {
+			t.Errorf("offline message already offers reopening, which its suggested_action repeats:\n%s", n.Message)
+		}
+		if !strings.Contains(strings.ToLower(n.SuggestedAction), "reopen") {
+			t.Errorf("offline suggested_action no longer names the second way out:\n%s", n.SuggestedAction)
+		}
+		return
+	}
+	t.Fatal("offline notice missing")
+}
+
+// Copy is data. A notice added straight to TypeScript skips review, the scenario
+// pins, and the scope table — so the catalog has to be the only source.
+func TestClientNoticeCopyIsNotInlineInDen(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	path := filepath.Join(root, "lycaon-den/src/notices/client-notices.ts")
+	raw, err := os.ReadFile(path)
+	testutil.FailErr(t, "read client-notices.ts", err)
+	src := string(raw)
+
+	// A copy field outside a comment means the catalog was bypassed.
+	for _, field := range []string{"title:", "message:", "suggestedAction:"} {
+		for _, line := range strings.Split(src, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			if strings.Contains(trimmed, field) {
+				t.Errorf("client-notices.ts declares %s inline — copy belongs in %s:\n  %s",
+					field, clientNoticesDirRel, trimmed)
+			}
+		}
+	}
+	// It reads the catalog for the error message without re-exporting it;
+	// consumers import generated catalogs directly.
+	if !strings.Contains(src, `from "./client-notices.generated.ts"`) {
+		t.Error("client-notices.ts no longer reads the generated catalog")
+	}
+	if strings.Contains(src, `export {`) || strings.Contains(src, "export *") {
+		t.Error("client-notices.ts re-exports the generated catalog — consumers import it directly")
+	}
+}
+
+const clientNoticesDirRel = "lycaon/config/packs/painted-wolf/platform/host/client-notices/"
+
+// The generated file carries the generator banner and names its rebuild command;
+// hand edits are lost on the next codegen run.
+func TestGeneratedClientNoticesDeclaresItselfGenerated(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), generatedClientNotices))
+	testutil.FailErr(t, "read generated client notices", err)
+	head := string(raw)
+	if !strings.HasPrefix(head, "// Code generated by codegen-client-notices. DO NOT EDIT.") {
+		t.Error("generated client notices lost its DO NOT EDIT banner")
+	}
+	if !strings.Contains(head, "./task codegen:client-notices") {
+		t.Error("generated client notices should name the command that rebuilds it")
+	}
+}
+
+// Every kind in the generated file has a catalog entry and vice versa. Catches a
+// stale generated file committed without its source, which the staleness check
+// only catches when codegen is actually run.
+func TestGeneratedClientNoticesMatchCatalogKinds(t *testing.T) {
+	cat := loadClientNotices(t)
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), generatedClientNotices))
+	testutil.FailErr(t, "read generated client notices", err)
+
+	keyRe := regexp.MustCompile(`(?m)^  ([a-z0-9_]+): \{`)
+	found := map[string]bool{}
+	for _, m := range keyRe.FindAllStringSubmatch(string(raw), -1) {
+		found[m[1]] = true
+	}
+	for _, n := range cat.Notices {
+		if !found[n.Kind] {
+			t.Errorf("%s is in the catalog but not in the generated file — run ./task codegen:client-notices", n.Kind)
+		}
+		delete(found, n.Kind)
+	}
+	for kind := range found {
+		t.Errorf("%s is in the generated file with no catalog entry", kind)
+	}
+}

@@ -1,0 +1,826 @@
+# Anchor catalog SSOT, validated by schemas/anchors.schema.json.
+# Host code emits catalog ids only. Spec: docs/agent-prompt-template.md
+
+schema_version: "2.0"
+
+anchors:
+  # ── Inform plane ────────────────────────────────────────────────────────────
+
+  - id: gate.blocked
+    title: Gate blocked
+    description: phase_gate_unmet blocks advance; coordinator kick carries failed_leaves.
+    trigger_class: tool_rejection
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        failed_leaves: { type: "string[]", required: true }
+        gate_obligations: { type: "object[]" }
+        advance_when_gate_met: { type: string }
+    dedup:
+      key: gate_blocked
+      omit_hint_codes: [WORKFLOW_GATE_UNMET]
+
+  - id: compose.done
+    title: Compose done
+    description: Successful compose upsert; coordinator should start the workflow run.
+    trigger_class: workflow_event
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        coordinator_brief: { type: string }
+    dedup:
+      key: compose_done
+      omit_hint_codes: [WORKFLOW_SESSION_COMPOSE_REQUIRED]
+
+  - id: leg.finished
+    title: Leg finished
+    description: Worker leg reaches terminal state (re-enter / digest).
+    trigger_class: manifest_on_reenter
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        completed_ago: { type: string }
+        worker_digest: { type: string }
+        evidence_digest: { type: string }
+        batch_phase: { type: string }
+        pending_overlay_jobs: { type: "string[]" }
+        partial_worker_jobs: { type: "string[]" }
+    dedup:
+      key: leg_finished
+      omit_inform_when: [board_reinjected]
+
+  - id: worker.task.finished
+    title: Worker task finished
+    description: Implement-mode task() worker reaches reactable terminal.
+    trigger_class: manifest_on_reenter
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        completed_ago: { type: string }
+        worker_digest: { type: string }
+        evidence_digest: { type: string }
+        last_worker_decision_request: { type: object }
+        job_id: { type: string }
+        child_session_id: { type: string }
+        tool_loops_used: { type: int }
+        max_tool_loops: { type: int }
+        host_max_tool_loops: { type: int }
+        worker_budget_exhausted: { type: bool }
+        suggested_resume_max: { type: int }
+        budget_request_open: { type: bool }
+        requested_max: { type: int }
+        requested_rounds: { type: int }
+        remaining_work: { type: "string[]" }
+
+  - id: phase.advanced
+    title: Phase advanced
+    description: Host auto-advances workflow phase (fallback when no on_reenter.reenter_leg).
+    trigger_class: workflow_event
+    surface: phase
+    planes: [inform]
+    envelope:
+      vars:
+        gate_obligations: { type: "object[]" }
+
+  - id: phase.entered
+    title: Phase entered
+    description: Cross-phase entry fires on_enter injects (fanout-plan/execute, topology, debate, findings, feedback-pending).
+    trigger_class: phase_on_enter
+    surface: phase
+    planes: [inform]
+    envelope:
+      vars:
+        phase: { type: string, required: true }
+        workflow: { type: string }
+        evidence_digest: { type: string }
+        topology_output: { type: string }
+        options_criterion: { type: string }
+        fanout_plan: { type: string }
+        max_fanout_legs: { type: int }
+
+  - id: review_loop.continue
+    title: Review loop continue
+    description: Non-terminal review_loop verdict below iteration_cap — host re-prompt.
+    trigger_class: workflow_event
+    surface: phase
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: review_loop.decide
+    title: Review loop decide
+    description: review_loop reached iteration_cap — coordinator must render terminal verdict.
+    trigger_class: workflow_event
+    surface: phase
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: feedback.pending
+    title: Feedback pending
+    description: Phase on_enter declares request_user_feedback.
+    trigger_class: phase_on_enter
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        pending_feedback: { type: object }
+    dedup:
+      key: feedback_pending
+      omit_hint_codes: [WORKFLOW_FEEDBACK_PENDING]
+
+  - id: feedback.received
+    title: Feedback received
+    description: Pending user feedback resolves (user submit).
+    trigger_class: workflow_event
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.task.started
+    title: Worker task started
+    description: Implement-mode task() spawns a worker child.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.leg.started
+    title: Worker leg started
+    description: Delegation leg spawns a worker child.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: wait.timer.fired
+    title: Wait timer fired
+    description: A wait() deadline expires.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: overlay.promote.complete
+    title: Overlay promote complete
+    description: All write overlays integrated (zero pending).
+    trigger_class: overlay_state
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        promoted_paths: { type: "string[]" }
+
+  - id: scan.finished
+    title: Scan finished
+    description: Security scan reaches terminal while an agent waits on scan_done.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        scan_id: { type: string, required: true }
+        scan_status: { type: string }
+        scan_categories: { type: "string[]" }
+        scan_findings_count: { type: int }
+
+  - id: scan.delta
+    title: Scan delta observed
+    description: An automatic delta scan of files the session's project changed finished with findings introduced or fixed.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        scan_id: { type: string, required: true }
+        scanner_id: { type: string }
+        introduced_count: { type: int }
+        fixed_count: { type: int }
+        introduced: { type: "object[]" }
+        fixed: { type: "object[]" }
+        introduced_omitted_count: { type: int }
+        fixed_omitted_count: { type: int }
+
+  - id: process.finished
+    title: Process finished
+    description: Command/verify process or held call reaches terminal while an agent waits on process_done.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        held_call_handle: { type: string }
+        held_call_tool: { type: string }
+        held_call_outcome: { type: string }
+
+  - id: process.refused
+    title: Process refused
+    description: The kernel refused a running command or verify job an operation no earlier result showed; the job keeps running.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.budget.requested
+    title: Worker budget requested
+    description: A running worker asked its coordinator for more tool rounds with request_budget.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        job_id: { type: string, required: true }
+        tool_loops_used: { type: int, required: true }
+        max_tool_loops: { type: int, required: true }
+        host_max_tool_loops: { type: int, required: true }
+        budget_request_open: { type: bool, required: true }
+        requested_max: { type: int, required: true }
+        requested_rounds: { type: int, required: true }
+        remaining_work: { type: "string[]", required: true }
+
+  - id: worker.budget.raised
+    title: Worker budget raised
+    description: The coordinator raised a running worker's tool-round ceiling.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars:
+        tool_loops_used: { type: int, required: true }
+        max_tool_loops: { type: int, required: true }
+        remaining: { type: int, required: true }
+
+  - id: worker.budget.declined
+    title: Worker budget declined
+    description: The coordinator declined a running worker's open request for more tool rounds.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars:
+        tool_loops_used: { type: int, required: true }
+        max_tool_loops: { type: int, required: true }
+        remaining: { type: int, required: true }
+
+  - id: edit.follow_up.repeat
+    title: Edit follow-up repeat
+    description: Two consecutive user-visible turns each answered with coordinator inline file edits.
+    trigger_class: observed_history
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: coordinator.closeout
+    title: Coordinator closeout
+    description: Investigate/synthesis final turn forced to the final report (no tools).
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: coordinator.citation.grounding
+    title: Coordinator citation grounding
+    description: Closeout JSON rejected for untraced cited_evidence or cited_urls.
+    trigger_class: tool_rejection
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: coordinator.report.document
+    title: Coordinator report document
+    description: Run report rejected for document fields it still owes (claims without findings, scanner groups without an assessment or set-aside, invalid fields).
+    trigger_class: tool_rejection
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: project.roots.changed
+    title: Project roots changed
+    description: Project crosses from one folder to two or more (POST roots).
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        folder: { type: string }
+        roots: { type: "object[]" }
+
+  - id: project.root.detach_canceled
+    title: Root detach canceled work
+    description: DELETE root?force=true stopped workers, overlays, or busy sessions.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        canceled: { type: "object[]" }
+
+  - id: worker.closeout
+    title: Worker closeout
+    description: Worker child finish turn offers only complete_leg.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.iterations.low
+    title: Worker iterations low
+    description: Any worker is told once per ceiling when its runway reaches the host threshold.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars:
+        remaining: { type: int, required: true }
+        max_tool_loops: { type: int, required: true }
+        at_host_max: { type: bool, required: true }
+        request_open: { type: bool, required: true }
+
+  - id: worker.cancel.closeout
+    title: Worker cancel closeout
+    description: Canceled worker leg finish turn offers only complete_leg.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.summary.trim
+    title: Worker summary trim
+    description: Worker survey exceeds parent character budget.
+    trigger_class: host_api
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: worker.citation.grounding
+    title: Worker citation grounding
+    description: Worker completion JSON fails evidence grounding.
+    trigger_class: tool_rejection
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  # ── Post-turn lifecycle informs (queued for the next Prompt take) ────────────
+
+  - id: progress.missing
+    title: Progress checklist missing
+    description: Turn ran progress-gated tools with no checklist authored; queue an authoring nudge.
+    trigger_class: observed_history
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        tool: { type: string, required: true }
+    dedup:
+      key: progress_missing
+
+  - id: progress.stale
+    title: Progress checklist stale after interrupt
+    description: User abort left open checklist steps; queue a reconcile nudge.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        pending: { type: int, required: true }
+    dedup:
+      key: progress_stale
+
+  - id: phase.exit_required
+    title: Workflow phase exit required
+    description: Turn ended while the active workflow phase requires an exit action.
+    trigger_class: workflow_event
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        workflow_id: { type: string, required: true }
+        phase_id: { type: string, required: true }
+    dedup:
+      key: phase_exit_required
+
+  - id: authz.seal_failed
+    title: Authorization seal failed
+    description: Run-start authorization context could not be recorded; the turn did not start.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  # ── In-loop landing advisories (rendered immediately into turn history) ──────
+
+  - id: turn.closeout
+    title: Turn closeout
+    description: Host limit forces a final prose-only turn on a non-closeout coordinator surface.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        reason_text: { type: string, required: true }
+        llm_timeout: { type: bool }
+
+  - id: turn.iterations.low
+    title: Turn iterations low
+    description: Coordinator warned once when few tool iterations remain this turn.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        remaining: { type: int, required: true }
+
+  - id: turn.survey.streak
+    title: Turn survey streak
+    description: Consecutive tool batches this turn ran only read-only tools; the host names the streak so the model acts on what it has or states the blocker.
+    trigger_class: observed_history
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        batches: { type: int, required: true }
+        tools: { type: "string[]", required: true }
+
+  - id: turn.spend.runway_low
+    title: Turn spend runway low
+    description: Session first crosses the spend-ceiling warning point (one-shot).
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: turn.spend.soft_stop
+    title: Turn spend soft stop
+    description: Running task crossed its spend ceiling; one bounded tool-capable landing round.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: outbound.secret.withheld
+    title: Outbound secret withheld
+    description: Host withheld an outbound request carrying a detected secret; turn continues.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        guidance: { type: string }
+
+  # ── Signal-only / assembly inject moments ───────────────────────────────────
+
+  - id: loop.wake
+    title: Loop wake
+    description: Host loop-wake turn; suppress kick when LLM runs ([host:loop-wake] sentinel). Non-content Anchor — no inform Binding.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+    dedup:
+      key: loop_wake
+      omit_inform_when: [loop_wake]
+
+  - id: board.changed
+    title: Board reinjected
+    description: Pack board orientation reinjected; omit leg-finished kick on same turn.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        board_hash: { type: string }
+        run_phase: { type: string }
+    dedup:
+      key: board_reinjected
+      omit_inform_when: [board_reinjected]
+
+  - id: inject.active_workflow
+    title: Active workflow inject
+    description: Pre-history active-workflow.md / run-context inject (InjectRenderer path).
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        run_context: { type: object }
+
+  - id: inject.worker_board
+    title: Worker board inject
+    description: Worker child pack-board block at run start.
+    trigger_class: assembly_inject
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars:
+        board: { type: object }
+
+  - id: inject.worker_leg
+    title: Worker leg inject
+    description: L3 worker-leg.md inject for delegation legs.
+    trigger_class: assembly_inject
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars:
+        leg: { type: object }
+
+  - id: inject.agents_md
+    title: Agents.md inject
+    description: Project AGENTS.md / agents-md standard inject prepend.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: inject.transition
+    title: Workflow transition inject
+    description: Transition guidance inject on coordinator turns.
+    trigger_class: workflow_event
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: inject.skill_procedure
+    title: Preloaded skill procedure
+    description: The selected procedure for the current turn.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        skill_name: { type: "string", required: true }
+        skill_body: { type: "string", required: true }
+        trigger_tool: { type: "string", required: false }
+
+  - id: inject.skill_pointer
+    title: Skill pointer
+    description: One line naming the skill the turn's first loadable tool call fitted, when the host did not read it.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        skill_name: { type: "string", required: true }
+
+  - id: inject.tool_procedures
+    title: Available tool procedures
+    description: Operating guidance derived from the exact tools offered in this model request.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        offered_tools: { type: "string[]", required: true }
+
+  - id: inject.command_jobs
+    title: Live handles inject
+    description: Host-authoritative ledger of live command jobs and held tool calls.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        jobs: { type: "object[]", required: true }
+        can_wait: { type: "bool", required: true }
+        has_command: { type: "bool", required: true }
+        has_held: { type: "bool", required: true }
+
+  - id: inject.source_changes
+    title: Source change brief inject
+    description: >-
+      Ledger-recorded files other actors changed between the previous turn
+      boundary and this one, actor-classified; working-set paths itemized,
+      the rest counted. Observed git ref movements (checkout, commit, pull …)
+      lead the block so file rows read against their cause.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        files: { type: "object[]", required: true }
+        git: { type: "object[]", required: true }
+        other_files: { type: "int", required: true }
+        other_effects: { type: "int", required: true }
+        truncated: { type: "bool", required: true }
+
+  - id: inject.synthesis_evidence
+    title: Synthesis evidence inject
+    description: Synthesis-surface evidence digest inject.
+    trigger_class: observed_history
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        evidence_digest: { type: string }
+
+  - id: inject.implement_spawn
+    title: Implement spawn inject
+    description: Implement-surface spawn roster inject.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: inject.blueprint
+    title: Blueprint inject
+    description: Workflow blueprint frontmatter inject.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        blueprint_path: { type: string }
+
+  - id: inject.worker_task_assignment
+    title: Worker task assignment inject
+    description: Worker assignment envelope inject.
+    trigger_class: assembly_inject
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: inject.worker_task_preamble
+    title: Worker task preamble inject
+    description: Worker task mode and focus inject.
+    trigger_class: assembly_inject
+    surface: worker
+    planes: [inform]
+    envelope:
+      vars: {}
+
+  - id: inject.scan_guidance
+    title: Scan guidance ephemeral inject
+    description: Ephemeral scan guidance summaries inject.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        summaries: { type: "object[]" }
+
+  # ── Block / transform plane (OAR) ───────────────────────────────────────────
+
+  - id: tool.pre_invoke
+    title: Tool pre-invoke
+    description: Before a tool call is dispatched; scope with selector.tool.
+    trigger_class: pre_invoke
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string, required: true }
+        profile: { type: string }
+
+  - id: coordinator.pre_invoke
+    title: Coordinator pre-invoke
+    description: Coordinator observations before a tool call. Prefer tool.pre_invoke with selector.profile when equivalent.
+    trigger_class: pre_invoke
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string, required: true }
+
+  - id: session.pre_invoke
+    title: Session pre-invoke policy
+    description: Before a prompt-loop tool call, with its session posture and tool arguments observable.
+    trigger_class: pre_invoke
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        session_posture: { type: string }
+
+  - id: tool.handler
+    title: Tool handler
+    description: After argument validation and before dispatch to the tool implementation.
+    trigger_class: tool_handler
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string, required: true }
+
+  - id: tool.rejected
+    title: Tool rejection
+    description: An intrinsic typed tool failure before its rejection feedback is delivered. This event does not claim to undo completed tool effects.
+    trigger_class: tool_rejection
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string, required: true }
+
+  - id: tool.post_invoke
+    title: Tool post-invoke
+    description: Complete tool results, including failures, before logging and delivery.
+    trigger_class: post_tool
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string }
+
+  - id: credential.assignment
+    title: Credential assignment
+    description: One literal credential assignment observed on a completed tool call. Rules decide quality policy from measured material and provenance.
+    trigger_class: post_tool
+    surface: coordinator
+    planes: [block, transform]
+    envelope:
+      vars:
+        tool: { type: string }
+
+  - id: coordinator.post_turn
+    title: Coordinator post-turn
+    description: An assembled agent turn after provisional checks and before turn completion. Implements core agent.post_turn.
+    trigger_class: post_turn
+    surface: agent
+    planes: [block, inform]
+    envelope:
+      vars: {}
+
+  - id: coordinator.closeout_check
+    title: Coordinator closeout check
+    description: A provisional closeout claim checked against workflow and evidence observations; a block requests repair before turn completion.
+    trigger_class: post_turn
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars: {}
+
+  - id: worker.finalize
+    title: Worker finalize
+    description: A complete worker result before persistence and delivery to its parent. Implements core agent.finalize.
+    trigger_class: finalize
+    surface: worker
+    planes: [block, inform]
+    envelope:
+      vars:
+        summary: { type: string }
+
+  - id: worker.report_check
+    title: Worker report check
+    description: A provisional worker report or completion claim checked against observed evidence; a block requests repair before final delivery.
+    trigger_class: finalize
+    surface: worker
+    planes: [block]
+    envelope:
+      vars:
+        summary: { type: string }
+
+  - id: content.input
+    title: Content input
+    description: User + retrieved content before the model sees it (content-safety; core model.input).
+    trigger_class: input
+    surface: coordinator
+    planes: [block, inform]
+    envelope:
+      vars:
+        content: { type: string }
+
+  - id: content.output
+    title: Content output
+    description: Model response before shown or acted on (content-safety; core model.output).
+    trigger_class: output
+    surface: coordinator
+    planes: [block, transform]
+    envelope:
+      vars:
+        content: { type: string }
+
+  - id: content.tool_result
+    title: Content tool result
+    description: Tool/RAG content before the model consumes it (content-safety; core model.tool_result).
+    trigger_class: tool_result
+    surface: coordinator
+    planes: [block, transform]
+    envelope:
+      vars:
+        content: { type: string }
+        tool: { type: string }

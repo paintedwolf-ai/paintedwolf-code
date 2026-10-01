@@ -1,0 +1,16 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': feedback.pending
+selector:
+  surface: phase
+effect: inform
+render: coordinator-feedback-pending
+tier: builtin
+invariants:
+  trigger_class: phase_on_enter
+  fires_in:
+  - phase on_enter declares request_user_feedback (text or choice response_type)
+  required:
+  - pending_feedback
+  - wait for the card
+  forbidden:
+  - ask the user in chat

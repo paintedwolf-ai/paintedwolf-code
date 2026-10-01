@@ -1,0 +1,26 @@
+paths:
+  /v1/attention:
+    get:
+      tags:
+      - attention
+      operationId: getAttention
+      summary: Cross-project attention snapshot
+      description: >-
+        Every session, in every project, that is waiting on the human, running,
+        or errored. Unscoped by project: this answers "what needs
+        me right now" for the projects the user is *not* looking at, which the
+        project-scoped SSE stream cannot. Idle sessions are omitted, so the row
+        count is bounded by live work rather than by history. Live updates arrive
+        on the `attention` SSE topic, which is device-scoped and therefore
+        delivered on every open stream regardless of its project filter.
+      responses:
+        '200':
+          description: Non-idle sessions across all projects, worst class first
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/attention.yaml#/components/schemas/AttentionView
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized

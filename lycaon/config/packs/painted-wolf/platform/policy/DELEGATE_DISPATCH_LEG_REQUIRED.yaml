@@ -1,0 +1,27 @@
+oar: '1.0'
+id: DELEGATE_DISPATCH_LEG_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "DELEGATE_DISPATCH_LEG_REQUIRED"
+effect: block
+copy:
+  what: The dispatch request did not identify a pending delegation leg.
+  cause: No leg_id was supplied and the delegation has no pending leg to infer.
+  why: Dispatching without one durable leg identity could duplicate or misattribute worker work.
+  fix: Inspect the delegation roster and provide the pending leg_id.
+  instead: Branch on the code and dispatch a specific pending leg
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: A pending delegation leg must be identified before dispatch
+x-paintedwolf-scenarios:
+- id: missing_leg
+  vars:
+    delegation_id: dep-1
+  expect_contains:
+  - 'Code: DELEGATE_DISPATCH_LEG_REQUIRED'
+  - pending leg

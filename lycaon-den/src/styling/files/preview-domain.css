@@ -1,0 +1,124 @@
+.den-files-editor__document-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.den-files-editor__preview--preparing {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.den-markdown-preview-presentation {
+  position: relative;
+  flex: 1 0 auto;
+}
+
+.den-markdown-preview-candidate {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.den-markdown-preview-window {
+  position: relative;
+  overflow-anchor: none;
+}
+
+.den-markdown-preview-block {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flow-root;
+}
+
+.den-files-editor__status {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 14px;
+  height: var(--den-files-footer-h);
+  min-height: var(--den-files-footer-h);
+  padding: 0 12px;
+  border-top: 1px solid var(--den-line);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+  /* Keeps status tips above the editor body. */
+  position: relative;
+  z-index: 4;
+}
+
+.den-files-editor__mode--readonly {
+  color: var(--den-accent-text);
+}
+
+.den-files-editor__status-toggle {
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: none;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.den-files-editor__status-toggle:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.den-files-editor__status-toggle:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+.project-files-view .den-browse-chrome,
+.den-files-tab-strip,
+.den-files-tab-strip__tree-toggle,
+.den-files-tabs,
+.den-files-tabs-fade,
+.den-files-tabs-overflow,
+.den-files-open-list,
+.den-files-open-list__row,
+.den-files-pin-glyph,
+.den-files-tab,
+.den-files-tab__label,
+.den-files-tab__dirty,
+.den-files-scope-mark,
+.den-files-tab__close,
+.den-files-toolbar,
+.den-files-editor__crumb-fade,
+.den-files-editor__status,
+.den-files-editor__status-toggle,
+.den-files-editor__mode,
+.den-files-stage .cm-gutters,
+.den-files-tree__row,
+.den-files-tree__twisty,
+.den-files-tree__label,
+.den-files-tree__add,
+.den-files-tree__more,
+.den-files-tree__filter {
+  user-select: none;
+}
+
+.den-files-editor__command-prompt .cm-panels {
+  position: static !important;
+  background: transparent;
+  color: inherit;
+  border: 0;
+}
+
+.den-files-editor__command-prompt .cm-vim-panel {
+  padding: 0;
+  font: inherit;
+}
+
+

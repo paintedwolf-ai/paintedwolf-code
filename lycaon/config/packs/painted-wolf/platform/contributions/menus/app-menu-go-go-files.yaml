@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-files
+slot: "app_menu.go"
+command: painted-wolf/platform:go-files
+group: "3"
+order: 15
+label: "Files editor"

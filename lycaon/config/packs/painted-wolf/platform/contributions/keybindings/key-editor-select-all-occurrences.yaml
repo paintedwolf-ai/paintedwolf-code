@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-select-all-occurrences
+command: painted-wolf/platform:editor-select-all-occurrences
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Ctrl+G"
+  windows:
+    - "Mod+F2"
+  linux:
+    - "Mod+F2"

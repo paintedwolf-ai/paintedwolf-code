@@ -1,0 +1,146 @@
+{
+  "description": "Shared condition-evaluation conformance cases. Go (evaluate_test.go) and Den (contribution/conditions.test.ts) both run every case. facts maps \"fact\" or \"fact=operand\" to a boolean; unlisted lookups are false. expect is full-plane evaluation; expect_host is the three-valued host verdict where shell facts are unknown.",
+  "cases": [
+    {
+      "name": "nil condition is true",
+      "condition": null,
+      "facts": {},
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "single host fact holds",
+      "condition": { "fact": "project_open" },
+      "facts": { "project_open": true },
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "single host fact fails",
+      "condition": { "fact": "editor_active" },
+      "facts": {},
+      "expect": false,
+      "expect_host": "false"
+    },
+    {
+      "name": "operand fact matches exact language",
+      "condition": { "fact": "editor_language", "is": "go" },
+      "facts": { "editor_language=go": true },
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "operand fact rejects other language",
+      "condition": { "fact": "editor_language", "is": "python" },
+      "facts": { "editor_language=go": true },
+      "expect": false,
+      "expect_host": "false"
+    },
+    {
+      "name": "all requires every child",
+      "condition": {
+        "all": [{ "fact": "project_open" }, { "fact": "editor_active" }]
+      },
+      "facts": { "project_open": true },
+      "expect": false,
+      "expect_host": "false"
+    },
+    {
+      "name": "any admits one child",
+      "condition": {
+        "any": [{ "fact": "session_idle" }, { "fact": "project_open" }]
+      },
+      "facts": { "project_open": true },
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "not inverts",
+      "condition": { "not": { "fact": "activity_live" } },
+      "facts": { "activity_live": true },
+      "expect": false,
+      "expect_host": "false"
+    },
+    {
+      "name": "shell fact evaluates in full plane",
+      "condition": { "fact": "composer_focused" },
+      "facts": { "composer_focused": true },
+      "expect": true,
+      "expect_host": "unknown"
+    },
+    {
+      "name": "shell fact is unknown to host even when false",
+      "condition": { "fact": "active_view", "is": "files" },
+      "facts": {},
+      "expect": false,
+      "expect_host": "unknown"
+    },
+    {
+      "name": "negated shell fact stays unknown to host",
+      "condition": { "not": { "fact": "composer_focused" } },
+      "facts": { "composer_focused": true },
+      "expect": false,
+      "expect_host": "unknown"
+    },
+    {
+      "name": "all with failing host fact is false despite shell unknown",
+      "condition": {
+        "all": [{ "fact": "composer_focused" }, { "fact": "project_open" }]
+      },
+      "facts": { "composer_focused": true },
+      "expect": false,
+      "expect_host": "false"
+    },
+    {
+      "name": "all with passing host fact and shell child is unknown to host",
+      "condition": {
+        "all": [{ "fact": "composer_focused" }, { "fact": "project_open" }]
+      },
+      "facts": { "composer_focused": true, "project_open": true },
+      "expect": true,
+      "expect_host": "unknown"
+    },
+    {
+      "name": "any with passing host fact is true despite shell unknown",
+      "condition": {
+        "any": [{ "fact": "workspace_kind", "is": "main" }, { "fact": "session_exists" }]
+      },
+      "facts": { "session_exists": true },
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "any of only-failing host and shell facts is unknown to host",
+      "condition": {
+        "any": [{ "fact": "workspace_kind", "is": "main" }, { "fact": "session_exists" }]
+      },
+      "facts": { "workspace_kind=main": true },
+      "expect": true,
+      "expect_host": "unknown"
+    },
+    {
+      "name": "requirement readiness joins the captured frame",
+      "condition": { "fact": "mcp_requirement_ready", "is": "acme/reviewer:tracker" },
+      "facts": { "mcp_requirement_ready=acme/reviewer:tracker": true },
+      "expect": true,
+      "expect_host": "true"
+    },
+    {
+      "name": "nested mixed-plane tree",
+      "condition": {
+        "all": [
+          { "fact": "project_open" },
+          {
+            "any": [
+              { "fact": "editor_language", "is": "go" },
+              { "not": { "fact": "editor_editable" } }
+            ]
+          }
+        ]
+      },
+      "facts": { "project_open": true, "editor_editable": true },
+      "expect": false,
+      "expect_host": "false"
+    }
+  ]
+}

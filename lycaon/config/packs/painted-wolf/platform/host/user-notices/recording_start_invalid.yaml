@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Recording start time isn't valid
+message: Recording start time must use RFC 3339 format.
+suggested_action: Retry the save with a valid timestamp.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [RFC 3339, valid timestamp]

@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-go-to-definition
+title: "Go to definition"
+scope: "files"
+keywords:
+  - "f12"
+  - "definition"
+  - "jump"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.goToDefinition"

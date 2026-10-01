@@ -1,0 +1,5 @@
+id: ci-cd-other
+label: Other CI/CD
+description: >-
+  Self-hosted and hosted CI/CD operations that delete a job, agent, cluster, or
+  build history, remove a shared secret store, or mint a runner token.

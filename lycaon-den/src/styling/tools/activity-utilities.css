@@ -1,0 +1,179 @@
+@utility den-activity-span {
+  container-type: inline-size;
+  container-name: den-activity-span;
+  border: none;
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  box-shadow: inset 0 0 0 1px var(--den-line);
+  overflow: visible;
+  min-width: 0;
+  &[open] > summary {
+    width: 100%;
+    padding: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+  }
+}
+
+
+@utility den-activity-span-chicklet {
+display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  min-height: max(48px, calc(var(--text-den-compact) * 2.7 + 1em));
+  padding: 8px 12px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+
+@utility den-activity-span-composition {
+display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
+  pointer-events: none;
+}
+
+
+@utility den-activity-span-cmd {
+display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-1);
+  box-shadow: none;
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+}
+
+
+@utility den-activity-span-cmd-name {
+font-weight: 500;
+  color: var(--den-text);
+  letter-spacing: -0.01em;
+}
+
+
+@utility den-activity-span-cmd-count {
+font-weight: 600;
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+
+@utility den-activity-span-chip {
+display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+
+@utility den-activity-span-count {
+font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-accent-text);
+  line-height: 1.5;
+}
+
+
+@utility den-activity-span-failed {
+flex: 0 0 auto;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-danger-text);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+
+@utility den-activity-span-hint {
+grid-column: 1 / -1;
+width: 100%;
+  min-width: 0;
+  font-size: var(--text-den-compact);
+  font-weight: 400;
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+@utility den-activity-span-item {
+display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+
+@utility den-activity-span-items {
+display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+
+@utility den-row-mark {
+position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+  width: var(--den-disclosure-mark-height);
+  height: var(--den-disclosure-mark-height);
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    background: var(--den-text-muted);
+    border-radius: 1px;
+  }
+  &::before {
+    left: 0;
+    right: 0;
+    top: calc(50% - 0.75px);
+    height: 1.5px;
+  }
+  &::after {
+    top: 0;
+    bottom: 0;
+    left: calc(50% - 0.75px);
+    width: 1.5px;
+    transform-origin: 50% 50%;
+    transition: transform var(--den-duration) var(--den-ease);
+  }
+}
+
+
+@utility den-activity-span-name {
+min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+font-weight: 600;
+  font-size: var(--text-den-compact);
+  letter-spacing: 0.02em;
+}
+
+
+/* Hide the count before either line truncates. */
+@container den-activity-span (max-width: 15rem) {
+  .den-activity-span-count {
+    display: none;
+  }
+}
+
+

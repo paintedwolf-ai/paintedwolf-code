@@ -1,0 +1,5 @@
+id: mobile-release
+label: Mobile release
+description: >-
+  App distribution operations that submit a build to a store, promote it to
+  users, or change the signing material a release is built with.

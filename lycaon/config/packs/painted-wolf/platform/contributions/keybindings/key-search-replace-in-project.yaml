@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-replace-in-project
+command: painted-wolf/platform:search-replace-in-project
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+H"
+  windows:
+    - "Mod+Shift+H"
+  linux:
+    - "Mod+Shift+H"

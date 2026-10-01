@@ -1,0 +1,70 @@
+oar: '1.0'
+id: SANDBOX_TRY_LOCAL_NETWORK
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_connect_ports
+    - paintedwolf.refused_listen_ports
+when: >-
+  paintedwolf.confine_applied
+  && (size(paintedwolf.refused_connect_ports) > 0 || size(paintedwolf.refused_listen_ports) > 0)
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %}
+    a listener on port {{ paintedwolf.refused_listen_ports }}{% if
+    paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if
+    paintedwolf.refused_connect_ports %} a direct connection to port
+    {{ paintedwolf.refused_connect_ports }}{% endif %}.
+  cause: >-
+    Listening and direct connections are separate capabilities. The kernel
+    names a refused connection by port only, not by address.
+  why: >-
+    Repeating the command without the declaration is refused again.
+  fix: >-
+    {% if paintedwolf.process_running %}If the job cannot finish without it,
+    stop it with `command_stop`, then reissue{% else %}Reissue{% endif %} the
+    same command with the capability that fits:{% if paintedwolf.refused_listen_ports %}
+    `capability_request.local_listen` with the port for a listener;{% endif %}{%
+    if paintedwolf.refused_connect_ports %} `capability_request.loopback_connect`
+    with the port for a service on this machine, or `capability_request.direct_ip`
+    for a host elsewhere that the program cannot reach through the proxy in
+    its environment{% endif %}.
+  instead: Declare the listener or connection in capability_request — a retry
+    without it is refused again
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a listener or direct connection this invocation needed
+x-paintedwolf-scenarios:
+  - id: database_client
+    vars:
+      tool: command
+      failed_stages: [psql -h 127.0.0.1 -c select 1]
+      refused_connect_ports: ['5432']
+    expect_contains:
+      - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
+      - capability_request.loopback_connect
+      - capability_request.direct_ip
+      - '5432'
+  - id: dev_server
+    vars:
+      tool: command
+      process_running: true
+      refused_listen_ports: ['8080']
+    expect_contains:
+      - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
+      - capability_request.local_listen
+      - command_stop

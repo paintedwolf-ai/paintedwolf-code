@@ -1,0 +1,142 @@
+paths:
+  /v1/projects/{id}/source/history:
+    get:
+      tags: [projects]
+      operationId: getProjectSourceHistory
+      summary: Get reversible project-file lifecycle history
+      description: Returns the exact host-owned undo and redo heads. Editor text history is separate.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '200':
+          description: Current lifecycle history heads
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryState
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+  /v1/projects/{id}/source/history/undo:
+    post:
+      tags: [projects]
+      operationId: undoProjectSourceHistory
+      x-person-action: record
+      summary: Undo the current project-file lifecycle operation
+      description: Applies the exact displayed history head with filesystem fingerprint and destination-vacancy checks.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationRequest
+      responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '200':
+          description: Canonical inverse transition
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationResponse
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          description: History moved or the filesystem no longer matches the recorded operation
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+  /v1/projects/{id}/source/history/redo:
+    post:
+      tags: [projects]
+      operationId: redoProjectSourceHistory
+      x-person-action: record
+      summary: Redo the current project-file lifecycle operation
+      description: Reapplies the exact displayed history head with filesystem fingerprint and destination-vacancy checks.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationRequest
+      responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '200':
+          description: Canonical reapplied transition
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationResponse
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          description: History moved or the filesystem no longer matches the recorded operation
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests

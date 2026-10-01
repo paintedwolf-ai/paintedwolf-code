@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-expand-all
+title: "Expand all folders in tree"
+scope: "files"
+keywords:
+  - "expand all"
+  - "open folders"
+  - "unfold folders"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.expandAll"

@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paintedwolf.com/schemas/host-resources.schema.json",
+  "title": "Painted Wolf host resources catalog",
+  "type": "object",
+  "required": ["version"],
+  "anyOf": [
+    { "required": ["resources"] },
+    { "required": ["guidance"] }
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "resources": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/host_resource" }
+    },
+    "guidance": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "enum": ["omit", "advertise", "avoid"]
+      }
+    }
+  },
+  "$defs": {
+    "host_resource": {
+      "type": "object",
+      "required": ["id", "family", "label", "category", "description", "surfaces", "realizations"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+        },
+        "family": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$"
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "docs_url": { "type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048 },
+        "surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "enum": ["process_exec"] }
+        },
+        "realizations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/realization" }
+        }
+      }
+    },
+    "realization": {
+      "type": "object",
+      "required": ["discover"],
+      "additionalProperties": false,
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["macos", "linux", "windows"] }
+        },
+        "discover": { "$ref": "#/$defs/expression" },
+        "connections": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/connection" }
+        }
+      }
+    },
+    "expression": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/expression" }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/expression" }
+        },
+        "executable": { "$ref": "#/$defs/executable" },
+        "path": { "$ref": "#/$defs/path" },
+        "environment": { "$ref": "#/$defs/environment" },
+        "loopback_http": { "$ref": "#/$defs/loopbackHttp" },
+        "named_pipe": { "$ref": "#/$defs/namedPipe" }
+      }
+    },
+    "executable": {
+      "type": "object",
+      "required": ["names"],
+      "additionalProperties": false,
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "maxLength": 255, "pattern": "^[A-Za-z0-9][A-Za-z0-9._+\\-]*$" }
+        },
+        "capture": { "$ref": "#/$defs/capture" }
+      }
+    },
+    "path": {
+      "type": "object",
+      "required": ["paths", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "kind": { "enum": ["file", "directory", "socket", "any"] },
+        "capture": { "$ref": "#/$defs/capture" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["names"],
+      "additionalProperties": false,
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        }
+      }
+    },
+    "loopbackHttp": {
+      "type": "object",
+      "required": ["urls"],
+      "additionalProperties": false,
+      "properties": {
+        "urls": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$)"
+          }
+        },
+        "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "timeout_ms": { "type": "integer", "minimum": 50, "maximum": 2000 },
+        "capture": { "$ref": "#/$defs/capture" }
+      }
+    },
+    "namedPipe": {
+      "type": "object",
+      "required": ["names"],
+      "additionalProperties": false,
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^\\\\\\\\\\.\\\\pipe\\\\[^\\u0000]+$"
+          }
+        },
+        "capture": { "$ref": "#/$defs/capture" }
+      }
+    },
+    "capture": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "connection": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["none", "proxy", "socks", "baseline_loopback", "local_service", "direct_ip", "dynamic"]
+        },
+        "transport": { "enum": ["unix_socket", "named_pipe"] },
+        "target": { "type": "string", "maxLength": 4096 },
+        "target_from": { "$ref": "#/$defs/capture" }
+      },
+      "allOf": [
+        { "not": { "required": ["target", "target_from"] } },
+        {
+          "if": { "properties": { "mode": { "const": "local_service" } } },
+          "then": { "required": ["transport", "target_from"] },
+          "else": { "not": { "required": ["transport"] } }
+        }
+      ]
+    }
+  }
+}

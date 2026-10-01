@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Could not refresh model list
+message: The provider rejected the model-list request, or its response could not be used.
+suggested_action: Check the provider credentials and endpoint, then try Refresh models again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - model list
+      - credentials

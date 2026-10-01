@@ -1,0 +1,115 @@
+fixtures:
+- rule: os-protection-disable
+  positive:
+  - csrutil disable
+  - iptables -F
+  - spctl --master-disable
+  - ufw disable
+  - pfctl -d
+  - firewall-cmd --set-default-zone=trusted
+  - nft flush ruleset
+  - iptables --flush
+  - setenforce 0
+  - sudo iptables -F
+  negative:
+  - csrutil status
+  - iptables -L
+  - ufw status
+  - pfctl -s rules
+  - firewall-cmd --state
+  - firewall-cmd --get-default-zone
+  - setenforce 1
+  - setenforce --help
+  - nft list ruleset
+  - csrutil enable
+  - spctl --status
+- rule: trust-store-add
+  positive:
+  - security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.pem
+  - keytool -importcert -alias corp -file ca.pem -keystore cacerts
+  - security add-certificates ca.pem
+  - update-ca-certificates --fresh
+  - trust anchor --store ca.pem
+  - update-ca-trust extract
+  - sudo trust anchor ca.pem
+  negative:
+  - security find-certificate -a
+  - keytool -list -keystore cacerts
+  - update-ca-certificates --help
+  - security add-trusted-cert --help
+  - certutil -L -d sql:/etc/pki/nssdb
+  - update-ca-trust check
+- rule: remote-access-grant
+  positive:
+  - ssh-copy-id deploy@build-host
+  - sudo ssh-copy-id -i /home/ci/.ssh/id_ed25519.pub deploy@build-host
+  negative:
+  - ssh deploy@build-host uptime
+  - scp key.pub deploy@build-host:/tmp/
+  - ssh-copy-id --help
+  - ssh-keygen -t ed25519
+- rule: local-account-grant
+  positive:
+  - usermod -aG sudo deploy
+  - adduser --create-home ci-runner
+  - useradd -G wheel deploy
+  - dscl . -create /Users/ci
+  - usermod -G sudo ci-bot
+  - sudo usermod -aG wheel deploy
+  negative:
+  - id deploy
+  - useradd --help
+  - dscl . -read /Users/ci UserShell
+  - useradd -m newuser
+  - visudo -c
+  - usermod -aG docker deploy
+- rule: service-control
+  positive:
+  - systemctl stop nginx
+  - launchctl unload /Library/LaunchDaemons/com.example.agent.plist
+  - systemctl disable nginx
+  - systemctl mask nginx
+  - launchctl bootout system/com.example.agent
+  - launchctl disable system/com.example.agent
+  - service nginx stop
+  negative:
+  - systemctl status nginx
+  - launchctl list
+  - systemctl list-units
+  - systemctl stop nginx --help
+  - launchctl unload --help
+- rule: persistence-install
+  positive:
+  - crontab /tmp/jobs.cron
+  - systemctl enable nginx
+  - systemctl --now enable nginx
+  - launchctl load -w /Library/LaunchAgents/com.example.agent.plist
+  - launchctl bootstrap gui/501 /Library/LaunchAgents/com.example.agent.plist
+  - at now + 1 hour
+  - sudo systemctl enable nginx
+  negative:
+  - crontab -l
+  - systemctl is-enabled nginx
+  - systemctl status nginx
+  - launchctl list
+  - crontab --help
+- rule: system-package-remove
+  positive:
+  - apt-get purge -y libc-bin
+  - apt purge -y nginx
+  - dnf remove -y httpd
+  - yum erase -y httpd
+  - zypper remove -y apache2
+  - pacman -Rns nginx
+  - apk del nginx
+  - brew uninstall --cask --zap docker
+  - sudo apt-get purge -y nginx
+  negative:
+  - apt-get install -y nginx
+  - apt list --installed
+  - dnf list installed
+  - apt-get purge -y nginx --dry-run
+  - brew uninstall docker
+  - brew list
+  - pacman -S nginx
+  - apk add nginx

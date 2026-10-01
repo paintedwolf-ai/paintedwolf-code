@@ -1,0 +1,5 @@
+code: obligation_gate_missing
+message: |
+  Phase {{phase}} declares obligation kind {{kind}} but does not gate on obligation_settled:{{kind}}.
+replacement: |
+  Add obligation_settled:{{kind}} to phases[{{phase}}].gates so the host holds the phase until the obligation settles.

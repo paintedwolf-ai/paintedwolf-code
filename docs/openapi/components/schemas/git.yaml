@@ -1,0 +1,350 @@
+components:
+  schemas:
+    GitFileEntry:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          description: Repo-toplevel-relative path of the changed file (exactly what porcelain printed).
+        status:
+          type: string
+          description: Two-character porcelain XY status code.
+        root_id:
+          type: string
+          format: uuid
+          description: Project root that contains this path; empty when the path falls under no project root.
+        root_relative_path:
+          type: string
+          description: Path relative to that project root; empty when root_id is empty.
+      required:
+        - path
+        - status
+        - root_id
+        - root_relative_path
+
+    GitStatusSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        available: {type: boolean}
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        root_ids:
+          x-go-name: "RootIDs"
+          type: array
+          items:
+            type: string
+            format: uuid
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: uint64
+          description: The published status generation these values come from; zero while the first snapshot loads.
+        refreshing:
+          type: boolean
+          description: True while a newer generation is loading behind these values. The values remain usable.
+        branch: {type: string}
+        head_short: {type: string}
+        upstream: {type: string}
+        ahead: {type: integer}
+        behind: {type: integer}
+        dirty: {type: boolean}
+        staged_count: {type: integer}
+        unstaged_count: {type: integer}
+        changed_count: {type: integer}
+      required: [available, repo_id, root_ids, revision, refreshing, ahead, behind, dirty, staged_count, unstaged_count, changed_count]
+
+    GitChangesPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [repo_id, revision, refreshing, files]
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        revision: { x-go-type: "uint64", type: integer, format: uint64}
+        refreshing:
+          type: boolean
+          description: True while a newer generation is loading behind this page. The page still answers for its own revision.
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/GitFileEntry'}
+        next_cursor: {type: string}
+
+    GitMutationResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [repo_id, revision, refreshing]
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        revision: { x-go-type: "uint64", type: integer, format: uint64}
+        refreshing: {type: boolean}
+
+    GitRepoEntry:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Derived repository id; omitted when available is false.
+        label:
+          type: string
+        root_ids:
+          x-go-name: "RootIDs"
+          type: array
+          description: Project root ids this repository contains, in project-roots order.
+          items:
+            type: string
+            format: uuid
+        available:
+          type: boolean
+          description: False for a root inside no repository.
+        branch:
+          type: string
+        head_short:
+          type: string
+        upstream:
+          type: string
+        ahead:
+          type: integer
+        behind:
+          type: integer
+        dirty:
+          type: boolean
+        staged_count:
+          type: integer
+        unstaged_count:
+          type: integer
+        changed_count:
+          type: integer
+        status_pending:
+          type: boolean
+          description: True while this repository's first status snapshot is loading; count and branch fields are not meaningful until it is false.
+      required:
+        - label
+        - root_ids
+        - available
+        - ahead
+        - behind
+        - dirty
+        - staged_count
+        - unstaged_count
+        - changed_count
+
+    GitReposView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        repos:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitRepoEntry'
+        active_repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Repository id for the session's active root when available; omitted when the set has no available repository.
+      required:
+        - repos
+
+    GitBranchEntry:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        current:
+          type: boolean
+      required:
+        - name
+        - current
+
+    GitBranchesView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        branches:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitBranchEntry'
+      required:
+        - branches
+
+    GitCheckoutRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        branch:
+          type: string
+        create:
+          type: boolean
+          description: Create the branch (checkout -b) before switching.
+      required:
+        - branch
+
+    GitInitRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: Project root in which to initialize a repository.
+      required:
+        - root_id
+
+    GitCommitRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+        paths:
+          type: array
+          description: Paths to stage; all changes are staged when omitted.
+          items:
+            type: string
+      required:
+        - message
+
+    GitStashRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+
+    GitCommitMessageResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    GitWorktreeView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        One chat's worktree binding. When bound is false, every other field is
+        absent or zero except session_id. State is absent when unbound.
+      properties:
+        bound:
+          type: boolean
+          description: False means the chat has no worktree.
+        session_id:
+          type: string
+          format: uuid
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: The bound repository's derived id.
+        label:
+          type: string
+          description: The repository's label, for copy.
+        branch:
+          type: string
+          description: The session branch checked out in the worktree.
+        base_branch:
+          type: string
+          description: The repository branch recorded at bind time; Land always targets this branch.
+        path:
+          type: string
+          description: Absolute worktree path — shown in the stale state and nowhere else.
+        state:
+          type: string
+          description: "Present only when bound: ready when the worktree directory exists; stale when the binding's path is missing."
+          enum: [ready, stale]
+        dirty:
+          type: boolean
+          description: The worktree has uncommitted changes.
+        ahead_of_base:
+          type: integer
+          description: Commits on the session branch not in base_branch.
+        behind_base:
+          type: integer
+          description: Commits on base_branch not in the session branch.
+        land_blocked_reason:
+          type: string
+          description: Preflight reason Land can surface even when ahead counts are unavailable.
+          enum: [base_branch_missing]
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+      required:
+        - bound
+        - session_id
+        - dirty
+        - ahead_of_base
+        - behind_base
+
+    GitWorktreeLandResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        Outcome of landing a session branch into the recorded base branch in the
+        project folder. landed false with reason nothing_to_land is success with
+        nothing to do; other reasons are refusals.
+      properties:
+        landed:
+          type: boolean
+        base_branch:
+          type: string
+        commits:
+          type: integer
+          description: Commits merged; zero when landed is false.
+        reason:
+          type: string
+          description: >
+            Empty on success. Otherwise one of nothing_to_land, base_missing,
+            base_dirty, base_on_other_branch, base_branch_missing, detached_head,
+            conflict.
+        conflicts:
+          type: array
+          description: Repo-toplevel-relative conflict paths when reason is conflict.
+          items:
+            type: string
+      required:
+        - landed
+        - base_branch
+        - commits
+        - reason
+        - conflicts
+
+    GitWorktreeBindRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Creates a worktree for a chat in one project repository.
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Repository to bind; must be available in the project's repository set.
+        branch:
+          type: string
+          description: New branch the worktree checks out.
+      required:
+        - repo_id
+        - branch

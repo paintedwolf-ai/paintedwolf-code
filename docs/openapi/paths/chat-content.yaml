@@ -1,0 +1,60 @@
+paths:
+  /v1/sessions/{id}/messages/{message_id}/content:
+    get:
+      tags: [sessions]
+      operationId: getChatContent
+      x-positional-window: true
+      summary: Read a bounded range of retained chat content
+      parameters:
+        - $ref: '../components/parameters.yaml#/components/parameters/SessionId'
+        - {name: message_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: field, in: query, required: true, schema: {type: string, enum: [content, tool_output, tool_args]}}
+        - {name: tool_call_id, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}}
+        - {name: sha256, in: query, required: true, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 16384, default: 8192}}
+        - {name: row, in: query, schema: {type: integer, minimum: 0}, description: Read up to 64 display rows starting here instead of a rune range.}
+        - {name: locate, in: query, schema: {type: integer, minimum: 0}, description: Read the display rows containing this rune offset.}
+      responses:
+        '200':
+          description: Screened content from the exact requested revision
+          content:
+            application/json:
+              schema: {$ref: '../components/schemas/chat-content.yaml#/components/schemas/ChatContentPage'}
+        '401': {$ref: '../components/responses.yaml#/components/responses/Unauthorized'}
+        default: {$ref: '../components/responses.yaml#/components/responses/Error'}
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/sessions/{id}/messages/{message_id}/content/search:
+    get:
+      tags: [sessions]
+      operationId: searchChatContent
+      summary: Search retained chat content without downloading its body
+      parameters:
+        - $ref: '../components/parameters.yaml#/components/parameters/SessionId'
+        - {name: message_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: field, in: query, required: true, schema: {type: string, enum: [content, tool_output, tool_args]}}
+        - {name: tool_call_id, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}}
+        - {name: sha256, in: query, required: true, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+        - {name: case_sensitive, in: query, schema: {type: boolean}}
+      responses:
+        '200':
+          description: Bounded matches at rune offsets in the requested revision
+          content:
+            application/json:
+              schema: {$ref: '../components/schemas/chat-content.yaml#/components/schemas/ChatContentSearchPage'}
+        '401': {$ref: '../components/responses.yaml#/components/responses/Unauthorized'}
+        default: {$ref: '../components/responses.yaml#/components/responses/Error'}
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict

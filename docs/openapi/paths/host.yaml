@@ -1,0 +1,20 @@
+paths:
+  /v1/host:
+    get:
+      tags: [host]
+      operationId: getHost
+      summary: Identify the host and the caller
+      description: >-
+        Returns the host identity, the contract version it serves, the
+        authenticated person, and the capabilities offered on this connection.
+      responses:
+        '200':
+          description: Host identity and the caller's standing on it
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/host.yaml#/components/schemas/HostInfo
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

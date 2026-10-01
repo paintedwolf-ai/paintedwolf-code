@@ -1,0 +1,275 @@
+@utility bg-den-tint-1 {
+  background: var(--den-tint-1);
+}
+
+@utility btn-primary {
+  min-height: 2.2857rem;
+  padding: 0 var(--spacing-den-8);
+  border: 1px solid var(--den-primary-border);
+  border-radius: var(--den-radius);
+  background: var(--den-primary-bg);
+  color: var(--den-primary-text);
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-primary-bg-hover);
+    border-color: var(--den-primary-border-hover);
+  }
+  &:active:not(:disabled) {
+    background: var(--den-primary-bg-active);
+  }
+  &:disabled {
+    background: var(--den-tint-3);
+    border-color: var(--den-border);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+/** Primary chrome at compact chrome-bar size (keeps weight 600; not btn-compact). */
+@utility btn-primary-compact {
+  height: auto;
+  min-height: max(1.7143rem, calc(var(--text-den-label) * 1.4 + 0.5em));
+  padding: 0 var(--spacing-den-6);
+  border: 1px solid var(--den-primary-border);
+  border-radius: var(--den-radius);
+  background: var(--den-primary-bg);
+  color: var(--den-primary-text);
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-primary-bg-hover);
+    border-color: var(--den-primary-border-hover);
+  }
+  &:active:not(:disabled) {
+    background: var(--den-primary-bg-active);
+  }
+  &:disabled {
+    background: var(--den-tint-3);
+    border-color: var(--den-border);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility btn-compact {
+  height: auto;
+  min-height: max(1.7143rem, calc(var(--text-den-label) * 1.4 + 0.5em));
+  padding: 0 var(--spacing-den-6);
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  border-radius: var(--den-radius);
+  cursor: pointer;
+}
+
+@utility btn-secondary {
+  min-height: 2.2857rem;
+  padding: 0 var(--spacing-den-7);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  /* Solid paper on the stage wash — not transparent / tinted. */
+  background: var(--den-background);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-text);
+  cursor: pointer;
+  margin: 0;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-background);
+    border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-line));
+  }
+  &:disabled {
+    color: var(--den-text-muted);
+    border-color: var(--den-border);
+    background: var(--den-background);
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+@utility btn-ghost {
+  min-height: max(1.7143rem, calc(var(--text-den-label) * 1.4 + 0.5em));
+  height: auto;
+  padding: 0 var(--spacing-den-6);
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-selection-hover);
+    color: var(--den-text);
+  }
+}
+
+@utility btn-danger {
+  min-height: 2.2857rem;
+  padding: 0 var(--spacing-den-7);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-text);
+  cursor: pointer;
+  margin: 0;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-danger) 55%, var(--den-line));
+    color: var(--den-danger-text);
+    background: color-mix(in srgb, var(--den-danger) 8%, transparent);
+  }
+  &:disabled {
+    color: var(--den-text-muted);
+    border-color: var(--den-border);
+    background: var(--den-tint-1);
+    cursor: not-allowed;
+  }
+}
+
+/* The No action matches Allow in weight. */
+@utility btn-no {
+  min-height: 2.2857rem;
+  padding: 0 var(--spacing-den-7);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-text);
+  cursor: pointer;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-line));
+    background: var(--den-background);
+  }
+  &:disabled {
+    color: var(--den-text-muted);
+    border-color: var(--den-border);
+    background: var(--den-tint-1);
+    cursor: not-allowed;
+  }
+}
+
+@utility btn-no--armed {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+  background: color-mix(in srgb, var(--den-accent-signal) 8%, var(--den-surface));
+}
+
+@utility btn-link {
+  margin-left: var(--spacing-den-4);
+  border: none;
+  background: none;
+  color: var(--den-accent-text);
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  transition: opacity var(--den-duration) var(--den-ease);
+
+  &:hover {
+    opacity: 0.85;
+  }
+}
+
+@utility btn-icon {
+  min-height: 2.2857rem;
+  padding: 0 var(--spacing-den-6);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-selection-hover);
+    border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
+    color: var(--den-text);
+  }
+  &:disabled {
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility den-icon-target {
+  box-sizing: border-box;
+  min-inline-size: var(--den-icon-target);
+  min-block-size: var(--den-icon-target);
+}
+
+/* Quiet icon control with hover frame and active accent tone. */
+@utility den-quiet-icon-btn {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--den-icon-target);
+  height: var(--den-icon-target);
+  padding: 0;
+  line-height: 0;
+  border: 1px solid transparent;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    border-color: var(--den-line);
+    background: var(--den-selection-hover);
+    color: var(--den-text);
+  }
+  /* State reads the accessibility attribute, so the paint cannot drift from it. */
+  &:is([aria-pressed="true"], [aria-expanded="true"]):not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
+    background: color-mix(in srgb, var(--den-accent-signal) 11%, transparent);
+    color: var(--den-text);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+

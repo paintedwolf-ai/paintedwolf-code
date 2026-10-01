@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Chat isn't pinned
+message: Only pinned chats can be moved.
+suggested_action: Pin the chat first, then move it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - pinned chats

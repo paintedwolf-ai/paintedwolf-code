@@ -1,0 +1,19 @@
+# NoticeAction — structured destination or recovery operation for a user notice.
+name: NoticeAction
+go_const_prefix: NoticeAction
+values:
+  - id: open_ai_providers
+    comment: >-
+      navigates to Settings → AI providers so the user can reconfigure or select a different model.
+  - id: retry_contribution_frame
+    comment: >-
+      re-fetches the active contribution frame from the host.
+  - id: prompt_retry
+    comment: >-
+      retries a failed prompt submission from the beginning when no progress occurred.
+  - id: prompt_keep_going
+    comment: >-
+      resumes prompt execution after partial progress was already made.
+  - id: prompt_rewind_and_retry
+    comment: >-
+      reverts project files and transcript suffix to before the prompt, then restarts it.

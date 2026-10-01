@@ -1,0 +1,112 @@
+/* --- Ignore rules view ---
+   Same measure and rhythm as the empty stage; rows read as a table of
+   decision, coverage, and action. */
+.den-ignore-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 32px var(--den-stage-inset-x) 48px;
+}
+
+.den-ignore-rules__title {
+  margin: 0;
+  font-size: var(--text-den-subhead);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--den-text);
+}
+
+.den-ignore-rules__body {
+  margin: 0;
+  max-width: 38rem;
+  font-size: var(--text-den-body);
+  line-height: 1.55;
+  color: var(--den-text-muted);
+  text-wrap: pretty;
+}
+
+.den-ignore-rules__file {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  color: var(--den-text);
+  overflow-wrap: anywhere;
+}
+
+.den-ignore-rules__group {
+  margin: 20px 0 0;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--den-text-muted);
+}
+
+.den-ignore-rules__note,
+.den-ignore-rules__empty {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.5;
+  color: var(--den-text-muted);
+}
+
+.den-ignore-rules__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--den-line);
+}
+
+.den-ignore-rules__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, auto) 6.5rem;
+  align-items: baseline;
+  gap: 4px 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-ignore-rules__reason {
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text);
+}
+
+.den-ignore-rules__predicates {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.den-ignore-rules__coverage,
+.den-ignore-rules__action {
+  font-size: var(--text-den-hint);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+
+.den-ignore-rules__withdraw {
+  padding: 2px 6px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-ignore-rules__withdraw:hover:not(:disabled) {
+  background: var(--den-tint-1);
+  color: var(--den-danger-text);
+}
+
+:where(.den-browse-stage[data-browse-band~="max-560"]) {
+  .den-ignore-rules__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .den-ignore-rules__coverage {
+    grid-row: 2;
+  }
+}

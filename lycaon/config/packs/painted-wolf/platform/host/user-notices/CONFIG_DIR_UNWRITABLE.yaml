@@ -1,0 +1,18 @@
+surfaces: [preflight]
+# Nothing can be saved — keys, settings, or history — and the fix is outside the
+# app, in filesystem permissions, so the notice takes the catastrophic tier.
+notification: { tier: catastrophic, scope: app }
+title: Settings folder is not writable
+message: >-
+  The app cannot write to its configuration folder, so API keys, settings,
+  and project history cannot be saved. This is usually a approvals problem
+  on your home folder.
+suggested_action: >-
+  Check that your user account owns ~/.config and that the disk is not full
+  or mounted read-only.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - cannot write
+      - approvals

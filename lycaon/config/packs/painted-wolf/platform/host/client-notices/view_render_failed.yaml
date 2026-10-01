@@ -1,0 +1,12 @@
+# Reload rebuilds only the failed view; the session remains available.
+scope: session
+title: This view stopped
+message: >-
+  Something went wrong while drawing this view. Your work is safe — the session
+  and everything in it are intact.
+suggested_action: Reload the view to try again. The rest of the app still works.
+scenarios:
+  - id: default
+    expect_contains:
+      - Your work is safe
+      - Reload the view

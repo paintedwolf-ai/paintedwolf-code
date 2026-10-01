@@ -1,0 +1,164 @@
+[
+  {
+    "release": "R17",
+    "component": "core",
+    "revision": "k1",
+    "dependencies": {},
+    "approval": "check-1",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "core",
+    "revision": "k2",
+    "dependencies": {},
+    "approval": "check-7",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "core",
+    "revision": "k3",
+    "dependencies": {},
+    "approval": "check-9",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "api",
+    "revision": "a7",
+    "dependencies": {
+      "core": "k1"
+    },
+    "approval": "check-1",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "api",
+    "revision": "a8",
+    "dependencies": {
+      "core": "k3"
+    },
+    "approval": "check-8",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "api",
+    "revision": "a9",
+    "dependencies": {
+      "core": "k2"
+    },
+    "approval": "check-4",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "cli",
+    "revision": "c2",
+    "dependencies": {
+      "core": "k2"
+    },
+    "approval": "check-6",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "cli",
+    "revision": "c3",
+    "dependencies": {
+      "core": "k1"
+    },
+    "approval": "check-3",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "cli",
+    "revision": "c4",
+    "dependencies": {
+      "core": "k3"
+    },
+    "approval": "check-4",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "revision": "w4",
+    "dependencies": {
+      "api": "a7",
+      "cli": "c2"
+    },
+    "approval": "check-2",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "revision": "w5",
+    "dependencies": {
+      "api": "a9",
+      "cli": "c2"
+    },
+    "approval": "check-3",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "revision": "w6",
+    "dependencies": {
+      "api": "a8",
+      "cli": "c2"
+    },
+    "approval": "check-4",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "jobs",
+    "revision": "j1",
+    "dependencies": {},
+    "approval": "check-1",
+    "environment": "production",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "revision": "w6",
+    "dependencies": {
+      "api": "a8",
+      "cli": "c4"
+    },
+    "approval": "check-5",
+    "environment": "staging",
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "component": "web",
+    "revision": "w4",
+    "dependencies": {
+      "api": "a7",
+      "cli": "c3"
+    },
+    "approval": "check-6",
+    "environment": "production",
+    "result": "failed"
+  }
+]

@@ -1,0 +1,19 @@
+title: Withdraw a published software artifact
+id: 699e59a2-f1a1-4dfa-93ba-5d1c579bb550
+status: stable
+description: Unpublishes, yanks, or deletes a named package, image, artifact, or release.
+references: [https://slsa.dev/spec/v1.2/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:artifact-withdraw', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

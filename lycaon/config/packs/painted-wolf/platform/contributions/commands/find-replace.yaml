@@ -1,0 +1,13 @@
+id: painted-wolf/platform:find-replace
+title: "Replace in view"
+palette: false
+scope: "files"
+category: "editing"
+keywords:
+  - "replace"
+  - "find and replace"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "find.replace"

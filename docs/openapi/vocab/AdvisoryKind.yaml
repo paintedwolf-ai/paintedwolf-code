@@ -1,0 +1,8 @@
+# AdvisoryKind — what an advisory database says about the matched package.
+name: AdvisoryKind
+go_const_prefix: AdvisoryKind
+values:
+  - id: vulnerability
+    comment: The package version carries a published vulnerability.
+  - id: malicious_package
+    comment: The package version itself is recorded as malware; there is no CVSS to score.

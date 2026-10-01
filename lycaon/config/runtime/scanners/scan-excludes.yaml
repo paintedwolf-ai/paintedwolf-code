@@ -1,0 +1,196 @@
+# Scan and capture exclusions match directories at any depth.
+# languages and no_vendor_dir record supported grammar coverage.
+# Ambiguous directory names remain in scope under not_excluded.
+
+version: 1
+
+groups:
+  - id: engine
+    why: VCS metadata and Lycaon's own overlays, sandboxes, and evidence — never product source.
+    languages: []
+    patterns:
+      - .git
+      - ${overlay_dir}
+
+  - id: node
+    why: npm / yarn / pnpm / bower dependency trees, and bundler output.
+    languages: [javascript, typescript, vue, html, solidity, circom]
+    patterns:
+      - node_modules
+      - bower_components
+      - jspm_packages
+      - .yarn/cache
+      - .pnpm-store
+      - dist
+
+  - id: vendored-tree
+    why: "`vendor/` is the shared convention for a committed dependency tree (Go modules, Composer, Bundler, Cargo, jsonnet-bundler, HHVM)."
+    languages: [go, php, ruby, rust, hack, jsonnet, perl]
+    patterns:
+      - vendor
+      - Godeps/_workspace
+      - .bundle
+
+  - id: python
+    why: Interpreter environments and installed distributions.
+    languages: [python]
+    patterns:
+      - site-packages
+      - .venv
+      - venv
+      - __pypackages__
+      - .eggs
+      - .tox
+      - __pycache__
+
+  - id: jvm
+    why: Maven / Gradle / Leiningen dependency caches and build output.
+    languages: [java, kotlin, scala, clojure, groovy]
+    patterns:
+      - target
+      - build
+      - .gradle
+      - .m2
+      - .cpcache
+
+  - id: dotnet
+    why: MSBuild intermediate and output trees. Anchored under `bin/` rather than skipping `bin/` itself, which commonly holds first-party scripts.
+    languages: [c_sharp]
+    patterns:
+      - obj
+      - bin/Debug
+      - bin/Release
+
+  - id: native
+    why: Vendored upstream sources in C/C++ and protobuf trees.
+    languages: [c, cpp, proto]
+    patterns:
+      - third_party
+
+  - id: rust
+    why: Cargo and Scarb build output. `vendor/` for `cargo vendor` is covered by vendored-tree.
+    languages: [rust, cairo]
+    patterns:
+      - target
+
+  - id: move
+    why: Aptos and Sui package build output, which contains the fetched dependency sources.
+    languages: [move]
+    patterns:
+      - build
+
+  - id: swift
+    why: CocoaPods, Carthage, SwiftPM, and Xcode build products.
+    languages: [swift]
+    patterns:
+      - Pods
+      - Carthage/Build
+      - Carthage/Checkouts
+      - .build
+      - DerivedData
+
+  - id: dart
+    why: Pub package cache and generated tool state.
+    languages: [dart]
+    patterns:
+      - .dart_tool
+      - .pub-cache
+
+  - id: beam
+    why: Mix build output. Elixir's `deps/` collides with Julia source and is handled per-rule — see not_excluded.
+    languages: [elixir]
+    patterns:
+      - _build
+
+  - id: ocaml
+    why: Dune build output and local opam switches.
+    languages: [ocaml]
+    patterns:
+      - _build
+      - _opam
+
+  - id: r
+    why: renv / packrat project libraries.
+    languages: [r]
+    patterns:
+      - renv/library
+      - packrat/lib
+      - packrat/src
+
+  - id: lua
+    why: LuaRocks project trees.
+    languages: [lua]
+    patterns:
+      - lua_modules
+      - .luarocks
+
+  - id: terraform
+    why: "`terraform init` downloads whole upstream modules here — real HCL that is not the user's to fix."
+    languages: [hcl]
+    patterns:
+      - .terraform
+
+  - id: perl
+    why: Local::lib install target for cpanm.
+    languages: [perl]
+    patterns:
+      - local/lib
+
+  - id: apex
+    why: Salesforce CLI project state.
+    languages: [apex]
+    patterns:
+      - .sfdx
+      - .sf
+
+# Languages with no in-repo dependency directory to exclude. Either the
+# ecosystem installs to a user-level cache, or the language only ever appears
+# inside another ecosystem's tree (where that ecosystem's group applies).
+no_vendor_dir:
+  - language: bash
+    why: Shell scripts live in the host repo; no dependency tree of their own.
+  - language: dockerfile
+    why: Build context is the repo itself.
+  - language: json
+    why: Config and data files follow the ecosystem that created the tree.
+  - language: yaml
+    why: Config and data files follow the ecosystem that created the tree.
+  - language: xml
+    why: Config and data files follow the ecosystem that created the tree.
+  - language: promql
+    why: Query files; no packaging system.
+  - language: ql
+    why: CodeQL packs resolve into a user-level cache (~/.codeql), not the repo.
+  - language: julia
+    why: Packages resolve into ~/.julia. The in-repo `deps/` is first-party build source — see not_excluded.
+  - language: commonlisp
+    why: Quicklisp installs to a user-level cache (~/.quicklisp).
+  - language: scheme
+    why: No dominant in-repo dependency convention.
+  - language: powershell
+    why: Modules install to a user-level path; a vendored `Modules/` cannot be told from a source dir — see not_excluded.
+
+# These names can contain either dependencies or source, so they stay in scope.
+not_excluded:
+  - pattern: packages
+    dependency_for: .NET (NuGet restore)
+    source_for: every pnpm / yarn workspaces monorepo roots its packages here
+  - pattern: bin
+    dependency_for: .NET and Rails build output
+    source_for: first-party script directories (`bin/*.sh`) that shell rules should scan
+  - pattern: lib
+    dependency_for: Solidity (`forge install` writes submodules here)
+    source_for: the primary source directory in countless projects
+  - pattern: deps
+    dependency_for: Elixir (mix dependency tree)
+    source_for: Julia build source (`deps/build.jl`)
+    handled_by: rules/lycaon/elixir/security.yaml — per-rule `paths.exclude`, so Elixir rules skip it and Julia rules do not
+  - pattern: external
+    dependency_for: Bazel external repositories
+    source_for: a common first-party directory name
+  - pattern: Modules
+    dependency_for: PowerShell vendored modules
+    source_for: too generic to attribute
+  - pattern: out
+    dependency_for: Foundry and IntelliJ build output
+    source_for: too generic to attribute

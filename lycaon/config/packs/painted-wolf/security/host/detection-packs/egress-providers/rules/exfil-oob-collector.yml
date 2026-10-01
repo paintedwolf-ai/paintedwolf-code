@@ -1,0 +1,61 @@
+title: Reached a public webhook or OOB-interaction collector
+id: e83e0263-e8e7-404b-b0ae-f014081787b7
+description: >-
+  Connected to a service whose only function is to receive and display
+  arbitrary traffic sent to a unique URL. These providers have no read side
+  and no build-time dependency use, so reaching one is already the operation.
+references:
+  - https://attack.mitre.org/techniques/T1567/
+  - https://github.com/SigmaHQ/sigma/blob/master/rules/network/dns/net_dns_external_service_interaction_domains.yml
+author: Painted Wolf Code
+date: '2026-08-21'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_host:
+    DestinationHostname:
+      - webhook.site
+      - requestcatcher.com
+      - beeceptor.com
+      - typedwebhook.tools
+      - pipedream.net
+      - interact.sh
+      - oastify.com
+      - oast.pro
+      - oast.live
+      - oast.site
+      - oast.online
+      - oast.fun
+      - oast.me
+      - burpcollaborator.net
+  # Suffix only for the four below: the collector is the per-token subdomain,
+  # while the apex is a product site someone can legitimately read. Canarytokens
+  # in particular is a defensive tool whose homepage is documentation — only
+  # tripping the token itself is the operation.
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .canarytokens.com
+      - .ceye.io
+      - .dnslog.cn
+      - .requestbin.net
+      - .webhook.site
+      - .requestcatcher.com
+      - .beeceptor.com
+      - .pipedream.net
+      - .interact.sh
+      - .oastify.com
+      - .oast.pro
+      - .oast.live
+      - .oast.site
+      - .oast.online
+      - .oast.fun
+      - .oast.me
+      - .burpcollaborator.net
+  condition: selection_host or selection_suffix

@@ -1,0 +1,11 @@
+id: topology_stage_complete
+kind: topology-gate
+purpose: |
+  The bound topology stage must finish and record merged output before the workflow advances.
+missing_signals:
+  - id: pending
+    when: "true"
+    detail: "Topology stage has not completed yet."
+    fix: "Wait for parallel topology legs to finish — the host marks the stage complete automatically."
+satisfy:
+  - "Topology orchestrator completes the bound stage and records topology_outputs."

@@ -1,0 +1,19 @@
+tags: [filesystem]
+description: "Change file ownership within write scope (never use command chown). Replaces command: chown(1)."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 20
+      description: Repo-relative paths (max 20; no recursive chown)
+    owner:
+      type: string
+      description: "current, numeric uid, or username — must resolve to the uid this host runs as"
+    group:
+      type: string
+      description: "Optional current, numeric gid, or group name — must resolve to effective gid (default current)"
+  required: [paths, owner]
+  additionalProperties: false

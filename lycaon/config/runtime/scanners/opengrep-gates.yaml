@@ -1,0 +1,41 @@
+analysis:
+  mode: intrafile
+vendor:
+- config/runtime/scanners/rules/vendor/0xdea/rules/c/insecure-api-gets.yaml
+lycaon:
+- config/runtime/scanners/rules/lycaon/apex/security.yaml
+- config/runtime/scanners/rules/lycaon/c/security.yaml
+- config/runtime/scanners/rules/lycaon/cairo/security.yaml
+- config/runtime/scanners/rules/lycaon/circom/security.yaml
+- config/runtime/scanners/rules/lycaon/coverage/security.yaml
+- config/runtime/scanners/rules/lycaon/clojure/security.yaml
+- config/runtime/scanners/rules/lycaon/csharp/security.yaml
+- config/runtime/scanners/rules/lycaon/dart/security.yaml
+- config/runtime/scanners/rules/lycaon/dockerfile/security.yaml
+- config/runtime/scanners/rules/lycaon/elixir/security.yaml
+- config/runtime/scanners/rules/lycaon/go/security.yaml
+- config/runtime/scanners/rules/lycaon/groovy/security.yaml
+- config/runtime/scanners/rules/lycaon/hack/security.yaml
+- config/runtime/scanners/rules/lycaon/java/security.yaml
+- config/runtime/scanners/rules/lycaon/javascript/security.yaml
+- config/runtime/scanners/rules/lycaon/json/security.yaml
+- config/runtime/scanners/rules/lycaon/jsonnet/security.yaml
+- config/runtime/scanners/rules/lycaon/jsp/security.yaml
+- config/runtime/scanners/rules/lycaon/julia/security.yaml
+- config/runtime/scanners/rules/lycaon/kotlin/security.yaml
+- config/runtime/scanners/rules/lycaon/move/security.yaml
+- config/runtime/scanners/rules/lycaon/perl/security.yaml
+- config/runtime/scanners/rules/lycaon/php/security.yaml
+- config/runtime/scanners/rules/lycaon/powershell/security.yaml
+- config/runtime/scanners/rules/lycaon/python/security.yaml
+- config/runtime/scanners/rules/lycaon/r/security.yaml
+- config/runtime/scanners/rules/lycaon/ruby/security.yaml
+- config/runtime/scanners/rules/lycaon/rust/security.yaml
+- config/runtime/scanners/rules/lycaon/scala/security.yaml
+- config/runtime/scanners/rules/lycaon/shell/security.yaml
+- config/runtime/scanners/rules/lycaon/solidity/security.yaml
+- config/runtime/scanners/rules/lycaon/swift/security.yaml
+- config/runtime/scanners/rules/lycaon/terraform/security.yaml
+- config/runtime/scanners/rules/lycaon/vue/security.yaml
+- config/runtime/scanners/rules/lycaon/xml/security.yaml
+- config/runtime/scanners/rules/lycaon/yaml/security.yaml

@@ -1,0 +1,49 @@
+oar: '1.0'
+id: COMMAND_GLOB_BUDGET_EXCEEDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.pattern
+  - paintedwolf.glob_limit
+  - paintedwolf.max
+when: paintedwolf.rejection_code == "COMMAND_GLOB_BUDGET_EXCEEDED"
+effect: block
+copy:
+  what: 'The glob `{{ paintedwolf.pattern }}` expands past {{ paintedwolf.max }} {{ paintedwolf.glob_limit }}.'
+  cause: One pattern may match 1,000 paths, and one call may examine 50,000 directory entries while expanding.
+  why: The host expands unquoted globs before approval so the reviewed argv is the argv that runs. A bounded walk
+    keeps that expansion from stalling the call; nothing was truncated.
+  fix: Narrow the pattern to a smaller directory or file set, quote it (`'*.go'`) so the program receives it
+    literally, or use `find` or `grep` to select paths.
+  instead: Narrow or quote the pattern
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: glob expansion exceeded its bound
+x-paintedwolf-scenarios:
+- id: matches
+  vars:
+    tool: command
+    pattern: '**/*.go'
+    glob_limit: matches
+    max: '1000'
+  expect_contains:
+  - 'Code: COMMAND_GLOB_BUDGET_EXCEEDED'
+  - '**/*.go'
+  - quote it
+- id: entries
+  vars:
+    tool: command
+    pattern: '**'
+    glob_limit: entries
+    max: '50000'
+  expect_contains:
+  - 'Code: COMMAND_GLOB_BUDGET_EXCEEDED'
+  - 50000 entries

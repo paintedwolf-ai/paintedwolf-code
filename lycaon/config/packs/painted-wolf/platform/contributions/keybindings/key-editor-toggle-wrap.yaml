@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-toggle-wrap
+command: painted-wolf/platform:editor-toggle-wrap
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+Z"
+  windows:
+    - "Alt+Z"
+  linux:
+    - "Alt+Z"

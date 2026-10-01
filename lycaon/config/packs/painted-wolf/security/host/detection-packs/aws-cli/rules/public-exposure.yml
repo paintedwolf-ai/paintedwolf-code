@@ -1,0 +1,68 @@
+title: Open a resource to the public internet
+id: da18987f-25cf-4c27-b57b-33e77ba24db7
+description: >-
+  Makes a database, image, snapshot, or bucket reachable by anyone, or removes the
+  account-level block that prevents it.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  verbs_public_exposure:
+    ApiAction|contains:
+      - ':delete-public-access-block'
+  # Negated exposure arguments remove public access.
+  selection_public_endpoint:
+    ApiAction|contains:
+      - ':modify-db-instance'
+      - ':modify-db-cluster'
+      - ':modify-cluster'
+      - ':create-db-instance'
+    CommandLine|contains: ' --publicly-accessible'
+  # These arguments share an image or snapshot publicly.
+  selection_share_all:
+    ApiAction|contains:
+      - ':modify-image-attribute'
+      - ':modify-snapshot-attribute'
+    CommandLine|contains:
+      - 'group=all'
+      - '"group": "all"'
+      - "'group': 'all'"
+  # Disabling every access block permits public object grants.
+  selection_access_block_off:
+    ApiAction|contains: ':put-public-access-block'
+    CommandLine|contains: 'blockpublicacls=false'
+  # A presigned URL grants temporary access through the link.
+  selection_presign:
+    ApiAction:
+      - 's3:presign'
+      - 'sagemaker:create-presigned-notebook-instance-url'
+      - 'sagemaker:create-presigned-domain-url'
+  filter_negated:
+    CommandLine|contains: ' --no-publicly-accessible'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and (verbs_public_exposure or (selection_public_endpoint and not filter_negated)
+    or selection_share_all or selection_access_block_off or selection_presign)
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

@@ -1,0 +1,8 @@
+id: painted-wolf/platform:action-rewrite-structurally
+title: "Rewrite structurally"
+target:
+  kind: "selection"
+  required: true
+execution:
+  preset: "edit_file"
+  prompt_ref: "guidance/editor/rewrite-structurally"

@@ -1,0 +1,31 @@
+# Negatives: near-misses, placeholders, and shapes that must stay clean under
+# upstream allowlists / charset / length floors.
+AKIAIOSFODNN7EXAMPLE
+AKIAIOSFODNN7CANARY0
+AKIASHORT
+not-a-key-at-all
+550e8400-e29b-41d4-a716-446655440000
+deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+ghp_short
+github_pat_too_short
+xoxb-1-2
+AIzaSyabcdefghijklmnopqrstuvwxyz1234567
+sk-notanopenaikey
+sk-ant-short
+eyJ.too.short
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+tvly-YOUR_API_KEY
+fw_your_api_key_here
+sk-or-v1-not-a-real-key
+-----BEGIN PUBLIC KEY-----
+password=hunter2
+api_key=example
+.env.example placeholder AWS_ACCESS_KEY_ID=
+export FIREWORKS_API_KEY="your_api_key_here"
+export TOGETHER_API_KEY="your_api_key"
+export BRAVE_SEARCH_API_KEY="your_actual_api_key_here"
+export KAGI_API_KEY="YOUR_TOKEN_HERE"
+export AZURE_OPENAI_API_KEY="REPLACE_WITH_YOUR_KEY_VALUE_HERE"
+apiKey: '<OPENROUTER_API_KEY>'
+X-Subscription-Token: <YOUR_API_KEY>

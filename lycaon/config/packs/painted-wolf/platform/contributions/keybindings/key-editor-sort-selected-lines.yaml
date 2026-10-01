@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-sort-selected-lines
+command: painted-wolf/platform:editor-sort-selected-lines
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "F5"
+  windows:
+    - "F5"
+  linux:
+    - "F5"

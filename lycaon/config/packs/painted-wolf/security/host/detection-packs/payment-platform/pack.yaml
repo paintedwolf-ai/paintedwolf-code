@@ -1,0 +1,5 @@
+id: payment-platform
+label: Payment platforms
+description: >-
+  Stripe CLI operations that delete a customer or product through its generic
+  REST passthrough command.

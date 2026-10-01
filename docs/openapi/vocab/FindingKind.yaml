@@ -1,0 +1,14 @@
+# FindingKind — SecurityFinding scanner-domain classification.
+name: FindingKind
+go_const_prefix: FindingKind
+values:
+  - id: sast
+    go: SAST
+  - id: secret
+  - id: sca
+    go: SCA
+  - id: container
+  - id: iac
+    go: IaC
+  - id: license
+  - id: custom

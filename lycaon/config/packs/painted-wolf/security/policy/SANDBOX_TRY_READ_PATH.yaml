@@ -1,0 +1,58 @@
+oar: '1.0'
+id: SANDBOX_TRY_READ_PATH
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_read_paths
+    - paintedwolf.refused_read_grants
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.refused_read_grants) > 0
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused reads of protected paths
+    {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %}
+    while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}.
+  cause: >-
+    The kernel refused them because those paths are protected unless the
+    invocation declares `capability_request.read_path`. Command output cannot
+    add the field.
+  why: >-
+    Repeating the command without the declaration is refused again.
+  fix: >-
+    {% if paintedwolf.process_running %}If the job cannot finish without the
+    read, stop it with `command_stop`, then reissue{% else %}Reissue{% endif %}
+    the same command with `capability_request.read_path` set to the matching
+    entry of {{ paintedwolf.refused_read_grants }}; approval follows the
+    project posture before it runs. If a later result says the read cannot
+    proceed, continue without the content and report what is missing.
+  instead: Reissue with capability_request.read_path naming the refused path —
+    do not retry the bare read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a protected read this invocation needed
+x-paintedwolf-scenarios:
+  - id: key_material
+    vars:
+      tool: command
+      failed_stages: [ssh-keygen -y -f /Users/person/.ssh/id_ed25519]
+      refused_read_paths: [/Users/person/.ssh/id_ed25519]
+      refused_read_grants: [/Users/person/.ssh/id_ed25519]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_READ_PATH'
+      - capability_request.read_path
+      - id_ed25519

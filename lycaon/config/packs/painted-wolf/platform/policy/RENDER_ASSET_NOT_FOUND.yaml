@@ -1,0 +1,40 @@
+oar: '1.0'
+id: RENDER_ASSET_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.missing
+  - paintedwolf.path
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "RENDER_ASSET_NOT_FOUND"
+effect: block
+copy:
+  what: 'render_view could not serve project asset {{ paintedwolf.path }}: {{ paintedwolf.rejection_reason }}.'
+  cause: The asset was unavailable as a readable regular file; the reason distinguishes missing root/path, nonregular
+    input, and filesystem failures.
+  why: Project assets are served offline from the project root — the render fails fast instead of shipping a mockup
+    with silently broken assets.
+  fix: Check the intended root-relative path and its readability using offered file tools. Prior kit.assets.sample_paths
+    contains examples, not a complete inventory. Retain required visual content until it can be served; do not silently
+    drop the reference.
+  instead: Resolve the reported asset failure without inferring absence from an I/O error
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Referenced project asset path does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: assets/logo.png
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_ASSET_NOT_FOUND'

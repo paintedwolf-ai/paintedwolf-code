@@ -1,0 +1,4 @@
+id: aws-access-token
+upstream_id: aws-access-token
+title: AWS access key ID
+severity: critical

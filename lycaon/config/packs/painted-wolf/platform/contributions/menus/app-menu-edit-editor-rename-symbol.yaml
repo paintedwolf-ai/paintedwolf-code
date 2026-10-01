@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-rename-symbol
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-rename-symbol
+group: "1"
+order: 13
+label: "Rename symbol"

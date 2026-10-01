@@ -1,0 +1,32 @@
+oar: '1.0'
+id: OVERLAY_PROMOTE_NOT_FOUND
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NOT_FOUND"
+effect: block
+copy:
+  what: No overlay {{ paintedwolf.job_id }} on this session — promote/reject targets must match the live
+    pulse roster
+  cause: Either the overlay_id is stale (an older transcript reference), was already promoted/rejected, or
+    was mistyped
+  why: There is no overlay to act on; retrying with the same id will keep failing
+  fix: Re-read the pulse roster's pending write list; pick a current overlay_id; or accept that this work is
+    already terminal
+  instead: Branch on Code; verify overlay_id against the live pulse roster
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: No overlay with overlay_id={{ paintedwolf.job_id }} exists on this session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: ov-missing
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_PROMOTE_NOT_FOUND'
+  - ov-missing

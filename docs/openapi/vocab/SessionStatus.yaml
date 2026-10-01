@@ -1,0 +1,20 @@
+name: SessionStatus
+description: Session lifecycle state.
+go_const_prefix: SessionStatus
+go_file: session_status.generated.go
+json_schema: docs/schemas/events/session-status.generated.json
+state_machine:
+  ts_file: lycaon-den/src/api/session-status.generated.ts
+  initial: [preparing, idle]
+  transitions:
+    preparing: [idle, error]
+    idle: [busy, error]
+    busy: [idle, error]
+    error: [idle, busy]
+  sql_check:
+    path: lycaon/internal/db/schema.sql
+values:
+  - id: preparing
+  - id: idle
+  - id: busy
+  - id: error

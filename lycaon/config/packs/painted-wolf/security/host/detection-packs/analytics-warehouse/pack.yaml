@@ -1,0 +1,5 @@
+id: analytics-warehouse
+label: Data warehouses
+description: >-
+  Databricks, BigQuery, and Snowflake operations that permanently delete a
+  cluster, catalog, dataset, or table.

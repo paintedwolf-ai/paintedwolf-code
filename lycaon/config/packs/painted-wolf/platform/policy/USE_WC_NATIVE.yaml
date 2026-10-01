@@ -1,0 +1,36 @@
+oar: '1.0'
+id: USE_WC_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "USE_WC_NATIVE"
+effect: block
+copy:
+  what: The parsed command can be represented by the supplied wc call.
+  cause: The host validated this replacement against the tool currently offered.
+  why: Native wc returns structured counts and identifies skipped binary inputs. Preserve the requested count
+    mode and inspect result coverage.
+  fix: Use the supplied replacement_calls entries exactly and in order; retain the intended paths, spans and
+    options.
+  instead: Use the validated wc replacement
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native wc instead of command wc
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_WC_NATIVE'

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-split-selection-into-lines
+command: painted-wolf/platform:editor-split-selection-into-lines
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+L"
+  windows:
+    - "Mod+Shift+L"
+  linux:
+    - "Mod+Shift+L"

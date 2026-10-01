@@ -1,0 +1,16 @@
+# A brand-new code, so it is additive and can never conflict. The host emits by
+# string code; this file is the copy for that string. No map monolith, no Go.
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: project }
+title: Onboarding checklist not finished
+message: >-
+  {{ remaining }} setup step(s) are still open for this project, so some
+  workflows will be missing context they expect.
+suggested_action: Open the onboarding checklist and finish the remaining steps.
+scenarios:
+  - id: default
+    vars:
+      remaining: "3"
+    expect_contains:
+      - "3"
+      - checklist

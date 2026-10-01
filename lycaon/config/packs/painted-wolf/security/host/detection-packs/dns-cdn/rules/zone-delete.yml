@@ -1,0 +1,30 @@
+title: Delete a DNS zone
+id: e1d4afeb-4c5c-4068-9f31-a4f412d2f86f
+description: Deletes a hosted DNS zone and every record in it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_flarectl:
+    Image: flarectl
+    CommandLine|contains: ' zone delete'
+  selection_route53:
+    Image: aws
+    ApiAction: 'route53:delete-hosted-zone'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_flarectl or selection_route53) and not filter_rehearsal and not filter_local

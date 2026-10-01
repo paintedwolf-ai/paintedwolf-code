@@ -1,0 +1,275 @@
+components:
+  schemas:
+    TrustSurfaceId:
+      type: string
+      description: One surface of project-supplied configuration.
+      enum:
+      - agents_md
+      - skills
+      - project_settings
+      - project_mcp
+      - scan_config
+      - prompt_overrides
+      - extension_config
+      - extension_suggestions
+    TrustSurfaceGroup:
+      type: string
+      description: >-
+        Groups surfaces by effect: steering, default replacement, or device
+        install suggestion.
+      enum:
+      - steering
+      - replaces_defaults
+      - suggestion
+    TrustSurfaceSetting:
+      x-go-generate: true
+      type: object
+      required: [id, label, group, enabled]
+      additionalProperties: false
+      description: One configurable surface with its device-level switch.
+      properties:
+        id:
+          $ref: "#/components/schemas/TrustSurfaceId"
+        label:
+          type: string
+        group:
+          $ref: "#/components/schemas/TrustSurfaceGroup"
+        enabled:
+          type: boolean
+    TrustSettingsResponse:
+      x-go-generate: true
+      type: object
+      required: [surfaces]
+      additionalProperties: false
+      description: >-
+        Device-wide off switches for what any project may supply. A quiet kill
+        switch, not the primary UX — day-to-day choices are per project.
+      properties:
+        surfaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustSurfaceSetting"
+    UpdateTrustSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Partial surface id to enabled; unnamed surfaces keep their value.
+
+    AgentContextInstruction:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          description: Root-relative AGENTS.md path in runtime precedence order.
+    AgentContextSkill:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - description
+      - path
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        path:
+          type: string
+          description: Root-relative SKILL.md path.
+    ProjectAgentContext:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - root_id
+      - path
+      - instructions_enabled
+      - skills_enabled
+      - instructions
+      - skills
+      additionalProperties: false
+      description: >-
+        Actual repository guidance available at one root-relative path. Built by
+        the same AGENTS.md and project-skill resolvers used for model context.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        instructions_enabled:
+          type: boolean
+        skills_enabled:
+          type: boolean
+        instructions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentContextInstruction"
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentContextSkill"
+    TrustSurfaceItem:
+      x-go-generate: true
+      type: object
+      required: [name, root_id, path]
+      additionalProperties: false
+      description: One concrete thing a surface supplies.
+      properties:
+        name:
+          type: string
+        detail:
+          type: string
+          description: Human-readable qualifier — an MCP transport, a pack source.
+        root_id:
+          type: string
+          format: uuid
+          description: Attached project root containing this file item.
+        path:
+          type: string
+          description: Root-relative path for file items.
+        lines:
+          type: integer
+          description: Prose size hint for instruction files.
+    ProjectTrustSurface:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - label
+      - group
+      - count
+      - items
+      - device_enabled
+      - project_enabled
+      - applying
+      - seen
+      additionalProperties: false
+      description: One discovered surface joined to what the human enabled and last read.
+      properties:
+        id:
+          $ref: "#/components/schemas/TrustSurfaceId"
+        label:
+          type: string
+        group:
+          $ref: "#/components/schemas/TrustSurfaceGroup"
+        count:
+          type: integer
+          description: >-
+            Number of discovered items. For skills this is what the loader will
+            use, so a name shadowed across roots is counted once.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustSurfaceItem"
+        device_enabled:
+          type: boolean
+        project_enabled:
+          type: boolean
+        applying:
+          type: boolean
+          description: Whether the surface currently affects the project.
+        seen:
+          type: boolean
+          description: >-
+            Whether the tree matches the version last read. An unseen surface
+            still applies; reading does not change what the agent gets.
+    ProjectTrust:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - surfaces
+      - unread_count
+      - review
+      additionalProperties: false
+      description: >-
+        What a project supplies, which of it applies, and what has moved since it
+        was read. One read shared by the composer chip and Project
+        configuration so those surfaces cannot disagree.
+      properties:
+        review:
+          $ref: "#/components/schemas/ProjectTrustReview"
+        unread_count:
+          type: integer
+          description: Distinct files whose current contents have not been marked read.
+        project_id:
+          type: string
+          format: uuid
+        surfaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectTrustSurface"
+    UpdateProjectTrustRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Partial surface id to enabled; unnamed surfaces keep their value.
+
+    ProjectTrustReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, project_id, changes]
+      description: The shared Trust comparison. Marking it read preserves its identity and files.
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustFileChange"
+    TrustFileChange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, root_id, root_label, path, surface_ids, kind, before, after]
+      properties:
+        id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+          description: Root identity retained even after the root is detached.
+        root_label:
+          type: string
+        path:
+          type: string
+        surface_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustSurfaceId"
+        kind:
+          type: string
+          enum: [added, modified, removed]
+        before:
+          type: string
+          description: Exact retained text when Trust was previously opened; empty for an addition.
+        after:
+          type: string
+          description: Exact text captured for this opening; empty for a removal.
+

@@ -1,0 +1,305 @@
+components:
+  schemas:
+    SourceChangeOp:
+      $ref: ../source-change-op.generated.yaml#/components/schemas/SourceChangeOp
+    SourceChangeOrigin:
+      $ref: ../source-change-origin.generated.yaml#/components/schemas/SourceChangeOrigin
+    SourceGitChangeKind:
+      $ref: ../source-git-change-kind.generated.yaml#/components/schemas/SourceGitChangeKind
+    SourceHeadMatch:
+      $ref: ../source-head-match.generated.yaml#/components/schemas/SourceHeadMatch
+    SourceCommandWindowState:
+      $ref: ../source-command-window-state.generated.yaml#/components/schemas/SourceCommandWindowState
+    SourceCommandWindow:
+      x-go-generate: true
+      type: object
+      required: [id, session_id, turn, tool_name, command_line, state, ordinal, started_at]
+      additionalProperties: false
+      description: |
+        One host-run command's observation window: the span of a command or
+        verify tool call during which reconcile passes attribute the file
+        changes they observe to that command, and admit files the window's
+        start inventory did not hold. Effects reference it by command_id. It
+        states when a change was observed, never that the process wrote the
+        bytes: an edit made in another editor while the command ran lands
+        here too, and the label says so.
+      properties:
+        id: {type: string, format: uuid}
+        session_id:
+          type: string
+          format: uuid
+          description: Chat whose tool call ran the command; its effects answer that chat's turn and session lenses.
+        turn: {type: integer}
+        tool_call_id:
+          x-go-pointer: true
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        tool_name:
+          x-go-pointer: true
+          type: string
+          description: The tool that ran the command — command or verify.
+        command_line:
+          type: string
+          description: The canonical command line, with secret references rather than values.
+        state: {$ref: '#/components/schemas/SourceCommandWindowState'}
+        admission_mode:
+          x-go-pointer: true
+          type: string
+          description: >-
+            How the pass that ended the window selected files. `scope` means
+            every directory the root's source scope admitted was observed;
+            `scope_bounded` means a walk budget stopped the observation short
+            of the scope. Omitted while running.
+        ordinal:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Position on the project's source-history clock, taken when the command started.
+        started_at: { x-go-name: "StartedAt", type: string, format: date-time}
+        ended_at:
+          x-go-pointer: true
+          x-go-name: "EndedAt"
+          type: string
+          format: date-time
+          description: When the window ended; omitted while running.
+    SourceGitChange:
+      x-go-generate: true
+      type: object
+      required: [id, root_id, kind, ordinal, observed_at]
+      additionalProperties: false
+      description: |
+        One observed git ref movement, stated from git's own records (HEAD and
+        the reflog) at observation time. Effects recorded by the pass that
+        observed the movement reference it as their cause; a movement that
+        changed no tracked file bytes — a bare commit — stands alone. The
+        invoking chat, turn, and tool call are absent for an unaffiliated
+        movement.
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Invoking chat.
+        turn: {type: integer, minimum: 0}
+        tool_call_id:
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        tool_name: {type: string}
+        id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/SourceGitChangeKind'}
+        from_commit:
+          x-go-pointer: true
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+        to_commit:
+          x-go-pointer: true
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+        from_ref:
+          x-go-pointer: true
+          type: string
+          description: Short branch name before the movement; omitted when detached or unknown.
+        to_ref:
+          x-go-pointer: true
+          type: string
+          description: Short branch name after the movement; omitted when detached or unknown.
+        detail:
+          x-go-pointer: true
+          type: string
+          description: Git's own subject for the movement — a commit message subject, a checkout description, or the raw reflog action for kind other.
+        ordinal:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Position on the project's source-history clock, shared with effects and versions.
+        observed_at: { x-go-name: "ObservedAt", type: string, format: date-time}
+    SourceContributor:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [origin, turn, actor_label]
+      description: One author of a change. Identity fields the contribution does not have are omitted.
+      properties:
+        origin: {$ref: '#/components/schemas/SourceChangeOrigin'}
+        session_id: {type: string, format: uuid, description: Chat that made the change; omitted for external contributions.}
+        turn: {type: integer}
+        person_id:
+          type: string
+          format: uuid
+          description: Person who wrote user-origin text; omitted for agent and external contributions.
+        actor_label: {type: string}
+        tool_call_id:
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        tool_name: {type: string}
+        worker_id: {type: string, format: uuid}
+    SourceWalkEffect:
+      x-go-generate: true
+      x-go-field-order: ["id", "project_id", "operation_id", "file_id", "before_version_id", "after_version_id", "workspace_kind", "root_id", "path", "from_root_id", "from_path", "entry_kind", "op", "origin", "session_id", "worker_id", "turn", "tool_call_id", "tool_name", "batch_id", "ordinal", "cause", "capture_quality", "actor_label", "git_change_id", "command_id", "observed_at", "contributors"]
+      type: object
+      required: [id, project_id, operation_id, file_id, after_version_id, workspace_kind, root_id, path, entry_kind, op, origin, turn, ordinal, cause, capture_quality, observed_at, contributors]
+      additionalProperties: false
+      properties:
+        contributors: {type: array, items: {$ref: '#/components/schemas/SourceContributor'}}
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        operation_id: {type: string, format: uuid}
+        file_id: {type: string, format: uuid}
+        before_version_id: { x-go-pointer: true, type: string, format: uuid}
+        after_version_id: {type: string, format: uuid}
+        workspace_kind:
+          x-go-type: "SourceWorkspaceKind"
+          allOf: [{$ref: 'source-workspace.yaml#/components/schemas/SourceWorkspaceKind'}]
+          description: Which kind of tree this effect landed in. A worker effect names its overlay through worker_id; the project's own tree is the default.
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        from_root_id: { x-go-pointer: true, type: string, format: uuid}
+        from_path:
+          x-go-pointer: true
+          type: string
+        op: {$ref: '#/components/schemas/SourceChangeOp'}
+        entry_kind: {type: string}
+        origin: {$ref: '#/components/schemas/SourceChangeOrigin'}
+        session_id: { x-go-pointer: true, type: string, format: uuid}
+        worker_id: { x-go-pointer: true, type: string, format: uuid}
+        turn: {type: integer}
+        tool_call_id:
+          x-go-pointer: true
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        tool_name:
+          x-go-pointer: true
+          type: string
+          description: Tool that caused the source effect, when invoked through the tool plane
+        batch_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: Shared by every effect one observation batch or one batch write recorded together; omitted for a single write.
+        ordinal: {type: integer, format: int64, minimum: 1}
+        cause: {type: string}
+        capture_quality:
+          type: string
+          enum: [exact, observed, reconciled]
+        actor_label: { x-go-pointer: true, type: string}
+        git_change_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: Id of the entry in the response's git_changes list this effect's operation traced its changes to; omitted for operations with no git cause.
+        command_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: Id of the entry in the response's commands list whose window was open when this effect was observed; omitted for operations no window covered.
+        observed_at: { x-go-name: "ObservedAt", type: string, format: date-time}
+    SourceWalkFile:
+      x-go-generate: true
+      type: object
+      required: [file_id, root_id, path, changed_since_presented, unpresented_agent_effects, tip, head_match, effects]
+      additionalProperties: false
+      properties:
+        commit:
+          x-go-pointer: true
+          $ref: 'source-versions.yaml#/components/schemas/SourceCommitComparison'
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        last_at: { x-go-pointer: true, x-go-name: "LastAt", type: string, format: date-time}
+        changed_since_presented: {type: boolean}
+        unpresented_agent_effects:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Agent effects not yet completed by a file presentation; human edits never clear this count.
+        presentation_effect_id:
+          type: string
+          format: uuid
+        presentation_ordinal: {type: integer, format: int64, minimum: 1}
+        tip:
+          $ref: 'source-versions.yaml#/components/schemas/SourceTip'
+        head_match:
+          $ref: '#/components/schemas/SourceHeadMatch'
+          description: Whether the tip's bytes equal what HEAD holds at this path, by derived git blob object id. Unknown whenever the lens, the repository, or the captured bytes cannot answer.
+        effects:
+          type: array
+          items: {$ref: '#/components/schemas/SourceWalkEffect'}
+    SourceWalkTurn:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [session_id, turn, message_id, prompt, observed_at]
+      description: The opening user message and complete-transcript ordinal for a recorded turn.
+      properties:
+        session_id: {type: string, format: uuid}
+        turn: {type: integer, minimum: 1}
+        message_id: {type: string, format: uuid}
+        prompt: {type: string, description: A short excerpt of the opening user message.}
+        observed_at: {type: string, format: date-time}
+    SourceWalkTurnSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [message_id, turn, steps, items]
+      properties:
+        message_id: {type: string, format: uuid}
+        turn:
+          type: integer
+          minimum: 1
+          description: Permanent turn ordinal this message opened, as the turn baseline spells it.
+        steps: {type: integer, minimum: 0}
+        items: {type: integer, minimum: 0}
+    SourceWalkSummary:
+      x-go-generate: true
+      type: object
+      required: [turns]
+      additionalProperties: false
+      properties:
+        turns:
+          type: array
+          items: {$ref: '#/components/schemas/SourceWalkTurnSummary'}
+    SourceWalkResponse:
+      x-go-generate: true
+      type: object
+      required: [baseline, files, git_changes, commands, turns, commit_available]
+      additionalProperties: false
+      properties:
+        baseline:
+          type: string
+          description: |
+            The baseline this page answered, in the request's grammar. A
+            chat-relative `turn:{session_id}` comes back as
+            `turn:{session_id},{n}` naming the turn it read; a chat with no
+            user turn yet answers `turn:{session_id},0` and lists nothing.
+            Send it back for later pages and address per-file comparisons with
+            it, so every read describes the same range.
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Omitted on the final page.
+        commit_roots:
+          type: array
+          items: {$ref: 'source-versions.yaml#/components/schemas/SourceCommitRoot'}
+        turns:
+          type: array
+          items: {$ref: '#/components/schemas/SourceWalkTurn'}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/SourceWalkFile'}
+        git_changes:
+          type: array
+          items: {$ref: '#/components/schemas/SourceGitChange'}
+          description: |
+            Movements selected by the same baseline and ordinal page as file
+            effects, including commits with no working-file changes, newest first.
+            Also includes movements referenced by this page's effects through
+            git_change_id; those references do not advance the page cursor.
+        commands:
+          type: array
+          items: {$ref: '#/components/schemas/SourceCommandWindow'}
+          description: |
+            Every command observation window an effect on this page references
+            by command_id, newest first. A window that observed nothing has no
+            row, so there is no bare command to list.
+        commit_available:
+          type: boolean
+          description: False when the project root is not a git checkout

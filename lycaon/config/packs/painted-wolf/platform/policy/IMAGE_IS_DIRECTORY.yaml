@@ -1,0 +1,33 @@
+oar: '1.0'
+id: IMAGE_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_image
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "IMAGE_IS_DIRECTORY"
+effect: block
+copy:
+  what: '{{ tool }} cannot view {{ paintedwolf.path }} because it is a directory.'
+  cause: The path names a directory, not an image file.
+  why: view_image inspects one image file at a time.
+  fix: List the directory with list_dir and pass one image file inside it.
+  instead: Branch on Code IMAGE_IS_DIRECTORY; pass a file path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
+x-paintedwolf-message: view_image path is a directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: assets/icons
+    profile: coordinator
+    tool: view_image
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: IMAGE_IS_DIRECTORY'

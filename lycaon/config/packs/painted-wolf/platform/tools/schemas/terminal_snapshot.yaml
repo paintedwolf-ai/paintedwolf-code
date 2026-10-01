@@ -1,0 +1,28 @@
+tags: [terminal]
+description: >-
+  User-visible photograph of the held terminal session (CLI output or TUI),
+  parallel to capture_page for pages. Returns one bounded VT screen and a
+  receipt, never a duplicate main-stream log. Use for any held session — not
+  only full-screen TUIs. Settles on output quiescence; does not advance
+  terminal_read's cursor.
+schema:
+  type: object
+  properties:
+    id:
+      type: string
+      description: Handle from terminal_open.
+    idle_ms:
+      type: integer
+      minimum: 1
+      description: Quiet window before snapshot (default host idle).
+    timeout_ms:
+      type: integer
+      minimum: 1
+      description: Hard per-call settle cap (default host timeout).
+    caption:
+      type: string
+      description: >-
+        Short label for this capture. Without one its card shows only the tool
+        name.
+  required: [id]
+  additionalProperties: false

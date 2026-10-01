@@ -1,0 +1,50 @@
+title: Disable an operating system protection
+id: b43ee550-cc33-458f-96ee-94a85af86c8c
+description: Turns off system integrity protection, code signing checks, or the host firewall.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_macos:
+    Image:
+      - csrutil
+      - spctl
+    CommandLine|contains:
+      - ' disable'
+      - ' --master-disable'
+  # `disable` is ufw's off-switch and `-d` is pfctl's; firewalld has neither, and
+  # reaches this rule only by making the trusted (accept-everything) zone the
+  # default for every unassigned interface.
+  selection_firewall_off:
+    Image:
+      - ufw
+      - pfctl
+      - firewall-cmd
+    CommandLine|contains:
+      - ' disable'
+      - ' -d '
+      - ' --set-default-zone=trusted'
+  # `-f` is the fragment match; only the capital flushes the chain.
+  selection_iptables_flush:
+    Image:
+      - iptables
+      - nft
+    CommandLine|re: '\s(-F|--flush)\b|\sflush\s+ruleset\b'
+  selection_selinux:
+    Image: setenforce
+    CommandLine|contains: ' 0'
+  filter_rehearsal:
+    Argv|re: '^(--help|status)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_macos or selection_firewall_off or selection_iptables_flush or selection_selinux) and not filter_rehearsal and not filter_local

@@ -1,0 +1,12 @@
+# Bundled MCP catalog — empty by default (BYO via user/project overlays).
+# See internal/mcp/ and docs/mcp.md.
+#
+# Transport is inferred from the row shape:
+#   - url: streamable HTTP
+#   - command: stdio subprocess
+#
+# Add providers in ~/.config/paintedwolf/mcp.yaml or {project}/${overlay_dir}/mcp.yaml.
+
+providers: []
+
+profiles: {}

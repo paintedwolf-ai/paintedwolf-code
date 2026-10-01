@@ -1,0 +1,6 @@
+# Order sorts commands within a slot group.
+id: example/editor-surface:editor-context-summarize
+slot: editor.context.analysis
+command: example/editor-surface:summarize-selection
+group: example
+order: 60

@@ -1,0 +1,33 @@
+# FindingIgnoreJustification — OpenVEX not_affected justifications for advisory ignores.
+name: FindingIgnoreJustification
+go_const_prefix: FindingIgnoreJustification
+description: >-
+  The OpenVEX justification for an advisory a project has judged not to apply,
+  carried unchanged so an ignore exports as a VEX statement.
+ts_labels:
+  path: lycaon-den/src/lib/finding-ignore-justification.generated.ts
+  const: FINDING_IGNORE_JUSTIFICATION_LABELS
+  type_import: ../api/types.ts
+  doc: >-
+    Control labels for the OpenVEX justifications an advisory ignore can carry.
+values:
+  - id: component_not_present
+    comment: >-
+      the vulnerable component is not in the artifact at all.
+    label: Component not present
+  - id: vulnerable_code_not_present
+    comment: >-
+      the component is present but the vulnerable code was removed.
+    label: Vulnerable code not present
+  - id: vulnerable_code_not_in_execute_path
+    comment: >-
+      the vulnerable code is present but nothing reaches it.
+    label: Not in the execute path
+  - id: vulnerable_code_cannot_be_controlled_by_adversary
+    comment: >-
+      the vulnerable code runs but no adversary-controlled input reaches it.
+    label: Not adversary-controlled
+  - id: inline_mitigations_already_exist
+    comment: >-
+      a mitigation in this project already blocks the exploit.
+    label: Mitigations already exist

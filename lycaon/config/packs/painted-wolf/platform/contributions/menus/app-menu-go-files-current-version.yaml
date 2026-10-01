@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-files-current-version
+slot: "app_menu.go"
+command: painted-wolf/platform:files-current-version
+group: "6"
+order: 27
+label: "Current version"

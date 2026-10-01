@@ -1,0 +1,93 @@
+language: elixir
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: shell-injection-vulnerable
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: System.cmd("sh", ["-c", conn.params["command"]])
+    end
+  want:
+  - lycaon.elixir.shell-injection
+  covers: []
+- name: shell-injection-safe
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: System.cmd("printf", ["%s", conn.params["text"]])
+    end
+  want: []
+  covers:
+  - lycaon.elixir.shell-injection
+- name: code-injection-vulnerable
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: Code.eval_string(conn.params["code"])
+    end
+  want:
+  - lycaon.elixir.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: Jason.decode(conn.params["data"])
+    end
+  want: []
+  covers:
+  - lycaon.elixir.code-injection
+- name: sql-injection-vulnerable
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: Ecto.Adapters.SQL.query(Repo,"SELECT * FROM users WHERE name = " <> conn.params["name"],[])
+    end
+  want:
+  - lycaon.elixir.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: Ecto.Adapters.SQL.query(Repo,"SELECT * FROM users WHERE name = $1",[conn.params["name"]])
+    end
+  want: []
+  covers:
+  - lycaon.elixir.sql-injection
+- name: path-traversal-vulnerable
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: File.read!(conn.params["path"])
+    end
+  want:
+  - lycaon.elixir.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(conn), do: File.read!("config.json")
+    end
+  want: []
+  covers:
+  - lycaon.elixir.path-traversal
+- name: unsafe-binary-deserialization-context-only
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(data), do: :erlang.binary_to_term(data)
+    end
+  want: []
+  covers: []
+- name: unsafe-binary-deserialization-safe
+  file: sample.ex
+  source: |
+    defmodule Audit do
+     def run(data), do: :erlang.binary_to_term(data, [:safe])
+    end
+  want: []
+  covers: []

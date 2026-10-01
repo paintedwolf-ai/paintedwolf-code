@@ -1,0 +1,18 @@
+# capture_page — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    capture_page:
+        tool: capture_page
+        tier_hint: recoverable
+        what_changes: Capture a screenshot and structural snapshot of a page.
+        who_affected: This session — a headless browser visits the target URL or served path.
+        if_wrong: Network/local page access leaves your machine; no project files are mutated.
+        allow_line: capturing page screenshots
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Capture
+                - screenshot

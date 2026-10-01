@@ -1,0 +1,10 @@
+# An unfinished onboarding check leaves the saved provider key intact.
+scope: app
+title: Could not check the connection
+message: >-
+  Your key is saved. You can continue now and change this later in Settings.
+scenarios:
+  - id: default
+    expect_contains:
+      - key is saved
+      - continue

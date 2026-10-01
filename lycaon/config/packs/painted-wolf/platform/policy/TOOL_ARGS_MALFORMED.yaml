@@ -1,0 +1,32 @@
+oar: '1.0'
+id: TOOL_ARGS_MALFORMED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "TOOL_ARGS_MALFORMED"
+effect: block
+copy:
+  what: Tool {{ tool }} arguments were not valid JSON — the object never parsed, so none of it reached the
+    tool.
+  cause: The transport did not decode one complete arguments object. The receiving tool was not invoked.
+  why: A rejection about "missing" fields is misleading here — the keys may have been sent but the malformed
+    JSON was discarded whole, so retrying the same shape keeps failing.
+  fix: Emit one valid JSON object with argument fields as sibling keys according to this tool’s schema. JSON
+    text is valid inside a body/content field when that field actually accepts it; misplaced argument fields
+    inside a string do not set those arguments.
+  instead: Repair the arguments object without changing the intended payload
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_args
+x-paintedwolf-message: Tool {{ tool }} arguments were not valid JSON — the object never parsed, so none of
+  it reached the tool.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: summarize
+  expect_contains:
+  - not valid JSON
+  - sibling key

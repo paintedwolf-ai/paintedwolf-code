@@ -1,0 +1,172 @@
+name: The agent did something wrong
+description: The agent stayed inside its permissions and did something you did not want. Not automatically a defect — and not a support request.
+labels: ["agent-behavior"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Stop — is this a containment failure?
+
+        If the agent **got outside the boundary it was given**, that is a security report and it
+        does not belong in a public issue. Use the private advisory flow instead (repository
+        **Security** tab → **Report a vulnerability**) if the agent:
+
+        - read or wrote a file **outside an approved project root**,
+        - ran a command that escaped its confinement,
+        - reached a network host it should not have been able to reach, or
+        - put a secret, key, or token somewhere it could be read.
+
+        `SECURITY.md` in the repository root defines the scope.
+
+        ## This form is not a warranty
+
+        You can attach any model. Model output is not deterministic. A single bad edit, an
+        ignored instruction, or a loop on a model you chose is often just the model — expected,
+        and not a product defect.
+
+        File here when you think the **host** should have prevented it: a missing gate, project
+        policy that never reached the model, a loop the product claims to detect, a shipped
+        default that fails the same task consistently, or a blast radius Review / undo / scope
+        should have contained. If you are unsure, say so below. Filing one does not entitle
+        you to a reply or a fix.
+
+        `REPORTING.md` is the bar.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: This is not a containment escape. The agent stayed inside the permissions it was granted.
+          required: true
+        - label: I searched existing issues and this is not already reported.
+          required: true
+        - label: I understand a one-off mistake from a model I chose may be closed as expected behaviour.
+          required: true
+        - label: Nothing I am pasting below contains secrets, credentials, or code I cannot publish. This issue will be public forever.
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: What did it do?
+      options:
+        - ""
+        - "Modified files I did not ask it to modify"
+        - "Ran a command I did not expect"
+        - "Proceeded without waiting for an approval I expected"
+        - "Made a destructive or plainly wrong edit"
+        - "Ignored AGENTS.md or project policy"
+        - "Looped or stalled without making progress"
+        - "Reported work as done when it was not"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: asked
+    attributes:
+      label: What you asked for
+      description: Your prompt, or a faithful paraphrase if it contained anything private.
+    validations:
+      required: true
+
+  - type: textarea
+    id: did
+    attributes:
+      label: What it did instead
+      description: >-
+        What actually happened, and how you noticed. If it edited files, say which kinds of files —
+        you do not need to paste the diff.
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and provider
+      description: >-
+        For example `claude-opus-4-6 / Anthropic` or `kimi-k2 / Moonshot`. Behaviour depends
+        heavily on the model, so a report without this cannot be acted on.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model_source
+    attributes:
+      label: Who chose this model?
+      description: The host owns shipped defaults. It does not own a model you pointed at the coordinator.
+      options:
+        - ""
+        - "Shipped default for this role — I did not override it"
+        - "I chose this model or provider myself"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host_claim
+    attributes:
+      label: Why do you think the product should have stopped this?
+      description: >-
+        The honest answer may be that it shouldn't have. Pick that if it is true — those reports
+        are closed as expected behaviour.
+      options:
+        - ""
+        - "An approval I expected never appeared"
+        - "Project policy / AGENTS.md was ignored — I believe it was injected"
+        - "It looped or stalled in a way the product claims to detect"
+        - "A shipped default model and shipped prompts fail this task consistently"
+        - "The blast radius should have been smaller (Review, undo, or scope)"
+        - "I am not sure — I want a human to look"
+        - "I don't think the product failed; I just want it on the record"
+    validations:
+      required: true
+
+  - type: textarea
+    id: system_info
+    attributes:
+      label: System information
+      description: >-
+        In the app: **Settings → Advanced → Diagnostics → System information → Copy for bug report**, then paste
+        it here. No keys, nothing about your projects.
+      render: text
+      placeholder: |
+        app version: 1.0.0
+        den version: 1.0.0
+        store schema_version: 1
+        readiness: ok
+    validations:
+      required: true
+
+  - type: input
+    id: report_id
+    attributes:
+      label: Report id
+      description: >-
+        In the app: **Settings → Advanced → Diagnostics → Save diagnostics bundle**, then paste the
+        **filename** here. **Keep the file — do not attach it.** It contains your file paths and
+        recent logs. If a maintainer needs it, they will ask on the issue — send it to
+        info@paintedwolf.ai. Do not email it unasked, and do not email for help.
+      placeholder: painted-wolf-code-diagnostics-20260729-141530.zip
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: Does it happen again?
+      description: A one-shot on a model you chose is unlikely to be acted on.
+      options:
+        - ""
+        - "Every time"
+        - "Often on this model"
+        - "Sometimes"
+        - "Saw it once"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Recovery snapshot is damaged"
+message: "The saved recovery snapshot did not pass its integrity checks, so nothing was restored."
+suggested_action: "Restore from a backup archive instead."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "integrity checks"

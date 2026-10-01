@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not commit changes
+message: >-
+  Git could not create the commit. Check the changed files, commit message, Git identity, and any repository hooks.
+suggested_action: >-
+  Resolve the repository issue, then retry the commit.

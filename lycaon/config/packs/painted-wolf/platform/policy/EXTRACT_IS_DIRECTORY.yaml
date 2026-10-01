@@ -1,0 +1,34 @@
+oar: '1.0'
+id: EXTRACT_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - extract_archive
+requires:
+  profiles:
+    - filesystem
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "EXTRACT_IS_DIRECTORY"
+effect: block
+copy:
+  what: extract_archive path {{ paintedwolf.path }} is a directory, not an archive file.
+  cause: Pass a file path to a zip/tar archive, not a directory.
+  why: Structured rejects let agents branch without parsing free-form errors.
+  fix: Point path at the archive file and retry.
+  instead: Branch on Code; fix args and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: archive path is a directory
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: archives/
+      profile: coordinator
+      tool: extract_archive
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EXTRACT_IS_DIRECTORY'

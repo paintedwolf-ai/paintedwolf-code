@@ -1,0 +1,142 @@
+version: 1
+
+# Hosts anyone may read and only an authenticated publisher may write.
+# Sites where anyone can post readable content are not registries.
+# Each supported language appears once, under a registry or `unregistered`.
+registries:
+  - id: npm
+    title: npm registry
+    hosts: [registry.npmjs.org, registry.yarnpkg.com]
+    languages: [javascript, typescript, vue, circom, solidity]
+
+  - id: pypi
+    title: Python Package Index
+    hosts: [pypi.org, files.pythonhosted.org]
+    languages: [python]
+
+  - id: crates
+    title: crates.io
+    hosts: [crates.io, index.crates.io, static.crates.io]
+    languages: [rust]
+
+  - id: go
+    title: Go module proxy
+    hosts: [proxy.golang.org, sum.golang.org]
+    languages: [go]
+
+  - id: nuget
+    title: NuGet Gallery
+    hosts: [api.nuget.org, globalcdn.nuget.org]
+    languages: [c_sharp]
+
+  - id: powershell-gallery
+    title: PowerShell Gallery
+    hosts: [www.powershellgallery.com]
+    languages: [powershell]
+
+  - id: rubygems
+    title: RubyGems
+    hosts: [rubygems.org, index.rubygems.org]
+    languages: [ruby]
+
+  - id: maven-central
+    title: Maven Central
+    hosts: [repo.maven.apache.org, repo1.maven.org]
+    languages: [java, groovy]
+
+  - id: gradle
+    title: Gradle Plugin Portal and distributions
+    hosts: [plugins.gradle.org, plugins-artifacts.gradle.org, services.gradle.org, downloads.gradle.org]
+    languages: [kotlin]
+
+  - id: sbt
+    title: sbt repository
+    hosts: [repo.scala-sbt.org]
+    languages: [scala]
+
+  - id: clojars
+    title: Clojars
+    hosts: [repo.clojars.org, clojars.org]
+    languages: [clojure]
+
+  - id: packagist
+    title: Packagist
+    hosts: [repo.packagist.org, packagist.org]
+    languages: [php, hack]
+
+  - id: pub
+    title: pub.dev
+    hosts: [pub.dev]
+    languages: [dart]
+
+  - id: hex
+    title: Hex
+    hosts: [hex.pm, repo.hex.pm, builds.hex.pm]
+    languages: [elixir]
+
+  - id: cpan
+    title: CPAN
+    hosts: [cpan.metacpan.org, fastapi.metacpan.org, www.cpan.org]
+    languages: [perl]
+
+  - id: luarocks
+    title: LuaRocks
+    hosts: [luarocks.org]
+    languages: [lua]
+
+  - id: opam
+    title: opam repository
+    hosts: [opam.ocaml.org]
+    languages: [ocaml]
+
+  - id: julia
+    title: Julia package server
+    hosts: [pkg.julialang.org]
+    languages: [julia]
+
+  - id: cran
+    title: CRAN
+    hosts: [cloud.r-project.org, cran.r-project.org]
+    languages: [r]
+
+  - id: cocoapods
+    title: CocoaPods trunk
+    hosts: [cdn.cocoapods.org]
+    languages: [swift]
+
+  - id: conan
+    title: ConanCenter
+    hosts: [center2.conan.io]
+    languages: [c, cpp]
+
+  - id: quicklisp
+    title: Quicklisp
+    hosts: [beta.quicklisp.org]
+    languages: [commonlisp]
+
+  - id: scarbs
+    title: Scarb registry
+    hosts: [scarbs.xyz]
+    languages: [cairo]
+
+  - id: terraform
+    title: Terraform Registry
+    hosts: [registry.terraform.io, releases.hashicorp.com]
+    languages: [hcl]
+
+  - id: buf
+    title: Buf Schema Registry
+    hosts: [buf.build]
+    languages: [proto]
+
+unregistered:
+  - languages: [apex]
+    reason: Salesforce packages install into an org, not from a registry a command downloads from.
+  - languages: [bash, dockerfile]
+    reason: No language package registry; container images are pulled by the container engine, not through a command's mediated egress.
+  - languages: [jsonnet, move, scheme]
+    reason: Dependencies are fetched from source forges, which are general-purpose sites.
+  - languages: [ql]
+    reason: CodeQL packs are served from a general-purpose container registry.
+  - languages: [html, json, promql, xml, yaml]
+    reason: Data, markup, and query formats have no package manager.

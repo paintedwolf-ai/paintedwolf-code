@@ -1,0 +1,36 @@
+oar: '1.0'
+id: DELETE_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - delete
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "DELETE_NOT_FOUND"
+effect: block
+copy:
+  what: delete path {{ paintedwolf.path }} does not exist in the workspace.
+  cause: The requested target is already absent at this path.
+  why: An absent target needs no deletion, and a different path may identify different work.
+  fix: Confirm the intended path or omit the absent target from remaining work. Do not create an object merely
+    to delete it. Preserve any earlier completed deletions.
+  instead: Branch on Code; confirm path or remove from paths[]
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
+x-paintedwolf-message: delete path does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: delete
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELETE_NOT_FOUND'

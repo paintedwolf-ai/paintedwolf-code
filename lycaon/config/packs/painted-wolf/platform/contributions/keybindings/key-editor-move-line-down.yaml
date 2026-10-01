@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-move-line-down
+command: painted-wolf/platform:editor-move-line-down
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+ArrowDown"
+  windows:
+    - "Alt+ArrowDown"
+  linux:
+    - "Alt+ArrowDown"

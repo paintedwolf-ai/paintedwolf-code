@@ -1,0 +1,12 @@
+# Coordinator and subagent model policy. Slots start empty.
+coordinator:
+  provider_id: ""
+  model: ""
+
+lite:
+  provider_id: ""
+  model: ""
+
+agent_pool:
+  selection: first
+  models: []

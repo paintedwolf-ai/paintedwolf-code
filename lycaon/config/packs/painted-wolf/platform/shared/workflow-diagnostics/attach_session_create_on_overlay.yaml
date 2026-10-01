@@ -1,0 +1,5 @@
+code: attach_session_create_on_overlay
+message: |
+  Custom overlay manifest cannot declare attach.policy session_create.
+replacement: |
+  Remove attach.policy session_create; ambient attachment belongs to the platform registry.

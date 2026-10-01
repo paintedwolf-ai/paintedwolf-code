@@ -1,0 +1,7 @@
+id: painted-wolf/platform:list-first
+title: "Move to first in a list"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "list.first"

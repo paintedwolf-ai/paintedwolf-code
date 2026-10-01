@@ -1,0 +1,38 @@
+oar: '1.0'
+id: GIT_COMMIT_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - git_commit
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_paths
+when: paintedwolf.rejection_code == "GIT_COMMIT_BULK_DENIED"
+effect: block
+copy:
+  what: git_commit received {{ paintedwolf.requested }} staging paths; the cap is {{ paintedwolf.max_paths
+    }}.
+  cause: The staging set exceeds the host’s per-commit bound.
+  why: A path count alone does not establish how many logical changes the work contains.
+  fix: Review the intended change and authorization. Split into coherent commits only when that matches the
+    task, keeping each staging set within {{ paintedwolf.max_paths }}; otherwise report the limit instead of
+    arbitrarily fragmenting the change.
+  instead: Resolve staging scope and commit intent before retrying
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: git_commit bulk path list denied
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: src/main.go
+    profile: coordinator
+    tool: git_commit
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_COMMIT_BULK_DENIED'

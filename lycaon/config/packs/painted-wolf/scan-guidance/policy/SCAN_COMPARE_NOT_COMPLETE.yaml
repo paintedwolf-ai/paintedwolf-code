@@ -1,0 +1,38 @@
+oar: '1.0'
+id: SCAN_COMPARE_NOT_COMPLETE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_compare
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.scan_old_status
+  - paintedwolf.scan_new_status
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_NOT_COMPLETE"
+effect: block
+copy:
+  what: The baseline scan is {{ paintedwolf.scan_old_status }} and the new scan is {{ paintedwolf.scan_new_status
+    }}; both must complete successfully.
+  cause: Compare reads authoritative finding sets written only when a scan completes successfully.
+  why: Incomplete rows have no stable finding buckets to diff.
+  fix: Wait or poll only for scans that are still active. A failed or canceled scan needs its failure resolved
+    and an intentional new assessment; polling cannot turn it into success. Preserve assigned comparison IDs
+    and report any replacement needed.
+  instead: Branch on Code; compare only complete scans
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: Scan not complete — cannot compare yet
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: scan_compare
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_COMPARE_NOT_COMPLETE'

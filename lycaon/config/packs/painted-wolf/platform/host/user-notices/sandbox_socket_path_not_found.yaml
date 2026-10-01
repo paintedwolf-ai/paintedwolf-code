@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+title: "Socket not found"
+message: "Nothing exists at that socket path."
+suggested_action: "Start the service that owns the socket, then try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "Nothing exists"

@@ -1,0 +1,11 @@
+manifest_version: 1
+id: example/team-flow
+name: Example — Team Flow
+version: 1.0.0
+description: A workflow the whole team gets, plus the topology it fans out with.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"
+feature: example-team-flow

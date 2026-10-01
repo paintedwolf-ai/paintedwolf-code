@@ -1,0 +1,33 @@
+oar: '1.0'
+id: ASK_USER_COMPARE_OPTIONS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - ask_user
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "ASK_USER_COMPARE_OPTIONS"
+effect: block
+copy:
+  what: ask_user with 2–4 artifacts synthesizes A… options; caller must not pass options or multi_choice.
+  cause: artifacts length is 2–4 with caller options or non-single_choice response_type.
+  why: The host defines compare choice labels; Other+text is always available. Compare is always single_choice.
+  fix: Omit options; pass 2–4 artifact UUIDs. Omit response_type or use single_choice.
+  instead: Branch on Code ASK_USER_COMPARE_OPTIONS; omit options and pass artifacts only
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: compare shape rejects conflicting options
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: stub
+      path: src/main.go
+      profile: coordinator
+      tool: ask_user
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: ASK_USER_COMPARE_OPTIONS'
+      - Omit options

@@ -1,0 +1,428 @@
+fixtures:
+- rule: instance-metadata
+  positive:
+  - 169.254.169.254
+  - metadata.google.internal
+  - metadata.goog
+  - 169.254.169.254.
+  - METADATA.GOOGLE.INTERNAL
+  - 169.254.170.2
+  - 169.254.170.23
+  - fd00:ec2::254
+  - fd00:ec2::23
+  - 100.100.100.200
+  - metadata.tencentyun.com
+  negative:
+  - example.com
+  - 169.254.169.253
+  - sub.metadata.google.internal
+  - 169.254.170.3
+  - 100.100.100.201
+  - fd00:ec2::255
+  - metadata.tencentyun.com.evil.test
+  - github.com
+- rule: payment-api
+  positive:
+  - api.stripe.com
+  - checkout.com
+  - stripe.com
+  - paypal.com
+  - api.paypal.com
+  - www.squareup.com
+  negative:
+  - stripe-docs.example.com
+  - github.com
+  - notstripe.com
+  - evilcheckout.com
+- rule: messaging-api
+  positive:
+  - hooks.slack.com
+  - api.sendgrid.com
+  - sendgrid.com
+  - discord.com
+  - www.discord.com
+  - api.twilio.com
+  - api.telegram.org
+  negative:
+  - slack-status.example.com
+  - registry.npmjs.org
+  - discordapp.com
+  - slack.com
+  - notdiscord.com
+  - core.telegram.org
+  - telegram.org
+- rule: aws-control-plane
+  positive:
+  - s3.us-east-1.amazonaws.com
+  - iam.amazonaws.com
+  - secretsmanager.us-east-1.amazonaws.com
+  - sts.cn-north-1.amazonaws.com.cn
+  - s3.us-east-1.api.aws
+  - console.aws.amazon.com
+  - AMAZONAWS.COM
+  - d-9067abc123.awsapps.com
+  - myorg.awsapps.com
+  negative:
+  - example.com
+  - github.com
+  - notamazonaws.com
+  - evil-amazonaws.com
+  - amazonaws.com.evil.com
+  - notawsapps.com
+  - awsapps.com.evil.test
+  - registry.npmjs.org
+- rule: gcp-control-plane
+  positive:
+  - storage.googleapis.com
+  - secretmanager.googleapis.com
+  - compute.googleapis.com
+  - gcr.io
+  - us-docker.pkg.dev
+  - my-service-abc.run.app
+  - GOOGLEAPIS.COM
+  - accounts.google.com
+  negative:
+  - example.com
+  - github.com
+  - notgoogleapis.com
+  - googleapis.com.evil.com
+  - docs.google.com
+  - accounts.google.com.evil.test
+  - registry.npmjs.org
+- rule: azure-control-plane
+  positive:
+  - management.azure.com
+  - contoso.vault.azure.net
+  - mystorage.blob.core.windows.net
+  - mydb.database.windows.net
+  - myregistry.azurecr.io
+  - graph.microsoft.com
+  - management.usgovcloudapi.net
+  - myapp.azurewebsites.net
+  - mycluster.eastus.azmk8s.io
+  - login.microsoftonline.com
+  - login.microsoftonline.us
+  - login.windows.net
+  negative:
+  - example.com
+  - github.com
+  - portal.azure.com
+  - login.microsoftonline.com.evil.test
+  - notlogin.windows.net
+  - notmanagement.azure.com
+  - registry.npmjs.org
+- rule: iaas-other-control-plane
+  positive:
+  - api.digitalocean.com
+  - nyc3.digitaloceanspaces.com
+  - api.linode.com
+  - api.vultr.com
+  - api.hetzner.cloud
+  - objectstorage.us-ashburn-1.oraclecloud.com
+  - ecs.cn-hangzhou.aliyuncs.com
+  - api.softlayer.cloud.ibm.com
+  negative:
+  - example.com
+  - github.com
+  - notdigitalocean.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+- rule: paas-edge-control-plane
+  positive:
+  - api.heroku.com
+  - api.vercel.com
+  - api.netlify.com
+  - api.render.com
+  - api.fly.io
+  - api.cloudflare.com
+  - my-worker.workers.dev
+  - api.railway.app
+  negative:
+  - example.com
+  - github.com
+  - www.cloudflare.com
+  - notvercel.com
+  - registry.npmjs.org
+- rule: iac-remote-control-plane
+  positive:
+  - app.terraform.io
+  - registry.terraform.io
+  - api.pulumi.com
+  - app.spacelift.io
+  - api.env0.com
+  negative:
+  - example.com
+  - github.com
+  - gitlab.com
+  - notterraform.com
+  - registry.npmjs.org
+- rule: data-cloud-control-plane
+  positive:
+  - xy12345.us-east-1.snowflakecomputing.com
+  - adb-123.azuredatabricks.net
+  - api.clickhouse.cloud
+  - api.motherduck.com
+  - cloud.getdbt.com
+  - api.fivetran.com
+  - cloud.mongodb.com
+  - cluster0.abc12.mongodb.net
+  - api.cockroachlabs.cloud
+  - ep-cool.neon.tech
+  - api.turso.tech
+  - api.algolia.com
+  - abc-dsn.algolia.net
+  - api.openai.com
+  - api.pinecone.io
+  - api.anthropic.com
+  - api.cohere.com
+  - api.redis.com
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - pypi.org
+  - www.cloudflare.com
+- rule: stream-queue-control-plane
+  positive:
+  - api.confluent.cloud
+  - pkc-abc.us-east-1.aws.confluent.cloud
+  - api.redpanda.cloud
+  - api.upstash.com
+  - mq.cloudamqp.com
+  - api.ably.io
+  - api.pusher.com
+  - api.svix.com
+  - api.livekit.cloud
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - pypi.org
+  - www.cloudflare.com
+  - notconfluent.com
+- rule: object-storage-control-plane
+  positive:
+  - api.backblazeb2.com
+  - mybucket.s3.us-west-000.backblazeb2.com
+  - s3.wasabisys.com
+  - abc123.r2.cloudflarestorage.com
+  - s3.filebase.com
+  - gateway.storjshare.io
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+  - cloudflare.com
+  - notbackblaze.com
+- rule: crm-customer-data-control-plane
+  positive:
+  - login.salesforce.com
+  - myorg.my.salesforce.com
+  - api.hubapi.com
+  - api.hubspot.com
+  - api.segment.io
+  - api.zendesk.com
+  - api.intercom.io
+  - api.klaviyo.com
+  - api.pipedrive.com
+  - contoso.crm.dynamics.com
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+  - notsalesforce.com
+  - pypi.org
+- rule: forge-api-control-plane
+  positive:
+  - api.github.com
+  - uploads.github.com
+  - gist.github.com
+  - api.gitlab.com
+  - api.bitbucket.org
+  negative:
+  - example.com
+  - github.com
+  - gitlab.com
+  - bitbucket.org
+  - registry.npmjs.org
+  - www.cloudflare.com
+  # Content fetches under the same suffix, not control calls.
+  - codeload.github.com
+  - raw.githubusercontent.com
+  - objects.githubusercontent.com
+- rule: container-registry-control-plane
+  positive:
+  - ghcr.io
+  - registry-1.docker.io
+  - quay.io
+  - public.ecr.aws
+  - hub.docker.com
+  - registry.gitlab.com
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - docker.com
+  - www.cloudflare.com
+- rule: package-publish-control-plane
+  positive:
+  - upload.pypi.org
+  - upload.test.pypi.org
+  - npm.pkg.github.com
+  - central.sonatype.com
+  - myorg.jfrog.io
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - pypi.org
+  - proxy.golang.org
+  - index.crates.io
+- rule: ci-cd-saas-control-plane
+  positive:
+  - api.circleci.com
+  - api.buildkite.com
+  - api.travis-ci.com
+  - api.bitrise.io
+  - api.codemagic.io
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+  - notcircleci.com
+- rule: secrets-auth-saas-control-plane
+  positive:
+  - api.doppler.com
+  - api.1password.com
+  - api.clerk.com
+  - api.auth0.com
+  - integrator-api.okta.com
+  - api.workos.com
+  negative:
+  - example.com
+  - github.com
+  - evil-1password.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+- rule: dev-saas-control-plane
+  positive:
+  - api.datadoghq.com
+  - api.sentry.io
+  - api.linear.app
+  - api.notion.com
+  - api.figma.com
+  - api.ngrok.com
+  - api.huggingface.co
+  - api.pagerduty.com
+  - api.launchdarkly.com
+  - connect.ngrok-agent.com
+  negative:
+  - example.com
+  - github.com
+  - gitlab.com
+  - registry.npmjs.org
+  - pypi.org
+  - www.cloudflare.com
+  # Tunnel domains belong to the reverse-tunnel rule.
+  - ngrok.com
+- rule: exfil-oob-collector
+  positive:
+  - webhook.site
+  - abc123.webhook.site
+  - requestcatcher.com
+  - my-app.requestcatcher.com
+  - beeceptor.com
+  - mymock.free.beeceptor.com
+  - typedwebhook.tools
+  - xxxxxxxxxxxxxxx.m.pipedream.net
+  - abcdefgh.interact.sh
+  - abcdefgh.oastify.com
+  - abcdefgh.oast.fun
+  - burpcollaborator.net
+  - u1a2b3c4.canarytokens.com
+  - abcdefgh.ceye.io
+  - abcdefgh.dnslog.cn
+  - mybin.requestbin.net
+  negative:
+  - example.com
+  - github.com
+  - registry.npmjs.org
+  - pipedream.com
+  - api.pipedream.com
+  # Apexes are product sites with a real read side; only the per-token
+  # subdomain is the collector.
+  - canarytokens.com
+  - ceye.io
+  - dnslog.cn
+  - requestbin.net
+- rule: anonymous-data-drop
+  positive:
+  - pastebin.com
+  - www.pastebin.com
+  - 0x0.st
+  - transfer.sh
+  - file.io
+  - termbin.com
+  - files.catbox.moe
+  - clbin.com
+  - rentry.co
+  - privatebin.net
+  - dpaste.com
+  - ghostbin.com
+  - gofile.io
+  - upload.gofile.io
+  - filebin.net
+  - temp.sh
+  - paste.rs
+  negative:
+  - example.com
+  - github.com
+  - raw.githubusercontent.com
+  - registry.npmjs.org
+  - www.cloudflare.com
+  - mytemp.sh
+  - gofile.io.evil.test
+  - notfilebin.net
+- rule: consumer-file-storage
+  positive:
+  - dropbox.com
+  - www.dropbox.com
+  - api.dropboxapi.com
+  - content.dropboxapi.com
+  - drive.google.com
+  - api.box.com
+  - upload.box.com
+  - dl.boxcloud.com
+  - mega.nz
+  - g.api.mega.co.nz
+  - wetransfer.com
+  - we.tl
+  negative:
+  - example.com
+  - github.com
+  - notdropbox.com
+  - dropbox.com.evil.test
+  - docs.google.com
+  - toolbox.com
+  - registry.npmjs.org
+- rule: reverse-tunnel
+  positive:
+  - abc123.ngrok.io
+  - panda-new-kit.ngrok-free.app
+  - my-tunnel.ngrok.app
+  - ngrok-free.dev
+  - long-words-here.trycloudflare.com
+  - region1.v2.argotunnel.com
+  - my-app.loca.lt
+  - serveo.net
+  - abcdefgh.lhr.life
+  negative:
+  - example.com
+  - github.com
+  - ngrok.com
+  - evilngrok.io
+  - trycloudflare.com.evil.test
+  - registry.npmjs.org

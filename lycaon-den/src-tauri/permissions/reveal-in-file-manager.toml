@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-reveal-in-file-manager"
+description = "Reveal a path under attached project roots in the OS file manager."
+commands.allow = ["reveal_in_file_manager"]
+
+[[permission]]
+identifier = "allow-reveal-typed-path-in-file-manager"
+description = "Reveal an existing absolute path typed into search in the OS file manager, without opening it."
+commands.allow = ["reveal_typed_path_in_file_manager"]

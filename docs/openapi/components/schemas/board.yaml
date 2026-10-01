@@ -1,0 +1,542 @@
+components:
+  schemas:
+    BoardDetailLevel:
+      type: string
+      enum:
+      - status
+      - compact
+      - full
+      - forensic
+    BoardDelegationEntry:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - phase
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        phase:
+          $ref: delegation.yaml#/components/schemas/DelegationPhase
+        task:
+          type: string
+    BoardWorkerRosterEntry:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      - agent_type
+      - status
+      additionalProperties: false
+      properties:
+        dependencies:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerDependency
+        worker_id:
+          type: string
+          format: uuid
+        agent_type:
+          type: string
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerStatus
+        merge_status:
+          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
+        overlay_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        scope_summary:
+          type: string
+        changed_paths:
+          type: array
+          items:
+            type: string
+        touched_paths:
+          type: array
+          items:
+            type: string
+        brief:
+          type: string
+          description: Worker assignment goal included in full board detail.
+        error:
+          type: string
+        max_tool_loops:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: Effective worker tool-round ceiling when known (host default 20, maximum 120)
+        budget_request:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
+          description: The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
+        tool_loops_used:
+          type: integer
+          minimum: 0
+          description: Completed tool rounds this worker run
+        reservations:
+          type: array
+          items:
+            type: string
+          description: Repo-relative paths held by handoff_reserve for this worker
+        blocked_on_approval:
+          type: boolean
+          description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
+    BoardForensicWorkers:
+      x-go-generate: true
+      type: object
+      description: Present only when detail_level is forensic. Full worker job records for host debugging — not for routine coordination.
+      required:
+      - notice
+      - tasks
+      additionalProperties: false
+      properties:
+        notice:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerTask
+    BoardView:
+      x-go-generate: true
+      type: object
+      description: Slim pack board view. Use detail_level=forensic only when you need full worker job records including workspace baselines.
+      required:
+      - summary
+      - repo
+      - cost
+      - pack_content_hash
+      - detail_level
+      - board
+      - board_chars
+      - truncated
+      - generated_at
+      - now_line
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Coordinator session this board snapshot belongs to.
+        summary:
+          type: string
+          description: One-line coordination headline (worker counts, merge status, conflicts).
+        repo:
+          $ref: board.yaml#/components/schemas/RepoBrief
+        git:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardGitSlice
+        scans:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardScansSlice
+        roster:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/BoardWorkerRosterEntry
+        promote_paths:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerPromoteJobPathStatus
+        overlay_merge_plan:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/OverlayMergePlan
+        delegation:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/BoardDelegationEntry
+        active_workflow_run:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/WorkflowRun
+        forensic_workers:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardForensicWorkers
+        cost:
+          x-go-type: "*CostSummary"
+          anyOf:
+          - $ref: cost.yaml#/components/schemas/CostSummary
+          - type: 'null'
+        pack_content_hash:
+          type: string
+        detail_level:
+          $ref: board.yaml#/components/schemas/BoardDetailLevel
+        board:
+          type: string
+        board_chars:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+        truncated_sections:
+          type: array
+          items:
+            type: string
+        generated_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        now_line:
+          type: string
+    BoardGitRepoLine:
+      x-go-generate: true
+      type: object
+      required:
+      - repo_id
+      - label
+      - dirty
+      - staged_count
+      - unstaged_count
+      additionalProperties: false
+      properties:
+        repo_id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        branch:
+          type: string
+        dirty:
+          type: boolean
+        staged_count:
+          type: integer
+          minimum: 0
+        unstaged_count:
+          type: integer
+          minimum: 0
+    BoardGitSlice:
+      x-go-generate: true
+      type: object
+      required:
+      - available
+      - repo_id
+      - label
+      - dirty
+      - staged_count
+      - unstaged_count
+      - others
+      - others_truncated
+      additionalProperties: false
+      properties:
+        available:
+          type: boolean
+        repo_id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        branch:
+          type: string
+        head_short:
+          type: string
+        dirty:
+          type: boolean
+        staged_count:
+          type: integer
+          minimum: 0
+        unstaged_count:
+          type: integer
+          minimum: 0
+        recent_commits:
+          type: array
+          items:
+            type: string
+        others:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/BoardGitRepoLine
+        others_truncated:
+          type: integer
+          minimum: 0
+        worktree:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardGitWorktree
+    BoardGitWorktree:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        The session's own checkout when it has one. Absent for a session working
+        directly in the project's folders.
+      properties:
+        branch:
+          type: string
+        base_branch:
+          type: string
+        ahead_of_base:
+          type: integer
+        behind_base:
+          type: integer
+        dirty:
+          type: boolean
+      required:
+        - branch
+        - base_branch
+        - ahead_of_base
+        - behind_base
+        - dirty
+    BoardScansSlice:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        current_assessment:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardScanSummary
+        latest_attempt:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardScanSummary
+        compare:
+          x-go-pointer: true
+          $ref: board.yaml#/components/schemas/BoardScanCompareSlice
+    BoardScanCompareSlice:
+      x-go-generate: true
+      type: object
+      required:
+      - scanners_compared
+      - new_count
+      - resolved_count
+      additionalProperties: false
+      properties:
+        baseline_assessment_id:
+          type: string
+          format: uuid
+          description: Previous complete assessment used for auto-compare.
+        scanners_compared:
+          type: integer
+          minimum: 0
+        new_count:
+          type: integer
+          minimum: 0
+        resolved_count:
+          type: integer
+          minimum: 0
+        new_by_level:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        top_new:
+          type: array
+          maxItems: 2
+          items:
+            $ref: board.yaml#/components/schemas/BoardScanCompareStub
+    BoardScanCompareStub:
+      x-go-generate: true
+      type: object
+      required:
+      - file
+      - rule_id
+      additionalProperties: false
+      properties:
+        file:
+          type: string
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+    BoardScanSummary:
+      x-go-generate: true
+      x-go-field-order: ["assessment_id", "source_snapshot_id", "coverage_status", "scanner_count", "status", "categories", "findings_count", "head_short", "findings_by_level", "findings_by_kind", "unmapped_count", "top_locations", "warning_summary", "error", "trigger", "created_at", "completed_at", "started_at", "long_running"]
+      type: object
+      required:
+      - assessment_id
+      - scanner_count
+      - status
+      - findings_count
+      - created_at
+      - long_running
+      additionalProperties: false
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+        source_snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        coverage_status:
+          $ref: scan/execution.yaml#/components/schemas/ScanCoverageStatus
+        scanner_count:
+          type: integer
+          minimum: 0
+        status:
+          $ref: scan/execution.yaml#/components/schemas/CodeScanStatus
+        categories:
+          type: array
+          items:
+            $ref: scan/findings.yaml#/components/schemas/ScanCategory
+        findings_count:
+          type: integer
+          minimum: 0
+        warning_summary:
+          type: array
+          items:
+            $ref: scan/execution.yaml#/components/schemas/ScanWarningSummary
+        error:
+          type: string
+        trigger:
+          $ref: scan/execution.yaml#/components/schemas/ScanTrigger
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        started_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        long_running:
+          type: boolean
+        head_short:
+          type: string
+        findings_by_level:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        findings_by_kind:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        unmapped_count:
+          type: integer
+          minimum: 0
+          description: SAST rows still mapped to SCAN_FINDING_UNMAPPED.
+        top_locations:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/BoardScanTopLocation
+    BoardScanTopLocation:
+      x-go-generate: true
+      type: object
+      required:
+      - uri
+      additionalProperties: false
+      properties:
+        uri:
+          type: string
+        start_line:
+          type: integer
+          minimum: 0
+    RepoBrief:
+      x-go-generate: true
+      x-go-field-order: ["languages", "file_count", "layout", "generated_at", "refreshing", "incomplete"]
+      type: object
+      description: Project orientation summary — languages detected by content via enry, listed in dominant-bytes order.
+      required:
+      - languages
+      - file_count
+      - generated_at
+      additionalProperties: false
+      properties:
+        refreshing:
+          type: boolean
+          description: The orientation is warming or belongs to an older observed source generation.
+        incomplete:
+          type: boolean
+          description: The observed file population has incomplete coverage, including settled budget omissions or failures. Zero files cannot establish an empty repository when this is true.
+        languages:
+          type: array
+          items:
+            type: string
+        file_count:
+          type: integer
+          minimum: 0
+        layout:
+          $ref: board.yaml#/components/schemas/RepoLayout
+        generated_at:
+          type: string
+          format: date-time
+    RepoLayout:
+      x-go-generate: true
+      type: object
+      description: Orientation-tier layout sample — Files for tiny repos, TopLevel for small/medium.
+      additionalProperties: false
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+          description: Tiny tier — full repo-relative file paths.
+        top_level:
+          type: array
+          items:
+            type: string
+          description: Small/medium tier — top-level dirs (trailing /) and promoted root files.
+    OverlayMergeSharedPath:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - worker_ids
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        worker_ids:
+          x-go-name: "WorkerIDs"
+          type: array
+          items:
+            type: string
+            format: uuid
+    OverlayMergePlanEntry:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        agent_type:
+          type: string
+        changed_paths:
+          type: array
+          items:
+            type: string
+        clean_paths:
+          type: array
+          items:
+            type: string
+        conflict_paths:
+          type: array
+          items:
+            type: string
+        promote_order:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
+        promote_after:
+          type: array
+          items:
+            type: string
+            format: uuid
+        blocked_by:
+          type: array
+          items:
+            type: string
+            format: uuid
+        preview_stale:
+          type: boolean
+    OverlayMergePlan:
+      x-go-generate: true
+      type: object
+      required:
+      - pending_count
+      additionalProperties: false
+      properties:
+        pending_count:
+          type: integer
+          minimum: 0
+        promote_sequence:
+          type: array
+          items:
+            type: string
+        shared_paths:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/OverlayMergeSharedPath
+        entries:
+          type: array
+          items:
+            $ref: board.yaml#/components/schemas/OverlayMergePlanEntry

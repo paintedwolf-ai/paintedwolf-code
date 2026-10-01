@@ -1,0 +1,3 @@
+level=info ts=2024-01-15T10:00:00Z msg="server started"
+level=error ts=2024-01-15T10:01:00Z msg="connection refused" code=503
+severity=warn time=2024-01-15T10:02:00Z message="retrying"

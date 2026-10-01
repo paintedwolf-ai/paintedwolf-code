@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-duplicate-selection
+title: "Duplicate selection"
+scope: "files"
+keywords:
+  - "duplicate line"
+  - "copy line down"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.duplicateSelection"

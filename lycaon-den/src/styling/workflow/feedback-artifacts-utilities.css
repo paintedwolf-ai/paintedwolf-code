@@ -1,0 +1,163 @@
+@utility den-workflow-feedback-card-artifact {
+margin: 0 0 10px;
+}
+
+
+@utility den-workflow-feedback-card-compare-grid {
+display: grid;
+  gap: 10px;
+  margin: 0 0 10px;
+  /* Tiles hug their image, so centre them in the column instead of stretching. */
+  justify-items: center;
+}
+
+
+@utility den-workflow-feedback-card-compare-grid--pair {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+
+@utility den-workflow-feedback-card-compare-grid--trio {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+
+@utility den-workflow-feedback-card-compare-grid--quad {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+
+@utility den-workflow-feedback-card-compare-label {
+margin: 0 0 4px;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-workflow-feedback-card-artifact-loading {
+margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+
+@utility den-workflow-feedback-card-artifact-frame {
+display: block;
+  position: relative;
+  /* Hug the letterboxed image: the border must not outrun a tall or square visual. */
+  width: fit-content;
+  padding: 0;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  cursor: zoom-in;
+  overflow: hidden;
+  max-width: 100%;
+  transition: border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+  &:hover {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+  }
+}
+
+
+/* Compare mode: the thumbnail itself is the choice control. */
+@utility den-workflow-feedback-card-artifact-choice {
+display: block;
+  cursor: pointer;
+}
+
+
+@utility den-workflow-feedback-card-artifact-radio {
+position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+@utility den-workflow-feedback-card-artifact-badge {
+position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max(24px, 1.5em);
+  min-height: max(24px, 1.5em);
+  height: auto;
+  padding: 0 0.375em;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--den-text);
+  background: color-mix(in srgb, var(--den-background) 82%, transparent);
+  border: 1px solid var(--den-line);
+  backdrop-filter: blur(2px);
+}
+
+
+@utility den-workflow-feedback-card-artifact-zoom {
+position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7143rem;
+  height: 1.7143rem;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-body);
+  cursor: zoom-in;
+  color: var(--den-text-muted);
+  background: color-mix(in srgb, var(--den-background) 82%, transparent);
+  border: 1px solid var(--den-line);
+  backdrop-filter: blur(2px);
+  transition: color var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+  &:hover {
+    color: var(--den-text);
+    border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+  }
+}
+
+.den-workflow-feedback-card-artifact--selectable {
+  position: relative;
+}
+
+.den-workflow-feedback-card-artifact--selectable .den-workflow-feedback-card-artifact-frame {
+  cursor: pointer;
+}
+
+.den-workflow-feedback-card-artifact-choice:focus-within .den-workflow-feedback-card-artifact-frame {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 55%, var(--den-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 18%, transparent);
+}
+
+.den-workflow-feedback-card-artifact--selected .den-workflow-feedback-card-artifact-frame {
+  border-color: var(--den-accent-signal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-signal) 45%, transparent);
+}
+
+.den-workflow-feedback-card-artifact--selected .den-workflow-feedback-card-artifact-badge {
+  background: var(--den-accent);
+  color: var(--den-on-accent);
+  border-color: transparent;
+}
+
+
+@utility den-workflow-feedback-card-artifact-img {
+display: block;
+  max-width: 100%;
+  max-height: 200px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}

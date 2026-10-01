@@ -1,0 +1,12 @@
+id: painted-wolf/platform:nav-toggle
+title: "Toggle sidebar"
+icon: surface
+scope: "global"
+keywords:
+  - "sidebar"
+  - "navigation"
+  - "hide sidebar"
+  - "show sidebar"
+action:
+  kind: native_ui
+  handler: "nav.toggle"

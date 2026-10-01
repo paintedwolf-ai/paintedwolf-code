@@ -1,0 +1,506 @@
+/* Shared context-stage chrome. */
+
+.den-browse-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+  contain: layout style;
+}
+
+.den-browse-stage__error {
+  margin: 0;
+  padding: 8px var(--den-stage-inset-x);
+  color: var(--den-danger);
+  font-size: var(--text-den-hint);
+}
+
+.den-browse-stage__hint {
+  margin: 0;
+  padding: 8px var(--den-stage-inset-x);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-browse-chrome {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--den-stage-inset-y) var(--den-stage-inset-x) 6px;
+  border-bottom: 1px solid var(--den-line);
+  container-type: inline-size;
+  container-name: den-browse-chrome;
+}
+
+/* Unused chrome space remains a window drag surface. */
+.den-browse-chrome__drag-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.den-browse-chrome__drag-surface[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* Stage chrome shares the titlebar band. */
+.den-browse-chrome--stage {
+  min-height: calc(var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+}
+
+/* Routed stages share one back control. */
+.den-stage-back {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: none;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  padding: 3px 9px 3px 7px;
+  cursor: pointer;
+}
+
+.den-stage-back:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.den-stage-back:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+/* Routed settings reserve a row for the back control. */
+.den-settings-panel:has(> .den-settings-stage-back) {
+  padding-top: calc(var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+}
+
+.den-settings-stage-back {
+  position: absolute;
+  top: 6px;
+  left: var(--den-stage-inset-x);
+  z-index: 2;
+}
+
+.den-browse-chrome--embed {
+  padding: 6px 10px;
+  gap: 4px;
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-browse-chrome--tabs {
+  padding: 8px var(--den-stage-inset-x) 0;
+  border-bottom: none;
+  gap: 0;
+}
+
+.den-browse-chrome__primary {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.den-browse-chrome__primary :is(
+  button,
+  a,
+  input,
+  textarea,
+  [role="button"],
+  [role="combobox"],
+  [role="menuitem"],
+  [contenteditable="true"],
+  [tabindex]:not([tabindex="-1"])
+),
+.den-browse-chrome__chips :is(
+  button,
+  a,
+  input,
+  textarea,
+  [role="button"],
+  [role="combobox"],
+  [role="menuitem"],
+  [contenteditable="true"],
+  [tabindex]:not([tabindex="-1"])
+) {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.den-browse-chrome__title {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: var(--text-den-section);
+  letter-spacing: -0.01em;
+}
+
+.den-browse-chrome__primary-slot {
+  flex: 1;
+  min-width: 0;
+}
+
+.den-browse-chrome__overflow {
+  flex-shrink: 0;
+}
+
+.den-browse-chrome__trailing {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.den-browse-chrome__chips {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+/* Controls retain their natural width. */
+.den-browse-chrome__chip-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.den-browse-chrome__meta {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+}
+
+/* Compact chrome preserves rows in short stages. */
+@media (max-height: 620px) {
+  .den-browse-chrome {
+    gap: 5px;
+    padding-bottom: 6px;
+  }
+
+  .den-browse-chrome--embed {
+    padding: 4px 10px;
+  }
+}
+
+.den-browse-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.den-browse-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* User-sized axes stay within the measured 60% ceiling. */
+.den-browse-body--with-detail .den-browse-detail {
+  flex: 0 0 var(--den-detail-w, clamp(320px, 36%, 420px));
+  min-width: 280px;
+  max-width: 60%;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--den-line);
+  background: var(--den-background);
+  /* Detail content controls its inset. */
+  padding: 0 0 var(--den-stage-inset-y);
+}
+
+/* Narrow stages stack detail below the list. */
+:where(.den-browse-stage[data-browse-band~="max-700"]) {
+  .den-browse-body--with-detail {
+    flex-direction: column;
+  }
+
+  .den-browse-body--with-detail .den-browse-detail {
+    flex: 0 0 var(--den-detail-h, clamp(200px, 40%, 320px));
+    min-width: 0;
+    max-width: none;
+    min-height: 160px;
+    max-height: 60%;
+    border-left: 0;
+    border-top: 1px solid var(--den-line);
+  }
+
+  .den-browse-body--split .den-browse-detail {
+    border-top: 0;
+  }
+}
+
+/* The splitter controls the divider hairline. */
+.den-browse-body--split .den-browse-detail {
+  border-left: 0;
+}
+
+.den-browse-segmented {
+  /* Read by the chosen segment and by the width every label reserves. */
+  --den-segment-weight-on: 550;
+  position: relative;
+  display: inline-flex;
+  /* The track hugs its segments even when a column parent stretches items. */
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  gap: 2px;
+  /* Short tracks can remove the thumb inset. */
+  --den-segment-thumb-inset: 2px;
+  flex-wrap: wrap;
+  padding: 3px;
+  border: none;
+  border-radius: var(--den-radius);
+  /* Recess the segment track into its plane. */
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel-inset);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Settings rows hold one line, so this track overflows rather than wrapping. */
+.den-settings-segmented.den-browse-segmented {
+  flex-wrap: nowrap;
+}
+
+/* The thumb box follows its segment; variants inset the fill. */
+.den-browse-segment-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+}
+
+.den-browse-segment-thumb__fill {
+  position: absolute;
+  inset: var(--den-segment-thumb-inset, 0px);
+  /* The selected segment sits above the recessed track. */
+  background: var(--den-surface-raised);
+  box-shadow: var(--den-bevel);
+  /* The inset radius keeps the fill concentric with the track. */
+  border-radius: calc(var(--den-radius) - 4px);
+}
+
+.den-browse-segment {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  padding: 4px 10px;
+  border-radius: calc(var(--den-radius) - 2px);
+  font: inherit;
+  font-size: var(--text-den-label);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color var(--den-duration) var(--den-ease);
+}
+
+.den-browse-segment:hover {
+  color: var(--den-text);
+}
+
+.den-browse-segment:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.den-browse-segment:focus-visible {
+  outline: 2px solid var(--den-accent);
+  outline-offset: 2px;
+}
+
+.den-browse-segment--on {
+  color: var(--den-text);
+  font-weight: var(--den-segment-weight-on);
+}
+
+/* Labels hold their chosen-state width, so choosing one cannot resize the track. */
+.den-browse-segment__label {
+  display: block;
+}
+
+.den-browse-segment__label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--den-segment-weight-on);
+}
+
+/* Multi-select filters wrap across visible rows. */
+.den-browse-filter-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Filter toggles retain intrinsic width. */
+.den-browse-filter-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: var(--text-den-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Smaller chip padding delays wrapping in narrow chrome. */
+@container den-browse-chrome (max-width: 720px) {
+  .den-browse-filter-toggles {
+    gap: 5px;
+  }
+
+  .den-browse-filter-toggle {
+    gap: 4px;
+    padding: 4px 8px;
+  }
+}
+
+@container den-browse-chrome (max-width: 520px) {
+  .den-browse-filter-toggle {
+    padding: 3px 7px;
+    font-size: var(--text-den-hint);
+  }
+
+  .den-browse-filter-toggle::before {
+    width: 11px;
+    height: 11px;
+  }
+}
+
+/* Hide tallies before labels wrap to a third row. */
+@container den-browse-chrome (max-width: 470px) {
+  .den-browse-filter-toggle__count {
+    display: none;
+  }
+}
+
+.den-browse-filter-toggle::before {
+  content: "";
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--den-line);
+  border-radius: 3px;
+  background: var(--den-background);
+  box-sizing: border-box;
+}
+
+.den-browse-filter-toggle--on {
+  color: var(--den-text);
+  border-color: color-mix(
+    in srgb,
+    var(--den-accent-signal) 40%,
+    var(--den-line)
+  );
+  background: var(--den-selection);
+  font-weight: 550;
+}
+
+.den-browse-filter-toggle--on::before {
+  content: "✓";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--den-accent);
+  background: var(--den-accent);
+  box-shadow: var(--den-bevel-plate);
+  color: var(--den-on-accent);
+  font-size: var(--text-den-micro);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.den-browse-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--den-chip-border);
+  border-radius: var(--den-radius-pill);
+  background: var(--den-chip-bg);
+  color: var(--den-chip-fg);
+  font-size: var(--text-den-label);
+  line-height: 1.2;
+}
+
+.den-browse-chip--active {
+  background: var(--den-background);
+  box-shadow: 0 0 0 1px var(--den-border);
+  color: var(--den-text);
+}
+
+.den-browse-chip--action {
+  border-radius: var(--den-radius);
+}
+
+.den-browse-chip--disabled { opacity: 0.5; }
+
+.den-browse-chip__btn,
+.den-browse-chip__label {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.den-browse-chip__label {
+  cursor: default;
+}
+
+.den-browse-chip__remove {
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  padding: 2px 8px 2px 0;
+  cursor: pointer;
+}
+
+.den-browse-chip__btn:disabled,
+.den-browse-chip__remove:disabled {
+  cursor: not-allowed;
+}

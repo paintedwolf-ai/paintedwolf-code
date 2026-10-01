@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': coordinator.closeout
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-closeout
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - investigate/synthesis final turn when tool iteration cap or budget forces the
+    final report
+  required:
+  - Do not paste file or code content
+  - Stop calling tools
+  forbidden:
+  - workflow_advance

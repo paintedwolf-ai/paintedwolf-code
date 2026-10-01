@@ -1,0 +1,447 @@
+.project-files-view {
+  --den-files-pane-chrome-h: 44px;
+  --den-files-tab-strip-inset: 5px;
+  --den-files-tab-strip-rule: calc(var(--den-files-tab-strip-inset) + var(--den-files-tab-drag-band));
+  --den-files-footer-h: 1.8571rem;
+  /* One height for the pickers and the view toggle they sit beside. */
+  --den-files-ctl-h: 1.7143rem;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.project-files-view .den-browse-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.project-files-view .den-browse-main {
+  display: flex;
+  overflow: hidden;
+}
+
+/* Single-document presentations omit stage navigation. */
+.project-files-view--document .den-browse-chrome,
+.project-files-view--document .den-files-tree-pane,
+.project-files-view--document .den-files-split,
+.project-files-view--document .den-files-tab-strip {
+  display: none;
+}
+
+.den-files-tab__qualifier {
+  color: var(--den-text-muted);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-micro);
+}
+
+.den-files-tab__label:has(.den-files-tab__qualifier) .den-files-tab__name {
+  flex: 0 0 auto;
+  max-width: 70%;
+}
+
+.project-files-view--document .den-browse-stage,
+.project-files-view--document .den-browse-main,
+.project-files-view--document .den-files-stage,
+.project-files-view--document .den-files-editor-pane {
+  width: 100%;
+  min-height: 0;
+}
+
+/* The tree header stays outside its scroll box; header and rows share one inset. */
+.den-files-tree-pane {
+  --den-files-tree-pane-inset-x: 14px;
+  flex: 0 0 var(--den-files-tree-w, 240px);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: var(--text-den-label);
+}
+
+/* The mode switch holds one line beside the header controls. */
+.den-files-pane-segment.den-browse-segmented {
+  flex-wrap: nowrap;
+}
+
+/* Chrome reserves 200px; scaled labels reserve 5.3rem. */
+.den-files-tree-pane:where([data-tree-band~="compact"]) .den-files-history-controls {
+  display: none;
+}
+
+:where(.den-files-tree-pane[data-tree-band~="compact"]) :is(.den-files-tree-pane-header--switch, .den-files-tree-scroll-frame) {
+  --den-files-tree-pane-inset-x: 8px;
+}
+
+:where(.den-files-tree-pane[data-tree-band~="compact"]) .den-files-tree-pane-header--switch {
+  gap: 4px;
+}
+
+/* Compact tracks retain the segment inset. */
+.den-files-tree-pane:where([data-tree-band~="compact"]) .den-files-pane-segment {
+  gap: 1px;
+  padding: 2px;
+}
+
+:where([data-tree-band~="compact"]) .den-files-pane-segment .den-browse-segment {
+  padding: 3px 6px;
+  font-size: var(--text-den-compact);
+}
+
+/* Shared, on-demand summary drawer below either navigator mode. */
+.den-file-summary-drawer {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+  height: var(--den-files-footer-h);
+  min-height: var(--den-files-footer-h);
+  background: var(--den-surface);
+  color: var(--den-text);
+}
+
+.den-file-summary-drawer[data-open="true"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+  max-height: 72%;
+}
+
+.den-file-summary-drawer__resize {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.den-file-summary-drawer__resize::before {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: transparent;
+}
+
+.den-file-summary-drawer__resize:hover::before,
+.den-file-summary-drawer__resize:focus-visible::before,
+.den-file-summary-resizing .den-file-summary-drawer__resize::before {
+  background: var(--den-accent-signal);
+}
+
+.den-file-summary-drawer__bar {
+  flex: 0 0 var(--den-files-footer-h);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--den-files-footer-h);
+  min-height: var(--den-files-footer-h);
+  padding: 0 10px;
+  border: 0;
+  border-top: 1px solid var(--den-line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-den-caption);
+  font-weight: 650;
+  text-align: left;
+}
+
+.den-file-summary-drawer__bar:hover {
+  background: var(--den-tint-1);
+}
+
+.den-file-summary-drawer__bar:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -2px;
+}
+
+.den-file-summary-drawer__path {
+  overflow: hidden;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-file-summary-drawer__empty {
+  margin: 12px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+}
+
+:where(.den-split-col--stage[data-stage-band~="max-735"]) {
+  .project-files-view:not(.project-files-view--tree-collapsed):not(
+      .project-files-view--tree-claimed
+    )
+    .den-files-tree-pane,
+  .project-files-view:not(.project-files-view--tree-collapsed):not(
+      .project-files-view--tree-claimed
+    )
+    .den-files-split,
+  .project-files-view:not(.project-files-view--tree-collapsed):not(
+      .project-files-view--tree-claimed
+    )
+    .den-files-tab-strip__tree-toggle[data-restore="user"] {
+    display: none;
+  }
+
+  .project-files-view:not(.project-files-view--tree-collapsed):not(
+      .project-files-view--tree-claimed
+    )
+    .den-files-tab-strip__tree-toggle[data-restore="automatic"] {
+    display: inline-flex;
+  }
+}
+
+/* The grip overlaps the pane boundary without reserving a gutter. */
+.den-files-split {
+  --den-resize-axis: width;
+  position: relative;
+  flex: 0 0 4px;
+  width: 4px;
+  margin-inline: -2px;
+  margin-top: var(--den-files-tab-strip-rule);
+  align-self: stretch;
+  z-index: 5;
+  background: transparent;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* A wider chrome target stops before the tree's scrollbar begins. */
+.den-files-split::after {
+  content: "";
+  position: absolute;
+  inset: 0 -4px auto;
+  height: calc(var(--den-files-pane-chrome-h) - var(--den-files-tab-strip-inset));
+}
+
+.den-files-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--den-line);
+  transition:
+    width var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease);
+}
+
+.den-shell--orientation-mirrored .den-files-split::before {
+  right: 2px;
+  left: auto;
+}
+
+.den-files-split:hover::before,
+.den-files-split:focus-visible::before,
+.den-stage--split-resizing .den-files-split::before {
+  width: 2px;
+  background: color-mix(in srgb, var(--den-accent-signal) 55%, var(--den-line));
+}
+
+.den-files-tree__row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 26px;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-files-tree__row:hover {
+  background: var(--den-tint-1);
+}
+
+.den-files-tree__row--active {
+  background: var(--den-tint-2);
+}
+
+.den-files-tree__row--active .den-files-tree__name {
+  color: var(--den-accent-text);
+  font-weight: 500;
+}
+
+.den-files-tree__row--root .den-files-tree__name {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.den-files-tree__twisty {
+  flex: 0 0 16px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-files-tree__twisty:focus-visible,
+.den-files-tree__label:focus-visible,
+.den-files-tree__elision:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+.den-files-tree__twisty-mark {
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  padding: 2.5px;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+.den-files-tree__twisty--open .den-files-tree__twisty-mark {
+  transform: rotate(45deg);
+}
+
+.den-files-tree__label,
+.den-files-tree__elision {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-files-tree__label {
+  color: var(--den-text);
+  padding: 0 4px 0 0;
+}
+
+.den-files-tree__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+}
+
+.den-files-tree__row--active .den-files-tree__icon {
+  color: var(--den-accent-text);
+}
+
+/* Reveal the new-file control on row engagement. */
+.den-files-tree__add {
+  flex: 0 0 20px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  border-radius: var(--den-radius-sm);
+  opacity: 0;
+}
+
+.den-files-tree__row:hover .den-files-tree__add,
+.den-files-tree__add:focus-visible {
+  opacity: 1;
+}
+
+.den-files-tree__add:hover {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+}
+
+.den-files-tree__add:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+.den-files-tree__name-input {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  border: 1px solid var(--den-accent-signal);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font: inherit;
+  padding: 0 5px;
+}
+
+.den-files-tree__name-input:focus-visible {
+  outline: none;
+}
+
+.den-files-tree__hint {
+  margin: 0;
+  padding: 3px 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+}
+
+.den-files-tree__hint--error {
+  color: var(--den-danger-text);
+}
+
+/* The delayed hint stays hidden for fast listings. */
+.den-files-tree__hint--loading {
+  animation: den-fade-up 0s 300ms both;
+}
+
+.den-files-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+}
+
+.den-files-editor-pane {
+  position: relative;
+
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--den-background);
+}
+
+.den-files-pane-presentation,
+.den-files-pane-presentation__content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+

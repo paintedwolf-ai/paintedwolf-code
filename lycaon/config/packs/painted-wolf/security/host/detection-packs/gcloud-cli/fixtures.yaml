@@ -1,0 +1,112 @@
+fixtures:
+- rule: audit-disable
+  positive:
+  - gcloud logging sinks delete audit-sink
+  - gcloud scc notifications delete 12345
+  negative:
+  - gcloud logging sinks list
+  - gcloud asset search-all-resources
+  - gcloud logging sinks delete audit-sink --help
+- rule: project-delete
+  positive:
+  - gcloud projects delete my-old-project
+  negative:
+  - gcloud projects list
+  - gcloud projects describe my-proj
+  - gcloud projects delete my-old-project --help
+  - gcloud help projects delete
+- rule: public-exposure
+  positive:
+  - gsutil iam ch allUsers:objectViewer gs://public-bucket
+  - gcloud compute firewall-rules create open --allow tcp:22 --source-ranges 0.0.0.0/0
+  negative:
+  - gcloud compute firewall-rules list
+  - gsutil ls gs://bucket
+  - gcloud compute firewall-rules create open --source-ranges 0.0.0.0/0 --help
+  - gsutil help iam ch
+  # The revoke reads the same as the grant apart from its verb.
+  - gcloud storage buckets remove-iam-policy-binding gs://x --member=allUsers --role=roles/storage.objectViewer
+  - gsutil iam ch -d allUsers:objectViewer gs://public-bucket
+  # A read piped into a filter is two processes, not a gcloud grant.
+  - gcloud storage buckets get-iam-policy gs://x | grep allUsers
+- rule: iam-grant
+  positive:
+  - gcloud projects add-iam-policy-binding p --member=user:x --role=roles/owner
+  - gcloud iam roles update myrole --project p --permissions storage.buckets.get
+  negative:
+  - gcloud projects get-iam-policy p
+  - gcloud iam roles list
+- rule: credential-mint
+  positive:
+  - gcloud iam service-accounts keys create key.json --iam-account sa@p.iam.gserviceaccount.com
+  negative:
+  - gcloud iam service-accounts keys list --iam-account sa@p.iam.gserviceaccount.com
+  - gcloud kms keys create mykey --keyring r --location l --purpose encryption
+- rule: secret-read
+  positive:
+  - gcloud secrets versions access latest --secret=prod-db
+  - gcloud kms decrypt --ciphertext-file=c.enc --plaintext-file=p.txt --key k --keyring r --location l
+  negative:
+  - gcloud secrets list
+  - gcloud kms keys list --keyring r --location l
+- rule: resource-destroy
+  positive:
+  - gcloud sql instances delete prod-db
+  - gcloud container clusters delete prod --region us-central1
+  negative:
+  - gcloud sql instances describe prod-db
+  - gcloud container clusters list
+- rule: service-disrupt
+  positive:
+  - gcloud compute instances stop web-1
+  - gcloud container clusters resize prod --num-nodes 0
+  negative:
+  - gcloud compute instances start web-1
+  - gcloud compute instances describe web-1
+- rule: session-credentials
+  positive:
+  - gcloud auth print-access-token
+  - gcloud container clusters get-credentials prod --region us-central1
+  negative:
+  - gcloud auth list
+  - gcloud config list
+- rule: storage-object-destroy
+  positive:
+  - gsutil rm -r gs://prod-backups
+  - gsutil -m rm -r gs://prod-backups/2026
+  - gsutil rb gs://prod-backups
+  - gcloud storage rm --recursive gs://prod-backups
+  - gcloud storage rm -r gs://prod-backups/2026
+  - sudo gsutil rm -r gs://prod-backups
+  negative:
+  - gsutil ls gs://prod-backups
+  - gsutil du -s gs://prod-backups
+  - gsutil cp ./a.txt gs://prod-backups/a.txt
+  - gcloud storage ls gs://prod-backups
+  - gsutil rm -r gs://prod-backups --help
+- rule: identity-destroy
+  positive:
+  - gcloud iam service-accounts delete deploy@proj.iam.gserviceaccount.com
+  - gcloud resource-manager folders delete 123456789
+  negative:
+  - gcloud iam service-accounts list
+  - gcloud resource-manager folders list --organization 1
+  - gcloud iam service-accounts delete deploy@proj.iam.gserviceaccount.com --help
+- rule: remote-execution
+  positive:
+  - gcloud compute ssh web-1 --zone us-central1-a --command "id"
+  - gcloud compute project-info add-metadata --metadata-from-file ssh-keys=keys.txt
+  - gcloud compute instances add-metadata web-1 --metadata-from-file ssh-keys=keys.txt
+  negative:
+  - gcloud compute ssh web-1 --zone us-central1-a
+  - gcloud compute instances describe web-1
+  # Metadata that is not a login key grants nobody a shell.
+  - gcloud compute instances add-metadata web-1 --metadata serial-port-enable=TRUE
+- rule: database-exposure
+  positive:
+  - gcloud sql instances patch prod --authorized-networks=0.0.0.0/0
+  - gcloud sql users set-password root --instance=prod --password=Correct-Horse-1
+  negative:
+  - gcloud sql instances describe prod
+  - gcloud sql instances patch prod --authorized-networks=10.0.0.0/8
+  - gcloud sql users list --instance=prod

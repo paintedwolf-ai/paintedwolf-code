@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-layout-toggle-orientation
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-toggle-orientation
+group: "1"
+order: 4
+label: "Mirror workspace"

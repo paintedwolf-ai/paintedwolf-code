@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CHMOD_SYMLINK_ESCAPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chmod
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.path_escape
+when: paintedwolf.rejection_code == "CHMOD_SYMLINK_ESCAPE"
+effect: block
+copy:
+  what: chmod on {{ paintedwolf.path }} was rejected because the symlink target escapes the workspace.
+  cause: The link resolves outside the permitted workspace or write scope.
+  why: The resolved target needs its own write authority.
+  fix: Operate on an intended in-scope target only. Do not replace or retarget a link merely to evade the boundary.
+  instead: Branch on Code; resolve symlink to an in-boundary path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
+x-paintedwolf-message: chmod symlink target escapes workspace
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: chmod
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHMOD_SYMLINK_ESCAPE'

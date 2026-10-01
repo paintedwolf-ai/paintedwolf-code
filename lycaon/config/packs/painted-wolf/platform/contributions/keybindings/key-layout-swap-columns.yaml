@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-swap-columns
+command: painted-wolf/platform:layout-swap-columns
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+X"
+  windows:
+    - "Mod+Shift+X"
+  linux:
+    - "Mod+Shift+X"

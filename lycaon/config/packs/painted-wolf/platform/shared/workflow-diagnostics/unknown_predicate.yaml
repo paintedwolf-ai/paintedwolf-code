@@ -1,0 +1,5 @@
+code: unknown_predicate
+message: |
+  Unknown or unregistered condition {{leaf}}.
+replacement: |
+  Use a registered gate or complete_when leaf from the condition registry.

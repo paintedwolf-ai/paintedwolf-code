@@ -1,0 +1,60 @@
+components:
+  schemas:
+    SourceStorage:
+      x-go-generate: true
+      type: object
+      required: [inventory, storage]
+      additionalProperties: false
+      properties:
+        inventory:
+          $ref: '#/components/schemas/SourceInventoryState'
+        storage:
+          $ref: '#/components/schemas/StorageUsageReport'
+    StorageUsageLane:
+      x-go-generate: true
+      type: object
+      required: [lane, scope, used_bytes]
+      additionalProperties: false
+      properties:
+        lane:
+          type: string
+          enum: [artifacts, source_blobs, prompt_attachments]
+        scope:
+          type: string
+          enum: [project, device]
+        used_bytes: {type: integer, format: int64, minimum: 0}
+    StorageUsageReport:
+      x-go-generate: true
+      type: object
+      required: [lanes]
+      additionalProperties: false
+      description: Retained-content usage, measured per lane.
+      properties:
+        lanes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageUsageLane'
+    SourceInventoryState:
+      x-go-generate: true
+      type: object
+      required: [status, complete, roots_generation, indexed_files]
+      additionalProperties: false
+      description: Project-scoped background source inventory lifecycle. Session creation never waits for this state.
+      properties:
+        status:
+          type: string
+          enum: [uninitialized, queued, scanning, ready, error]
+        complete:
+          type: boolean
+          description: True only when the indexed snapshot matches the current roots generation.
+        roots_generation: {type: integer, minimum: 0}
+        indexed_files: {type: integer, format: int64, minimum: 0}
+        source_snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+          description: Content-addressed identity of the complete published source manifest.
+        worktree_epoch:
+          type: string
+          description: Process generation vector proven stable when the snapshot was published.
+        started_at: { x-go-pointer: true, type: string, format: date-time}
+        completed_at: { x-go-pointer: true, type: string, format: date-time}

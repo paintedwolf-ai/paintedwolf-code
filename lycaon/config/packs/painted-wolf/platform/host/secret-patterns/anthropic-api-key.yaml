@@ -1,0 +1,4 @@
+id: anthropic-api-key
+upstream_id: anthropic-api-key
+title: Anthropic API key
+severity: critical

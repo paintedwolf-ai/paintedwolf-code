@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SANDBOX_DIRECT_IP_REQUEST_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.direct_ip_held_unsupported
+  - paintedwolf.can_command
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_DIRECT_IP_REQUEST_INVALID"
+effect: block
+copy:
+  what: The direct network capability request was invalid for this tool or action.
+  cause: '{% if paintedwolf.direct_ip_held_unsupported %}This held session cannot carry one-action direct network
+    authority.{% else %}The host rejected the direct_ip shape or destinations: {{ paintedwolf.rejection_reason }}.{%
+    endif %}'
+  why: Direct network authority is granted per invocation and must be requested explicitly on a supported action.
+  fix: '{% if paintedwolf.direct_ip_held_unsupported %}{% if paintedwolf.can_command %}Use command for the intended
+    one-action request, with its own reviewed boundary.{% else %}Return the action for execution on a surface that
+    offers a one-action direct-network request.{% endif %}{% else %}On a supporting invocation, direct_ip accepts
+    true, a destination list, or an object with declared_destinations. Destination entries use host:port with optional
+    tcp:// or udp://. Correct the reported field without broadening the intended destinations.{% endif %}'
+  instead: Branch on Code; correct or remove the direct network request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_direct_ip
+x-paintedwolf-message: structured direct network request invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_DIRECT_IP_REQUEST_INVALID'
+  - direct network

@@ -1,0 +1,12 @@
+id: orchestration_complete
+kind: workflow-terminal
+purpose: |
+  Ambient implement workflow has finished all boot/work cycles and is ready to mark the run complete.
+missing_signals:
+  - id: not_complete
+    when: "true"
+    detail: "Orchestration closeout preconditions are not satisfied."
+    fix: "Finish verify-phase coordinator acknowledgment and any open worker legs before terminal advance."
+satisfy:
+  - "Ensure verify gates pass and no active worker cycle remains."
+  - "Call workflow_advance when orchestration_complete evaluates true."

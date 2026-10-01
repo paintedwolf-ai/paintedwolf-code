@@ -1,0 +1,93 @@
+{
+  "id": "fact-moderation-rule-owns-the-threshold",
+  "title": "The classifier reports a score per category and the rule sets the bar",
+  "covers": [
+    "OAR-FACT-16"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "HATE_HIGH",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "moderation"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "moderation_score(\"hate\") >= 0.7"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "HATE_LOW",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "moderation"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "moderation_score(\"hate\") >= 0.4 && moderation_score(\"hate\") < 0.7"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp",
+        "moderation"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.output",
+    "facts": {
+      "moderation_score": 0.5,
+      "moderation_categories": [
+        "hate"
+      ]
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "HATE_LOW"
+  }
+}

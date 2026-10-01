@@ -1,0 +1,13 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': progress.missing
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-progress-missing
+tier: builtin
+invariants:
+  trigger_class: observed_history
+  fires_in:
+  - post-turn hook after progress-gated tools ran with no checklist authored
+  required:
+  - update_progress

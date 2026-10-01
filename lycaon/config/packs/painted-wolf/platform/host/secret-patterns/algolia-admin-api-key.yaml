@@ -1,0 +1,9 @@
+id: algolia-admin-api-key
+title: Algolia admin API key
+regex: '(?i)\balgolia_admin_(?:api_)?key\b[''" ]*[:=][ ''"]*([a-z0-9]{32})\b'
+keywords:
+  - algolia_admin_api_key
+  - algolia_admin_key
+severity: critical
+secret_group: 1
+entropy: 3.5

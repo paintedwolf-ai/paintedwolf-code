@@ -1,0 +1,128 @@
+# EventTopic — SSE EventHub topic ids (wire).
+name: EventTopic
+go_const_prefix: EventTopic
+json_schema: docs/schemas/events/event-topic.generated.json
+values:
+  - id: session
+    payload: session/events.yaml#/components/schemas/SessionEvent
+  - id: message
+    payload: events.yaml#/components/schemas/MessageEvent
+  - id: worker
+    payload: events.yaml#/components/schemas/WorkerEvent
+  - id: checkpoint
+    payload: checkpoint.yaml#/components/schemas/CheckpointEvent
+  - id: board
+    payload: events.yaml#/components/schemas/BoardEvent
+  - id: delegation
+    payload: events.yaml#/components/schemas/DelegationEvent
+  - id: cost
+    payload: cost.yaml#/components/schemas/CostEvent
+  - id: llm
+    go: LLM
+    payload: events.yaml#/components/schemas/LLMCallEvent
+  - id: activity
+    payload: events.yaml#/components/schemas/ActivityEvent
+    comment: >-
+      Session-scoped, host-observed work currently occupying a live turn. Start
+      and terminal events share one activity id so clients never infer liveness
+      from transcript timing or model-authored progress prose.
+  - id: oar
+    go: OAR
+    payload: events.yaml#/components/schemas/OAROnFireEvent
+    comment: >-
+      Session-scoped record emitted by an Open Agent Rules publish_event action.
+      The payload is the portable minimum: qualified rule identity, anchor, and
+      effect.
+  - id: scan
+    payload: scan/execution.yaml#/components/schemas/CodeScanEvent
+  - id: providers
+    payload: events.yaml#/components/schemas/ProviderEvent
+  - id: model_policy
+    payload: events.yaml#/components/schemas/ModelPolicyEvent
+  - id: settings
+    payload: events.yaml#/components/schemas/SettingsEvent
+  - id: workflow
+    payload: workflow.yaml#/components/schemas/WorkflowEvent
+  - id: grounding
+    payload: settings/verification.yaml#/components/schemas/GroundingEvent
+  - id: findings
+    payload: findings.yaml#/components/schemas/FindingsEvent
+  - id: progress
+    payload: progress.yaml#/components/schemas/ProgressEvent
+  - id: queue
+    payload: queue.yaml#/components/schemas/QueueEvent
+  - id: project
+    payload: project/identity.yaml#/components/schemas/ProjectEvent
+  - id: process
+    payload: events.yaml#/components/schemas/BackgroundProcessEvent
+  - id: preview
+    payload: events.yaml#/components/schemas/PreviewEvent
+    comment: Streams read-only live page frames (CDP screencast) for Den.
+  - id: attention
+    payload: attention.yaml#/components/schemas/AttentionView
+    comment: >-
+      Device-scoped. Published with an empty project key so the hub fans it out
+      to every subscriber.
+  - id: cli_open
+    go: CLIOpen
+    payload: events.yaml#/components/schemas/CLIOpenEvent
+    comment: >-
+      Device-scoped, like attention: `lycaon open` names a project the window
+      may not currently be showing, so it cannot be filtered to one project.
+  - id: source_changed
+    payload: events.yaml#/components/schemas/SourceChangesEvent
+    comment: Project-scoped file changes. Session ids only attribute producers.
+  - id: source_operation
+    payload: project/source-operations.yaml#/components/schemas/SourceOperationEvent
+    comment: >-
+      Project-scoped file operation status. Every persisted transition or
+      progress save publishes the operation as the operation list would return it.
+  - id: file_briefing
+    payload: project/file-briefings.yaml#/components/schemas/FileBriefingEvent
+    comment: Project file briefing progress.
+  - id: artifact
+    payload: events.yaml#/components/schemas/ArtifactEvent
+    comment: >-
+      Project-scoped. A durable visual artifact was written or deleted. Carries
+      no bytes: the gallery re-reads the list, so one artifact's metadata,
+      reference counts, and tile all render from one place.
+  - id: agent_presence
+    payload: agent-presence.yaml#/components/schemas/AgentPresenceEvent
+    comment: >-
+      Project-scoped, ephemeral. Each event carries one chat's complete
+      presence; clients replace that chat's value and re-read the snapshot
+      when the stream reopens.
+  - id: editor_document
+    payload: events.yaml#/components/schemas/EditorDocumentEvent
+    comment: >-
+      Content-free state after lease, path, divergence, and screening transitions;
+      draft bytes accompany only transitions that changed document content.
+  - id: preflight
+    payload: events.yaml#/components/schemas/PreflightEvent
+    comment: >-
+      Device-scoped. Host readiness changed while the app was running — a
+      capability that was fine at boot is not any more, or has recovered. Carries
+      no report: the client re-reads GET /v1/preflight, so one probe's copy,
+      tier, and scope are rendered from one place regardless of what woke it.
+  - id: turn_clock
+    payload: progress.yaml#/components/schemas/TurnClock
+    comment: >-
+      Session-tree active-time clock, published on the edges where it actually
+      transitions (first turn in, last turn out, run reset). Den ticks locally
+      between edges. Separate from progress because how long a session has been
+      busy is a session fact: a session that never writes a checklist still has
+      a clock, and the progress digest only refreshes on checklist writes.
+  - id: turn_load
+    payload: turn-load.yaml#/components/schemas/TurnLoad
+    comment: >-
+      One decision-engine receipt as it lands: the turn decision before the
+      model's first call or a request_tools or skills_read resolution.
+      Session-scoped. The transcript page carries
+      the same shape for the turns it shows, so a reload draws what the
+      event drew.
+  - id: source_view
+    payload: source-views/views.yaml#/components/schemas/SourceViewEvent
+    comment: >-
+      Project-scoped, content-free retained source presentation invalidation.
+      View owners refresh bounded state and rows; paths, queries, failures, and
+      source content never appear in this event.

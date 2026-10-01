@@ -1,0 +1,42 @@
+title: Change app signing material
+id: a79b67a1-2406-4d72-ab57-99c9a9f46f6d
+description: Creates, revokes, or overwrites the certificates and keys releases are signed with.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_fastlane:
+    Image: fastlane
+    CommandLine|contains:
+      - ' match nuke'
+      - ' cert create'
+      - ' sigh renew'
+  selection_android:
+    Image:
+      - keytool
+      - apksigner
+    CommandLine|contains:
+      - ' -genkeypair'
+      - ' -genkey'
+      - ' rotate'
+  # Bare `eas credentials` opens an interactive manager whose only flag is
+  # --platform; it changes nothing until a menu item is chosen. The colon
+  # subcommand is the one that writes credentials.
+  selection_expo_creds:
+    Image: eas
+    CommandLine|contains: ' credentials:configure-build'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|-list)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_fastlane or selection_android or selection_expo_creds) and not filter_rehearsal and not filter_local

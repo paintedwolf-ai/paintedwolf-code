@@ -1,0 +1,37 @@
+oar: '1.0'
+id: JQ_FORMAT_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.allowed
+    - paintedwolf.format
+when: paintedwolf.rejection_code == "JQ_FORMAT_INVALID"
+effect: block
+copy:
+  what: jq format {{ paintedwolf.format }} is not supported — allowed {{ paintedwolf.allowed }}.
+  cause: The format parameter must be auto, json, yaml, or toml.
+  why: Structured rejects let agents branch without parsing free-form decode errors.
+  fix: Retry with format auto or an explicit json, yaml, or toml value.
+  instead: Branch on Code; use a supported format value
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq format argument is invalid
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      allowed: '[auto json yaml toml]'
+      format: xml
+      path: config.xml
+      profile: explore_readonly
+      tool: jq
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_FORMAT_INVALID'

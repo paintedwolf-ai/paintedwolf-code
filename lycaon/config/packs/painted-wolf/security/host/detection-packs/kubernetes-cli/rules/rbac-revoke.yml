@@ -1,0 +1,46 @@
+title: Remove a role or role binding
+id: d508a391-af1c-4d94-8703-4367236eec32
+description: >-
+  Deletes an RBAC role or binding, or removes a subject from one, so an identity
+  loses the access it was granted.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  selection_delete:
+    CommandLine|contains: ' delete '
+  # Padding distinguishes role targets from bindings and arguments.
+  verbs_rbac_target:
+    CommandLine|contains:
+      - ' clusterrolebinding'
+      - ' rolebinding'
+      - ' clusterrole '
+      - ' clusterroles '
+      - ' clusterrole/'
+      - ' role '
+      - ' roles '
+      - ' role/'
+  verbs_rbac_policy_remove:
+    CommandLine|contains:
+      - ' adm policy remove-'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and ((selection_delete and verbs_rbac_target) or verbs_rbac_policy_remove) and not filter_rehearsal and not filter_local

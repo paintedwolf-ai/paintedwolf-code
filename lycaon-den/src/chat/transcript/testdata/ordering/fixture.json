@@ -1,0 +1,280 @@
+{
+  "session_id": "sess-ord-fixture",
+  "workflow_run_id": "run-1",
+  "note": "Golden fixture for the transcript ordering invariant. Messages carry `ord` (immutable creation ordinal); the canonical_order is the one rendered sequence an ord sort must produce under any SSE-arrival permutation. Covers every TranscriptItem kind + row-child overlays (grounding, inline checkpoint). Non-items: internal/compacted (visibility-filtered). worker_summary patches into the canonical worker card so it is a backing row, not a separate rendered item. Transcript-visible workflow_boundary rows are ord-ordered timeline markers.",
+  "messages": [
+    {
+      "id": "m1",
+      "ord": 1,
+      "role": "user",
+      "content": "Ship the 1.0 release.",
+      "visibility": "transcript",
+      "seq": 1,
+      "ts": "2026-07-08T20:00:00Z"
+    },
+    {
+      "id": "m2",
+      "ord": 2,
+      "role": "system",
+      "kind": "workflow_boundary",
+      "content": "",
+      "visibility": "transcript",
+      "workflow_run_id": "run-1",
+      "workflow_boundary": { "event": "start", "workflow_id": "release", "phase": "plan" },
+      "seq": 2,
+      "ts": "2026-07-08T20:00:01Z"
+    },
+    {
+      "id": "m3",
+      "ord": 3,
+      "role": "assistant",
+      "content": "Searching the repo first.",
+      "visibility": "transcript",
+      "tool_calls": [
+        { "id": "tc1", "name": "find", "args": { "pattern": "VERSION" } },
+        { "id": "tc2", "name": "grep", "args": { "pattern": "release" } }
+      ],
+      "seq": 3,
+      "ts": "2026-07-08T20:00:02Z"
+    },
+    {
+      "id": "m4",
+      "ord": 4,
+      "role": "tool",
+      "content": "found 3 files",
+      "visibility": "transcript",
+      "tool_result": { "tool_call_id": "tc1", "tool": "find", "outcome": "completed" },
+      "seq": 4,
+      "ts": "2026-07-08T20:00:03Z"
+    },
+    {
+      "id": "m5",
+      "ord": 5,
+      "role": "tool",
+      "content": "matched 12 lines",
+      "visibility": "transcript",
+      "tool_result": { "tool_call_id": "tc2", "tool": "grep", "outcome": "completed" },
+      "seq": 5,
+      "ts": "2026-07-08T20:00:04Z"
+    },
+    {
+      "id": "m6",
+      "ord": 6,
+      "role": "system",
+      "kind": "index_warming",
+      "content": "Warmed web index for the release.",
+      "visibility": "transcript",
+      "index_warming": { "trigger": "turn", "tier": "fresh", "pages": 3 },
+      "seq": 6,
+      "ts": "2026-07-08T20:00:05Z"
+    },
+    {
+      "id": "m7",
+      "ord": 7,
+      "role": "system",
+      "kind": "progress_update",
+      "content": "",
+      "visibility": "transcript",
+      "workflow_run_id": "run-1",
+      "progress_update": {
+        "seq": 0,
+        "initial": true,
+        "steps": [ { "label": "Plan", "state": "active" } ],
+        "changes": []
+      },
+      "seq": 7,
+      "ts": "2026-07-08T20:00:06Z"
+    },
+    {
+      "id": "m8",
+      "ord": 8,
+      "role": "system",
+      "kind": "progress_complete",
+      "content": "",
+      "visibility": "transcript",
+      "workflow_run_id": "run-1",
+      "progress_complete": { "steps": [ { "label": "Plan", "state": "done" } ] },
+      "seq": 8,
+      "ts": "2026-07-08T20:00:07Z"
+    },
+    {
+      "id": "m9",
+      "ord": 9,
+      "role": "assistant",
+      "content": "",
+      "visibility": "transcript",
+      "tool_calls": [
+        { "id": "tc3", "name": "task", "args": { "agent_type": "implementer", "brief": { "goal": "Edit the README", "done_when": ["Return the completed edit."] } } }
+      ],
+      "seq": 9,
+      "ts": "2026-07-08T20:00:08Z"
+    },
+    {
+      "id": "m10",
+      "ord": 10,
+      "role": "tool",
+      "content": "job-1 dispatched",
+      "visibility": "transcript",
+      "tool_result": { "tool_call_id": "tc3", "tool": "task", "outcome": "completed", "dispatch": { "job_id": "job-1" } },
+      "seq": 10,
+      "ts": "2026-07-08T20:00:09Z"
+    },
+    {
+      "id": "m11",
+      "ord": 11,
+      "role": "assistant",
+      "content": "Worker complete: edited README.md.",
+      "visibility": "transcript",
+      "worker_summary": { "job_id": "job-1", "status": "complete" },
+      "seq": 11,
+      "ts": "2026-07-08T20:00:10Z"
+    },
+    {
+      "id": "m12",
+      "ord": 12,
+      "role": "system",
+      "kind": "workflow_feedback",
+      "content": "Which version?",
+      "visibility": "transcript",
+      "workflow_run_id": "run-1",
+      "workflow_feedback": {
+        "phase_id": "pick-version",
+        "prompt": "Which version?",
+        "response_type": "single_choice",
+        "options": ["1.0", "2.0"]
+      },
+      "seq": 12,
+      "ts": "2026-07-08T20:00:11Z"
+    },
+    {
+      "id": "m13",
+      "ord": 13,
+      "role": "assistant",
+      "kind": "plan",
+      "content": "Plan: cut 1.0, tag, write release notes.",
+      "visibility": "transcript",
+      "seq": 13,
+      "ts": "2026-07-08T20:00:12Z"
+    },
+    {
+      "id": "m14",
+      "ord": 14,
+      "role": "assistant",
+      "kind": "draft",
+      "content": "Draft synthesis: release 1.0 is ready to ship.",
+      "visibility": "transcript",
+      "draft_status": "live",
+      "draft_version_count": 1,
+      "seq": 14,
+      "ts": "2026-07-08T20:00:13Z"
+    },
+    {
+      "id": "m15",
+      "ord": 15,
+      "role": "assistant",
+      "content": "Final synthesis: release 1.0 ships now.",
+      "visibility": "transcript",
+      "grounding": {
+        "traced": true,
+        "host_assembled": false,
+        "observed_path_count": 1,
+        "observed_paths_sample": ["README.md"]
+      },
+      "seq": 15,
+      "ts": "2026-07-08T20:00:14Z"
+    },
+    {
+      "id": "m16",
+      "ord": 16,
+      "role": "system",
+      "kind": "workflow_boundary",
+      "content": "",
+      "visibility": "transcript",
+      "workflow_run_id": "run-1",
+      "workflow_boundary": { "event": "end", "workflow_id": "release" },
+      "seq": 16,
+      "ts": "2026-07-08T20:00:15Z"
+    },
+    {
+      "id": "m17",
+      "ord": 17,
+      "role": "assistant",
+      "content": "internal reasoning that the user never sees",
+      "visibility": "internal",
+      "seq": 17,
+      "ts": "2026-07-08T20:00:16Z"
+    },
+    {
+      "id": "m18",
+      "ord": 18,
+      "role": "assistant",
+      "content": "",
+      "visibility": "internal",
+      "compacted_chunk": {
+        "original_tokens": 1000,
+        "compacted_tokens": 200,
+        "kind": "assistant",
+        "strategy": "summary"
+      },
+      "seq": 18,
+      "ts": "2026-07-08T20:00:17Z"
+    },
+    {
+      "id": "m19", "ord": 19, "seq": 19, "role": "tool", "content": "",
+      "ts": "2026-07-08T20:01:00Z",
+      "tool_result": { "content": "", "overlay_promotion": {
+        "files": [{ "path": "README.md", "after": "# Release 1.0" }]
+      } }
+    }
+  ],
+  "draft_versions": [
+    {
+      "session_id": "sess-ord-fixture",
+      "slot_id": "m14",
+      "version_index": 1,
+      "body": "Earlier draft: maybe 1.0, maybe 2.0.",
+      "outcome_code": "ungrounded",
+      "created_at": "2026-07-08T19:59:00Z"
+    }
+  ],
+  "worker_file_edits": [
+    {
+      "key": "worker-file-edit:m19",
+      "job_id": "job-1",
+      "parent_message_id": "m19",
+      "ord": 19,
+      "sub": 20,
+      "file_edit": { "path": "README.md", "after": "# Release 1.0" },
+      "pending": false,
+      "ts": "2026-07-08T20:01:00Z"
+    }
+  ],
+  "inline_checkpoints": [
+    {
+      "key": "checkpoint:m10:approve-edit",
+      "tool_call_id": "tc3",
+      "parent_message_id": "m10",
+      "ord": 10,
+      "sub": 11,
+      "kind": "approval",
+      "status": "approved"
+    }
+  ],
+  "canonical_order": [
+    { "kind": "user", "key": "m1", "ord": 1, "sub": 0 },
+    { "kind": "workflow_boundary", "key": "m2", "ord": 2, "sub": 0 },
+    { "kind": "assistant", "key": "m3", "ord": 3, "sub": 0 },
+    { "kind": "activity_span", "key": "group:m4:m5", "ord": 4, "sub": 0 },
+    { "kind": "index_warming", "key": "m6", "ord": 6, "sub": 0 },
+    { "kind": "progress_update", "key": "m7", "ord": 7, "sub": 0 },
+    { "kind": "progress_complete", "key": "m8", "ord": 8, "sub": 0 },
+    { "kind": "tool", "key": "m10:0", "ord": 10, "sub": 10 },
+    { "kind": "checkpoint", "key": "checkpoint:m10:approve-edit", "ord": 10, "sub": 11 },
+    { "kind": "workflow_feedback", "key": "m12", "ord": 12, "sub": 0 },
+    { "kind": "plan", "key": "m13", "ord": 13, "sub": 0 },
+    { "kind": "draft", "key": "m14", "ord": 14, "sub": 0 },
+    { "kind": "assistant", "key": "m15", "ord": 15, "sub": 0 },
+    { "kind": "workflow_boundary", "key": "m16", "ord": 16, "sub": 0 },
+    { "kind": "worker_file_edit", "key": "worker-file-edit:m19", "ord": 19, "sub": 20 }
+  ]
+}

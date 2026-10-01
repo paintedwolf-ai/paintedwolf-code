@@ -1,0 +1,19 @@
+description: >-
+  Merge preview — same plan as promote_overlay without landing. overlay_id == job_id.
+  Returns path_status and ready_resolutions; spill_path is
+  host-data-relative (promote-spills/<id>.json). Example: {"overlay_id":"<job_id>"}.
+schema:
+  type: object
+  properties:
+    overlay_id:
+      type: string
+      description: Worker job_id from task() or pack_board
+    path:
+      type: string
+      description: Optional — scope preview to one repo-relative path
+    detail:
+      type: string
+      enum: [hunks, full]
+      description: Conflict shape — hunks (default) or full; spill_path for complete bodies
+  required: [overlay_id]
+  additionalProperties: false

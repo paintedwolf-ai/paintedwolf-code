@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-open
+title: "Open Crossbar"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "search.open"

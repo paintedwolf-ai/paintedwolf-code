@@ -1,0 +1,23 @@
+title: Mint a Kubernetes service-account token
+id: 5a9f7a76-8c23-4f6f-8b17-5c6d7e8f9a05
+description: Requests a bound service-account token and prints it to stdout.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: kubectl
+    CommandLine|contains:
+      - ' create token'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

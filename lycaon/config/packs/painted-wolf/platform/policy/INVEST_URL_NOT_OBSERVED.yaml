@@ -1,0 +1,35 @@
+oar: '1.0'
+id: INVEST_URL_NOT_OBSERVED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.surface
+    - paintedwolf.unobserved_cited_urls
+when: paintedwolf.surface == "implement_investigate" && size(paintedwolf.unobserved_cited_urls) > 0
+effect: block
+copy:
+  what: 'Investigate cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report.'
+  cause: 'cited_urls must reference URLs already recorded in the evidence union for this chat.'
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: 'Repair only the trailing citation metadata. Retain observed URLs that support the pinned report; remove unsupported URLs, using cited_urls [] if none remain.'
+  instead: 'The citation repair does not reopen research or worker dispatch. Keep unsupported claims explicitly untraced.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_investigate
+x-paintedwolf-evidence:
+  ui_label: URL citations
+  ui_check_id: url_citations
+  in_session_retry: true
+x-paintedwolf-message: 'Investigate cited URLs not observed in the report evidence'
+x-paintedwolf-scenarios:
+  - id: ungrounded_url
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: https://example.com
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: INVEST_URL_NOT_OBSERVED'

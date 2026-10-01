@@ -1,0 +1,16 @@
+tags: [filesystem]
+description: "Create directories within write scope (never use command mkdir). Replaces command: mkdir(1)."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 20
+      description: Repo-relative directory paths (max 20)
+    mode:
+      type: string
+      description: Octal allowlist (755 default; same family as chmod)
+  required: [paths]
+  additionalProperties: false

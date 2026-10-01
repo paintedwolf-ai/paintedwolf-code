@@ -1,0 +1,5 @@
+id: search-cluster
+label: Search clusters
+description: >-
+  Elasticsearch, OpenSearch, and Meilisearch REST operations that delete an
+  index or wipe cluster-wide data.

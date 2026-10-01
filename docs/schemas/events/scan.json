@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/scan.json",
+  "$ref": "../../openapi/components/schemas/scan/execution.yaml#/components/schemas/CodeScanEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeScanEvent"
+}

@@ -1,0 +1,41 @@
+title: Delete objects or a bucket on a remote
+id: a10f3805-6b64-4464-ba19-a0829210038c
+description: Removes stored objects, a directory of them, or a whole bucket from a configured remote.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_rclone:
+    Image: rclone
+    CommandLine|re: '(?i)\s(purge|delete|deletefile|rmdir|rmdirs)\s'
+  # mc removes a single named object without flags; the recursive form is the
+  # one that empties a prefix, and --dangerous is its site-wide switch.
+  selection_mc_recursive:
+    Image: mc
+    CommandLine|contains|all:
+      - ' rm '
+      - ' --recursive'
+  selection_mc_bucket:
+    Image: mc
+    CommandLine|contains: ' rb '
+  selection_s5cmd:
+    Image: s5cmd
+    CommandLine|re: '(?i)\s(rm|rb)\s'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--dryrun|--help|-h)$'
+  filter_short_dry_run:
+    Image: rclone
+    Argv: '-n'
+  filter_local:
+    EffectReach: local
+  condition: (selection_rclone or selection_mc_recursive or selection_mc_bucket or selection_s5cmd) and not filter_rehearsal and not filter_short_dry_run and not filter_local

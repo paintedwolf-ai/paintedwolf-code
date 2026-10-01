@@ -1,0 +1,291 @@
+components:
+  schemas:
+    ProjectRoot:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - path
+      - label
+      - is_primary
+      - added_at
+      - kind
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Canonical display label and case-insensitive @label addressing token. Draft roots use the temporary label Draft; attached roots default to the folder basename.
+        is_primary:
+          type: boolean
+        git_remote_hash:
+          type: [string, "null"]
+        added_at:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum: [draft, attached]
+          description: Engine-created draft workspace or user-attached folder.
+    ProjectPromotion:
+      x-go-generate: true
+      type: object
+      required:
+      - destination_path
+      - init_git
+      - phase
+      - last_error
+      - updated_at
+      additionalProperties: false
+      properties:
+        destination_path:
+          type: string
+        init_git:
+          type: boolean
+        phase:
+          type: string
+          enum: [queued, staged, installed, committed]
+        last_error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    Project:
+      x-go-generate: true
+      x-go-field-order: ["id", "name", "roots", "roots_generation", "session_count", "starred", "is_draft", "promotion", "cover_artifact_id", "cover_root_session_id", "cover_source", "cover_updated_at", "last_activity_at", "last_opened_at", "created_at"]
+      type: object
+      required:
+      - id
+      - name
+      - roots
+      - roots_generation
+      - session_count
+      - starred
+      - is_draft
+      - promotion
+      - last_opened_at
+      - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: [string, "null"]
+        roots:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectRoot"
+        roots_generation:
+          type: integer
+          minimum: 0
+        session_count:
+          type: integer
+          minimum: 0
+          description: Number of retained root chats, including archived chats and excluding worker sessions.
+        starred:
+          type: boolean
+        is_draft:
+          type: boolean
+          description: Computed from the project having exactly one primary draft root.
+        promotion:
+          x-go-type: "*ProjectPromotion"
+          oneOf:
+          - $ref: "#/components/schemas/ProjectPromotion"
+          - type: "null"
+          description: Durable save-to-folder progress, or null when no transition is active.
+        last_activity_at:
+          type: [string, "null"]
+          format: date-time
+          description: Newest activity_at among the project's sessions; null when it has none.
+        last_opened_at:
+          type: string
+          format: date-time
+          description: >-
+            When the person last opened the project: created a chat in it, or
+            had one of its chats on screen (markSessionSeen). Fetching a session
+            does not open its project.
+        created_at:
+          type: string
+          format: date-time
+        cover_artifact_id:
+          type: [string, "null"]
+          format: uuid
+          description: Product-render VisualArtifact id for the home-page project card (capture or render).
+        cover_root_session_id:
+          type: [string, "null"]
+          format: uuid
+          description: Root session id for fetching cover bytes via GET /v1/sessions/{id}/artifacts/{artifact_id}.
+        cover_source:
+          type: [string, "null"]
+          enum: [capture, render, null]
+          description: Producer face of the designated cover artifact.
+        cover_updated_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the product-render cover was last designated.
+    CreateProjectRootInput:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        label:
+          type: string
+          maxLength: 64
+          description: Display label doubling as the @label addressing token; unique per project (case-insensitive). Blank = derived from the folder basename.
+        is_primary:
+          x-go-pointer: true
+          type: boolean
+    CreateProjectRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          x-go-pointer: true
+          type: string
+        roots:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateProjectRootInput"
+        draft:
+          type: boolean
+          description: Materialize as an unsaved draft until the user promotes it.
+    UpdateProjectRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+        starred:
+          x-go-pointer: true
+          type: boolean
+    AttachProjectRootRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        label:
+          type: string
+          maxLength: 64
+          description: Display label doubling as the @label addressing token; unique per project (case-insensitive). Blank = derived from the folder basename.
+        is_primary:
+          x-go-pointer: true
+          type: boolean
+    UpdateProjectRootRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        is_primary:
+          x-go-pointer: true
+          type: boolean
+        label:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Rename the display label / @label addressing token; empty rejected, unique per project (case-insensitive).
+    PromoteProjectRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - root_path
+      additionalProperties: false
+      properties:
+        root_path:
+          type: string
+          description: An empty folder that receives the draft through a restart-safe save.
+        init_git:
+          type: boolean
+          description: Initialise a git repository in the staged workspace before installation.
+    CloneProjectRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - url
+      - parent_dir
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+        parent_dir:
+          type: string
+          description: Existing folder the clone is created under.
+        name:
+          type: string
+          description: Folder name for the clone; derived from the url when omitted.
+    FolderDetect:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+          description: >-
+            The project that already holds this folder as a root, when there is one.
+            Absent for a folder no project covers. Opening a folder that carries this
+            reopens that project; minting a second one over the same tree would lose
+            its trust state.
+        extension_suggestions:
+          x-go-pointer: true
+          $ref: ../extensions.yaml#/components/schemas/ExtensionSuggestionsResponse
+          description: Install choices available before opening the project.
+    ProjectEventAction:
+      type: string
+      enum:
+      - created
+      - updated
+      - deleted
+    ProjectEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - action
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          $ref: "#/components/schemas/ProjectEventAction"
+        project:
+          x-go-pointer: true
+          $ref: "#/components/schemas/Project"
+    ProjectListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - projects
+      additionalProperties: false
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next project page; empty or omitted at the end.

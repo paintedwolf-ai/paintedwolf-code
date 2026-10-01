@@ -1,0 +1,15 @@
+tags: [git, mutation]
+description: "Switch to an existing local branch, or explicitly create and switch to a new one. Rehearses and reviews file changes before applying. Preserves unrelated local edits; refuses conflicting edits. Reports the actual branch and HEAD even after failure. Replaces command: git checkout."
+schema:
+  type: object
+  properties:
+    branch: {type: string, minLength: 1, description: "Destination branch identifier."}
+    create: {type: boolean, default: false, description: "Create a new branch; never replace an existing branch."}
+    ref: {type: string, minLength: 1, description: "Starting revision when create is true (default HEAD)."}
+  required: [branch]
+  allOf:
+    - if: {required: [ref]}
+      then:
+        required: [create]
+        properties: {create: {const: true}}
+  additionalProperties: false

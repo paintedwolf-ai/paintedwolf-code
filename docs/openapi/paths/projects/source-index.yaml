@@ -1,0 +1,223 @@
+paths:
+  /v1/projects/{id}/source/definition:
+    post:
+      tags:
+      - projects
+      operationId: resolveProjectSourceDefinition
+      x-person-action: none
+      summary: Resolve declarations for an identifier
+      description: |
+        Narrows whole-word search hits in the active root to files that
+        declare the exact identifier (AST confirmation). Mentions that are
+        not declarations never appear as candidates. One candidate jumps;
+        several are ranked for a picker; zero is a successful empty list so
+        the client can open prefilled search. Caps set truncated. Languages
+        without a grammar return an empty list with 200 — never an error.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceDefinitionRequest
+      responses:
+        '200':
+          description: Ranked declaration candidates (may be empty)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceDefinitionResponse
+        '400':
+          description: Missing path/symbol or no attached folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or root not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/source/symbols:
+    get:
+      tags:
+      - projects
+      operationId: listProjectSourceSymbols
+      summary: List declarations in one project file
+      description: |
+        Returns document-order outline symbols (functions, methods, types,
+        classes, constants, headings) for one root-relative file. Languages
+        without a grammar return an empty list with 200. Capped at 2 000
+        symbols with truncated set when the cap is hit.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        description: Root-relative path
+        schema:
+          type: string
+      - name: root_id
+        in: query
+        required: false
+        description: Pin the read to one attached root
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Symbol list (may be empty)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceSymbolsResponse
+        '400':
+          description: Missing path or no attached folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path outside the project sandbox
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          description: Binary file
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/source/index:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSourceIndex
+      summary: Read the compact revisioned project source index summary
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      responses:
+        '200':
+          description: Ready source index summary (possibly refreshing)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceIndexSummary
+        '202':
+          description: Source index is warming off the request path
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceIndexSummary
+        '400':
+          description: Project has no attached folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+  /v1/projects/{id}/source/search:
+    get:
+      tags: [projects]
+      operationId: searchProjectSource
+      x-multi-stream-list: true
+      summary: Search the cached project source index
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: q
+        in: query
+        required: false
+        schema: {type: string}
+        description: >-
+          Any portion of a file's full path, including the root folder's own path: a basename, a
+          fuzzy root-relative path, or an absolute, `~/`, `./`, or `file://` path. A code host file
+          link resolves in the root checked out from that repository, and a development server URL
+          by its path. Surrounding quotes, backticks, shell escapes, and a location (`:12:3`,
+          `:10-20`, `#L12`, `#L10-L20`, `(12,3)`) are read, not matched; a pasted compiler, test, or
+          stack trace line contributes only its location. A path that matches nothing is retried
+          without its leading directories.
+      - {name: root_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      - {name: cursor, in: query, required: false, schema: {type: string}, description: Pagination cursor from previous page next_cursor}
+      responses:
+        '200':
+          description: Ranked results from the newest available index revision
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceSearchResponse}
+        '202':
+          description: Source index is warming off the request path
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-index.yaml#/components/schemas/SourceSearchResponse}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType

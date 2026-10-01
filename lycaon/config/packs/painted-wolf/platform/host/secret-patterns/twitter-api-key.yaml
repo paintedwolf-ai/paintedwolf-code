@@ -1,0 +1,5 @@
+id: twitter-api-key
+upstream_id: twitter-api-key
+title: X consumer key
+severity: critical
+enabled: false

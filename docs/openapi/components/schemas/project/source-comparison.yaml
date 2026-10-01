@@ -1,0 +1,302 @@
+components:
+  schemas:
+    SourcePinGitHead:
+      x-go-generate: true
+      type: object
+      required: [root_id, repo_state]
+      additionalProperties: false
+      description: >-
+        The git position one root held when the pin was taken, as last observed
+        before the boundary.
+      properties:
+        root_id: {type: string, format: uuid}
+        repo_state:
+          type: string
+          enum: [repo, no_repo, unreadable]
+        head_commit: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        head_ref: {type: string}
+    SourcePin:
+      x-go-generate: true
+      type: object
+      required: [id, project_id, created_at]
+      additionalProperties: false
+      description: Named source comparison boundary.
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        label: {type: string}
+        created_at: { x-go-name: "CreatedAt", type: string, format: date-time}
+        git_heads:
+          type: array
+          items: {$ref: '#/components/schemas/SourcePinGitHead'}
+    SourcePinList:
+      x-go-generate: true
+      type: object
+      required: [pins]
+      additionalProperties: false
+      properties:
+        pins:
+          type: array
+          items: {$ref: '#/components/schemas/SourcePin'}
+        next_cursor: {type: string}
+    SourcePinCreate:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        label: {type: string, maxLength: 120}
+    SourcePinUpdate:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          type: [string, "null"]
+          maxLength: 120
+    SourceComparisonSide:
+      x-go-generate: true
+      type: object
+      required: [state, size_bytes, availability, content]
+      additionalProperties: false
+      description: |
+        One exact immutable endpoint. Availability is explicit because version
+        identity and metadata remain explicit for metadata-only captures and
+        unexpectedly unavailable content.
+      properties:
+        version_id:
+          type: string
+          format: uuid
+          description: Empty for working-file, repository-object, and carried-start endpoints.
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        state:
+          type: string
+          enum: [content, directory, absent, unresolved]
+        sha256: { x-go-name: "Sha256", type: string}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        availability:
+          type: string
+          enum: [available, absent, directory, unavailable, not_captured, binary, unresolved]
+        reason: {type: string}
+        content:
+          type: string
+          description: Exact decoded text when availability is available; otherwise empty.
+        secret_screen:
+          x-go-type: "*SecretScreen"
+          allOf: [{$ref: 'editor-secrets.yaml#/components/schemas/SecretScreen'}]
+          description: >-
+            Secret spans computed over content when availability is available.
+            Offsets refer to the exact content string in this side. Omitted when
+            screening is unavailable or this side has no readable text.
+    SourceAttributedText:
+      x-go-generate: true
+      type: object
+      description: Character range in UTF-16 code units after CRLF is normalized to LF. The comparison endpoints retain their original text and saved hashes.
+      additionalProperties: false
+      required: [index, length, contributors, selected, visible]
+      properties:
+        index: {type: integer, minimum: 0, x-go-type: uint32}
+        length: {type: integer, minimum: 1, x-go-type: uint32}
+        contributors: {type: array, items: {$ref: 'source-walk.yaml#/components/schemas/SourceContributor'}}
+        selected: {type: boolean, description: "Authored in the selected chat or turn, subject to the marking choice."}
+        visible: {type: boolean, description: False when the person's edit is left unmarked.}
+    SourceComparisonAttribution:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [before, after]
+      description: Changed ranges in UTF-16 coordinates, using collaborative character identities or recorded file deltas. Other chats remain visible as context. Missing authors remain unknown.
+      properties:
+        before: {type: array, items: {$ref: '#/components/schemas/SourceAttributedText'}}
+        after: {type: array, items: {$ref: '#/components/schemas/SourceAttributedText'}}
+    SourceComparison:
+      x-go-generate: true
+      type: object
+      required: [in_range, location_changed, truncated]
+      additionalProperties: false
+      description: |
+        Exact endpoints painted by a Walk effect or version selection. Both
+        endpoints are present when in_range is true and omitted when it is
+        false — a lens with no effect for the file has no endpoints to
+        describe, and inventing empty ones would report states outside the
+        values each side declares.
+      properties:
+        truncated:
+          type: boolean
+          description: True when content exceeds the inline byte cap and full diff requires paged comparison views.
+        presentation_after_ordinal:
+          x-go-pointer: true
+          type: integer
+          format: int64
+          minimum: 0
+          description: The unread boundary used for this presentation comparison. Open views retain it until the reader leaves.
+        attribution:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceComparisonAttribution'
+          description: Present when the endpoints share text identities; both endpoints retain their actual saved bytes.
+
+        in_range:
+          type: boolean
+          description: False only when a requested lens contains no effect for the file.
+        effect_id: {type: string, format: uuid}
+        file_id: {type: string, format: uuid}
+        op: {$ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'}
+        before:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceComparisonSide'
+          description: Present only when in_range is true.
+        after:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceComparisonSide'
+          description: Present only when in_range is true.
+        location_changed:
+          type: boolean
+          description: True when root_id or path differs between the endpoints.
+        user_edits_unmarked:
+          type: boolean
+          description: True when attribution marks omit the person's own edits. Saved endpoints are unchanged.
+    SourceAttributionInterval:
+      x-go-generate: true
+      type: object
+      required: [start_line, end_line, turn, recorded_at]
+      additionalProperties: false
+      description: Inclusive 1-based line span containing text attributed to an agent change. Spans may overlap when several agents contributed to the same line.
+      properties:
+        start_line: {type: integer, minimum: 1}
+        end_line: {type: integer, minimum: 1}
+        session_id: { x-go-pointer: true, type: string, format: uuid}
+        turn: {type: integer, minimum: 0}
+        tool_call_id: { x-go-pointer: true, type: string, pattern: '^[a-zA-Z0-9:._-]+$'}
+        recorded_at: { x-go-name: "RecordedAt", type: string, format: date-time}
+    SourceAttributionResponse:
+      x-go-generate: true
+      type: object
+      required: [head_sha256, intervals]
+      additionalProperties: false
+      description: |
+        Line provenance for one file. head_sha256 is the tip after hash the
+        intervals describe; clients render marks only when the buffer base
+        sha matches and the buffer is clean.
+      properties:
+        head_sha256: { x-go-name: "HeadSha256", type: string}
+        intervals:
+          type: array
+          items: {$ref: '#/components/schemas/SourceAttributionInterval'}
+    WorkerJobChangesResponse:
+      x-go-generate: true
+      type: object
+      required: [files]
+      additionalProperties: false
+      description: |
+        Files a worker job has changed on its own overlay. These have not landed
+        on the project roots — the coordinator lands them with promote_overlay,
+        and only then do they appear on the project's change lens.
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerJobChangedFile'
+    WorkerJobChangedFile:
+      x-go-generate: true
+      type: object
+      required: [root_id, path, op]
+      additionalProperties: false
+      description: One overlay-modified file, addressed by root.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root the path belongs to; two roots may share a relative path
+        path:
+          type: string
+          description: Root-relative path (slash-separated)
+        op:
+          $ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'
+    SourceGitCommitDetails:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [hash, parents, message, author_name, authored_at, committed_at]
+      properties:
+        hash: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        parents: {type: array, items: {type: string, pattern: '^[0-9a-f]{7,64}$'}}
+        message: {type: string}
+        author_name: {type: string}
+        authored_at: { x-go-name: "AuthoredAt", type: string, format: date-time}
+        committed_at: { x-go-name: "CommittedAt", type: string, format: date-time}
+    SourceGitReviewFile:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, before_path, op, before_mode, after_mode, before_oid, after_oid, insertions, deletions, binary]
+      properties:
+        path: {type: string, description: Root-relative path in the comparison; deleted paths retain their old address.}
+        before_path: {type: string}
+        op: {$ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'}
+        before_mode: {type: string}
+        after_mode: {type: string}
+        before_oid: {type: string, pattern: '^([0-9a-f]{7,64})?$'}
+        after_oid: {type: string, pattern: '^([0-9a-f]{7,64})?$'}
+        insertions: {type: integer, minimum: 0}
+        deletions: {type: integer, minimum: 0}
+        binary: {type: boolean}
+    SourceGitReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [change, commit, commit_comparison, before_commit, after_commit, files, files_total, insertions, deletions]
+      properties:
+        change: {$ref: 'source-walk.yaml#/components/schemas/SourceGitChange'}
+        commit: {$ref: '#/components/schemas/SourceGitCommitDetails'}
+        commit_comparison: {type: boolean, description: True compares the destination commit with its selected parent; false compares the recorded movement endpoints.}
+        before_commit: {type: string, pattern: '^([0-9a-f]{7,64})?$', description: Empty only for an initial commit compared with the empty tree.}
+        after_commit: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        files: {type: array, items: {$ref: '#/components/schemas/SourceGitReviewFile'}}
+        files_total: {type: integer, minimum: 0, description: Complete count within the attached root.}
+        insertions: {type: integer, minimum: 0}
+        deletions: {type: integer, minimum: 0}
+        next_cursor: {type: string}
+    SourceRevisionComparison:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, spec, kind, label, before_commit, after_commit]
+      description: |
+        A typed revision resolved in one root's repository to two immutable
+        commits. A commit compares with its first parent; the checked-out
+        branch compares its tip with its parent; any other local branch
+        compares its merge base with HEAD with HEAD; A..B compares A with B,
+        and A...B compares their merge base with B.
+      properties:
+        root_id: {type: string, format: uuid}
+        spec: {type: string, description: The revision as typed.}
+        kind: {type: string, enum: [commit, branch, range]}
+        label: {type: string, description: 'Short name for the comparison, such as "a1b2c3d Fix parser" or "topic...HEAD".'}
+        before_commit: {type: string, pattern: '^([0-9a-f]{7,64})?$', description: Full commit id; empty only for a root commit compared with the empty tree.}
+        after_commit: {type: string, pattern: '^[0-9a-f]{7,64}$', description: Full commit id.}
+        subject: {type: string, description: Commit subject when the comparison is one commit against its parent.}
+    SourceRevisionsResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [comparisons]
+      properties:
+        comparisons:
+          type: array
+          description: One comparison per root where the revision resolves, primary root first. Empty when it names nothing.
+          items: {$ref: '#/components/schemas/SourceRevisionComparison'}
+    SourceRevisionReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, before_commit, after_commit, files, files_total, insertions, deletions]
+      properties:
+        root_id: {type: string, format: uuid}
+        before_commit: {type: string, pattern: '^([0-9a-f]{7,64})?$', description: Empty compares with the empty tree.}
+        after_commit: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        files: {type: array, items: {$ref: '#/components/schemas/SourceGitReviewFile'}}
+        files_total: {type: integer, minimum: 0, description: Complete count within the attached root.}
+        insertions: {type: integer, minimum: 0}
+        deletions: {type: integer, minimum: 0}
+        next_cursor: {type: string}
+

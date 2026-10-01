@@ -1,0 +1,70 @@
+title: Reached a stream or queue cloud API
+id: 46e18ae8-8e0d-4384-b6b2-9596bcda9ed0
+description: >-
+  Connected to a managed Kafka, queue, pub/sub, or realtime messaging control
+  plane. A hostname cannot tell a consume from a topic wipe or ACL change.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - api.confluent.cloud
+      - confluent.cloud
+      - api.redpanda.cloud
+      - api.upstash.com
+      - mq.cloudamqp.com
+      - api.cloudamqp.com
+      - api.ably.io
+      - rest.ably.io
+      - api.pusherapp.com
+      - api.pusher.com
+      - api.pubnub.com
+      - psrv.io
+      - api.knock.app
+      - api.svix.com
+      - api.hookdeck.com
+      - api.courier.com
+      - api.novu.co
+      - api.livekit.cloud
+      - api.stream.io
+      - api.getstream.io
+  # Upstash and Aiven front a database and a queue on one domain; the hostname
+  # cannot separate them, so this rule owns both.
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .confluent.cloud
+      - .confluent.io
+      - .redpanda.cloud
+      - .redpanda.com
+      - .upstash.io
+      - .upstash.com
+      - .cloudamqp.com
+      - .rmq.cloudamqp.com
+      - .ably.io
+      - .ably.net
+      - .pusher.com
+      - .pusherapp.com
+      - .pubnub.com
+      - .pubnub.net
+      - .psrv.io
+      - .knock.app
+      - .svix.com
+      - .hookdeck.com
+      - .courier.com
+      - .novu.co
+      - .livekit.cloud
+      - .livekit.io
+      - .stream-io-api.com
+      - .getstream.io
+      - .aiven.io
+  condition: selection_host or selection_suffix

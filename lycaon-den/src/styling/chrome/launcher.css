@@ -1,0 +1,150 @@
+.den-launcher {
+  width: 540px;
+  max-width: calc(100vw - 32px);
+  margin: 48px auto 0;
+  background: var(--den-background);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  box-shadow: var(--den-shadow-lg);
+  overflow: hidden;
+}
+.den-launcher__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--den-line);
+  color: var(--den-text-muted);
+}
+.den-launcher__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-text);
+  font-size: var(--text-den-subhead);
+  outline: none;
+}
+.den-launcher__list {
+  max-height: 320px;
+}
+.den-launcher__rows {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+}
+.den-launcher__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text);
+  text-align: left;
+  cursor: pointer;
+}
+.den-launcher__row:hover,
+.den-launcher__row--active {
+  background: var(--den-tint-1);
+}
+.den-launcher__glyph {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5714rem;
+  height: 1.5714rem;
+  border-radius: 6px;
+  background: var(--den-surface-elevated);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+}
+.den-launcher__row--active .den-launcher__glyph {
+  background: color-mix(in srgb, var(--den-accent-signal) 16%, transparent);
+  color: var(--den-accent-text);
+}
+.den-launcher__name {
+  flex-shrink: 0;
+  font-size: var(--text-den-body);
+}
+.den-launcher__meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.den-launcher__count {
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.den-launcher__check {
+  flex-shrink: 0;
+  color: var(--den-accent-text);
+}
+.den-launcher__empty {
+  padding: 12px 14px;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+}
+.den-launcher__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--den-line);
+  background: var(--den-surface);
+}
+.den-launcher__footer-spacer {
+  flex: 1;
+}
+.den-launcher__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.den-launcher__action:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.den-launcher__action--primary {
+  background: color-mix(in srgb, var(--den-accent-signal) 10%, transparent);
+  border: 1px solid var(--den-accent-warm);
+  color: var(--den-accent-text);
+}
+.den-launcher__action--primary:hover {
+  background: color-mix(in srgb, var(--den-accent-signal) 16%, transparent);
+  color: var(--den-accent-text);
+}
+
+/* Shell chrome is inert while open — this strip keeps the window movable. */
+.den-crossbar__chrome-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 1;
+}
+.den-crossbar__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}

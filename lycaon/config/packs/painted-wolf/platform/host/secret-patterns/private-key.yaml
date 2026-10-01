@@ -1,0 +1,4 @@
+id: private-key
+upstream_id: private-key
+title: PEM private key
+severity: critical

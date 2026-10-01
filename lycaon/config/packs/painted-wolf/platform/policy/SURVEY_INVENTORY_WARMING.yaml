@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SURVEY_INVENTORY_WARMING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - grep
+    - find
+    - wc
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.timeout_ms
+when: paintedwolf.rejection_code == "SURVEY_INVENTORY_WARMING"
+effect: block
+copy:
+  what: 'The source catalog has no complete generation yet; the wait for one ended at {{ paintedwolf.timeout_ms }}ms.'
+  cause: Discovery of the project tree has not covered it, so the tool has no file list to read.
+  why: Warming is not an empty result. Nothing here says the tree holds no matches.
+  fix: "Scope path to a directory you already know, or retry after other work while discovery continues. Do not conclude the pattern or file is absent."
+  instead: Branch on Code; retry later or narrow the path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: Source catalog is still warming
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: find
+      timeout_ms: 2000
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SURVEY_INVENTORY_WARMING'

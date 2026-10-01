@@ -1,0 +1,8 @@
+# Defaults resolve by platform, scope, and provenance.
+id: example/editor-surface:key-summarize-selection
+command: example/editor-surface:summarize-selection
+scope: files
+bindings:
+  macos: [Mod+Shift+Y]
+  windows: [Mod+Shift+Y]
+  linux: [Mod+Shift+Y]

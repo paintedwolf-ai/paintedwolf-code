@@ -1,0 +1,11 @@
+description: "Explain a named file or area with a bounded, source-cited briefing. Path sets scope; task ranks within it. Use next_actions only when more evidence is needed."
+schema:
+  type: object
+  properties:
+    path: { type: string, minLength: 1, description: "File or directory to explain." }
+    paths: { type: array, items: { type: string, minLength: 1 }, minItems: 1, maxItems: 16, description: "Files or directories instead of path." }
+    content: { type: string, description: "Inline text; short pastes return verbatim." }
+    task: { type: string, description: "The user question, kept close to their words. Omit for an overview." }
+    pattern: { type: string, minLength: 1, description: "RE2 content pattern within path or paths." }
+    cursor: { type: string, minLength: 1, description: "From a continue action; copy its args unchanged." }
+  additionalProperties: false

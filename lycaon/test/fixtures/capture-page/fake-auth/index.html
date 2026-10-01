@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html><head><title>Fake auth</title></head>
+<body>
+<button id="login" type="button">Log in</button>
+<div id="status">anon</div>
+<a id="secret" href="/secret.html" hidden>Secret</a>
+<script>
+document.getElementById("login").addEventListener("click", () => {
+  document.cookie = "session=authed; path=/";
+  document.getElementById("status").textContent = "authed";
+  document.getElementById("secret").hidden = false;
+});
+</script>
+</body></html>

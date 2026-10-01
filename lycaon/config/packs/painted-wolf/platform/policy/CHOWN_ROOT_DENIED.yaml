@@ -1,0 +1,39 @@
+oar: '1.0'
+id: CHOWN_ROOT_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chown
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ownership_target
+  - paintedwolf.ownership_field
+  - paintedwolf.ownership_uid
+  - paintedwolf.ownership_gid
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CHOWN_ROOT_DENIED"
+effect: block
+copy:
+  cause: The requested root identity differs from this host’s user identity.
+  why: This host permits only its current user ID {{ paintedwolf.ownership_uid }} and group ID {{ paintedwolf.ownership_gid
+    }}.
+  fix: Use current or the exact permitted identity only when that matches the requested ownership change. Otherwise
+    report the limitation; do not guess another account, elevate the host, or switch tools to bypass it.
+  instead: Branch on Code CHOWN_ROOT_DENIED; retain the current-identity boundary
+  what: The requested root ownership target {{ paintedwolf.ownership_target }} is unavailable for chown.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
+x-paintedwolf-message: chown:chown cannot chown to root uid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: scripts/run.sh
+    profile: implement
+    tool: chown
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHOWN_ROOT_DENIED'

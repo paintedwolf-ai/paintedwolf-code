@@ -1,0 +1,14 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker could not finish
+message: The worker stopped before it could return a summary to the coordinator.
+suggested_action: >-
+  Retry the task. If it keeps happening, open the worker to see where it
+  stopped.
+scenarios:
+  - id: generic
+    vars: {}
+    expect_contains:
+      - summary
+      - coordinator

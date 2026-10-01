@@ -1,0 +1,64 @@
+# List this pack under suggest in {project}/${overlay_dir}/extensions.yaml.
+# Collaborators can choose whether to install it.
+#
+# This workflow uses the generic gate kit.
+id: example-triage
+version: 1.0.0
+name: Example Triage
+description: Ask what broke, fan out to find why, stop for a human. Read-only.
+trigger: /example-triage
+request:
+  question: What problem should this triage investigate?
+icon: bug
+initial_posture: spec
+topology: example-triage-sweep
+agents:
+  - { id: coordinator, tools: all }
+  - { id: path-explorer, tools: profile }
+blueprint:
+  id: triage
+  file: example-triage.md
+phases:
+  - id: intake
+    activity_label: Asking what broke
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [await-user-input]
+    on_enter:
+      request_user_feedback:
+        prompt: "What broke, and what did you expect instead?"
+    complete_when: user_feedback_received:intake
+    next: sweep
+
+  - id: sweep
+    activity_label: Sweeping for causes
+    blueprint_write: true
+    coordinator_surface: plan_research
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [plan-research]
+    bind_topology_stage: fan_out
+    complete_when: gates_satisfied
+    gates: [hitl_consulted:sweep]
+    next: sign_off
+
+  - id: sign_off
+    activity_label: Waiting for your approval
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [await-user-input]
+    human_approval:
+      blueprint: example-triage.md
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    next: done
+
+  - id: done
+    activity_label: Wrapping up
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [await-user-input]
+    terminal: true
+    complete_when: orchestration_complete
+
+controls:
+  phase_advance: host

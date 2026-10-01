@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-new-file
+command: painted-wolf/platform:files-new-file
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+N"
+  windows:
+    - "Mod+N"
+  linux:
+    - "Mod+N"

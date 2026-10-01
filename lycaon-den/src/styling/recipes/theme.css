@@ -1,0 +1,50 @@
+@theme {
+  --color-den-bg: var(--den-background);
+  --color-den-surface: var(--den-surface);
+  --color-den-surface-elevated: var(--den-surface-elevated);
+  --color-den-border: var(--den-border);
+  --color-den-text: var(--den-text);
+  --color-den-text-muted: var(--den-text-muted);
+  --color-den-accent: var(--den-accent);
+  --color-den-accent-text: var(--den-accent-text);
+  --color-den-accent-warm: var(--den-accent-warm);
+  --color-den-accent-signal: var(--den-accent-signal);
+  --color-den-on-accent: var(--den-on-accent);
+  --color-den-danger: var(--den-danger);
+  --color-den-positive: var(--den-status-positive);
+
+  --radius-den-sm: var(--den-radius-sm);
+  --radius-den: var(--den-radius);
+  --radius-den-lg: var(--den-radius-lg);
+
+  --font-den-mono: var(--den-font-mono);
+
+  /* Spacing scale in rem. */
+  --spacing-den-1: 0.1429rem;
+  --spacing-den-2: 0.2857rem;
+  --spacing-den-3: 0.4286rem;
+  --spacing-den-4: 0.5714rem;
+  --spacing-den-5: 0.7143rem;
+  --spacing-den-6: 0.8571rem;
+  --spacing-den-7: 1rem;
+  --spacing-den-8: 1.1429rem;
+  --spacing-den-9: 1.4286rem;
+
+  /* Type scale in rem. */
+  --text-den-micro: 0.7143rem;
+  --text-den-overline: 0.75rem;
+  --text-den-caption: 0.7857rem;
+  --text-den-compact: 0.8214rem;
+  --text-den-hint: 0.8571rem;
+  --text-den-label: 0.8929rem;
+  --text-den-body: 0.9286rem;
+  --text-den-input: 0.9643rem;
+  --text-den-subhead: 1rem;
+  --text-den-section: 1.0714rem;
+  --text-den-title: 1.1429rem;
+  --text-den-display: 1.2857rem;
+  --text-den-heading: 1.4286rem;
+  --text-den-hero: 1.5714rem;
+  --text-den-banner: 1.8571rem;
+}
+

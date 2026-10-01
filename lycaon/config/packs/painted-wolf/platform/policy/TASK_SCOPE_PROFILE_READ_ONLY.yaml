@@ -1,0 +1,35 @@
+oar: '1.0'
+id: TASK_SCOPE_PROFILE_READ_ONLY
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  facts:
+    - paintedwolf.agent_type
+    - paintedwolf.profile_mutation_capable
+    - paintedwolf.scope_mode
+    - paintedwolf.tool_is_task
+when: paintedwolf.tool_is_task && !paintedwolf.profile_mutation_capable && paintedwolf.scope_mode == "write"
+effect: block
+copy:
+  what: '**{{ paintedwolf.agent_type }}** uses a read-only tool profile and cannot take **`scope.mode: write`**.'
+  cause: You dispatched a write-scoped task to an agent whose profile has no mutation tools (no file edits, command, or git commit).
+  why: Write scope provisions an overlay and expects mutations; a read-only profile cannot author overlay changes or report files.
+  fix: 'Survey/analysis → keep this agent with `scope.mode: read`. Authoring a report or product edits → use a mutation-capable profile with `scope.mode: write`.'
+  instead: 'Branch on Code: pick a mutation-capable profile for write overlays; keep read-only profiles on read scope.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: read-only profiles cannot take scope.mode write
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      agent_type: repo-researcher
+      detail: bad args
+      path: docs/report.md
+      profile: coordinator
+      scope_mode: write
+      scope_paths:
+        - docs/report.md
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: TASK_SCOPE_PROFILE_READ_ONLY'

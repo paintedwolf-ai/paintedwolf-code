@@ -1,0 +1,1139 @@
+# Painted Wolf Code's Open Agent Rules capability document.
+#
+# What this host provides: which core anchors it implements and under which
+# local names, which capability profiles it claims *whole*, every host-tier fact
+# it publishes with its type, and the limits it evaluates under. A rule author,
+# and a conformance runner, can read this and know what will load before
+# attempting it.
+#
+# Schema: schemas/oar/oar-capability.schema.json (vendored from openagentrules.org)
+# Normative: [OAR-FACT-21], [OAR-FACT-24], [OAR-PROF-2], [OAR-PROF-3]
+#
+# host_facts is checked against internal/oar/catalogue.go by
+# TestCapabilityDocumentMatchesCatalogue — a fact added to the engine without
+# being declared here fails the build, and vice versa.
+
+oar_capability_version: "1.0"
+host: paintedwolf
+
+anchors:
+  # Core anchor id -> the local catalog anchor that implements it.
+  core:
+    tool.pre_invoke: tool.pre_invoke
+    tool.handler: tool.handler
+    tool.post_invoke: tool.post_invoke
+    agent.post_turn: coordinator.post_turn
+    agent.finalize: worker.finalize
+    model.input: content.input
+    model.output: content.output
+    model.tool_result: content.tool_result
+
+  unsupported: []
+  host:
+    - coordinator.pre_invoke
+    - session.pre_invoke
+    - coordinator.post_turn
+    - coordinator.closeout_check
+    - worker.finalize
+    - worker.report_check
+    - content.input
+    - content.output
+    - content.tool_result
+    - credential.assignment
+    - tool.rejected
+
+profiles:
+  - content-provenance
+  - content
+  - secrets
+  - filesystem
+  - mcp
+  - session
+  - tool
+
+# Steps `flow` matches against, oldest first ([OAR-FACT-12], [OAR-PROF-3]).
+activity_window: 16
+
+# Host-registered detectors for secret observations. Conformance corpus reserves
+# its own detector refs separately; this host ships secretmatch.
+detectors:
+  - detector://secretmatch
+
+# Content mutation is implemented: accumulated transforms apply in evaluation
+# order against original-coordinate spans ([OAR-OPS-13]–[OAR-OPS-21]).
+supports_transform: true
+
+expression_nodes_max: 256
+
+host_facts:
+ - name: paintedwolf.rejection_reason
+   type: string
+ - name: paintedwolf.rejection_field
+   type: string
+ - name: paintedwolf.mime
+   type: string
+ - name: paintedwolf.worker_budget_at_max
+   type: bool
+ - name: paintedwolf.search_provider_statuses
+   type: list<string>
+ - name: paintedwolf.period_max_year
+   type: int
+ - name: paintedwolf.period_min_year
+   type: int
+ - name: paintedwolf.wait_allowed_conditions
+   type: list<string>
+ - name: paintedwolf.condition
+   type: string
+ - name: paintedwolf.read_empty_file
+   type: bool
+ - name: paintedwolf.artifact_id
+   type: string
+ - name: paintedwolf.limit
+   type: int
+ - name: paintedwolf.scan_id
+   type: string
+ - name: paintedwolf.text_base_changed
+   type: bool
+ - name: paintedwolf.structural_languages
+   type: list<string>
+ - name: paintedwolf.surface_presentable_ids
+   type: list<string>
+ - name: paintedwolf.scan_no_engines
+   type: bool
+ - name: paintedwolf.secret_reference_count
+   type: int
+ - name: paintedwolf.secret_reference_limit
+   type: int
+ - name: paintedwolf.direct_ip_held_unsupported
+   type: bool
+ - name: paintedwolf.can_command
+   type: bool
+ - name: paintedwolf.scan_baseline_missing
+   type: bool
+ - name: paintedwolf.scan_old_status
+   type: string
+ - name: paintedwolf.scan_new_status
+   type: string
+ - name: paintedwolf.can_stat
+   type: bool
+ - name: paintedwolf.recall_widen_invalid
+   type: bool
+ - name: paintedwolf.recall_allowed_fields
+   type: list<string>
+ - name: paintedwolf.render_total_exceeded
+   type: bool
+ - name: paintedwolf.render_viewport_exceeded
+   type: bool
+ - name: paintedwolf.render_kit_available
+   type: list<string>
+ - name: paintedwolf.render_kit_suggestions
+   type: list<string>
+ - name: paintedwolf.render_asset_origin
+   type: string
+ - name: paintedwolf.render_kit_kind
+   type: string
+ - name: paintedwolf.artifact_preview_mimes
+   type: list<string>
+ - name: paintedwolf.max_asset_bytes
+   type: int
+ - name: paintedwolf.max_render_bytes
+   type: int
+ - name: paintedwolf.total_bytes
+   type: int
+ - name: paintedwolf.content_height
+   type: int
+ - name: paintedwolf.max_height
+   type: int
+ - name: paintedwolf.max_width
+   type: int
+ - name: paintedwolf.is_image
+   type: bool
+ - name: paintedwolf.extension
+   type: string
+ - name: paintedwolf.supported_formats
+   type: string
+ - name: paintedwolf.width
+   type: int
+ - name: paintedwolf.height
+   type: int
+ - name: paintedwolf.max_dimension
+   type: int
+ - name: paintedwolf.max_pairs
+   type: int
+ - name: paintedwolf.can_page_close
+   type: bool
+ - name: paintedwolf.mcp_probe_in_flight
+   type: bool
+ - name: paintedwolf.page_live_ids
+   type: list<string>
+ - name: paintedwolf.measure_selector
+   type: string
+ - name: paintedwolf.cookie_jar_name
+   type: string
+ - name: paintedwolf.token_jar_name
+   type: string
+ - name: paintedwolf.grep_nested_repeat
+   type: bool
+ - name: paintedwolf.can_page_act
+   type: bool
+ - name: paintedwolf.can_page_snapshot
+   type: bool
+ - name: paintedwolf.measure_page_id
+   type: string
+ - name: paintedwolf.can_capture_page
+   type: bool
+ - name: paintedwolf.can_measure_page
+   type: bool
+ - name: paintedwolf.fetch_budget_used
+   type: int
+ - name: paintedwolf.fetch_budget_retry_after_seconds
+   type: int
+ - name: paintedwolf.git_addressed_session_required
+   type: bool
+ - name: paintedwolf.git_changed_path_count
+   type: int
+ - name: paintedwolf.chmod_allowed_modes
+   type: list<string>
+ - name: paintedwolf.ownership_target
+   type: string
+ - name: paintedwolf.ownership_field
+   type: string
+ - name: paintedwolf.ownership_uid
+   type: int
+ - name: paintedwolf.ownership_gid
+   type: int
+ - name: paintedwolf.ask_artifact_mime
+   type: string
+ - name: paintedwolf.ask_artifact_formats
+   type: list<string>
+ - name: paintedwolf.ask_prompt_runes
+   type: int
+ - name: paintedwolf.ask_prompt_limit
+   type: int
+ - name: paintedwolf.ask_option_count
+   type: int
+ - name: paintedwolf.ask_option_limit
+   type: int
+ - name: paintedwolf.ask_artifact_count
+   type: int
+ - name: paintedwolf.ask_artifact_limit
+   type: int
+ - name: paintedwolf.ask_purpose
+   type: string
+ - name: paintedwolf.ask_purposes
+   type: list<string>
+ - name: paintedwolf.inherited_blueprint_approved
+   type: bool
+ - name: paintedwolf.inherited_blueprint_status
+   type: string
+ - name: paintedwolf.inherited_parent_run
+   type: string
+ - name: paintedwolf.viewport_width
+   type: int
+ - name: paintedwolf.viewport_height
+   type: int
+ - name: paintedwolf.viewport_min_edge
+   type: int
+ - name: paintedwolf.viewport_max_edge
+   type: int
+ - name: paintedwolf.capture_output_kind
+   type: string
+ - name: paintedwolf.capture_semantic_output
+   type: bool
+ - name: paintedwolf.capture_actions_required
+   type: bool
+ - name: paintedwolf.capture_held_target
+   type: bool
+ - name: paintedwolf.capture_project_escape
+   type: bool
+ - name: paintedwolf.navigation_origin
+   type: string
+ - name: paintedwolf.navigation_url
+   type: string
+ - name: paintedwolf.navigation_error
+   type: string
+ - name: paintedwolf.pending_input_id
+   type: string
+ - name: paintedwolf.review_reason
+   type: string
+ - name: paintedwolf.review_expected_call
+   type: string
+ - name: paintedwolf.review_unknown_groups
+   type: list<string>
+ - name: paintedwolf.review_scan_id_groups
+   type: list<string>
+ - name: paintedwolf.review_empty_set_asides
+   type: list<string>
+ - name: paintedwolf.review_missing_reviewers
+   type: list<string>
+ - name: paintedwolf.review_uncited_reviewers
+   type: list<string>
+ - name: paintedwolf.review_ungrounded_sample
+   type: list<string>
+ - name: paintedwolf.review_observed_handles
+   type: list<string>
+ - name: paintedwolf.review_attempt
+   type: int
+ - name: paintedwolf.review_iteration_cap
+   type: int
+ - name: paintedwolf.review_terminal_value
+   type: string
+ - name: paintedwolf.last_assistant
+   type: string
+ - name: paintedwolf.turn_tools
+   type: list<string>
+ - name: paintedwolf.surface
+   type: string
+ - name: paintedwolf.profile
+   type: string
+ - name: paintedwolf.phase
+   type: string
+ - name: paintedwolf.workers_idle
+   type: bool
+ - name: paintedwolf.worker_spawn_blocked
+   type: bool
+ - name: paintedwolf.active_worker_count
+   type: int
+ - name: paintedwolf.pending_overlay_promote
+   type: bool
+ - name: paintedwolf.overlay_state
+   type: string
+ - name: paintedwolf.surface_may_finish
+   type: bool
+ - name: paintedwolf.is_host_cycle_turn
+   type: bool
+ - name: paintedwolf.batch_phase
+   type: string
+ - name: paintedwolf.batch_closed
+   type: bool
+ - name: paintedwolf.progress_open_items
+   type: int
+ - name: paintedwolf.progress_has_open_steps
+   type: bool
+ - name: paintedwolf.has_completion_report
+   type: bool
+ - name: paintedwolf.task_envelope_echo
+   type: bool
+ - name: paintedwolf.closeout_surface
+   type: bool
+ - name: paintedwolf.progress_reconcile_needed
+   type: bool
+ - name: paintedwolf.verify_required
+   type: bool
+ - name: paintedwolf.verifier_pass
+   type: bool
+ - name: paintedwolf.synthesis_wrapup_tool_forbidden
+   type: bool
+ - name: paintedwolf.progress_closure_armed
+   type: bool
+ - name: paintedwolf.progress_gated_tool
+   type: bool
+ - name: paintedwolf.progress_missing
+   type: bool
+ - name: paintedwolf.review_loop_active
+   type: bool
+ - name: paintedwolf.path_is_worker_branch
+   type: bool
+ - name: paintedwolf.verify_has_command
+   type: bool
+ - name: paintedwolf.verify_declared
+   type: bool
+ - name: paintedwolf.progress_closed_beyond_baseline
+   type: bool
+ - name: paintedwolf.progress_reconciled_since_arm
+   type: bool
+ - name: paintedwolf.pending_user_input
+   type: bool
+ - name: paintedwolf.stub_valid
+   type: bool
+ - name: paintedwolf.tool_allowed_for_profile
+   type: bool
+ - name: paintedwolf.habit_redirect_match
+   type: string
+ - name: paintedwolf.write_roots
+   type: list<string>
+ - name: paintedwolf.pattern_parse_ok
+   type: bool
+ - name: paintedwolf.mode_bits
+   type: string
+ - name: paintedwolf.posture_unresolved
+   type: bool
+ - name: paintedwolf.high_risk_tool
+   type: bool
+ - name: paintedwolf.tool_is_state
+   type: bool
+ - name: paintedwolf.tool_is_delegation
+   type: bool
+ - name: paintedwolf.tool_is_task
+   type: bool
+ - name: paintedwolf.tool_payload_chunkable
+   type: bool
+   observation: True when this tool's arguments carry a free-form payload the model can split across calls; false when its arguments are always small.
+ - name: paintedwolf.tool_is_handoff
+   type: bool
+ - name: paintedwolf.pack_runner_task
+   type: bool
+ - name: paintedwolf.agent_is_plan_writer
+   type: bool
+ - name: paintedwolf.disallowed_agent
+   type: bool
+ - name: paintedwolf.plan_awaiting_approval
+   type: bool
+ - name: paintedwolf.unobserved_cited_paths
+   type: list<string>
+ - name: paintedwolf.unobserved_cited_urls
+   type: list<string>
+ - name: paintedwolf.unobserved_cited_handles
+   type: list<string>
+ - name: paintedwolf.citation_fields_present
+   type: bool
+ - name: paintedwolf.claims_completion
+   type: bool
+ - name: paintedwolf.has_matching_ledger_job
+   type: bool
+ - name: paintedwolf.ledger_criteria_met
+   type: bool
+ - name: paintedwolf.worker_summary_present
+   type: bool
+ - name: paintedwolf.worker_artifact_present
+   type: bool
+ - name: paintedwolf.worker_artifact_measured
+   type: bool
+ - name: paintedwolf.files_touched
+   type: list<string>
+ - name: paintedwolf.summary_length
+   type: int
+ - name: paintedwolf.repeat_count
+   type: int
+ - name: paintedwolf.fruitless_search_run
+   type: int
+ - name: paintedwolf.same_code_reject_run
+   type: int
+ - name: paintedwolf.code_reject_responses
+   type: int
+ - name: paintedwolf.deferred_unactivated
+   type: int
+ - name: paintedwolf.worker_attempted_mutation
+   type: bool
+ - name: paintedwolf.batch_ready_ignoring_progress
+   type: bool
+ - name: paintedwolf.synthesis_delay_count
+   type: int
+ - name: paintedwolf.review_verdict_gate_open
+   type: bool
+ - name: paintedwolf.verdict_delay_count
+   type: int
+ - name: paintedwolf.closeout_gates_open
+   type: bool
+ - name: paintedwolf.closeout_gate_open_leaves
+   type: string
+ - name: paintedwolf.closeout_gate_delay_count
+   type: int
+ - name: paintedwolf.workflow_report_phase_pending
+   type: bool
+ - name: paintedwolf.phase_obligation_pending
+   type: bool
+ - name: paintedwolf.phase_obligation_kinds
+   type: string
+ - name: paintedwolf.scope_mode
+   type: string
+ - name: paintedwolf.profile_mutation_capable
+   type: bool
+ - name: paintedwolf.base_overlay_id
+   type: string
+ - name: paintedwolf.base_overlay_resolves
+   type: bool
+ - name: paintedwolf.base_overlay_checked
+   type: bool
+ - name: paintedwolf.base_overlay_pending
+   type: bool
+ - name: paintedwolf.active_read_count
+   type: int
+ - name: paintedwolf.active_write_count
+   type: int
+ - name: paintedwolf.max_workers
+   type: int
+ - name: paintedwolf.max_read_workers
+   type: int
+ - name: paintedwolf.max_write_workers
+   type: int
+ - name: paintedwolf.citation_unverifiable
+   type: bool
+ - name: paintedwolf.scout_survey_evidence_present
+   type: bool
+ - name: paintedwolf.surface_claim_ungrounded
+   type: bool
+ - name: paintedwolf.page_measure_ungrounded
+   type: bool
+ - name: paintedwolf.agent_is_scout
+   type: bool
+ - name: paintedwolf.agent_is_implementer
+   type: bool
+ - name: paintedwolf.profile_surveys_project_tree
+   type: bool
+ - name: paintedwolf.profile_fetches_urls
+   type: bool
+   observation: True when this agent's tool profile can retrieve a URL, so guidance may tell it to observe one before citing it.
+ - name: paintedwolf.repo_known_empty
+   type: bool
+ - name: paintedwolf.last_audit_ungrounded
+   type: bool
+ - name: paintedwolf.grounding_escalated
+   type: bool
+ - name: paintedwolf.command_not_argv
+   type: bool
+ - name: paintedwolf.bulk_denied
+   type: bool
+ - name: paintedwolf.binary_denied
+   type: bool
+ - name: paintedwolf.mode_denied
+   type: bool
+ - name: paintedwolf.path_escape
+   type: bool
+ - name: paintedwolf.beyond_eof
+   type: bool
+ - name: paintedwolf.not_running
+   type: bool
+ - name: paintedwolf.unsupported
+   type: bool
+ - name: paintedwolf.resource_limit
+   type: bool
+ - name: paintedwolf.conflict
+   type: bool
+ - name: paintedwolf.path_required
+   type: bool
+ - name: paintedwolf.id_required
+   type: bool
+ - name: paintedwolf.unknown_target
+   type: bool
+ - name: paintedwolf.missing
+   type: bool
+ - name: paintedwolf.forbidden
+   type: bool
+ - name: paintedwolf.selector_empty
+   type: bool
+ - name: paintedwolf.selector_ambiguous
+   type: bool
+ - name: paintedwolf.reject_observation
+   type: string
+ - name: paintedwolf.rejection_code
+   type: string
+ - name: paintedwolf.recent_tool_names
+   type: list<string>
+ - name: paintedwolf.source_includes
+   type: (string) -> bool
+ - name: paintedwolf.action_host_resources
+   type: list<string>
+   observation: Exact host-resource ids resolved for this action; empty when none were requested.
+ - name: paintedwolf.action_host_resource_denials
+   type: list<string>
+   observation: Exact action host-resource ids denied by the host authorization layer; empty when none were denied.
+ - name: paintedwolf.confine_applied
+   type: bool
+   observation: True when this invocation ran under an applied confine boundary.
+ - name: paintedwolf.network_mode
+   type: string
+   observation: Closed egress mode the boundary applied (deny, proxy_only, direct_ip); empty when the boundary did not apply.
+ - name: paintedwolf.denial_subject
+   type: string
+   observation: Kind of resource a classified refusal named (unmediated, direct_connect, path, socket, listen, loopback_connect); empty when none was named.
+ - name: paintedwolf.confine_signals
+   type: list<string>
+   observation: Closed tokens observed at the confinement boundary (name_resolution_denied, write_denied, socks_proxy, proxy_door_unused, grant and deny outcomes); empty when none were observed.
+ - name: paintedwolf.failed_stages
+   type: list<string>
+   observation: Command lines of the finished invocation's failed stages; empty when all succeeded, while it runs, or when the invocation spawned no process.
+ - name: paintedwolf.process_running
+   type: bool
+   observation: True when the invocation's process was still running when observed.
+ - name: paintedwolf.sandbox_refusals
+   type: list<string>
+   observation: Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports.
+ - name: paintedwolf.refused_write_paths
+   type: list<string>
+   observation: Paths the kernel refused the invocation's processes for writing, at any layer; empty when none.
+ - name: paintedwolf.refused_write_grants
+   type: list<string>
+   observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.refused_read_paths
+   type: list<string>
+   observation: Paths the kernel refused the invocation's processes for reading, at any layer; empty when none.
+ - name: paintedwolf.refused_read_grants
+   type: list<string>
+   observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.refused_socket_paths
+   type: list<string>
+   observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.
+ - name: paintedwolf.refused_connect_ports
+   type: list<string>
+   observation: Ports of TCP or UDP connections the kernel refused the invocation's processes; the kernel does not name the peer address. Empty when none.
+ - name: paintedwolf.refused_listen_ports
+   type: list<string>
+   observation: Ports the kernel refused the invocation's processes a listener on; empty when none.
+ - name: paintedwolf.refused_signals
+   type: list<string>
+   observation: Signal deliveries the kernel refused the invocation's processes to processes outside their boundary; empty when none.
+ - name: paintedwolf.unsandboxed_refusals
+   type: list<string>
+   observation: Operations the kernel refused the invocation's processes that no sandbox capability admits, as operation, target, and process; empty when none.
+ - name: paintedwolf.worktree_stale_paths
+   type: list<string>
+   observation: Agent-policy files, relative to the write root, whose Git index entry the command changed while the worktree kept the clean content it had before; empty when the index did not change or no Git repository applies.
+ - name: paintedwolf.worktree_leftover_paths
+   type: list<string>
+   observation: Agent-policy files, relative to the write root, the command removed from the Git index while the worktree kept the file; empty when none.
+ - name: paintedwolf.worktree_conflict_paths
+   type: list<string>
+   observation: Agent-policy files, relative to the write root, that gained unmerged Git index stages during the command; empty when none.
+ - name: paintedwolf.credential_length
+   type: int
+   observation: Number of Unicode scalar values in the literal candidate at credential.assignment.
+ - name: paintedwolf.credential_distinct_words
+   type: int
+   observation: Count of distinct case-folded words split on whitespace, hyphen, underscore, dot, and comma.
+ - name: paintedwolf.credential_longest_run
+   type: int
+   observation: Longest unbroken run of letters, digits, hyphen, underscore, plus, slash, and equals in the literal candidate.
+ - name: paintedwolf.credential_run_classes
+   type: int
+   observation: Number of lower-case, upper-case, and digit classes in the longest run; equal-length ties take the larger class count.
+ - name: paintedwolf.credential_fingerprint
+   type: string
+   observation: Device HMAC fingerprint of the candidate literal, never its plaintext. Provider failure if the device fingerprinter is unavailable.
+ - name: paintedwolf.credential_ignored
+   type: bool
+   observation: Whether the exact candidate is classified as non-secret under current project and device decisions. Protected evidence takes precedence.
+ - name: paintedwolf.credential_harvested
+   type: bool
+   observation: Whether the root session's harvest contains the candidate fingerprint. Provider failure if provenance lookup is unavailable.
+ - name: paintedwolf.editorconfig_mismatch
+   type: bool
+   observation: True when a landed text write broke a rule its .editorconfig chain declares on lines the write inserted or rewrote; false when no rule is declared or the chain could not be read.
+ - name: paintedwolf.host_resource_status_for
+   type: (string) -> string
+   observation: Discovery status for a known host-resource id; empty when the host has no report for the id.
+ - name: paintedwolf.host_resource_policy_for
+   type: (string) -> string
+   observation: Effective host authorization posture for a known host-resource id; empty when the host has no report for the id.
+ - name: paintedwolf.active_count
+   type: string
+ - name: paintedwolf.actual_chars
+   type: string
+ - name: paintedwolf.agent_type
+   type: string
+ - name: paintedwolf.allowed
+   type: string
+ - name: paintedwolf.args_hint
+   type: string
+ - name: paintedwolf.assignment
+   type: string
+ - name: paintedwolf.available
+   type: list<string>
+ - name: paintedwolf.need
+   type: string
+ - name: paintedwolf.bare_repo_scope
+   type: bool
+ - name: paintedwolf.blocked
+   type: string
+ - name: paintedwolf.bundle
+   type: string
+ - name: paintedwolf.bytes
+   type: string
+ - name: paintedwolf.cap
+   type: string
+ - name: paintedwolf.capability
+   type: string
+ - name: paintedwolf.capability_request_fields
+   type: list<string>
+ - name: paintedwolf.missing_summary_job_ids
+   type: list<string>
+ - name: paintedwolf.supports_local_listen
+   type: bool
+ - name: paintedwolf.supports_loopback_connect
+   type: bool
+ - name: paintedwolf.categories
+   type: string
+ - name: paintedwolf.change_count
+   type: string
+ - name: paintedwolf.child_session_id
+   type: string
+ - name: paintedwolf.class
+   type: string
+ - name: paintedwolf.conflict_count
+   type: string
+ - name: paintedwolf.conflict_paths
+   type: list<string>
+ - name: paintedwolf.content_type
+   type: string
+ - name: paintedwolf.count
+   type: string
+ - name: paintedwolf.current_max
+   type: string
+ - name: paintedwolf.cwd
+   type: string
+ - name: paintedwolf.declared
+   type: string
+ - name: paintedwolf.definitions
+   type: string
+ - name: paintedwolf.dest
+   type: string
+ - name: paintedwolf.destination
+   type: string
+ - name: paintedwolf.detail
+   type: string
+ - name: paintedwolf.editorconfig_lines
+   type: string
+ - name: paintedwolf.editorconfig_rules
+   type: list<string>
+ - name: paintedwolf.end_line
+   type: string
+ - name: paintedwolf.engines
+   type: string
+ - name: paintedwolf.extraction_started
+   type: bool
+ - name: paintedwolf.extracted_entries
+   type: int
+ - name: paintedwolf.extracted_bytes
+   type: int
+ - name: paintedwolf.extracted_paths_sample
+   type: list<string>
+ - name: paintedwolf.extracted_paths_omitted
+   type: int
+ - name: paintedwolf.extracted_paths
+   type: list<string>
+ - name: paintedwolf.workflow_allowed_agents
+   type: list<string>
+ - name: paintedwolf.can_request_tools
+   type: bool
+ - name: paintedwolf.tool_loadable
+   type: bool
+ - name: paintedwolf.can_task
+   type: bool
+ - name: paintedwolf.can_complete_leg
+   type: bool
+ - name: paintedwolf.turn_surface
+   type: string
+ - name: paintedwolf.summary_source_limited
+   type: bool
+ - name: paintedwolf.summary_skipped_count
+   type: int
+ - name: paintedwolf.summary_skipped_paths
+   type: list<string>
+ - name: paintedwolf.execution_outcome
+   type: string
+ - name: paintedwolf.grounding_verdict
+   type: string
+ - name: paintedwolf.background_limit
+   type: int
+ - name: paintedwolf.live_terminal_ids
+   type: list<string>
+ - name: paintedwolf.live_command_handles
+   type: list<string>
+ - name: paintedwolf.terminal_failure
+   type: string
+ - name: paintedwolf.terminal_not_pty
+   type: bool
+ - name: paintedwolf.can_terminal_open
+   type: bool
+ - name: paintedwolf.can_terminal_close
+   type: bool
+ - name: paintedwolf.can_terminal_read
+   type: bool
+ - name: paintedwolf.can_command_stop
+   type: bool
+ - name: paintedwolf.can_command_output
+   type: bool
+ - name: paintedwolf.can_secret_generate
+   type: bool
+ - name: paintedwolf.can_ask_user
+   type: bool
+ - name: paintedwolf.grounding_reason
+   type: string
+ - name: paintedwolf.missing_paths
+   type: list<string>
+ - name: paintedwolf.git_after_observed
+   type: bool
+ - name: paintedwolf.git_merge_active
+   type: bool
+ - name: paintedwolf.git_conflict_paths
+   type: list<string>
+ - name: paintedwolf.http_method
+   type: string
+ - name: paintedwolf.http_requests_started
+   type: int
+ - name: paintedwolf.http_responses_received
+   type: int
+ - name: paintedwolf.http_last_status
+   type: int
+ - name: paintedwolf.response_type
+   type: string
+ - name: paintedwolf.spill_readable
+   type: bool
+ - name: paintedwolf.can_read
+   type: bool
+ - name: paintedwolf.can_list_dir
+   type: bool
+ - name: paintedwolf.can_find
+   type: bool
+ - name: paintedwolf.can_grep
+   type: bool
+ - name: paintedwolf.entries
+   type: string
+ - name: paintedwolf.entry
+   type: string
+ - name: paintedwolf.error
+   type: string
+ - name: paintedwolf.escape
+   type: string
+ - name: paintedwolf.example
+   type: string
+ - name: paintedwolf.fault_stage
+   type: string
+ - name: paintedwolf.format
+   type: string
+ - name: paintedwolf.handle
+   type: string
+ - name: paintedwolf.handles_text
+   type: string
+ - name: paintedwolf.host_max
+   type: string
+ - name: paintedwolf.hunk_count
+   type: string
+ - name: paintedwolf.index
+   type: string
+ - name: paintedwolf.interactive
+   type: string
+ - name: paintedwolf.job_id
+   type: string
+ - name: paintedwolf.kept
+   type: string
+ - name: paintedwolf.keys
+   type: string
+ - name: paintedwolf.kind
+   type: string
+ - name: paintedwolf.label
+   type: string
+ - name: paintedwolf.leg_id
+   type: string
+ - name: paintedwolf.line
+   type: string
+ - name: paintedwolf.line_count
+   type: string
+ - name: paintedwolf.listed
+   type: bool
+ - name: paintedwolf.locators
+   type: string
+ - name: paintedwolf.match_count
+   type: string
+ - name: paintedwolf.max_awaited
+   type: string
+ - name: paintedwolf.max_bytes
+   type: string
+ - name: paintedwolf.max_chars
+   type: string
+ - name: paintedwolf.max_depth
+   type: string
+ - name: paintedwolf.max_entries
+   type: string
+ - name: paintedwolf.max_file_bytes
+   type: string
+ - name: paintedwolf.max_in_flight
+   type: string
+ - name: paintedwolf.max_len
+   type: string
+ - name: paintedwolf.max_lines
+   type: string
+ - name: paintedwolf.max_pages
+   type: string
+ - name: paintedwolf.max_path_bytes
+   type: string
+ - name: paintedwolf.max_paths
+   type: string
+ - name: paintedwolf.max_tool_loops
+   type: string
+ - name: paintedwolf.max_uncompressed_bytes
+   type: string
+ - name: paintedwolf.merge_status
+   type: string
+ - name: paintedwolf.min_required
+   type: string
+ - name: paintedwolf.missing_args
+   type: string
+ - name: paintedwolf.name
+   type: string
+ - name: paintedwolf.next_action
+   type: string
+ - name: paintedwolf.next_offset
+   type: string
+ - name: paintedwolf.observed_paths_count
+   type: string
+ - name: paintedwolf.observed_paths_omitted
+   type: int
+ - name: paintedwolf.observed_paths_sample
+   type: string
+ - name: paintedwolf.observed_urls_count
+   type: string
+ - name: paintedwolf.observed_urls_sample
+   type: string
+ - name: paintedwolf.occurrences
+   type: string
+ - name: paintedwolf.offender_count
+   type: string
+ - name: paintedwolf.offenders_omitted
+   type: int
+ - name: paintedwolf.reference_required
+   type: bool
+ - name: paintedwolf.observed_handles_sample
+   type: string
+ - name: paintedwolf.remaining_overlay_paths
+   type: list<string>
+ - name: paintedwolf.offenders_sample
+   type: string
+ - name: paintedwolf.offset
+   type: string
+ - name: paintedwolf.old_string_chars
+   type: string
+ - name: paintedwolf.operator
+   type: string
+ - name: paintedwolf.opaque_overflow
+   type: bool
+ - name: paintedwolf.original_author
+   type: string
+ - name: paintedwolf.original_bytes
+   type: string
+ - name: paintedwolf.overlap_job_ids
+   type: list<string>
+ - name: paintedwolf.overlay_id
+   type: string
+ - name: paintedwolf.page_key
+   type: string
+ - name: paintedwolf.parse_reason
+   type: string
+ - name: paintedwolf.parse_language
+   type: string
+ - name: paintedwolf.parse_phase
+   type: string
+ - name: paintedwolf.parse_timeout_ms
+   type: string
+ - name: paintedwolf.parse_elapsed_ms
+   type: string
+ - name: paintedwolf.parse_source_bytes
+   type: string
+ - name: paintedwolf.parse_reached_bytes
+   type: string
+ - name: paintedwolf.parse_failure
+   type: string
+ - name: paintedwolf.parse_config
+   type: string
+ - name: paintedwolf.parse_error
+   type: string
+ - name: paintedwolf.paths
+   type: list<string>
+ - name: paintedwolf.patterns_list
+   type: string
+ - name: paintedwolf.pending_count
+   type: string
+ - name: paintedwolf.prior_job_id
+   type: string
+ - name: paintedwolf.prior_summary
+   type: string
+ - name: paintedwolf.program
+   type: string
+ - name: paintedwolf.project_dir
+   type: string
+ - name: paintedwolf.promote_order
+   type: string
+ - name: paintedwolf.pwd
+   type: string
+ - name: paintedwolf.ref
+   type: string
+ - name: paintedwolf.requested
+   type: string
+ - name: paintedwolf.requested_max
+   type: string
+ - name: paintedwolf.retryable
+   type: bool
+ - name: paintedwolf.rule_category
+   type: string
+ - name: paintedwolf.rule_id
+   type: string
+ - name: paintedwolf.rule_match_count
+   type: string
+ - name: paintedwolf.rule_pack_id
+   type: string
+ - name: paintedwolf.rule_pattern
+   type: string
+ - name: paintedwolf.rule_scope
+   type: string
+ - name: paintedwolf.rule_unit_id
+   type: string
+ - name: paintedwolf.sample_identifiers
+   type: string
+ - name: paintedwolf.provider
+   type: string
+ - name: paintedwolf.shape
+   type: string
+ - name: paintedwolf.shell_metacharacters
+   type: bool
+ - name: paintedwolf.size
+   type: string
+ - name: paintedwolf.source_revision
+   type: string
+ - name: paintedwolf.spill_bytes
+   type: string
+ - name: paintedwolf.spill_path
+   type: string
+ - name: paintedwolf.start_line
+   type: string
+ - name: paintedwolf.status
+   type: string
+ - name: paintedwolf.step_fields
+   type: string
+ - name: paintedwolf.suggested_resume_max
+   type: string
+ - name: paintedwolf.suggested_tool
+   type: string
+ - name: paintedwolf.supplied
+   type: string
+ - name: paintedwolf.symbol
+   type: string
+ - name: paintedwolf.terminal_capture
+   type: bool
+ - name: paintedwolf.threshold
+   type: string
+ - name: paintedwolf.timeout_ms
+   type: string
+ - name: paintedwolf.tool_loops_used
+   type: string
+ - name: paintedwolf.tools
+   type: list<string>
+ - name: paintedwolf.total_lines
+   type: string
+ - name: paintedwolf.type
+   type: string
+ - name: paintedwolf.env_assignment
+   type: bool
+ - name: paintedwolf.reissue_via_command
+   type: bool
+ - name: paintedwolf.sequence_unsupported
+   type: bool
+ - name: paintedwolf.scratch_var
+   type: bool
+ - name: paintedwolf.unpaginated_survey
+   type: bool
+ - name: paintedwolf.use_background_param
+   type: bool
+ - name: paintedwolf.use_pipeline_array
+   type: bool
+ - name: paintedwolf.use_stdin_param
+   type: bool
+ - name: paintedwolf.use_substitution_result
+   type: bool
+ - name: paintedwolf.unused_fields
+   type: string
+ - name: paintedwolf.user_guidance
+   type: string
+ - name: paintedwolf.valid_categories
+   type: string
+ - name: paintedwolf.verify_command
+   type: string
+ - name: paintedwolf.window
+   type: string
+ - name: paintedwolf.worker_leg
+   type: bool
+ - name: paintedwolf.workflow_id
+   type: string
+ - name: paintedwolf.code
+   type: string
+ - name: paintedwolf.code_instead
+   type: string
+ - name: paintedwolf.command
+   type: string
+ - name: paintedwolf.host
+   type: string
+ - name: paintedwolf.id
+   type: string
+ - name: paintedwolf.max
+   type: string
+ - name: paintedwolf.mode
+   type: string
+ - name: paintedwolf.path
+   type: string
+ - name: paintedwolf.port
+   type: string
+ - name: paintedwolf.pattern
+   type: string
+ - name: paintedwolf.pending
+   type: string
+ - name: paintedwolf.period
+   type: string
+ - name: paintedwolf.progress
+   type: string
+ - name: paintedwolf.resolvable
+   type: string
+ - name: paintedwolf.resource
+   type: string
+ - name: paintedwolf.resume_field
+   type: string
+ - name: paintedwolf.resume_recorded
+   type: string
+ - name: paintedwolf.resume_requested
+   type: string
+ - name: paintedwolf.settled_work
+   type: list<string>
+ - name: paintedwolf.redirect
+   type: bool
+ - name: paintedwolf.redirection_issue
+   type: string
+ - name: paintedwolf.redirection_conflict
+   type: bool
+ - name: paintedwolf.redirection_pipe
+   type: bool
+ - name: paintedwolf.redirection_terminal
+   type: bool
+ - name: paintedwolf.glob_limit
+   type: string
+ - name: paintedwolf.year
+   type: string
+ - name: paintedwolf.fetch_url_deferred
+   type: bool
+ - name: paintedwolf.http_request_web_page
+   type: bool
+ - name: paintedwolf.relocated_field
+   type: string
+ - name: paintedwolf.nested_under
+   type: string
+ - name: paintedwolf.expected_path
+   type: string
+ - name: paintedwolf.did_you_mean
+   type: string
+ - name: paintedwolf.unparsed_json
+   type: bool
+ - name: paintedwolf.expected_type
+   type: string
+ - name: paintedwolf.conflict_keys
+   type: list<string>
+ - name: paintedwolf.replacement_args_json
+   type: string
+ - name: paintedwolf.source_analysis_unavailable
+   type: bool
+ - name: paintedwolf.parse_failure_count
+   type: string
+ - name: paintedwolf.parse_paths
+   type: list<string>
+ - name: paintedwolf.parse_errors
+   type: list<string>
+ - name: paintedwolf.python_indent_lines
+   type: list<string>
+ - name: paintedwolf.syntax_diagnostics_truncated
+   type: bool
+ - name: paintedwolf.parse_timed_out
+   type: bool
+ - name: paintedwolf.parse_canceled
+   type: bool
+ - name: paintedwolf.parse_syntax_error
+   type: bool
+ - name: paintedwolf.syntax_check_overridden
+   type: bool
+ - name: paintedwolf.syntax_override_reason
+   type: string

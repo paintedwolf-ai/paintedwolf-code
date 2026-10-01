@@ -1,0 +1,11 @@
+emit: banner
+category: expected_behavior
+severity: info
+effect: block
+message: "Workflow gate blocked at phase {{ paintedwolf.phase }}. {% if paintedwolf.blocked %}Unmet leaves: {{ paintedwolf.blocked }}.{% else %}Unmet leaves: {{ paintedwolf.failed_leaves }}.{% endif %} Inspect the returned gate and reason before choosing the required work."
+what: "Workflow gate blocked at phase {{ paintedwolf.phase }}. {% if paintedwolf.blocked %}Unmet leaves: {{ paintedwolf.blocked }}.{% else %}Unmet leaves: {{ paintedwolf.failed_leaves }}.{% endif %} Inspect the returned gate and reason before choosing the required work."
+cause: "Workflow gate blocked at phase {{ paintedwolf.phase }}. {% if paintedwolf.blocked %}Unmet leaves: {{ paintedwolf.blocked }}.{% else %}Unmet leaves: {{ paintedwolf.failed_leaves }}.{% endif %} Inspect the returned gate and reason before choosing the required work."
+why: Satisfy the listed gate leaves before advancing or delegating
+fix: "Use the current failed_leaves and gate requirements to identify what is still missing. Preserve accepted evidence and pending work; satisfy unmet requirements through the offered tools before advancing."
+instead: Use Progress line and failed_leaves; do not claim the phase is complete
+id: WORKFLOW_GATE_BLOCKED

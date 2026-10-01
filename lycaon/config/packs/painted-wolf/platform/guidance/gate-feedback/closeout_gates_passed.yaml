@@ -1,0 +1,12 @@
+id: closeout_gates_passed
+kind: workflow-closeout
+purpose: |
+  Closeout requires completed delegation and current source verification evidence.
+missing_signals:
+  - id: closeout_pending
+    when: "true"
+    detail: "Delegation, current source verification, or required security evidence is incomplete."
+    fix: "Finish active work and record passing current-source verification and required security evidence."
+satisfy:
+  - "Finish active delegation work."
+  - "Record passing current-source verification and required security evidence."

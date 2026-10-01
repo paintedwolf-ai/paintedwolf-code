@@ -1,0 +1,45 @@
+# These rules match the paths an action names, so fixtures carry target_files as
+# well as a command line. Paths are home-relative — the form the event projection
+# produces.
+fixtures:
+- rule: private-keys
+  positive:
+  - command: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+    target_files: ['~/.ssh/id_ed25519']
+  # The config selects which identity later connections present, so it is key
+  # material even with no key bytes in it.
+  - command: printf 'IdentityFile ~/.ssh/other' >> ~/.ssh/config
+    target_files: ['~/.ssh/config']
+  - command: gpg --import leaked.asc
+    target_files: ['~/.gnupg/private-keys-v1.d/AABB.key']
+  negative:
+  - command: ssh-keygen -t ed25519 -f ./deploy_key
+    target_files: ['~/code/app/deploy_key']
+  - command: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 --help
+    target_files: ['~/.ssh/id_ed25519']
+- rule: encryption-identities
+  positive:
+  - command: age-keygen -o ~/.age/keys.txt
+    target_files: ['~/.age/keys.txt']
+  - command: sops --encrypt secrets.yaml
+    target_files: ['~/.config/sops/age/keys.txt']
+  - command: docker trust key generate release
+    target_files: ['~/.docker/trust/private/abc.key']
+  negative:
+  - command: sops --encrypt secrets.yaml
+    target_files: ['~/code/app/secrets.enc.yaml']
+  - command: age-keygen -o ~/.age/keys.txt --help
+    target_files: ['~/.age/keys.txt']
+- rule: password-stores
+  positive:
+  - command: security add-generic-password -s api -w hunter2
+    target_files: ['~/Library/Keychains/login.keychain-db']
+  - command: pass insert work/deploy
+    target_files: ['~/.password-store/work/deploy.gpg']
+  - command: secret-tool store --label=api service api
+    target_files: ['~/.local/share/keyrings/login.keyring']
+  negative:
+  - command: pass show work/deploy > notes.txt
+    target_files: ['~/code/app/notes.txt']
+  - command: pass insert work/deploy --help
+    target_files: ['~/.password-store/work/deploy.gpg']

@@ -1,0 +1,41 @@
+oar: '1.0'
+id: VERIFY_UNVERIFIABLE
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool:
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.confine_signals
+    - paintedwolf.denial_subject
+    - paintedwolf.destination
+when: >-
+  paintedwolf.confine_applied && "boundary_refused" in paintedwolf.confine_signals
+effect: warn
+copy:
+  what: >-
+    verify settled as unverifiable. Confinement stopped the check, so the
+    host has no verdict about the work.
+  cause: >-
+    The host observed a boundary refusal{% if paintedwolf.denial_subject %} for {{ paintedwolf.denial_subject }}{% endif %}{% if paintedwolf.destination %} at {{ paintedwolf.destination }}{% endif %}. Other failures in the same run may have independent causes; inspect them separately.
+  why: >-
+    An unverifiable receipt is completed evidence the wrap-up gate cannot
+    treat as passed. It is not an owner failure.
+  fix: >-
+    Use the structured refusal to identify the boundary. A remote-package destination denial cannot be widened in that invocation: acquire the package first, then run its installed local executable under a separately reviewed request. For other boundary denials, verify and command accept capability_request for the access actually needed. Listening and loopback connecting are separate authorities. Preserve the completed receipt, retry only after a relevant change, and wait for any live handle. Never substitute an easier check and report it as the selected project check.
+  instead: Report verification.method blocked if no justified recovery remains; this receipt is not a pass.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:verify
+x-paintedwolf-message: verify reached no verdict because confinement stopped the run
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: verify
+    expect_contains:
+      - 'Code: VERIFY_UNVERIFIABLE'
+      - unverifiable
+      - capability_request

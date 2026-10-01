@@ -1,0 +1,107 @@
+{
+  "id": "fire-counter-scope-with-an-empty-value-stays-scoped",
+  "title": "A rule declaring counter_scope keeps a scoped counter even when the scope value is empty",
+  "covers": [
+    "OAR-FIRE-10",
+    "OAR-CONF-33"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "SCOPED",
+      "effect": "allow",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "counter_scope": "tool_args_fingerprint",
+      "on_fire": [
+        "increment_counter"
+      ]
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "READER",
+      "effect": "warn",
+      "when": "fire_count_of(\"SCOPED\") >= 2",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "session_id": "s1",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke"
+      },
+      {
+        "anchor": "tool.pre_invoke"
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "expected": {
+          "decision": "warn",
+          "code": "READER"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "READER",
+    "counters": {
+      "oar.test/SCOPED#": {
+        "fire_count": 3
+      },
+      "oar.test/SCOPED": {
+        "fire_count": 0
+      }
+    }
+  }
+}

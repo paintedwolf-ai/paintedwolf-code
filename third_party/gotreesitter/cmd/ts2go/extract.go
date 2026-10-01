@@ -1,0 +1,2919 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
+
+// ExtractedGrammar holds all data extracted from a tree-sitter parser.c file.
+type ExtractedGrammar struct {
+	Name               string
+	StateCount         int
+	LargeStateCount    int
+	SymbolCount        int
+	AliasCount         int
+	TokenCount         int
+	FieldCount         int
+	ProductionIDCount  int
+	ExternalTokenCount int
+	MaxAliasSeqLength  int
+
+	SymbolNames    []string
+	SymbolMetadata []SymbolMeta
+	FieldNames     []string
+
+	ParseTable   [][]uint16
+	ParseActions []ActionGroup
+	// ConflictPolicies are deterministic conflict choices derived from parse
+	// action rows. State IDs are parser.c runtime states, with no grammargen
+	// state remapping.
+	ConflictPolicies []ExtractedConflictPolicy
+	LexModes         []LexModeEntry
+	LexStates        []LexStateEntry
+
+	// Optional keyword lexer DFA (from ts_lex_keywords).
+	KeywordLexStates    []LexStateEntry
+	KeywordCaptureToken int
+
+	// Field mapping metadata for ChildByFieldName support.
+	FieldMapSlices  [][2]uint16
+	FieldMapEntries []FieldMapEntry
+
+	// Small parse table (compressed sparse format for non-large states).
+	SmallParseTable    []uint16
+	SmallParseTableMap []uint32
+
+	// Per-production alias symbol sequence.
+	AliasSequences [][]uint16
+	// Per-nonterminal alias map from tree-sitter C's ts_non_terminal_alias_map.
+	NonTerminalAliasMap [][]uint16
+
+	// Enum values extracted from the C source for resolving symbolic names.
+	enumValues map[string]int
+
+	// External token index -> grammar symbol ID.
+	ExternalSymbols []uint16
+	// Optional external lex state validity table from ts_external_scanner_states.
+	ExternalLexStates [][]bool
+
+	// ABI 15: reserved words (flat array, 0-terminated per set).
+	ReservedWords          []uint16
+	MaxReservedWordSetSize int
+
+	// ABI 15: supertype data.
+	SupertypeCount      int
+	SupertypeSymbols    []uint16
+	SupertypeMapSlices  [][2]uint16
+	SupertypeMapEntries []uint16
+
+	// ABI 15: language metadata version.
+	LanguageMetadataMajor int
+	LanguageMetadataMinor int
+	LanguageMetadataPatch int
+
+	// Capability inferred from parser.c evidence that the grammar has
+	// C recovery-cost competition prerequisites: RECOVER actions plus extracted
+	// lex-mode surface. This is not default-on certification.
+	CRecoveryCostCompetitionCapable bool
+
+	// Explicit parity certification for default-on C recovery-cost competition.
+	// The parser.c extractor leaves this false unless a generic certification
+	// source is added by callers.
+	CRecoveryCostCompetitionEnabledByDefault bool
+}
+
+// FieldMapEntry mirrors gotreesitter.FieldMapEntry for code generation.
+type FieldMapEntry struct {
+	FieldID    uint16
+	ChildIndex uint16
+	Inherited  bool
+}
+
+// SymbolMeta holds visibility and naming info for a symbol.
+type SymbolMeta struct {
+	Visible   bool
+	Named     bool
+	Supertype bool
+}
+
+// ActionGroup is a contiguous group of parse actions in the actions table.
+type ActionGroup struct {
+	Index    int // C array index of the header entry
+	Count    int
+	Reusable bool
+	Actions  []ExtractedAction
+}
+
+// ExtractedAction is a single parse action extracted from parser.c.
+type ExtractedAction struct {
+	Type         string // "shift", "reduce", "accept", "recover"
+	State        int    // for shift/recover
+	Symbol       int    // for reduce
+	ChildCount   int    // for reduce
+	Precedence   int    // for reduce
+	ProductionID int    // for reduce
+	Extra        bool   // for shift (extra tokens)
+	Repetition   bool   // for shift (repetition)
+}
+
+// ExtractedConflictPolicy describes one derived deterministic conflict policy.
+type ExtractedConflictPolicy struct {
+	State         int
+	Lookahead     int
+	Kind          string
+	ReduceSymbols []int
+}
+
+// LexModeEntry maps a parser state to its lexer configuration.
+type LexModeEntry struct {
+	LexState          int
+	ExternalLexState  int
+	ReservedWordSetID int // ABI 15; 0 if not present
+}
+
+// LexStateEntry is a normalized lexer state extracted from ts_lex/ts_lex_keywords.
+type LexStateEntry struct {
+	ID          int
+	Transitions []LexTransitionEntry
+	Accept      SymbolID
+	HasAccept   bool
+	EOF         int
+	IsKeyword   bool
+}
+
+// LexTransitionEntry is one transition in a lexer DFA state.
+type LexTransitionEntry struct {
+	Lo   rune
+	Hi   rune
+	Skip bool
+	Next int
+}
+
+// ExtractGrammar parses a tree-sitter parser.c source and extracts all
+// structured data tables from it.
+func ExtractGrammar(source string) (*ExtractedGrammar, error) {
+	g := &ExtractedGrammar{}
+
+	if err := extractConstants(source, g); err != nil {
+		return nil, fmt.Errorf("constants: %w", err)
+	}
+
+	// Extract the C enum so we can resolve symbolic names in tables.
+	g.enumValues = extractEnum(source)
+
+	if err := extractLanguageName(source, g); err != nil {
+		// Not fatal — name can be provided via flag.
+		g.Name = "unknown"
+	}
+	inferProductionIDCount(source, g)
+
+	if err := extractSymbolNames(source, g); err != nil {
+		return nil, fmt.Errorf("symbol names: %w", err)
+	}
+
+	if err := extractSymbolMetadata(source, g); err != nil {
+		return nil, fmt.Errorf("symbol metadata: %w", err)
+	}
+
+	if err := extractFieldNames(source, g); err != nil {
+		// Not fatal — some grammars have no fields.
+		g.FieldNames = nil
+	}
+
+	if strings.Contains(source, "ts_field_map_slices") || strings.Contains(source, "ts_field_map") {
+		if err := extractFieldMaps(source, g); err != nil {
+			// Some parser generators omit or rename field-map data.
+		}
+	}
+
+	if err := extractParseTable(source, g); err != nil {
+		return nil, fmt.Errorf("parse table: %w", err)
+	}
+
+	if err := extractSmallParseTable(source, g); err != nil {
+		// Not fatal — only present when LARGE_STATE_COUNT < STATE_COUNT.
+	}
+
+	if err := extractParseActions(source, g); err != nil {
+		return nil, fmt.Errorf("parse actions: %w", err)
+	}
+	g.ConflictPolicies = extractConflictPolicies(g)
+
+	if err := extractAliasSequences(source, g); err != nil {
+		return nil, fmt.Errorf("alias sequences: %w", err)
+	}
+	if err := extractNonTerminalAliasMap(source, g); err != nil {
+		return nil, fmt.Errorf("non-terminal alias map: %w", err)
+	}
+
+	if err := extractLexModes(source, g); err != nil {
+		return nil, fmt.Errorf("lex modes: %w", err)
+	}
+	g.CRecoveryCostCompetitionCapable = extractedCRecoveryCostCompetitionSurface(source, g)
+
+	// Lex state extraction is intentionally staged:
+	// first lock helper/parsing interfaces, then emit full DFA tables.
+	if err := extractLexStates(source, g); err != nil {
+		return nil, fmt.Errorf("lex states: %w", err)
+	}
+
+	if g.ExternalTokenCount > 0 {
+		if err := extractExternalSymbols(source, g); err != nil {
+			// Not fatal: grammars without external scanners will omit this.
+		}
+		if err := extractExternalLexStates(source, g); err != nil {
+			// Not fatal: some grammars omit the table and fall back to action probing.
+		}
+	}
+
+	// ABI 15 optional arrays — non-fatal if absent.
+	if err := extractReservedWords(source, g); err != nil {
+		// Not fatal: ABI < 15 grammars won't have reserved words.
+	}
+	if err := extractSupertypes(source, g); err != nil {
+		// Not fatal: ABI < 15 grammars or grammars without supertypes.
+	}
+	if err := extractLanguageMetadata(source, g); err != nil {
+		// Not fatal: ABI < 15 grammars won't have metadata.
+	}
+
+	return g, nil
+}
+
+// extractFieldMaps parses ts_field_map_slices[] and ts_field_map[] arrays.
+func extractFieldMaps(source string, g *ExtractedGrammar) error {
+	if g.ProductionIDCount == 0 {
+		return nil
+	}
+
+	// Slice metadata.
+	slices, err := extractFieldMapSlices(source, g)
+	if err == nil {
+		g.FieldMapSlices = slices
+	}
+
+	// Entry metadata.
+	entries, err := extractFieldMapEntries(source, g)
+	if err == nil {
+		g.FieldMapEntries = entries
+	}
+
+	return nil
+}
+
+// extractConstants finds #define constants in the parser.c source.
+func extractConstants(source string, g *ExtractedGrammar) error {
+	defs := map[string]*int{
+		"STATE_COUNT":               &g.StateCount,
+		"LARGE_STATE_COUNT":         &g.LargeStateCount,
+		"SYMBOL_COUNT":              &g.SymbolCount,
+		"ALIAS_COUNT":               &g.AliasCount,
+		"TOKEN_COUNT":               &g.TokenCount,
+		"FIELD_COUNT":               &g.FieldCount,
+		"PRODUCTION_ID_COUNT":       &g.ProductionIDCount,
+		"EXTERNAL_TOKEN_COUNT":      &g.ExternalTokenCount,
+		"MAX_ALIAS_SEQUENCE_LENGTH": &g.MaxAliasSeqLength,
+		"SUPERTYPE_COUNT":           &g.SupertypeCount,
+	}
+
+	re := regexp.MustCompile(`#define\s+(\w+)\s+(\d+)`)
+	matches := re.FindAllStringSubmatch(source, -1)
+
+	for _, m := range matches {
+		if ptr, ok := defs[m[1]]; ok {
+			val, err := strconv.Atoi(m[2])
+			if err != nil {
+				return fmt.Errorf("parse %s: %w", m[1], err)
+			}
+			*ptr = val
+		}
+	}
+
+	if g.StateCount == 0 {
+		return fmt.Errorf("STATE_COUNT not found")
+	}
+	if g.SymbolCount == 0 {
+		return fmt.Errorf("SYMBOL_COUNT not found")
+	}
+
+	return nil
+}
+
+func inferProductionIDCount(source string, g *ExtractedGrammar) {
+	if g == nil || g.ProductionIDCount > 0 {
+		return
+	}
+	for _, arrayName := range []string{"ts_field_map_slices", "ts_alias_sequences"} {
+		if count, ok := inferFirstArrayDimension(source, arrayName, g.enumValues); ok && count > 0 {
+			g.ProductionIDCount = count
+			return
+		}
+	}
+}
+
+func inferFirstArrayDimension(source, arrayName string, enums map[string]int) (int, bool) {
+	re := regexp.MustCompile(fmt.Sprintf(`(?m)\b%s\s*\[\s*(\w+)\s*\]`, regexp.QuoteMeta(arrayName)))
+	matches := re.FindAllStringSubmatch(source, -1)
+	for _, m := range matches {
+		if len(m) < 2 {
+			continue
+		}
+		if resolved, ok := resolveIndexedName(m[1], enums); ok && resolved > 0 {
+			return resolved, true
+		}
+	}
+	return 0, false
+}
+
+// extractEnum parses the C enum block(s) and returns a map of name->value.
+// Tree-sitter parser.c files contain enums like:
+//
+//	enum ts_symbol_identifiers {
+//	  anon_sym_LBRACE = 1,
+//	  sym_number = 3,
+//	};
+//
+// and also:
+//
+//	enum ts_field_identifiers {
+//	  field_key = 1,
+//	};
+//
+// We also add the well-known ts_builtin_sym_end = 0.
+func extractEnum(source string) map[string]int {
+	vals := map[string]int{
+		"ts_builtin_sym_end":   0,
+		"ts_builtin_sym_error": 65535,
+	}
+
+	// Find all enum blocks. Tree-sitter grammars use both named enums:
+	//   enum ts_symbol_identifiers { ... };
+	// and anonymous enums:
+	//   enum { ... };
+	enumRe := regexp.MustCompile(`(?s)enum\s*(?:\w+\s*)?\{([^}]*)\}`)
+	enumMatches := enumRe.FindAllStringSubmatch(source, -1)
+
+	entryRe := regexp.MustCompile(`(\w+)\s*=\s*(\d+)`)
+
+	for _, em := range enumMatches {
+		entries := entryRe.FindAllStringSubmatch(em[1], -1)
+		for _, e := range entries {
+			val, err := strconv.Atoi(e[2])
+			if err == nil {
+				vals[e[1]] = val
+			}
+		}
+	}
+
+	return vals
+}
+
+// resolveSymbol resolves a symbolic name or numeric literal to an integer
+// using the extracted enum values.
+func (g *ExtractedGrammar) resolveSymbol(s string) (int, bool) {
+	// Try numeric first.
+	if n, err := strconv.Atoi(s); err == nil {
+		return n, true
+	}
+	// Try enum lookup.
+	if g.enumValues != nil {
+		if v, ok := g.enumValues[s]; ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
+// extractLanguageName tries to find the language name from the
+// tree_sitter_LANG function at the bottom of parser.c.
+func extractLanguageName(source string, g *ExtractedGrammar) error {
+	re := regexp.MustCompile(`(?m)^(?:const\s+)?(?:TS_PUBLIC\s+)?(?:const\s+)?TSLanguage\s+\*tree_sitter_(\w+)\s*\(`)
+	m := re.FindStringSubmatch(source)
+	if m == nil {
+		return fmt.Errorf("language name function not found")
+	}
+	g.Name = m[1]
+	return nil
+}
+
+// extractSymbolNames parses the ts_symbol_names[] array.
+func extractSymbolNames(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_symbol_names")
+	if err != nil {
+		return err
+	}
+
+	names, err := parseIndexedStringArray(body, g.SymbolCount, g.enumValues)
+	if err != nil {
+		return err
+	}
+	if len(names) < g.SymbolCount {
+		padded := make([]string, g.SymbolCount)
+		copy(padded, names)
+		names = padded
+	}
+	g.SymbolNames = names
+	return nil
+}
+
+// extractSymbolMetadata parses the ts_symbol_metadata[] array.
+func extractSymbolMetadata(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_symbol_metadata")
+	if err != nil {
+		return err
+	}
+
+	// Split the body into individual entries by matching each [...] = { ... }
+	// block. The metadata can span multiple lines, so we use a multiline
+	// approach: find each entry start, then scan for the closing brace.
+	type metaEntry struct {
+		idx    int
+		fields string
+	}
+
+	var entries []metaEntry
+	maxIdx := -1
+	idxRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{`)
+	locs := idxRe.FindAllStringSubmatchIndex(body, -1)
+
+	for _, loc := range locs {
+		name := body[loc[2]:loc[3]]
+		braceStart := loc[1] - 1 // position of '{'
+
+		// Find matching closing brace.
+		depth := 0
+		end := braceStart
+		for i := braceStart; i < len(body); i++ {
+			if body[i] == '{' {
+				depth++
+			} else if body[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i
+					break
+				}
+			}
+		}
+
+		idx, ok := resolveIndexedName(name, g.enumValues)
+		if !ok || idx < 0 {
+			continue
+		}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+
+		entries = append(entries, metaEntry{
+			idx:    idx,
+			fields: body[braceStart+1 : end],
+		})
+	}
+
+	size := g.SymbolCount
+	if len(g.SymbolNames) > size {
+		size = len(g.SymbolNames)
+	}
+	if maxIdx+1 > size {
+		size = maxIdx + 1
+	}
+	if size < 0 {
+		size = 0
+	}
+	meta := make([]SymbolMeta, size)
+
+	for _, e := range entries {
+		if e.idx >= len(meta) {
+			continue
+		}
+		meta[e.idx] = SymbolMeta{
+			Visible:   strings.Contains(e.fields, ".visible = true"),
+			Named:     strings.Contains(e.fields, ".named = true"),
+			Supertype: strings.Contains(e.fields, ".supertype = true"),
+		}
+	}
+
+	g.SymbolMetadata = meta
+	return nil
+}
+
+// extractFieldNames parses the ts_field_names[] array.
+func extractFieldNames(source string, g *ExtractedGrammar) error {
+	if g.FieldCount == 0 {
+		return nil
+	}
+
+	body, err := findArrayBody(source, "ts_field_names")
+	if err != nil {
+		return err
+	}
+
+	// Field names array is indexed. Index 0 is always NULL.
+	names := make([]string, g.FieldCount+1) // +1 because field IDs are 1-based
+
+	// Match entries with numeric or symbolic indices.
+	re := regexp.MustCompile(`\[(\w+)\]\s*=\s*(?:NULL|"([^"]*)")`)
+	matches := re.FindAllStringSubmatch(body, -1)
+
+	for _, m := range matches {
+		idx := 0
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			idx = n
+		} else if g.enumValues != nil {
+			if v, ok := g.enumValues[m[1]]; ok {
+				idx = v
+			}
+		}
+		if idx >= len(names) {
+			continue
+		}
+		names[idx] = m[2] // empty string if NULL
+	}
+
+	// If no indexed entries, try sequential parsing.
+	if len(matches) == 0 {
+		names = parseSequentialFieldNames(body, g.FieldCount+1)
+	}
+
+	g.FieldNames = names
+	return nil
+}
+
+// parseSequentialFieldNames handles field name arrays without explicit indices.
+func parseSequentialFieldNames(body string, count int) []string {
+	names := make([]string, count)
+	re := regexp.MustCompile(`(?:NULL|"([^"]*)")`)
+	matches := re.FindAllStringSubmatch(body, -1)
+	for i, m := range matches {
+		if i >= count {
+			break
+		}
+		names[i] = m[1]
+	}
+	return names
+}
+
+// extractParseTable parses the ts_parse_table[][] 2D array.
+// This is the dense table for large states (0..LARGE_STATE_COUNT-1).
+//
+// In real parser.c files, the entries use symbolic enum names and macros:
+//
+//	[0] = {
+//	  [ts_builtin_sym_end] = ACTIONS(1),
+//	  [anon_sym_LBRACE] = ACTIONS(7),
+//	  [sym_number] = ACTIONS(13),
+//	};
+//
+// ACTIONS(N) and STATE(N) are macros that expand to numbers.
+func extractParseTable(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_parse_table")
+	if err != nil {
+		// Some grammars rely entirely on the small/compact parse table and may
+		// omit a dense ts_parse_table.
+		if strings.Contains(err.Error(), "not found") {
+			g.ParseTable = nil
+			return nil
+		}
+		return err
+	}
+
+	// Find each state block: [N] = { ... } or [STATE(N)] = { ... }
+	// We need to handle nested braces properly since each state contains
+	// inner assignments.
+	stateStartRe := regexp.MustCompile(`\[(?:STATE\()?(\w+)\)?\]\s*=\s*\{`)
+	locs := stateStartRe.FindAllStringSubmatchIndex(body, -1)
+
+	// Row count for dense parse table:
+	// 1) Prefer LARGE_STATE_COUNT when present.
+	// 2) Otherwise, if parser reports STATE_COUNT, use that (Swift-style full
+	//    dense table without LARGE_STATE_COUNT).
+	// 3) Last resort: infer from the max state index seen in table initializers.
+	denseStateCount := g.LargeStateCount
+	if denseStateCount == 0 {
+		if g.StateCount > 0 {
+			denseStateCount = g.StateCount
+		} else {
+			maxState := -1
+			for _, loc := range locs {
+				name := body[loc[2]:loc[3]]
+				if n, err := strconv.Atoi(name); err == nil {
+					if n > maxState {
+						maxState = n
+					}
+					continue
+				}
+				if g.enumValues != nil {
+					if v, ok := g.enumValues[name]; ok && v > maxState {
+						maxState = v
+					}
+				}
+			}
+			if maxState >= 0 {
+				denseStateCount = maxState + 1
+			}
+		}
+	}
+	if denseStateCount == 0 || g.SymbolCount == 0 {
+		g.ParseTable = nil
+		return nil
+	}
+
+	table := make([][]uint16, denseStateCount)
+	for i := range table {
+		table[i] = make([]uint16, g.SymbolCount)
+	}
+
+	// Parse inner assignments: [sym_name] = ACTIONS(N) or [sym_name] = N
+	// The values can be ACTIONS(N), STATE(N), or plain numbers.
+	innerRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*(?:ACTIONS|STATE)\((\d+)\)`)
+	innerPlainRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*(\d+)`)
+
+	for _, loc := range locs {
+		name := body[loc[2]:loc[3]]
+		stateIdx := 0
+		if n, err := strconv.Atoi(name); err == nil {
+			stateIdx = n
+		} else if g.enumValues != nil {
+			if v, ok := g.enumValues[name]; ok {
+				stateIdx = v
+			}
+		}
+
+		if stateIdx >= denseStateCount {
+			continue
+		}
+
+		// Find matching closing brace for this state.
+		braceStart := loc[1] - 1
+		depth := 0
+		braceEnd := braceStart
+		for i := braceStart; i < len(body); i++ {
+			if body[i] == '{' {
+				depth++
+			} else if body[i] == '}' {
+				depth--
+				if depth == 0 {
+					braceEnd = i
+					break
+				}
+			}
+		}
+
+		stateBody := body[braceStart+1 : braceEnd]
+
+		// Try ACTIONS(N)/STATE(N) form first.
+		innerMatches := innerRe.FindAllStringSubmatch(stateBody, -1)
+		if len(innerMatches) == 0 {
+			// Fall back to plain numeric form.
+			innerMatches = innerPlainRe.FindAllStringSubmatch(stateBody, -1)
+		}
+
+		for _, im := range innerMatches {
+			symIdx, ok := g.resolveSymbol(im[1])
+			if !ok {
+				continue
+			}
+			val, err := strconv.Atoi(im[2])
+			if err != nil {
+				continue
+			}
+			if symIdx < g.SymbolCount {
+				table[stateIdx][symIdx] = uint16(val)
+			}
+		}
+	}
+
+	g.ParseTable = table
+	return nil
+}
+
+// extractSmallParseTable parses the ts_small_parse_table[] and
+// ts_small_parse_table_map[] arrays (compressed sparse table).
+//
+// The C source uses macros and symbolic names:
+//
+//	[0] = 33,
+//	  ACTIONS(3), 1,
+//	    sym_comment,
+//	  ACTIONS(23), 1,
+//	    anon_sym_LBRACK,
+//	  STATE(542), 1,
+//	    sym__expression,
+//
+// After macro expansion (ACTIONS(N)=N, STATE(N)=N), this becomes a flat
+// array of uint16 values: [group_count, section_value, sym_count, sym1, ...]
+// We need to resolve all symbolic names to their enum integer values.
+func extractSmallParseTable(source string, g *ExtractedGrammar) error {
+	// We need to find ts_small_parse_table but NOT ts_small_parse_table_map.
+	body, err := findExactArrayBody(source, "ts_small_parse_table")
+	if err != nil {
+		return err
+	}
+
+	g.SmallParseTable = parseSmallParseTableValues(body, g.enumValues)
+
+	// Map from state to offset.
+	mapBody, err := findArrayBody(source, "ts_small_parse_table_map")
+	if err != nil {
+		return err
+	}
+
+	g.SmallParseTableMap = parseSmallParseTableMap(mapBody, g.LargeStateCount)
+	return nil
+}
+
+// parseSmallParseTableValues extracts all uint16 values from the small parse
+// table body, resolving ACTIONS(N), STATE(N) macros and symbolic enum names.
+// The result is a flat uint16 array matching the compiled C format.
+func parseSmallParseTableValues(body string, enums map[string]int) []uint16 {
+	// Match tokens: numbers, ACTIONS(N), STATE(N), or symbolic names.
+	// We need to extract them in order, skipping array indices like [0] =.
+	tokenRe := regexp.MustCompile(
+		`\[(\d+)\]\s*=` + // array index assignment (capture group 1)
+			`|` + `(?:ACTIONS|STATE)\((\d+)\)` + // macro with number (capture group 2)
+			`|` + `\b([a-zA-Z_]\w*)\b` + // symbolic name (capture group 3)
+			`|` + `\b(\d+)\b`, // plain number (capture group 4)
+	)
+
+	// Keywords to skip (not enum values)
+	skipWords := map[string]bool{
+		"ACTIONS": true, "STATE": true, "SMALL_STATE": true,
+		"static": true, "const": true, "uint16_t": true,
+	}
+
+	matches := tokenRe.FindAllStringSubmatch(body, -1)
+	var result []uint16
+	for _, m := range matches {
+		if m[1] != "" {
+			// Array index like [0] = ... — skip entirely.
+			// The index is NOT part of the flat data.
+			continue
+		}
+		if m[2] != "" {
+			// ACTIONS(N) or STATE(N) — the macro is identity, so just use N.
+			n, err := strconv.Atoi(m[2])
+			if err == nil {
+				result = append(result, uint16(n))
+			}
+			continue
+		}
+		if m[3] != "" {
+			// Symbolic name — resolve via enum lookup.
+			name := m[3]
+			if skipWords[name] {
+				continue
+			}
+			if enums != nil {
+				if v, ok := enums[name]; ok {
+					result = append(result, uint16(v))
+				}
+				// If not found in enums, skip (it's a C keyword or type name)
+			}
+			continue
+		}
+		if m[4] != "" {
+			// Plain number.
+			n, err := strconv.Atoi(m[4])
+			if err == nil {
+				result = append(result, uint16(n))
+			}
+		}
+	}
+	return result
+}
+
+// extractFieldMapSlices parses ts_field_map_slices[].
+func extractFieldMapSlices(source string, g *ExtractedGrammar) ([][2]uint16, error) {
+	body, err := findArrayBody(source, "ts_field_map_slices")
+	if err != nil {
+		return nil, err
+	}
+
+	slices := make([][2]uint16, g.ProductionIDCount)
+
+	// Try indexed form: [N] = {start, length}
+	indexedRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{([^}]*)\}`)
+	matches := indexedRe.FindAllStringSubmatch(body, -1)
+
+	if len(matches) > 0 {
+		for _, m := range matches {
+			idx, ok := parseFieldMapIndex(g, m[1])
+			if !ok || idx >= len(slices) {
+				continue
+			}
+			values := parseFieldIntPairs(m[2])
+			if len(values) >= 2 {
+				slices[idx] = [2]uint16{values[0], values[1]}
+			}
+		}
+		return slices, nil
+	}
+
+	// Fallback: parse sequential {{a,b},{c,d},...} entries.
+	pairRe := regexp.MustCompile(`\{([^{}]+)\}`)
+	pairs := pairRe.FindAllStringSubmatch(body, -1)
+	for i := 0; i < len(slices) && i < len(pairs); i++ {
+		values := parseFieldIntPairs(pairs[i][1])
+		if len(values) >= 2 {
+			slices[i] = [2]uint16{values[0], values[1]}
+		}
+	}
+
+	return slices, nil
+}
+
+// extractFieldMapEntries parses ts_field_map[].
+//
+// C tree-sitter uses designated initializers with continuation entries:
+//
+//	[3] =
+//	    {field_operand, 1},
+//	    {field_operator, 0},   // continuation at index 4
+//	[5] =
+//	    {field_value, 1},
+//
+// We scan all {entry} blocks in source order, using [N]= markers to set
+// the current index and auto-incrementing for continuation entries.
+func extractFieldMapEntries(source string, g *ExtractedGrammar) ([]FieldMapEntry, error) {
+	// Modern tree-sitter generators use "ts_field_map_entries"; older
+	// generators (and our test fixture) used plain "ts_field_map".
+	body, err := findArrayBody(source, "ts_field_map_entries")
+	if err != nil {
+		body, err = findArrayBody(source, "ts_field_map")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	type idxEntry struct {
+		idx   int
+		entry FieldMapEntry
+	}
+
+	// Build a sorted list of (position, index) for designator markers.
+	designatorRe := regexp.MustCompile(`\[(\w+)\]\s*=`)
+	designatorLocs := designatorRe.FindAllStringSubmatchIndex(body, -1)
+	type posIdx struct {
+		pos int
+		idx int
+	}
+	var designators []posIdx
+	for _, loc := range designatorLocs {
+		token := body[loc[2]:loc[3]]
+		idx, ok := parseFieldMapIndex(g, token)
+		if ok {
+			designators = append(designators, posIdx{pos: loc[0], idx: idx})
+		}
+	}
+	// designators are already in source order from FindAll.
+
+	// Scan all {entry} blocks in order, tracking current index.
+	// When a designator [N]= appears before an entry, reset curIdx to N.
+	// Otherwise, auto-increment for continuation entries.
+	entryRe := regexp.MustCompile(`\{([^{}]+)\}`)
+	entryLocs := entryRe.FindAllStringSubmatchIndex(body, -1)
+
+	var parsed []idxEntry
+	maxIdx := -1
+	curIdx := 0
+	prevEntryEnd := 0 // byte position after the last processed entry
+	dNext := 0        // next designator to consider
+
+	for _, loc := range entryLocs {
+		entryStart := loc[0]
+		entryBody := body[loc[2]:loc[3]]
+
+		// Consume any designator that falls between the previous entry's
+		// end and this entry's start. Use the last such designator.
+		for dNext < len(designators) && designators[dNext].pos < entryStart {
+			if designators[dNext].pos >= prevEntryEnd {
+				curIdx = designators[dNext].idx
+			}
+			dNext++
+		}
+
+		entry, ok := parseFieldMapEntry(g, entryBody)
+		if !ok {
+			curIdx++
+			prevEntryEnd = loc[1]
+			continue
+		}
+		parsed = append(parsed, idxEntry{idx: curIdx, entry: entry})
+		if curIdx > maxIdx {
+			maxIdx = curIdx
+		}
+		curIdx++
+		prevEntryEnd = loc[1]
+	}
+
+	if maxIdx < 0 {
+		return nil, nil
+	}
+
+	entries := make([]FieldMapEntry, maxIdx+1)
+	for _, it := range parsed {
+		if it.idx >= 0 && it.idx < len(entries) {
+			entries[it.idx] = it.entry
+		}
+	}
+	return entries, nil
+}
+
+func parseFieldMapIndex(g *ExtractedGrammar, token string) (int, bool) {
+	// Numeric index.
+	if v, err := strconv.ParseInt(token, 0, 32); err == nil {
+		return int(v), true
+	}
+	// Symbolic index.
+	if g != nil && g.enumValues != nil {
+		if v, ok := g.enumValues[token]; ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
+func parseFieldMapEntry(g *ExtractedGrammar, body string) (FieldMapEntry, bool) {
+	entry := FieldMapEntry{}
+	found := false
+
+	// Named fields: .field_id = X, .child_index = N, .inherited = bool
+	if fieldID, ok := extractFieldMapTokenField(g, body, `\.field_id\s*=\s*([^,}]+)`); ok {
+		entry.FieldID = fieldID
+		found = true
+	}
+	if childIndex, ok := extractFieldMapNumericField(body, `\.child_index\s*=\s*([+-]?(?:0x[0-9a-fA-F]+|\d+))`); ok {
+		entry.ChildIndex = childIndex
+		found = true
+	}
+	if inherited, ok := extractFieldMapBoolField(body, `\.inherited\s*=\s*(true|false)`); ok {
+		entry.Inherited = inherited
+		found = true
+	}
+
+	// Some generator versions use .field = ... and .index = ...
+	if entry.FieldID == 0 {
+		if fieldID, ok := extractFieldMapTokenField(g, body, `\.field\s*=\s*([^,}]+)`); ok {
+			entry.FieldID = fieldID
+			found = true
+		}
+	}
+	if entry.ChildIndex == 0 {
+		if childIndex, ok := extractFieldMapNumericField(body, `\.index\s*=\s*([+-]?(?:0x[0-9a-fA-F]+|\d+))`); ok {
+			entry.ChildIndex = childIndex
+			found = true
+		}
+	}
+
+	// Positional fallback for field_id, child_index, inherited.
+	// Also handles mixed syntax like {field_name, 0, .inherited = true}
+	// where .inherited matched above but field_id/child_index are positional.
+	if !found || entry.FieldID == 0 {
+		tokens := parseIdentifierLikeTokens(body)
+		if len(tokens) == 0 && !found {
+			return entry, false
+		}
+
+		if entry.FieldID == 0 && len(tokens) >= 1 {
+			if v, ok := parseFieldMapToken(g, tokens[0]); ok {
+				entry.FieldID = v
+				found = true
+			}
+		}
+		if !found || entry.ChildIndex == 0 {
+			if len(tokens) >= 2 {
+				if v, ok := parseFieldMapUnsignedInt(tokens[1]); ok {
+					entry.ChildIndex = v
+					found = true
+				}
+			}
+		}
+		if len(tokens) >= 3 {
+			if v, ok := parseFieldMapBool(tokens[2]); ok {
+				entry.Inherited = v
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		return entry, false
+	}
+	return entry, true
+}
+
+func extractFieldMapTokenField(g *ExtractedGrammar, body, pattern string) (uint16, bool) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		return 0, false
+	}
+	val, ok := parseFieldMapToken(g, strings.TrimSpace(m[1]))
+	return val, ok
+}
+
+func extractFieldMapNumericField(body, pattern string) (uint16, bool) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		return 0, false
+	}
+	return parseFieldMapUnsignedInt(m[1])
+}
+
+func extractFieldMapBoolField(body, pattern string) (bool, bool) {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		return false, false
+	}
+	return parseFieldMapBool(m[1])
+}
+
+func parseFieldMapToken(g *ExtractedGrammar, token string) (uint16, bool) {
+	if v, ok := parseFieldMapUnsignedInt(token); ok {
+		return v, true
+	}
+	if token == "NULL" || token == "0" {
+		return 0, true
+	}
+	if g != nil && g.enumValues != nil {
+		if v, ok := g.enumValues[token]; ok {
+			return uint16(v), true
+		}
+	}
+	return 0, false
+}
+
+func parseFieldMapUnsignedInt(raw string) (uint16, bool) {
+	token := strings.TrimSpace(raw)
+	if token == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(token, 0, 0)
+	if err != nil {
+		return 0, false
+	}
+	if v < 0 {
+		return 0, false
+	}
+	if v > int64(^uint16(0)) {
+		return 0, false
+	}
+	return uint16(v), true
+}
+
+func parseFieldMapBool(raw string) (bool, bool) {
+	switch strings.TrimSpace(raw) {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
+func parseFieldIntPairs(raw string) []uint16 {
+	re := regexp.MustCompile(`([+-]?(?:0x[0-9a-fA-F]+|\d+))`)
+	matches := re.FindAllString(raw, -1)
+	vals := make([]uint16, 0, len(matches))
+	for _, tok := range matches {
+		if v, ok := parseFieldMapUnsignedInt(tok); ok {
+			vals = append(vals, v)
+		}
+	}
+	return vals
+}
+
+func parseIdentifierLikeTokens(raw string) []string {
+	re := regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*|[+-]?(?:0x[0-9a-fA-F]+|\d+)|true|false)\b`)
+	matches := re.FindAllString(raw, -1)
+	return matches
+}
+
+// parseSmallParseTableMap extracts the small parse table map which maps
+// (state - LARGE_STATE_COUNT) to offsets in the small parse table.
+// The C format is: [SMALL_STATE(N)] = offset
+// where SMALL_STATE(N) = N - LARGE_STATE_COUNT.
+func parseSmallParseTableMap(body string, largeStateCount int) []uint32 {
+	// Match entries: [SMALL_STATE(N)] = M or [N] = M
+	entryRe := regexp.MustCompile(`\[(?:SMALL_STATE\()?(\d+)\)?\]\s*=\s*(\d+)`)
+	matches := entryRe.FindAllStringSubmatch(body, -1)
+
+	// Find the max index to size the array.
+	maxIdx := 0
+	type mapEntry struct {
+		idx int
+		val uint32
+	}
+	var entries []mapEntry
+	for _, m := range matches {
+		rawIdx, err1 := strconv.Atoi(m[1])
+		val, err2 := strconv.Atoi(m[2])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		// SMALL_STATE(N) = N - LARGE_STATE_COUNT, so the array index is
+		// (N - LARGE_STATE_COUNT) if using SMALL_STATE, or N if raw.
+		// Since the regex captures the inner number, for SMALL_STATE(29)
+		// we get 29. The compiled index would be 29-29=0.
+		// We need to figure out if it's SMALL_STATE or raw.
+		idx := rawIdx
+		if rawIdx >= largeStateCount {
+			// It's SMALL_STATE(N) which evaluates to N - LARGE_STATE_COUNT
+			idx = rawIdx - largeStateCount
+		}
+		entries = append(entries, mapEntry{idx: idx, val: uint32(val)})
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+
+	result := make([]uint32, maxIdx+1)
+	for _, e := range entries {
+		if e.idx < len(result) {
+			result[e.idx] = e.val
+		}
+	}
+	return result
+}
+
+// extractParseActions parses the ts_parse_actions[] array.
+//
+// Real parser.c format uses 4-arg REDUCE:
+//
+//	[0] = {.entry = {.count = 0, .reusable = false}},
+//	[1] = {.entry = {.count = 1, .reusable = false}}, RECOVER(),
+//	[3] = {.entry = {.count = 1, .reusable = true}}, SHIFT_EXTRA(),
+//	[5] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_document, 0, 0, 0),
+//	[7] = {.entry = {.count = 1, .reusable = true}}, SHIFT(16),
+//	[19] = {.entry = {.count = 2, .reusable = true}}, REDUCE(aux_sym_document_repeat1, 2, 0, 0), SHIFT_REPEAT(16),
+func extractParseActions(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_parse_actions")
+	if err != nil {
+		return err
+	}
+
+	// Split into lines and parse sequentially.
+	lines := strings.Split(body, "\n")
+
+	var groups []ActionGroup
+	var currentGroup *ActionGroup
+
+	// Match action-group header with optional C array index.
+	// Supports both tree-sitter formats:
+	//   [N] = {.entry = {.count = C, .reusable = true}}, ...
+	//   [N] = {.count = C, .reusable = true}, ...
+	headerRe := regexp.MustCompile(`(?:\[(\d+)\]\s*=\s*)?\{\s*(?:\.entry\s*=\s*)?(?:\{\s*)?\.count\s*=\s*(\d+),\s*\.reusable\s*=\s*(true|false)\s*(?:\}\s*)?\}`)
+	shiftRe := regexp.MustCompile(`(?:^|,\s*)\bSHIFT\((\d+)\)`)
+	shiftExtraRe := regexp.MustCompile(`\bSHIFT_EXTRA\(\)`)
+	shiftRepeatRe := regexp.MustCompile(`\bSHIFT_REPEAT\((\d+)\)`)
+	// REDUCE appears in multiple forms across tree-sitter versions, including:
+	//   REDUCE(sym, count)
+	//   REDUCE(sym, count, prec)
+	//   REDUCE(sym, count, prec, prod_id)
+	//   REDUCE(sym, count, .dynamic_precedence = -1, .production_id = 42)
+	reduceRe := regexp.MustCompile(`\bREDUCE\(([^)]*)\)`)
+	acceptRe := regexp.MustCompile(`\bACCEPT_INPUT\(\)`)
+	recoverRe := regexp.MustCompile(`\bRECOVER\(\)`)
+
+	// Track the next expected C index for groups without explicit indices.
+	nextCIndex := 0
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Check for header entry.
+		if hm := headerRe.FindStringSubmatch(line); hm != nil {
+			// Flush previous group.
+			if currentGroup != nil {
+				groups = append(groups, *currentGroup)
+			}
+			// Capture the C array index if present.
+			cIndex := nextCIndex
+			if hm[1] != "" {
+				cIndex, _ = strconv.Atoi(hm[1])
+			}
+			count, _ := strconv.Atoi(hm[2])
+			currentGroup = &ActionGroup{
+				Index:    cIndex,
+				Count:    count,
+				Reusable: hm[3] == "true",
+			}
+			// Next C index = current + 1 (header) + count (actions)
+			nextCIndex = cIndex + 1 + count
+		}
+
+		if currentGroup == nil {
+			continue
+		}
+
+		// Collect all action matches with their positions so we can
+		// add them in source order.
+		var matches []actionMatch
+
+		// SHIFT_EXTRA
+		for _, loc := range shiftExtraRe.FindAllStringIndex(line, -1) {
+			matches = append(matches, actionMatch{
+				pos:    loc[0],
+				action: ExtractedAction{Type: "shift", Extra: true},
+			})
+		}
+
+		// SHIFT_REPEAT
+		for _, idx := range shiftRepeatRe.FindAllStringSubmatchIndex(line, -1) {
+			state, _ := strconv.Atoi(line[idx[2]:idx[3]])
+			matches = append(matches, actionMatch{
+				pos:    idx[0],
+				action: ExtractedAction{Type: "shift", State: state, Repetition: true},
+			})
+		}
+
+		// SHIFT (plain — not SHIFT_EXTRA or SHIFT_REPEAT)
+		for _, idx := range shiftRe.FindAllStringSubmatchIndex(line, -1) {
+			pos := idx[0]
+			// Check this is not part of SHIFT_EXTRA or SHIFT_REPEAT by
+			// looking at what follows SHIFT in the source.
+			shiftStart := strings.Index(line[pos:], "SHIFT")
+			if shiftStart >= 0 {
+				afterShift := pos + shiftStart + 5 // len("SHIFT")
+				if afterShift < len(line) && line[afterShift] == '_' {
+					continue // it's SHIFT_EXTRA or SHIFT_REPEAT
+				}
+			}
+			state, _ := strconv.Atoi(line[idx[2]:idx[3]])
+			matches = append(matches, actionMatch{
+				pos:    pos,
+				action: ExtractedAction{Type: "shift", State: state},
+			})
+		}
+
+		// REDUCE
+		for _, idx := range reduceRe.FindAllStringSubmatchIndex(line, -1) {
+			reduceArgs := line[idx[2]:idx[3]]
+			action, err := parseReduceActionArgs(reduceArgs, g)
+			if err != nil {
+				continue
+			}
+			matches = append(matches, actionMatch{
+				pos:    idx[0],
+				action: action,
+			})
+		}
+
+		// ACCEPT_INPUT
+		for _, loc := range acceptRe.FindAllStringIndex(line, -1) {
+			matches = append(matches, actionMatch{
+				pos:    loc[0],
+				action: ExtractedAction{Type: "accept"},
+			})
+		}
+
+		// RECOVER
+		for _, loc := range recoverRe.FindAllStringIndex(line, -1) {
+			matches = append(matches, actionMatch{
+				pos:    loc[0],
+				action: ExtractedAction{Type: "recover"},
+			})
+		}
+
+		// Sort by position and append.
+		sortActionMatches(matches)
+		for _, m := range matches {
+			currentGroup.Actions = append(currentGroup.Actions, m.action)
+		}
+	}
+
+	// Flush last group.
+	if currentGroup != nil {
+		groups = append(groups, *currentGroup)
+	}
+
+	g.ParseActions = groups
+	return nil
+}
+
+func extractConflictPolicies(g *ExtractedGrammar) []ExtractedConflictPolicy {
+	if g == nil || g.TokenCount <= 0 || len(g.ParseActions) == 0 {
+		return nil
+	}
+	actionGroups := make(map[int]*ActionGroup, len(g.ParseActions))
+	for i := range g.ParseActions {
+		actionGroups[g.ParseActions[i].Index] = &g.ParseActions[i]
+	}
+
+	var policies []ExtractedConflictPolicy
+	seen := make(map[[2]int]struct{})
+	visit := func(state, lookahead, actionIndex int) {
+		if state < 0 || lookahead < 0 || lookahead >= g.TokenCount || actionIndex == 0 {
+			return
+		}
+		key := [2]int{state, lookahead}
+		if _, ok := seen[key]; ok {
+			return
+		}
+		group := actionGroups[actionIndex]
+		if group == nil {
+			return
+		}
+		policy, ok := conflictPolicyForExtractedActionRow(state, lookahead, group.Actions)
+		if !ok {
+			return
+		}
+		seen[key] = struct{}{}
+		policies = append(policies, policy)
+	}
+
+	for state, row := range g.ParseTable {
+		limit := g.TokenCount
+		if len(row) < limit {
+			limit = len(row)
+		}
+		for lookahead := 0; lookahead < limit; lookahead++ {
+			visit(state, lookahead, int(row[lookahead]))
+		}
+	}
+
+	smallBase := g.LargeStateCount
+	table := g.SmallParseTable
+	for smallIdx, offset := range g.SmallParseTableMap {
+		state := smallBase + smallIdx
+		if int(offset) >= len(table) {
+			continue
+		}
+		groupCount := table[offset]
+		pos := int(offset) + 1
+		for i := uint16(0); i < groupCount; i++ {
+			if pos+1 >= len(table) {
+				break
+			}
+			actionIndex := int(table[pos])
+			symbolCount := int(table[pos+1])
+			pos += 2
+			for j := 0; j < symbolCount; j++ {
+				if pos >= len(table) {
+					break
+				}
+				lookahead := int(table[pos])
+				pos++
+				visit(state, lookahead, actionIndex)
+			}
+		}
+	}
+
+	sort.Slice(policies, func(i, j int) bool {
+		if policies[i].State != policies[j].State {
+			return policies[i].State < policies[j].State
+		}
+		return policies[i].Lookahead < policies[j].Lookahead
+	})
+	return policies
+}
+
+func conflictPolicyForExtractedActionRow(state, lookahead int, actions []ExtractedAction) (ExtractedConflictPolicy, bool) {
+	if state < 0 || lookahead < 0 || len(actions) < 2 {
+		return ExtractedConflictPolicy{}, false
+	}
+
+	shiftFound := false
+	reduceFound := false
+	reduceSymbols := make(map[int]struct{})
+	for _, action := range actions {
+		switch action.Type {
+		case "shift":
+			if shiftFound || !action.Repetition || action.Extra {
+				return ExtractedConflictPolicy{}, false
+			}
+			shiftFound = true
+		case "reduce":
+			if action.Extra || action.Symbol < 0 {
+				return ExtractedConflictPolicy{}, false
+			}
+			reduceFound = true
+			reduceSymbols[action.Symbol] = struct{}{}
+		default:
+			return ExtractedConflictPolicy{}, false
+		}
+	}
+	if !shiftFound || !reduceFound {
+		return ExtractedConflictPolicy{}, false
+	}
+
+	symbols := make([]int, 0, len(reduceSymbols))
+	for sym := range reduceSymbols {
+		symbols = append(symbols, sym)
+	}
+	sort.Ints(symbols)
+	return ExtractedConflictPolicy{
+		State:         state,
+		Lookahead:     lookahead,
+		Kind:          "repetition_shift",
+		ReduceSymbols: symbols,
+	}, true
+}
+
+// extractAliasSequences parses ts_alias_sequences[PRODUCTION_ID_COUNT][MAX_ALIAS_SEQUENCE_LENGTH].
+func extractAliasSequences(source string, g *ExtractedGrammar) error {
+	if g.ProductionIDCount == 0 || g.MaxAliasSeqLength == 0 {
+		return nil
+	}
+
+	body, err := findArrayBody(source, "ts_alias_sequences")
+	if err != nil {
+		// Grammars without aliases omit this table.
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return err
+	}
+
+	seqs := make([][]uint16, g.ProductionIDCount)
+	for i := range seqs {
+		seqs[i] = make([]uint16, g.MaxAliasSeqLength)
+	}
+
+	type seqEntry struct {
+		production int
+		fields     string
+	}
+	var entries []seqEntry
+	idxRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{`)
+	locs := idxRe.FindAllStringSubmatchIndex(body, -1)
+	for _, loc := range locs {
+		name := body[loc[2]:loc[3]]
+		production, ok := resolveIndexedName(name, g.enumValues)
+		if !ok || production < 0 || production >= g.ProductionIDCount {
+			continue
+		}
+
+		braceStart := loc[1] - 1
+		depth := 0
+		end := braceStart
+		for i := braceStart; i < len(body); i++ {
+			if body[i] == '{' {
+				depth++
+			} else if body[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i
+					break
+				}
+			}
+		}
+		entries = append(entries, seqEntry{
+			production: production,
+			fields:     body[braceStart+1 : end],
+		})
+	}
+
+	anyAlias := false
+	fieldRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*(\w+)`)
+	for _, entry := range entries {
+		matches := fieldRe.FindAllStringSubmatch(entry.fields, -1)
+		for _, m := range matches {
+			childIdx, ok := resolveIndexedName(m[1], g.enumValues)
+			if !ok || childIdx < 0 || childIdx >= g.MaxAliasSeqLength {
+				continue
+			}
+			aliasSym, ok := resolveIndexedName(m[2], g.enumValues)
+			if !ok || aliasSym <= 0 {
+				continue
+			}
+			seqs[entry.production][childIdx] = uint16(aliasSym)
+			anyAlias = true
+		}
+	}
+
+	if anyAlias {
+		g.AliasSequences = seqs
+	}
+	return nil
+}
+
+// extractNonTerminalAliasMap parses tree-sitter C's compact
+// ts_non_terminal_alias_map array:
+//
+//	symbol, count, alias..., symbol, count, alias..., 0
+//
+// The runtime currently uses the key set to preserve wrappers during
+// alias-bearing reductions, but retaining the full alias list keeps the blob
+// faithful to the C table for future audits.
+func extractNonTerminalAliasMap(source string, g *ExtractedGrammar) error {
+	if g.SymbolCount == 0 {
+		return nil
+	}
+	body, err := findExactArrayBody(source, "ts_non_terminal_alias_map")
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return err
+	}
+	tokens := regexp.MustCompile(`\b[A-Za-z_]\w*|[0-9]+`).FindAllString(stripCComments(body), -1)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	rows := make([][]uint16, g.SymbolCount)
+	any := false
+	for i := 0; i < len(tokens); {
+		sym, ok := resolveIndexedName(tokens[i], g.enumValues)
+		if !ok {
+			return fmt.Errorf("resolve symbol %q", tokens[i])
+		}
+		i++
+		if sym == 0 {
+			break
+		}
+		if sym < 0 || sym >= g.SymbolCount {
+			return fmt.Errorf("symbol %d outside symbol count %d", sym, g.SymbolCount)
+		}
+		if i >= len(tokens) {
+			return fmt.Errorf("missing alias count for symbol %d", sym)
+		}
+		count, ok := resolveIndexedName(tokens[i], g.enumValues)
+		if !ok {
+			return fmt.Errorf("resolve alias count %q for symbol %d", tokens[i], sym)
+		}
+		i++
+		if count < 0 {
+			return fmt.Errorf("negative alias count %d for symbol %d", count, sym)
+		}
+		aliases := make([]uint16, 0, count)
+		for j := 0; j < count; j++ {
+			if i >= len(tokens) {
+				return fmt.Errorf("missing alias %d/%d for symbol %d", j+1, count, sym)
+			}
+			aliasSym, ok := resolveIndexedName(tokens[i], g.enumValues)
+			if !ok {
+				return fmt.Errorf("resolve alias %q for symbol %d", tokens[i], sym)
+			}
+			i++
+			aliasSymbolCount := g.SymbolCount + g.AliasCount
+			if aliasSym < 0 || aliasSym >= aliasSymbolCount {
+				return fmt.Errorf("alias symbol %d outside symbol+alias count %d", aliasSym, aliasSymbolCount)
+			}
+			aliases = append(aliases, uint16(aliasSym))
+		}
+		if len(aliases) > 0 {
+			rows[sym] = aliases
+			any = true
+		}
+	}
+	if any {
+		g.NonTerminalAliasMap = rows
+	}
+	return nil
+}
+
+func parseReduceActionArgs(args string, g *ExtractedGrammar) (ExtractedAction, error) {
+	fields := splitTopLevelCSV(args)
+	if len(fields) < 2 {
+		return ExtractedAction{}, fmt.Errorf("reduce expects at least symbol and child count")
+	}
+
+	// Detect named-argument format: REDUCE(.symbol = X, .child_count = Y, ...)
+	// Newer tree-sitter versions emit this instead of positional REDUCE(X, Y, ...).
+	if strings.Contains(fields[0], "=") {
+		return parseReduceNamedArgs(fields, g)
+	}
+
+	symStr := strings.TrimSpace(fields[0])
+	sym, _ := g.resolveSymbol(symStr)
+	childCount, err := strconv.Atoi(strings.TrimSpace(fields[1]))
+	if err != nil {
+		return ExtractedAction{}, fmt.Errorf("reduce child count: %w", err)
+	}
+
+	action := ExtractedAction{
+		Type:       "reduce",
+		Symbol:     sym,
+		ChildCount: childCount,
+	}
+
+	var numericExtras []int
+	for _, extra := range fields[2:] {
+		extra = strings.TrimSpace(extra)
+		if extra == "" {
+			continue
+		}
+
+		if key, value, ok := strings.Cut(extra, "="); ok {
+			key = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(key), "."))
+			value = strings.TrimSpace(value)
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				continue
+			}
+			switch key {
+			case "dynamic_precedence", "precedence", "prec":
+				action.Precedence = n
+			case "production_id":
+				action.ProductionID = n
+			}
+			continue
+		}
+
+		if n, err := strconv.Atoi(extra); err == nil {
+			numericExtras = append(numericExtras, n)
+		}
+	}
+
+	// Legacy positional form: REDUCE(sym, count, prec[, prod_id]).
+	if len(numericExtras) > 0 {
+		action.Precedence = numericExtras[0]
+	}
+	if len(numericExtras) > 1 {
+		action.ProductionID = numericExtras[1]
+	}
+
+	return action, nil
+}
+
+// parseReduceNamedArgs handles the named-argument REDUCE format used by newer
+// tree-sitter versions: REDUCE(.symbol = X, .child_count = Y, .production_id = Z).
+func parseReduceNamedArgs(fields []string, g *ExtractedGrammar) (ExtractedAction, error) {
+	action := ExtractedAction{Type: "reduce"}
+	hasSymbol, hasChildCount := false, false
+
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		key, value, ok := strings.Cut(field, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(key), "."))
+		value = strings.TrimSpace(value)
+
+		switch key {
+		case "symbol":
+			sym, _ := g.resolveSymbol(value)
+			action.Symbol = sym
+			hasSymbol = true
+		case "child_count":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				return ExtractedAction{}, fmt.Errorf("reduce .child_count: %w", err)
+			}
+			action.ChildCount = n
+			hasChildCount = true
+		case "dynamic_precedence", "precedence", "prec":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				continue
+			}
+			action.Precedence = n
+		case "production_id":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				continue
+			}
+			action.ProductionID = n
+		}
+	}
+
+	if !hasSymbol || !hasChildCount {
+		return ExtractedAction{}, fmt.Errorf("reduce named args missing .symbol or .child_count")
+	}
+	return action, nil
+}
+
+func splitTopLevelCSV(s string) []string {
+	parts := make([]string, 0, 4)
+	start := 0
+	depth := 0
+
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(s[start:i]))
+				start = i + 1
+			}
+		}
+	}
+
+	if start <= len(s) {
+		parts = append(parts, strings.TrimSpace(s[start:]))
+	}
+	return parts
+}
+
+// extractLexModes parses the ts_lex_modes[] array.
+func extractLexModes(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_lex_modes")
+	if err != nil {
+		return err
+	}
+
+	modes := make([]LexModeEntry, g.StateCount)
+	re := regexp.MustCompile(`\[(\d+)\]\s*=\s*\{([^}]*)\}`)
+	matches := re.FindAllStringSubmatch(body, -1)
+
+	lexStateRe := regexp.MustCompile(`\.lex_state\s*=\s*(\d+)`)
+	extLexRe := regexp.MustCompile(`\.external_lex_state\s*=\s*(\d+)`)
+	rwSetRe := regexp.MustCompile(`\.reserved_word_set_id\s*=\s*(\d+)`)
+
+	for _, m := range matches {
+		idx, err := strconv.Atoi(m[1])
+		if err != nil || idx >= g.StateCount {
+			continue
+		}
+		fields := m[2]
+		entry := LexModeEntry{}
+		if lm := lexStateRe.FindStringSubmatch(fields); lm != nil {
+			entry.LexState, _ = strconv.Atoi(lm[1])
+		}
+		if em := extLexRe.FindStringSubmatch(fields); em != nil {
+			entry.ExternalLexState, _ = strconv.Atoi(em[1])
+		}
+		if rw := rwSetRe.FindStringSubmatch(fields); rw != nil {
+			entry.ReservedWordSetID, _ = strconv.Atoi(rw[1])
+		}
+		modes[idx] = entry
+	}
+
+	g.LexModes = modes
+	return nil
+}
+
+func extractedCRecoveryCostCompetitionSurface(source string, g *ExtractedGrammar) bool {
+	if g == nil || g.StateCount <= 1 || g.SymbolCount == 0 || g.TokenCount == 0 {
+		return false
+	}
+	if !strings.Contains(source, "RECOVER()") || !strings.Contains(source, "ts_lex_modes") {
+		return false
+	}
+	if len(g.LexModes) == 0 || g.LexModes[0].LexState < 0 {
+		return false
+	}
+	for _, group := range g.ParseActions {
+		for _, action := range group.Actions {
+			if action.Type == "recover" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// extractLexStates normalizes the ts_lex and ts_lex_keywords function bodies.
+// TODO: implement full DFA lowering from generated control-flow to tables.
+func extractLexStates(source string, g *ExtractedGrammar) error {
+	dfa, err := ExtractLexDFA(source)
+	if err != nil {
+		if errors.Is(err, ErrNoLexFunction) {
+			return nil
+		}
+		return err
+	}
+
+	g.LexStates = make([]LexStateEntry, len(dfa.States))
+	for i, st := range dfa.States {
+		entry := LexStateEntry{
+			ID:        i,
+			Accept:    st.Accept,
+			HasAccept: st.HasAccept,
+			EOF:       st.EOF,
+			IsKeyword: st.IsKeyword,
+		}
+		if len(st.Transitions) > 0 {
+			entry.Transitions = make([]LexTransitionEntry, 0, len(st.Transitions))
+			for _, tr := range st.Transitions {
+				entry.Transitions = append(entry.Transitions, LexTransitionEntry{
+					Lo:   tr.Lo,
+					Hi:   tr.Hi,
+					Skip: tr.Skip,
+					Next: tr.Next,
+				})
+			}
+		}
+		g.LexStates[i] = entry
+	}
+
+	g.KeywordLexStates = make([]LexStateEntry, len(dfa.KeywordStates))
+	for i, st := range dfa.KeywordStates {
+		entry := LexStateEntry{
+			ID:        i,
+			Accept:    st.Accept,
+			HasAccept: st.HasAccept,
+			EOF:       st.EOF,
+			IsKeyword: st.IsKeyword,
+		}
+		if len(st.Transitions) > 0 {
+			entry.Transitions = make([]LexTransitionEntry, 0, len(st.Transitions))
+			for _, tr := range st.Transitions {
+				entry.Transitions = append(entry.Transitions, LexTransitionEntry{
+					Lo:   tr.Lo,
+					Hi:   tr.Hi,
+					Skip: tr.Skip,
+					Next: tr.Next,
+				})
+			}
+		}
+		g.KeywordLexStates[i] = entry
+	}
+	if dfa.HasKeywordCapture {
+		g.KeywordCaptureToken = int(dfa.KeywordCapture)
+	}
+	return nil
+}
+
+// extractReservedWords parses the ts_reserved_words[][] 2D array (ABI 15).
+// Returns nil (not error) if the array is not found (ABI < 15).
+func extractReservedWords(source string, g *ExtractedGrammar) error {
+	// Find the array declaration to extract dimensions.
+	dimRe := regexp.MustCompile(`ts_reserved_words\[(\d+)\]\[(\d+)\]`)
+	dm := dimRe.FindStringSubmatch(source)
+	if dm == nil {
+		// Not an ABI 15 grammar — gracefully skip.
+		return nil
+	}
+	setCount, _ := strconv.Atoi(dm[1])
+	setSize, _ := strconv.Atoi(dm[2])
+	if setCount == 0 || setSize == 0 {
+		return nil
+	}
+	g.MaxReservedWordSetSize = setSize
+
+	body, err := findArrayBody(source, "ts_reserved_words")
+	if err != nil {
+		// Array declared but body not found — skip gracefully.
+		return nil
+	}
+
+	// Allocate flat array: setCount * setSize, zero-filled.
+	flat := make([]uint16, setCount*setSize)
+
+	// Parse indexed entries: [N] = { sym1, sym2, ..., 0, 0 }
+	idxRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{`)
+	locs := idxRe.FindAllStringSubmatchIndex(body, -1)
+
+	for _, loc := range locs {
+		name := body[loc[2]:loc[3]]
+		setIdx, ok := resolveIndexedName(name, g.enumValues)
+		if !ok || setIdx < 0 || setIdx >= setCount {
+			continue
+		}
+
+		// Find matching closing brace.
+		braceStart := loc[1] - 1
+		depth := 0
+		end := braceStart
+		for i := braceStart; i < len(body); i++ {
+			if body[i] == '{' {
+				depth++
+			} else if body[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i
+					break
+				}
+			}
+		}
+
+		inner := body[braceStart+1 : end]
+		// Parse comma-separated symbols/numbers.
+		tokenRe := regexp.MustCompile(`\b([A-Za-z_]\w*|\d+)\b`)
+		toks := tokenRe.FindAllStringSubmatch(inner, -1)
+		offset := setIdx * setSize
+		for i, t := range toks {
+			if i >= setSize {
+				break
+			}
+			sym, ok := resolveIndexedName(t[1], g.enumValues)
+			if !ok {
+				continue
+			}
+			flat[offset+i] = uint16(sym)
+		}
+	}
+
+	g.ReservedWords = flat
+	return nil
+}
+
+// extractSupertypes parses the ABI 15 supertype arrays:
+// ts_supertype_symbols[], ts_supertype_map_slices[], ts_supertype_map_entries[].
+// Returns nil (not error) if the arrays are not found (ABI < 15).
+func extractSupertypes(source string, g *ExtractedGrammar) error {
+	if g.SupertypeCount == 0 {
+		return nil
+	}
+
+	// 1. ts_supertype_symbols[] — simple symbol array.
+	symBody, err := findArrayBody(source, "ts_supertype_symbols")
+	if err != nil {
+		// Not present — skip.
+		return nil
+	}
+	g.SupertypeSymbols = parseIndexedSymbolArray(symBody, g.SupertypeCount, g.enumValues)
+
+	// 2. ts_supertype_map_slices[] — indexed {.index, .length} pairs.
+	sliceBody, err := findArrayBody(source, "ts_supertype_map_slices")
+	if err != nil {
+		// Slices not present — leave nil.
+		return nil
+	}
+
+	// Find max index to size the array.
+	idxRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{([^}]*)\}`)
+	matches := idxRe.FindAllStringSubmatch(sliceBody, -1)
+	maxIdx := -1
+	type sliceEntry struct {
+		idx    int
+		index  uint16
+		length uint16
+	}
+	var entries []sliceEntry
+	for _, m := range matches {
+		idx, ok := resolveIndexedName(m[1], g.enumValues)
+		if !ok || idx < 0 {
+			continue
+		}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+		values := parseFieldIntPairs(m[2])
+		var index, length uint16
+		if len(values) >= 2 {
+			index = values[0]
+			length = values[1]
+		}
+		entries = append(entries, sliceEntry{idx: idx, index: index, length: length})
+	}
+
+	if maxIdx >= 0 {
+		slices := make([][2]uint16, maxIdx+1)
+		for _, e := range entries {
+			if e.idx < len(slices) {
+				slices[e.idx] = [2]uint16{e.index, e.length}
+			}
+		}
+		g.SupertypeMapSlices = slices
+	}
+
+	// 3. ts_supertype_map_entries[] — flat symbol array.
+	entryBody, err := findArrayBody(source, "ts_supertype_map_entries")
+	if err != nil {
+		// Entries not present — leave nil.
+		return nil
+	}
+
+	// Parse as a flat list of symbols/numbers.
+	tokenRe := regexp.MustCompile(`\b([A-Za-z_]\w*|\d+)\b`)
+	toks := tokenRe.FindAllStringSubmatch(entryBody, -1)
+	var mapEntries []uint16
+	for _, t := range toks {
+		sym, ok := resolveIndexedName(t[1], g.enumValues)
+		if !ok {
+			continue
+		}
+		mapEntries = append(mapEntries, uint16(sym))
+	}
+	g.SupertypeMapEntries = mapEntries
+
+	return nil
+}
+
+// extractLanguageMetadata parses the .metadata block from the TSLanguage struct
+// initializer at the bottom of parser.c (ABI 15).
+// Returns nil (not error) if the metadata block is not found (ABI < 15).
+func extractLanguageMetadata(source string, g *ExtractedGrammar) error {
+	// Look for .metadata = { .major_version = N, .minor_version = N, .patch_version = N }
+	// This appears inside the TSLanguage struct initializer.
+	metaRe := regexp.MustCompile(`\.metadata\s*=\s*\{([^}]*)\}`)
+	m := metaRe.FindStringSubmatch(source)
+	if m == nil {
+		// No metadata — ABI < 15, skip gracefully.
+		return nil
+	}
+	fields := m[1]
+
+	majorRe := regexp.MustCompile(`\.major_version\s*=\s*(\d+)`)
+	minorRe := regexp.MustCompile(`\.minor_version\s*=\s*(\d+)`)
+	patchRe := regexp.MustCompile(`\.patch_version\s*=\s*(\d+)`)
+
+	if mv := majorRe.FindStringSubmatch(fields); mv != nil {
+		g.LanguageMetadataMajor, _ = strconv.Atoi(mv[1])
+	}
+	if mv := minorRe.FindStringSubmatch(fields); mv != nil {
+		g.LanguageMetadataMinor, _ = strconv.Atoi(mv[1])
+	}
+	if mv := patchRe.FindStringSubmatch(fields); mv != nil {
+		g.LanguageMetadataPatch, _ = strconv.Atoi(mv[1])
+	}
+
+	return nil
+}
+
+// --- Helper functions ---
+
+// actionMatch holds a parsed action and its position in the line
+// for position-ordered insertion.
+type actionMatch struct {
+	pos    int
+	action ExtractedAction
+}
+
+// sortActionMatches sorts action matches by their position in the source line.
+func sortActionMatches(matches []actionMatch) {
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].pos < matches[j].pos
+	})
+}
+
+// findArrayBody finds a C array declaration and returns the body between
+// the outermost braces. It handles nested braces correctly.
+func findArrayBody(source, name string) (string, error) {
+	// Find the array declaration: "name[...] = {" or "name[...][...] = {"
+	pattern := regexp.MustCompile(`(?m)` + regexp.QuoteMeta(name) + `\s*\[[^\]]*\](?:\s*\[[^\]]*\])?\s*=\s*\{`)
+	loc := pattern.FindStringIndex(source)
+	if loc == nil {
+		return "", fmt.Errorf("array %q not found", name)
+	}
+
+	// Find the opening brace.
+	start := strings.LastIndex(source[loc[0]:loc[1]], "{")
+	if start == -1 {
+		return "", fmt.Errorf("opening brace not found for %q", name)
+	}
+	start += loc[0]
+
+	end, err := findMatchingBrace(source, start)
+	if err != nil {
+		return "", fmt.Errorf("unmatched brace for %q: %w", name, err)
+	}
+	return source[start+1 : end], nil
+}
+
+// findExactArrayBody is like findArrayBody but ensures the name is not a
+// prefix of a longer name (e.g., "ts_small_parse_table" vs
+// "ts_small_parse_table_map").
+func findExactArrayBody(source, name string) (string, error) {
+	// Find the array declaration ensuring the name is followed by [ not _
+	pattern := regexp.MustCompile(`(?m)` + regexp.QuoteMeta(name) + `\[`)
+	locs := pattern.FindAllStringIndex(source, -1)
+
+	for _, loc := range locs {
+		// Check that the character before the match is not alphanumeric or underscore
+		// (to avoid matching ts_small_parse_table_map when looking for ts_small_parse_table).
+		// Actually we need to verify the full context. Let's check that at loc[1]-1
+		// we have '[' and the name before it matches exactly.
+		matchStr := source[loc[0]:loc[1]]
+		if matchStr != name+"[" {
+			continue
+		}
+
+		// Now find the "= {" after this point.
+		rest := source[loc[0]:]
+		bracePattern := regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `\s*\[[^\]]*\](?:\s*\[[^\]]*\])?\s*=\s*\{`)
+		bm := bracePattern.FindStringIndex(rest)
+		if bm == nil {
+			continue
+		}
+
+		// Find opening brace.
+		segment := rest[bm[0]:bm[1]]
+		bracePos := strings.LastIndex(segment, "{")
+		if bracePos == -1 {
+			continue
+		}
+		start := loc[0] + bm[0] + bracePos
+
+		end, err := findMatchingBrace(source, start)
+		if err == nil {
+			return source[start+1 : end], nil
+		}
+	}
+
+	return "", fmt.Errorf("array %q not found (exact)", name)
+}
+
+// findFunctionBody finds a C function definition by name and returns the text
+// inside the outermost braces, plus the absolute index of the opening brace.
+func findFunctionBody(source, funcName string) (string, int, bool) {
+	if funcName == "" {
+		return "", 0, false
+	}
+
+	sigRe := regexp.MustCompile(`(?m)\b` + regexp.QuoteMeta(funcName) + `\s*\(`)
+	locs := sigRe.FindAllStringIndex(source, -1)
+	for _, loc := range locs {
+		openParen := -1
+		for i := loc[0]; i < len(source); i++ {
+			if source[i] == '(' {
+				openParen = i
+				break
+			}
+		}
+		if openParen < 0 {
+			continue
+		}
+
+		closeParen, ok := findMatchingParen(source, openParen)
+		if !ok {
+			continue
+		}
+
+		i := closeParen + 1
+		for i < len(source) && (source[i] == ' ' || source[i] == '\t' || source[i] == '\n' || source[i] == '\r') {
+			i++
+		}
+		if i >= len(source) || source[i] != '{' {
+			continue
+		}
+
+		end, err := findMatchingBrace(source, i)
+		if err != nil {
+			return "", 0, false
+		}
+		return source[i+1 : end], i, true
+	}
+
+	return "", 0, false
+}
+
+// findMatchingBrace returns the index of the closing brace that matches the
+// opening brace at start. Braces inside C strings, chars, and comments are ignored.
+func findMatchingBrace(source string, start int) (int, error) {
+	if start < 0 || start >= len(source) || source[start] != '{' {
+		return 0, fmt.Errorf("invalid opening brace index")
+	}
+
+	depth := 0
+	inString := false
+	inChar := false
+	inLineComment := false
+	inBlockComment := false
+	escaped := false
+
+	for i := start; i < len(source); i++ {
+		c := source[i]
+
+		if inLineComment {
+			if c == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			if c == '*' && i+1 < len(source) && source[i+1] == '/' {
+				inBlockComment = false
+				i++
+			}
+			continue
+		}
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if inChar {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '\'' {
+				inChar = false
+			}
+			continue
+		}
+
+		if c == '/' && i+1 < len(source) {
+			next := source[i+1]
+			if next == '/' {
+				inLineComment = true
+				i++
+				continue
+			}
+			if next == '*' {
+				inBlockComment = true
+				i++
+				continue
+			}
+		}
+
+		switch c {
+		case '"':
+			inString = true
+		case '\'':
+			inChar = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, nil
+			}
+			if depth < 0 {
+				return 0, fmt.Errorf("negative brace depth")
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("no matching closing brace")
+}
+
+// findMatchingParen returns the index of the matching ')' for source[start]=='('.
+// Parentheses inside strings/chars/comments are ignored.
+func findMatchingParen(source string, start int) (int, bool) {
+	if start < 0 || start >= len(source) || source[start] != '(' {
+		return 0, false
+	}
+
+	depth := 0
+	inString := false
+	inChar := false
+	inLineComment := false
+	inBlockComment := false
+	escaped := false
+
+	for i := start; i < len(source); i++ {
+		c := source[i]
+
+		if inLineComment {
+			if c == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			if c == '*' && i+1 < len(source) && source[i+1] == '/' {
+				inBlockComment = false
+				i++
+			}
+			continue
+		}
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if inChar {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '\'' {
+				inChar = false
+			}
+			continue
+		}
+
+		if c == '/' && i+1 < len(source) {
+			next := source[i+1]
+			if next == '/' {
+				inLineComment = true
+				i++
+				continue
+			}
+			if next == '*' {
+				inBlockComment = true
+				i++
+				continue
+			}
+		}
+
+		switch c {
+		case '"':
+			inString = true
+		case '\'':
+			inChar = true
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+			if depth < 0 {
+				return 0, false
+			}
+		}
+	}
+
+	return 0, false
+}
+
+// stripCComments removes // and /* */ comments while preserving line breaks.
+func stripCComments(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+
+	inString := false
+	inChar := false
+	inLineComment := false
+	inBlockComment := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		if inLineComment {
+			if c == '\n' {
+				inLineComment = false
+				b.WriteByte(c)
+			}
+			continue
+		}
+		if inBlockComment {
+			if c == '\n' {
+				b.WriteByte('\n')
+			}
+			if c == '*' && i+1 < len(s) && s[i+1] == '/' {
+				inBlockComment = false
+				i++
+			}
+			continue
+		}
+
+		if inString {
+			b.WriteByte(c)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		if inChar {
+			b.WriteByte(c)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '\'' {
+				inChar = false
+			}
+			continue
+		}
+
+		if c == '/' && i+1 < len(s) {
+			next := s[i+1]
+			if next == '/' {
+				inLineComment = true
+				i++
+				continue
+			}
+			if next == '*' {
+				inBlockComment = true
+				i++
+				continue
+			}
+		}
+
+		b.WriteByte(c)
+		if c == '"' {
+			inString = true
+		} else if c == '\'' {
+			inChar = true
+		}
+	}
+
+	return b.String()
+}
+
+// parseCChar decodes a C character-literal payload (e.g. "a", "\n", "\u00e9").
+// The input should not include surrounding single quotes.
+func parseCChar(s string) (rune, bool) {
+	if s == "" {
+		return 0, false
+	}
+
+	if len(s) == 1 {
+		return rune(s[0]), true
+	}
+
+	if s[0] != '\\' {
+		runes := []rune(s)
+		if len(runes) == 1 {
+			return runes[0], true
+		}
+		return 0, false
+	}
+
+	switch s {
+	case `\n`:
+		return '\n', true
+	case `\t`:
+		return '\t', true
+	case `\r`:
+		return '\r', true
+	case `\f`:
+		return '\f', true
+	case `\v`:
+		return '\v', true
+	case `\a`:
+		return '\a', true
+	case `\b`:
+		return '\b', true
+	case `\\`:
+		return '\\', true
+	case `\'`:
+		return '\'', true
+	case `\"`:
+		return '"', true
+	case `\0`:
+		return 0, true
+	}
+
+	if strings.HasPrefix(s, `\u`) {
+		if len(s) != 6 {
+			return 0, false
+		}
+		v, err := strconv.ParseInt(s[2:], 16, 32)
+		if err != nil {
+			return 0, false
+		}
+		return rune(v), true
+	}
+	if strings.HasPrefix(s, `\U`) {
+		if len(s) != 10 {
+			return 0, false
+		}
+		v, err := strconv.ParseInt(s[2:], 16, 32)
+		if err != nil {
+			return 0, false
+		}
+		return rune(v), true
+	}
+	if strings.HasPrefix(s, `\x`) {
+		if len(s) < 3 {
+			return 0, false
+		}
+		v, err := strconv.ParseInt(s[2:], 16, 32)
+		if err != nil {
+			return 0, false
+		}
+		return rune(v), true
+	}
+
+	// Octal escape: \NNN (1-3 octal digits)
+	if len(s) >= 2 && s[0] == '\\' && s[1] >= '0' && s[1] <= '7' {
+		end := 2
+		for end < len(s) && end < 4 && s[end] >= '0' && s[end] <= '7' {
+			end++
+		}
+		v, err := strconv.ParseInt(s[1:end], 8, 32)
+		if err != nil {
+			return 0, false
+		}
+		return rune(v), true
+	}
+
+	return 0, false
+}
+
+// parseIndexedStringArray parses a C array of the form:
+//
+//	[ts_builtin_sym_end] = "end",
+//	[anon_sym_LBRACE] = "{",
+//
+// or sequential: "foo", "bar", ...
+func parseIndexedStringArray(body string, count int, enums map[string]int) ([]string, error) {
+	// Try indexed form first: [name] = "string"
+	indexedRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*"((?:[^"\\]|\\.)*)"`)
+	matches := indexedRe.FindAllStringSubmatch(body, -1)
+
+	if len(matches) > 0 {
+		type pair struct {
+			idx int
+			val string
+		}
+		parsed := make([]pair, 0, len(matches))
+		maxIdx := count - 1
+		for i, m := range matches {
+			idx := i
+			if resolved, ok := resolveIndexedName(m[1], enums); ok {
+				idx = resolved
+			}
+			if idx < 0 {
+				continue
+			}
+			if idx > maxIdx {
+				maxIdx = idx
+			}
+			parsed = append(parsed, pair{idx: idx, val: unescapeCString(m[2])})
+		}
+		if maxIdx < 0 {
+			return nil, nil
+		}
+		result := make([]string, maxIdx+1)
+		for _, p := range parsed {
+			if p.idx >= len(result) {
+				continue
+			}
+			result[p.idx] = p.val
+		}
+		return result, nil
+	}
+
+	// Fall back to sequential form: "string1", "string2"
+	seqRe := regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
+	seqMatches := seqRe.FindAllStringSubmatch(body, -1)
+	if count <= 0 {
+		count = len(seqMatches)
+	}
+	result := make([]string, count)
+	for i, m := range seqMatches {
+		if i >= count {
+			break
+		}
+		result[i] = unescapeCString(m[1])
+	}
+
+	return result, nil
+}
+
+// unescapeCString decodes a C string literal's body (as emitted into
+// ts_symbol_names[] by tree-sitter's C code generator) into gotreesitter's
+// reversible at-rest symbol spelling. Unicode and ordinary C escapes become
+// their decoded text. The one deliberate exception is C's `\?` spelling: it
+// remains `\?` internally so it stays distinct from literal token text `\?`,
+// whose generated C spelling decodes to `\\?`. Grammargen uses the same
+// convention, and public node/query APIs remove exactly one `\?` layer to
+// expose the text reported by the C runtime.
+//
+// It handles the full set of C escapes tree-sitter's generator can emit:
+// \\ \" \? \n \t \r \a \b \f \v, \xNN (hex byte, greedy per the C
+// standard), octal \NNN (1-3 octal digits), \uXXXX / \UXXXXXXXX (universal
+// character names — the form C actually emits for non-ASCII symbol
+// spellings like agda's "∀"), and, defensively, the \u{...} brace form used
+// by some non-C generators/toolchains even though the local parser.c corpus
+// never emits it.
+//
+// A single forward scan (rather than a chain of global replacements) is
+// required for correctness here: variable-length escapes (\xNN.., octal,
+// \u{...}) cannot be expressed as fixed string replacements, and the scan
+// naturally protects doubled backslashes — many grammars have tokens whose
+// *literal* text contains a backslash (pkl/swift "\(", cue "\#(", tlaplus
+// "\forall"), which C always escapes as "\\(" etc. in the generated source.
+// Any backslash sequence that isn't a recognized escape (including one
+// half of a doubled backslash, once the first backslash of the pair has
+// been consumed) is left exactly as-is: the backslash is copied verbatim
+// and the following byte is handled as an ordinary character on the next
+// iteration, reproducing the same "copy literally" behavior for both
+// doubled-backslash literal content and malformed/truncated escapes (e.g.
+// a lone trailing "\u12" with too few hex digits).
+func unescapeCString(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != '\\' {
+			r, n := utf8.DecodeRuneInString(s[i:])
+			b.WriteRune(r)
+			i += n
+			continue
+		}
+		if i+1 >= len(s) {
+			// Trailing lone backslash: nothing follows to form an escape.
+			b.WriteByte('\\')
+			i++
+			continue
+		}
+		switch next := s[i+1]; next {
+		case '\\':
+			b.WriteByte('\\')
+			i += 2
+		case '"':
+			b.WriteByte('"')
+			i += 2
+		case '\'':
+			b.WriteByte('\'')
+			i += 2
+		case '?':
+			// Preserve the reversible at-rest discriminator shared with
+			// grammargen. Public APIs decode this one layer.
+			b.WriteString(`\?`)
+			i += 2
+		case 'n':
+			b.WriteByte('\n')
+			i += 2
+		case 't':
+			b.WriteByte('\t')
+			i += 2
+		case 'r':
+			b.WriteByte('\r')
+			i += 2
+		case 'a':
+			b.WriteByte('\a')
+			i += 2
+		case 'b':
+			b.WriteByte('\b')
+			i += 2
+		case 'f':
+			b.WriteByte('\f')
+			i += 2
+		case 'v':
+			b.WriteByte('\v')
+			i += 2
+		case 'u':
+			if n, ok := decodeUniversalCharEscape(s, i); ok {
+				b.WriteRune(n.r)
+				i = n.next
+				continue
+			}
+			// Unrecognized/malformed \u escape: copy the backslash verbatim
+			// and let normal scanning pick up "u..." on the next iteration.
+			b.WriteByte('\\')
+			i++
+		case 'U':
+			if i+10 <= len(s) {
+				if v, err := strconv.ParseUint(s[i+2:i+10], 16, 32); err == nil && utf8.ValidRune(rune(v)) {
+					b.WriteRune(rune(v))
+					i += 10
+					continue
+				}
+			}
+			b.WriteByte('\\')
+			i++
+		case 'x':
+			j := i + 2
+			for j < len(s) && isHexDigitByte(s[j]) {
+				j++
+			}
+			if j > i+2 {
+				if v, err := strconv.ParseUint(s[i+2:j], 16, 32); err == nil {
+					b.WriteByte(byte(v))
+					i = j
+					continue
+				}
+			}
+			b.WriteByte('\\')
+			i++
+		default:
+			if next >= '0' && next <= '7' {
+				end := i + 1
+				for end < len(s) && end < i+4 && s[end] >= '0' && s[end] <= '7' {
+					end++
+				}
+				if v, err := strconv.ParseUint(s[i+1:end], 8, 32); err == nil {
+					b.WriteByte(byte(v))
+					i = end
+					continue
+				}
+			}
+			// Not a recognized escape: this is literal token text (e.g. pkl
+			// "\(", cue "\#(", circom "\=") that C reports verbatim. Copy the
+			// backslash and let the following byte be handled as an ordinary
+			// character on the next iteration.
+			b.WriteByte('\\')
+			i++
+		}
+	}
+	return b.String()
+}
+
+// isHexDigitByte reports whether b is an ASCII hex digit.
+func isHexDigitByte(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+type decodedUniversalChar struct {
+	r    rune
+	next int
+}
+
+// decodeUniversalCharEscape decodes a C11 universal-character-name escape
+// \uXXXX (exactly 4 hex digits) starting at s[i] == '\\', s[i+1] == 'u'.
+// It also accepts the non-C \u{...} brace form defensively: no grammar in
+// the local corpus emits it, but some non-parser.c toolchains use it for
+// the same purpose.
+func decodeUniversalCharEscape(s string, i int) (decodedUniversalChar, bool) {
+	if i+2 < len(s) && s[i+2] == '{' {
+		end := strings.IndexByte(s[i+3:], '}')
+		if end < 0 {
+			return decodedUniversalChar{}, false
+		}
+		hex := s[i+3 : i+3+end]
+		if hex == "" {
+			return decodedUniversalChar{}, false
+		}
+		v, err := strconv.ParseUint(hex, 16, 32)
+		if err != nil || !utf8.ValidRune(rune(v)) {
+			return decodedUniversalChar{}, false
+		}
+		return decodedUniversalChar{r: rune(v), next: i + 3 + end + 1}, true
+	}
+	if i+6 > len(s) {
+		return decodedUniversalChar{}, false
+	}
+	v, err := strconv.ParseUint(s[i+2:i+6], 16, 32)
+	if err != nil {
+		return decodedUniversalChar{}, false
+	}
+	if !utf8.ValidRune(rune(v)) {
+		return decodedUniversalChar{}, false
+	}
+	return decodedUniversalChar{r: rune(v), next: i + 6}, true
+}
+
+// parseUint16List parses a comma-separated list of uint16 values from
+// the body of a C array declaration.
+func parseUint16List(body string) []uint16 {
+	re := regexp.MustCompile(`\d+`)
+	matches := re.FindAllString(body, -1)
+	result := make([]uint16, 0, len(matches))
+	for _, m := range matches {
+		n, err := strconv.Atoi(m)
+		if err != nil {
+			continue
+		}
+		result = append(result, uint16(n))
+	}
+	return result
+}
+
+// parseUint32List parses a comma-separated list of uint32 values from
+// the body of a C array declaration.
+// extractExternalSymbols parses ts_external_scanner_symbol_map[].
+func extractExternalSymbols(source string, g *ExtractedGrammar) error {
+	body, err := findArrayBody(source, "ts_external_scanner_symbol_map")
+	if err != nil {
+		return err
+	}
+	g.ExternalSymbols = parseIndexedSymbolArray(body, g.ExternalTokenCount, g.enumValues)
+	return nil
+}
+
+// extractExternalLexStates parses ts_external_scanner_states[][].
+func extractExternalLexStates(source string, g *ExtractedGrammar) error {
+	if g == nil || g.ExternalTokenCount == 0 {
+		return nil
+	}
+
+	dimRe := regexp.MustCompile(`ts_external_scanner_states\[(\d+)\]\[[^\]]+\]`)
+	dm := dimRe.FindStringSubmatch(source)
+	if dm == nil {
+		return fmt.Errorf("external lex states table not found")
+	}
+	rowCount, err := strconv.Atoi(dm[1])
+	if err != nil || rowCount <= 0 {
+		return fmt.Errorf("invalid external lex states row count %q", dm[1])
+	}
+
+	body, err := findArrayBody(source, "ts_external_scanner_states")
+	if err != nil {
+		return err
+	}
+
+	table := make([][]bool, rowCount)
+	for i := range table {
+		table[i] = make([]bool, g.ExternalTokenCount)
+	}
+
+	rowRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*\{`)
+	locs := rowRe.FindAllStringSubmatchIndex(body, -1)
+	for _, loc := range locs {
+		rowName := body[loc[2]:loc[3]]
+		rowIdx, ok := resolveIndexedName(rowName, g.enumValues)
+		if !ok || rowIdx < 0 || rowIdx >= rowCount {
+			continue
+		}
+
+		braceStart := loc[1] - 1
+		depth := 0
+		end := -1
+		for i := braceStart; i < len(body); i++ {
+			switch body[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					end = i
+					i = len(body)
+				}
+			}
+		}
+		if end < 0 {
+			return fmt.Errorf("unterminated external lex state row %q", rowName)
+		}
+
+		rowBody := body[braceStart+1 : end]
+		entryRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*true`)
+		entries := entryRe.FindAllStringSubmatch(rowBody, -1)
+		for _, m := range entries {
+			colIdx, ok := resolveIndexedName(m[1], g.enumValues)
+			if !ok || colIdx < 0 || colIdx >= g.ExternalTokenCount {
+				continue
+			}
+			table[rowIdx][colIdx] = true
+		}
+	}
+
+	g.ExternalLexStates = table
+	return nil
+}
+
+// parseIndexedSymbolArray parses a C symbol array in either indexed form:
+//
+//	[ext_tok_foo] = sym_bar,
+//
+// or sequential form:
+//
+//	sym_bar, sym_baz,
+func parseIndexedSymbolArray(body string, count int, enums map[string]int) []uint16 {
+	result := make([]uint16, count)
+	if count == 0 {
+		return result
+	}
+
+	// Indexed form.
+	indexedRe := regexp.MustCompile(`\[(\w+)\]\s*=\s*(\w+)`)
+	indexed := indexedRe.FindAllStringSubmatch(body, -1)
+	if len(indexed) > 0 {
+		for i, m := range indexed {
+			idx := i
+			if v, ok := resolveIndexedName(m[1], enums); ok {
+				idx = v
+			}
+			sym, ok := resolveIndexedName(m[2], enums)
+			if !ok || idx < 0 || idx >= count {
+				continue
+			}
+			result[idx] = uint16(sym)
+		}
+		return result
+	}
+
+	// Sequential form.
+	tokenRe := regexp.MustCompile(`\b([A-Za-z_]\w*|\d+)\b`)
+	toks := tokenRe.FindAllStringSubmatch(body, -1)
+	out := 0
+	for _, t := range toks {
+		if out >= count {
+			break
+		}
+		sym, ok := resolveIndexedName(t[1], enums)
+		if !ok {
+			continue
+		}
+		result[out] = uint16(sym)
+		out++
+	}
+	return result
+}
+
+func resolveIndexedName(name string, enums map[string]int) (int, bool) {
+	if n, err := strconv.Atoi(name); err == nil {
+		return n, true
+	}
+	if enums != nil {
+		if v, ok := enums[name]; ok {
+			return v, true
+		}
+	}
+	return 0, false
+}

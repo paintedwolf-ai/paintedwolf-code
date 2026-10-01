@@ -1,0 +1,36 @@
+# INVEST_NO_NEW_EVIDENCE — second investigate closeout cites only prior report evidence.
+
+oar: '1.0'
+id: INVEST_NO_NEW_EVIDENCE
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.surface
+    - paintedwolf.reject_observation
+when: paintedwolf.surface == "implement_investigate" && paintedwolf.reject_observation == "closeout_no_new_evidence"
+effect: block
+copy:
+  what: Investigate repeated {{ paintedwolf.offender_count }} citation(s) already committed in an earlier report this turn — no new evidence.
+  cause: The current cited evidence locations and URLs are all present in the earlier committed report
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: Keep the earlier report as the delivered result. Do not dispatch work merely to manufacture new citations or repeat the same report. If required work remains, preserve that gap for an actionable turn; the report-only turn does not reopen tools.
+  instead: Park until new worker results or a user instruction; the host will not assemble a duplicate report
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_investigate
+x-paintedwolf-evidence:
+  ui_label: New evidence
+  ui_check_id: closeout_new_evidence
+x-paintedwolf-message: Investigate cited only evidence from a prior closeout
+x-paintedwolf-scenarios:
+  - id: subset_repeat
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: path:AGENTS.md
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: INVEST_NO_NEW_EVIDENCE'

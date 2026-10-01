@@ -1,0 +1,41 @@
+title: Delete a server, cluster, or volume
+id: cd4bbb2a-71c8-46d4-98e3-6a7fa737c2d1
+description: Deletes a compute instance, managed cluster, database, or volume.
+references:
+  - https://attack.mitre.org/
+  - https://upcloud.com/docs/guides/upcloud-command-line-interface/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # The verb is shared across eight otherwise-unrelated provider CLIs with no
+  # service-specific qualifier — a coarse, verb-alone match, one band below
+  # where a precise per-provider rule for the same delete would sit.
+  selection_image:
+    Image:
+      - doctl
+      - hcloud
+      - linode-cli
+      - scw
+      - vultr-cli
+      - exo
+      - civo
+      - upctl
+  verbs_resource_destroy:
+    CommandLine|contains:
+      - ' delete'
+      - ' destroy'
+      - ' rm '
+      - ' terminate'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|list|describe)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_resource_destroy and not filter_rehearsal and not filter_local

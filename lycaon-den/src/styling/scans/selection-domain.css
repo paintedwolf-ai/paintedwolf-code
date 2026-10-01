@@ -1,0 +1,90 @@
+/* --- Selection band --- */
+.den-ledger-selection {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 var(--den-stage-inset-x) 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-1);
+}
+
+.den-ledger-selection__count {
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+/* --- Filter panel --- */
+
+.den-finding-filter__group,
+.den-finding-ignore__group {
+  margin: 8px 12px 4px;
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--den-text-muted);
+}
+
+.den-finding-filter__row,
+.den-finding-ignore__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+
+.den-finding-filter__row:hover,
+.den-finding-ignore__row:hover {
+  background: var(--den-tint-1);
+}
+
+.den-finding-filter__row-count {
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+
+.den-finding-filter__row-meta,
+.den-finding-ignore__row-meta {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.den-finding-filter__actions,
+.den-finding-ignore__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 12px 2px;
+  border-top: 1px solid var(--den-line);
+}
+
+/* --- Ignore panel --- */
+
+/* YAML preview of the entries about to be written. */
+.den-finding-ignore__preview {
+  margin: 0 12px;
+  padding: 8px 10px;
+  max-height: 11rem;
+  overflow: auto;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--den-text-muted);
+}
+

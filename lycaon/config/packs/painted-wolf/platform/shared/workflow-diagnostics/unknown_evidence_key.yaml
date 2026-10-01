@@ -1,0 +1,5 @@
+code: unknown_evidence_key
+message: |
+  Unknown evidence_passed key {{key}}.
+replacement: |
+  Use a typed evidence key (verify, test, security, or a known review-family key).

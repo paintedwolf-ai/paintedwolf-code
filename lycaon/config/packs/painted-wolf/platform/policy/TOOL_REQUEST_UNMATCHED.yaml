@@ -1,0 +1,38 @@
+oar: '1.0'
+id: TOOL_REQUEST_UNMATCHED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - request_tools
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.available
+  - paintedwolf.profile
+  - paintedwolf.need
+when: paintedwolf.rejection_code == "TOOL_REQUEST_UNMATCHED"
+effect: block
+copy:
+  what: 'No schema loaded for the request "{{ paintedwolf.need }}" in profile {{ paintedwolf.profile }}'
+  cause: No additional tool was selected for this need
+  why: Existing tools remain available; an empty result does not establish that no relevant tool exists
+  fix: 'Continue with tools already available where possible. Retry only with a more specific need or an exact loadable name: {{ paintedwolf.available }}'
+  instead: Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_tools
+x-paintedwolf-message: 'No schema loaded for "{{ paintedwolf.need }}" in profile {{ paintedwolf.profile }}. Loadable: {{ paintedwolf.available }}'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    available:
+    - chmod
+    - wc
+    profile: implement
+    need: frobnicate the widget
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_REQUEST_UNMATCHED'
+  - chmod

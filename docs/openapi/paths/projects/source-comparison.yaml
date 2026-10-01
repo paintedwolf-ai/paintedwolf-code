@@ -1,0 +1,469 @@
+paths:
+  /v1/projects/{id}/source/pins:
+    get:
+      tags: [projects]
+      operationId: listProjectSourcePins
+      summary: List named source pins
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      - name: cursor
+        in: query
+        description: Opaque next_cursor from the preceding page.
+        schema: {type: string}
+      responses:
+        '200':
+          description: Source pins
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinList}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags: [projects]
+      operationId: createProjectSourcePin
+      x-person-action: record
+      summary: Pin the current source state
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinCreate}
+      responses:
+        '201':
+          description: Source pin created
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourcePin}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/source/pins/{pin_id}:
+    patch:
+      tags: [projects]
+      operationId: updateProjectSourcePin
+      x-person-action: record
+      summary: Rename a source pin
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: pin_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinUpdate}
+      responses:
+        '200':
+          description: Source pin updated
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourcePin}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags: [projects]
+      operationId: deleteProjectSourcePin
+      x-person-action: record
+      summary: Delete a source pin
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: pin_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '204': {description: Source pin deleted}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/source/comparison:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSourceComparison
+      summary: Load exact endpoints for a Walk effect, file version, or lens range
+      description: |
+        Effect mode compares the explicit before_version_id and after_version_id
+        stored on one Walk effect. Version mode compares the selected immutable
+        version with its parent. Neither mode reads the live filesystem or a
+        successor row.
+
+        Commit path mode (path + root_id + baseline=commit) compares the
+        attached root's HEAD with the live working path without creating source
+        history. expected_head, when present, rejects a changed HEAD with 409;
+        an empty expected_head names an unborn repository.
+
+        Scope mode (file_id + baseline) compares the oldest effect
+        pre-image in that lens with the current tracked head. It exists for the
+        tree and summary lenses; Walk itself always uses effect mode. Under the
+        presentation baseline the range starts after the acknowledged version.
+        Fully reviewed files answer with in_range false.
+
+        Reviewed mode (file_id + reviewed_through_ordinal) compares the immutable
+        endpoints covered by that look. A replaced or withdrawn look answers 409.
+        Reading reviewed history never acknowledges subsequent edits.
+
+        Git object mode (blob_oid + root_id) reads the endpoints straight from
+        the repository object store: after is the named blob, before the
+        optional before_blob_oid. It previews a listed commit — both sides are
+        verified against the ids they were fetched by.
+
+        Exactly one mode per request. A baseline holding no change for the file
+        answers 200 with in_range false, because an empty range is a valid scope answer.
+      parameters:
+      - name: display_path
+        in: query
+        description: File name used for syntax when selecting a Git blob.
+        schema: {type: string}
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: file_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Scope mode. Stable logical-file identity; paths are not identities.
+      - name: path
+        in: query
+        required: false
+        schema: {type: string}
+        description: Commit path mode. Root-relative path, including a deleted path.
+      - name: expected_head
+        in: query
+        required: false
+        schema: {type: string}
+        description: Commit path mode. HEAD observed by the listing, or empty for an unborn repository.
+      - name: baseline
+        in: query
+        required: false
+        schema: {type: string, default: presentation}
+        description: 'Recorded scope mode, or commit path mode. Commit comparisons require root_id and path.'
+      - name: presentation_after_ordinal
+        in: query
+        required: false
+        schema: {type: integer, format: int64, minimum: 0}
+        description: Presentation scope only. Retains an open view's returned unread boundary even if another view acknowledges changes.
+      - name: reviewed_through_ordinal
+        in: query
+        required: false
+        schema: {type: integer, format: int64, minimum: 1}
+        description: Reviewed mode. The Seen row's look identity; requires file_id and excludes baseline and mark_user_edits.
+      - name: mark_user_edits
+        in: query
+        required: false
+        schema: {type: boolean, default: true}
+        description: |
+          Scope mode only. False leaves the person's authored ranges unmarked.
+          The before and after endpoints remain actual saved versions.
+          Chat and turn scopes select their authors; other chats remain labeled context.
+      - name: effect_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Walk mode. One exact persisted effect.
+      - name: version_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Dropdown mode. One immutable version compared with its parent.
+      - name: blob_oid
+        in: query
+        required: false
+        schema: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        description: Git object mode. The after side, fetched from the repository store and verified.
+      - name: before_blob_oid
+        in: query
+        required: false
+        schema: {type: string, pattern: '^[0-9a-f]{7,64}$'}
+        description: Git object mode. Optional before side; omitted reads as absent.
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Git object mode. Root whose repository holds the objects.
+      responses:
+        '200':
+          description: Exact comparison pair
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourceComparison
+        '400':
+          description: Invalid baseline, or not exactly one addressing mode
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project, effect, version, or baseline pin not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/source/attribution:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSourceAttribution
+      summary: Agent line provenance intervals for one file
+      description: |
+        Intervals are workspace-scoped. Pass session_id so a chat bound to a
+        worktree reads provenance from the tree it is showing; omitted, the
+        project's own roots answer.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        schema: {type: string}
+      - name: root_id
+        in: query
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Attribution intervals and tip head sha
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourceAttributionResponse
+        '400':
+          description: Missing path or root_id
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/source/git-changes/{git_change_id}/review:
+    get:
+      tags: [projects]
+      operationId: getProjectSourceGitReview
+      summary: Review the files recorded by an observed Git movement
+      description: |
+        Reads Git objects using an observed movement owned by this project.
+        Paths and counts are limited to the attached root. No source effects
+        are synthesized and neither HEAD nor working-tree bytes are compared.
+        Commit, amend, merge, cherry-pick, revert, and clone default to the
+        destination commit versus its first parent (empty tree for an initial
+        commit). Other movements default to their recorded endpoints, or to the
+        destination commit when no previous tip was recorded.
+        Missing objects are unavailable, never an empty successful review.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: git_change_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: movement
+        in: query
+        schema: {type: boolean}
+        description: True selects the recorded before/after tips; false selects the destination commit and a parent.
+      - name: parent
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 1000, default: 1}
+        description: One-based parent index, only for commit comparison.
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      - name: cursor
+        in: query
+        description: Opaque pagination cursor from next_cursor.
+        schema: {type: string}
+      responses:
+        '200':
+          description: Immutable Git review
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourceGitReview
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/source/revisions:
+    get:
+      tags: [projects]
+      operationId: resolveProjectSourceRevisions
+      summary: Resolve a typed commit, branch, or range to Git comparisons
+      description: |
+        Reads one revision token in every attached root backed by a Git
+        repository, or only root_id, and answers the two commits it names in
+        each root where it resolves. A commit compares with its first parent
+        (the empty tree for a root commit). A local branch that is checked out
+        compares its tip with its parent; any other local branch compares its
+        merge base with HEAD with HEAD. A..B compares A with B; A...B compares
+        their merge base with B; an omitted side is HEAD. A revision that
+        resolves nowhere answers 200 with no comparisons. A token that starts
+        with a dash or holds whitespace or control characters is rejected
+        before Git runs.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: spec
+        in: query
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 256}
+        description: A commit id or prefix, ref, or A..B / A...B range.
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Resolve in this root only.
+      responses:
+        '200':
+          description: Comparisons the revision names, primary root first
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourceRevisionsResponse
+        '400':
+          description: The spec is missing or cannot be a revision
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/source/revisions/review:
+    get:
+      tags: [projects]
+      operationId: getProjectSourceRevisionReview
+      summary: Review the files between two commits of a root's repository
+      description: |
+        Pages the files that differ between two full commit ids in the named
+        root's repository, limited to that root. An empty before compares
+        after with the empty tree. Nothing is recorded, and neither HEAD nor
+        working-tree bytes are compared. Missing objects are unavailable,
+        never an empty successful review.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: root_id
+        in: query
+        required: true
+        schema: {type: string, format: uuid}
+      - name: from_revision
+        in: query
+        required: false
+        schema: {type: string, pattern: '^([0-9a-f]{40}|[0-9a-f]{64})?$'}
+        description: Full commit id; omitted compares with the empty tree.
+      - name: to_revision
+        in: query
+        required: true
+        schema: {type: string, pattern: '^([0-9a-f]{40}|[0-9a-f]{64})$'}
+        description: Full commit id.
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      - name: cursor
+        in: query
+        description: Opaque pagination cursor from next_cursor.
+        schema: {type: string}
+      responses:
+        '200':
+          description: Immutable Git review
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-comparison.yaml#/components/schemas/SourceRevisionReview
+        '400':
+          description: A root or full commit id is missing or malformed
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable

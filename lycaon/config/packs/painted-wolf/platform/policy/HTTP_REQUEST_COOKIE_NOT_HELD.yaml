@@ -1,0 +1,26 @@
+oar: '1.0'
+id: HTTP_REQUEST_COOKIE_NOT_HELD
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [http_request]
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "HTTP_REQUEST_COOKIE_NOT_HELD"
+effect: block
+copy:
+  what: The request named a cookie the jar does not carry for this URL, so nothing was sent.
+  cause: A cookie reference resolves only against cookies the jar already holds for that destination. The named one was never set by a prior response, was set for a different origin or path, or has expired. The rejection data lists the jar, the `missing` names, and the ones actually `held`.
+  why: A cookie value is a credential the host keeps in the protected store, so a reference is substituted privately and never guessed. Sending the request without the cookie would authenticate as nobody and read as a session that silently lapsed.
+  fix: Make the request that sets the cookie first, so the jar holds it; then reference it. Read `held` in the rejection data to see which names are available for this URL.
+  instead: Branch on Code HTTP_REQUEST_COOKIE_NOT_HELD; issue the login or session request first, or reference a held cookie
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: http_request cookie not held for this URL
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {jar: registry, missing: session, held: csrf, profile: implement, tool: http_request}
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: HTTP_REQUEST_COOKIE_NOT_HELD'

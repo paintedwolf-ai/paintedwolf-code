@@ -1,0 +1,37 @@
+title: Send a database dump off this machine
+id: 878ffe34-3e49-4352-9fbd-0942d5b2bedf
+description: Pipes a database dump directly into a transfer, so the contents leave before anything writes them down.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # The dump alone stays silent; the pipeline field carries the dump-and-send
+  # composition (download-piped-to-shell's shape, reversed). Sent data cannot be
+  # recalled, so this sits above the reversible band.
+  selection_dump:
+    Image:
+      - pg_dump
+      - pg_dumpall
+      - mysqldump
+      - mariadb-dump
+      - mongodump
+      - sqlite3
+      - clickhouse-client
+      - cqlsh
+  selection_piped_to_transfer:
+    PipelineCommandLine|re: '(?i)\|\s*(sudo\s+(-\S+\s+)*)?(curl|wget|httpie|http|nc|ncat|socat|ssh|scp|rclone|mc|s5cmd|aws|gsutil|az)\b'
+  filter_rehearsal:
+    Argv|re: '^(--help|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_dump and selection_piped_to_transfer and not filter_rehearsal and not filter_local

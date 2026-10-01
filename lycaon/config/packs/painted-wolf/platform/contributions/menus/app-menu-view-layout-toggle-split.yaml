@@ -1,0 +1,8 @@
+id: painted-wolf/platform:app-menu-view-layout-toggle-split
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-toggle-split
+group: "1"
+order: 2
+label: "Split with conversation"
+state:
+  fact: "split_live"

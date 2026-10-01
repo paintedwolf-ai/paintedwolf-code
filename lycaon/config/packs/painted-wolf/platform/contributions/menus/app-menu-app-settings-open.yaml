@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-app-settings-open
+slot: "app_menu.app"
+command: painted-wolf/platform:settings-open
+group: "0"
+order: 1
+label: "Settings…"

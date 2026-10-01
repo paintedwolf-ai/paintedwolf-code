@@ -1,0 +1,90 @@
+@utility den-files-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+
+  .den-shell--orientation-mirrored .project-files-view & {
+    flex-direction: row-reverse;
+  }
+
+  & .cm-content {
+    user-select: text;
+  }
+}
+
+@utility den-files-empty {
+  user-select: text;
+}
+
+@utility den-files-editor__notice {
+  user-select: text;
+}
+
+@utility den-files-tree__hint {
+  user-select: text;
+}
+
+@utility den-files-image__canvas {
+  display: flex;
+}
+
+@utility den-files-root-summary__content {
+  padding: 18px;
+}
+
+@utility den-sidebar-scope-picker__menu-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@utility den-files-image__stage--fit {
+  /* The canvas takes the viewport's height, so the image fits both ways. */
+  & .den-files-image__canvas {
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+  }
+
+  & .den-files-image__img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+}
+
+@utility den-files-image__stage--actual {
+  cursor: grab;
+
+  & .den-files-image__canvas {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  & .den-files-image__img {
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+  }
+}
+
+@utility den-files-image__stage--dragging {
+  cursor: grabbing;
+}
+
+@utility den-files-info__icon {
+  user-select: none;
+}
+
+@utility den-files-image__stage {
+  user-select: none;
+}
+

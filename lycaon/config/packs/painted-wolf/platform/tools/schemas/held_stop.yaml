@@ -1,0 +1,9 @@
+description: Cancel a running held call. Request once, then wait on the handle or read call_result.
+schema:
+  type: object
+  properties:
+    handle:
+      description: Identifier returned by the initiating asynchronous invocation.
+      type: string
+  required: [handle]
+  additionalProperties: false

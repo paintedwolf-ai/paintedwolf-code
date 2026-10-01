@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Attachment too large
+message: >-
+  The attachment exceeds the size or count limit for one message.
+suggested_action: Attach fewer or smaller files and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - exceeds
+      - limit

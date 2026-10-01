@@ -1,0 +1,77 @@
+{
+  "id": "fact-tool-fingerprint-canonical-arguments",
+  "title": "fact tool fingerprint canonical arguments",
+  "covers": [
+    "OAR-FACT-28",
+    "OAR-CONF-40"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "id": "TEST",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "copy": {
+        "what": "{{ tool_args_fingerprint }}"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "tool_call": {
+      "name": "read",
+      "arguments": {
+        "b": "x",
+        "a": 1
+      }
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "copy": {
+      "what": "6a1efedf3850e2046a15f321a6d974931912bd11d5eb8e9db79baf718ce5785e"
+    }
+  }
+}

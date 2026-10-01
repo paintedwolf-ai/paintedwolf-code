@@ -1,0 +1,31 @@
+title: Install or upgrade a Helm release
+id: 22b857d5-f791-448b-9fe5-df4b58102211
+description: >-
+  Renders a chart and applies it to the cluster, creating or replacing whatever
+  the chart declares. The chart's contents are not read here.
+references:
+  - https://helm.sh/docs/helm/helm_upgrade/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image: helm
+  # Padding distinguishes verbs from argument values.
+  verbs_chart_deploy:
+    CommandLine|contains:
+      - ' install '
+      - ' upgrade '
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_chart_deploy and not filter_rehearsal and not filter_local

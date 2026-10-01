@@ -1,0 +1,155 @@
+language: php
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: command-injection-vulnerable
+  file: sample.php
+  source: '<?php system($_GET["command"]);
+
+    '
+  want:
+  - lycaon.php.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.php
+  source: '<?php system("printf ready");
+
+    '
+  want: []
+  covers:
+  - lycaon.php.command-injection
+- name: sql-injection-vulnerable
+  file: sample.php
+  source: '<?php $db->query("SELECT * FROM users WHERE name = " . $_GET["name"]);
+
+    '
+  want:
+  - lycaon.php.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.php
+  source: '<?php $stmt=$db->prepare("SELECT * FROM users WHERE name = ?"); $stmt->execute([$_GET["name"]]);
+
+    '
+  want: []
+  covers:
+  - lycaon.php.sql-injection
+- name: code-injection-vulnerable
+  file: sample.php
+  source: '<?php eval($_GET["code"]);
+
+    '
+  want:
+  - lycaon.php.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.php
+  source: '<?php json_decode($_GET["data"]);
+
+    '
+  want: []
+  covers:
+  - lycaon.php.code-injection
+- name: path-traversal-vulnerable
+  file: sample.php
+  source: '<?php readfile($_GET["path"]);
+
+    '
+  want:
+  - lycaon.php.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.php
+  source: '<?php readfile("public/index.html");
+
+    '
+  want: []
+  covers:
+  - lycaon.php.path-traversal
+- name: unsafe-deserialization-vulnerable
+  file: sample.php
+  source: '<?php unserialize($_POST["data"]);
+
+    '
+  want:
+  - lycaon.php.unsafe-deserialization
+  covers: []
+- name: unsafe-deserialization-safe
+  file: sample.php
+  source: '<?php json_decode($_POST["data"]);
+
+    '
+  want: []
+  covers:
+  - lycaon.php.unsafe-deserialization
+- name: xss-vulnerable
+  file: sample.php
+  source: '<?php echo $_GET["html"];
+
+    '
+  want:
+  - lycaon.php.xss
+  covers: []
+- name: xss-safe
+  file: sample.php
+  source: '<?php echo htmlspecialchars($_GET["html"], ENT_QUOTES, "UTF-8");
+
+    '
+  want: []
+  covers:
+  - lycaon.php.xss
+- name: tls-verification-disabled-vulnerable
+  file: sample.php
+  source: '<?php curl_setopt($c,CURLOPT_SSL_VERIFYPEER,false);
+
+    '
+  want:
+  - lycaon.php.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.php
+  source: '<?php curl_setopt($c,CURLOPT_SSL_VERIFYPEER,true);
+
+    '
+  want: []
+  covers:
+  - lycaon.php.tls-verification-disabled
+- name: precision-safe-conversion
+  file: sample.php
+  source: '<?php $n = intval($_GET["limit"]); $db->query("SELECT * FROM users LIMIT " . $n);
+
+    '
+  want: []
+  covers: []
+- name: review-escape-undone
+  file: sample.php
+  source: |
+    <?php $arg = trim(escapeshellarg($_GET['dir']), "'"); system("ls " . $arg);
+  want:
+  - lycaon.php.command-injection
+  covers: []
+- name: review-escape-used-as-argument
+  file: sample.php
+  source: |
+    <?php system("ls " . escapeshellarg($_GET['dir']));
+  want: []
+  covers: []
+- name: review-escape-benign-trim
+  file: sample.php
+  source: |
+    <?php system("ls " . trim(escapeshellarg($_GET['dir'])));
+  want: []
+  covers: []
+- name: review-escape-before-transform
+  file: sample.php
+  source: |
+    <?php system("ls " . escapeshellarg(trim($_GET['dir'], "'")));
+  want: []
+  covers: []
+- name: review-escape-benign-replacement
+  file: sample.php
+  source: |
+    <?php system("ls " . str_replace("x", "y", escapeshellarg($_GET['dir'])));
+  want: []
+  covers: []

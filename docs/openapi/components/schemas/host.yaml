@@ -1,0 +1,54 @@
+components:
+  schemas:
+    PersonRole:
+      $ref: person-role.generated.yaml#/components/schemas/PersonRole
+    HostCapability:
+      $ref: host-capability.generated.yaml#/components/schemas/HostCapability
+    Person:
+      x-go-generate: true
+      type: object
+      description: >-
+        A human who acts on this host. Durable authorship names a person by id;
+        the window or tab they used is a separate client id.
+      required: [id, role]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/PersonRole'
+    HostInfo:
+      x-go-generate: true
+      type: object
+      description: >-
+        The host a client is connected to, the contract it serves, and who the
+        client is on it. A client reads this before relying on any other route.
+      required: [host_id, host_public_key, product_version, contract_version, caller, capabilities]
+      additionalProperties: false
+      properties:
+        host_id:
+          type: string
+          format: uuid
+          description: >-
+            Stable identity of this install, derived from its public key. It
+            survives restarts and store resets, and changes only when the host
+            key is replaced.
+        host_public_key:
+          type: string
+          description: Ed25519 public key of this host, standard base64 of the 32 key bytes.
+        product_version:
+          type: string
+          description: Host product semver.
+        contract_version:
+          type: string
+          description: >-
+            Host API contract version (MAJOR.MINOR.PATCH). A client built for a
+            different major version must not use the host.
+        caller:
+          $ref: '#/components/schemas/Person'
+        capabilities:
+          type: array
+          description: Facilities the host offers this client, sorted and unique.
+          items:
+            $ref: '#/components/schemas/HostCapability'

@@ -1,0 +1,19 @@
+# mcp_call — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    mcp_call:
+        tool: mcp_call
+        tier_hint: recoverable
+        what_changes: Call external action {{ action_label }}.
+        who_affected: The connected service and anything it can reach on your behalf.
+        if_wrong: External effects may persist even if local files are unchanged.
+        allow_line: the `{{ tool }}` action
+        scenarios:
+            - id: default
+              vars:
+                action_label: docs.search_docs
+                tool: mcp_docs_search_docs
+              expect_contains:
+                - external action
+                - search_docs

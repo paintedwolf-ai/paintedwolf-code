@@ -1,0 +1,232 @@
+/* Split geometry resolves from the live host width. */
+.den-shell-stage-host--split {
+  --den-split-divider-px: 1px;
+  --den-split-chat-min: 340px;
+  --den-split-stage-min: 736px;
+
+  /* Zero below the combined column minimum. */
+  --den-split-fits: max(0px, calc((100% - 1076px) * 1000));
+
+  /* The conversation keeps its width, so window resizes land on the stage. */
+  --den-split-chat-fit: clamp(
+    var(--den-split-chat-min),
+    var(--den-split-chat-w),
+    calc(100% - var(--den-split-stage-min) - var(--den-split-divider-px))
+  );
+
+  /* The conversation takes the whole host when both columns cannot fit. */
+  --den-split-chat-track: max(
+    var(--den-split-chat-fit),
+    calc(100% - var(--den-split-divider-px) - var(--den-split-fits))
+  );
+
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) var(--den-split-divider-px)
+    var(--den-split-chat-track);
+  grid-template-areas: "stage divider chat";
+}
+
+.den-shell-stage-host--split[data-stage-leading="false"] {
+  grid-template-columns:
+    var(--den-split-chat-track) var(--den-split-divider-px)
+    minmax(0, 1fr);
+  grid-template-areas: "chat divider stage";
+}
+
+/* A hidden conversation gives the stage the whole split; its column stays mounted. */
+.den-shell-stage-host--split[data-conversation-hidden] {
+  grid-template-columns: minmax(0, 1fr) var(--den-split-divider-px) 0;
+}
+
+.den-shell-stage-host--split[data-conversation-hidden][data-stage-leading="false"] {
+  grid-template-columns: 0 var(--den-split-divider-px) minmax(0, 1fr);
+}
+
+/* A committed hide drops the divider; a drag preview keeps it under the pointer. */
+.den-shell-stage-host--split[data-conversation-hidden="hidden"] {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+
+.den-shell-stage-host--split[data-conversation-hidden="hidden"][data-stage-leading="false"] {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.den-shell-stage-host--split[data-conversation-hidden="hidden"]
+  .den-split-divider {
+  display: none;
+}
+
+.den-shell-stage-host--split[data-conversation-hidden] .den-split-col--chat {
+  overflow: hidden;
+  visibility: hidden;
+}
+
+/* Explicit context hiding keeps its mounted column and gives chat the host. */
+.den-shell-stage-host--split[data-context-hidden] {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.den-shell-stage-host--split[data-context-hidden][data-stage-leading="false"] {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+
+.den-shell-stage-host--split[data-context-hidden] .den-split-col--stage,
+.den-shell-stage-host--split[data-context-hidden] .den-split-divider {
+  display: none;
+}
+
+/* Narrow bands hide the column excluded by the host selection. */
+.den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+    [data-conversation-hidden], [data-context-hidden]
+  ) .den-split-divider {
+  display: none;
+}
+
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-1076"][data-narrow-survivor="conversation"]
+  ):not([data-conversation-hidden], [data-context-hidden]) .den-split-col--stage {
+  display: none;
+}
+
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+  ):not([data-conversation-hidden], [data-context-hidden]) {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+  ):not([data-conversation-hidden], [data-context-hidden])[data-stage-leading="false"] {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+  ):not([data-conversation-hidden], [data-context-hidden]) .den-split-col--chat {
+  display: none;
+}
+
+/* Narrow splits replace the hide control with the widen control. */
+.den-shell-stage-host--split:where([data-host-band~="max-1076"])
+  :is(.den-pane-toggle--hide-conversation, .den-pane-toggle--hide-context),
+.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+  .den-split-fit-restore {
+  display: none;
+}
+
+/* The pane away from the sidebar restores it only when its neighbor yields. */
+.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+  .den-nav-split-fallback {
+  display: none;
+}
+
+.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+  :is(.tabs__rail-leading, .tabs__rail-trailing):has(> .den-nav-split-fallback:only-child),
+.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+  .den-shell-header-titlebar__edge:not(
+    :has(> :not(.den-nav-split-fallback, .den-split-fit-restore))
+  ) {
+  display: none;
+}
+
+/* Empty mounted columns take no space. */
+.den-shell-stage-host[data-stage-occupied="false"] .den-split-col--stage,
+.den-shell-stage-host[data-chat-occupied="false"] .den-split-col--chat {
+  display: none;
+}
+
+.den-split-col {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* Portaled chrome may extend outside the column. */
+  contain: layout style;
+}
+
+.den-shell-stage-host--split .den-split-col--stage {
+  grid-area: stage;
+}
+
+.den-shell-stage-host--split .den-split-col--chat {
+  grid-area: chat;
+  flex: 1 1 0;
+}
+
+.den-split-col .den-shell-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Idle surfaces preserve scroll and editor state. */
+.den-resident-surface > .den-shell-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.den-resident-surface--active {
+  position: relative;
+  z-index: 1;
+}
+
+/* Clipping hides descendants that override visibility. */
+.den-resident-surface--pending,
+.den-resident-surface--idle {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  visibility: hidden;
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+
+/* A parked surface keeps its last size, so a window resize does not lay it out. */
+.den-resident-surface--idle {
+  inset: 0 auto auto 0;
+  width: var(--den-parked-width, 100%);
+  height: var(--den-parked-height, 100%);
+}
+
+.den-split-divider {
+  grid-area: divider;
+  position: relative;
+  flex: 0 0 var(--den-split-divider-px, 1px);
+  width: var(--den-split-divider-px, 1px);
+  cursor: col-resize;
+  z-index: var(--den-z-stage-header);
+  outline: none;
+}
+
+.den-split-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 -2px;
+  /* A narrow target leaves adjacent editor scrollbars reachable. */
+}
+
+.den-split-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--den-line);
+}
+
+.den-shell--split-resizing,
+.den-shell--split-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.den-shell--split-resizing .den-split-col {
+  pointer-events: none;
+}
+

@@ -1,0 +1,10 @@
+id: OVERLAY_PROMOTE_SPILL
+emit: banner
+category: informational
+severity: info
+message: 'Overlay {{ paintedwolf.job_id }} assessment was shortened inline.'
+what: 'Overlay {{ paintedwolf.job_id }} assessment was shortened inline.{% if paintedwolf.spill_path %} Retained JSON is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available.{% endif %}'
+cause: The assessment exceeded the inline budget.
+why: This changes delivery only; an already completed promotion remains applied.
+fix: '{% if paintedwolf.spill_readable %}Use `read(path="{{ paintedwolf.spill_path }}")` with offset/limit to inspect retained JSON.{% endif %} Prefer `preview_overlay(overlay_id="{{ paintedwolf.job_id }}", path="<conflict path>")` for a bounded current assessment of a still-pending overlay. For an applied promotion, inspect the primary tree and completion record; do not promote again to recover output.'
+instead: Inspect retained evidence or current state without repeating promotion

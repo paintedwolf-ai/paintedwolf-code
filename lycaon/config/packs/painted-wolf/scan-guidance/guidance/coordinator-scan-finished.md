@@ -1,0 +1,3 @@
+Security scan finished — your `wait()` **scan_done** trigger fired.{% if scan_id %} Scan `{{ scan_id }}`{% if scan_categories %} ({{ scan_categories }}){% endif %} is **{{ scan_status }}**{% if scan_findings_count %} with {{ scan_findings_count }} finding(s){% endif %}.{% endif %}
+
+Resume the user's task. If pack board **`Scan:`** shows a regression tail (`+N new`, `regression · +N critical`), dispatch verify or implement fix before advance — use **`scan_compare`** for grounded introduced/resolved evidence. Use `scan_query` or `pack_board` only for security asks — else note completion and continue. Another scan in flight → **`wait(timeout_ms=300000, conditions=[{"kind":"scan_done"}])`**.

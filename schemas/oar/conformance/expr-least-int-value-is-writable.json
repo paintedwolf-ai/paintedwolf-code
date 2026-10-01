@@ -1,0 +1,49 @@
+{
+  "id": "expr-least-int-value-is-writable",
+  "title": "The magnitude 9223372036854775808 is admitted as the immediate operand of unary minus",
+  "covers": [
+    "OAR-EXPR-21",
+    "OAR-FACT-23"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "LEAST_INT",
+      "effect": "warn",
+      "when": "fire_count > -9223372036854775808"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "LEAST_INT"
+  }
+}

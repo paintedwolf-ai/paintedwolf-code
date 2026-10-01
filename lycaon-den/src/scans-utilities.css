@@ -1,0 +1,120 @@
+/* Layout for the Security stage panels; theme values stay in scans-domain.css. */
+
+@utility den-finding-filter__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 15rem;
+  max-width: min(26rem, 90vw);
+  padding: 6px 0;
+}
+
+@utility den-finding-ignore__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 15rem;
+  max-width: min(26rem, 90vw);
+  padding: 6px 0;
+}
+
+@utility den-finding-filter__group {
+  &:first-child {
+    margin-top: 2px;
+  }
+}
+
+@utility den-finding-ignore__group {
+  &:first-child {
+    margin-top: 2px;
+  }
+}
+
+/* Popover rows carry the same control at the density other menus use. */
+@utility den-finding-filter__row {
+  & :is(.den-radio, .den-checkbox) {
+    flex-shrink: 0;
+    width: 0.9286rem;
+    height: 0.9286rem;
+  }
+}
+
+@utility den-finding-ignore__row {
+  & :is(.den-radio, .den-checkbox) {
+    flex-shrink: 0;
+    width: 0.9286rem;
+    height: 0.9286rem;
+  }
+}
+
+@utility den-finding-filter__row--stacked {
+  align-items: flex-start;
+}
+
+@utility den-finding-filter__row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+@utility den-finding-ignore__row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+@utility den-finding-ignore__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 12px;
+}
+
+@utility den-finding-ignore__reason {
+  margin: 0 12px;
+  width: calc(100% - 24px);
+}
+
+@utility den-finding-ignore__justification {
+  margin: 0 12px;
+  width: calc(100% - 24px);
+}
+
+/* Matches the density the project list uses for a row-scale control. */
+@utility den-ledger-check {
+  & .den-checkbox {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+  }
+}
+
+@utility den-ledger-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+@utility den-ledger-selection__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@utility den-ignore-rules__row-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@utility den-ignore-rules__action {
+  justify-self: end;
+  white-space: nowrap;
+}

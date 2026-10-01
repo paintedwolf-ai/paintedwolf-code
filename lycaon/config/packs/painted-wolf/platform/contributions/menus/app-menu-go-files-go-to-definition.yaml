@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-files-go-to-definition
+slot: "app_menu.go"
+command: painted-wolf/platform:files-go-to-definition
+group: "6"
+order: 23
+label: "Go to definition"

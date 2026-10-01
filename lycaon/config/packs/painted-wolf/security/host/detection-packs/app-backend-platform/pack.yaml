@@ -1,0 +1,6 @@
+id: app-backend-platform
+label: App backend platforms
+description: >-
+  Managed backend platform (Atlas, PlanetScale, Neon, Firebase, Supabase,
+  Appwrite) operations that delete a project, organization, or database, or
+  reset one to empty.

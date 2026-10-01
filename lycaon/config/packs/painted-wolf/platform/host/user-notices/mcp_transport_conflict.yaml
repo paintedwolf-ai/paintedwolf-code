@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Choose one transport
+message: A provider is either HTTP (URL) or stdio (command), not both.
+suggested_action: Clear the URL or the command so only one transport remains.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not both
+      - transport

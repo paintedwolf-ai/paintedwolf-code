@@ -1,0 +1,139 @@
+{
+  "id": "workflow-dependent-recovery",
+  "version": "1.0.0",
+  "name": "Dependency graph recovery",
+  "description": "Process the release according to README.md.",
+  "trigger": "/workflow-dependent-recovery",
+  "request": {
+    "question": "Which release should this workflow process?"
+  },
+  "initial_posture": "build",
+  "agents": [
+    {
+      "id": "coordinator",
+      "tools": "all"
+    }
+  ],
+  "phases": [
+    {
+      "id": "recovery_scope",
+      "activity_label": "Recovery scope",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/recovery_scope.md",
+      "review_loop": {
+        "evidence_key": "recovery_scope",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "core": "string",
+          "api": "string",
+          "search": "string",
+          "web": "string",
+          "jobs": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:recovery_scope"
+      ],
+      "next": "select_action"
+    },
+    {
+      "id": "select_action",
+      "activity_label": "Select action",
+      "coordinator_surface": "recon_reconcile",
+      "surface_template": "agents/select_action.md",
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "choice_transition_required"
+      ],
+      "next": "release_index",
+      "transitions": [
+        {
+          "id": "seal",
+          "to": "release_index",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Seal"
+        },
+        {
+          "id": "record_action",
+          "to": "recovery_action",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Record action"
+        }
+      ]
+    },
+    {
+      "id": "recovery_action",
+      "activity_label": "Recovery action",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/recovery_action.md",
+      "review_loop": {
+        "evidence_key": "recovery_action",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "component": "string",
+          "action": "string",
+          "artifact": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:recovery_action"
+      ],
+      "next": "select_action"
+    },
+    {
+      "id": "release_index",
+      "activity_label": "Release index",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/release_index.md",
+      "review_loop": {
+        "evidence_key": "release_index",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "core": "string",
+          "api": "string",
+          "search": "string",
+          "web": "string",
+          "jobs": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:release_index"
+      ],
+      "next": "done"
+    },
+    {
+      "id": "done",
+      "activity_label": "Complete",
+      "terminal": true,
+      "complete_when": "orchestration_complete"
+    }
+  ],
+  "controls": {
+    "phase_advance": "host"
+  }
+}

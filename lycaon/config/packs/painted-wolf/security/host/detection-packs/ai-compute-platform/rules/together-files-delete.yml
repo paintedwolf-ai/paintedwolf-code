@@ -1,0 +1,27 @@
+title: Delete a Together AI file
+id: c7f6e622-8f1f-4559-b69f-ea43370b85e3
+description: Permanently deletes an uploaded file, such as a fine-tuning training set.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image:
+      - tg
+      - together
+    CommandLine|contains: ' files delete'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and not filter_rehearsal and not filter_local

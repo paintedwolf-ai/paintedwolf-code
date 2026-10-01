@@ -1,0 +1,38 @@
+oar: '1.0'
+id: SCAN_NOT_COMPLETE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_summary
+  - scan_query
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.scan_id
+  - paintedwolf.status
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SCAN_NOT_COMPLETE"
+effect: block
+copy:
+  what: Scan {{ paintedwolf.scan_id }} exists with status {{ paintedwolf.status }}; drill-down requires successful
+    completion.
+  cause: Host SAST/SCA/secrets is still pending or running, or the scan failed before ingest.
+  why: scan_query and scan_summary drill-down require the authoritative finding set written at completion.
+  fix: Wait or poll only while the scan is active. For failed or canceled scans, resolve the failure and report
+    the need for a new intended assessment. Do not substitute another scan when the task binds this ID.
+  instead: Branch on Code; drill down only on complete scans
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_drilldown
+x-paintedwolf-message: Scan not complete — drill-down not ready yet
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    scan_id: scan-1
+    status: running
+    tool: scan_query
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_NOT_COMPLETE'

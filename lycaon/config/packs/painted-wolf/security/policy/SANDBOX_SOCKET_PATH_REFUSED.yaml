@@ -1,0 +1,29 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_REFUSED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_REFUSED"
+effect: block
+copy:
+  what: The host could not resolve or inspect socket path {{ paintedwolf.path }}.
+  cause: 'Resolution failed: {{ paintedwolf.rejection_reason }}.'
+  why: Spawn must not proceed on an unresolved socket identity.
+  fix: Resolve the reported host filesystem or service-access failure before retrying the intended socket. A blind
+    retry or different path does not repair a permission/I/O failure.
+  instead: Branch on Code; correct structured args — never parse stderr
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: structured socket path refused
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_REFUSED'
+  - socket path

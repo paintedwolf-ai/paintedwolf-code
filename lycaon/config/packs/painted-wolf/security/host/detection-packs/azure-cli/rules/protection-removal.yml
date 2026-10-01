@@ -1,0 +1,36 @@
+title: Remove a protection that prevents loss
+id: f0a5c035-6194-466a-a9de-5f5961fe5dad
+description: >-
+  Deletes a management lock or turns off backup protection, removing the guard
+  that stands between a later command and the data.
+references:
+  - https://learn.microsoft.com/en-us/cli/azure/reference-index
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: az
+  verbs_protection_removal:
+    CommandLine|contains:
+      - ' lock delete'
+  selection_backup_off:
+    CommandLine|contains: ' backup protection disable'
+  selection_backup_data_deleted:
+    CommandLine|re: '(?i)--delete-backup-data\s+true'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and (verbs_protection_removal or (selection_backup_off and selection_backup_data_deleted))
+    and not filter_rehearsal and not filter_local

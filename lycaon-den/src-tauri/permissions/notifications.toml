@@ -1,0 +1,19 @@
+[[permission]]
+identifier = "allow-den-notify-permission-state"
+description = "Read macOS UNUserNotificationCenter authorization state."
+commands.allow = ["den_notify_permission_state"]
+
+[[permission]]
+identifier = "allow-den-notify-request-permission"
+description = "Request macOS notification authorization."
+commands.allow = ["den_notify_request_permission"]
+
+[[permission]]
+identifier = "allow-den-notify-send"
+description = "Deliver a macOS UNUserNotificationCenter notification."
+commands.allow = ["den_notify_send"]
+
+[[permission]]
+identifier = "allow-den-notify-cancel-sessions"
+description = "Cancel macOS notifications for the given sessions."
+commands.allow = ["den_notify_cancel_sessions"]

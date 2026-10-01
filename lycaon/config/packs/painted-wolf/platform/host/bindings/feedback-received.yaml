@@ -1,0 +1,14 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': feedback.received
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-feedback-received
+tier: builtin
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - pending user feedback resolves (user submit) — OnFeedbackResolved
+  required:
+  - ask_user
+  - continue

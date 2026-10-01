@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Painted Wolf Code</title>
+    <style>
+      html {
+        color-scheme: light dark;
+        /* Stock light until the memo or token sheet writes --den-background. */
+        background: var(--den-background, #ffffff);
+      }
+      body {
+        margin: 0;
+        background: var(--den-background, #ffffff);
+      }
+      body:not(.den-app-ready) #root {
+        display: none;
+      }
+      @keyframes den-boot-fade-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes den-boot-fade-out {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+      #den-boot-fallback {
+        --boot-fade-ms: 480ms;
+        /* Overlay titlebar height; the boot script below sets it. */
+        --boot-titlebar-inset: 0px;
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--den-background, #ffffff);
+        color: var(--den-text, #1c1b1a);
+        z-index: 2147483646;
+        opacity: 0;
+        cursor: default;
+        animation: den-boot-fade-in var(--boot-fade-ms) ease-out forwards;
+      }
+      #den-boot-fallback,
+      #den-boot-fallback * {
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -webkit-user-drag: none;
+      }
+      #den-boot-fallback ::selection,
+      #den-boot-fallback *::selection {
+        background: transparent;
+        color: inherit;
+      }
+      #den-boot-fallback.den-boot-fallback--out {
+        animation: den-boot-fade-out var(--boot-fade-ms) ease-out forwards;
+        /* App JS turns pointer events off as the fade starts, so the mounted shell
+           takes clicks and window drag. */
+      }
+      /* Viewport units only — rem tracks the OS text scale through --den-text-scale. */
+      #den-boot-fallback .den-boot-fallback-name {
+        margin: 0;
+        padding: 0 3vmin;
+        max-width: 94vw;
+        text-align: center;
+        white-space: nowrap;
+        /* Width constrains a nowrap name; 10vw plus 3vmin padding fits the
+           narrowest allowed window. */
+        font-size: clamp(40px, 10vw, 120px);
+        font-weight: 600;
+        line-height: 1.1;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: -0.03em;
+        /* Pull up by half the titlebar inset so the name reads as centered over the
+           whole window, including the overlay titlebar/menu-bar zone at the top. */
+        transform: translateY(calc(var(--boot-titlebar-inset) / -2));
+      }
+      body.den-peer-boot #den-boot-fallback {
+        --boot-fade-ms: 120ms;
+      }
+      body.den-peer-boot #den-boot-fallback .den-boot-fallback-name {
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0;
+        color: var(--den-text-muted, #6d6965);
+        /* This label carries a file name, so its length is unbounded. The
+           container's aria-label keeps the whole thing. */
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #den-boot-fallback {
+          animation: none;
+          opacity: 1;
+        }
+      }
+      /* Dark scheme: memo values when present, else these literals. */
+      html[data-den-appearance="dark"],
+      html[data-den-appearance="dark"] body,
+      html[data-den-appearance="dark"] #den-boot-fallback {
+        background: var(--den-background, #191817);
+        color: var(--den-text, #e4e2df);
+      }
+      html[data-den-appearance="dark"]
+        body.den-peer-boot
+        #den-boot-fallback
+        .den-boot-fallback-name {
+        color: var(--den-text-muted, #aaa6a1);
+      }
+      /* Unstamped root follows the OS. */
+      @media (prefers-color-scheme: dark) {
+        html:not([data-den-appearance]),
+        html:not([data-den-appearance]) body,
+        html:not([data-den-appearance]) #den-boot-fallback {
+          /* Before the token sheet loads. Keep in step with tokens.css. */
+          background: #191817;
+          color: #e4e2df;
+        }
+        html:not([data-den-appearance])
+          body.den-peer-boot
+          #den-boot-fallback
+          .den-boot-fallback-name {
+          color: #aaa6a1;
+        }
+      }
+    </style>
+    <script>
+      // Inherit CSP nonce from served stylesheet for dynamically created styles.
+      var bootStyleNonce = (function () {
+        var served = typeof document.querySelector === "function" ? document.querySelector("style") : null;
+        if (served && served.nonce) return served.nonce;
+        return (document.currentScript && document.currentScript.nonce) || "";
+      })();
+
+      // Replay the last painted appearance before the first frame.
+      // Writer: src/contributions/boot-theme-cache.ts. Shape pinned by
+      // boot-theme-cache.test.ts.
+      (function () {
+        try {
+          var raw = localStorage.getItem("paintedwolf.boot-theme");
+          if (!raw) return;
+          var memo = JSON.parse(raw);
+          if (!memo) return;
+          var fixed = memo.mode === "light" || memo.mode === "dark" ? memo.mode : null;
+          var prefersDark =
+            typeof window.matchMedia === "function" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var scheme = fixed || (prefersDark ? "dark" : "light");
+          var root = document.documentElement;
+          root.setAttribute("data-den-appearance", scheme);
+          root.style.colorScheme = scheme;
+          var paint = memo[scheme];
+          if (!paint || typeof paint.style !== "string") return;
+          // Scope replay to the scheme stamped on the root.
+          var replay = document.createElement("style");
+          replay.id = "den-boot-theme-replay";
+          if (bootStyleNonce) replay.nonce = bootStyleNonce;
+          replay.textContent =
+            ':root:root[data-den-appearance="' + scheme + '"]{' + paint.style + "}";
+          document.head.appendChild(replay);
+          if (paint.logomark === "hidden" || paint.logomark === "shown") {
+            root.setAttribute("data-den-logomark", paint.logomark);
+          }
+        } catch (err) {
+          /* Baked stylesheet paints. */
+        }
+      })();
+
+      // Replay the last painted type before the first frame.
+      // Writer: src/fonts/boot-font-cache.ts. Shape pinned by
+      // boot-font-cache.test.ts.
+      (function () {
+        try {
+          var raw = localStorage.getItem("paintedwolf.boot-fonts");
+          if (!raw) return;
+          var memo = JSON.parse(raw);
+          if (!memo) return;
+          var root = document.documentElement;
+          if (typeof memo.ui === "string" && memo.ui) {
+            root.style.setProperty("--den-font-ui", memo.ui);
+          }
+          if (typeof memo.mono === "string" && memo.mono) {
+            root.style.setProperty("--den-font-mono", memo.mono);
+          }
+        } catch (err) {
+          /* Generated defaults paint. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run Painted Wolf Code.</noscript>
+    <!-- Native drag region: active before app code runs. -->
+    <div id="den-boot-fallback" role="status" aria-label="Loading Painted Wolf Code" data-tauri-drag-region="deep">
+      <p class="den-boot-fallback-name">Painted Wolf Code</p>
+    </div>
+    <div id="root"></div>
+    <script>
+      (function () {
+        var isTauri = "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
+        var query = new URLSearchParams(window.location.search || "");
+        var windowSubject = query.get("window_subject");
+        var isPeerWindow = windowSubject === "file" || windowSubject === "session" || windowSubject === "context";
+        if (isPeerWindow) document.body.classList.add("den-peer-boot");
+
+        // rAF is throttled off-screen; the timeout is the one that fires.
+        // Runs before splash work so a throw cannot leave the window hidden.
+        if (isTauri) {
+          var revealed = false;
+          var revealWindow = function () {
+            if (revealed) return;
+            revealed = true;
+            try {
+              window.__TAURI_INTERNALS__.invoke("den_reveal_window");
+            } catch (err) {
+              console.debug("[boot] reveal window failed", err);
+            }
+          };
+          requestAnimationFrame(function () {
+            requestAnimationFrame(revealWindow);
+          });
+          setTimeout(revealWindow, 100);
+        }
+
+        var fallback = document.getElementById("den-boot-fallback");
+        if (!fallback) return;
+
+        if (isPeerWindow) {
+          var peerLabel = "Opening window…";
+          if (windowSubject === "file") {
+            var filePath = query.get("path") || "";
+            var segments = filePath.split("/");
+            peerLabel = "Opening " + (segments[segments.length - 1] || "file") + "…";
+          } else if (windowSubject === "session") {
+            peerLabel = "Opening chat…";
+          } else if (windowSubject === "context") {
+            peerLabel = "Opening " + (query.get("stage_id") || "view") + "…";
+          }
+          fallback.setAttribute("aria-label", peerLabel);
+          var fallbackName = fallback.querySelector(".den-boot-fallback-name");
+          if (fallbackName) fallbackName.textContent = peerLabel;
+        }
+
+        // Prevent text selection during boot fallback.
+        fallback.addEventListener("selectstart", function (event) {
+          event.preventDefault();
+        });
+
+        // Set before first paint so the name starts centered over the titlebar zone.
+        var ua = (navigator.userAgent || "").toLowerCase();
+        var plat = (navigator.platform || "").toLowerCase();
+        var isMac = plat.indexOf("mac") >= 0 || ua.indexOf("mac os") >= 0;
+        var isLinux = plat.indexOf("linux") >= 0 || ua.indexOf("linux") >= 0;
+        if (isTauri && (isMac || isLinux)) {
+          fallback.style.setProperty("--boot-titlebar-inset", isMac ? "30px" : "28px");
+        }
+      })();
+    </script>
+    <script src="/src/index.tsx" type="module"></script>
+  </body>
+</html>

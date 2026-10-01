@@ -1,0 +1,36 @@
+oar: '1.0'
+id: RECALL_LIVE_CODE_NOT_IN_SCOPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - recall
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.can_grep
+  - paintedwolf.can_find
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RECALL_LIVE_CODE_NOT_IN_SCOPE"
+effect: block
+copy:
+  what: recall reads the record, not the working tree.
+  cause: The query asked for kind:code or kind:file, which are matches against files as they are now.
+  why: The two answer different questions. A recalled observation is dated and may be stale; a tree match is
+    current. One result shape carrying both would leave no way to tell which one you got.
+  fix: '{% if paintedwolf.can_grep %}Use grep for current-tree content.{% endif %}{% if paintedwolf.can_find
+    %} Use find for current paths.{% endif %} Current-source evidence requires an offered source tool; recall
+    retrieves dated observations, including completed legs, and cannot establish current file contents.'
+  instead: Branch on Code RECALL_LIVE_CODE_NOT_IN_SCOPE; use grep or find for the current tree
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
+x-paintedwolf-message: recall reads the record, not the working tree.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: recall
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RECALL_LIVE_CODE_NOT_IN_SCOPE'

@@ -1,0 +1,43 @@
+/* Brand lockup sits in the aside titlebar, out of the nav flow. */
+.den-shell-aside-main {
+  --den-nav-brand-titlebar-top: 5px;
+  --den-nav-content-titlebar-offset: 0px;
+  position: relative;
+}
+
+.den-shell-aside-main > .den-nav-brand {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 0;
+  /* Align the lockup's visible label to the Files stage tab label. */
+  top: var(--den-nav-brand-titlebar-top);
+  left: var(--den-nav-rail-gutter);
+  width: fit-content;
+  max-width: calc(100% - (var(--den-nav-rail-gutter) + 48px));
+  height: calc(var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+  margin: 0;
+  padding: var(--den-stage-inset-y) 8px;
+}
+
+.den-custom-chrome .den-shell-aside-main > .den-nav-brand {
+  /* Compact hit target; the lockup stays on the stage tab strip. */
+  height: auto;
+}
+
+.den-custom-chrome .den-shell-aside-main {
+  --den-nav-brand-titlebar-top: calc(var(--den-titlebar-inset) + 13px);
+  --den-nav-content-titlebar-offset: calc(var(--den-titlebar-inset) - 10px);
+}
+
+/* Mirrored Files puts the hide control on the lockup's left; keep the same gap. */
+.den-custom-chrome
+  .den-shell--orientation-mirrored:has(.project-files-view)
+  .den-shell-aside-main > .den-nav-brand {
+  left: calc(var(--den-nav-rail-gutter) + 38px);
+}
+
+/* Offset the main rail under the titlebar lockup; dock stays put. */
+.den-shell-aside-main > .den-shell-nav-frame,
+.den-shell-aside-main > .home-nav {
+  margin-top: var(--den-nav-content-titlebar-offset);
+}

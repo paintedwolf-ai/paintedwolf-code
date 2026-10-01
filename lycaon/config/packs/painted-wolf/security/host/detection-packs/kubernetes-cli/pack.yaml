@@ -1,0 +1,7 @@
+id: kubernetes-cli
+label: Kubernetes
+description: >-
+  Cluster operations that remove a namespace or workload, widen cluster access,
+  read secret material, or take nodes out of service.
+equivalents:
+  kubectl: [oc, kubecolor]

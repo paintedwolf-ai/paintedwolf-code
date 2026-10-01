@@ -1,0 +1,15 @@
+id: painted-wolf/platform:files-version-prev
+title: "Previous version"
+scope: files
+keywords:
+  - "previous version"
+  - "earlier version"
+  - "version history step"
+category: navigation
+when:
+  all:
+    - fact: files_stage_active
+    - fact: files_version_historical
+action:
+  kind: native_ui
+  handler: "files.previousVersion"

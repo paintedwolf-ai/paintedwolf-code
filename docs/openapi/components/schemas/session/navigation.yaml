@@ -1,0 +1,131 @@
+components:
+  schemas:
+    SourceContext:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [locations, truncated]
+      description: Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+      properties:
+        locations:
+          type: array
+          maxItems: 4096
+          items:
+            $ref: "#/components/schemas/NavigationTarget"
+        truncated:
+          type: boolean
+    NavigationStatus:
+      type: string
+      enum: [pending, resolved, ambiguous, missing, unavailable]
+    NavigationTarget:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, root_id, path, entry_kind]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        entry_kind:
+          $ref: "#/components/schemas/NavigationEntryKind"
+        worker_id:
+          type: string
+          format: uuid
+    NavigationReference:
+      x-go-generate: true
+      type: object
+      required: [id, syntax, mention, project_id, path, status, explicit]
+      additionalProperties: false
+      description: A producer destination and its bounded host resolution. Navigation never supplies citation grounding.
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          minLength: 1
+          maxLength: 128
+        syntax:
+          type: string
+          description: Markdown occurrence kind (link, code, fence, or text).
+        mention:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Exact Markdown destination or standalone path token; independent of display label.
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        entry_kind:
+          $ref: "#/components/schemas/NavigationEntryKind"
+        status:
+          $ref: "#/components/schemas/NavigationStatus"
+        explicit:
+          type: boolean
+          description: True only for an authored Markdown destination, rather than an inferred prose path.
+        deleted:
+          type: boolean
+          description: The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+        worker_id:
+          type: string
+          format: uuid
+        line:
+          type: integer
+        end_line:
+          type: integer
+        candidates:
+          type: array
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/NavigationTarget"
+    ResolveMessageNavigationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [message_id, content_sha256]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        content_sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+        reference_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          maxLength: 128
+        candidate_index:
+          x-go-pointer: true
+          type: integer
+          minimum: 0
+          maximum: 31
+          description: Validate this candidate of the stored ambiguous reference; requires reference_id.
+    MessageNavigationResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [content_sha256, references]
+      properties:
+        content_sha256:
+          type: string
+        references:
+          type: array
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/NavigationReference"
+    NavigationEntryKind:
+      type: string
+      description: Navigable project filesystem entry identity.
+      enum:
+      - file
+      - folder

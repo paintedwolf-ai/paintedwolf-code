@@ -1,0 +1,41 @@
+oar: '1.0'
+id: SKILL_RESOURCE_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - skills_read
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.available
+  - paintedwolf.name
+  - paintedwolf.resource
+  - paintedwolf.unknown_target
+when: paintedwolf.rejection_code == "SKILL_RESOURCE_UNKNOWN"
+effect: block
+copy:
+  what: Skill {{ paintedwolf.name }} has no readable resource at {{ paintedwolf.resource }}.
+  cause: The path is not a regular bundled file listed for this skill.
+  why: Skill resources are confined to their own directory and selected by exact relative path.
+  fix: 'Call skills_read for the skill instructions, then use one of its listed files: {{ paintedwolf.available
+    }}'
+  instead: Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:skills_read
+x-paintedwolf-message: 'Skill {{ paintedwolf.name }} has no resource {{ paintedwolf.resource }}. Available:
+  {{ paintedwolf.available }}'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    name: verify-a-change
+    resource: references/missing.md
+    available:
+    - references/failure-triage.md
+    profile: implement
+    tool: skills_read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SKILL_RESOURCE_UNKNOWN'

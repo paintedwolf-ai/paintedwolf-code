@@ -1,0 +1,15 @@
+id: path-explorer
+name: Path explorer
+description: Bounded path, find, and grep code survey
+tool_profile: explore_readonly
+exec_mode: none
+capabilities:
+  - explore
+  - survey
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/path-explorer.md

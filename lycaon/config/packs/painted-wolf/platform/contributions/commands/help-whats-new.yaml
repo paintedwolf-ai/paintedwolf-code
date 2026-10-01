@@ -1,0 +1,10 @@
+id: painted-wolf/platform:help-whats-new
+title: "What’s new"
+scope: "global"
+keywords:
+  - "release notes"
+  - "changelog"
+  - "update"
+action:
+  kind: native_ui
+  handler: "help.whatsNew"

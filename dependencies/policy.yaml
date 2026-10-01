@@ -1,0 +1,37 @@
+# Dependency policy. See dependencies/README.md for the file layout and fields.
+
+title: Dependency inventory and update guide
+
+quadrants:
+  high_urgency_high_friction: |
+    Planned precision updates. Watch upstream advisories continuously. Run each update as an
+    isolated task with full cross-platform regression testing.
+  high_urgency_low_friction: |
+    Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list
+    surface these; take patches promptly.
+  low_urgency_high_friction: |
+    Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or
+    security fix calls for it.
+  low_urgency_low_friction: |
+    Opportunistic maintenance during routine windows.
+
+dependabot:
+  interval: weekly
+  cooldown_days: 3
+  extra:
+    - ecosystem: github-actions
+      directory: /
+      group: github-actions
+
+# Render order.
+sections:
+  - runtimes.yaml
+  - engines.yaml
+  - tools.yaml
+  - vendored.yaml
+  - frontend.yaml
+  - backend-go.yaml
+  - tauri.yaml
+  - decision-engine.yaml
+  - document-core.yaml
+  - commentlint.yaml

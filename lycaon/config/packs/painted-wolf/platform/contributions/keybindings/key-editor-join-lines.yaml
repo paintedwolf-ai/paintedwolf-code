@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-join-lines
+command: painted-wolf/platform:editor-join-lines
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+J"
+  windows:
+    - "Mod+J"
+  linux:
+    - "Mod+J"

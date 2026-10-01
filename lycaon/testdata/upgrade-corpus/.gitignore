@@ -1,0 +1,4 @@
+# Live SQLite sidecars must never enter the upgrade corpus (B1/B4).
+store.db-wal
+store.db-shm
+store.db.bak

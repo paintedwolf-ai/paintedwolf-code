@@ -1,0 +1,12 @@
+id: fan-out-recon
+pattern: fan_out
+iteration_cap: 8
+task: Parallel repository recon
+fan_out:
+  profile: path-explorer
+  subtasks:
+    - "List top-level packages and build files"
+    - "Find test entrypoints and CI config"
+    - "Use `summarize` on src/ and report layout and main modules"
+  max_workers: 5
+  aggregation: merge

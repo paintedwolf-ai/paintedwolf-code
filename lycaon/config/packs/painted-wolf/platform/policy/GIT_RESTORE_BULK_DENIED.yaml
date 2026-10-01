@@ -1,0 +1,37 @@
+oar: '1.0'
+id: GIT_RESTORE_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - git_restore
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_paths
+when: paintedwolf.rejection_code == "GIT_RESTORE_BULK_DENIED"
+effect: block
+copy:
+  what: git_restore received {{ paintedwolf.requested }} paths; the current bound is {{ paintedwolf.max_paths
+    }}.
+  cause: The explicit restore set exceeds the per-call path bound.
+  why: Restoring paths replaces work and must retain the reviewed target/source intent.
+  fix: Split only the authorized restore targets into batches of at most {{ paintedwolf.max_paths }}, retaining
+    the intended restore source. Do not add paths or discard unrelated work.
+  instead: Branch on Code; fix args and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: git_restore bulk path list denied
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: src/main.go
+    profile: coordinator
+    tool: git_restore
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_RESTORE_BULK_DENIED'

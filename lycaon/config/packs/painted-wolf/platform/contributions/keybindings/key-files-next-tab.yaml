@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-next-tab
+command: painted-wolf/platform:files-next-tab
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+]"
+  windows:
+    - "Mod+Shift+]"
+  linux:
+    - "Mod+Shift+]"

@@ -1,0 +1,43 @@
+rules:
+- id: lycaon.powershell.download-execution
+  languages:
+  - generic
+  severity: WARNING
+  message: Downloaded content is executed as PowerShell code
+  metadata:
+    category: security
+    cwe: CWE-494
+    confidence: MEDIUM
+    technology:
+    - powershell
+    parser_mode: generic
+  options: {}
+  paths: &id001
+    include:
+    - '*.ps1'
+    - '*.psm1'
+    - '*.psd1'
+  patterns:
+  - pattern-either:
+    - pattern: iex ( ... DownloadString ( ... ) ... )
+    - pattern: Invoke-WebRequest ... | Invoke-Expression
+    - pattern: Invoke-WebRequest ... | iex
+  - pattern-not-inside: '< # ... # >'
+- id: lycaon.powershell.certificate-validation-disabled
+  languages:
+  - generic
+  severity: ERROR
+  message: A certificate callback accepts every server certificate
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - powershell
+    parser_mode: generic
+  options: {}
+  paths: *id001
+  patterns:
+  - pattern-either:
+    - pattern: '[ System . Net . ServicePointManager ] :: ServerCertificateValidationCallback = { $ true }'
+  - pattern-not-inside: '< # ... # >'

@@ -1,0 +1,10 @@
+id: painted-wolf/platform:settings-open
+title: "Open settings"
+icon: settings
+scope: "global"
+keywords:
+  - "preferences"
+  - "options"
+action:
+  kind: native_ui
+  handler: "settings.open"

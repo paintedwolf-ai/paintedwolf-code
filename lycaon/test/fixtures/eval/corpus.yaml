@@ -1,0 +1,14 @@
+id: tool-sequences-v2
+tasks:
+  - id: named-area-explanation
+    prompt: >-
+      Explain how internal/app starts the service and connects configuration to HTTP routing. Do not change files.
+  - id: precise-symbol
+    prompt: >-
+      Find the LoadConfig definition and report its default listen address with exact file evidence. Do not change files.
+  - id: unknown-layout
+    prompt: >-
+      Identify where this repository defines its health endpoint and explain the shortest call path to it. Do not change files.
+  - id: cross-cutting-gap
+    prompt: >-
+      Explain how invalid configuration prevents startup, including the remaining gap between validation and server construction. Do not change files.

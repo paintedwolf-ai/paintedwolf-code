@@ -1,0 +1,5 @@
+id: alibaba-access-key-id
+upstream_id: alibaba-access-key-id
+title: Alibaba access key ID
+severity: critical
+enabled: false

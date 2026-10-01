@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-unfold-code
+title: "Unfold code"
+scope: files
+category: editing
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.unfoldCode"

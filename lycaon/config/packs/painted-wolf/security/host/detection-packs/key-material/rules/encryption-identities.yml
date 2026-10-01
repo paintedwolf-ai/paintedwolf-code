@@ -1,0 +1,26 @@
+title: Write an encryption or image-signing identity
+id: 2c74e8a9-51b6-4f03-9d2a-7e8b41c6053f
+description: >-
+  Rewrites an age or sops identity, or the Docker content-trust root that decides
+  which images this machine will accept as signed.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-12'
+modified: '2026-08-12'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.key-material
+level: high
+detection:
+  selection_target:
+    TargetFile|contains:
+      - '~/.age/'
+      - '~/.config/sops/age/'
+      - '~/.docker/trust/'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_target and not filter_rehearsal

@@ -1,0 +1,171 @@
+components:
+  schemas:
+    VisualArtifact:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - mime
+      - source
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        mime:
+          type: string
+        bytes:
+          x-go-type: "[]byte"
+          type: string
+          format: byte
+        store_ref:
+          type: boolean
+        source:
+          $ref: "#/components/schemas/VisualArtifactSource"
+        caption:
+          type: string
+        evidence_handle:
+          type: string
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Held browser page that produced live-tool media.
+        recorded_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Wall-clock start of a time-based visual recording.
+        duration_ms:
+          x-go-name: "DurationMS"
+          type: integer
+          format: int64
+          minimum: 0
+          description: Duration of a time-based visual recording in milliseconds.
+        width:
+          type: integer
+          minimum: 1
+          description: Raster width in pixels, read from the stored image header. Absent for non-raster media.
+        height:
+          type: integer
+          minimum: 1
+          description: Raster height in pixels, read from the stored image header. Absent for non-raster media.
+        perceive:
+          type: boolean
+          description: When true, host attaches this image on vision-capable models
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Originating tool_use id for perceive attach
+        origin_message_id:
+          type: string
+          format: uuid
+          description: Assistant transcript row that originated this artifact.
+    VisualArtifactSource:
+      type: string
+      description: >
+        Producer face: render (host-rasterized markup), capture (observed
+        running surface), fetch (image retrieved from the web), user (prompt
+        attachment), or workspace (a project image file read as is).
+      enum:
+      - render
+      - capture
+      - fetch
+      - user
+      - workspace
+    ArtifactListItem:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - mime
+      - source
+      - session_id
+      - created_at
+      additionalProperties: false
+      description: Metadata-only durable artifact row (no bytes, no host paths)
+      properties:
+        id:
+          type: string
+          format: uuid
+        mime:
+          type: string
+        source:
+          $ref: "#/components/schemas/VisualArtifactSource"
+        caption:
+          type: string
+        evidence_handle:
+          type: string
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Held browser page that produced live-tool media.
+        session_id:
+          type: string
+          format: uuid
+        workflow_run_id:
+          type: string
+          format: uuid
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        created_at:
+          type: string
+          format: date-time
+        recorded_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        duration_ms:
+          x-go-name: "DurationMS"
+          type: integer
+          format: int64
+          minimum: 0
+        origin_message_id:
+          type: string
+          format: uuid
+          description: Message that produced or presented this artifact when known
+        references:
+          type: array
+          description: >
+            What would break if this artifact were deleted, counted by kind.
+            Absent or empty means nothing durable claims it.
+          items:
+            $ref: "#/components/schemas/ArtifactReferenceCount"
+    ArtifactReferenceKind:
+      type: string
+      description: >
+        What holds a durable claim on an artifact. Each reference is a row
+        written in the referrer's own transaction and cascaded by it, so
+        retention and delete impact are the same question.
+      enum:
+      - message_present
+      - message_attachment
+      - tool_result
+      - project_cover
+    ArtifactReferenceCount:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      - count
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/ArtifactReferenceKind"
+        count:
+          type: integer
+          minimum: 0
+    ArtifactListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - artifacts
+      additionalProperties: false
+      properties:
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtifactListItem"
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next project artifact page; empty at the end.

@@ -1,0 +1,5 @@
+code: review_agent_not_declared
+message: |
+  review_loop on phase {{phase}} names agent {{agent}}, which is not in this workflow's agents[] list.
+replacement: |
+  Add {{agent}} to agents[] or remove it from phases[{{phase}}].review_loop.required_agents / if_spawnable.

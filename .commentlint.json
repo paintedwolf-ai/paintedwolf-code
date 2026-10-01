@@ -1,0 +1,19 @@
+{
+  "max_line_length": 120,
+  "work_markers_require_issue": true,
+  "issue_pattern": "(?:#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)",
+  "local_home_paths": true,
+  "parse_timeout": "30s",
+  "excludes": [
+    "third_party/gotreesitter",
+    ".paintedwolf/tool-output",
+    ".paintedwolf-dev",
+    "THIRD-PARTY-NOTICES.md",
+    "docs/openapi.yaml",
+    "lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md",
+    "lycaon-den/src-tauri/engine-root",
+    "lycaon-den/src/api/types.ts",
+    "schemas/guidance_registry.json"
+  ],
+  "forbid": {}
+}

@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-select-all-occurrences
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-select-all-occurrences
+group: "0"
+order: 3

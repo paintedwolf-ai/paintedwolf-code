@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-composer
+command: painted-wolf/platform:go-composer
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader I"
+  windows:
+    - "Leader I"
+  linux:
+    - "Leader I"

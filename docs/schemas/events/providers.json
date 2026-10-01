@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/providers.json",
+  "$ref": "../../openapi/components/schemas/events.yaml#/components/schemas/ProviderEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProviderEvent"
+}

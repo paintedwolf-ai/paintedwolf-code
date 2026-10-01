@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/checkpoint.json",
+  "$ref": "../../openapi/components/schemas/checkpoint.yaml#/components/schemas/CheckpointEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckpointEvent"
+}

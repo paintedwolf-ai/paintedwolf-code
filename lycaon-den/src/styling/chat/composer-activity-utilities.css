@@ -1,0 +1,86 @@
+/* Activity sits above the composer without moving its actions. */
+@utility den-composer-activity {
+display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  padding: 0 4px;
+  min-height: max(16px, 1.2em);
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  pointer-events: none;
+}
+
+
+/* A leaving line gives up its lane so the frame can close while it fades. */
+.den-composer-activity[data-leaving] {
+  position: absolute;
+  top: var(--den-composer-pad-y);
+  inset-inline: var(--den-composer-pad-start) var(--den-composer-pad-end);
+}
+
+
+@utility den-composer-status-button {
+display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--den-composer-action-col);
+  height: var(--den-composer-action-col);
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--den-radius-pill);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  &:hover,
+  &:focus-visible {
+    color: var(--den-text);
+    background: var(--den-tint-1);
+  }
+}
+
+
+@utility den-composer-activity-spinner {
+/* Even-pixel sizing keeps rotation centered. */
+display: block;
+  box-sizing: border-box;
+  width: round(nearest, max(12px, 0.875em), 2px);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  border: 2px solid var(--den-line);
+  border-top-color: var(--den-text-muted);
+  border-radius: 50%;
+  transform-origin: 50% 50%;
+  transform: translateZ(0);
+  will-change: transform;
+  animation: den-composer-activity-spin 0.75s linear infinite;
+}
+
+
+@utility den-composer-activity-label {
+min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* Tabular digits stabilize the elapsed-time lane. */
+@utility den-composer-activity-elapsed {
+margin-left: auto;
+  flex-shrink: 0;
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--den-text-muted) 72%, transparent);
+}
+
+
+
+@utility den-composer-elevated-access {
+  color: var(--den-warning-text);
+  &:disabled {
+    color: var(--den-text-muted);
+    cursor: default;
+  }
+}

@@ -1,0 +1,14 @@
+id: painted-wolf/platform:files-choose-comparison
+title: "Choose what to compare with"
+scope: "files"
+keywords:
+  - "comparison"
+  - "review scope"
+  - "since last commit"
+  - "new since you looked"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.chooseComparison"

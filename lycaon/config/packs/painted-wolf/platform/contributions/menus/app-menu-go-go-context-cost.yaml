@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-context-cost
+slot: "app_menu.go"
+command: painted-wolf/platform:go-context-cost
+group: "2"
+order: 8
+label: "Cost"

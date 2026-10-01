@@ -1,0 +1,10 @@
+manifest_version: 1
+id: painted-wolf/implement
+name: Implement
+version: 1.0.0
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"
+feature: implement

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-select-all-occurrences
+title: "Select all occurrences"
+scope: "files"
+keywords:
+  - "select matches"
+  - "all matches"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.selectAllOccurrences"

@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/preview.json",
+  "$ref": "../../openapi/components/schemas/events.yaml#/components/schemas/PreviewEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PreviewEvent"
+}

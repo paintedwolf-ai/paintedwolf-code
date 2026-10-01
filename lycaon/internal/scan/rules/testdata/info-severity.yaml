@@ -1,0 +1,4 @@
+rules:
+  - id: lycaon.shell.test-info
+    languages: [bash]
+    severity: INFO

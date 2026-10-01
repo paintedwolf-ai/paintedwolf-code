@@ -1,0 +1,37 @@
+title: Delete a database branch or user
+id: 6babd7ec-ffdf-4aa6-804e-40be1b9a1796
+description: Deletes a database branch, its passwords, or a project database user.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_atlas:
+    Image: atlas
+    CommandLine|contains: ' dbusers delete'
+  selection_pscale:
+    Image: pscale
+    CommandLine|contains:
+      - ' branch delete'
+      - ' password delete'
+  selection_neon:
+    Image:
+      - neon
+      - neonctl
+    CommandLine|contains: ' branches delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_atlas or selection_pscale or selection_neon) and not filter_rehearsal and not filter_local

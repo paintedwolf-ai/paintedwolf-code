@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-open-files-list
+title: "Show open files"
+scope: "files"
+keywords:
+  - "open files"
+  - "buffers"
+  - "tabs"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.openFilesList"

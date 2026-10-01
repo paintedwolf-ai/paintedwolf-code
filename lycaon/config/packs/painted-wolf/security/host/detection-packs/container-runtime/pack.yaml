@@ -1,0 +1,7 @@
+id: container-runtime
+label: Containers
+description: >-
+  Container operations that discard persistent volumes, prune everything
+  unused, publish an image, or run without the isolation a container provides.
+equivalents:
+  docker: [podman, nerdctl]

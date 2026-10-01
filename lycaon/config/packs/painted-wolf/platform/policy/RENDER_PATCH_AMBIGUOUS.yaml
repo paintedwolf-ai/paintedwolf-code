@@ -1,0 +1,35 @@
+oar: '1.0'
+id: RENDER_PATCH_AMBIGUOUS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.handle
+  - paintedwolf.match_count
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RENDER_PATCH_AMBIGUOUS"
+effect: block
+copy:
+  what: '{{ tool }} found {{ paintedwolf.match_count }} matches for old_string in render handle "{{ paintedwolf.handle }}".'
+  cause: The target string is ambiguous because it matches multiple locations and replace_all is false.
+  why: Surgical patching requires a unique match to prevent unintended changes to other parts of the markup.
+  fix: Include more surrounding context in old_string to make it unique, or set replace_all to true if all matches should change.
+  instead: 'Branch on Code RENDER_PATCH_AMBIGUOUS; include surrounding context or set replace_all: true'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:render_view
+x-paintedwolf-message: ambiguous patch target in handle markup
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: mockup-1
+    match_count: '3'
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_PATCH_AMBIGUOUS'

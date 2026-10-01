@@ -1,0 +1,559 @@
+components:
+  schemas:
+    WorkerSummaryStatus:
+      type: string
+      enum:
+        - complete
+        - partial
+        - failed
+        - canceled
+        - held
+        - open
+        - needs_decision
+    WorkerBlockerClass:
+      type: string
+      description: Machine class on worker request_decision — never inferred from stderr prose
+      enum:
+        - decision
+        - checkpoint
+        - sandbox
+    WorkerDecisionRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [worker_id, child_session_id, question, options, blocker_class]
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        child_session_id:
+          type: string
+          format: uuid
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        blocker_class:
+          $ref: "#/components/schemas/WorkerBlockerClass"
+        artifact_id:
+          type: string
+          format: uuid
+          description: Optional session-tree VisualArtifact the worker wants judged
+        artifact_ids:
+          x-go-name: "ArtifactIDs"
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: string
+            format: uuid
+          description: Optional 2–4 session-tree visuals for a compare preference
+    CitationVerdict:
+      type: string
+      enum:
+        - matched
+        - traced
+        - unverifiable
+    WorkerSummaryMeta:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [worker_id, child_session_id, agent_type, status, envelope]
+      properties:
+        source_context:
+          x-go-pointer: true
+          $ref: navigation.yaml#/components/schemas/SourceContext
+        delegation_id:
+          type: string
+          format: uuid
+        leg_id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+          format: uuid
+        child_session_id:
+          type: string
+          format: uuid
+        agent_type:
+          type: string
+        status:
+          $ref: "#/components/schemas/WorkerSummaryStatus"
+        grounding:
+          x-go-pointer: true
+          $ref: "#/components/schemas/CitationGrounding"
+        decision_request:
+          x-go-pointer: true
+          $ref: "#/components/schemas/WorkerDecisionRequest"
+        envelope:
+          type: string
+          description: Structured worker completion block.
+    CitationGrounding:
+      x-go-generate: true
+      x-go-field-order: ["traced", "host_assembled", "hint_code", "retry_count", "observed_path_count", "observed_paths_sample", "observed_url_count", "observed_urls_sample", "checks", "findings", "cited_urls", "prose_leak_count", "prose_leaks_sample", "prose_advisory_count", "prose_advisories_sample", "cited_evidence", "evidence_records", "evidence_record_count", "verification"]
+      type: object
+      additionalProperties: false
+      required:
+      - traced
+      properties:
+        traced:
+          type: boolean
+        host_assembled:
+          type: boolean
+        hint_code:
+          type: string
+        retry_count:
+          type: integer
+        observed_path_count:
+          type: integer
+        observed_paths_sample:
+          type: array
+          items:
+            type: string
+        observed_url_count:
+          type: integer
+        observed_urls_sample:
+          x-go-name: "ObservedURLsSample"
+          type: array
+          items:
+            type: string
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/CitationGroundingCheck"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CitationGroundingFinding"
+        cited_urls:
+          x-go-name: "CitedURLs"
+          type: array
+          items:
+            type: string
+        cited_evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/CitationGroundingCitedEvidence"
+        prose_leak_count:
+          type: integer
+        prose_leaks_sample:
+          type: array
+          items:
+            type: string
+        prose_advisory_count:
+          type: integer
+        prose_advisories_sample:
+          type: array
+          items:
+            type: string
+        evidence_records:
+          type: array
+          items:
+            $ref: "#/components/schemas/CitationGroundingEvidenceRecord"
+        evidence_record_count:
+          type: integer
+          minimum: 0
+          description: >-
+            How many ledger records the audit drew evidence_records from. Larger
+            than the array when the wire cap held some back, so a reader can say
+            "24 of 61" rather than mistake the sample for the whole ledger.
+        verification:
+          x-go-pointer: true
+          $ref: "#/components/schemas/CitationVerification"
+    CitationVerification:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - method
+      - reason
+      description: >-
+        The validation scope the closeout declared. Retained on the grounding
+        audit because the projected prose omits the trailer.
+      properties:
+        method:
+          type: string
+          enum: [inspection, targeted, project, blocked]
+        reason:
+          type: string
+    CitationGroundingEvidenceRecord:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+        kind:
+          type: string
+        shape:
+          type: string
+        fidelity:
+          type: string
+          description: >-
+            How faithfully this record reproduces what the tool observed —
+            structured | scraped | opaque. Unrelated to Message.trust_tier,
+            which answers whether instructions in content may be followed.
+        tool:
+          type: string
+        path:
+          type: string
+        urls:
+          x-go-name: "URLs"
+          type: array
+          items:
+            type: string
+          description: >-
+            Every URL this observation grounds. A web_search record carries all of its
+            result URLs; a fetch_url record carries the single fetched page.
+        line:
+          type: integer
+        line_end:
+          type: integer
+          description: Last line of the first observed range; a read that returned lines 80–88 states both.
+        match_count:
+          type: integer
+          minimum: 0
+          description: For a search record, how many matching lines the tool returned.
+        match_paths:
+          type: integer
+          minimum: 0
+          description: For a search record, how many distinct files those matches fell in.
+        url_titles:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Page titles the tool reported, keyed by URL. A fetch carries its page's
+            title; a search carries one per result it returned.
+        excerpt:
+          type: string
+        truncated:
+          type: boolean
+    CitationGroundingFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+          description: Host-minted evidence handle resolved from the session ledger.
+        path:
+          type: string
+        line:
+          type: integer
+        excerpt:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/CitationVerdict"
+        note:
+          type: string
+        openable:
+          x-go-pointer: true
+          type: boolean
+          description: >-
+            True when the cited path resolves to a regular file under the project
+            jail; false when it is a directory, missing, or outside the jail;
+            absent when the host did not resolve the path. Den links only when
+            openable is not false.
+    CitationGroundingCitedEvidence:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+          description: Host-minted evidence handle resolved from the session ledger.
+        path:
+          type: string
+        line:
+          type: integer
+        excerpt:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/CitationVerdict"
+        openable:
+          x-go-pointer: true
+          type: boolean
+          description: >-
+            True when the cited path resolves to a regular file under the project
+            jail; false when it is a directory, missing, or outside the jail;
+            absent when the host did not resolve the path. Den links only when
+            openable is not false.
+    CitationGroundingCheckStatus:
+      type: string
+      description: Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
+      enum:
+      - passed
+      - failed
+      - advisory
+    CitationGroundingCheck:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - label
+      - status
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        label:
+          type: string
+        status:
+          $ref: "#/components/schemas/CitationGroundingCheckStatus"
+        kind:
+          type: string
+          description: Citation checks audit typed citations; lifecycle checks audit worker activity (survey, artifact).
+          enum:
+          - citation
+          - lifecycle
+        vacuous:
+          type: boolean
+          description: A passed check that had no citations to verify.
+        summary:
+          type: string
+        matched:
+          type: array
+          items:
+            type: string
+        failed:
+          type: array
+          items:
+            type: string
+    CompletionReportScope:
+      type: string
+      description: >
+        What a grounded completion report is a report of. `session` covers a
+        chat session's own work; `phase` covers one workflow phase; `run` is the
+        run's declared deliverable, produced in the phase gated on
+        topology_report_delivered. Stated on the record, never re-derived from
+        live run state.
+      enum:
+      - session
+      - phase
+      - run
+    CompletionReportMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      additionalProperties: false
+      description: >
+        Identity of a grounded completion report. Present on every message of
+        kind completion_report. Only a run-scoped completion from a workflow
+        with enabled reports can produce a PDF; session and phase completions
+        are ordinary replies without document downloads.
+      properties:
+        scope:
+          $ref: "#/components/schemas/CompletionReportScope"
+        surface_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Coordinator surface that delivered the report (its exit class is report).
+        phase:
+          type: string
+          description: Workflow phase that produced the report; empty at session scope.
+        headline:
+          type: string
+          description: >
+            One sentence stating the report's conclusion, authored with the
+            report. The rendered document leads with it; absent, the document
+            leads with its title.
+        summary:
+          type: string
+          description: >
+            The report's assessment in plain language, written for a reader who
+            will not open the detail behind it.
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletionReportFinding"
+          description: >
+            The assessed conclusions the report states, most severe first. These
+            are the report's own findings, distinct from raw scanner rows.
+        limits:
+          type: array
+          items:
+            type: string
+          description: >
+            Coverage gaps the report declares, one per entry: what was not
+            checked, run, or reached. Rendered as a boxed list so a gap survives
+            a reader who never reaches the closing paragraph.
+        ask:
+          x-go-pointer: true
+          $ref: "#/components/schemas/CompletionReportAsk"
+        set_asides:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletionReportSetAside"
+          description: >
+            Scanner groups the report accounts for without assessing them one by
+            one, each with its reason.
+        defects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletionReportDefect"
+          description: >
+            Run scope only. The document requirements this report still failed
+            when its repairs ran out and the host stored it as drafted, one per
+            failing requirement. Absent on a report the host accepted; a report
+            that carries defects ends its run as not accepted.
+    CompletionReportDefect:
+      x-go-generate: true
+      type: object
+      required:
+      - code
+      - reason
+      additionalProperties: false
+      description: One document requirement a stored run report failed.
+      properties:
+        code:
+          $ref: "#/components/schemas/CompletionReportDefectCode"
+        reason:
+          type: string
+          description: What the check found, as it told the coordinator.
+        subjects:
+          type: array
+          items:
+            type: string
+          description: A sample of what the reason is about, such as claim ids or scanner groups.
+        count:
+          type: integer
+          description: How many subjects there are; larger than the sample when it was capped.
+    CompletionReportDefectCode:
+      type: string
+      description: >
+        The closeout rejection code of the failed requirement. `REPORT_FENCE_UNREADABLE`:
+        the coordinator's report JSON had members the report does not declare, or of
+        the wrong type; the host stored the members it could read and names the rest.
+        `REPORT_DOCUMENT_INVALID`: a field broke the report schema's rules.
+        `REPORT_CLAIM_UNREPORTED`: a claim
+        the review left open or overturned has no finding. `REPORT_INVENTORY_UNACCOUNTED`:
+        scanner groups have neither an assessment nor a set-aside.
+      enum:
+      - REPORT_FENCE_UNREADABLE
+      - REPORT_DOCUMENT_INVALID
+      - REPORT_CLAIM_UNREPORTED
+      - REPORT_INVENTORY_UNACCOUNTED
+    CompletionReportAsk:
+      x-go-generate: true
+      type: object
+      required:
+      - do
+      - effort
+      additionalProperties: false
+      description: >
+        The one decision a report asks of its reader, written for someone who
+        has never seen the work.
+      properties:
+        do:
+          type: string
+          description: What the reader is asked to decide or approve.
+        effort:
+          $ref: "#/components/schemas/CompletionReportAskEffort"
+        why:
+          type: string
+          description: The consequence that makes the ask worth the reader's time.
+    CompletionReportAskEffort:
+      type: string
+      description: How much work saying yes commits the team to.
+      enum:
+      - small
+      - medium
+      - large
+    CompletionReportSetAside:
+      x-go-generate: true
+      type: object
+      required:
+      - reason
+      additionalProperties: false
+      description: >
+        Scanner groups accounted for together: named by id, or selected as every
+        group one scanner reported entirely inside the listed path globs.
+      properties:
+        scan_group_ids:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_-]+$'
+        scanner:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+          description: Why these groups need no assessment of their own.
+    CompletionReportFindingDisposition:
+      type: string
+      description: >
+        What a finding asks for. `act` needs work; `accept` is a risk kept on
+        purpose; `held` is a surface examined and found sound.
+      enum:
+      - act
+      - accept
+      - held
+    CompletionReportFinding:
+      x-go-generate: true
+      type: object
+      required:
+      - title
+      additionalProperties: false
+      description: >
+        One assessed conclusion a report states: what it is, how it grades, what
+        it means if nothing is done, and what to do about it.
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Stable reference a reader can quote; shared with a verdict claim when the finding was adjudicated.
+        title:
+          type: string
+          description: The finding in one line, in plain language.
+        severity:
+          type: string
+          description: Severity in the subject's own vocabulary; ranked labels take a tone, unranked ones render plainly.
+        status:
+          type: string
+          description: Where the finding stands, in the subject's own word.
+        impact:
+          type: string
+          description: What it means if nothing is done.
+        action:
+          type: string
+          description: What to do about it.
+        where:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletionReportFindingLocation"
+        disposition:
+          $ref: "#/components/schemas/CompletionReportFindingDisposition"
+        answers:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Answers to the workflow's declared rating questions, keyed by
+            question id. Absent when a claim with the same id carries them.
+        scan_group_ids:
+          type: array
+          items:
+            type: string
+          description: Scanner groups of the run's inventory this finding assesses.
+    CompletionReportFindingLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Where a finding lives — an evidence handle, a place, or both.
+      properties:
+        handle:
+          type: string
+        path:
+          type: string
+        line:
+          type: integer
+          minimum: 0

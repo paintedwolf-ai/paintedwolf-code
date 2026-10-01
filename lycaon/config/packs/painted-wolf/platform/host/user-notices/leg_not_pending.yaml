@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Task leg already dispatched
+message: >-
+  That task leg is not pending any more — it was already dispatched or has
+  finished.
+suggested_action: >-
+  Check the worker list for its progress or result.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not pending
+      - worker list

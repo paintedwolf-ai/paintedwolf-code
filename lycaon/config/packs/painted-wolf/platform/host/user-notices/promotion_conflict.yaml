@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Save transition conflicts with this action
+message: This draft already has a save transition at a different phase or destination.
+suggested_action: Retry the existing save, or cancel it before it commits and choose another folder.

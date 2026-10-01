@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not pull changes
+message: >-
+  Git could not fast-forward from the upstream branch. Check remote access, local changes, and branch divergence.
+suggested_action: >-
+  Commit or stash local changes and review diverged branches before retrying.

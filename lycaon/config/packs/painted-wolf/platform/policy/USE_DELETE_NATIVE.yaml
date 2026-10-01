@@ -1,0 +1,40 @@
+oar: '1.0'
+id: USE_DELETE_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.example
+  - paintedwolf.habit_redirect_match
+when: paintedwolf.rejection_code == "USE_DELETE_NATIVE"
+effect: block
+copy:
+  what: The parsed command can be represented by the supplied delete call.
+  cause: The host parsed the supported command shape and validated the replacement against the tool currently
+    offered.
+  why: The supplied calls retain the parsed files_only restriction and targets; native deletion still applies
+    scope and approval checks.
+  fix: Use the supplied replacement_calls entries exactly and in order. Account for each result before continuing;
+    native limits and partial-result receipts still apply.
+  instead: Use the validated delete replacement and preserve the intended operation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native delete instead of command rm
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_DELETE_NATIVE'

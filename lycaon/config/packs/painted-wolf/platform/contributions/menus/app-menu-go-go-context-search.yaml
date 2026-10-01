@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-context-search
+slot: "app_menu.go"
+command: painted-wolf/platform:go-context-search
+group: "2"
+order: 6
+label: "Search"

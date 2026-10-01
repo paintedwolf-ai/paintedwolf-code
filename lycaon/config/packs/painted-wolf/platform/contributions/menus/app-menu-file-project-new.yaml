@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-project-new
+slot: "app_menu.file"
+command: painted-wolf/platform:project-new
+group: "0"
+order: 2
+label: "New project…"

@@ -1,0 +1,15 @@
+description: Compose from a bundled template. Returns effective_summary; read prepended coordinator_brief before proposing with state_start.
+schema:
+  type: object
+  properties:
+    template_id:
+      description: "Template catalog id."
+      type: string
+    params:
+      description: "Template parameter object."
+      type: object
+    dry_run:
+      description: "When true, validate/compose without activating."
+      type: boolean
+  required: [template_id]
+  additionalProperties: false

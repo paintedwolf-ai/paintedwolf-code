@@ -1,0 +1,7 @@
+id: painted-wolf/platform:list-confirm
+title: "Confirm list selection"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "list.confirm"

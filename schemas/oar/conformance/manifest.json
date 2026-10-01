@@ -1,0 +1,2591 @@
+{
+  "oar": "1.0",
+  "description": "The Open Agent Rules 1.0 conformance corpus. Each fixture replays one anchor occurrence, or an ordered run of them, against one rule set on the host its own input.capability describes, and states the decision a conforming engine must produce. A fixture marked baseline declares a capability set nothing conforming lacks, and may not be skipped ([OAR-CONF-35]).",
+  "fixtures": [
+    {
+      "id": "cfg-ambiguous-bare-reference-rejected",
+      "file": "cfg-ambiguous-bare-reference-rejected.json",
+      "title": "A bare reference matching more than one rule is rejected, naming them",
+      "covers": [
+        "OAR-CFG-8"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-bare-reference-prefers-an-exact-qualified-match",
+      "file": "cfg-bare-reference-prefers-an-exact-qualified-match.json",
+      "title": "A bare reference names the unnamespaced rule exactly, even when a publisher ships the same id",
+      "covers": [
+        "OAR-CFG-8"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-bare-reference-resolves-across-namespaces",
+      "file": "cfg-bare-reference-resolves-across-namespaces.json",
+      "title": "An operator writes the bare id; it resolves against every loaded rule whatever its namespace",
+      "covers": [
+        "OAR-CFG-8",
+        "OAR-CFG-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-cannot-alter-what-a-rule-means",
+      "file": "cfg-cannot-alter-what-a-rule-means.json",
+      "title": "A configuration changes whether and how loudly a rule runs, never what it means",
+      "covers": [
+        "OAR-CFG-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-disable-treats-a-rule-as-off",
+      "file": "cfg-disable-treats-a-rule-as-off.json",
+      "title": "A rule an operator disables behaves exactly as though its enforcement were off",
+      "covers": [
+        "OAR-CFG-1",
+        "OAR-CFG-2",
+        "OAR-CONF-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-enforcement-replaces-the-declared-value",
+      "file": "cfg-enforcement-replaces-the-declared-value.json",
+      "title": "A configured enforcement replaces the rule's own",
+      "covers": [
+        "OAR-CFG-3",
+        "OAR-CONF-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-forward-minor-config-rejected",
+      "file": "cfg-forward-minor-config-rejected.json",
+      "title": "A configuration written against a later minor is rejected, exactly as a document with one is",
+      "covers": [
+        "OAR-CFG-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-last-statement-about-a-rule-wins",
+      "file": "cfg-last-statement-about-a-rule-wins.json",
+      "title": "Configuration documents apply in order, and the last statement about a rule wins",
+      "covers": [
+        "OAR-CFG-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-mandatory-rule-cannot-be-disabled",
+      "file": "cfg-mandatory-rule-cannot-be-disabled.json",
+      "title": "A configuration disabling a mandatory rule is rejected, naming the rule",
+      "covers": [
+        "OAR-CFG-5",
+        "OAR-OPS-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-mandatory-rule-cannot-be-downgraded",
+      "file": "cfg-mandatory-rule-cannot-be-downgraded.json",
+      "title": "A configuration downgrading a mandatory rule to monitor is rejected",
+      "covers": [
+        "OAR-CFG-5",
+        "OAR-OPS-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-qualified-reference-disambiguates",
+      "file": "cfg-qualified-reference-disambiguates.json",
+      "title": "The qualified form is required only when the bare one is actually ambiguous",
+      "covers": [
+        "OAR-CFG-8",
+        "OAR-CFG-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cfg-unknown-rule-reference-rejected",
+      "file": "cfg-unknown-rule-reference-rejected.json",
+      "title": "A configuration naming a rule that is not loaded is rejected, naming it",
+      "covers": [
+        "OAR-CFG-4",
+        "OAR-CONF-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "conf-core-anchor-fact-reports-the-core-spelling",
+      "file": "conf-core-anchor-fact-reports-the-core-spelling.json",
+      "title": "The core fact anchor reports the core identifier however the host spells the moment locally",
+      "covers": [
+        "OAR-CONF-29",
+        "OAR-PROF-1",
+        "OAR-FACT-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "conf-occurrence-anchor-is-host-local",
+      "file": "conf-occurrence-anchor-is-host-local.json",
+      "title": "input.anchor is the right-hand side of anchors.core; the core identifier on the left does not select",
+      "covers": [
+        "OAR-CONF-29",
+        "OAR-PROF-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "conf-order-suppressor-precedes-only-the-rules-it-names",
+      "file": "conf-order-suppressor-precedes-only-the-rules-it-names.json",
+      "title": "A suppressor precedes only the rules it names; every other rule keeps its kind-then-identifier place",
+      "covers": [
+        "OAR-CONF-10",
+        "OAR-EVAL-18",
+        "OAR-EVAL-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "conf-rule-set-members-validate-individually",
+      "file": "conf-rule-set-members-validate-individually.json",
+      "title": "A rule set is not itself a schema-bearing document: each member is validated on its own terms",
+      "covers": [
+        "OAR-CONF-1",
+        "OAR-DOC-31"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "conf-selector-on-anchor-uses-the-core-spelling",
+      "file": "conf-selector-on-anchor-uses-the-core-spelling.json",
+      "title": "A selector clause on the core fact anchor matches the core identifier, not the host-local one",
+      "covers": [
+        "OAR-CONF-29",
+        "OAR-SEL-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "copy-canonical-double-integral",
+      "file": "copy-canonical-double-integral.json",
+      "title": "copy canonical double integral",
+      "covers": [
+        "OAR-COPY-4",
+        "OAR-COPY-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-canonical-double-negative",
+      "file": "copy-canonical-double-negative.json",
+      "title": "copy canonical double negative",
+      "covers": [
+        "OAR-COPY-4",
+        "OAR-COPY-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-canonical-double-negative-zero",
+      "file": "copy-canonical-double-negative-zero.json",
+      "title": "copy canonical double negative zero",
+      "covers": [
+        "OAR-COPY-4",
+        "OAR-COPY-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-canonical-double-small",
+      "file": "copy-canonical-double-small.json",
+      "title": "copy canonical double small",
+      "covers": [
+        "OAR-COPY-4",
+        "OAR-COPY-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-does-not-change-decision",
+      "file": "copy-does-not-change-decision.json",
+      "title": "Rendered copy is presentation of the decision and does not change the effect or the winning rule",
+      "covers": [
+        "OAR-COPY-6",
+        "OAR-DOC-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-empty-members-remain-present",
+      "file": "copy-empty-members-remain-present.json",
+      "title": "copy empty members remain present",
+      "covers": [
+        "OAR-COPY-1",
+        "OAR-COPY-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "copy-if-else-and-not",
+      "file": "copy-if-else-and-not.json",
+      "title": "Copy conditionals take the if branch on a non-zero fact, the else branch otherwise, and not inverts the test",
+      "covers": [
+        "OAR-COPY-3",
+        "OAR-COPY-7"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-if-omits-zero",
+      "file": "copy-if-omits-zero.json",
+      "title": "A copy if-branch is omitted when the named fact is the zero value of its type",
+      "covers": [
+        "OAR-COPY-3",
+        "OAR-COPY-7",
+        "OAR-FACT-25"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-illegal-construct-rejected",
+      "file": "copy-illegal-construct-rejected.json",
+      "title": "A copy member carrying a construct the binding grammar does not derive is a load error",
+      "covers": [
+        "OAR-COPY-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "copy-interpolates-facts",
+      "file": "copy-interpolates-facts.json",
+      "title": "After the decision, copy bindings substitute declared facts; list<string> joins with comma-space; whitespace in tags is insignificant",
+      "covers": [
+        "OAR-COPY-1",
+        "OAR-COPY-4",
+        "OAR-COPY-7",
+        "OAR-COPY-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-list-joins",
+      "file": "copy-list-joins.json",
+      "title": "A list<string> binding interpolates as its members joined by comma-space",
+      "covers": [
+        "OAR-COPY-4",
+        "OAR-COPY-7"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-map-type-rejected",
+      "file": "copy-map-type-rejected.json",
+      "title": "A copy binding whose fact type cannot be interpolated is a load error",
+      "covers": [
+        "OAR-COPY-4"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-missing-endif-is-a-load-error",
+      "file": "copy-missing-endif-is-a-load-error.json",
+      "title": "copy missing endif is a load error",
+      "covers": [
+        "OAR-COPY-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "copy-nonempty-map-list-takes-if",
+      "file": "copy-nonempty-map-list-takes-if.json",
+      "title": "copy nonempty map list takes if",
+      "covers": [
+        "OAR-COPY-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-profile-fact-needs-requires",
+      "file": "copy-profile-fact-needs-requires.json",
+      "title": "A copy binding naming a non-core fact the rule does not reach through requires is a load error",
+      "covers": [
+        "OAR-COPY-5",
+        "OAR-FACT-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "copy-unknown-fact-rejected",
+      "file": "copy-unknown-fact-rejected.json",
+      "title": "A copy binding naming a fact the engine does not declare is a load error, never a runtime default",
+      "covers": [
+        "OAR-COPY-2",
+        "OAR-FACT-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "cs-content-length-threshold-is-in-the-rule",
+      "file": "cs-content-length-threshold-is-in-the-rule.json",
+      "title": "The secrets profile publishes a length; the rule decides what is too long",
+      "covers": [
+        "OAR-FACT-7",
+        "OAR-FACT-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "cs-jailbreak-score-below-threshold-passes",
+      "file": "cs-jailbreak-score-below-threshold-passes.json",
+      "title": "A score below the rule's threshold does not fire; the detector never decided",
+      "covers": [
+        "OAR-OPS-11",
+        "OAR-CONF-25"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "doc-bare-id-is-the-qualified-identifier",
+      "file": "doc-bare-id-is-the-qualified-identifier.json",
+      "title": "A rule with no namespace has the bare id as its qualified identifier \u2014 no separator, no host name",
+      "covers": [
+        "OAR-DOC-8",
+        "OAR-EVAL-8"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-copy-does-not-affect-the-decision",
+      "file": "doc-copy-does-not-affect-the-decision.json",
+      "title": "Two rules differing only in copy produce the same effect, and copy never reorders them",
+      "covers": [
+        "OAR-DOC-24",
+        "OAR-EVAL-19"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-copy-member-outside-the-closed-set-rejected",
+      "file": "doc-copy-member-outside-the-closed-set-rejected.json",
+      "title": "copy carries a closed set of presentation strings",
+      "covers": [
+        "OAR-DOC-24"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-current-minor-loads",
+      "file": "doc-current-minor-loads.json",
+      "title": "Every minor less than or equal to the engine's own is accepted",
+      "covers": [
+        "OAR-DOC-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-detector-forbidden-for-other-kinds",
+      "file": "doc-detector-forbidden-for-other-kinds.json",
+      "title": "A detector object on any other kind is rejected",
+      "covers": [
+        "OAR-DOC-23"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-detector-required-for-detector-kind",
+      "file": "doc-detector-required-for-detector-kind.json",
+      "title": "kind: detector without a detector object is rejected",
+      "covers": [
+        "OAR-DOC-23"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-duplicate-qualified-identifier-rejected",
+      "file": "doc-duplicate-qualified-identifier-rejected.json",
+      "title": "Two rules with the same qualified identifier are a load-time rejection",
+      "covers": [
+        "OAR-DOC-9"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-empty-flow-rejected",
+      "file": "doc-empty-flow-rejected.json",
+      "title": "A flow that is present must be non-empty; the empty list is rejected rather than assigned a meaning",
+      "covers": [
+        "OAR-DOC-15",
+        "OAR-CONF-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-enforcement-defaults-to-enforce",
+      "file": "doc-enforcement-defaults-to-enforce.json",
+      "title": "A document with no enforcement enforces",
+      "covers": [
+        "OAR-DOC-16"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-forward-minor-rejected",
+      "file": "doc-forward-minor-rejected.json",
+      "title": "A minor greater than the engine's own is refused rather than partly honoured",
+      "covers": [
+        "OAR-DOC-5",
+        "OAR-CONF-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-malformed-id-rejected",
+      "file": "doc-malformed-id-rejected.json",
+      "title": "id must match the published pattern",
+      "covers": [
+        "OAR-DOC-6",
+        "OAR-CONF-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-mandatory-and-overrides-default",
+      "file": "doc-mandatory-and-overrides-default.json",
+      "title": "mandatory defaults to false and overrides to the empty list, so an ordinary rule is suppressible",
+      "covers": [
+        "OAR-DOC-17",
+        "OAR-DOC-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-minimal-rule-loads-and-fires",
+      "file": "doc-minimal-rule-loads-and-fires.json",
+      "title": "A document with only the five obligatory fields loads and fires",
+      "covers": [
+        "OAR-DOC-1",
+        "OAR-DOC-2",
+        "OAR-DOC-11",
+        "OAR-EVAL-3",
+        "OAR-CONF-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-missing-required-field-rejected",
+      "file": "doc-missing-required-field-rejected.json",
+      "title": "A document without effect is rejected, naming the field",
+      "covers": [
+        "OAR-DOC-2",
+        "OAR-CONF-1",
+        "OAR-CONF-21"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-on-error-defaults-to-fail-closed",
+      "file": "doc-on-error-defaults-to-fail-closed.json",
+      "title": "A rule that cannot be evaluated and declares no on_error blocks under its own identifiers",
+      "covers": [
+        "OAR-DOC-18",
+        "OAR-OPS-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-on-fire-defaults-to-empty",
+      "file": "doc-on-fire-defaults-to-empty.json",
+      "title": "A rule with no on_fire changes no counter, and its condition changes none either",
+      "covers": [
+        "OAR-DOC-19",
+        "OAR-FACT-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-qualified-identity-distinguishes-publishers",
+      "file": "doc-qualified-identity-distinguishes-publishers.json",
+      "title": "Two documents sharing an id under different namespaces are distinct rules and both load",
+      "covers": [
+        "OAR-DOC-8",
+        "OAR-EVAL-8",
+        "OAR-EVAL-9",
+        "OAR-EVAL-19"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-references-do-not-affect-the-decision",
+      "file": "doc-references-do-not-affect-the-decision.json",
+      "title": "Interoperability taxonomy tags never affect a decision",
+      "covers": [
+        "OAR-DOC-25"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-related-target-need-not-be-loaded",
+      "file": "doc-related-target-need-not-be-loaded.json",
+      "title": "related records lineage, never affects a decision, and its target need not be loaded",
+      "covers": [
+        "OAR-DOC-30"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-rule-set-member-must-be-a-document",
+      "file": "doc-rule-set-member-must-be-a-document.json",
+      "title": "A rule set containing a member that is not a rule document is rejected",
+      "covers": [
+        "OAR-DOC-31"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-rule-set-position-does-not-set-order",
+      "file": "doc-rule-set-position-does-not-set-order.json",
+      "title": "A member's position in the collection never affects identity, ordering, or precedence",
+      "covers": [
+        "OAR-DOC-31",
+        "OAR-DOC-28",
+        "OAR-EVAL-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-status-does-not-affect-the-decision",
+      "file": "doc-status-does-not-affect-the-decision.json",
+      "title": "status records the author's confidence and is inert",
+      "covers": [
+        "OAR-DOC-29"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-transform-forbidden-for-other-effects",
+      "file": "doc-transform-forbidden-for-other-effects.json",
+      "title": "A transform object on any other effect is rejected",
+      "covers": [
+        "OAR-DOC-22"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-transform-required-for-transform-effect",
+      "file": "doc-transform-required-for-transform-effect.json",
+      "title": "effect: transform without a transform object is rejected",
+      "covers": [
+        "OAR-DOC-22"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "doc-undefined-field-emit-rejected",
+      "file": "doc-undefined-field-emit-rejected.json",
+      "title": "A field this specification does not define is rejected, naming it",
+      "covers": [
+        "OAR-DOC-27"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-undefined-severity-field-rejected",
+      "file": "doc-undefined-severity-field-rejected.json",
+      "title": "severity was never a field of this format and is rejected",
+      "covers": [
+        "OAR-DOC-27"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-undefined-top-level-copy-fields-rejected",
+      "file": "doc-undefined-top-level-copy-fields-rejected.json",
+      "title": "The pre-release top-level copy fields are gone and are rejected by name",
+      "covers": [
+        "OAR-DOC-27"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-unknown-effect-rejected",
+      "file": "doc-unknown-effect-rejected.json",
+      "title": "effect is a closed enumeration",
+      "covers": [
+        "OAR-DOC-11"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-unknown-kind-rejected",
+      "file": "doc-unknown-kind-rejected.json",
+      "title": "kind is a closed enumeration",
+      "covers": [
+        "OAR-DOC-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-unsupported-major-rejected",
+      "file": "doc-unsupported-major-rejected.json",
+      "title": "A major version this engine does not implement is refused, not coerced",
+      "covers": [
+        "OAR-DOC-4",
+        "OAR-CONF-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-version-checked-before-undefined-field",
+      "file": "doc-version-checked-before-undefined-field.json",
+      "title": "oar is checked before any other processing, so a bad version wins over a bad field",
+      "covers": [
+        "OAR-CONF-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-version-leading-zero-rejected",
+      "file": "doc-version-leading-zero-rejected.json",
+      "title": "A version part with a leading zero is not a version; two engines free to equate 01.0 and 1.0 would disagree about what loads",
+      "covers": [
+        "OAR-DOC-3",
+        "OAR-CONF-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "doc-x-extension-is-ignored",
+      "file": "doc-x-extension-is-ignored.json",
+      "title": "An x- extension the engine does not recognise is ignored, and never affects the decision",
+      "covers": [
+        "OAR-DOC-26"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-advisories-accumulate-in-evaluation-order",
+      "file": "eval-advisories-accumulate-in-evaluation-order.json",
+      "title": "Two nudges at one occurrence both appear, in evaluation order, neither discarding the other",
+      "covers": [
+        "OAR-EVAL-8",
+        "OAR-EVAL-19",
+        "OAR-EVAL-20",
+        "OAR-COPY-7",
+        "OAR-COPY-9",
+        "OAR-CONF-37"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-advisories-omit-a-monitor-rule",
+      "file": "eval-advisories-omit-a-monitor-rule.json",
+      "title": "A monitor nudge is recorded and does not appear on advisories",
+      "covers": [
+        "OAR-EVAL-20",
+        "OAR-EVAL-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-advisories-omit-a-suppressed-rule",
+      "file": "eval-advisories-omit-a-suppressed-rule.json",
+      "title": "A suppressed nudge does not appear on advisories",
+      "covers": [
+        "OAR-EVAL-20",
+        "OAR-EVAL-14"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-advisories-warns-accumulate",
+      "file": "eval-advisories-warns-accumulate.json",
+      "title": "Two warnings at one occurrence both appear, in evaluation order",
+      "covers": [
+        "OAR-EVAL-20",
+        "OAR-COPY-9",
+        "OAR-CONF-37"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-allow-contributes-no-decision",
+      "file": "eval-allow-contributes-no-decision.json",
+      "title": "A rule firing with allow records an explicit pass and never overrides another rule",
+      "covers": [
+        "OAR-EVAL-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-block-short-circuits",
+      "file": "eval-block-short-circuits.json",
+      "title": "The first enforced rule firing with block stops the occurrence; later rules are not evaluated",
+      "covers": [
+        "OAR-EVAL-4",
+        "OAR-CONF-13",
+        "OAR-OPS-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-decision-carries-both-identifiers",
+      "file": "eval-decision-carries-both-identifiers.json",
+      "title": "A decision carries the effect, the bare id, and the qualified identifier",
+      "covers": [
+        "OAR-EVAL-8",
+        "OAR-EVAL-9"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-flow-is-tested-before-when",
+      "file": "eval-flow-is-tested-before-when.json",
+      "title": "when is not evaluated when flow did not match, so a rule the flow excluded cannot raise",
+      "covers": [
+        "OAR-EVAL-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "eval-flow-matched-then-when-is-evaluated",
+      "file": "eval-flow-matched-then-when-is-evaluated.json",
+      "title": "When flow does match, when is evaluated and may raise",
+      "covers": [
+        "OAR-EVAL-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "eval-kind-does-not-decide",
+      "file": "eval-kind-does-not-decide.json",
+      "title": "kind carries no meaning beyond order: a later-ordered rule's effect still wins on precedence",
+      "covers": [
+        "OAR-EVAL-2",
+        "OAR-EVAL-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-mandatory-rule-cannot-be-overridden",
+      "file": "eval-mandatory-rule-cannot-be-overridden.json",
+      "title": "An overrides entry naming a mandatory rule is a load-time rejection",
+      "covers": [
+        "OAR-EVAL-17",
+        "OAR-OPS-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-monitor-does-not-short-circuit-or-suppress",
+      "file": "eval-monitor-does-not-short-circuit-or-suppress.json",
+      "title": "A monitored rule neither short-circuits the occurrence nor suppresses the rule it overrides",
+      "covers": [
+        "OAR-EVAL-10",
+        "OAR-CONF-11"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-monitor-records-without-acting",
+      "file": "eval-monitor-records-without-acting.json",
+      "title": "A monitored rule is evaluated and recorded, contributes no decision and applies no side-effect",
+      "covers": [
+        "OAR-EVAL-10",
+        "OAR-OPS-1",
+        "OAR-CONF-11",
+        "OAR-FIRE-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-monitor-rule-that-raises-does-not-block",
+      "file": "eval-monitor-rule-that-raises-does-not-block.json",
+      "title": "A monitor rule that cannot be evaluated is recorded errored and its on_error is not applied",
+      "covers": [
+        "OAR-EVAL-10",
+        "OAR-OPS-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-no-rule-fires-is-none",
+      "file": "eval-no-rule-fires-is-none.json",
+      "title": "An occurrence at which nothing fires resolves to none",
+      "covers": [
+        "OAR-EVAL-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-off-is-not-selected-or-recorded",
+      "file": "eval-off-is-not-selected-or-recorded.json",
+      "title": "A rule whose enforcement is off is not selected, not evaluated, and not in the trace",
+      "covers": [
+        "OAR-EVAL-11",
+        "OAR-OPS-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-off-still-loads-and-reports-load-errors",
+      "file": "eval-off-still-loads-and-reports-load-errors.json",
+      "title": "A rule whose enforcement is off remains loaded, so a load-time error in it is still reported",
+      "covers": [
+        "OAR-EVAL-11",
+        "OAR-OPS-2"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-order-is-kind-then-qualified-id",
+      "file": "eval-order-is-kind-then-qualified-id.json",
+      "title": "Evaluation runs schema, policy, invariant, detector, then ascending by qualified identifier",
+      "covers": [
+        "OAR-EVAL-1",
+        "OAR-CONF-10",
+        "OAR-OPS-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-overrides-cycle-rejected",
+      "file": "eval-overrides-cycle-rejected.json",
+      "title": "A suppression cycle is a load-time rejection, naming the rules in it",
+      "covers": [
+        "OAR-EVAL-16",
+        "OAR-CONF-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-overrides-unresolvable-reference-rejected",
+      "file": "eval-overrides-unresolvable-reference-rejected.json",
+      "title": "An overrides entry that resolves to no loaded rule is a load-time rejection, naming it",
+      "covers": [
+        "OAR-EVAL-13",
+        "OAR-CONF-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-precedence-nudge-over-warn",
+      "file": "eval-precedence-nudge-over-warn.json",
+      "title": "nudge outranks warn whatever order the two fire in",
+      "covers": [
+        "OAR-EVAL-6",
+        "OAR-EVAL-20",
+        "OAR-CONF-14"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-precedence-transform-over-nudge-and-warn",
+      "file": "eval-precedence-transform-over-nudge-and-warn.json",
+      "title": "transform outranks nudge, and nudge outranks warn",
+      "covers": [
+        "OAR-EVAL-6",
+        "OAR-EVAL-20",
+        "OAR-CONF-14"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "eval-side-effects-of-losing-rule-still-apply",
+      "file": "eval-side-effects-of-losing-rule-still-apply.json",
+      "title": "on_fire applies to every rule that fired and was enforced, including one whose effect lost precedence",
+      "covers": [
+        "OAR-EVAL-12",
+        "OAR-CONF-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-side-effects-of-unreached-rule-do-not-apply",
+      "file": "eval-side-effects-of-unreached-rule-do-not-apply.json",
+      "title": "A rule never reached because of a short-circuit applies no side-effect",
+      "covers": [
+        "OAR-EVAL-12"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-suppression-does-not-transit",
+      "file": "eval-suppression-does-not-transit.json",
+      "title": "If A overrides B and B overrides C, A firing suppresses B but not C",
+      "covers": [
+        "OAR-EVAL-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-suppression-withdraws-side-effects-too",
+      "file": "eval-suppression-withdraws-side-effects-too.json",
+      "title": "A suppressed rule contributes no decision and applies no side-effect",
+      "covers": [
+        "OAR-EVAL-14",
+        "OAR-CONF-12",
+        "OAR-EVAL-12"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-suppressor-is-evaluated-first",
+      "file": "eval-suppressor-is-evaluated-first.json",
+      "title": "A suppressor is evaluated before the rule it names, even when the base order puts the block first",
+      "covers": [
+        "OAR-EVAL-18",
+        "OAR-EVAL-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-suppressor-ordering-disturbs-base-order-least",
+      "file": "eval-suppressor-ordering-disturbs-base-order-least.json",
+      "title": "Only the constrained pair moves; every other rule keeps its kind-and-identifier place",
+      "covers": [
+        "OAR-EVAL-18"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "eval-transform-does-not-short-circuit",
+      "file": "eval-transform-does-not-short-circuit.json",
+      "title": "A rule firing with transform lets later rules run",
+      "covers": [
+        "OAR-EVAL-5",
+        "OAR-CONF-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-additional-builtin-rejected",
+      "file": "expr-additional-builtin-rejected.json",
+      "title": "A function the engine does not declare is an unknown identifier, not a built-in",
+      "covers": [
+        "OAR-EXPR-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-aggregate-equality-rejected",
+      "file": "expr-aggregate-equality-rejected.json",
+      "title": "Equality over two aggregate values is rejected at load rather than implemented element-wise",
+      "covers": [
+        "OAR-EXPR-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-arithmetic-operand-pair-rejected",
+      "file": "expr-arithmetic-operand-pair-rejected.json",
+      "title": "An arithmetic operand pair outside the typed set is refused at load",
+      "covers": [
+        "OAR-EXPR-9"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-chained-relation-rejected",
+      "file": "expr-chained-relation-rejected.json",
+      "title": "A relation admits at most one relational operator, whatever the precedence table suggests",
+      "covers": [
+        "OAR-EXPR-1",
+        "OAR-EXPR-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-comment-rejected",
+      "file": "expr-comment-rejected.json",
+      "title": "A comment is not part of the language",
+      "covers": [
+        "OAR-EXPR-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-division-by-zero-raises",
+      "file": "expr-division-by-zero-raises.json",
+      "title": "Division by zero raises, and the rule is handled per its on_error",
+      "covers": [
+        "OAR-EXPR-14",
+        "OAR-OPS-3",
+        "OAR-OPS-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-dotted-identifier-is-a-single-name",
+      "file": "expr-dotted-identifier-is-a-single-name.json",
+      "title": "A dotted identifier is one host-tier name, so tool_args.path is an unknown identifier rather than field selection",
+      "covers": [
+        "OAR-EXPR-1",
+        "OAR-FACT-3",
+        "OAR-EXPR-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-double-division-by-zero-raises",
+      "file": "expr-double-division-by-zero-raises.json",
+      "title": "Division by a double zero raises rather than producing an IEEE infinity, and fail_closed then blocks with the rule's identifiers",
+      "covers": [
+        "OAR-EXPR-14",
+        "OAR-OPS-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-double-literal-overflow-rejected",
+      "file": "expr-double-literal-overflow-rejected.json",
+      "title": "A double literal whose nearest binary64 value is not finite is rejected at load",
+      "covers": [
+        "OAR-EXPR-21"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-double-overflow-raises",
+      "file": "expr-double-overflow-raises.json",
+      "title": "expr double overflow raises",
+      "covers": [
+        "OAR-EXPR-14"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-empty-affix-matches-every-string",
+      "file": "expr-empty-affix-matches-every-string.json",
+      "title": "An empty prefix, suffix, or substring matches every string",
+      "covers": [
+        "OAR-EXPR-22"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-empty-list-literal-rejected",
+      "file": "expr-empty-list-literal-rejected.json",
+      "title": "The empty list literal is rejected because its type cannot be inferred",
+      "covers": [
+        "OAR-EXPR-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-field-selection-rejected",
+      "file": "expr-field-selection-rejected.json",
+      "title": "There is no field-selection operator: a \".\" after anything but a name is rejected, naming the construct and its offset",
+      "covers": [
+        "OAR-EXPR-1"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-fifth-builtin-rejected",
+      "file": "expr-fifth-builtin-rejected.json",
+      "title": "A built-in this specification does not define is an unknown identifier",
+      "covers": [
+        "OAR-EXPR-16",
+        "OAR-EXPR-23"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-index-operand-pair-rejected",
+      "file": "expr-index-operand-pair-rejected.json",
+      "title": "An index operand pair outside the typed set is refused at load",
+      "covers": [
+        "OAR-EXPR-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-index-out-of-range-raises",
+      "file": "expr-index-out-of-range-raises.json",
+      "title": "Indexing a list out of range raises, and the rule is handled per its on_error",
+      "covers": [
+        "OAR-EXPR-13",
+        "OAR-OPS-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-index-typed-list-of-maps",
+      "file": "expr-index-typed-list-of-maps.json",
+      "title": "list<map> indexed by int yields map, which supports in and size only",
+      "covers": [
+        "OAR-EXPR-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-int-double-comparison-promotes",
+      "file": "expr-int-double-comparison-promotes.json",
+      "title": "One int and one double compare after promotion, and only for the comparison",
+      "covers": [
+        "OAR-EXPR-11",
+        "OAR-FACT-23"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-int-overflow-raises",
+      "file": "expr-int-overflow-raises.json",
+      "title": "Integer arithmetic that overflows 64 bits raises rather than wrapping",
+      "covers": [
+        "OAR-EXPR-15",
+        "OAR-FACT-23"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-integer-division-truncates-toward-zero",
+      "file": "expr-integer-division-truncates-toward-zero.json",
+      "title": "Integer division truncates toward zero, and the remainder takes the sign of the dividend",
+      "covers": [
+        "OAR-EXPR-21"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-least-int-value-is-writable",
+      "file": "expr-least-int-value-is-writable.json",
+      "title": "The magnitude 9223372036854775808 is admitted as the immediate operand of unary minus",
+      "covers": [
+        "OAR-EXPR-21",
+        "OAR-FACT-23"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-list-literal-members-must-agree",
+      "file": "expr-list-literal-members-must-agree.json",
+      "title": "A list literal takes the type of its members, which must all agree",
+      "covers": [
+        "OAR-EXPR-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-list-of-ints-has-no-declarable-type",
+      "file": "expr-list-of-ints-has-no-declarable-type.json",
+      "title": "A list literal of agreeing members is still rejected when no list type of that member exists",
+      "covers": [
+        "OAR-EXPR-21",
+        "OAR-FACT-22"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-literal-newline-in-string-rejected",
+      "file": "expr-literal-newline-in-string-rejected.json",
+      "title": "expr literal newline in string rejected",
+      "covers": [
+        "OAR-EXPR-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-map-literal-rejected",
+      "file": "expr-map-literal-rejected.json",
+      "title": "A map literal is outside the grammar",
+      "covers": [
+        "OAR-EXPR-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-map-string-string-is-a-map-for-in-and-size",
+      "file": "expr-map-string-string-is-a-map-for-in-and-size.json",
+      "title": "A map<string,string> host fact answers in and size(), and indexes to a string",
+      "covers": [
+        "OAR-EXPR-21",
+        "OAR-EXPR-12",
+        "OAR-EXPR-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-map-supports-in-and-size",
+      "file": "expr-map-supports-in-and-size.json",
+      "title": "in tests key presence on a map and size counts its members",
+      "covers": [
+        "OAR-EXPR-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-minimum-integer-unary-node-count",
+      "file": "expr-minimum-integer-unary-node-count.json",
+      "title": "expr minimum integer unary node count",
+      "covers": [
+        "OAR-EXPR-17",
+        "OAR-EXPR-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-modulo-by-zero-raises",
+      "file": "expr-modulo-by-zero-raises.json",
+      "title": "Modulo by zero raises",
+      "covers": [
+        "OAR-EXPR-14"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-modulo-takes-two-ints",
+      "file": "expr-modulo-takes-two-ints.json",
+      "title": "% takes two int operands",
+      "covers": [
+        "OAR-EXPR-9"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-negative-list-index-raises",
+      "file": "expr-negative-list-index-raises.json",
+      "title": "A negative list index raises, as an out-of-range one does",
+      "covers": [
+        "OAR-EXPR-21",
+        "OAR-EXPR-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-null-is-an-unknown-identifier",
+      "file": "expr-null-is-an-unknown-identifier.json",
+      "title": "There is no null value: null is rejected as an unknown identifier",
+      "covers": [
+        "OAR-EXPR-7"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-oversized-integer-literal-rejected",
+      "file": "expr-oversized-integer-literal-rejected.json",
+      "title": "An integer literal that does not fit 64 bits is rejected at load",
+      "covers": [
+        "OAR-EXPR-21",
+        "OAR-EXPR-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-parse-tree-above-the-declared-limit-rejected",
+      "file": "expr-parse-tree-above-the-declared-limit-rejected.json",
+      "title": "A parse tree above the engine's declared ceiling is refused, and the ceiling is in the capability document",
+      "covers": [
+        "OAR-EXPR-17",
+        "OAR-EXPR-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-parse-tree-of-256-nodes-accepted",
+      "file": "expr-parse-tree-of-256-nodes-accepted.json",
+      "title": "An engine accepts a condition whose parse tree holds 256 nodes, the published floor",
+      "covers": [
+        "OAR-EXPR-17",
+        "OAR-EXPR-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-precedence-table-does-not-extend-the-grammar",
+      "file": "expr-precedence-table-does-not-extend-the-grammar.json",
+      "title": "a < b < c is not derivable, so it is rejected rather than grouped by the precedence table",
+      "covers": [
+        "OAR-EXPR-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-reserved-word-is-lexed-greedily",
+      "file": "expr-reserved-word-is-lexed-greedily.json",
+      "title": "A name beginning with a reserved word is one identifier, not two tokens",
+      "covers": [
+        "OAR-EXPR-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-short-circuit-avoids-a-raise",
+      "file": "expr-short-circuit-avoids-a-raise.json",
+      "title": "A false left operand of && stops the right one from raising",
+      "covers": [
+        "OAR-EXPR-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-short-circuit-guards-a-partial-subexpression",
+      "file": "expr-short-circuit-guards-a-partial-subexpression.json",
+      "title": "The right operand is not evaluated when the left decides the result, so the guard holds",
+      "covers": [
+        "OAR-EXPR-5"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-single-quoted-words-are-not-references",
+      "file": "expr-single-quoted-words-are-not-references.json",
+      "title": "expr single quoted words are not references",
+      "covers": [
+        "OAR-EXPR-1",
+        "OAR-FACT-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-size-is-the-only-builtin",
+      "file": "expr-size-is-the-only-builtin.json",
+      "title": "size counts Unicode code points on a string, and no other built-in exists",
+      "covers": [
+        "OAR-EXPR-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-string-builtins-do-not-fold-case",
+      "file": "expr-string-builtins-do-not-fold-case.json",
+      "title": "The string built-ins compare by code point and never fold case",
+      "covers": [
+        "OAR-EXPR-22"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-string-builtins-match",
+      "file": "expr-string-builtins-match.json",
+      "title": "The three string built-ins match a prefix, a suffix, and a substring",
+      "covers": [
+        "OAR-EXPR-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-string-concatenation-accepted",
+      "file": "expr-string-concatenation-accepted.json",
+      "title": "+ concatenates two strings",
+      "covers": [
+        "OAR-EXPR-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-string-escapes-accepted",
+      "file": "expr-string-escapes-accepted.json",
+      "title": "The closed escape set is accepted, including a four-digit \\u escape",
+      "covers": [
+        "OAR-EXPR-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-ternary-branches-must-share-a-type",
+      "file": "expr-ternary-branches-must-share-a-type.json",
+      "title": "The ternary condition is bool and its branches share a type",
+      "covers": [
+        "OAR-EXPR-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-type-confused-comparison-rejected",
+      "file": "expr-type-confused-comparison-rejected.json",
+      "title": "A comparison between unrelated types is refused at load rather than silently never firing",
+      "covers": [
+        "OAR-EXPR-11"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-typed-accessor-reaches-a-map-member",
+      "file": "expr-typed-accessor-reaches-a-map-member.json",
+      "title": "A declared observation function reaches a map member with a type known at load",
+      "covers": [
+        "OAR-EXPR-19",
+        "OAR-FACT-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-unary-binds-tighter-than-multiplication",
+      "file": "expr-unary-binds-tighter-than-multiplication.json",
+      "title": "The precedence table governs how the grammar groups what it does derive",
+      "covers": [
+        "OAR-EXPR-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "expr-unparameterised-map-cannot-be-indexed",
+      "file": "expr-unparameterised-map-cannot-be-indexed.json",
+      "title": "A fact of the unparameterised type map may not be indexed; it supports only in and size",
+      "covers": [
+        "OAR-EXPR-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "expr-unsupported-escape-rejected",
+      "file": "expr-unsupported-escape-rejected.json",
+      "title": "An escape outside the closed set is rejected",
+      "covers": [
+        "OAR-EXPR-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-condition-outside-requires-rejected",
+      "file": "fact-condition-outside-requires-rejected.json",
+      "title": "A condition reaching a profile fact the rule did not declare in requires is refused",
+      "covers": [
+        "OAR-FACT-20",
+        "OAR-CONF-4"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-condition-type-error-rejected",
+      "file": "fact-condition-type-error-rejected.json",
+      "title": "A condition that is not type-correct against the declared environment is refused at load",
+      "covers": [
+        "OAR-FACT-4",
+        "OAR-CONF-5"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-content-provenance-distinguishes-untrusted-tool-data",
+      "file": "fact-content-provenance-distinguishes-untrusted-tool-data.json",
+      "title": "The content-provenance profile exposes host-attributed segment authority and trust without inspecting content text",
+      "covers": [
+        "OAR-FACT-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-copy-runtime-type-error-uses-on-error",
+      "file": "fact-copy-runtime-type-error-uses-on-error.json",
+      "title": "fact copy runtime type error uses on error",
+      "covers": [
+        "OAR-FACT-26",
+        "OAR-COPY-5",
+        "OAR-COPY-11"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-core-tier-needs-no-requires",
+      "file": "fact-core-tier-needs-no-requires.json",
+      "title": "Every conforming engine provides the core facts, so a rule over them needs no requires at all",
+      "covers": [
+        "OAR-FACT-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-detector-facts-are-assembled-lazily",
+      "file": "fact-detector-facts-are-assembled-lazily.json",
+      "title": "A detector is not run for a rule the selector did not select, so detector://error never fails",
+      "covers": [
+        "OAR-FACT-11",
+        "OAR-CONF-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-detector-observations-are-rule-local",
+      "file": "fact-detector-observations-are-rule-local.json",
+      "title": "A detector finding produced for one rule is not visible to a later rule",
+      "covers": [
+        "OAR-FACT-11"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-detector-reports-observations-rule-owns-threshold",
+      "file": "fact-detector-reports-observations-rule-owns-threshold.json",
+      "title": "The detector reports spans and scores; the rule sets the threshold, and two rules may disagree",
+      "covers": [
+        "OAR-FACT-5",
+        "OAR-FACT-7",
+        "OAR-FACT-8",
+        "OAR-OPS-11",
+        "OAR-CONF-25"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-flow-longer-than-window-rejected",
+      "file": "fact-flow-longer-than-window-rejected.json",
+      "title": "A flow longer than the host's declared activity window is refused at load",
+      "covers": [
+        "OAR-FACT-13",
+        "OAR-PROF-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-flow-matches-a-non-contiguous-subsequence",
+      "file": "fact-flow-matches-a-non-contiguous-subsequence.json",
+      "title": "flow matches when its steps appear in order in the activity window, contiguous or not",
+      "covers": [
+        "OAR-FACT-12"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-flow-out-of-order-does-not-match",
+      "file": "fact-flow-out-of-order-does-not-match.json",
+      "title": "The steps must appear in the order flow gives them",
+      "covers": [
+        "OAR-FACT-12"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-flow-rejected-when-window-is-zero",
+      "file": "fact-flow-rejected-when-window-is-zero.json",
+      "title": "A host that tracks no recent activity declares zero and rejects every rule carrying flow",
+      "covers": [
+        "OAR-PROF-3",
+        "OAR-FACT-13"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-host-fact-must-be-namespaced",
+      "file": "fact-host-fact-must-be-namespaced.json",
+      "title": "A host-tier fact published under a bare name belongs to no tier and is refused",
+      "covers": [
+        "OAR-FACT-14",
+        "OAR-FACT-18",
+        "OAR-FACT-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-host-fact-must-sit-under-the-host-namespace",
+      "file": "fact-host-fact-must-sit-under-the-host-namespace.json",
+      "title": "A host-tier fact under a namespace the host does not own is refused",
+      "covers": [
+        "OAR-FACT-18",
+        "OAR-FACT-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-host-fact-zero-at-unreported-occurrence",
+      "file": "fact-host-fact-zero-at-unreported-occurrence.json",
+      "title": "fact host fact zero at unreported occurrence",
+      "covers": [
+        "OAR-FACT-25"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-host-tier-fact-loads-and-fires",
+      "file": "fact-host-tier-fact-loads-and-fires.json",
+      "title": "A rule reaching a host-tier fact through requires.facts loads and fires; the capability document says so",
+      "covers": [
+        "OAR-FACT-18",
+        "OAR-FACT-21",
+        "OAR-CONF-23"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-moderation-rule-owns-the-threshold",
+      "file": "fact-moderation-rule-owns-the-threshold.json",
+      "title": "The classifier reports a score per category and the rule sets the bar",
+      "covers": [
+        "OAR-FACT-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-name-of-an-unclaimed-profile-is-not-declared",
+      "file": "fact-name-of-an-unclaimed-profile-is-not-declared.json",
+      "title": "A host that does not claim a profile declares none of its names, so a rule reaching for one is refused",
+      "covers": [
+        "OAR-FACT-17",
+        "OAR-FACT-19",
+        "OAR-CONF-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-non-boolean-condition-rejected",
+      "file": "fact-non-boolean-condition-rejected.json",
+      "title": "A rejection for a non-boolean result names the type produced and the word bool",
+      "covers": [
+        "OAR-FACT-4"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-observation-function-supplied-by-fixture",
+      "file": "fact-observation-function-supplied-by-fixture.json",
+      "title": "A value supplied under an observation function's name is that function's result for every argument",
+      "covers": [
+        "OAR-FACT-9",
+        "OAR-CONF-26"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-profile-is-provided-whole",
+      "file": "fact-profile-is-provided-whole.json",
+      "title": "A host claiming a profile provides every member of it, not a convenient subset",
+      "covers": [
+        "OAR-FACT-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-requires-facts-reaches-one-name",
+      "file": "fact-requires-facts-reaches-one-name.json",
+      "title": "requires.facts reaches an individual name without claiming the whole profile",
+      "covers": [
+        "OAR-FACT-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-requires-unprovided-profile-rejected",
+      "file": "fact-requires-unprovided-profile-rejected.json",
+      "title": "A rule naming a profile the host does not provide is refused at load, naming both",
+      "covers": [
+        "OAR-FACT-19",
+        "OAR-CONF-4",
+        "OAR-CONF-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-root-must-be-boolean",
+      "file": "fact-root-must-be-boolean.json",
+      "title": "fact root must be boolean",
+      "covers": [
+        "OAR-FACT-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-runtime-type-error-uses-on-error",
+      "file": "fact-runtime-type-error-uses-on-error.json",
+      "title": "fact runtime type error uses on error",
+      "covers": [
+        "OAR-FACT-26"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-tool-fingerprint-canonical-arguments",
+      "file": "fact-tool-fingerprint-canonical-arguments.json",
+      "title": "fact tool fingerprint canonical arguments",
+      "covers": [
+        "OAR-FACT-28",
+        "OAR-CONF-40"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-transform-target-is-assembled",
+      "file": "fact-transform-target-is-assembled.json",
+      "title": "A transform target is a fact reference, so it is assembled even when the rule has no when",
+      "covers": [
+        "OAR-FACT-11",
+        "OAR-CONF-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-transform-target-needs-requires",
+      "file": "fact-transform-target-needs-requires.json",
+      "title": "fact transform target needs requires",
+      "covers": [
+        "OAR-FACT-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-undeclarable-type-rejected",
+      "file": "fact-undeclarable-type-rejected.json",
+      "title": "A capability document declaring a fact type outside the published set is refused",
+      "covers": [
+        "OAR-FACT-22",
+        "OAR-FACT-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-unknown-identifier-rejected",
+      "file": "fact-unknown-identifier-rejected.json",
+      "title": "A condition naming something that is not a declared fact or function is refused at load",
+      "covers": [
+        "OAR-FACT-3",
+        "OAR-FACT-1",
+        "OAR-CONF-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fact-unreported-fact-does-not-take-the-on-error-path",
+      "file": "fact-unreported-fact-does-not-take-the-on-error-path.json",
+      "title": "An unreported fact is not a provider failure, so a fail_closed rule over one does not block",
+      "covers": [
+        "OAR-FACT-25",
+        "OAR-OPS-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-unreported-fact-takes-its-zero-value",
+      "file": "fact-unreported-fact-takes-its-zero-value.json",
+      "title": "A declared fact the host has nothing to report for reads as the zero value of its type, never a failure",
+      "covers": [
+        "OAR-FACT-25",
+        "OAR-CONF-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-unreported-observation-function-takes-its-zero-value",
+      "file": "fact-unreported-observation-function-takes-its-zero-value.json",
+      "title": "An observation function the fixture did not supply returns the zero value of its declared return type",
+      "covers": [
+        "OAR-FACT-25",
+        "OAR-CONF-26"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-window-is-ordered-oldest-first",
+      "file": "fact-window-is-ordered-oldest-first.json",
+      "title": "The activity window reads oldest step first, so flow reads in the order the steps happened",
+      "covers": [
+        "OAR-FACT-12"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fact-window-newest-first-would-not-match",
+      "file": "fact-window-newest-first-would-not-match.json",
+      "title": "The same steps in the opposite order do not match, which is what fixes the window's direction",
+      "covers": [
+        "OAR-FACT-12"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-actions-apply-in-declaration-and-evaluation-order",
+      "file": "fire-actions-apply-in-declaration-and-evaluation-order.json",
+      "title": "The actions of one rule apply in the order listed, and rules apply in evaluation order",
+      "covers": [
+        "OAR-FIRE-8"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-actions-bind-to-their-core-facts",
+      "file": "fire-actions-bind-to-their-core-facts.json",
+      "title": "increment_counter writes fire_count and increment_breaker writes breaker_count",
+      "covers": [
+        "OAR-FIRE-3",
+        "OAR-CONF-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-count-counts-increments-not-firings",
+      "file": "fire-count-counts-increments-not-firings.json",
+      "title": "fire_count counts applications of increment_counter, so a rule that fires with no on_fire has zero",
+      "covers": [
+        "OAR-FIRE-3",
+        "OAR-FIRE-4",
+        "OAR-EVAL-19"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-count-of-escalates-across-occurrences",
+      "file": "fire-count-of-escalates-across-occurrences.json",
+      "title": "One rule counts and two read the count, so warn-then-block is expressible",
+      "covers": [
+        "OAR-FIRE-11",
+        "OAR-CONF-31"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-count-of-non-literal-argument-rejected",
+      "file": "fire-count-of-non-literal-argument-rejected.json",
+      "title": "A counter read whose argument is not a string literal is refused at load",
+      "covers": [
+        "OAR-FIRE-11"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-count-of-unresolvable-reference-rejected",
+      "file": "fire-count-of-unresolvable-reference-rejected.json",
+      "title": "A counter read naming no loaded rule is refused at load",
+      "covers": [
+        "OAR-FIRE-11"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-counter-scope-keys-the-counter",
+      "file": "fire-counter-scope-keys-the-counter.json",
+      "title": "A scoped counter counts each distinct scope value separately",
+      "covers": [
+        "OAR-FIRE-10",
+        "OAR-FIRE-5",
+        "OAR-CONF-33"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-counter-scope-non-string-fact-rejected",
+      "file": "fire-counter-scope-non-string-fact-rejected.json",
+      "title": "A counter scope naming a fact that is not a string is refused at load",
+      "covers": [
+        "OAR-FIRE-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-counter-scope-undeclared-profile-fact-rejected",
+      "file": "fire-counter-scope-undeclared-profile-fact-rejected.json",
+      "title": "A counter scope naming a profile fact the rule does not require is refused at load",
+      "covers": [
+        "OAR-FIRE-10"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-counter-scope-unknown-fact-rejected",
+      "file": "fire-counter-scope-unknown-fact-rejected.json",
+      "title": "A counter scope naming a fact the engine does not declare is refused at load",
+      "covers": [
+        "OAR-FIRE-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-counter-scope-with-an-empty-value-stays-scoped",
+      "file": "fire-counter-scope-with-an-empty-value-stays-scoped.json",
+      "title": "A rule declaring counter_scope keeps a scoped counter even when the scope value is empty",
+      "covers": [
+        "OAR-FIRE-10",
+        "OAR-CONF-33"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-counters-are-keyed-by-qualified-identifier",
+      "file": "fire-counters-are-keyed-by-qualified-identifier.json",
+      "title": "Two rules sharing a bare id under different namespaces keep separate counters",
+      "covers": [
+        "OAR-FIRE-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-every-condition-sees-the-same-counter-snapshot",
+      "file": "fire-every-condition-sees-the-same-counter-snapshot.json",
+      "title": "A rule's own increment cannot change the value its own condition just read",
+      "covers": [
+        "OAR-FIRE-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-indirect-scope-requires-declaration",
+      "file": "fire-indirect-scope-requires-declaration.json",
+      "title": "Counter readers declare the target scope dependency",
+      "covers": [
+        "OAR-FIRE-11"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-own-count-reads-previous-occurrence",
+      "file": "fire-own-count-reads-previous-occurrence.json",
+      "title": "fire own count reads previous occurrence",
+      "covers": [
+        "OAR-FIRE-3",
+        "OAR-FIRE-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-publish-event-writes-no-fact",
+      "file": "fire-publish-event-writes-no-fact.json",
+      "title": "publish_event emits a record and is not observable to any condition",
+      "covers": [
+        "OAR-FIRE-3",
+        "OAR-FIRE-7"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-reset-sets-the-counter-to-zero",
+      "file": "fire-reset-sets-the-counter-to-zero.json",
+      "title": "reset_counter and reset_breaker set their bound fact to zero",
+      "covers": [
+        "OAR-FIRE-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "fire-scope-needs-declared-capability",
+      "file": "fire-scope-needs-declared-capability.json",
+      "title": "fire scope needs declared capability",
+      "covers": [
+        "OAR-FIRE-10",
+        "OAR-FACT-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "fire-unknown-side-effect-rejected",
+      "file": "fire-unknown-side-effect-rejected.json",
+      "title": "on_fire draws from a closed vocabulary",
+      "covers": [
+        "OAR-FIRE-1"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "mcp-bridged-call-facts",
+      "file": "mcp-bridged-call-facts.json",
+      "title": "The mcp profile's facts and its _for accessors are distinct names and both work",
+      "covers": [
+        "OAR-FACT-16",
+        "OAR-FACT-2"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "mcp-error-code-is-a-machine-code",
+      "file": "mcp-error-code-is-a-machine-code.json",
+      "title": "A failed bridged call reports a machine error code, never free text, and the rule matches it exactly",
+      "covers": [
+        "OAR-SEL-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "mcp-result-projection-accessors",
+      "file": "mcp-result-projection-accessors.json",
+      "title": "The mcp projection accessors carry declared return types, so a condition over them checks at load",
+      "covers": [
+        "OAR-FACT-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-annotate-then-redact-same-span",
+      "file": "ops-annotate-then-redact-same-span.json",
+      "title": "Annotating and then redacting the same span yields the redaction followed by the annotation, not the redaction alone",
+      "covers": [
+        "OAR-OPS-21",
+        "OAR-OPS-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-annotation-inside-covering-rewrite",
+      "file": "ops-annotation-inside-covering-rewrite.json",
+      "title": "ops annotation inside covering rewrite",
+      "covers": [
+        "OAR-OPS-16",
+        "OAR-OPS-21",
+        "OAR-OPS-23",
+        "OAR-CONF-39"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-bare-substitute-prefers-own-namespace",
+      "file": "ops-bare-substitute-prefers-own-namespace.json",
+      "title": "ops bare substitute prefers own namespace",
+      "covers": [
+        "OAR-DOC-8",
+        "OAR-OPS-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-block-discards-accumulated-transforms",
+      "file": "ops-block-discards-accumulated-transforms.json",
+      "title": "A block at an occurrence discards every accumulated transform: nothing is delivered to mutate",
+      "covers": [
+        "OAR-OPS-17",
+        "OAR-EVAL-6"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-content-anchor-evaluation-is-buffered",
+      "file": "ops-content-anchor-evaluation-is-buffered.json",
+      "title": "A content anchor is evaluated once, over the fully assembled content",
+      "covers": [
+        "OAR-OPS-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-detector-produced-facts-reach-the-transform",
+      "file": "ops-detector-produced-facts-reach-the-transform.json",
+      "title": "A span fact the detector produced at run time is the one the transform rewrites; content comes back changed, not merely reported changed",
+      "covers": [
+        "OAR-CONF-25",
+        "OAR-FACT-11",
+        "OAR-OPS-15"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-detector-transform-facts-are-rule-local",
+      "file": "ops-detector-transform-facts-are-rule-local.json",
+      "title": "Each accumulated transform uses the detector facts assembled for its own rule",
+      "covers": [
+        "OAR-FACT-11",
+        "OAR-OPS-15"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-error-short-circuit-retains-suppressed",
+      "file": "ops-error-short-circuit-retains-suppressed.json",
+      "title": "ops error short circuit retains suppressed",
+      "covers": [
+        "OAR-OPS-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-fail-closed-blocks-and-stops",
+      "file": "ops-fail-closed-blocks-and-stops.json",
+      "title": "A rule that cannot be evaluated with on_error fail_closed blocks and stops the occurrence",
+      "covers": [
+        "OAR-OPS-3",
+        "OAR-OPS-9",
+        "OAR-CONF-9",
+        "OAR-CONF-25"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-fail-open-records-and-continues",
+      "file": "ops-fail-open-records-and-continues.json",
+      "title": "A rule that cannot be evaluated with on_error fail_open contributes nothing and evaluation continues",
+      "covers": [
+        "OAR-OPS-4"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-load-errors-are-not-routed-through-on-error",
+      "file": "ops-load-errors-are-not-routed-through-on-error.json",
+      "title": "An unknown identifier is a load-time rejection even when on_error says fail_open",
+      "covers": [
+        "OAR-OPS-3",
+        "OAR-CONF-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-monitor-outcome-says-which-way-it-went",
+      "file": "ops-monitor-outcome-says-which-way-it-went.json",
+      "title": "Monitor mode records whether the rule would have fired, which is the only question it exists to answer",
+      "covers": [
+        "OAR-OPS-9",
+        "OAR-EVAL-10"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-on-error-bare-reference-stays-in-namespace",
+      "file": "ops-on-error-bare-reference-stays-in-namespace.json",
+      "title": "A bare on_error reference does not resolve to the same id in another namespace",
+      "covers": [
+        "OAR-OPS-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-on-error-naming-an-unloaded-rule-rejected",
+      "file": "ops-on-error-naming-an-unloaded-rule-rejected.json",
+      "title": "An on_error naming a rule that is not loaded is a load-time rejection",
+      "covers": [
+        "OAR-OPS-5",
+        "OAR-CONF-6"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-on-error-substitute-not-selected-at-its-anchor",
+      "file": "ops-on-error-substitute-not-selected-at-its-anchor.json",
+      "title": "The substituted rule need not be selected at this anchor: substitution is a reference into the loaded set, not a second evaluation",
+      "covers": [
+        "OAR-OPS-5"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-on-error-substitutes-another-rules-identifiers",
+      "file": "ops-on-error-substitutes-another-rules-identifiers.json",
+      "title": "on_error naming a rule blocks under that rule's identifiers, and the effect is still block",
+      "covers": [
+        "OAR-OPS-5"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-overlapping-transforms-are-not-merged",
+      "file": "ops-overlapping-transforms-are-not-merged.json",
+      "title": "Two transforms whose targets overlap apply in order rather than being merged or reordered",
+      "covers": [
+        "OAR-OPS-16",
+        "OAR-EVAL-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-redact-then-annotate-same-span",
+      "file": "ops-redact-then-annotate-same-span.json",
+      "title": "Redacting a span and then annotating it yields both, in that order: a zero-width annotation overlaps nothing",
+      "covers": [
+        "OAR-OPS-21",
+        "OAR-OPS-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-skipped-span-record",
+      "file": "ops-skipped-span-record.json",
+      "title": "ops skipped span record",
+      "covers": [
+        "OAR-OPS-23",
+        "OAR-CONF-39"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-suppressed-rule-is-traced-through-a-short-circuit",
+      "file": "ops-suppressed-rule-is-traced-through-a-short-circuit.json",
+      "title": "A rule suppressed by a blocking suppressor is recorded suppressed, not omitted as never considered",
+      "covers": [
+        "OAR-OPS-10",
+        "OAR-EVAL-14",
+        "OAR-EVAL-18"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-trace-records-every-outcome",
+      "file": "ops-trace-records-every-outcome.json",
+      "title": "The trace records fired, passed, errored, monitored, and suppressed, in evaluation order",
+      "covers": [
+        "OAR-OPS-9",
+        "OAR-OPS-10",
+        "OAR-CONF-16"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-transform-annotate-content-appends-at-the-end",
+      "file": "ops-transform-annotate-content-appends-at-the-end.json",
+      "title": "annotate on a content target inserts at the end of the content",
+      "covers": [
+        "OAR-OPS-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-annotate-inserts-after-the-span",
+      "file": "ops-transform-annotate-inserts-after-the-span.json",
+      "title": "annotate inserts its replacement immediately after the span end and removes nothing",
+      "covers": [
+        "OAR-OPS-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-annotate-records-a-zero-width-rewrite",
+      "file": "ops-transform-annotate-records-a-zero-width-rewrite.json",
+      "title": "An annotate does not consume the span it annotated, so a later transform over it still applies",
+      "covers": [
+        "OAR-OPS-21",
+        "OAR-OPS-16"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-annotate-requires-replacement",
+      "file": "ops-transform-annotate-requires-replacement.json",
+      "title": "annotate must carry a replacement: an annotation with nothing to annotate with is not a transform",
+      "covers": [
+        "OAR-OPS-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-block-discards-the-mutation",
+      "file": "ops-transform-block-discards-the-mutation.json",
+      "title": "A block at the occurrence leaves the content untouched",
+      "covers": [
+        "OAR-OPS-17"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-offsets-are-original-coordinates",
+      "file": "ops-transform-offsets-are-original-coordinates.json",
+      "title": "A later transform\u2019s offsets are read against the original content, not the earlier output",
+      "covers": [
+        "OAR-OPS-16",
+        "OAR-OPS-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-overlapping-spans-merge",
+      "file": "ops-transform-overlapping-spans-merge.json",
+      "title": "Two overlapping spans in one transform are rewritten once, as a single covering span",
+      "covers": [
+        "OAR-OPS-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-redact-may-omit-replacement",
+      "file": "ops-transform-redact-may-omit-replacement.json",
+      "title": "redact may omit its replacement, and the engine substitutes its own placeholder",
+      "covers": [
+        "OAR-OPS-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-redact-with-replacement-is-replace",
+      "file": "ops-transform-redact-with-replacement-is-replace.json",
+      "title": "redact carrying a replacement and replace carrying the same one produce the same rewrite",
+      "covers": [
+        "OAR-OPS-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-redact-without-replacement-uses-the-fixed-placeholder",
+      "file": "ops-transform-redact-without-replacement-uses-the-fixed-placeholder.json",
+      "title": "redact with no replacement substitutes exactly the code points [REDACTED]",
+      "covers": [
+        "OAR-OPS-13",
+        "OAR-OPS-21"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-rejected-when-unimplemented",
+      "file": "ops-transform-rejected-when-unimplemented.json",
+      "title": "An engine that does not implement content mutation refuses the rule rather than degrading it",
+      "covers": [
+        "OAR-OPS-18"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "ops-transform-replace-requires-replacement",
+      "file": "ops-transform-replace-requires-replacement.json",
+      "title": "replace must carry a replacement",
+      "covers": [
+        "OAR-OPS-13"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-span-out-of-range-is-ignored",
+      "file": "ops-transform-span-out-of-range-is-ignored.json",
+      "title": "A span whose range falls outside the content is ignored rather than raising",
+      "covers": [
+        "OAR-OPS-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-span-over-an-earlier-rewrite-is-skipped",
+      "file": "ops-transform-span-over-an-earlier-rewrite-is-skipped.json",
+      "title": "A span overlapping a range an earlier transform rewrote is not applied, and is not clamped",
+      "covers": [
+        "OAR-OPS-16",
+        "OAR-OPS-20"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-span-without-start-and-end-rejected",
+      "file": "ops-transform-span-without-start-and-end-rejected.json",
+      "title": "A span carrying neither start nor end cannot be applied",
+      "covers": [
+        "OAR-OPS-19"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-spans-apply-highest-start-first",
+      "file": "ops-transform-spans-apply-highest-start-first.json",
+      "title": "Two spans in one transform are applied from the highest start, so the earlier offsets still land",
+      "covers": [
+        "OAR-OPS-20",
+        "OAR-OPS-19",
+        "OAR-CONF-34"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-target-must-be-content-or-a-list-map-fact",
+      "file": "ops-transform-target-must-be-content-or-a-list-map-fact.json",
+      "title": "A target naming anything else is a load-time rejection",
+      "covers": [
+        "OAR-OPS-14"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transform-whole-content-target",
+      "file": "ops-transform-whole-content-target.json",
+      "title": "A transform naming the whole content replaces all of it",
+      "covers": [
+        "OAR-OPS-14",
+        "OAR-CONF-34"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-transforms-accumulate-in-evaluation-order",
+      "file": "ops-transforms-accumulate-in-evaluation-order.json",
+      "title": "Two transforms at one occurrence both apply, in evaluation order, neither discarding the other",
+      "covers": [
+        "OAR-OPS-15",
+        "OAR-OPS-16",
+        "OAR-EVAL-5",
+        "OAR-EVAL-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "ops-unresolvable-detector-reference-rejected",
+      "file": "ops-unresolvable-detector-reference-rejected.json",
+      "title": "A kind: detector rule whose reference the engine cannot resolve is refused at load",
+      "covers": [
+        "OAR-OPS-12"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-anchor-map-declaring-one-twice-rejected",
+      "file": "prof-anchor-map-declaring-one-twice-rejected.json",
+      "title": "A core anchor declared both supported and unsupported is a rejection",
+      "covers": [
+        "OAR-PROF-2",
+        "OAR-FACT-24"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-anchor-map-omitting-a-core-anchor-rejected",
+      "file": "prof-anchor-map-omitting-a-core-anchor-rejected.json",
+      "title": "Every core anchor appears exactly once across core and unsupported",
+      "covers": [
+        "OAR-PROF-2",
+        "OAR-FACT-24"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-core-anchor-maps-to-a-local-name",
+      "file": "prof-core-anchor-maps-to-a-local-name.json",
+      "title": "A rule names the core anchor; the occurrence names the local one the host mapped it to",
+      "covers": [
+        "OAR-PROF-1",
+        "OAR-CONF-3",
+        "OAR-CONF-29"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-history-records-admitted-tool-names",
+      "file": "prof-history-records-admitted-tool-names.json",
+      "title": "prof history records admitted tool names",
+      "covers": [
+        "OAR-PROF-9",
+        "OAR-CONF-40"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "prof-host-native-anchor-loads",
+      "file": "prof-host-native-anchor-loads.json",
+      "title": "A host-native anchor is a valid document and loads; it is simply not portable, which is not a load failure",
+      "covers": [
+        "OAR-PROF-5",
+        "OAR-PROF-8",
+        "OAR-CONF-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-secrets-claim-requires-a-detector",
+      "file": "prof-secrets-claim-requires-a-detector.json",
+      "title": "A capability document claiming secrets with no registered detector is invalid: zero-valued scores are not the observation",
+      "covers": [
+        "OAR-OPS-22",
+        "OAR-FACT-24"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "prof-uncatalogued-anchor-rejected",
+      "file": "prof-uncatalogued-anchor-rejected.json",
+      "title": "An anchor that is neither core nor in the declared host catalogue is a load error, naming the value: a misspelled anchor must not silently never run",
+      "covers": [
+        "OAR-PROF-5",
+        "OAR-DOC-12",
+        "OAR-CONF-3"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "prof-unsupported-core-anchor-rejected",
+      "file": "prof-unsupported-core-anchor-rejected.json",
+      "title": "A rule targeting a core anchor the host declares unsupported is refused, naming the anchor",
+      "covers": [
+        "OAR-PROF-4",
+        "OAR-DOC-12",
+        "OAR-CONF-3",
+        "OAR-CONF-20"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "sel-anchor-clause-is-core",
+      "file": "sel-anchor-clause-is-core.json",
+      "title": "The core fact anchor may be named by a clause without any requires",
+      "covers": [
+        "OAR-SEL-7",
+        "OAR-FACT-15"
+      ],
+      "baseline": true
+    },
+    {
+      "id": "sel-capability-host-string-is-selectable",
+      "file": "sel-capability-host-string-is-selectable.json",
+      "title": "sel capability host string is selectable",
+      "covers": [
+        "OAR-SEL-3",
+        "OAR-FACT-27"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-clause-matches-by-membership",
+      "file": "sel-clause-matches-by-membership.json",
+      "title": "A selector clause matches when the fact it names is a member of the clause list",
+      "covers": [
+        "OAR-SEL-7",
+        "OAR-CONF-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-clause-naming-untyped-fact-rejected",
+      "file": "sel-clause-naming-untyped-fact-rejected.json",
+      "title": "A clause naming a fact that is neither string nor list<string> is a load error",
+      "covers": [
+        "OAR-SEL-3"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-clause-not-matching-deselects",
+      "file": "sel-clause-not-matching-deselects.json",
+      "title": "A rule whose clause does not match is not selected and does not appear in the trace",
+      "covers": [
+        "OAR-SEL-7",
+        "OAR-CONF-8",
+        "OAR-OPS-9"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-clause-outside-core-needs-requires",
+      "file": "sel-clause-outside-core-needs-requires.json",
+      "title": "A selector clause naming a profile fact the rule does not declare in requires is rejected",
+      "covers": [
+        "OAR-FACT-20",
+        "OAR-CONF-4"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-clauses-are-conjunctive",
+      "file": "sel-clauses-are-conjunctive.json",
+      "title": "Every clause present must match for the rule to be selected",
+      "covers": [
+        "OAR-SEL-7"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-empty-clause-loads-and-never-selects",
+      "file": "sel-empty-clause-loads-and-never-selects.json",
+      "title": "A clause whose value is the empty list matches nothing; the rule still loads",
+      "covers": [
+        "OAR-SEL-6"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-list-fact-matches-on-intersection",
+      "file": "sel-list-fact-matches-on-intersection.json",
+      "title": "A clause naming a list<string> fact matches on a non-empty intersection",
+      "covers": [
+        "OAR-SEL-7"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-matches-typed-facts-not-prose",
+      "file": "sel-matches-typed-facts-not-prose.json",
+      "title": "A clause matches a fact value exactly; it is never a substring or keyword search",
+      "covers": [
+        "OAR-SEL-8"
+      ],
+      "baseline": false
+    },
+    {
+      "id": "sel-unknown-fact-clause-rejected",
+      "file": "sel-unknown-fact-clause-rejected.json",
+      "title": "A clause naming a fact the engine does not declare is a load error, never a silent match",
+      "covers": [
+        "OAR-SEL-3",
+        "OAR-FACT-1"
+      ],
+      "baseline": true
+    }
+  ]
+}

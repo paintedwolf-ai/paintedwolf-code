@@ -1,0 +1,5 @@
+code: merchandising_incomplete
+message: |
+  Catalog workflow is missing merchandising field {{field}}.
+replacement: |
+  Set name, description, and trigger so the workflow can be listed and chosen.

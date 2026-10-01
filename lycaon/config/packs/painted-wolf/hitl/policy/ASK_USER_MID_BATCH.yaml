@@ -1,0 +1,27 @@
+emit: banner
+category: advisory
+severity: info
+selector:
+  tool:
+  - ask_user
+message: mid-batch ask_user should be rare
+what: ask_user accepted a pending question during batch phase {{ paintedwolf.batch_phase }}.
+cause: The batch has left pre_dispatch; this does not by itself establish that a writer is running.
+why: Prefer clarifying before dispatch; mid-batch asks interrupt in-flight work more
+  often than they help.
+fix: Host parks the turn after ask_user — read the answered tool result when the loop
+  wakes; prefer pre-dispatch clarify next time.
+instead: Prefer pre-dispatch clarify asks; use mid-batch ask_user only for blocking
+  forks
+scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+    batch_phase: orchestrate
+  expect_contains:
+  - 'Code: ASK_USER_MID_BATCH'
+  - pre-dispatch
+id: ASK_USER_MID_BATCH

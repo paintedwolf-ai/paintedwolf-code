@@ -1,0 +1,65 @@
+# Catalog tool allowlist for codegen and contracts.
+# Functional ids follow docs/naming.md.
+#
+# Every id here is registered at serve boot. Native tools registered directly in
+# Go are not listed — native-tools.yaml holds those.
+
+tools:
+  # state_* work tracking
+  - state_update
+  - state_close
+  - state_start
+  - state_query
+
+  # handoff_* sibling worker coordination (parent session plane)
+  - handoff_init
+  - handoff_reserve
+  - handoff_release
+  - handoff_release_all
+  - handoff_health
+
+  # delegate_* multi-worker orchestration
+  - delegate_init
+  - delegate_decompose
+  - delegate_dispatch
+  - delegate_status
+
+  # scan_* host security scans and drill-down
+  - scan_pack
+  - scan_list
+  - scan_summary
+  - scan_query
+  - scan_compare
+
+  # coordinator workflow surface
+  - workflow_compose
+  - workflow_compose_from_template
+  - workflow_catalog_summaries
+  - workflow_persist
+  - workflow_user_feedback
+  - workflow_advance
+  - ask_user
+  - fanout_plan
+  - submit_verdict
+
+  # plan_* markdown helpers
+  - plan_append_review_evidence
+
+  # pack_* coordinator orientation board
+  - pack_board
+
+  # record_finding agent feed writer (grounded)
+  - record_finding
+
+  # request_decision worker escalation (resumable)
+  - request_decision
+
+  # request_budget worker ask for a higher tool-round ceiling
+  - request_budget
+
+  # parse_* delegation plan parsing
+  - parse_extract_json
+  - parse_validate
+  - parse_evaluation
+  - parse_decomposition
+  - parse_delegation_plan

@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: {tier: non_catastrophic, scope: session}
+title: Backup could not be completed
+message: >-
+  The backup could not include all retained data. Some files were missing,
+  unreadable, or changed during capture.
+suggested_action: >-
+  Let active changes finish, then try again. If this repeats, export diagnostics
+  from Settings → Advanced → Diagnostics.

@@ -1,0 +1,5 @@
+<30>Jan 15 10:00:00 host1 sshd: Failed password for invalid user admin from 203.0.113.7 port 55012
+<30>Jan 15 10:00:01 host1 sshd: Failed password for invalid user root from 198.51.100.9 port 41044
+<30>Jan 15 10:00:02 host1 sshd: Failed password for invalid user admin from 203.0.113.8 port 55013
+<30>Jan 15 10:00:03 host1 sshd: Accepted publickey for deploy from 10.0.0.1 port 22
+<30>Jan 15 10:00:04 host1 sshd: Failed password for invalid user admin from 203.0.113.7 port 55014

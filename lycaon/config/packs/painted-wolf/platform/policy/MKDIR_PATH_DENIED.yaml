@@ -1,0 +1,36 @@
+oar: '1.0'
+id: MKDIR_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - mkdir
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "MKDIR_PATH_DENIED"
+effect: block
+copy:
+  cause: The resolved path is protected by the host write policy.
+  why: Changing the creation tool cannot override this boundary.
+  fix: Preserve any earlier creation receipts. Use a different path only if it is both intended and permitted;
+    do not rename or route through another tool to evade protection.
+  instead: Preserve the path boundary and report the unmet creation
+  what: Directory creation is denied at {{ paintedwolf.path }}.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mkdir
+x-paintedwolf-message: mkdir:mkdir path matches deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: mkdir
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MKDIR_PATH_DENIED'

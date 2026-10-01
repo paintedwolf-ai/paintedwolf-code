@@ -1,0 +1,105 @@
+language: vue
+comment:
+- <!--
+- -->
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: script-data-flow
+  file: sample.vue
+  source: |
+    <script>const code = location.hash; eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: script-safe-data
+  file: sample.vue
+  source: |
+    <script>const data = location.hash; JSON.parse(data);</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+- name: script-dom-xss
+  file: sample.vue
+  source: |
+    <script>const html = location.search; document.body.innerHTML = html;</script>
+  want:
+  - lycaon.javascript.dom-xss
+  covers: []
+- name: script-text-content
+  file: sample.vue
+  source: |
+    <script>document.body.textContent = location.search;</script>
+  want: []
+  covers:
+  - lycaon.javascript.dom-xss
+- name: route-html-injection-vulnerable
+  file: sample.vue
+  source: |
+    <template><div v-html="$route.query.html"></div></template>
+  want:
+  - lycaon.vue.route-html-injection
+  covers: []
+- name: route-html-injection-safe
+  file: sample.vue
+  source: |
+    <template><div>{{ $route.query.html }}</div></template>
+  want: []
+  covers:
+  - lycaon.vue.route-html-injection
+- name: typescript-script
+  file: sample.vue
+  source: |
+    <template><div>Hi</div></template>
+    <script setup lang="ts">const code: string = location.hash; eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: script-type-is-not-html-mime
+  file: sample.vue
+  source: |
+    <script type="application/json">eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: nested-template-script-is-inert
+  file: sample.vue
+  source: |
+    <template><script>eval(location.hash)</script></template>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+- name: custom-block-script-is-inert
+  file: sample.vue
+  source: |
+    <custom><script>eval(location.hash)</script></custom>
+    <template><div>Static content</div></template>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+- name: jsx-script
+  file: sample.vue
+  source: |
+    <script lang="jsx">const element = <div/>; eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: tsx-script
+  file: sample.vue
+  source: |
+    <script setup lang="tsx">const element = <div/>; const value: string = location.hash; eval(value)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: mapped-utf8-evidence
+  file: sample.vue
+  source: |
+    <template><div>狼</div></template>
+    <script lang="ts">const label = "狼"; const code: string = location.hash; eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  evidence:
+  - rule: lycaon.javascript.code-injection
+    primary: {line: 2, column: 81, end_line: 2, end_column: 85}
+    source: {line: 2, column: 61, end_line: 2, end_column: 74}
+    sink: {line: 2, column: 81, end_line: 2, end_column: 85}

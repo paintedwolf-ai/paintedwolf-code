@@ -1,0 +1,22 @@
+# Packages excluded from the per-package coverage floor (scripts/coverage-packages.sh).
+#
+# A line here is a claim that the package cannot meaningfully carry statement
+# coverage of its own — not that covering it is inconvenient. Two kinds qualify:
+#
+#   test-support   exists only to be imported by tests; exercised entirely through
+#                  its consumers, and a direct test would assert on itself
+#   generated      written by codegen; the generator's tests are the real proof
+#
+# Anything else belongs in a test, not in this file.
+
+# test-support
+internal/testutil
+internal/testdbseed
+internal/testtool
+internal/browser/browsertest
+internal/guidance/ledgertest
+internal/prompts/promptstest
+internal/report/reporttest
+
+# generated
+internal/db/queries

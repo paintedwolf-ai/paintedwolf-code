@@ -1,0 +1,32 @@
+title: Delete a CI namespace or cluster
+id: 2a0ef386-1c67-40b2-80bb-0cf077f047b5
+description: Removes an orb namespace and every orb published under it, or an agent cluster and its queues.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_circleci:
+    Image: circleci
+    CommandLine|re: '(?i)\snamespace\s+(delete|rm)\b'
+  selection_buildkite:
+    Image: bk
+    CommandLine|contains|all:
+      - ' cluster delete'
+      - ' --yes'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_circleci or selection_buildkite) and not filter_rehearsal and not filter_local

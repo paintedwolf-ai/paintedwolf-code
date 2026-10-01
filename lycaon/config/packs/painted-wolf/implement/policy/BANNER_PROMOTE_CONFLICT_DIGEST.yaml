@@ -1,0 +1,16 @@
+emit: banner
+category: informational
+severity: info
+message: Conflict hunks for overlay {{ paintedwolf.overlay_id }} — line ranges inline; read spill_path for
+  full bodies
+what: conflict_digest lists branch_delta, conflict_tier, and hunk summaries inline — overlay_intent carries
+  worker goal
+cause: Large assessments spill full JSON; digest stays compact for context budget
+why: Coordinators need intent (what) before line ranges (where)
+fix: Use current preview_overlay ready_resolutions and each path’s conflict_tier/branch_delta. Small overlapping_edit
+  conflicts can use hunk cherry-picks with start_line, end_line and content; larger or line_shift conflicts
+  need reviewed merged proposals or content. keep_theirs and keep_ours select a whole-file winner and may discard
+  the other intent.
+instead: Read each path’s branch_delta before any available spill; preserve partial overlays and re-preview
+  after sibling promotions.
+id: BANNER_PROMOTE_CONFLICT_DIGEST

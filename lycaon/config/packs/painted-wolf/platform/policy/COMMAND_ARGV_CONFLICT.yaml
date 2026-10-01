@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COMMAND_ARGV_CONFLICT
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "COMMAND_ARGV_CONFLICT"
+effect: block
+copy:
+  what: '`{{ tool }}()` received both `command` and `pipeline`.'
+  cause: Those arguments are exclusive — one argv line or a multi-stage array, not both.
+  why: The host cannot choose which form to run. A grant that says to reissue the same argv means pick one form and pass it again.
+  fix: 'Keep `command: "…"` for one stage, or `pipeline: ["…", "…"]` for a multi-stage run. Drop the other.'
+  instead: 'Retry with `command` or `pipeline`, not both'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command and pipeline are exclusive
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COMMAND_ARGV_CONFLICT'
+      - both `command` and `pipeline`

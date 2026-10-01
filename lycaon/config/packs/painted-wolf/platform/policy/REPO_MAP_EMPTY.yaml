@@ -1,0 +1,14 @@
+emit: banner
+category: informational
+severity: info
+message: >-
+  This view extracted no symbols. Inspect its file counts, filters and skip_reasons before choosing another scope or an available filename/text search.
+cause: >-
+  No symbol definitions were extracted for this view and its filters.
+why: >-
+  Files may still exist without a supported grammar or usable definitions. The result counts and skip_reasons describe the observed scope; no symbols is not proof of an empty repository.
+fix: >-
+  Use the returned paths, counts and skip_reasons to select a relevant scope. Use an offered filename or text search when symbol extraction cannot answer the question.
+instead: >-
+  Preserve this successful view and distinguish files with no extracted symbols from paths that were not examined.
+id: REPO_MAP_EMPTY

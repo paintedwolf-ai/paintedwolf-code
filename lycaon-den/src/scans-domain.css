@@ -1,0 +1,8 @@
+@import "./styling/scans/stage-domain.css";
+@import "./styling/scans/coverage-domain.css";
+@import "./styling/scans/findings-domain.css";
+@import "./styling/scans/detail-domain.css";
+@import "./styling/scans/ledger-domain.css";
+@import "./styling/scans/diagnostics-domain.css";
+@import "./styling/scans/selection-domain.css";
+@import "./styling/scans/ignore-rules-domain.css";

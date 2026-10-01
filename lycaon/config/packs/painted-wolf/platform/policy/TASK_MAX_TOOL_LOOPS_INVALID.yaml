@@ -1,0 +1,44 @@
+oar: '1.0'
+id: TASK_MAX_TOOL_LOOPS_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.host_max
+  - paintedwolf.max_tool_loops
+  - paintedwolf.min_required
+when: paintedwolf.rejection_code == "TASK_MAX_TOOL_LOOPS_INVALID"
+effect: block
+copy:
+  what: Requested max_tool_loops {{ paintedwolf.max_tool_loops }} falls outside the current host range {{ paintedwolf.min_required
+    }}–{{ paintedwolf.host_max }}.
+  cause: You sent max_tool_loops {{ paintedwolf.max_tool_loops }} outside **[{{ paintedwolf.min_required }},
+    {{ paintedwolf.host_max }}]**.
+  why: An explicit worker budget must remain the requested budget; the host does not silently clamp it.
+  fix: Omit `max_tool_loops` to use the task scope default, or set a value between **{{ paintedwolf.min_required
+    }}** and **{{ paintedwolf.host_max }}**.
+  instead: Branch on Code; set max_tool_loops within host bounds or omit it
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:task
+x-paintedwolf-message: '`task()` max_tool_loops {{ paintedwolf.max_tool_loops }} is out of range (maximum {{
+  paintedwolf.host_max }}, minimum {{ paintedwolf.min_required }})'
+x-paintedwolf-scenarios:
+- id: below_min
+  vars:
+    host_max: 40
+    max_tool_loops: 1
+    min_required: 2
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TASK_MAX_TOOL_LOOPS_INVALID'
+- id: above_host_cap
+  vars:
+    host_max: 40
+    max_tool_loops: 41
+    min_required: 2
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TASK_MAX_TOOL_LOOPS_INVALID'

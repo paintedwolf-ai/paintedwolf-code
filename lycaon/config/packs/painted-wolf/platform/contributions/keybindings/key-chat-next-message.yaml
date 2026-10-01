@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-chat-next-message
+command: painted-wolf/platform:chat-next-message
+scope: global
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+PageDown"
+  windows:
+    - "Alt+PageDown"
+  linux:
+    - "Alt+PageDown"

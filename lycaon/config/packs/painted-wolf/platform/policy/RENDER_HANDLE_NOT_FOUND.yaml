@@ -1,0 +1,34 @@
+oar: '1.0'
+id: RENDER_HANDLE_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+  - view_image
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.handle
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RENDER_HANDLE_NOT_FOUND"
+effect: block
+copy:
+  what: '{{ tool }} could not find render handle "{{ paintedwolf.handle }}".'
+  cause: 'No visual handle named "{{ paintedwolf.handle }}" exists in this session.'
+  why: Handles are session-scoped and must be initialized with markup before patching or inspecting.
+  fix: Call render_view with handle and markup to initialize the handle first.
+  instead: Branch on Code RENDER_HANDLE_NOT_FOUND; create the handle with markup or check the handle name
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:render_view
+x-paintedwolf-message: render handle not found in session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: mockup-1
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_HANDLE_NOT_FOUND'

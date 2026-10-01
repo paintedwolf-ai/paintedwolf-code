@@ -1,0 +1,20 @@
+description: Validate decomposition.
+schema:
+  type: object
+  properties:
+    raw:
+      type: string
+      description: Decomposition JSON.
+    max_legs:
+      type: integer
+      description: Maximum leg count.
+      minimum: 1
+    max_files_per_leg:
+      type: integer
+      description: Maximum files per leg.
+      minimum: 1
+    require_deps:
+      type: boolean
+      description: Require dependency declarations.
+  required: [raw]
+  additionalProperties: false

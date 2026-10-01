@@ -1,0 +1,19 @@
+# terminal_open — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    terminal_open:
+        tool: terminal_open
+        tier_hint: recoverable
+        what_changes: Starts a project command under a pseudo-terminal (TTY).
+        who_affected: This project — same blast radius as command, with a controlling terminal.
+        if_wrong: Usually reversible locally; review the command before allowing.
+        allow_line: running `{{ command }}` under a pty
+        scenarios:
+            - id: default
+              vars:
+                command: go test ./...
+                project: my-app
+              expect_contains:
+                - pseudo-terminal
+                - project

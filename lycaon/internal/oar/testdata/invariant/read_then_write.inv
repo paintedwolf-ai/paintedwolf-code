@@ -1,0 +1,4 @@
+raise "Read then write" if:
+    (a: ToolCall) -> (b: ToolCall)
+    a.name == "read"
+    b.name == "write"

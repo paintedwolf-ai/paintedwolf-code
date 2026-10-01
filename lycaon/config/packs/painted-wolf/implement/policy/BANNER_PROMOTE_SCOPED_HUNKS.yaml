@@ -1,0 +1,14 @@
+emit: banner
+category: informational
+severity: info
+message: Scoped preview for {{ paintedwolf.path }} — {{ paintedwolf.hunk_count }} inline hunks on overlay {{
+  paintedwolf.overlay_id }}
+what: Scoped preview for {{ paintedwolf.path }} exposes {{ paintedwolf.hunk_count }} inline hunks (inline limit
+  {{ paintedwolf.inline_threshold }}).
+cause: Single-path scoped preview avoids spill-only hunk visibility for moderate conflicts
+why: Coordinators need hunk bodies to cherry-pick overlapping_edit or compose full-file resolutions
+fix: Use inline hunks for overlapping_edit only when the path has at most {{ paintedwolf.threshold }} hunks;
+  include start_line, end_line and content, back-to-front. For line_shift or larger conflicts, review ready_resolutions
+  or compose merged full-file content; use spill_path only when supplied.
+instead: Do not read primary in a loop when inline hunks or spill_path are available
+id: BANNER_PROMOTE_SCOPED_HUNKS

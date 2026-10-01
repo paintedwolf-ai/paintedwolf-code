@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SOURCE_VERSION_NO_PREDECESSOR
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "SOURCE_VERSION_NO_PREDECESSOR"
+effect: block
+copy:
+  what: No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
+  cause: The file has no earlier recorded version in this project's source ledger.
+  why: Omitted version_id defaults to the immediate predecessor, which requires at least two recorded states.
+  fix: Query source_history(mode="effects") to check recorded history, or pass an explicit version_id.
+  instead: Branch on Code; verify history via source_history
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:restore_version
+x-paintedwolf-message: no earlier version recorded for this file
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: file has only one recorded version
+      path: main.go
+      profile: implement
+      tool: restore_version
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_NO_PREDECESSOR'

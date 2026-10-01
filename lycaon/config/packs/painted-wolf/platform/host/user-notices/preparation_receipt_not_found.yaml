@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Preparation not ready"
+message: "Chat preparation has not reached the point this request reads."
+suggested_action: "Wait for preparation to progress, then try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "has not reached"

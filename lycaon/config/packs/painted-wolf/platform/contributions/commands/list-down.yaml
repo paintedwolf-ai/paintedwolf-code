@@ -1,0 +1,7 @@
+id: painted-wolf/platform:list-down
+title: "Move down in a list"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "list.down"

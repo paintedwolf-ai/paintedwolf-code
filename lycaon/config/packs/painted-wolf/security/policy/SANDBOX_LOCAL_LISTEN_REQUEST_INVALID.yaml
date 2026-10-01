@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SANDBOX_LOCAL_LISTEN_REQUEST_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_LOCAL_LISTEN_REQUEST_INVALID"
+effect: block
+copy:
+  what: The local listener capability request was invalid.
+  cause: 'The local_listen request failed structured validation: {{ paintedwolf.rejection_reason }}.'
+  why: Listener authority must use the structured shape so the sandbox profile matches the declared ports.
+  fix: On an invocation supporting local_listen, use an object with optional ports (1–8 integers from 1 through
+    65535). An empty object requests any local port; prefer the intended exact port set when known.
+  instead: Branch on Code; correct or remove the local listener request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_local_listen
+x-paintedwolf-message: structured local listener request invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_LOCAL_LISTEN_REQUEST_INVALID'
+  - local listener

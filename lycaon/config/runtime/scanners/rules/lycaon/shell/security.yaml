@@ -1,0 +1,33 @@
+rules:
+- id: lycaon.shell.remote-script-pipe
+  languages:
+  - bash
+  severity: ERROR
+  message: A downloaded script is executed directly by a shell
+  metadata:
+    category: security
+    cwe: CWE-494
+    confidence: HIGH
+    technology:
+    - bash
+  pattern-either:
+  - patterns:
+    - pattern: curl ... $URL ... | sh ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://
+  - patterns:
+    - pattern: curl ... $URL ... | bash ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://
+  - patterns:
+    - pattern: wget ... $URL ... | sh ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://
+  - patterns:
+    - pattern: wget ... $URL ... | bash ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://

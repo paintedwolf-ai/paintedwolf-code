@@ -1,0 +1,99 @@
+/* Tool domain retention floor. */
+
+/* Dynamic status modifiers require plain CSS. */
+.den-task-card-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  line-height: 1;
+  min-height: max(24px, calc(var(--text-den-overline) * 1.3 + 0.5em));
+  /* Trim trailing letter spacing. */
+  padding: 0.25em calc(0.5em - 0.06em) 0.25em 0.5em;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+}
+.den-task-card-status--running {
+  color: var(--den-accent-text);
+  background: color-mix(in srgb, var(--den-accent-signal) 12%, transparent);
+}
+.den-task-card-status--live::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+}
+.den-task-card-status--done {
+  color: var(--den-status-positive-text);
+  background: color-mix(in srgb, var(--den-status-positive) 12%, transparent);
+}
+.den-task-card-status--partial {
+  color: var(--den-status-running);
+  background: color-mix(in srgb, var(--den-status-running) 12%, transparent);
+}
+.den-task-card-status--open {
+  color: var(--den-accent-text);
+  background: color-mix(in srgb, var(--den-accent-signal) 12%, transparent);
+}
+.den-task-card-status--error {
+  color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 12%, transparent);
+}
+
+/* Pulse amplitude varies by color scheme. */
+@keyframes den-tool-running-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes den-ai-rationale-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Pulse the pending approval dot. */
+@keyframes den-approval-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes den-transcript-disclosure-body-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes den-transcript-disclosure-body-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}

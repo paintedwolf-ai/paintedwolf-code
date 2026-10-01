@@ -1,0 +1,14 @@
+emit: banner
+category: informational
+severity: info
+message: >-
+  This view contains no included entries at the requested path and depth. Check scope and filters before concluding that the repository is empty.
+cause: >-
+  The requested view contains no entries after its scope, depth and inclusion filters.
+why: >-
+  This result describes the requested view; excluded or unvisited paths are outside that observation.
+fix: >-
+  Check the requested path and filters against the task. Choose another attached scope only when relevant; create files only when the task requires new content and the current tools permit it.
+instead: >-
+  Retain the empty-view result without repeating the same survey or inventing absent files.
+id: REPO_MAP_NO_FILES

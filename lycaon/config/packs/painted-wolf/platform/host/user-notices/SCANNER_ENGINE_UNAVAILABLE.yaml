@@ -1,0 +1,13 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Scanner engine unavailable
+message: >-
+  The bundled code-scanning engine could not be loaded, so security and
+  pattern scans will not run. Everything else works normally.
+suggested_action: Reinstall the app to restore the bundled scanner engine.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - scanning engine
+      - Reinstall

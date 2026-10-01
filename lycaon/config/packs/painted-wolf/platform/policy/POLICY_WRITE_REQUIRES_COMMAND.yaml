@@ -1,0 +1,24 @@
+oar: '1.0'
+id: POLICY_WRITE_REQUIRES_COMMAND
+kind: policy
+anchor: tool.rejected
+selector:
+  tool: [terminal_open]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.path, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "POLICY_WRITE_REQUIRES_COMMAND"
+effect: block
+copy:
+  what: A persistent terminal cannot carry instruction-file write approval.
+  cause: The requested write access to {{ paintedwolf.path }} would remain available to later terminal input.
+  why: Each instruction change requires its own explicit approval.
+  fix: Use a file editing tool, or a separate command with capability_request.write_root naming this exact file.
+  instead: Prepare the instruction change for an ordinary approval.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:policy_write_request
+x-paintedwolf-message: Instruction changes require a separately reviewed action
+x-paintedwolf-scenarios:
+  - id: persistent_terminal
+    vars: {path: AGENTS.md, tool: terminal_open, profile: implement}
+    expect_contains: ['Code: POLICY_WRITE_REQUIRES_COMMAND', 'persistent terminal']

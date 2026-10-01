@@ -1,0 +1,28 @@
+package contract
+
+import (
+	"strings"
+	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+)
+
+var socketCapabilityPaths = []string{
+	"lycaon/internal/tools/socket_capability.go",
+	"lycaon/internal/tools/invocation_boundary.go",
+	"lycaon/internal/tools/package_execution_boundary.go",
+	"lycaon/internal/tools/socket_realization.go",
+	"lycaon/internal/tools/socket_approval.go",
+	"lycaon/internal/tools/socket_spawn.go",
+	"lycaon/internal/tools/socket_execution_grants.go",
+	"lycaon/internal/tools/socket_authorization_ledger.go",
+}
+
+func socketCapabilitySources(t *testing.T, root string) string {
+	t.Helper()
+	var sources []string
+	for _, path := range socketCapabilityPaths {
+		sources = append(sources, contractcheck.ReadRepoFile(t, root, path))
+	}
+	return strings.Join(sources, "\n")
+}

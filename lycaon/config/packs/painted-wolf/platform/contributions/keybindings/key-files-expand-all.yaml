@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-expand-all
+command: painted-wolf/platform:files-expand-all
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+E"
+  windows:
+    - "Mod+Shift+E"
+  linux:
+    - "Mod+Shift+E"

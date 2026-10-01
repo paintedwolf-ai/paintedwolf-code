@@ -1,0 +1,2 @@
+This is plain prose without any log structure.
+It spans multiple lines and should not classify as a log.

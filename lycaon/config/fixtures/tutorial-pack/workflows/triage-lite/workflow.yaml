@@ -1,0 +1,40 @@
+id: triage-lite
+version: 1.0.0
+name: Triage Lite
+description: Look at the problem, write up what you found, and stop for a human.
+trigger: /triage-lite
+request:
+  question: What problem should this triage investigate?
+initial_posture: spec
+blueprint:
+  id: triage
+  file: triage-lite.md
+injects:
+  - on: phase.entered
+    selector:
+      workflow: triage-lite
+      phase: investigate
+    effect: inform
+    render: triage-lite-plan
+    tier: workflow
+phases:
+  - id: investigate
+    activity_label: Investigating the problem
+    blueprint_write: true
+    coordinator_surface: plan_research
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [plan-research]
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    advance:
+      when_gate_met: auto
+    human_approval:
+      blueprint: triage-lite.md
+    next: done
+  - id: done
+    activity_label: Done
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [await-user-input]
+    terminal: true
+    complete_when: orchestration_complete

@@ -1,0 +1,16 @@
+# A topology is the parallelism shape, separate from any one workflow — so the
+# shape is reusable and tunable in one place. Unit id:
+# workflows/_topologies/example-triage-sweep
+id: example-triage-sweep
+pattern: fan_out
+iteration_cap: 4
+task: Parallel read-only sweep for the cause of a reported problem
+criterion: Prefer the explanation with the shortest evidence chain from symptom to code
+fan_out:
+  profile: path-explorer
+  subtasks:
+    - "Trace the reported symptom back to the code that produces it"
+    - "Find recent changes touching that path and what they altered"
+    - "Identify what the code assumes that the failing input violates"
+  max_workers: 3
+  aggregation: merge

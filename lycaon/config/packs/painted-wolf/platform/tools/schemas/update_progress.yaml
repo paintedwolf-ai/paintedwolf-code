@@ -1,0 +1,9 @@
+description: Set session progress checklist (markdown). Replaces the whole checklist — see content for markers and caps.
+schema:
+  type: object
+  properties:
+    content:
+      type: string
+      description: 'Checklist: `- [ ]` pending, `- [x]` done, `- [~]` terminal descope (not in-progress), `- [>]` optional (last). Max 48 lines when needed; labels ≤60c. UI the user will see: also `- [ ] Snapshot the running UI` (or `Snapshot the terminal`) after the deliverable.'
+  required: [content]
+  additionalProperties: false

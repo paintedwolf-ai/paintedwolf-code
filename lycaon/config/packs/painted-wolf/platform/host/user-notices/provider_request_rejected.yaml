@@ -1,0 +1,38 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - status
+    - reason
+title: >-
+  {% if reason == "cloudflare_workers_paid_required" %}This model requires a paid Workers plan{% else %}The model provider rejected the request{% endif %}
+message: >-
+  {% if reason == "cloudflare_workers_paid_required" %}
+  Cloudflare requires the Workers Paid plan to use{% if model %} {{ model }}{% else %} this model{% endif %}.
+  {% else %}
+  The model provider rejected this request{% if status %} (HTTP {{ status }}){% endif %}.
+  Technical details are available in Diagnostics.
+  {% endif %}
+suggested_action: >-
+  {% if reason == "cloudflare_workers_paid_required" %}
+  Choose a model available on the Workers Free plan, or upgrade your Workers plan in Cloudflare and try again.
+  {% else %}
+  Review the provider response and configuration before trying again.
+  {% endif %}
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_status
+    vars: { provider_id: together-ai-1, status: 400 }
+    expect_contains: ["HTTP 400", "Diagnostics"]
+  - id: generic
+    vars: {}
+    expect_contains: ["rejected this request"]
+  - id: cloudflare_paid_plan
+    vars: { provider_id: cloudflare-workers-ai-1, model: "@cf/zai-org/glm-5.3-flash", status: 403, reason: cloudflare_workers_paid_required }
+    expect_contains: ["Workers Paid plan", "@cf/zai-org/glm-5.3-flash"]

@@ -1,0 +1,15 @@
+id: painted-wolf/platform:files-toggle-line-endings
+title: "Toggle line endings"
+scope: files
+keywords:
+  - "line endings"
+  - "eol"
+  - "crlf"
+  - "lf"
+  - "toggle eol"
+category: edit
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.toggleLineEndings"

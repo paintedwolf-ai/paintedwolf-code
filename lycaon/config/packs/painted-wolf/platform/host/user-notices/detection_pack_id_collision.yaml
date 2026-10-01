@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Detection pack already exists
+message: >-
+  A detection pack with that id is already installed. Choose a different id, or
+  import with replace to overwrite a device pack.
+suggested_action: Pick another folder, or enable replace when overwriting a device pack.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - already installed
+      - replace

@@ -1,0 +1,220 @@
+components:
+  schemas:
+    AbortDelegationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+    CreateDelegationRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - project_id
+      - task
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
+        project_id:
+          type: string
+          format: uuid
+        task:
+          type: string
+        strategy:
+          $ref: delegation.yaml#/components/schemas/HuntStrategy
+          description: Decomposition strategy. The host uses file-based when the request omits it.
+        inspect_mode:
+          $ref: delegation.yaml#/components/schemas/InspectMode
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        workflow_run_id:
+          type: string
+          format: uuid
+        blueprint_path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+    DelegationStatus:
+      type: string
+      enum:
+      - active
+      - done
+      - failed
+      - aborted
+      - canceled
+    Delegation:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - project_id
+      - task
+      - strategy
+      - status
+      - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        workspace_root_id:
+          type: string
+          format: uuid
+        workspace_path:
+          type: string
+        coordinator_session_id:
+          type: string
+          format: uuid
+          description: Coordinator session created with the delegation (for prompts and grounding)
+        task:
+          type: string
+        strategy:
+          $ref: delegation.yaml#/components/schemas/HuntStrategy
+        inspect_mode:
+          $ref: delegation.yaml#/components/schemas/InspectMode
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        workflow_run_id:
+          type: string
+          format: uuid
+        blueprint_path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        base_head_sha:
+          type: string
+        status:
+          $ref: delegation.yaml#/components/schemas/DelegationStatus
+        reason:
+          type: string
+        phase:
+          $ref: delegation.yaml#/components/schemas/DelegationPhase
+        legs:
+          type: array
+          items:
+            $ref: delegation.yaml#/components/schemas/Leg
+        created_at:
+          type: string
+          format: date-time
+    DelegationPhase:
+      type: string
+      enum:
+      - setup
+      - worker
+      - closeout
+      - done
+    DispatchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        leg_id:
+          type: string
+          format: uuid
+    HuntStrategy:
+      type: string
+      enum:
+      - file-based
+      - feature-based
+      - risk-based
+      - research-based
+    InspectMode:
+      type: string
+      enum:
+      - standard
+      - turbo
+      - full
+    Leg:
+      type: object
+      required:
+      - id
+      - delegation_id
+      - title
+      - status
+      - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        delegation_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        agent_type:
+          type: string
+          description: Functional worker agent id stamped at dispatch
+        status:
+          $ref: delegation.yaml#/components/schemas/LegStatus
+        worker_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+        depends_on:
+          type: array
+          description: Leg ids that must complete before this leg can dispatch.
+          items:
+            type: string
+            format: uuid
+        files:
+          type: array
+          items:
+            type: string
+        prompt:
+          type: string
+        completion_criteria:
+          type: array
+          items:
+            type: string
+        workspace_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+          description: Stable workspace binding id for scoped evidence
+        result:
+          $ref: worker.yaml#/components/schemas/WorkerResult
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    LegStatus:
+      type: string
+      enum:
+      - pending
+      - dispatched
+      - running
+      - retry_pending
+      - complete
+      - failed
+      - held
+      - canceled
+    DelegationLegListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - legs
+      additionalProperties: false
+      properties:
+        legs:
+          type: array
+          items:
+            $ref: delegation.yaml#/components/schemas/Leg

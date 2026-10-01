@@ -1,0 +1,121 @@
+# Untied skill activation seeds (curated subset).
+# Contract test: disjoint should_trigger prompts; no completeness claim.
+apply-a-structural-codemod:
+  should_trigger:
+    - "Replace every call to the deprecated request helper with the new API"
+    - "Change this repeated function signature across the package with a syntax-aware rewrite"
+  should_not_trigger:
+    - "Fix the typo in this one error message"
+    - "Rename this single local variable"
+use-secrets-without-reading-them:
+  should_trigger:
+    - "Generate a new database password and configure the service without showing it"
+    - "Use the managed secret reference from the earlier turn in this HTTP header"
+    - "Rotate the generated signing key and revoke its old managed reference"
+  should_not_trigger:
+    - "Use the configured GitHub integration to inspect the pull request"
+    - "Run the app with its existing ambient sign-in"
+    - "Explain how authentication works in this service"
+    - "Add a login form to the settings page"
+investigate-code-history:
+  should_trigger:
+    - "Which commit introduced this guard and why was it added?"
+    - "Trace the history of these lines and explain who last changed the behavior"
+  should_not_trigger:
+    - "Explain what this function does now"
+    - "Why is CI failing on the pull request?"
+triage-security-findings:
+  should_trigger:
+    - "Triage the latest scanner findings and tell me which are credible"
+    - "Did this fix resolve the security finding or introduce any new ones?"
+  should_not_trigger:
+    - "Perform a manual security review of this design"
+    - "Write a Sigma rule for suspicious cloud commands"
+verify-a-change:
+  should_trigger:
+    - "Run the project's checks and verify this change"
+    - "The verification digest failed after my edit; diagnose and fix the root cause"
+  should_not_trigger:
+    - "Explain this file without changing it"
+    - "Show me the current Git history"
+craft-icons-and-chrome:
+  should_trigger:
+    - "Design a cohesive set of SVG navigation icons in duotone style"
+    - "Build a floating command palette chrome header with keyboard shortcut badges"
+    - "Create an outline icon for this new tool action and verify its pixel grid alignment"
+    - "Upgrade the UI/UX with polished vector icons and custom controls"
+    - "Craft a bespoke SVG icon set and styled headers for this SaaS dashboard"
+  should_not_trigger:
+    - "Run the project's visual regression test suite in Playwright"
+    - "Explain the CSS flexbox layout of this webpage"
+
+draw-a-diagram:
+  should_trigger:
+    - "Draw the request flow from the API gateway through the workers to the database"
+    - "Sketch the states this job moves through and what triggers each transition"
+  should_not_trigger:
+    - "Chart the benchmark timings from this run"
+    - "Mock up two layouts for the settings page"
+visualize-data:
+  should_trigger:
+    - "Chart the build durations we just measured across the last ten runs"
+    - "Show these benchmark results as a comparison table"
+  should_not_trigger:
+    - "Draw the architecture of the ingestion pipeline"
+    - "Add a chart component to the dashboard page"
+measure-interface:
+  should_trigger:
+    - "Does the dropdown overlap the save button after it opens?"
+    - "Measure the gap between the sidebar cards and check they align"
+  should_not_trigger:
+    - "Take a screenshot of the home page"
+    - "Review the settings page for keyboard accessibility"
+orchestrate-a-large-task:
+  should_trigger:
+    - "Apply this logging rule across every service in the monorepo"
+    - "Try three implementation approaches in parallel and compare them"
+  should_not_trigger:
+    - "Fix the null check in this handler"
+    - "Explain how the scheduler assigns work"
+write-policy-rule:
+  should_trigger:
+    - "Write an agent rule that asks before commands touch the deploy directory"
+    - "Add an Open Agent Rules policy with scenarios for this anchor"
+  should_not_trigger:
+    - "Write a Sigma detection for suspicious cloud commands"
+    - "Add input validation to this API endpoint"
+write-prompt-override:
+  should_trigger:
+    - "Override the coordinator persona prompt for this project"
+    - "Customize the worker prompt template in our overlay and render-test it"
+  should_not_trigger:
+    - "Write a new skill for our deploy procedure"
+    - "Improve the system prompt in our chatbot app"
+prepare-a-release:
+  should_trigger:
+    - "Get version 2.3.0 ready to release with notes and verified artifacts"
+    - "Assemble the release candidate and prove a clean install works"
+  should_not_trigger:
+    - "Publish the package to npm now"
+    - "Bump the lodash dependency"
+plan-a-database-migration:
+  should_trigger:
+    - "Plan how to split the name column on the live users table without downtime"
+    - "What's the safe rollout for adding a non-null column to this big table?"
+  should_not_trigger:
+    - "How many orders have a null customer id?"
+    - "Restore last night's backup into staging"
+verify-a-backup-and-restore:
+  should_trigger:
+    - "Prove last night's backup actually restores"
+    - "Can we meet our recovery-time objective from the nightly dump?"
+  should_not_trigger:
+    - "Plan the schema migration for the orders table"
+    - "Back up this file before editing it"
+diagnose-a-tls-failure:
+  should_trigger:
+    - "curl fails with certificate verify failed against the staging API"
+    - "Why does the client reject this certificate chain?"
+  should_not_trigger:
+    - "Add HTTPS support to the local dev server"
+    - "Why is the API returning 500s?"

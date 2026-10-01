@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_jq
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "jq",
+		Extensions:     []string{".jq"},
+		Language:       JqLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "[\n \"and\"\n \"as\"\n \"break\"\n \"catch\"\n \"def\"\n \"elif\"\n \"else\"\n \"end\"\n \"foreach\"\n \"if\"\n \"import\"\n \"include\"\n \"label\"\n \"module\"\n \"or\"\n \"reduce\"\n \"then\"\n \"try\"\n ] @keyword\n",
+	})
+}

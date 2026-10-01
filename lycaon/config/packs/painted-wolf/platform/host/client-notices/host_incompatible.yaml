@@ -1,0 +1,16 @@
+# The engine serves a different major Host API contract than this build.
+# Retry re-reads the handshake, which only helps once one side is updated.
+scope: app
+title: This app can't use this engine
+message: >-
+  The engine speaks a version of the app contract this build does not
+  support. Update the app or the engine so they match, then try again.
+suggested_action: The versions still do not match. Update the app or the engine first.
+scenarios:
+  - id: default
+    expect_contains:
+      - does not support
+      - Update the app or the engine
+  - id: retry-failed
+    expect_contains:
+      - still do not match

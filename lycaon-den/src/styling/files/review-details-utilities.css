@@ -1,0 +1,75 @@
+@utility den-git-review__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-den-label);
+
+  & label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+@utility den-git-review__files {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@utility den-git-review__filename {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@utility den-git-review__observed {
+  & > :not(summary) {
+    margin-top: 10px;
+  }
+}
+
+@utility den-files-tab-deck {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+
+  & > .den-resident-surface {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  & > .den-resident-surface--idle {
+    display: none;
+  }
+}
+
+@utility den-sidebar-scope-picker__option--toggle {
+  cursor: pointer;
+}
+
+@utility den-review-lens__empty {
+  margin: 18px 8px;
+  text-align: center;
+}
+
+@utility den-review-lens__empty--above-seen {
+  margin: 8px;
+  text-align: left;
+}
+
+@utility files-removed-lines__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+@utility files-removed-lines__row {
+  display: flex;
+  min-width: max-content;
+}
+

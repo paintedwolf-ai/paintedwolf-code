@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-home
+slot: "app_menu.go"
+command: painted-wolf/platform:go-home
+group: "1"
+order: 3
+label: "Home"

@@ -1,0 +1,35 @@
+title: Create a release
+id: 96a559bd-a41a-473f-a335-e03b7597b0d4
+description: Creates a published release on a source hosting platform.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - gh
+      - glab
+      - tea
+  selection_release:
+    CommandLine|contains|all:
+      - ' release '
+      - ' create'
+  # --draft is not filtered: a draft still creates a remote release object
+  # and its tag, so the external half of this rule's effect class still holds.
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_release and not filter_rehearsal and not filter_local

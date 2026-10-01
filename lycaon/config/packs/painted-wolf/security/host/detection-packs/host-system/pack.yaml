@@ -1,0 +1,5 @@
+id: host-system
+label: Host system
+description: >-
+  Machine-level operations that disable an OS protection, add a trusted
+  certificate, grant remote login, or stop a system service.

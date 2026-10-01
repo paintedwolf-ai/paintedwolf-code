@@ -1,0 +1,9 @@
+scope: app
+title: Update Painted Wolf Code
+message: >-
+  This version is older than the rest of the app expects. Update for full
+  compatibility.
+scenarios:
+  - id: default
+    expect_contains:
+      - Update

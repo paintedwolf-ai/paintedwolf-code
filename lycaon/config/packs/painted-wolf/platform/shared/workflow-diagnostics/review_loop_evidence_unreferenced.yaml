@@ -1,0 +1,5 @@
+code: review_loop_evidence_unreferenced
+message: |
+  Phase {{phase}} review_loop evidence_key {{key}} is not in gates as evidence_passed:{{key}}.
+replacement: |
+  Add evidence_passed:{{key}} to the phase gates.

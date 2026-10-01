@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-diff-prev-file
+title: "Previous changed file"
+scope: files
+keywords:
+  - "previous file"
+  - "prev diff"
+  - "previous changed file"
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.diffPrevFile"

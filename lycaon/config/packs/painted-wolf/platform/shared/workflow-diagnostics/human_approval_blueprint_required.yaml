@@ -1,0 +1,5 @@
+code: human_approval_blueprint_required
+message: |
+  Phase {{phase}} uses human_approval but the workflow does not declare a blueprint.
+replacement: |
+  Add a workflow blueprint and have the phase approve that document.

@@ -1,0 +1,18 @@
+id: painted-wolf/platform:go-context-blueprints
+title: "Show blueprints"
+scope: "global"
+keywords:
+  - "blueprints"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "blueprints"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.blueprints"

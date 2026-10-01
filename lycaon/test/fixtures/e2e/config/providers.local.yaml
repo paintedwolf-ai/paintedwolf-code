@@ -1,0 +1,7 @@
+providers:
+  - id: e2e-mock
+    kind: ollama
+    label: E2E mock provider
+    base_url: http://model-fixture:11434
+    models:
+      - id: mock-model

@@ -1,0 +1,74 @@
+{
+  "id": "fact-unreported-fact-does-not-take-the-on-error-path",
+  "title": "An unreported fact is not a provider failure, so a fail_closed rule over one does not block",
+  "covers": [
+    "OAR-FACT-25",
+    "OAR-OPS-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.input",
+      "id": "STRICT",
+      "effect": "block",
+      "on_error": "fail_closed",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "prompt_injection_score > 0.5"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.input"
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/STRICT:passed"
+    ]
+  }
+}

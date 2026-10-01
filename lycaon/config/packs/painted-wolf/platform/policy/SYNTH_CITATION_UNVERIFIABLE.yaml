@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SYNTH_CITATION_UNVERIFIABLE
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.citation_unverifiable
+    - paintedwolf.surface
+when: paintedwolf.surface != "implement_investigate" && paintedwolf.citation_unverifiable
+effect: block
+copy:
+  what: 'Synthesis supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence.'
+  cause: 'The citation metadata does not resolve to the claimed recorded passage.'
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: 'Repair only the trailing citation metadata using the exact observed evidence handle or path, line and verbatim excerpt. Preserve the pinned report and omit any citation that cannot be supported.'
+  instead: 'Use existing coordinator or worker observations; citation repair does not reopen tool calls.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Evidence citations
+  ui_check_id: cited_evidence
+  in_session_retry: true
+x-paintedwolf-message: 'Synthesis citation location or excerpt did not match recorded evidence'
+x-paintedwolf-scenarios:
+  - id: paraphrased_excerpt
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: src/a.go:10 ("paraphrased claim")
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SYNTH_CITATION_UNVERIFIABLE'

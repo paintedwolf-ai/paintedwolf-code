@@ -1,0 +1,23 @@
+# The enforced bound. The agent's tools[] below is what the model is OFFERED;
+# this profile is what the host will actually let through. If they disagree, the
+# profile wins — so keep the offered list a subset of the granted one.
+id: example_docs_only
+description: Docs writer — reads the tree, writes prose, runs nothing
+tools:
+  read: sticky
+  grep: sticky
+  find: sticky
+  list_dir: sticky
+  summarize: sticky
+  survey_repo: sticky
+  write: sticky
+  edit: sticky
+  update_progress: true
+deny_tools:
+  - command
+  - verify
+  - git_commit
+  - git_restore
+  - delete
+  - delegate_*
+  - state_*

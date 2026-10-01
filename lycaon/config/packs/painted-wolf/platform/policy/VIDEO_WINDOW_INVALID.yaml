@@ -1,0 +1,48 @@
+oar: '1.0'
+id: VIDEO_WINDOW_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  - paintedwolf.path
+  - paintedwolf.width
+  - paintedwolf.height
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_WINDOW_INVALID"
+effect: block
+copy:
+  what: '{{ tool }} was asked for a part of {% if paintedwolf.path %}{{ paintedwolf.path }}{% else %}the video{% endif %} that
+    it does not have{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}.'
+  cause: A crop must lie inside the video{% if paintedwolf.width %}'s {{ paintedwolf.width }}x{{ paintedwolf.height }}
+    pixels{% endif %}, and start_ms must come before the end of the video.
+  why: Every frame in a view comes from a moment and region that exist in the recording.
+  fix: Read duration_ms, width, and height from the attachment's fence or an earlier view, and keep the request inside them.
+  instead: Branch on Code VIDEO_WINDOW_INVALID; correct the times, window, or crop
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video window or crop is outside the video
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: recordings/bug.mp4
+    reason: window_outside_video
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_WINDOW_INVALID'
+- id: crop_outside_video
+  vars:
+    height: 180
+    path: recordings/bug.mp4
+    reason: crop_outside_video
+    tool: view_video
+    width: 320
+  expect_contains:
+  - 'Code: VIDEO_WINDOW_INVALID'
+  - 320x180

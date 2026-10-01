@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Sign-in is not available"
+message: "This app's engine has no access token set up, so it cannot answer requests yet."
+suggested_action: "Restart Painted Wolf Code. If it keeps happening, report it from Settings → Advanced → Diagnostics."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no access token"

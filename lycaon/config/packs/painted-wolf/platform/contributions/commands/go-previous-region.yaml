@@ -1,0 +1,7 @@
+id: painted-wolf/platform:go-previous-region
+title: "Focus previous region"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "go.previousRegion"

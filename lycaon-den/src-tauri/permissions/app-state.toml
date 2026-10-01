@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-read-app-state"
+description = "Read Den persisted app state from ~/.config/lycaon/."
+commands.allow = ["read_app_state"]
+
+[[permission]]
+identifier = "allow-patch-app-state"
+description = "Merge one slice-wise patch into Den persisted app state in ~/.config/lycaon/."
+commands.allow = ["patch_app_state"]

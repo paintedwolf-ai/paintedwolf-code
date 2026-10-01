@@ -1,0 +1,69 @@
+oar: '1.0'
+id: WRITE_SCOPE_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.patterns_list
+  - paintedwolf.profile
+  - paintedwolf.redirect
+when: paintedwolf.rejection_code == "WRITE_SCOPE_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} path {{ paintedwolf.path }} is outside profile {{ paintedwolf.profile }} write scope.'
+  cause: The path must match at least one allowed write glob for this profile.
+  why: All mutations and file redirects must stay within the active write contract.
+  fix: 'Allowed write globs for this profile:
+
+    {{ paintedwolf.patterns_list }}
+
+    {% if paintedwolf.redirect %}If saving output was optional, omit stdout_to/stderr_to and inspect the bounded
+    result tail. If a file is required, its destination must both serve the intended task and be in scope.{%
+    else %}Use an in-scope path only when it is the intended destination. Otherwise report the scope dependency;
+    changing mutation tools does not expand authority.{% endif %}'
+  instead: Preserve the intended destination and respect the active write scope
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:write_scope
+x-paintedwolf-message: path outside profile write scope
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    patterns_list: '- `${overlay_dir}/blueprints/**`'
+    profile: plan_write_only
+    tool: write
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WRITE_SCOPE_DENIED'
+  - blueprints
+- id: command_redirect
+  vars:
+    detail: bad args
+    kind: redirect
+    path: weather_output.txt
+    patterns_list: '- `${overlay_dir}/blueprints/**`'
+    profile: plan_writer
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WRITE_SCOPE_DENIED'
+  - stdout_to
+  - tail
+- id: verify_redirect
+  vars:
+    detail: bad args
+    kind: redirect
+    path: out.log
+    patterns_list: '- `${overlay_dir}/blueprints/**`'
+    profile: plan_writer
+    tool: verify
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WRITE_SCOPE_DENIED'
+  - stdout_to
+  - tail

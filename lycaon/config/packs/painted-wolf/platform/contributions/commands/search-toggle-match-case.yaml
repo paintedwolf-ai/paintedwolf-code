@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-toggle-match-case
+title: "Toggle search match case"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "search.toggleMatchCase"

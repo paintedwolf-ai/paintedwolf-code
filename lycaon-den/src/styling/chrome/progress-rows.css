@@ -1,0 +1,64 @@
+/* Progress rows: one row per unit of host work, as the Security stage and phase notes show it. */
+.den-progress-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.den-progress-rows li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.den-progress-rows__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+
+.den-progress-rows__label {
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-progress-rows__status {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  color: var(--den-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.den-progress-rows__bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--den-line);
+}
+
+.den-progress-rows__fill {
+  display: block;
+  height: 100%;
+  background: var(--den-accent);
+  transition: width var(--den-duration) var(--den-ease);
+}
+
+.den-progress-rows__readout {
+  margin: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}

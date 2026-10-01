@@ -1,0 +1,27 @@
+title: Delete an Argo CD project
+id: 1494c506-4eb5-4d33-8d0a-148942452bb0
+description: Removes a project, which is both the container its applications live in and the boundary deciding who may deploy where.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_argocd:
+    Image: argocd
+    CommandLine|contains: ' proj delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_argocd and not filter_rehearsal and not filter_local

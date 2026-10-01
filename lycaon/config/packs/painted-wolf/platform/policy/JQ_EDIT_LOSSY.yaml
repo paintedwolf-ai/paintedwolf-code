@@ -1,0 +1,39 @@
+oar: '1.0'
+id: JQ_EDIT_LOSSY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+    - paintedwolf.format
+    - paintedwolf.kind
+    - paintedwolf.line
+when: paintedwolf.rejection_code == "JQ_EDIT_LOSSY"
+effect: block
+copy:
+  what: 'Rewriting {{ paintedwolf.path }} as {{ paintedwolf.format }} would lose a {{ paintedwolf.kind }}{% if paintedwolf.line %} at line {{ paintedwolf.line }}{% endif %}; nothing was written.'
+  cause: The document holds syntax a structured rewrite cannot carry, such as TOML comments or datetimes, YAML anchors and aliases, or a YAML tag on a value the program changed.
+  why: A write that silently drops comments, references, or types changes more than the program asked for.
+  fix: Make this change with edit or replace_lines, which keep the surrounding text as written.
+  instead: Branch on Code; edit the text directly
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq_edit
+x-paintedwolf-message: jq_edit rewrite would lose source syntax
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      format: toml
+      kind: comment
+      line: '3'
+      path: Cargo.toml
+      profile: implement
+      tool: jq_edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_EDIT_LOSSY'

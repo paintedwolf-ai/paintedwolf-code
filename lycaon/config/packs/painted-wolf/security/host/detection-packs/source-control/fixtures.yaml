@@ -1,0 +1,67 @@
+fixtures:
+- rule: reflog-purge
+  positive:
+  - git reflog expire --expire=now --all
+  - git gc --prune=now --aggressive
+  - git reflog delete refs/stash@{0}
+  - sudo -u ci git reflog expire --expire=now --all
+  negative:
+  - git reflog
+  - git gc --auto
+  - git reflog expire --help
+  - git gc --prune=1.day.ago
+  - git prune --expire=now
+- rule: history-rewrite
+  positive:
+  - git filter-branch --tree-filter 'rm -f secrets.env' HEAD
+  - git-filter-repo --path secrets.env --invert-paths
+  - git replace --graft HEAD^ newparent
+  - bfg --delete-files secrets.env
+  negative:
+  - git log --oneline
+  - git rebase main
+  - git filter-branch --help
+  - git replace --list
+  - git rebase -i HEAD~3
+- rule: discard-working-tree
+  positive:
+  - tool: git_stash
+    args: {action: drop, ref: "stash@{0}"}
+  - command: git reset --hard origin/main
+    args: {cwd: /tmp/outside}
+  - git stash clear
+  - command: git checkout -- .
+    args: {cwd: /tmp/outside}
+  - command: git checkout -f main
+    args: {cwd: /tmp/outside}
+  - command: git restore --staged --worktree .
+    args: {cwd: /tmp/outside}
+  - command: git restore .
+    args: {cwd: /tmp/outside}
+  - git stash drop
+  negative:
+  - git reset HEAD~1
+  - git stash list
+  - tool: git_stash_list
+    args: {limit: 20}
+  - tool: git_stash
+    args: {action: apply, ref: "stash@{0}"}
+  - git reset --hard --help
+  - git restore --staged .
+  - git checkout main
+  - git stash pop
+- rule: branch-delete
+  positive:
+  - git branch -D feature/abandoned
+  - git worktree remove ../scratch
+  - git tag -d v1.2.3
+  - git branch --delete --force feature/x
+  - git branch --force --delete feature/x
+  - sudo -u ci git branch -D feature/abandoned
+  negative:
+  - git branch -d merged-feature
+  - git branch --list
+  - git worktree list
+  - git tag -l
+  - git branch -D --dry-run feature/x
+  - git tag --list

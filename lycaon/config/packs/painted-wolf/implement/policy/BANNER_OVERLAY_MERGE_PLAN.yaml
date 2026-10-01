@@ -1,0 +1,13 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay merge plan — {{ paintedwolf.pending_count }} pending; promote in listed order
+what: pack_board reports session-level overlay overlap graph and suggested promote sequence
+cause: Pending overlays may be independent or share paths; the current board snapshot supplies the order and
+  shared-path graph.
+why: Binary per-overlay clean status hides global merge topology
+fix: Follow the current promote_sequence; preview_overlay each eligible overlay and re-preview siblings after
+  every landing. Ordering never waives leg completion or current-revision evidence obligations.
+instead: Use overlay_merge_plan.promote_sequence before blind promote — independent overlays first, overlapping
+  ones last
+id: BANNER_OVERLAY_MERGE_PLAN

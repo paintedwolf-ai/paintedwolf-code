@@ -1,0 +1,28 @@
+title: Delete Grafana resources
+id: e26db1de-d369-4b08-abf4-73ce7a52d779
+description: Deletes dashboards, folders, or other stored Grafana resources, including every resource of a kind at once.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # The selector names a kind, not an effect, so this cannot tell a dashboard
+  # from an alert rule — a coarse match, one band under the precise
+  # monitor delete.
+  selection_grafanactl:
+    Image: grafanactl
+    CommandLine|contains: ' resources delete'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_grafanactl and not filter_rehearsal and not filter_local

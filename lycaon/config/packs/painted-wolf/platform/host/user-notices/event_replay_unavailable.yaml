@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - event_cursor
+title: Live updates resumed
+message: The retained event window no longer includes the requested position.
+suggested_action: The current state was reloaded automatically.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [event window, reloaded]

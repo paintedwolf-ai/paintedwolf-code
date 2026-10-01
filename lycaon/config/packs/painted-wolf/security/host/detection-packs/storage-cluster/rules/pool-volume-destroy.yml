@@ -1,0 +1,36 @@
+title: Destroy a storage pool or volume
+id: 5728b7a6-a300-4ca2-a3f4-1941acf38758
+description: Destroys a ZFS pool or removes an LVM logical/volume group, along with its data.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_zfs:
+    Image:
+      - zpool
+      - zfs
+    CommandLine|contains:
+      - ' destroy '
+  selection_lvm:
+    Image:
+      - lvremove
+      - vgremove
+      - pvremove
+  selection_wipefs:
+    Image: wipefs
+    CommandLine|contains: ' -a '
+  filter_rehearsal:
+    Argv|re: '^(--help|--no-act|-n)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_zfs or selection_lvm or selection_wipefs) and not filter_rehearsal and not filter_local

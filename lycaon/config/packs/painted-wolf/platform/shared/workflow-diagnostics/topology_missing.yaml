@@ -1,0 +1,5 @@
+code: topology_missing
+message: |
+  Topology {{topology}} is missing or failed to load.
+replacement: |
+  Add a YAML file under config/packs/painted-wolf/platform/workflows/_topologies/ for this topology id.

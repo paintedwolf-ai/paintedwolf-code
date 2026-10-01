@@ -1,0 +1,73 @@
+surfaces:
+  - host_error
+  - http
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - ceiling_usd
+    - spent_usd
+    - estimate_coverage
+    - unpriced_tokens
+    - unknown_charged_calls
+title: Spend ceiling reached
+message: >-
+  {% if spent_usd -%}
+  {% if estimate_coverage == "lower_bound" -%}
+  This session reached its spend ceiling (at least ${{ spent_usd }} of ${{ ceiling_usd }} estimated).
+  {% if unpriced_tokens %}Some tokens have no price.{% endif %}
+  {% if unknown_charged_calls %}Some provider usage is unreported.{% endif %}
+  {%- else -%}
+  This session reached its spend ceiling (${{ spent_usd }} of ${{ ceiling_usd }} estimated).
+  {%- endif %}
+  {%- elif ceiling_usd -%}
+  This session reached its spend ceiling of ${{ ceiling_usd }} estimated.
+  {%- else -%}
+  This session reached its spend ceiling.
+  {%- endif %}
+suggested_action: Raise the ceiling in Settings → Advanced → Budgets to continue.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: with_amounts
+    vars:
+      ceiling_usd: "5.00"
+      spent_usd: "5.12"
+      estimate_coverage: complete
+    expect_contains:
+      - spend ceiling
+      - "5.00"
+      - "5.12"
+  - id: generic
+    vars: {}
+    expect_contains:
+      - spend ceiling
+  - id: partial
+    vars:
+      ceiling_usd: "5.00"
+      spent_usd: "5.12"
+      estimate_coverage: lower_bound
+      unpriced_tokens: 100
+    expect_contains:
+      - at least
+      - Some tokens have no price
+  - id: unknown_usage
+    vars:
+      ceiling_usd: "5.00"
+      spent_usd: "5.12"
+      estimate_coverage: lower_bound
+      unknown_charged_calls: 1
+    expect_contains:
+      - at least
+      - Some provider usage is unreported
+  - id: missing_prices_and_usage
+    vars:
+      ceiling_usd: "5.00"
+      spent_usd: "5.12"
+      estimate_coverage: lower_bound
+      unpriced_tokens: 100
+      unknown_charged_calls: 2
+    expect_contains:
+      - at least
+      - Some tokens have no price
+      - Some provider usage is unreported

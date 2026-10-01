@@ -1,0 +1,12 @@
+id: painted-wolf/platform:session-stop
+title: "Stop response"
+icon: stop
+scope: "global"
+keywords:
+  - "cancel"
+  - "abort"
+when:
+  fact: "activity_live"
+action:
+  kind: native_ui
+  handler: "session.stop"

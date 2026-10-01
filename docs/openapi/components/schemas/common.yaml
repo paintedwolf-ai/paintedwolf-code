@@ -1,0 +1,74 @@
+components:
+  schemas:
+    Error:
+      x-go-generate: true
+      x-go-name: ErrorResponse
+      description: >-
+        Every API error body. `code` identifies the condition and maps to exactly
+        one HTTP status; clients branch on it, never on `message` or the status
+        alone. The presentation fields are rendered from the host notice catalog.
+      type: object
+      required:
+      - code
+      - message
+      additionalProperties: false
+      properties:
+        code:
+          $ref: './api-error-code.generated.yaml#/components/schemas/ApiErrorCode'
+          description: Machine-readable error code
+        message:
+          type: string
+          description: User-facing message for this occurrence (rendered server-side)
+        details:
+          type: object
+          additionalProperties: true
+          description: >-
+            Structured context for the code, such as `field` for `invalid_request`,
+            `param` for `invalid_query`, or `errors` for `workflow_validation_failed`.
+        title:
+          type: string
+          description: User-facing notice title (rendered server-side)
+        retryable:
+          type: boolean
+          description: Catalog signal that the same operation may succeed when retried.
+        suggested_action:
+          type: string
+          description: Hint for agent or user recovery
+        actions:
+          type: array
+          items:
+            $ref: './notice-action.generated.yaml#/components/schemas/NoticeAction'
+          description: Structured in-app destinations for the remedy; clients never infer them from copy.
+        tier:
+          $ref: './notice-tier.generated.yaml#/components/schemas/NoticeTier'
+          description: >-
+            Host-declared tier for the underlying notice; always
+            `non_catastrophic` on an HTTP error body, which requires a request the
+            user was able to make.
+        scope:
+          $ref: './notice-scope.generated.yaml#/components/schemas/NoticeScope'
+          description: >-
+            Host-declared scope for the underlying notice, so a failed request
+            surfaces where it belongs rather than wherever the user happens to be.
+        resolution:
+          type: string
+          description: Which declared resolution produced `tier`/`scope`.
+    NoticeCopy:
+      x-go-generate: true
+      type: object
+      required:
+      - title
+      - message
+      additionalProperties: false
+      description: Rendered user-notice copy for the accompanying catalog code.
+      properties:
+        title:
+          type: string
+        message:
+          type: string
+        suggested_action:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: './notice-action.generated.yaml#/components/schemas/NoticeAction'

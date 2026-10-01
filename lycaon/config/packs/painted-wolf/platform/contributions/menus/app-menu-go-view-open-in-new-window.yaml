@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-view-open-in-new-window
+slot: "app_menu.go"
+command: painted-wolf/platform:view-open-in-new-window
+group: "4"
+order: 16
+label: "Open in new window"

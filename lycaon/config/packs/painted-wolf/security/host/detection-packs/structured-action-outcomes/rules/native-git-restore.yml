@@ -1,0 +1,14 @@
+title: Discard local changes with Git restore
+id: a89a3088-cc8c-4fc9-be42-4c397a3f77a7
+status: stable
+description: Uses the native Git restore action, which overwrites uncommitted changes in specifically named paths.
+references: [https://git-scm.com/docs/git-restore]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {Tool: git_restore, TargetFile|re: '.+'}
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.impact]

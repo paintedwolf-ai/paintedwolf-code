@@ -1,0 +1,8 @@
+# SourceChangeOp — closed set of source_changed SSE ops.
+name: SourceChangeOp
+go_const_prefix: SourceChangeOp
+values:
+  - id: write
+  - id: create
+  - id: rename
+  - id: delete

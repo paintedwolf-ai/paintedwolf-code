@@ -1,0 +1,15 @@
+id: plan-reviewer-alt
+name: Plan reviewer (alt)
+description: Advisory plan markdown review (diverse second model)
+tool_profile: plan_review_readonly
+exec_mode: none
+capabilities:
+  - plan_review
+topology_roles:
+  - worker
+  - gate
+dispatch_lanes:
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/plan-reviewer-alt.md

@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SURVEY_PATH_ESCAPE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.path_escape
+when: paintedwolf.rejection_code == "SURVEY_PATH_ESCAPE"
+effect: block
+copy:
+  what: '{{ tool }} could not establish path authority for {{ paintedwolf.path }}.'
+  cause: The path resolver could not place this request within an attached or currently authorized scope. This
+    does not establish whether an approval card was shown.
+  why: Structured rejects keep sandbox enforcement consistent across read-only survey tools.
+  fix: If you meant a project file, use a path inside an attached folder (list_dir from "." / "@label/sub/path").
+    If the user named this exact path, say it is outside the attached folders and ask them to attach that folder;
+    do not respell the path to look reachable.
+  instead: Preserve the path boundary; do not respell the path or request pasted protected content
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:survey
+x-paintedwolf-message: survey path escapes project sandbox
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: ../outside
+    profile: explore_readonly
+    tool: find
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURVEY_PATH_ESCAPE'
+  - attached folder

@@ -1,0 +1,213 @@
+.os-theme-den.os-scrollbar {
+  --os-size: var(--den-scrollbar-size);
+  --os-padding-perpendicular: 2px;
+  --os-padding-axis: 2px;
+  --os-track-border-radius: 999px;
+  --os-handle-border-radius: 999px;
+  --os-handle-interactive-area-offset: 4px;
+  --os-handle-bg: var(--den-scrollbar-thumb);
+  --os-handle-bg-hover: var(--den-scrollbar-thumb-hover);
+  --os-handle-bg-active: var(--den-scrollbar-thumb-hover);
+  --os-handle-min-size: 40px;
+  --os-track-bg: transparent;
+  --os-track-bg-hover: transparent;
+  --os-track-bg-active: transparent;
+}
+
+[data-overlayscrollbars-viewport] {
+  overscroll-behavior: none;
+}
+
+.os-theme-den .os-scrollbar-handle {
+  cursor: default;
+  touch-action: none;
+}
+
+/* Logical hosts place the handle from their published range, not the native scroll timeline. */
+.os-scrollbar-vertical.den-scrollbar-logical .os-scrollbar-handle {
+  height: calc(var(--den-scrollbar-viewport) * 100%) !important;
+  top: calc(var(--den-scrollbar-position) * 100%) !important;
+  transform: translateY(calc(var(--den-scrollbar-position) * -100%)) !important;
+}
+
+/* Idle bars fade through the theme's opacity transition. */
+.os-theme-den.os-scrollbar.den-scrollbar-idle {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Den's input binding needs pointer events on the handle and track. */
+.os-scrollbar.den-scrollbar-handle-interactive .os-scrollbar-handle,
+.os-scrollbar.den-scrollbar-track-interactive .os-scrollbar-track {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+[data-den-scrollbar-dragging] .os-theme-den .os-scrollbar-handle {
+  cursor: grabbing;
+}
+
+/* Themed viewports suppress native gutters; their frames carry the chrome. */
+:is(
+  .den-scrollport__viewport,
+  .den-chat-stream-frame > .den-chat-stream,
+  .den-files-tree-scroll,
+  .den-shell-nav,
+  .cm-editor .cm-scroller
+) {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* These rules reproduce the library's attached layout, so a frame lays out
+   the same before and after its scrollbar attaches. */
+[data-den-scrollport] > .den-scrollport__viewport {
+  position: relative;
+  z-index: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  outline: none;
+}
+
+/* Gestures along an axis the viewport does not scroll reach the parent. */
+[data-den-scrollport="y"] > .den-scrollport__viewport {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: auto;
+  overscroll-behavior-y: none;
+}
+
+[data-den-scrollport="x"] > .den-scrollport__viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+}
+
+[data-den-scrollport="both"] > .den-scrollport__viewport {
+  overflow: auto;
+  overscroll-behavior: none;
+}
+
+/* A focused viewport's ring would be clipped by its frame, so the frame draws it. */
+[data-den-scrollport]:has(> .den-scrollport__viewport:focus-visible) {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+}
+
+[data-den-scrollport] > .den-scrollport__viewport:focus-visible {
+  box-shadow: none;
+}
+
+/* Chrome paints above the viewport's stacking context. */
+[data-den-scrollport] > .os-scrollbar {
+  z-index: 1;
+}
+
+/* Layered, so frame classes size and place their own box. */
+@layer components {
+  [data-den-scrollport] {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* The content box is the scroll extent: it fills the viewport and grows with its children. */
+  .den-scrollport__content {
+    display: flow-root;
+    box-sizing: border-box;
+    min-height: 100%;
+  }
+
+  /* Sideways extents take their children's width, so the box measures the whole range. */
+  [data-den-scrollport="x"] > .den-scrollport__viewport > .den-scrollport__content {
+    width: max-content;
+    min-width: 100%;
+  }
+}
+
+/* Editor panels and the scroller remain a column. */
+.cm-editor[data-overlayscrollbars~="host"] {
+  flex-direction: column !important;
+}
+
+/* Editor scrollbars sit above the editable surface. */
+.cm-editor[data-overlayscrollbars~="host"] > .os-scrollbar {
+  z-index: 1;
+}
+
+/* Wide lines entering view preserve the vertical track height. */
+.cm-editor[data-overlayscrollbars~="host"] > .os-scrollbar-vertical {
+  bottom: 0;
+}
+
+/* The tree frame keeps its sticky-overlay column. */
+.den-files-tree-scroll-frame[data-overlayscrollbars~="host"] {
+  flex-direction: column !important;
+}
+
+/* Tree scrollbars paint above pinned folder rows. */
+.den-files-tree-scroll-frame > .os-scrollbar {
+  z-index: 4;
+}
+
+.den-files-tree-scroll-frame[data-overlayscrollbars~="host"]
+  > .den-files-tree-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
+
+/* The rail frame keeps its column. */
+.den-shell-nav-frame[data-overlayscrollbars~="host"] {
+  flex-direction: column !important;
+}
+
+/* The rail's handle sits flush with its edge, clear of the rows' 10px gutter.
+   The interactive offset keeps the grab area at the shared 12px. */
+.den-shell-nav-frame > .os-theme-den.os-scrollbar {
+  --os-size: 8px;
+  --os-padding-perpendicular: 0px;
+}
+
+/* The chat frame keeps the transcript column; its scroller fills it. */
+.den-chat-stream-frame[data-overlayscrollbars~="host"] {
+  flex-direction: column !important;
+}
+
+.den-chat-stream-frame[data-overlayscrollbars~="host"] > .den-chat-stream {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* The transcript scrollbar paints above the stream's edge caps. */
+.den-chat-stream-frame > .os-scrollbar {
+  z-index: 5;
+}
+
+.cm-editor[data-overlayscrollbars~="host"] > .cm-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+
+.cm-editor
+  > .cm-scroller[data-overlayscrollbars-viewport~="measuring"] {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}

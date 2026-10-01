@@ -1,0 +1,40 @@
+title: Run a command on a Compute Engine instance
+id: 94d15b6d-d72e-46b7-9e12-c3c8cd49a7cc
+description: >-
+  Runs an arbitrary command on an instance over SSH, or installs login keys that
+  grant shell access to every instance in the project.
+references:
+  - https://cloud.google.com/sdk/gcloud/reference
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: gcloud
+  selection_ssh:
+    CommandLine|contains: ' compute ssh'
+  selection_ssh_command:
+    CommandLine|contains: ' --command'
+  selection_metadata_keys:
+    CommandLine|contains:
+      - ' compute instances add-metadata'
+      - ' compute project-info add-metadata'
+  selection_ssh_keys_value:
+    CommandLine|contains: 'ssh-keys'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|help)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and ((selection_ssh and selection_ssh_command)
+    or (selection_metadata_keys and selection_ssh_keys_value))
+    and not filter_rehearsal and not filter_local

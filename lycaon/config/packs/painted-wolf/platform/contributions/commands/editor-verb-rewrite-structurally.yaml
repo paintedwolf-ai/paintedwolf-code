@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-verb-rewrite-structurally
+title: "Rewrite structurally"
+scope: "files"
+keywords:
+  - "refactor"
+  - "rewrite"
+  - "restructure"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-rewrite-structurally

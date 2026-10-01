@@ -1,0 +1,13 @@
+tags: [workers]
+description: >-
+  Decline a running worker's open request_budget. Its ceiling stays where it
+  is; the worker is told on its next round to finish within it with an honest
+  partial report, and its request closes.
+schema:
+  type: object
+  properties:
+    job_id:
+      type: string
+      description: Worker job id from task() enqueue or pack_board roster
+  required: [job_id]
+  additionalProperties: false

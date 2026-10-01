@@ -1,0 +1,6 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Project trust is off
+message: >-
+  The project setting needed for this action is off.
+suggested_action: Open Trust for this project, turn the setting on, then retry.

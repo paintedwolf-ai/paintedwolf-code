@@ -1,0 +1,24 @@
+description: "Bounded recursive directory walk — canonical for ** name_glob. Default type=any returns files and directories together. Wide unscoped walk at path=\".\" (2000+ paths) returns view digest (selected=0) with distribution + FIND_OVERFLOW_NARROW — pass name_glob when you can name a filename pattern. A concrete path (not \".\") or name_glob returns literal results[] (same as list_dir targeted). Explicit max_results or offset also forces a literal page. Replaces command: find(1) recursive walk, tree(1)."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Project-relative walk root, or an absolute path — no flags or scope text inside this string (default "."). name_glob, type, max_depth, max_results, and offset are sibling JSON keys. Subpaths (not ".") return literal pages on overflow. Host enforces attached roots — do not refuse an absolute path in prose without calling the tool.
+    name_glob:
+      type: string
+      description: "Optional glob filter. Supports *, ?, character classes, ** directories, and brace alternatives (e.g. **/*.{go,ts}). Patterns without / or ** match basenames; path patterns match repo-relative paths. Invalid patterns are rejected."
+    type:
+      type: string
+      enum: [file, dir, any]
+      description: Entry type filter (default any — files and dirs in one call)
+    offset:
+      type: integer
+      description: Skip this many matching entries before returning results (use with truncated/next_offset)
+    max_depth:
+      type: integer
+      description: Maximum directory depth below path (min 1). With name_glob, every depth is searched unless you set this; a listing without name_glob defaults to 8. Read depth_notice when deeper entries were left out.
+    max_results:
+      type: integer
+      description: Page size for literal results[]. Omit on the first unscoped path=\".\" walk — the host returns view digest; set max_results or offset when paging after narrowing.
+  additionalProperties: false

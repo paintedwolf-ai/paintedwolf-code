@@ -1,0 +1,16 @@
+tags: [edit, filesystem]
+description: "Unified diff between two repo-relative file paths (read-scope only; never use command diff). Replaces command: diff(1)."
+schema:
+  type: object
+  properties:
+    path_a:
+      type: string
+      description: Repo-relative path to the left/before file
+    path_b:
+      type: string
+      description: Repo-relative path to the right/after file
+    context_lines:
+      type: integer
+      description: Unified hunk context lines (default 3, max 10)
+  required: [path_a, path_b]
+  additionalProperties: false

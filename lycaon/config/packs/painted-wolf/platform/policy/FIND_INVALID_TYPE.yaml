@@ -1,0 +1,34 @@
+oar: '1.0'
+id: FIND_INVALID_TYPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - find
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.type
+when: paintedwolf.rejection_code == "FIND_INVALID_TYPE"
+effect: block
+copy:
+  what: find received invalid type {{ paintedwolf.type }} — want file, dir, or any.
+  cause: The type filter must be one of file, dir, or any.
+  why: Structured find filters keep walk semantics predictable under sandbox caps.
+  fix: Retry find with type file, dir, or any (or omit type).
+  instead: Branch on Code; fix the type argument
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:find
+x-paintedwolf-message: find type argument is invalid
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: src/
+      profile: explore_readonly
+      tool: find
+      type: symlink
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: FIND_INVALID_TYPE'

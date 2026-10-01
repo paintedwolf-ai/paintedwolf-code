@@ -1,0 +1,39 @@
+name: release-system-live-test
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-system-live-test
+  cancel-in-progress: false
+
+jobs:
+  r2-release-controls:
+    runs-on: ubuntu-latest
+    environment: release-rehearsal
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Exercise isolated R2 release system
+        env:
+          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
+          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
+          RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
+          RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
+        run: ./task release:live-test

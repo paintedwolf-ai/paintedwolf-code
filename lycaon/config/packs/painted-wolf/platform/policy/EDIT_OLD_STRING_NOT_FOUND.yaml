@@ -1,0 +1,42 @@
+oar: '1.0'
+id: EDIT_OLD_STRING_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - edit
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.old_string_chars
+  - paintedwolf.path
+  - paintedwolf.total_lines
+when: paintedwolf.rejection_code == "EDIT_OLD_STRING_NOT_FOUND"
+effect: block
+copy:
+  what: edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars)
+    in the current file ({{ paintedwolf.total_lines }} lines).
+  cause: old_string must match the file text exactly. Stale content, copied line-number prefixes, or literal
+    backslash-escape text can cause misses; valid JSON Unicode escapes are decoded before matching.
+  why: Structured rejects steer agents back to read for a verbatim copy instead of guessing from free-form
+    errors.
+  fix: Re-read {{ paintedwolf.path }} and copy the exact substring after the line-number tab into old_string.
+    When near_line is present, call the read_hint first so the slice is current.
+  instead: Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:edit
+x-paintedwolf-message: edit old_string not found in file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    old_string_chars: 42
+    path: internal/foo.go
+    profile: implement
+    tool: edit
+    total_lines: 120
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: EDIT_OLD_STRING_NOT_FOUND'

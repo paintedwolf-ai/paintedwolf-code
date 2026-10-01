@@ -1,0 +1,41 @@
+title: Reached a messaging or email API
+id: d6a870c6-a376-40d0-b1f4-7a1b53d12b75
+description: Connected to a service that can send messages to people outside this machine.
+references:
+  - https://attack.mitre.org/
+  - https://core.telegram.org/bots/api
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - twilio.com
+      - sendgrid.com
+      - mailgun.net
+      - postmarkapp.com
+      - resend.com
+      - discord.com
+      # Telegram's bot API: sendMessage and sendDocument make it the cheapest
+      # exfil and C2 channel there is, but a bot polling getUpdates is an
+      # ordinary read, so it bands with the other messaging APIs rather than
+      # with the collectors that have no read side. Exact host — core. and web.
+      # under telegram.org are documentation and the consumer client.
+      - api.telegram.org
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .twilio.com
+      - .sendgrid.com
+      - .mailgun.net
+      - .postmarkapp.com
+      - .resend.com
+      - .discord.com
+      - .slack.com
+  condition: selection_host or selection_suffix

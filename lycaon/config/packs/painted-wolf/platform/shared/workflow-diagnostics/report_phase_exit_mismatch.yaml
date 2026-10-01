@@ -1,0 +1,5 @@
+code: report_phase_exit_mismatch
+message: |
+  Phase {{phase}} waits on topology_report_delivered but binds {{surface}} (exit: {{exit}}) — the report would ship without the closeout grounding contract.
+replacement: |
+  Bind phases[{{phase}}].coordinator_surface to a surface declared `exit: report` in coordinator-surfaces.yaml.

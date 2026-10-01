@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not discard changes
+message: >-
+  Git could not discard all working changes. Inspect the repository because some files may already have changed.
+suggested_action: >-
+  Review the remaining changes before retrying.

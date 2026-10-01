@@ -1,0 +1,27 @@
+title: Remove a RunPod pod
+id: 2bedc361-d307-4082-b0b1-4fbb0f1b45c3
+description: Permanently deletes a RunPod pod and all of its container-local data.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: runpodctl
+    CommandLine|contains:
+      - ' remove pod '
+      - ' remove pods '
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and not filter_rehearsal and not filter_local

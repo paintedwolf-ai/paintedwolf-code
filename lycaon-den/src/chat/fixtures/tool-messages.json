@@ -1,0 +1,89 @@
+{
+  "assistantWithRead": {
+    "id": "msg-a1",
+    "role": "assistant", "origin": "model", "authority": "none", "trust_tier": "trusted",
+    "content": "",
+    "tool_calls": [
+      {
+        "id": "call-read-1",
+        "name": "read",
+        "args": { "path": "src/main.go" }
+      }
+    ],
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  "toolReadResult": {
+    "id": "msg-t1",
+    "role": "tool", "origin": "tool", "authority": "none", "trust_tier": "untrusted",
+    "content": "package main\n",
+    "tool_result": {
+      "content": "package main\n",
+      "tool": "read",
+      "tool_call_id": "call-read-1",
+      "assistant_message_id": "msg-a1",
+      "tool_args": { "path": "src/main.go" },
+      "outcome": "completed"
+    },
+    "created_at": "2026-01-01T00:00:01Z"
+  },
+  "assistantWithPackBoard": {
+    "id": "msg-a2",
+    "role": "assistant", "origin": "model", "authority": "none", "trust_tier": "trusted",
+    "content": "",
+    "tool_calls": [
+      {
+        "id": "call-board-1",
+        "name": "pack_board",
+        "args": { "detail_level": "compact" }
+      }
+    ],
+    "created_at": "2026-01-01T00:02:00Z"
+  },
+  "toolPackBoardResult": {
+    "id": "msg-t2",
+    "role": "tool", "origin": "tool", "authority": "none", "trust_tier": "untrusted",
+    "content": "{\"board\":\"<!-- pack-board:v1 -->\\n| Phase | P0 spec |\",\"recon\":{\"empty\":false,\"stale\":false,\"compact\":\"go · mod\",\"languages\":[\"go\"],\"package_manager\":\"go\",\"test_command\":\"go test\",\"monorepo\":false,\"fingerprint\":\"abc\",\"generated_at\":\"2026-01-01T00:00:00Z\"}}",
+    "tool_result": {
+      "content": "{\"board\":\"<!-- pack-board:v1 -->\\n| Phase | P0 spec |\",\"recon\":{\"empty\":false,\"stale\":false,\"compact\":\"go · mod\",\"languages\":[\"go\"],\"package_manager\":\"go\",\"test_command\":\"go test\",\"monorepo\":false,\"fingerprint\":\"abc\",\"generated_at\":\"2026-01-01T00:00:00Z\"}}",
+      "tool": "pack_board",
+      "tool_call_id": "call-board-1",
+      "assistant_message_id": "msg-a2",
+      "tool_args": { "detail_level": "compact" },
+      "outcome": "completed"
+    },
+    "created_at": "2026-01-01T00:02:01Z"
+  },
+  "assistantWithDelegate": {
+    "id": "msg-a3",
+    "role": "assistant", "origin": "model", "authority": "none", "trust_tier": "trusted",
+    "content": "",
+    "tool_calls": [
+      {
+        "id": "call-task-1",
+        "name": "delegate_dispatch",
+        "args": {
+          "subagent_type": "implementer",
+          "description": "Implement feature X"
+        }
+      }
+    ],
+    "created_at": "2026-01-01T00:03:00Z"
+  },
+  "toolDelegateResult": {
+    "id": "msg-t3",
+    "role": "tool", "origin": "tool", "authority": "none", "trust_tier": "untrusted",
+    "content": "Worker spawned",
+    "tool_result": {
+      "content": "Worker spawned",
+      "tool": "delegate_dispatch",
+      "tool_call_id": "call-task-1",
+      "assistant_message_id": "msg-a3",
+      "tool_args": {
+        "subagent_type": "implementer",
+        "description": "Implement feature X"
+      },
+      "outcome": "completed"
+    },
+    "created_at": "2026-01-01T00:03:01Z"
+  }
+}

@@ -1,0 +1,43 @@
+title: Delete a Windows service or registry key
+id: da56348b-9290-4b66-acde-c3fb08327288
+description: Deletes a system service definition or a registry key tree.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_sc:
+    Image:
+      - sc
+      - sc.exe
+    CommandLine|contains: ' delete '
+  selection_reg:
+    Image:
+      - reg
+      - reg.exe
+    CommandLine|contains: ' delete '
+  selection_powershell:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    CommandLine|contains:
+      - 'Remove-Service'
+      - 'Remove-Item -Path HKLM'
+      - 'Remove-Item -Path HKCU'
+      - 'Remove-Item Registry::'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(-whatif|/[?])(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_sc or selection_reg or selection_powershell) and not filter_rehearsal and not filter_local

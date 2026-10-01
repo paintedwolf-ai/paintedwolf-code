@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-select-all-matches
+command: painted-wolf/platform:find-select-all-matches
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Enter"
+  windows:
+    - "Mod+Shift+Enter"
+  linux:
+    - "Mod+Shift+Enter"

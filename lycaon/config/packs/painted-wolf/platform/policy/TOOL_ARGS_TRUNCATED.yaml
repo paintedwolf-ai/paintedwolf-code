@@ -1,0 +1,46 @@
+oar: '1.0'
+id: TOOL_ARGS_TRUNCATED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.tool_payload_chunkable
+when: paintedwolf.rejection_code == "TOOL_ARGS_TRUNCATED"
+effect: block
+copy:
+  what: Tool {{ tool }} call ended at the completion token cap before its arguments closed, so none of it reached
+    the tool.
+  cause: The argument stream reached the provider completion cap before producing the complete call. {% if paintedwolf.tool_payload_chunkable
+    %}The payload did not fit this response budget.{% else %}This result does not establish why the argument stream
+    failed to finish.{% endif %}
+  why: '{% if paintedwolf.tool_payload_chunkable %}Retrying the same call hits the same cap; the payload has to
+    be split, not resent.{% else %}There is no second half to send. Splitting is not the recovery here, and neither
+    is retrying the call unchanged.{% endif %}'
+  fix: '{% if paintedwolf.tool_payload_chunkable %}Use smaller complete atomic changes, retaining valid intermediate
+    source and the intended final content. A partially written file shell may fail syntax validation; do not use
+    append chunks to bypass that boundary. For one indivisible large change, report the budget limitation or use
+    an offered workflow capable of carrying it.{% else %}Reissue {{ tool }} with concise schema-valid arguments.
+    Do not discard required values or split arguments across calls that cannot combine them.{% endif %}'
+  instead: '{% if paintedwolf.tool_payload_chunkable %}Partition only where complete valid operations preserve the
+    intended change.{% else %}Correct and bound one complete argument object before retrying.{% endif %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_args
+x-paintedwolf-message: Tool {{ tool }} call ended at the completion token cap before its arguments closed, so none
+  of it reached the tool.
+x-paintedwolf-scenarios:
+- id: chunkable_payload
+  vars:
+    tool: write
+    tool_payload_chunkable: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_ARGS_TRUNCATED'
+- id: small_args_runaway
+  vars:
+    tool: terminal_open
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_ARGS_TRUNCATED'

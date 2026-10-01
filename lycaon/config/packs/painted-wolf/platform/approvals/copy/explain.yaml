@@ -1,0 +1,19 @@
+# copy — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    copy:
+        tool: copy
+        tier_hint: recoverable
+        what_changes: Copy files within the project.
+        who_affected: Source and destination paths in this project.
+        if_wrong: Overwrites are usually reversible via git if tracked.
+        allow_line: copying files in this project
+        scenarios:
+            - id: default
+              vars:
+                path: src/a.ts
+                project: my-app
+              expect_contains:
+                - Copy files
+                - project

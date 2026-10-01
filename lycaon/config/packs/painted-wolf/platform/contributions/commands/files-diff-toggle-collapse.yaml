@@ -1,0 +1,14 @@
+id: painted-wolf/platform:files-diff-toggle-collapse
+title: "Toggle fold all changed files"
+scope: files
+keywords:
+  - "collapse diffs"
+  - "fold diffs"
+  - "toggle fold diffs"
+  - "collapse all files"
+category: view
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.diffToggleCollapse"

@@ -1,0 +1,4 @@
+id: slack-bot-token
+upstream_id: slack-bot-token
+title: Slack token
+severity: critical

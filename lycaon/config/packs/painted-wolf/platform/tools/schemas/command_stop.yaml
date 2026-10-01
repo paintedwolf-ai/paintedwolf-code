@@ -1,0 +1,10 @@
+tags: [process]
+description: Request termination of a command job process tree. stop_requested acknowledges the request; running stays true until exit is observed. Request once, then wait on the handle or inspect command_output rather than repeating stop.
+schema:
+  type: object
+  properties:
+    handle:
+      description: "Live command handle returned by command/verify."
+      type: string
+  required: [handle]
+  additionalProperties: false

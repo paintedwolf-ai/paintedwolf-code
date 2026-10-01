@@ -1,0 +1,13 @@
+id: brave-search-api-key
+title: Brave Search API key
+regex: '(?i)\b(?:brave_search_api_key|brave_api_key|x-subscription-token)\b[''" ]*[:=][ ''"]*([A-Za-z0-9._~+/-]{28,})'
+keywords:
+  - brave_search_api_key
+  - brave_api_key
+  - x-subscription-token
+severity: critical
+secret_group: 1
+entropy: 3.5
+allowlist_stopwords:
+  - your_api_key
+  - your_actual_api_key_here

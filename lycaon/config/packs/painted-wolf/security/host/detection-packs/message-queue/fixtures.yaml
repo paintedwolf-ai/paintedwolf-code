@@ -1,0 +1,55 @@
+fixtures:
+- rule: topic-delete
+  positive:
+  - kafka-topics --bootstrap-server broker:9092 --delete --topic orders
+  - rpk topic delete orders
+  - kafka-topics.sh --bootstrap-server broker:9092 --delete --topic orders
+  - nats stream rm ORDERS
+  - pulsar-admin topics delete persistent://public/default/orders
+  - nats stream purge ORDERS
+  - confluent kafka topic delete orders --force
+  - confluent kafka topic delete --force orders
+  - sudo confluent kafka topic delete orders --force
+  negative:
+  - kafka-topics --bootstrap-server broker:9092 --list
+  - rpk topic list
+  - kafka-topics --bootstrap-server broker:9092 --describe --topic orders
+  - nats stream ls
+  - pulsar-admin topics list persistent://public/default
+  - rpk topic create orders
+  - kafka-topics --bootstrap-server broker:9092 --delete --topic orders --help
+  - confluent kafka topic delete orders
+  - confluent kafka topic list
+- rule: consumer-offset-reset
+  positive:
+  - kafka-consumer-groups --bootstrap-server broker:9092 --group billing --reset-offsets --to-earliest --execute
+  - kafka-consumer-groups.sh --bootstrap-server broker:9092 --group billing --reset-offsets --to-latest --execute
+  - rpk group seek billing --to start
+  - rpk group offset-delete billing --from-file offsets.txt
+  - nats consumer reset ORDERS billing --sequence 100 -f
+  negative:
+  - kafka-consumer-groups --bootstrap-server broker:9092 --describe --group billing
+  - nats stream info ORDERS
+  - kafka-consumer-groups --bootstrap-server broker:9092 --group billing --reset-offsets --dry-run
+  - rpk group describe billing
+  - nats consumer info ORDERS billing
+  - nats consumer ls ORDERS
+- rule: confluent-cluster-delete
+  positive:
+  - confluent kafka cluster delete lkc-abc123 --force
+  - confluent kafka cluster delete --force lkc-abc123
+  - sudo confluent kafka cluster delete lkc-abc123 --force
+  negative:
+  - confluent kafka cluster delete lkc-abc123
+  - confluent kafka cluster list
+  - confluent kafka cluster describe lkc-abc123
+  - confluent kafka cluster delete lkc-abc123 --help
+  - confluent kafka cluster delete lkc-abc123 -h
+- rule: confluent-rbac-grant
+  positive:
+  - confluent iam rbac role-binding create --principal User:u-123456 --role ResourceOwner --environment env-123456 --kafka-cluster lkc-123456 --resource Topic:my-topic
+  - sudo confluent iam rbac role-binding create --principal User:u-123456 --role CloudClusterAdmin --kafka-cluster lkc-123456
+  negative:
+  - confluent iam rbac role-binding list --principal User:u-123456
+  - confluent iam rbac role-binding delete --principal User:u-123456 --role ResourceOwner --kafka-cluster lkc-123456
+  - confluent iam rbac role-binding create --principal User:u-123456 --role ResourceOwner --help

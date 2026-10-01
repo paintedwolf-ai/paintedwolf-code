@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SURFACE_NOTE_WORKER_SESSION
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - surface_note
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SURFACE_NOTE_WORKER_SESSION"
+effect: block
+copy:
+  what: A note posted here would land on this worker's transcript, not the user's chat.
+  cause: surface_note ran in a spawned worker session, so the note row would append there.
+  why: A worker's channel to the user is its leg envelope, which the coordinator reads and relays.
+  fix: Use record_finding for sibling findings only when offered. Return the user-facing fact through the current
+    leg completion surface for the coordinator to relay; do not post a replacement surface_note in this worker.
+  instead: Branch on Code SURFACE_NOTE_WORKER_SESSION; report through the leg, do not retry here
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:surface_note
+x-paintedwolf-message: A note posted here would land on this worker's transcript, not the user's chat.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: explore
+    tool: surface_note
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURFACE_NOTE_WORKER_SESSION'
+  - not the user's chat

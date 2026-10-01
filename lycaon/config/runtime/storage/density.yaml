@@ -1,0 +1,8 @@
+# Content-blob density pass: idle projects get their model-output/evidence
+# bodies recompressed at a higher ratio, then are marked cold so future ticks
+# skip them (idx_projects_storage_tier_idle) until the project reopens.
+density:
+  idle_threshold_days: 14
+  poll_interval_ms: 21600000 # 6h
+  projects_per_tick: 25
+  blobs_per_project_tick: 200

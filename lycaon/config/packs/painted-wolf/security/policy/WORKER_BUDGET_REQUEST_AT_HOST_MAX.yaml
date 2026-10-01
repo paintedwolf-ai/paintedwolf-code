@@ -1,0 +1,35 @@
+oar: '1.0'
+id: WORKER_BUDGET_REQUEST_AT_HOST_MAX
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - request_budget
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_tool_loops
+  - paintedwolf.host_max
+when: paintedwolf.rejection_code == "WORKER_BUDGET_REQUEST_AT_HOST_MAX"
+effect: block
+copy:
+  what: This leg's ceiling of {{ paintedwolf.max_tool_loops }} tool rounds is already the host maximum.
+  cause: The host bounds every worker ceiling at {{ paintedwolf.host_max }}, and no grant can exceed it.
+  why: A request the coordinator cannot grant would only spend its attention.
+  fix: Finish the work already in progress, then return an honest partial report that names what is left in
+    remaining_risk and suggested_next_task.
+  instead: Report the remaining work; do not repeat request_budget
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_budget
+x-paintedwolf-message: This leg's ceiling is already the host maximum
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    max_tool_loops: 120
+    host_max: 120
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_BUDGET_REQUEST_AT_HOST_MAX'
+  - suggested_next_task

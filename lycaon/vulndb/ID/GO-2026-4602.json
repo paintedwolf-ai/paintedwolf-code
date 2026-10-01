@@ -1,0 +1,75 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "os",
+      "symbols": [
+       "File.ReadDir",
+       "File.Readdir",
+       "ReadDir",
+       "dirFS.ReadDir",
+       "rootFS.ReadDir"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "stdlib"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.8"
+      },
+      {
+       "introduced": "1.26.0-0"
+      },
+      {
+       "fixed": "1.26.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-27139"
+ ],
+ "credits": [
+  {
+   "name": "Miloslav Trma\u010d of Red Hat"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4602"
+ },
+ "details": "On Unix platforms, when listing the contents of a directory using File.ReadDir or File.Readdir the returned FileInfo could reference a file outside of the Root in which the File was opened.\n\nThe impact of this escape is limited to reading metadata provided by lstat from arbitrary locations on the filesystem without permitting reading or writing files outside the root.",
+ "id": "GO-2026-4602",
+ "modified": "2026-03-06T21:03:42Z",
+ "published": "2026-03-06T21:03:42Z",
+ "references": [
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/EdhZqrQ98hk"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/77827"
+  },
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/749480"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "FileInfo can escape from a Root in os"
+}

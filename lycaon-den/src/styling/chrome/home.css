@@ -1,0 +1,648 @@
+/* Non-scrolling anchor: the drop overlay covers the stage, not the canvas. */
+.home-view-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.home-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.home-view__content {
+  padding: var(--den-stage-inset-y) 26px 40px;
+}
+.home-view__idea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  padding: 10px 12px;
+  /* Aligns this divider with the search divider. */
+  margin-bottom: 11px;
+}
+.home-view__idea-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* The chip rail borrows composer chrome; the card's gap does the spacing. */
+.home-view__idea .den-composer-attach-note,
+.home-view__idea .den-composer-chip-rail {
+  margin: 0;
+}
+.home-view__idea-error {
+  margin: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-danger);
+}
+.recent-switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--den-text) 22%, transparent);
+  pointer-events: none;
+}
+.recent-switcher {
+  pointer-events: auto;
+  min-width: 340px;
+  max-width: min(520px, 90vw);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-overlay-strong);
+  padding: 6px;
+}
+.recent-switcher__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.recent-switcher__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 9px;
+  text-align: left;
+  font: inherit;
+  color: var(--den-text);
+  cursor: pointer;
+}
+.recent-switcher__row--active {
+  background: color-mix(in srgb, var(--den-accent-text) 12%, transparent);
+}
+.recent-switcher__dot {
+  flex-shrink: 0;
+}
+.recent-switcher__primary {
+  font-size: var(--text-den-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.recent-switcher__project {
+  margin-left: auto;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  flex-shrink: 0;
+}
+.recent-switcher__hint {
+  margin: 4px 0 2px;
+  text-align: center;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.peer-view-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.peer-view-switcher__item .recent-switcher__row {
+  flex: 1;
+  min-width: 0;
+}
+.peer-view-switcher__close {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.peer-view-switcher__close:hover {
+  color: var(--den-text);
+  background: color-mix(in srgb, var(--den-accent-text) 10%, transparent);
+}
+
+/* Cross-project attention uses a quiet accent card. */
+.attention-band {
+  border: 1px solid color-mix(in srgb, var(--den-accent-text) 30%, var(--den-border));
+  border-radius: var(--den-radius-shell);
+  background: color-mix(in srgb, var(--den-accent-text) 4%, var(--den-background));
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.attention-band__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.attention-band__title {
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-accent-text);
+}
+.attention-band__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attention-band__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--den-text);
+}
+.attention-band__row:hover,
+.attention-band__row:focus-visible {
+  background: color-mix(in srgb, var(--den-accent-text) 8%, transparent);
+}
+.attention-band__primary {
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.attention-band__project {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+/* Reasons align in one trailing column. */
+.attention-band__reason {
+  margin-left: auto;
+  font-size: var(--text-den-hint);
+  color: var(--den-accent-text);
+  flex-shrink: 0;
+}
+.attention-band__age {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  flex-shrink: 0;
+  min-width: 3.5ch;
+  text-align: right;
+}
+.attention-band__more {
+  margin: 8px 0 0 8px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.home-view__notices > * {
+  margin: 0;
+}
+.home-view__notices .system-nudge {
+  margin: 0 0 8px;
+}
+.home-view__notices:has(> *) {
+  margin-bottom: 6px;
+}
+.home-view__doors {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.home-view__doors-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* An even height keeps the divider on a whole CSS pixel. */
+  height: 18px;
+}
+.home-view__doors-line {
+  flex: 1;
+  height: 1px;
+  background: var(--den-border);
+}
+.home-view__doors-label {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  white-space: nowrap;
+}
+.home-view__doors-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.home-view__door {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-family: inherit;
+  font-size: var(--text-den-body);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.home-view__door:hover {
+  background: color-mix(in srgb, var(--den-tint-1) 70%, var(--den-background));
+}
+.home-view__door svg {
+  color: var(--den-accent-text);
+}
+.home-view__idea:focus-within {
+  border-color: var(--den-accent-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-signal) 16%, transparent);
+}
+.home-view__idea-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--den-accent-text);
+}
+/* The attribute outranks the scrollport frame's base min-height. */
+.home-view__idea-scroll[data-den-scrollport] {
+  flex: 1;
+  min-width: 0;
+  min-height: 21px;
+  max-height: 104px;
+}
+.home-view__idea-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1.5rem;
+  border: none;
+  background: transparent;
+  color: var(--den-text);
+  font-family: inherit;
+  font-size: var(--text-den-subhead);
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+}
+.home-view__idea-input::placeholder {
+  color: var(--den-text-muted);
+}
+.home-view__idea-input:focus-visible {
+  box-shadow: none;
+}
+.home-view__idea-send {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-accent-warm);
+  box-shadow: var(--den-bevel-plate);
+  color: var(--den-on-accent-warm);
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.home-view__idea-send:active:not(:disabled) {
+  filter: var(--den-plate-pressed);
+}
+.home-view__idea-send:disabled {
+  background: var(--den-tint-3);
+  box-shadow: none;
+  color: var(--den-text-muted);
+  cursor: not-allowed;
+}
+.home-view__section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.home-view__section-title {
+  font-size: var(--text-den-section);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.home-view__section-count {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.home-view__empty-pane {
+  margin-top: 4px;
+  padding: 0;
+}
+.home-view__empty {
+  margin: 0;
+  font-size: var(--text-den-subhead);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  text-align: center;
+  padding-top: 8px;
+}
+.home-view__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.den-list-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+  width: 100%;
+  overflow: hidden;
+}
+.den-list-head {
+  display: grid;
+  grid-template-columns: 28px 28px minmax(0, 1fr) 5.5rem 26px 26px;
+  column-gap: 10px;
+  align-items: center;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--den-line);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--den-text-muted);
+}
+.den-list-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+.den-list-sort:hover,
+.den-list-sort--active {
+  color: var(--den-text);
+}
+.den-list-sort--activity {
+  justify-content: flex-end;
+  text-align: right;
+  width: 100%;
+}
+.den-list-sort-glyph {
+  font-size: var(--text-den-caption);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.den-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--den-line);
+  background: var(--den-background);
+}
+.den-list-toolbar-count {
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-text-muted);
+  margin-right: 2px;
+}
+.den-list-toolbar-progress {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.den-list-toolbar-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.den-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The centered introduction keeps its steps left-aligned. */
+.home-view__teach {
+  max-width: 26rem;
+  margin-inline: auto;
+  padding-top: 32px;
+}
+.home-view__teach-intro {
+  margin-bottom: 18px;
+  text-align: center;
+}
+.home-view__teach-heading {
+  margin: 0 0 6px;
+  font-size: var(--text-den-section);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--den-text);
+  text-wrap: balance;
+}
+.home-view__teach-lede {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  text-wrap: balance;
+}
+.home-view__teach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: start;
+}
+.home-view__teach-step {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+}
+.home-view__teach-num {
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  color: var(--den-text-muted);
+  text-align: right;
+  padding-top: 1px;
+}
+.home-view__teach-copy {
+  min-width: 0;
+}
+.home-view__teach-title {
+  margin: 0 0 3px;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--den-text);
+}
+.home-view__teach-body {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  transition: border-color var(--den-duration) var(--den-ease);
+}
+.project-card:hover {
+  border-color: color-mix(in srgb, var(--den-text-muted) 25%, var(--den-border));
+}
+.project-card__thumb-btn {
+  position: relative;
+  display: block;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  border-radius: calc(var(--den-radius) - 1px) calc(var(--den-radius) - 1px) 0 0;
+}
+.project-card__draft-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 7px;
+  border-radius: var(--den-radius-sm);
+  background: color-mix(in srgb, var(--den-accent-signal) 14%, var(--den-surface));
+  color: var(--den-accent-text);
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+}
+.project-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px 11px;
+}
+.project-card__meta {
+  flex: 1;
+  min-width: 0;
+}
+.project-card__name {
+  display: block;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.project-card__rename {
+  width: 100%;
+  border: 1px solid var(--den-accent-warm);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  padding: 2px 6px;
+  outline: none;
+}
+.project-card__sub {
+  display: block;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-card__star,
+.project-card__menu-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+.project-card__star--on {
+  color: var(--den-accent-text);
+}
+.project-card__menu {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-md);
+}
+.project-card__menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-den-label);
+  color: var(--den-text);
+  padding: 7px 9px;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+.project-card__menu button:hover {
+  background: var(--den-tint-1);
+}
+.project-card__menu-danger {
+  color: var(--den-danger-text);
+}
+
+.project-list-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  cursor: pointer;
+}
+.project-list-check .den-checkbox {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+}
+/* The row is clickable; nested controls stop propagation. */

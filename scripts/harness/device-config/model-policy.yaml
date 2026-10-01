@@ -1,0 +1,11 @@
+coordinator:
+  provider_id: ollama-1
+  model: gemma4:e2b
+lite:
+  provider_id: ollama-1
+  model: gemma4:e2b
+agent_pool:
+  selection: first
+  models:
+    - provider_id: ollama-1
+      model: gemma4:e2b

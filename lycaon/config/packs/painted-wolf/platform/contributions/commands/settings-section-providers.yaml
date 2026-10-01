@@ -1,0 +1,11 @@
+id: painted-wolf/platform:settings-section-providers
+title: "Settings: AI providers"
+scope: "global"
+keywords:
+  - "providers"
+  - "models"
+  - "llm"
+  - "api key"
+action:
+  kind: native_ui
+  handler: "settings.section.providers"

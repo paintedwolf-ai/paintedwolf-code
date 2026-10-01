@@ -1,0 +1,28 @@
+title: Write a package registry credential
+id: 9c37e5a1-4b88-4d02-97fe-2a6d8c04e7b3
+description: >-
+  Rewrites a package manager's registry credentials. One line in these files also
+  redirects the registry address for every later install.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-10'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.credential-store
+level: high
+detection:
+  selection_target:
+    TargetFile|contains:
+      - '~/.npmrc'
+      - '~/.pypirc'
+      - '~/.cargo/credentials.toml'
+      - '~/.m2/settings.xml'
+      - '~/.gradle/gradle.properties'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_target and not filter_rehearsal

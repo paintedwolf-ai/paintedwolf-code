@@ -1,0 +1,68 @@
+oar: '1.0'
+id: DOOM_LOOP_CODE_REPEAT
+kind: invariant
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts:
+  - paintedwolf.code
+  - paintedwolf.code_instead
+  - paintedwolf.count
+  - paintedwolf.worker_leg
+  - paintedwolf.code_reject_responses
+when: paintedwolf.code_reject_responses >= 3
+effect: block
+copy:
+  cause: One tool has been rejected with the same structured Code in multiple model responses, across different
+    arguments
+  why: A repeated code identifies the same rule, but different arguments may expose different violations or
+    a host defect. The original diagnostic remains above. Compare its field, path, and observed state before
+    deciding whether another attempt can make progress.
+  fix: 'Identify a concrete change that addresses the original diagnostic before retrying. {% if paintedwolf.code_instead
+    %}The rule suggests: {{ paintedwolf.code_instead }}. Check that this applies to the current inputs and
+    observed state.{% else %} Use the original field or path diagnostic to select the correction.{% endif %}
+    If valid inputs still fail, preserve the failing example and report the host constraint instead of simplifying
+    away the assigned objective.'
+  instead: '{% if paintedwolf.worker_leg %}If an answer could unblock the work, use `request_decision` to suspend
+    the same leg. Otherwise use `complete_leg` with `leg_status: blocked`, the observed constraint, and the
+    remaining risk. {% else %}Keep accepted peer work and existing evidence. Resolve the blocked requirement
+    through the available tools, or use `ask_user` when human input or authority is required. Describe unresolved
+    work explicitly in closeout. {% endif %}'
+  what: 'At least {{ paintedwolf.count }} model responses called {{ tool }} and were rejected with Code: {{ paintedwolf.code }} this session —
+    inspect the original diagnostic before retrying'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:doom_loop
+x-paintedwolf-message: 'At least {{ paintedwolf.count }} model responses called {{ tool }} and were rejected with Code: {{ paintedwolf.code }}
+  this session — inspect the original diagnostic before retrying'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    code: COMMAND_NOT_ARGV
+    count: 3
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Code: DOOM_LOOP_CODE_REPEAT'
+  - COMMAND_NOT_ARGV
+  - inspect the original diagnostic before retrying
+- id: worker_leg
+  vars:
+    code: WORKER_SCOPE_DENIED
+    count: 3
+    profile: explore_readonly
+    tool: read
+    worker_leg: true
+  expect_contains:
+  - 'Code: DOOM_LOOP_CODE_REPEAT'
+  - 'leg_status: blocked'
+- id: carries_repeated_code_exit
+  vars:
+    code: PROGRESS_ITEM_NOT_CLOSED
+    code_instead: '`update_progress` that closes or revises a step, then retry `task`'
+    count: 3
+    profile: coordinator
+    tool: task
+  expect_contains:
+  - 'Code: DOOM_LOOP_CODE_REPEAT'
+  - PROGRESS_ITEM_NOT_CLOSED
+  - update_progress

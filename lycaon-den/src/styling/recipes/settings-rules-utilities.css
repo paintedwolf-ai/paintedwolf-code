@@ -1,0 +1,79 @@
+@utility den-settings-warn {
+  font-size: var(--text-den-hint);
+  color: var(--den-danger-text);
+  margin: 0;
+  max-width: var(--den-prose-measure);
+}
+
+@utility den-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-4);
+  align-items: center;
+}
+
+@utility den-settings-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: var(--text-den-body);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+  overflow: hidden;
+
+  & li {
+    display: grid;
+    grid-template-columns:
+      minmax(112px, 0.85fr)
+      minmax(140px, 1.4fr)
+      minmax(92px, 0.75fr)
+      auto;
+    gap: var(--spacing-den-5);
+    align-items: center;
+    padding: var(--spacing-den-5) var(--spacing-den-6);
+    border-bottom: 1px solid var(--den-line);
+  }
+  & li:last-child {
+    border-bottom: none;
+  }
+  & code {
+    font-family: var(--den-font-mono);
+    font-size: var(--text-den-label);
+    background: var(--den-background);
+    border: 1px solid var(--den-line);
+    padding: 3px var(--spacing-den-3);
+    border-radius: var(--den-radius-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@utility den-settings-rules-pairs {
+  & li {
+    grid-template-columns: 1fr 1fr auto;
+  }
+}
+
+@utility den-settings-rules-head {
+  background: var(--den-background);
+
+  & span {
+    font-size: var(--text-den-overline);
+    font-weight: 600;
+    color: var(--den-text-muted);
+  }
+}
+
+@utility den-settings-optional-pill {
+  padding: 2px 8px;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+}
+
+/** Marks a Settings-mirror panel as project-local (Models / Approvals / MCP). */

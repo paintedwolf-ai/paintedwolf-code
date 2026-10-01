@@ -1,0 +1,63 @@
+components:
+  schemas:
+    ElevatedAccessEffect:
+      $ref: ../elevated-access-effect.generated.yaml#/components/schemas/ElevatedAccessEffect
+    ElevatedAccessRecord:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, scope, effects]
+      properties:
+        id: {type: string, pattern: '^(grant|quiet)_[A-Za-z0-9_-]+$'}
+        kind: {type: string, enum: [grant, quiet]}
+        title: {type: string}
+        scope:
+          $ref: ../settings/approvals.yaml#/components/schemas/ApprovalGrantScope
+        effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElevatedAccessEffect'
+        expires_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+    ElevatedAccessSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_session_id, approvals_enabled, total, records, shared_scopes]
+      properties:
+        approvals_enabled: {type: boolean, description: False when Advanced turns approvals off.}
+        root_session_id: {type: string, format: uuid}
+        total: {type: integer, minimum: 0}
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElevatedAccessRecord'
+        shared_scopes:
+          type: array
+          items:
+            $ref: ../settings/approvals.yaml#/components/schemas/ApprovalGrantScope
+    ElevatedAccessRevokeResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, disposition]
+      properties:
+        id: {type: string, pattern: '^(grant|quiet)_[A-Za-z0-9_-]+$'}
+        disposition: {type: string, enum: [revoked, already_absent, failed]}
+        code:
+          $ref: ../api-error-code.generated.yaml#/components/schemas/ApiErrorCode
+        message: {type: string}
+    RevokeElevatedAccessResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [results, remaining]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElevatedAccessRevokeResult'
+        remaining:
+          $ref: '#/components/schemas/ElevatedAccessSummary'

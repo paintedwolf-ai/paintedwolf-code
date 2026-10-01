@@ -1,0 +1,81 @@
+/* Derived tokens follow the generated base plane. */
+
+:root {
+  /* Regions inherit the plane their marks blend into. */
+  --den-plane: var(--den-background);
+
+  /* Highlights lift toward the scheme's pale endpoint. */
+  --den-lift: var(--den-background);
+
+  /* Enabled text fields share the page background. */
+  --den-control-bg: var(--den-background);
+  /* Disabled text fields add a muted text tint. */
+  --den-control-bg-disabled: color-mix(in srgb, var(--den-text) 5.5%, var(--den-background));
+
+  --den-editor-selection-strength: 50%;
+
+  /* Primary controls share accent borders and hover fills across appearances. */
+  --den-primary-bg: var(--den-surface-elevated);
+  --den-primary-border: color-mix(in srgb, var(--den-accent-signal) 38%, var(--den-line));
+  --den-primary-text: var(--den-accent-text);
+  --den-primary-bg-hover: color-mix(in srgb, var(--den-accent-signal) 14%, var(--den-surface-elevated));
+  --den-primary-border-hover: color-mix(in srgb, var(--den-accent-signal) 55%, var(--den-line));
+  --den-primary-bg-active: color-mix(in srgb, var(--den-accent-signal) 22%, var(--den-surface-elevated));
+
+  --den-scrollbar-thumb: color-mix(in srgb, var(--den-text-muted) 55%, transparent);
+  --den-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--den-accent-signal) 28%,
+    var(--den-text-muted) 72%
+  );
+
+  /* Text selections remain visible over diff fills. */
+  --den-diff-selection: color-mix(in srgb, var(--den-text) 18%, var(--den-selection-strong));
+  /* Thin bars need a stronger mix than a filled cell. */
+  --den-diff-add-mark: color-mix(in srgb, var(--den-diff-add-hue) 62%, var(--den-surface));
+  --den-diff-delete-mark: color-mix(in srgb, var(--den-diff-delete-hue) 55%, var(--den-surface));
+  /* Folded removals need stronger marks without a neighboring line fill. */
+  --den-diff-cut-mark: var(--den-diff-delete-mark);
+
+  /* Severity marks derive from theme status colors. */
+  --den-finding-critical: var(--den-danger-text);
+  --den-finding-high: color-mix(in srgb, var(--den-danger-text) 55%, var(--den-warning-text));
+  --den-finding-medium: var(--den-warning-text);
+  --den-finding-low: color-mix(in srgb, var(--den-warning-text) 40%, var(--den-text-muted));
+  --den-finding-info: var(--den-text-muted);
+
+  /* Severity fills remain visible in cells too narrow for glyphs. */
+  --den-finding-critical-wash: color-mix(in srgb, var(--den-finding-critical) 15%, transparent);
+  --den-finding-high-wash: color-mix(in srgb, var(--den-finding-high) 15%, transparent);
+  --den-finding-medium-wash: color-mix(in srgb, var(--den-finding-medium) 15%, transparent);
+  --den-finding-low-wash: color-mix(in srgb, var(--den-finding-low) 15%, transparent);
+  --den-finding-info-wash: color-mix(in srgb, var(--den-finding-info) 15%, transparent);
+}
+
+/* Dark appearance needs stronger contrast in the shared ramp. */
+:root[data-den-appearance="dark"] {
+  --den-editor-selection-strength: 100%;
+  --den-lift: var(--den-text);
+  --den-diff-cut-mark: color-mix(in srgb, var(--den-diff-delete-hue) 68%, var(--den-surface));
+  --den-scrollbar-thumb: color-mix(in srgb, var(--den-text-muted) 50%, transparent);
+  --den-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--den-accent-signal) 38%,
+    var(--den-text-muted) 62%
+  );
+}
+
+/* Match the dark ramp before appearance hydration. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-den-appearance]) {
+    --den-editor-selection-strength: 100%;
+    --den-lift: var(--den-text);
+    --den-diff-cut-mark: color-mix(in srgb, var(--den-diff-delete-hue) 68%, var(--den-surface));
+    --den-scrollbar-thumb: color-mix(in srgb, var(--den-text-muted) 50%, transparent);
+    --den-scrollbar-thumb-hover: color-mix(
+      in srgb,
+      var(--den-accent-signal) 38%,
+      var(--den-text-muted) 62%
+    );
+  }
+}

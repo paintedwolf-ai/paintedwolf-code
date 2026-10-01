@@ -1,0 +1,32 @@
+[
+  {
+    "release": "R17",
+    "region": "west",
+    "revision": "w2",
+    "artifact": "west-v2",
+    "dependencies": {
+      "east": "e1"
+    },
+    "result": "passed"
+  },
+  {
+    "release": "R17",
+    "region": "west",
+    "revision": "w3",
+    "artifact": "west-v3",
+    "dependencies": {
+      "east": "e2"
+    },
+    "result": "passed"
+  },
+  {
+    "release": "R16",
+    "region": "west",
+    "revision": "w4",
+    "artifact": "west-v4",
+    "dependencies": {
+      "east": "e2"
+    },
+    "result": "passed"
+  }
+]

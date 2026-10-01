@@ -1,0 +1,21 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+    - reason
+    - reject_code
+title: This request was not valid
+message: >-
+  {% if reason %}{{ reason }}{% else %}Something in the request could not be accepted.{% endif %}
+suggested_action: Check the fields and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - could not be accepted
+  - id: reason
+    vars:
+      reason: project_id is required
+    expect_contains:
+      - project_id is required

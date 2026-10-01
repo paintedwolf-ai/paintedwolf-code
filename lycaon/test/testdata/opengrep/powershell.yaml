@@ -1,0 +1,116 @@
+language: powershell
+comment:
+- '#'
+limits: Comment-aware generic matching. Dynamic aliases and indirect dispatch need additional analysis.
+cases:
+- name: invoke-expression-context-only
+  file: sample.ps1
+  source: |
+    Invoke-Expression $code
+  want: []
+  covers: []
+- name: invoke-expression-safe
+  file: sample.ps1
+  source: |
+    Write-Output $code
+  want: []
+  covers: []
+- name: download-execution-vulnerable
+  file: sample.ps1
+  source: |
+    iex ((New-Object Net.WebClient).DownloadString($url))
+  want:
+  - lycaon.powershell.download-execution
+  covers: []
+- name: download-execution-safe
+  file: sample.ps1
+  source: |
+    Invoke-WebRequest -Uri $url -OutFile download.ps1
+  want: []
+  covers:
+  - lycaon.powershell.download-execution
+- name: encoded-command-context-only
+  file: sample.ps1
+  source: |
+    pwsh -EncodedCommand $payload
+  want: []
+  covers: []
+- name: encoded-command-safe
+  file: sample.ps1
+  source: |
+    pwsh -File ./script.ps1
+  want: []
+  covers: []
+- name: certificate-validation-disabled-vulnerable
+  file: sample.ps1
+  source: |
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+  want:
+  - lycaon.powershell.certificate-validation-disabled
+  covers: []
+- name: certificate-validation-disabled-safe
+  file: sample.ps1
+  source: |
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+  want: []
+  covers:
+  - lycaon.powershell.certificate-validation-disabled
+- name: runtime-credential
+  file: sample.ps1
+  source: |
+    ConvertTo-SecureString $env:APP_PASSWORD -AsPlainText -Force
+  want: []
+  covers: []
+- name: block-comment
+  file: sample.ps1
+  source: |
+    <#
+    Invoke-Expression $code
+    #>
+  want: []
+  covers: []
+- name: code-after-block-comment
+  file: sample.ps1
+  source: |
+    <#
+    iex $example
+    #>
+    iex $code
+  want: []
+  covers: []
+- name: precision-encoded-transport
+  file: sample.ps1
+  source: |+
+    $payload = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Write-Output ok'))
+    pwsh -EncodedCommand $payload
+
+  want: []
+  covers: []
+- name: precision-trusted-generated-eval
+  file: sample.ps1
+  source: |+
+    $code = 'Write-Output ok'
+    Invoke-Expression $code
+
+  want: []
+  covers: []
+- name: precision-quoted-example
+  file: sample.ps1
+  source: |+
+    Write-Output '[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }'
+
+  want: []
+  covers: []
+- name: precision-literal-download-example
+  file: sample.ps1
+  source: |
+    Write-Output 'iex ((New-Object Net.WebClient).DownloadString($url))'
+  want: []
+  covers: []
+- name: precision-expanded-download-code
+  file: sample.ps1
+  source: |
+    Write-Output "$(iex ((New-Object Net.WebClient).DownloadString($url)))"
+  want:
+  - lycaon.powershell.download-execution
+  covers: []

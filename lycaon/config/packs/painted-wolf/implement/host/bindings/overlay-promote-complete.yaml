@@ -1,0 +1,18 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': overlay.promote.complete
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-overlay-promote-complete
+tier: builtin
+invariants:
+  trigger_class: overlay_state
+  fires_in:
+  - implement overlay-promote surface ends with zero pending write overlays
+  required:
+  - merge experience report
+  - inline `command`
+  - exercise promoted paths before new scaffolding
+  forbidden:
+  - promote_overlay
+  - reject_overlay

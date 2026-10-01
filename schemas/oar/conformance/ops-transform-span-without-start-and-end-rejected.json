@@ -1,0 +1,90 @@
+{
+  "id": "ops-transform-span-without-start-and-end-rejected",
+  "title": "A span carrying neither start nor end cannot be applied",
+  "covers": [
+    "OAR-OPS-19"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "REDACT",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "size(pii_entities) > 0",
+      "on_error": "fail_open",
+      "transform": {
+        "action": "redact",
+        "target": "pii_entities",
+        "replacement": "[x]"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 or 555-0199 now",
+    "facts": {
+      "pii_entities": [
+        {
+          "label": "phone"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/REDACT:errored"
+    ],
+    "content": "call 555-0100 or 555-0199 now"
+  }
+}

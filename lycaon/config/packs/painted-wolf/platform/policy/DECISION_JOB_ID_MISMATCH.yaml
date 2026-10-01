@@ -1,0 +1,37 @@
+oar: '1.0'
+id: DECISION_JOB_ID_MISMATCH
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "DECISION_JOB_ID_MISMATCH"
+effect: block
+copy:
+  what: answer_decision was called with a job_id that does not match the pending needs_decision for that
+    worker
+  cause: The coordinator picked a sibling job id or a stale resume id instead of the job_id from the needs_decision
+    envelope
+  why: Call `answer_decision(job_id=<exact job_id from the envelope>, option=...)` the host resumes the
+    worker automatically
+  fix: Call `answer_decision(job_id=<exact job_id from the envelope>, option=...)` the host resumes the
+    worker automatically
+  instead: Use the envelope job_id, the host resumes the worker automatically — do not dispatch new work
+    until the worker is terminal
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: answer_decision job_id must match the needs_decision envelope
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    expected_job_id: job-expected
+    job_id: job-wrong
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DECISION_JOB_ID_MISMATCH'
+  - answer_decision
+selector:
+  tool:
+  - answer_decision

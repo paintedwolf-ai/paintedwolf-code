@@ -1,0 +1,9 @@
+id: painted-wolf/platform:go-files-tabs
+title: "Focus file tabs"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "go.filesTabs"

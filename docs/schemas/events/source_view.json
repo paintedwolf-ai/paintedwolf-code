@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/source_view.json",
+  "$ref": "../../openapi/components/schemas/source-views/views.yaml#/components/schemas/SourceViewEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceViewEvent"
+}

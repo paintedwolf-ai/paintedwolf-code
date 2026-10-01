@@ -1,0 +1,10 @@
+manifest_version: 1
+id: acme/triage-lite
+name: Triage Lite
+version: 1.0.0
+description: A minimal pack — one workflow, one rule, one inject template.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

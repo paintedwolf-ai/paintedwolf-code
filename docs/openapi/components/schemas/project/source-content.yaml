@@ -1,0 +1,440 @@
+components:
+  schemas:
+    SourceEditorConfig:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - root_id
+      additionalProperties: false
+      description: |
+        EditorConfig pairs in effect for one root-addressed path. Every property
+        is omitted when no `.editorconfig` declares it.
+      properties:
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root that holds the path
+        indent_style:
+          type: string
+          enum: [space, tab]
+        indent_size:
+          type: integer
+          minimum: 1
+          maximum: 64
+          description: Columns per indentation level; omitted when indent_size_tab is true.
+        indent_size_tab:
+          type: boolean
+          description: True when `indent_size = tab`, so a level follows tab_width.
+        tab_width:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        end_of_line:
+          type: string
+          enum: [lf, crlf]
+        trim_trailing_whitespace:
+          x-go-pointer: true
+          type: boolean
+        insert_final_newline:
+          x-go-pointer: true
+          type: boolean
+        charset:
+          type: string
+          enum: [latin1, utf-8, utf-8-bom, utf-16be, utf-16le]
+    ProjectSourceReadResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - workspace_id
+      - workspace_kind
+      - path
+      - content
+      - over_limit
+      - binary
+      - size_bytes
+      - writable
+      additionalProperties: false
+      description: |
+        Sandbox-validated project file content or metadata for the in-app
+        source viewer. Editable ceiling is 4 MiB. When over_limit or binary is
+        true, content is empty and Den opens an info card or image tab (bytes
+        via GET …/source/raw). Truncated-prefix reads are not returned.
+        UTF-16LE and UTF-16BE text is decoded for editing; other non-UTF-8 text
+        is refused with 415 unsupported_encoding rather than reported as binary.
+      properties:
+        file_id:
+          type: string
+          format: uuid
+          description: >-
+            Stable identity of the logical file across moves and workspaces;
+            absent until the source ledger has recorded this path.
+        version_id:
+          type: string
+          format: uuid
+          description: >-
+            The recorded version holding exactly the content read; absent when
+            the ledger has not yet recorded this content (an external change
+            the watcher has not settled). A read records nothing.
+        workspace_id:
+          type: string
+          pattern: '^ws_[0-9a-f]{32}$'
+          description: Physical project or worker workspace that served this read.
+        workspace_kind:
+          $ref: 'source-workspace.yaml#/components/schemas/SourceWorkspaceKind'
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+        language:
+          type: string
+          description: Supported host grammar for this path, matching the editor_language contribution fact. Omitted when no supported grammar applies.
+        content:
+          type: string
+          description: |
+            Full UTF-8 editor text when editable (byte-order marks stripped);
+            empty for over-limit or binary, and empty when an open response
+            carries the editor document, whose crdt_update holds the text
+        over_limit:
+          type: boolean
+          description: True when size_bytes exceeds the 4 MiB editable ceiling
+        binary:
+          type: boolean
+          description: |
+            True for non-text content (including images). Content is empty;
+            image tabs load bytes from GET …/source/raw.
+        size_bytes:
+          x-go-type: "int64"
+          type: integer
+          minimum: 0
+          description: Original file size on disk in bytes
+        modified_at:
+          x-go-type: "string"
+          x-go-name: "ModifiedAt"
+          type: string
+          format: date-time
+          description: File modification time (UTC)
+        mime:
+          x-go-name: "MIME"
+          type: string
+          description: Sniffed content type (not extension-derived)
+        sha256:
+          type: string
+          description: |
+            Hex SHA-256 of on-disk bytes (BOM included when present), set only
+            for full editable text reads. Echo it as base_sha256 on an editor save.
+        root_id:
+          type: string
+          format: uuid
+          description: |
+            Attached root that served the read (the mirrored root for worker
+            overlay reads); path is root-relative to it. Echo it as root_id
+            to pin later reads and saves to the same root.
+        encoding:
+          $ref: '#/components/schemas/SourceEncoding'
+          description: |
+            Round-trip encoding for editable text (and over-limit text metadata).
+            Omitted for binary and image reads. Echo on PUT /source.
+        deleted:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceDeletedFile'
+          description: Present only for an absent path opened with include_deleted. Current content and SHA-256 remain empty and writable is false.
+        writable:
+          type: boolean
+          description: |
+            True when owner-write mode bits are set at load. Report only — the
+            write path still fails honestly if the fact was stale.
+    SourceDeletedFile:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [deleted_at, previous]
+      description: The last recorded deletion at this exact path in this workspace, with its preceding immutable state. Never an editable working file.
+      properties:
+        deleted_at:
+          type: string
+          format: date-time
+        previous:
+          $ref: '../source-reader.yaml#/components/schemas/SourceReaderEndpoint'
+        source:
+          x-go-pointer: true
+          $ref: '../source-views/comparison.yaml#/components/schemas/VersionComparisonSource'
+    PutProjectSourceRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - path
+      - root_id
+      - content
+      - encoding
+      - base_sha256
+      additionalProperties: false
+      description: In-app editor save of one project file (full replacement content).
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
+        path:
+          type: string
+          minLength: 1
+          description: Repo-relative path (slash-separated) of an existing file
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root the save lands on; omitted searches every root primary-first
+        content:
+          type: string
+          description: Full replacement UTF-8 editor text without a byte-order mark. Decoded text is bounded to 8 MiB to allow UTF-16 expansion; the encoded file, including its byte-order mark, must fit 4 MiB. The JSON envelope permits escaping of the full supported content.
+        encoding:
+          $ref: '#/components/schemas/SourceEncoding'
+          description: |
+            Exact encoding from the matching read. The host restores UTF-8 and
+            UTF-16 byte-order marks when named by the encoding. Any missing or
+            unsupported value is 400.
+        base_sha256:
+          type: string
+          minLength: 1
+          description: |
+            sha256 reported by the read (or previous save) this edit was based
+            on; mismatched on-disk content refuses the save with 409
+            source_write_conflict.
+
+    MakeProjectSourceEditableRequest:
+      x-go-generate: true
+      type: object
+      required: [path, root_id, base_sha256]
+      additionalProperties: false
+      description: Human request to add owner-write permission to the exact file bytes shown in the editor.
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative path of the existing regular file.
+        root_id:
+          type: string
+          minLength: 1
+          format: uuid
+          description: Attached root that contains the file.
+        base_sha256:
+          type: string
+          minLength: 1
+          description: SHA-256 from the matching source read; stale bytes are refused with 409 source_write_conflict.
+
+    MakeProjectSourceEditableResponse:
+      x-go-generate: true
+      type: object
+      required: [path, root_id, previous_mode, mode, writable]
+      additionalProperties: false
+      description: Completed owner-write permission transition.
+      properties:
+        path:
+          type: string
+        root_id:
+          type: string
+          format: uuid
+        previous_mode:
+          x-go-type: "uint32"
+          type: integer
+          minimum: 0
+          maximum: 511
+          description: Permission bits before the transition.
+        mode:
+          x-go-type: "uint32"
+          type: integer
+          minimum: 0
+          maximum: 511
+          description: Permission bits after adding owner-write.
+        writable:
+          type: boolean
+          description: True when the resulting mode grants owner-write.
+    CreateProjectSourceEntryRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - path
+      - kind
+      additionalProperties: false
+      description: |
+        In-app creation of one new, empty project file or folder. Missing parent
+        folders are created along the way, so a nested path needs no separate
+        call per level. A new file starts empty — its content arrives through
+        PUT /source like any later edit.
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
+        path:
+          type: string
+          minLength: 1
+          description: |
+            Repo-relative path (slash-separated) that must not exist yet;
+            every segment stays inside the selected root.
+        kind:
+          type: string
+          enum: [file, folder]
+          description: Which kind of entry to create at path
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root the new entry lands on; omitted uses the primary root
+    ProjectSourceEntryCreatedResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      description: |
+        Completed in-app creation. Only the normalized path comes back — a new
+        file is read through GET /source like any other, which is where the
+        editor gets the sha256 its first save must echo.
+      properties:
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+    RenameProjectSourceRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - from
+      - to
+      additionalProperties: false
+      description: |
+        Same-root rename or move of one file or folder. Missing parent folders
+        on to are created. Cross-root moves are refused.
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root both paths must stay under; omitted uses the primary root
+        from:
+          type: string
+          minLength: 1
+          description: Existing root-relative path to rename or move
+        to:
+          type: string
+          minLength: 1
+          description: Destination root-relative path in the same root; must not already exist
+    CopyProjectSourceRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - from
+      - to
+      additionalProperties: false
+      description: |
+        Same-root copy of one file or folder (recursive). Modes are preserved.
+        An occupied destination is refused.
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root both paths must stay under; omitted uses the primary root
+        from:
+          type: string
+          minLength: 1
+          description: Existing root-relative path to copy
+        to:
+          type: string
+          minLength: 1
+          description: Destination root-relative path in the same root; must not already exist
+    ProjectSourceLifecycleResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      additionalProperties: false
+      description: Canonical address a rename or copy landed on.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root that contains the new path
+        path:
+          type: string
+          description: Normalized root-relative path (slash-separated)
+    SourceEncoding:
+      $ref: ../source-encoding.generated.yaml#/components/schemas/SourceEncoding
+    # Enum values from docs/openapi/vocab/SourceSymbolKind.yaml — do not hand-edit.
+    ProjectSourceWriteResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - size_bytes
+      - sha256
+      additionalProperties: false
+      description: Completed in-app editor save.
+      properties:
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+        size_bytes:
+          x-go-type: "int64"
+          type: integer
+          minimum: 0
+          description: New file size in bytes
+        sha256:
+          type: string
+          description: Hex SHA-256 of the saved content (base for the next save)
+    SourceDirListing:
+      x-go-generate: true
+      type: object
+      required:
+      - workspace_id
+      - root_id
+      - dir
+      - watch_complete
+      - entries
+      additionalProperties: false
+      description: |
+        One directory level under an attached root for the Files tree.
+        Entries are sorted folders first, then case-insensitive by name.
+      properties:
+        workspace_id:
+          type: string
+          pattern: '^ws_[0-9a-f]{32}$'
+          description: Physical root-set identity used to produce this listing.
+        root_id:
+          type: string
+          format: uuid
+        dir:
+          type: string
+          description: Normalized root-relative directory; "." is the root folder
+        watch_complete:
+          type: boolean
+          description: Whether host filesystem observation covers this directory. A truncated watch covers some directories and not others, so this is answered per listing rather than per root. False tells visible clients to revalidate this directory on a bounded timer.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceDirEntry'
+    SourceDirEntry:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - is_dir
+      additionalProperties: false
+      description: One immediate child of a browsed directory.
+      properties:
+        name:
+          type: string
+        is_dir:
+          type: boolean
+          description: True for directories (symlinks classify by their target)

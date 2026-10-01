@@ -1,0 +1,14 @@
+id: painted-wolf/platform:layout-toggle-split
+title: "Toggle split with conversation"
+scope: "global"
+keywords:
+  - "split"
+  - "layout"
+  - "beside"
+  - "single view"
+  - "split view"
+when:
+  fact: "project_open"
+action:
+  kind: native_ui
+  handler: "layout.toggleSplit"

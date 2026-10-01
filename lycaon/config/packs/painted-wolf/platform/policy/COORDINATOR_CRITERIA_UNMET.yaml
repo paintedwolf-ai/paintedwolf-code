@@ -1,0 +1,30 @@
+oar: '1.0'
+id: COORDINATOR_CRITERIA_UNMET
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts: [paintedwolf.grounding_verdict, paintedwolf.grounding_reason, paintedwolf.leg_id]
+when: paintedwolf.grounding_verdict == "COORDINATOR_CRITERIA_UNMET"
+effect: block
+copy:
+  what: 'Completed leg {{ paintedwolf.leg_id }} has unmet closeout criteria.'
+  cause: '{{ paintedwolf.grounding_reason }}'
+  why: Job completion alone does not establish that required evidence and overlay landing are complete.
+  fix: Inspect the leg's current criteria and overlay state. Complete the missing verification, summary delivery, or authorized landing step; do not redispatch already completed work to obtain a new receipt.
+  instead: Resolve the reported criterion using the existing job and its evidence before closing the delegation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grounding
+x-paintedwolf-message: Completion claimed but leg criteria not yet met
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    grounding_reason: Completion evidence is missing.
+    leg_id: leg-1
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Completion evidence is missing.'
+  - 'leg-1'
+  - 'Rejected:'
+  - 'Code: COORDINATOR_CRITERIA_UNMET'

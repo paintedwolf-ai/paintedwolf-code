@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-open-version-history
+command: painted-wolf/platform:files-open-version-history
+scope: files
+bindings:
+  macos:
+    - "Mod+Alt+H"
+  windows:
+    - "Mod+Alt+H"
+  linux:
+    - "Mod+Alt+H"

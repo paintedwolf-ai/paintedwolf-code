@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Not a git repository
+message: >-
+  This folder is not inside a git repository, so there is no history to read.
+suggested_action: >-
+  Open a folder that is under version control, or run git init there in your own terminal.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not inside a git repository
+      - git init

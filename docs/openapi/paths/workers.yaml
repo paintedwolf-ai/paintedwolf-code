@@ -1,0 +1,98 @@
+paths:
+  /v1/workers:
+    get:
+      tags:
+      - workers
+      operationId: listWorkers
+      summary: List worker tasks for a project
+      parameters:
+      - name: cursor
+        in: query
+        schema: {type: string}
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectIDQuery
+      - name: session_id
+        in: query
+        required: true
+        description: Coordinator session whose worker tasks are returned.
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: ../components/schemas/worker.yaml#/components/schemas/WorkerStatus
+      responses:
+        '200':
+          description: Worker tasks
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/worker.yaml#/components/schemas/WorkerListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/workers/{id}/cancel:
+    post:
+      tags:
+      - workers
+      operationId: cancelWorker
+      x-person-action: record
+      summary: Cancel a worker task
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/WorkerId
+      responses:
+        '202':
+          description: Cancel initiated; terminal status delivered via the worker SSE topic
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/worker.yaml#/components/schemas/WorkerTask
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/workers/{id}/changes:
+    get:
+      tags:
+      - workers
+      operationId: getWorkerChanges
+      summary: List overlay-modified paths for a worker job
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Changed overlay paths
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/project/source-comparison.yaml#/components/schemas/WorkerJobChangesResponse
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          description: Worker job not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

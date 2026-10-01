@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-rename-scope-file
+command: painted-wolf/platform:editor-rename-scope-file
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+ArrowLeft"
+  windows:
+    - "Alt+ArrowLeft"
+  linux:
+    - "Alt+ArrowLeft"

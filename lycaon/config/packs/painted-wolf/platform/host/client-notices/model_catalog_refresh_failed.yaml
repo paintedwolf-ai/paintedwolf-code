@@ -1,0 +1,11 @@
+# A failed client refresh leaves the saved provider catalog visible.
+scope: app
+title: Could not refresh the model list
+message: >-
+  The models you already saved for this provider are still listed and still
+  work.
+scenarios:
+  - id: default
+    expect_contains:
+      - still listed
+      - still work

@@ -1,0 +1,3273 @@
+{
+  "current-verification-ties": {
+    "preserve": [
+      "README.md",
+      "test_report.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "report",
+        "function": "select",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 8
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 8
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {
+              "limit": 8
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              },
+              {
+                "name": "c",
+                "score": 1
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              },
+              {
+                "name": "c",
+                "score": 1
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          }
+        ],
+        "id": "report.select-behavior"
+      }
+    ]
+  },
+  "workspace-conflict-normalize-deduplicate": {
+    "preserve": [
+      "README.md",
+      "test_first.py",
+      "test_second.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "catalog",
+        "function": "select_records",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                " A ",
+                "a",
+                "B",
+                " b ",
+                ""
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                "Stra\u00dfe",
+                "STRASSE",
+                " Stra\u00dfe "
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "a",
+              "b",
+              ""
+            ],
+            "args": [
+              [
+                " A ",
+                "a",
+                "B",
+                " b ",
+                ""
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "strasse"
+            ],
+            "args": [
+              [
+                "Stra\u00dfe",
+                "STRASSE",
+                " Stra\u00dfe "
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "b",
+              "a"
+            ],
+            "args": [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "catalog.select_records-behavior"
+      }
+    ],
+    "artifact_bytes": {
+      "preferences.json": "{\"owner_note\":\"Preserve this user preference\",\"theme\":\"violet\"}\n"
+    }
+  },
+  "worker-complete-normalized": {
+    "preserve": [
+      "README.md",
+      "test_status.py",
+      "settings.json"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "status",
+        "function": "display_status",
+        "calls": [
+          [
+            [
+              "pending"
+            ],
+            {}
+          ],
+          [
+            [
+              " ACTIVE "
+            ],
+            {}
+          ],
+          [
+            [
+              " Done "
+            ],
+            {}
+          ],
+          [
+            [
+              "unknown"
+            ],
+            {}
+          ],
+          [
+            [
+              ""
+            ],
+            {}
+          ],
+          [
+            [
+              "done"
+            ],
+            {}
+          ],
+          [
+            [
+              "paused"
+            ],
+            {}
+          ],
+          [
+            [
+              " PAUSED "
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": "Waiting",
+            "args": [
+              "pending"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Running",
+            "args": [
+              " ACTIVE "
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Complete",
+            "args": [
+              " Done "
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Unknown",
+            "args": [
+              "unknown"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Unknown",
+            "args": [
+              ""
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Complete",
+            "args": [
+              "done"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "On hold",
+            "args": [
+              "paused"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "On hold",
+            "args": [
+              " PAUSED "
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "status.display_status-behavior"
+      }
+    ]
+  },
+  "changed-intent-input-order": {
+    "preserve": [
+      "README.md",
+      "test_report.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "report",
+        "function": "summarize",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 8
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 8
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            {
+              "limit": 8
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "z",
+                "score": 2,
+                "active": true
+              },
+              {
+                "name": "a",
+                "score": 2,
+                "active": false
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "z",
+                "score": 2,
+                "active": true
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "z",
+                "score": 2,
+                "active": true
+              },
+              {
+                "name": "a",
+                "score": 2,
+                "active": false
+              },
+              {
+                "name": "c",
+                "score": 1,
+                "active": true
+              },
+              {
+                "name": "a",
+                "score": 2,
+                "active": true
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2,
+                "active": true
+              },
+              {
+                "name": "c",
+                "score": 1,
+                "active": true
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2,
+                "active": true
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "a",
+                "score": 2,
+                "active": true
+              },
+              {
+                "name": "c",
+                "score": 1,
+                "active": true
+              },
+              {
+                "name": "a",
+                "score": 2,
+                "active": false
+              },
+              {
+                "name": "z",
+                "score": 2,
+                "active": true
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": true
+                },
+                {
+                  "name": "c",
+                  "score": 1,
+                  "active": true
+                },
+                {
+                  "name": "a",
+                  "score": 2,
+                  "active": false
+                },
+                {
+                  "name": "z",
+                  "score": 2,
+                  "active": true
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          }
+        ],
+        "id": "report.summarize-behavior"
+      }
+    ],
+    "cli": {
+      "file": "app.py",
+      "input": [
+        {
+          "name": "z",
+          "score": 2,
+          "active": true
+        },
+        {
+          "name": "a",
+          "score": 2,
+          "active": false
+        },
+        {
+          "name": "c",
+          "score": 1,
+          "active": true
+        },
+        {
+          "name": "a",
+          "score": 2,
+          "active": true
+        }
+      ],
+      "status": 0,
+      "value": [
+        {
+          "name": "z",
+          "score": 2,
+          "active": true
+        },
+        {
+          "name": "a",
+          "score": 2,
+          "active": false
+        }
+      ]
+    }
+  },
+  "fresh-service-denied": {
+    "preserve": [
+      "README.md",
+      "client.py",
+      "events.json",
+      "fallback.json"
+    ],
+    "artifacts": {},
+    "probes": [],
+    "smoke_command": "python3 -B client.py --minimum 100 --offline",
+    "receipt": {
+      "file": "receipt.json",
+      "expected": {
+        "receipt": {
+          "$context": "receipt"
+        },
+        "balances": [
+          {
+            "account": "birch",
+            "cents": 120
+          },
+          {
+            "account": "cedar",
+            "cents": 100
+          }
+        ]
+      }
+    }
+  },
+  "wave-review": {
+    "preserve": [
+      "README.md",
+      "test_ranking.py",
+      "test_labels.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "ranking",
+        "function": "rank",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "b",
+                  "score": 3
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              },
+              {
+                "name": "c",
+                "score": 1
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              },
+              {
+                "name": "c",
+                "score": 1
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "b",
+                  "score": 3
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "ranking.rank-behavior"
+      },
+      {
+        "id": "labels.display_status-behavior",
+        "module": "labels",
+        "function": "display_status",
+        "calls": [
+          [
+            [
+              "pending"
+            ],
+            {}
+          ],
+          [
+            [
+              "active"
+            ],
+            {}
+          ],
+          [
+            [
+              "done"
+            ],
+            {}
+          ],
+          [
+            [
+              "other"
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": "Waiting",
+            "args": [
+              "pending"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Running",
+            "args": [
+              "active"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Complete",
+            "args": [
+              "done"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Unknown",
+            "args": [
+              "other"
+            ],
+            "kwargs": {}
+          }
+        ]
+      }
+    ]
+  },
+  "conflict-superseded": {
+    "preserve": [
+      "README.md",
+      "test_filter.py",
+      "test_page.py",
+      "test_combined.py",
+      "preferences.json"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "catalog",
+        "function": "select_records",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "prefix": "al"
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "prefix": "AL",
+              "offset": 1
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "prefix": "al",
+              "offset": 1,
+              "limit": 1
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "offset": 1,
+              "limit": 2
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "offset": 100
+            }
+          ],
+          [
+            [
+              []
+            ],
+            {
+              "prefix": "strass"
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "prefix": "al"
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "prefix": "AL",
+              "offset": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "prefix": "al",
+              "offset": 1,
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "offset": 1,
+              "limit": 2
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "limit": 0
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "offset": 100
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "prefix": "strass"
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "offset": -1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "limit": -1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "offset": true
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            {
+              "limit": 1.5
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "prefix": "al"
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "prefix": "AL",
+              "offset": 1
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "prefix": "al",
+              "offset": 1,
+              "limit": 1
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "offset": 1,
+              "limit": 2
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "offset": 100
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {
+              "prefix": "strass"
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "alpha"
+              },
+              {
+                "name": "Beta"
+              },
+              {
+                "name": "ALPINE"
+              },
+              {
+                "name": "bravo"
+              },
+              {
+                "name": "Stra\u00dfe"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "alpha"
+              },
+              {
+                "name": "ALPINE"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "prefix": "al"
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "ALPINE"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "prefix": "AL",
+              "offset": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "ALPINE"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "prefix": "al",
+              "offset": 1,
+              "limit": 1
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "Beta"
+              },
+              {
+                "name": "ALPINE"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "offset": 1,
+              "limit": 2
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 0
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "offset": 100
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "Stra\u00dfe"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "ALPINE"
+                },
+                {
+                  "name": "bravo"
+                },
+                {
+                  "name": "Stra\u00dfe"
+                }
+              ]
+            ],
+            "kwargs": {
+              "prefix": "strass"
+            }
+          },
+          {
+            "error": "ValueError"
+          },
+          {
+            "error": "ValueError"
+          },
+          {
+            "error": "ValueError"
+          },
+          {
+            "error": "ValueError"
+          }
+        ],
+        "id": "catalog.select_records-behavior"
+      }
+    ]
+  },
+  "leg-failed": {
+    "preserve": [
+      "README.md",
+      "status.py",
+      "test_status.py",
+      "test_catalog.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "id": "catalog.select_records-behavior",
+        "module": "catalog",
+        "function": "select_records",
+        "calls": [
+          [
+            [
+              [
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "ALPINE"
+                }
+              ]
+            ],
+            {
+              "prefix": "al"
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "value": [
+              {
+                "name": "alpha"
+              },
+              {
+                "name": "ALPINE"
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "Beta"
+                },
+                {
+                  "name": "alpha"
+                },
+                {
+                  "name": "ALPINE"
+                }
+              ]
+            ],
+            "kwargs": {
+              "prefix": "al"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "denied-no-fallback": {
+    "preserve": [
+      "README.md",
+      "public.json"
+    ],
+    "artifacts": {},
+    "probes": [],
+    "absent": [
+      "receipt.json"
+    ],
+    "copies": {
+      "public-receipt.json": "public.json"
+    }
+  },
+  "capability-write-root": {
+    "preserve": [
+      "README.md",
+      "export.py"
+    ],
+    "artifacts": {},
+    "probes": [],
+    "outside": {
+      "file": "report.json",
+      "expected": {
+        "exported": true,
+        "items": 3
+      }
+    }
+  },
+  "closeout-blocked": {
+    "preserve": [
+      "README.md",
+      "test_report.py",
+      "check.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "report",
+        "function": "select",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ],
+              0
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            {
+              "limit": 8
+            }
+          ],
+          [
+            [
+              [
+                {
+                  "name": "b",
+                  "score": 3
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 1
+            }
+          },
+          {
+            "value": [],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ],
+              0
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "z",
+                "score": 2
+              },
+              {
+                "name": "c",
+                "score": 1
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "z",
+                  "score": 2
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "b",
+                  "score": 3
+                }
+              ]
+            ],
+            "kwargs": {
+              "limit": 8
+            }
+          },
+          {
+            "value": [
+              {
+                "name": "b",
+                "score": 3
+              },
+              {
+                "name": "a",
+                "score": 2
+              },
+              {
+                "name": "a",
+                "score": 2
+              }
+            ],
+            "args": [
+              [
+                {
+                  "name": "b",
+                  "score": 3
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "c",
+                  "score": 1
+                },
+                {
+                  "name": "a",
+                  "score": 2
+                },
+                {
+                  "name": "z",
+                  "score": 2
+                }
+              ]
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "report.select-behavior"
+      }
+    ]
+  },
+  "capability-background-service": {
+    "preserve": [
+      "README.md",
+      "serve.py",
+      "client.py",
+      "nonce.txt"
+    ],
+    "artifacts": {
+      "receipt.json": {
+        "receipt": "wait-ready-3b9e"
+      }
+    },
+    "probes": []
+  },
+  "wave-join": {
+    "preserve": [
+      "README.md",
+      "test_library.py",
+      "test_consumer.py",
+      "test_distinct.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "module": "consumer",
+        "function": "select",
+        "calls": [
+          [
+            [
+              []
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                " A ",
+                "a",
+                "B",
+                " b ",
+                ""
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                "Stra\u00dfe",
+                "STRASSE",
+                " Stra\u00dfe "
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "a",
+              "b",
+              ""
+            ],
+            "args": [
+              [
+                " A ",
+                "a",
+                "B",
+                " b ",
+                ""
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "strasse"
+            ],
+            "args": [
+              [
+                "Stra\u00dfe",
+                "STRASSE",
+                " Stra\u00dfe "
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [
+              "b",
+              "a"
+            ],
+            "args": [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "consumer.select-behavior"
+      },
+      {
+        "module": "library",
+        "function": "normalize",
+        "calls": [
+          [
+            [
+              " Alpha "
+            ],
+            {}
+          ],
+          [
+            [
+              "Stra\u00dfe"
+            ],
+            {}
+          ],
+          [
+            [
+              ""
+            ],
+            {}
+          ],
+          [
+            [
+              "ready"
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": "alpha",
+            "args": [
+              " Alpha "
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "strasse",
+            "args": [
+              "Stra\u00dfe"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "",
+            "args": [
+              ""
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "ready",
+            "args": [
+              "ready"
+            ],
+            "kwargs": {}
+          }
+        ],
+        "id": "library.normalize-behavior"
+      },
+      {
+        "id": "distinct.unique-behavior",
+        "module": "distinct",
+        "function": "unique",
+        "calls": [
+          [
+            [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            {}
+          ],
+          [
+            [
+              []
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [
+              "b",
+              "a"
+            ],
+            "args": [
+              [
+                "b",
+                "a",
+                "b"
+              ]
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": [],
+            "args": [
+              []
+            ],
+            "kwargs": {}
+          }
+        ]
+      },
+      {
+        "id": "consumer.uses-both-integrated-libraries",
+        "module": "consumer",
+        "function": "select",
+        "files": {
+          "library.py": "def normalize(name):\n    return \"<\" + name + \">\"\n",
+          "distinct.py": "def unique(values):\n    return [\"joined\", *values]\n"
+        },
+        "calls": [
+          [
+            [
+              [
+                "B",
+                "B"
+              ]
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": [
+              "joined",
+              "<B>",
+              "<B>"
+            ],
+            "args": [
+              [
+                "B",
+                "B"
+              ]
+            ],
+            "kwargs": {}
+          }
+        ]
+      }
+    ]
+  },
+  "closeout-resumed": {
+    "preserve": [
+      "README.md",
+      "settings.json",
+      "test_status.py"
+    ],
+    "artifacts": {},
+    "probes": [
+      {
+        "id": "status.display_status-behavior",
+        "module": "status",
+        "function": "display_status",
+        "calls": [
+          [
+            [
+              "pending"
+            ],
+            {}
+          ],
+          [
+            [
+              "active"
+            ],
+            {}
+          ],
+          [
+            [
+              "done"
+            ],
+            {}
+          ]
+        ],
+        "expected": [
+          {
+            "value": "Waiting",
+            "args": [
+              "pending"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Running",
+            "args": [
+              "active"
+            ],
+            "kwargs": {}
+          },
+          {
+            "value": "Complete",
+            "args": [
+              "done"
+            ],
+            "kwargs": {}
+          }
+        ]
+      }
+    ]
+  },
+  "workflow-revision-reapproval": {
+    "preserve": [
+      ".paintedwolf/prompt_files/agents/impact.md",
+      ".paintedwolf/prompt_files/agents/release_index.md",
+      ".paintedwolf/prompt_files/agents/selection.md",
+      ".paintedwolf/workflows/workflow-revision-reapproval/workflow.yaml",
+      "README.md",
+      "approvals.json",
+      "baseline.json"
+    ],
+    "artifacts": {},
+    "probes": []
+  },
+  "workflow-scoped-exception": {
+    "preserve": [
+      ".paintedwolf/prompt_files/agents/api_disposition.md",
+      ".paintedwolf/prompt_files/agents/hold.md",
+      ".paintedwolf/prompt_files/agents/release.md",
+      ".paintedwolf/prompt_files/agents/release_index.md",
+      ".paintedwolf/prompt_files/agents/select_action.md",
+      ".paintedwolf/prompt_files/agents/web_disposition.md",
+      ".paintedwolf/workflows/workflow-scoped-exception/workflow.yaml",
+      "README.md",
+      "exceptions.json",
+      "release.json"
+    ],
+    "artifacts": {},
+    "probes": []
+  },
+  "workflow-reopen-branch": {
+    "preserve": [
+      ".paintedwolf/prompt_files/agents/baseline.md",
+      ".paintedwolf/prompt_files/agents/correction.md",
+      ".paintedwolf/prompt_files/agents/reconcile.md",
+      ".paintedwolf/prompt_files/agents/release_index.md",
+      ".paintedwolf/workflows/workflow-reopen-branch/workflow.yaml",
+      "README.md",
+      "amendment.json",
+      "handoffs.json",
+      "replacements.json"
+    ],
+    "artifacts": {},
+    "probes": []
+  },
+  "workflow-dependent-recovery": {
+    "preserve": [
+      ".paintedwolf/prompt_files/agents/recovery_action.md",
+      ".paintedwolf/prompt_files/agents/recovery_scope.md",
+      ".paintedwolf/prompt_files/agents/release_index.md",
+      ".paintedwolf/prompt_files/agents/select_action.md",
+      ".paintedwolf/workflows/workflow-dependent-recovery/workflow.yaml",
+      "README.md",
+      "dependencies.json",
+      "deployments.json"
+    ],
+    "artifacts": {},
+    "probes": []
+  }
+}

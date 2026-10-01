@@ -1,0 +1,603 @@
+{
+  "schema": "gts-dispatcher-census-a0/v1",
+  "parser_revision": "3c55dca287c9dd6ed987c764b9aafd90b22281a2",
+  "grammar_lock_path": "grammars/languages.lock",
+  "grammar_lock_sha256": "9ddb6324afd014f6ecdd1cae3dd1ba238f1e62ce03d126e6d8b267ce34d72ecb",
+  "corpus_source_lock_path": "corpus_sources.lock",
+  "corpus_source_lock_sha256": "41c744279c8b1d7c9fe7b1b8e26fba733423e77cd48efea46927309c22d163ea",
+  "fixture_root": "testdata/dispatcher_census_a0",
+  "languages": [
+    "ada",
+    "apex",
+    "authzed",
+    "bitbake",
+    "cobol",
+    "cooklang",
+    "corn",
+    "doxygen",
+    "dtd",
+    "hlsl",
+    "solidity",
+    "templ",
+    "wgsl",
+    "wolfram"
+  ],
+  "entries": [
+    {
+      "language": "ada",
+      "bucket": "large",
+      "bytes": 157470,
+      "sha256": "77d8b1c3090521484bd67ca73de4f9e21dc203e77b409a5696a5c6cbed57c29b",
+      "source_repo": "https://github.com/AdaCore/Ada_Drivers_Library",
+      "source_commit": "95bdcbf8bcb0760e725b2ee06309734681f905ba",
+      "source_path": "components/src/radio/si4432/si4432.ads",
+      "output_path": "testdata/dispatcher_census_a0/ada/large__si4432.ads"
+    },
+    {
+      "language": "ada",
+      "bucket": "medium",
+      "bytes": 9171,
+      "sha256": "79f9469c41782f8b4ba4598c5836d6df2022985156d046f1815007d24729a3cc",
+      "source_repo": "https://github.com/AdaCore/Ada_Drivers_Library",
+      "source_commit": "95bdcbf8bcb0760e725b2ee06309734681f905ba",
+      "source_path": "arch/ARM/STM32/svd/stm32f7x9/stm32_svd-pwr.ads",
+      "output_path": "testdata/dispatcher_census_a0/ada/medium__stm32_svd-pwr.ads"
+    },
+    {
+      "language": "ada",
+      "bucket": "small",
+      "bytes": 394,
+      "sha256": "b66f29b76ca0e5ec867779a63bc0a9d617cd06cbcc7895754e6847e4762a39d2",
+      "source_repo": "https://github.com/AdaCore/Ada_Drivers_Library",
+      "source_commit": "95bdcbf8bcb0760e725b2ee06309734681f905ba",
+      "source_path": "testsuite/tests/hexdump/src/tc_hexdump.adb",
+      "output_path": "testdata/dispatcher_census_a0/ada/small__tc_hexdump.adb"
+    },
+    {
+      "language": "apex",
+      "bucket": "large",
+      "bytes": 26932,
+      "sha256": "69a1730332203fdc1a5e7512a376058c9c23ccbf5bfde79f06d265e43fb71789",
+      "source_repo": "https://github.com/trailheadapps/apex-recipes",
+      "source_commit": "4a935d603a965e308783ae6830a94e545b17bff6",
+      "source_path": "force-app/tests/Data Recipes/DMLRecipes_Tests.cls",
+      "output_path": "testdata/dispatcher_census_a0/apex/large__DMLRecipes_Tests.cls"
+    },
+    {
+      "language": "apex",
+      "bucket": "medium",
+      "bytes": 9230,
+      "sha256": "2f805b6c34bce1bc5f737d498f9e0caa9a190a6475454faeb5a4577b2e6c181f",
+      "source_repo": "https://github.com/trailheadapps/apex-recipes",
+      "source_commit": "4a935d603a965e308783ae6830a94e545b17bff6",
+      "source_path": "force-app/main/default/classes/Files Recipes/FilesRecipes.cls",
+      "output_path": "testdata/dispatcher_census_a0/apex/medium__FilesRecipes.cls"
+    },
+    {
+      "language": "apex",
+      "bucket": "small",
+      "bytes": 379,
+      "sha256": "709cf39ec502713e43cc872f7edb807f2db753de1a55f3efd0422e0df2fce21c",
+      "source_repo": "https://github.com/trailheadapps/apex-recipes",
+      "source_commit": "4a935d603a965e308783ae6830a94e545b17bff6",
+      "source_path": "force-app/main/default/classes/Quiddity Recipes/QuiddityRecipes.cls",
+      "output_path": "testdata/dispatcher_census_a0/apex/small__QuiddityRecipes.cls"
+    },
+    {
+      "language": "authzed",
+      "bucket": "large",
+      "bytes": 106126,
+      "sha256": "86921255ed996dbf67a519adf1e33d5353aa873f025f77e2150ded76ac81197c",
+      "source_repo": "https://github.com/authzed/spicedb",
+      "source_commit": "024601e66c148a398be733f06f444e14c57ccd25",
+      "source_path": "pkg/schemadsl/parser/tests/superlarge.zed",
+      "output_path": "testdata/dispatcher_census_a0/authzed/large__superlarge.zed"
+    },
+    {
+      "language": "authzed",
+      "bucket": "small",
+      "bytes": 692,
+      "sha256": "fac84d359ebf4b628e54f567b30657792550d0c58441c42fb10a2a044b379574",
+      "source_repo": "https://github.com/authzed/spicedb",
+      "source_commit": "024601e66c148a398be733f06f444e14c57ccd25",
+      "source_path": "pkg/schemadsl/parser/tests/doccomments.zed",
+      "output_path": "testdata/dispatcher_census_a0/authzed/small__doccomments.zed"
+    },
+    {
+      "language": "authzed",
+      "bucket": "small",
+      "bytes": 280,
+      "sha256": "a78131bee5849e2ce1b002605896a090a0003e052574e76ea469c3b895c534e0",
+      "source_repo": "https://github.com/authzed/spicedb",
+      "source_commit": "024601e66c148a398be733f06f444e14c57ccd25",
+      "source_path": "pkg/schemadsl/parser/tests/localimport_with_quotes_in_quotes.zed",
+      "output_path": "testdata/dispatcher_census_a0/authzed/small__localimport_with_quotes_in_quotes.zed"
+    },
+    {
+      "language": "bitbake",
+      "bucket": "large",
+      "bytes": 168224,
+      "sha256": "eaa9e3f2354345d558717c4791a67144d8b27767674bf5468e157a0e0a332ff6",
+      "source_repo": "https://github.com/openembedded/openembedded-core",
+      "source_commit": "eeea0396b60e50ddb636088eee8ffe23c512d367",
+      "source_path": "meta/recipes-kernel/linux-firmware/linux-firmware_20260519.bb",
+      "output_path": "testdata/dispatcher_census_a0/bitbake/large__linux-firmware_20260519.bb"
+    },
+    {
+      "language": "bitbake",
+      "bucket": "medium",
+      "bytes": 9229,
+      "sha256": "7deb41efd839d8b5b8b2c98589614377d12fd81fa6033824330084e07c5eaf9f",
+      "source_repo": "https://github.com/openembedded/openembedded-core",
+      "source_commit": "eeea0396b60e50ddb636088eee8ffe23c512d367",
+      "source_path": "meta/recipes-devtools/clang/clang_git.bb",
+      "output_path": "testdata/dispatcher_census_a0/bitbake/medium__clang_git.bb"
+    },
+    {
+      "language": "bitbake",
+      "bucket": "small",
+      "bytes": 259,
+      "sha256": "fbdb85e443edd378e944e5a1416c0c4a1e485f0cd38f70a5ac75748073a15d12",
+      "source_repo": "https://github.com/openembedded/openembedded-core",
+      "source_commit": "eeea0396b60e50ddb636088eee8ffe23c512d367",
+      "source_path": "meta-selftest/recipes-test/error/error.bb",
+      "output_path": "testdata/dispatcher_census_a0/bitbake/small__error.bb"
+    },
+    {
+      "language": "cobol",
+      "bucket": "large",
+      "bytes": 64212,
+      "sha256": "a5401b40c3a91d7fac4c5bc2f9af9938b120b5b8845df8c70180a04290d454e1",
+      "source_repo": "https://github.com/RocketSoftwareCOBOLandMainframe/BankDemo",
+      "source_commit": "9e4c7a4e0082c6437a84db67e87f3536a88a6245",
+      "source_path": "sources/copybook/MBANK30.cpy",
+      "output_path": "testdata/dispatcher_census_a0/cobol/large__MBANK30.cpy"
+    },
+    {
+      "language": "cobol",
+      "bucket": "medium",
+      "bytes": 9243,
+      "sha256": "b08493ffcdbcac9b49f271d43c4abc2bd2714f862b4bd90cc58b2dd2cfa6185a",
+      "source_repo": "https://github.com/RocketSoftwareCOBOLandMainframe/BankDemo",
+      "source_commit": "9e4c7a4e0082c6437a84db67e87f3536a88a6245",
+      "source_path": "sources/cobol/data/sql/DBANK02P.cbl",
+      "output_path": "testdata/dispatcher_census_a0/cobol/medium__DBANK02P.cbl"
+    },
+    {
+      "language": "cobol",
+      "bucket": "small",
+      "bytes": 1813,
+      "sha256": "6dee77dce5c427cb2f9911c963f47ea2c6427362a879581830b69ca58c96c9e1",
+      "source_repo": "https://github.com/RocketSoftwareCOBOLandMainframe/BankDemo",
+      "source_commit": "9e4c7a4e0082c6437a84db67e87f3536a88a6245",
+      "source_path": "sources/copybook/CVERSNP1.cpy",
+      "output_path": "testdata/dispatcher_census_a0/cobol/small__CVERSNP1.cpy"
+    },
+    {
+      "language": "cooklang",
+      "bucket": "medium",
+      "bytes": 2523,
+      "sha256": "6120e9cafce48a745c0f5dade752499883bc2b07230cae93d6a452a788c7ba74",
+      "source_repo": "https://github.com/cooklang/cooklang-rs",
+      "source_commit": "1c6784031c04027992225313c203fc0861a81d8f",
+      "source_path": "benches/complex_test_recipe.cook",
+      "output_path": "testdata/dispatcher_census_a0/cooklang/medium__complex_test_recipe.cook"
+    },
+    {
+      "language": "cooklang",
+      "bucket": "medium",
+      "bytes": 2799,
+      "sha256": "956fcaf1c14e0e915efded324450789cb5d9a896cf60e4feafb71b918c8e621a",
+      "source_repo": "https://github.com/cooklang/cooklang-rs",
+      "source_commit": "1c6784031c04027992225313c203fc0861a81d8f",
+      "source_path": "benches/frontmatter_test_recipe.cook",
+      "output_path": "testdata/dispatcher_census_a0/cooklang/medium__frontmatter_test_recipe.cook"
+    },
+    {
+      "language": "cooklang",
+      "bucket": "medium",
+      "bytes": 2994,
+      "sha256": "1acb11626700218ebc8ff8b7d445e1a257b12af35dea7dbc0fcef0587a79468f",
+      "source_repo": "https://github.com/cooklang/cooklang-rs",
+      "source_commit": "1c6784031c04027992225313c203fc0861a81d8f",
+      "source_path": "benches/test_recipe.cook",
+      "output_path": "testdata/dispatcher_census_a0/cooklang/medium__test_recipe.cook"
+    },
+    {
+      "language": "corn",
+      "bucket": "small",
+      "bytes": 288,
+      "sha256": "e9793277f21b19593024cf7f670934333deefb54eae122caaa1f66cf41c7606a",
+      "source_repo": "https://github.com/jakestanger/corn",
+      "source_commit": "e0629ecab1511d591c271b2512da0f676c6d30a5",
+      "source_path": "assets/inputs/compact.corn",
+      "output_path": "testdata/dispatcher_census_a0/corn/small__compact.corn"
+    },
+    {
+      "language": "corn",
+      "bucket": "small",
+      "bytes": 863,
+      "sha256": "98aaba0d478418a7855fa538cb9cd52ab81b2d2e581402d212bc3951a6a5db02",
+      "source_repo": "https://github.com/jakestanger/corn",
+      "source_commit": "e0629ecab1511d591c271b2512da0f676c6d30a5",
+      "source_path": "assets/inputs/complex.corn",
+      "output_path": "testdata/dispatcher_census_a0/corn/small__complex.corn"
+    },
+    {
+      "language": "corn",
+      "bucket": "small",
+      "bytes": 568,
+      "sha256": "7d412d6e3c5e396818885601df14ad092b8cbe4aac690a45d7a4c29e0410da94",
+      "source_repo": "https://github.com/jakestanger/corn",
+      "source_commit": "e0629ecab1511d591c271b2512da0f676c6d30a5",
+      "source_path": "assets/inputs/readme_example.corn",
+      "output_path": "testdata/dispatcher_census_a0/corn/small__readme_example.corn"
+    },
+    {
+      "language": "doxygen",
+      "bucket": "medium",
+      "bytes": 7220,
+      "sha256": "66408d6539b27d7c49b1e51777605c38c91b6d924267db5109ee00e2a1cfcf41",
+      "source_repo": "https://github.com/doxygen/doxygen",
+      "source_commit": "b3e7fb3b6e2f4278c21317d4af1f6f3fdb388f72",
+      "source_path": "examples/CMakeLists.txt",
+      "output_path": "testdata/dispatcher_census_a0/doxygen/medium__CMakeLists.txt"
+    },
+    {
+      "language": "doxygen",
+      "bucket": "medium",
+      "bytes": 9777,
+      "sha256": "31622a6c075ffa6f78a16af6e379f517213d42ff67729bbd0d10551c5fca9702",
+      "source_repo": "https://github.com/doxygen/doxygen",
+      "source_commit": "b3e7fb3b6e2f4278c21317d4af1f6f3fdb388f72",
+      "source_path": "addon/doxmlparser/examples/metrics/metrics.py",
+      "output_path": "testdata/dispatcher_census_a0/doxygen/medium__metrics.py"
+    },
+    {
+      "language": "doxygen",
+      "bucket": "small",
+      "bytes": 260,
+      "sha256": "86998161914382f8152e4984db091e7bf486799c1091fc6c57db4e704eee4a3b",
+      "source_repo": "https://github.com/doxygen/doxygen",
+      "source_commit": "b3e7fb3b6e2f4278c21317d4af1f6f3fdb388f72",
+      "source_path": "examples/example.cfg",
+      "output_path": "testdata/dispatcher_census_a0/doxygen/small__example.cfg"
+    },
+    {
+      "language": "dtd",
+      "bucket": "large",
+      "bytes": 285292,
+      "sha256": "923e8f6ea911bd940ea95d957028fa3155a11b54a756bbe291d3710e110172d9",
+      "source_repo": "https://github.com/docbook/docbook",
+      "source_commit": "0f5c6e72120a540c898025707b3d6c829785790b",
+      "source_path": "MovedToCodeberg/src/docbook/schemas/5.0/dtd/dbits.dtd",
+      "output_path": "testdata/dispatcher_census_a0/dtd/large__dbits.dtd"
+    },
+    {
+      "language": "dtd",
+      "bucket": "large",
+      "bytes": 198540,
+      "sha256": "4f54c108abea1e4ae8e13e98d79bc0534d442012ed7ab40fcb4052dc843f65dd",
+      "source_repo": "https://github.com/docbook/docbook",
+      "source_commit": "0f5c6e72120a540c898025707b3d6c829785790b",
+      "source_path": "MovedToCodeberg/src/docbook/schemas/5.0/dtd/docbook.dtd",
+      "output_path": "testdata/dispatcher_census_a0/dtd/large__docbook.dtd"
+    },
+    {
+      "language": "dtd",
+      "bucket": "medium",
+      "bytes": 9174,
+      "sha256": "54c96c2aa55e2a95b4d0f9ac30df90cfdd717fa1c52f6d3547f1cbd3c8ad4b85",
+      "source_repo": "https://github.com/docbook/docbook",
+      "source_commit": "0f5c6e72120a540c898025707b3d6c829785790b",
+      "source_path": "MovedToCodeberg/src/docbook/schemas/4.5/dtd/calstblx.dtd",
+      "output_path": "testdata/dispatcher_census_a0/dtd/medium__calstblx.dtd"
+    },
+    {
+      "language": "hlsl",
+      "bucket": "large",
+      "bytes": 438923,
+      "sha256": "a040bc70f9def8027c54fbead44bef8095a0ef7b8caeda5d5544e1f66c06e32d",
+      "source_repo": "https://github.com/microsoft/DirectXShaderCompiler",
+      "source_commit": "8ed708842c1ccb24bd914eff03125c837a01be71",
+      "source_path": "tools/clang/test/SemaHLSL/scalar-operators-assign-exact-precision.hlsl",
+      "output_path": "testdata/dispatcher_census_a0/hlsl/large__scalar-operators-assign-exact-precision.hlsl"
+    },
+    {
+      "language": "hlsl",
+      "bucket": "medium",
+      "bytes": 9184,
+      "sha256": "5970109b639f12e12d8a269ce3f00de111460dd5ecf396211e82e670791582b8",
+      "source_repo": "https://github.com/microsoft/DirectXShaderCompiler",
+      "source_commit": "8ed708842c1ccb24bd914eff03125c837a01be71",
+      "source_path": "tools/clang/test/HLSLFileCheck/samples/SubD11_SmoothPS.hlsl",
+      "output_path": "testdata/dispatcher_census_a0/hlsl/medium__SubD11_SmoothPS.hlsl"
+    },
+    {
+      "language": "hlsl",
+      "bucket": "small",
+      "bytes": 256,
+      "sha256": "40445754964cadabe24608e4104826d22df0595a7e7cd58f4a458f1d19a46d8f",
+      "source_repo": "https://github.com/microsoft/DirectXShaderCompiler",
+      "source_commit": "8ed708842c1ccb24bd914eff03125c837a01be71",
+      "source_path": "tools/clang/test/HLSLFileCheck/hlsl/intrinsics/atomic/atomic_cast1.hlsl",
+      "output_path": "testdata/dispatcher_census_a0/hlsl/small__atomic_cast1.hlsl"
+    },
+    {
+      "language": "solidity",
+      "bucket": "large",
+      "bytes": 64872,
+      "sha256": "766829f6d9758a1318dd009143912d7aa6bbafa4f4b2a137c94d7f81a73b38ac",
+      "source_repo": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "source_commit": "48ab75f29abaa315fad7fa7b8338f92bb07376a7",
+      "source_path": "contracts/utils/Packing.sol",
+      "output_path": "testdata/dispatcher_census_a0/solidity/large__Packing.sol"
+    },
+    {
+      "language": "solidity",
+      "bucket": "medium",
+      "bytes": 9279,
+      "sha256": "f527a063813c2bf60c153fb08e38539578935402894fcc36fac42324ca325d3b",
+      "source_repo": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "source_commit": "48ab75f29abaa315fad7fa7b8338f92bb07376a7",
+      "source_path": "contracts/proxy/utils/Initializable.sol",
+      "output_path": "testdata/dispatcher_census_a0/solidity/medium__Initializable.sol"
+    },
+    {
+      "language": "solidity",
+      "bucket": "small",
+      "bytes": 263,
+      "sha256": "9fbd10c6970c328f348c9a86604bdad336743caeda2547f94b6a86d8a906c961",
+      "source_repo": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "source_commit": "48ab75f29abaa315fad7fa7b8338f92bb07376a7",
+      "source_path": "contracts/interfaces/IERC3156.sol",
+      "output_path": "testdata/dispatcher_census_a0/solidity/small__IERC3156.sol"
+    },
+    {
+      "language": "templ",
+      "bucket": "medium",
+      "bytes": 2161,
+      "sha256": "4415618a310cc880cb67fcd902bb7e9f82e91b9d0f461349e0cfb5cd0b1fa007",
+      "source_repo": "https://github.com/a-h/templ",
+      "source_commit": "f8e3a1b4efb329e94e4831e3ad494bbc2086b756",
+      "source_path": "examples/htmx-fragments/main.templ",
+      "output_path": "testdata/dispatcher_census_a0/templ/medium__main.templ"
+    },
+    {
+      "language": "templ",
+      "bucket": "medium",
+      "bytes": 2999,
+      "sha256": "e4a5934ad709206e1c5ca82ab9bc86cd20467df61484357096e6378b5dbb7791",
+      "source_repo": "https://github.com/a-h/templ",
+      "source_commit": "f8e3a1b4efb329e94e4831e3ad494bbc2086b756",
+      "source_path": "generator/test-css-usage/template.templ",
+      "output_path": "testdata/dispatcher_census_a0/templ/medium__template.templ"
+    },
+    {
+      "language": "templ",
+      "bucket": "small",
+      "bytes": 257,
+      "sha256": "bdc8798d13311d9f459108d3fad77f291dde4156fe68295671706684b8dd3eb3",
+      "source_repo": "https://github.com/a-h/templ",
+      "source_commit": "f8e3a1b4efb329e94e4831e3ad494bbc2086b756",
+      "source_path": "generator/test-go-template-in-templ/template.templ",
+      "output_path": "testdata/dispatcher_census_a0/templ/small__template.templ"
+    },
+    {
+      "language": "wgsl",
+      "bucket": "medium",
+      "bytes": 5737,
+      "sha256": "999d93539ed738ab5041d75fe28e7b9d4da7e7ef25c345f2a1ef52239320268b",
+      "source_repo": "https://github.com/webgpu/webgpu-samples",
+      "source_commit": "904fe349a66cae556eaff2bebf4ff00e59d184b5",
+      "source_path": "sample/normalMap/normalMap.wgsl",
+      "output_path": "testdata/dispatcher_census_a0/wgsl/medium__normalMap.wgsl"
+    },
+    {
+      "language": "wgsl",
+      "bucket": "medium",
+      "bytes": 5444,
+      "sha256": "2d5630364c6667404abeb05ead49255f6538998ec66bf20cd5337a0eb5a26783",
+      "source_repo": "https://github.com/webgpu/webgpu-samples",
+      "source_commit": "904fe349a66cae556eaff2bebf4ff00e59d184b5",
+      "source_path": "sample/cornell/radiosity.wgsl",
+      "output_path": "testdata/dispatcher_census_a0/wgsl/medium__radiosity.wgsl"
+    },
+    {
+      "language": "wgsl",
+      "bucket": "small",
+      "bytes": 272,
+      "sha256": "7af39dd8fd0e00f911fafaef4e2b40e2b0314f586049acef74c0fc451dd73286",
+      "source_repo": "https://github.com/webgpu/webgpu-samples",
+      "source_commit": "904fe349a66cae556eaff2bebf4ff00e59d184b5",
+      "source_path": "sample/reversedZ/fragmentTextureQuad.wgsl",
+      "output_path": "testdata/dispatcher_census_a0/wgsl/small__fragmentTextureQuad.wgsl"
+    },
+    {
+      "language": "wolfram",
+      "bucket": "large",
+      "bytes": 19124,
+      "sha256": "e03c8588214ce3a0a5ba48d1f1335276c1826356052c33df1f3184a6d6303a53",
+      "source_repo": "https://github.com/WolframResearch/WolframLanguageForJupyter",
+      "source_commit": "9a26ac78743cc47084c9c99ff75c5aee2657a409",
+      "source_path": "WolframLanguageForJupyter/Resources/EvaluationUtilities.wl",
+      "output_path": "testdata/dispatcher_census_a0/wolfram/large__EvaluationUtilities.wl"
+    },
+    {
+      "language": "wolfram",
+      "bucket": "medium",
+      "bytes": 9315,
+      "sha256": "45a6287c3c8ad5f4f37298d4915d1bfb29e6e91ee0eccde1c842efb7c90e3dec",
+      "source_repo": "https://github.com/WolframResearch/WolframLanguageForJupyter",
+      "source_commit": "9a26ac78743cc47084c9c99ff75c5aee2657a409",
+      "source_path": "WolframLanguageForJupyter/Resources/OutputHandlingUtilities.wl",
+      "output_path": "testdata/dispatcher_census_a0/wolfram/medium__OutputHandlingUtilities.wl"
+    },
+    {
+      "language": "wolfram",
+      "bucket": "small",
+      "bytes": 322,
+      "sha256": "55be9b6143e5dd68ddb433bb9c95c0388a505b65c452fb6036e064d537e3f602",
+      "source_repo": "https://github.com/WolframResearch/WolframLanguageForJupyter",
+      "source_commit": "9a26ac78743cc47084c9c99ff75c5aee2657a409",
+      "source_path": "WolframLanguageForJupyter/PacletInfo.m",
+      "output_path": "testdata/dispatcher_census_a0/wolfram/small__PacletInfo.m"
+    }
+  ],
+  "receipts": [
+    {
+      "language": "ada",
+      "arm_id": "dispatch.ada",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 17861,
+      "nodes_rewritten": 0,
+      "error_roots": 0,
+      "parse_errors": 0
+    },
+    {
+      "language": "apex",
+      "arm_id": "dispatch.apex",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 6816,
+      "nodes_rewritten": 0,
+      "error_roots": 0,
+      "parse_errors": 0
+    },
+    {
+      "language": "authzed",
+      "arm_id": "dispatch.authzed",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 8326,
+      "nodes_rewritten": 18,
+      "error_roots": 1,
+      "parse_errors": 0
+    },
+    {
+      "language": "bitbake",
+      "arm_id": "dispatch.bitbake",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 40358,
+      "nodes_rewritten": 0,
+      "error_roots": 2,
+      "parse_errors": 0
+    },
+    {
+      "language": "cobol",
+      "arm_id": "predicate.cobol-exact",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 1441,
+      "nodes_rewritten": 1315,
+      "error_roots": 3,
+      "parse_errors": 0
+    },
+    {
+      "language": "cooklang",
+      "arm_id": "dispatch.cooklang",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 1037,
+      "nodes_rewritten": 1021,
+      "error_roots": 2,
+      "parse_errors": 0
+    },
+    {
+      "language": "corn",
+      "arm_id": "dispatch.corn",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 792,
+      "nodes_rewritten": 0,
+      "error_roots": 0,
+      "parse_errors": 0
+    },
+    {
+      "language": "doxygen",
+      "arm_id": "dispatch.doxygen",
+      "files": 3,
+      "checked": 2,
+      "run": 2,
+      "nodes_visited": 4,
+      "nodes_rewritten": 0,
+      "error_roots": 3,
+      "parse_errors": 0
+    },
+    {
+      "language": "dtd",
+      "arm_id": "dispatch.dtd",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 105771,
+      "nodes_rewritten": 0,
+      "error_roots": 2,
+      "parse_errors": 0
+    },
+    {
+      "language": "hlsl",
+      "arm_id": "dispatch.hlsl",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 100424,
+      "nodes_rewritten": 0,
+      "error_roots": 1,
+      "parse_errors": 0
+    },
+    {
+      "language": "solidity",
+      "arm_id": "dispatch.solidity",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 26897,
+      "nodes_rewritten": 666,
+      "error_roots": 0,
+      "parse_errors": 0
+    },
+    {
+      "language": "templ",
+      "arm_id": "dispatch.templ",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 1138,
+      "nodes_rewritten": 76,
+      "error_roots": 1,
+      "parse_errors": 0
+    },
+    {
+      "language": "wgsl",
+      "arm_id": "dispatch.wgsl",
+      "files": 3,
+      "checked": 3,
+      "run": 3,
+      "nodes_visited": 2630,
+      "nodes_rewritten": 171,
+      "error_roots": 2,
+      "parse_errors": 0
+    },
+    {
+      "language": "wolfram",
+      "arm_id": "dispatch.wolfram",
+      "files": 3,
+      "checked": 6,
+      "run": 6,
+      "nodes_visited": 77,
+      "nodes_rewritten": 0,
+      "error_roots": 3,
+      "parse_errors": 0
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+tags: [terminal]
+description: >-
+  Write literal text and/or named control tokens ({Enter}, {Ctrl-C}, …) to a
+  held pty, then return the settled vt grid. Never send known plaintext passwords,
+  tokens, or passphrases. An opaque {{paintedwolf-secret:…}} reference is allowed when the
+  interactive prompt is the consuming boundary; the host resolves and screens it.
+schema:
+  type: object
+  properties:
+    secret_use:
+      type: object
+      additionalProperties: false
+      required: [services]
+      description: >-
+        Request one reusable permission for the managed secrets used by this
+        process and their later use with the named HTTP services. The person
+        reviews both process access and these declared service addresses.
+        This does not claim the process or a daemon sends only to those services.
+        Put connection and socket requirements in capability_request as usual.
+      properties:
+        services:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 1024
+          description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
+    id:
+      type: string
+      description: Handle from terminal_open.
+    input:
+      type: string
+      description: Pty write payload. Use {Enter}, {Ctrl-C}, and other named controls; use {LeftBrace} for a literal opening brace and {RightBrace} for a literal closing brace. Protected reference values are inserted as literal bytes.
+    observe:
+      type: string
+      enum: [ack, delta, screen]
+      default: screen
+      description: "Observation returned after the write: ack only, one output delta, or the settled VT screen."
+  required: [id, input]
+  additionalProperties: false

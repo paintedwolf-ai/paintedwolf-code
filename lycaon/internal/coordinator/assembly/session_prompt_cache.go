@@ -1,0 +1,260 @@
+package assembly
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/scopedstore"
+)
+
+// TurnAssemblyScratch holds ephemeral prompt assembly state for one Prompt turn.
+type TurnAssemblyScratch struct {
+	Iteration                  int
+	PromptTurnSeq              int
+	SurfaceID                  string
+	PendingKickIDs             []string
+	StablePrompt               string
+	StablePromptKey            string
+	BoardBlock                 string
+	BoardKey                   string
+	RunContextBlock            string
+	RunContextKey              string
+	SpawnRosterBlock           string
+	SpawnRosterKey             string
+	WorkerLegBlock             string
+	WorkerLegKey               string
+	WorkerLegVolatileKey       string
+	LastSeenSiblingNoteID      int64
+	PendingSiblingNotes        []inject.SiblingNote
+	ModeTransitionCauses       []surface.ModeTransitionCause
+	TransitionInjectKey        string
+	TransitionInjectBlock      string
+	CurrentExecutionModeFamily string
+	WorkspaceRoots             []map[string]any
+	WorkspaceRootCount         int
+	WorkspaceActivePath        string
+	WorkspaceRootsLoaded       bool
+	// SourceBriefBlocks holds each turn's rendered source-change brief, keyed
+	// by the message that opened the turn.
+	SourceBriefBlocks  map[string]string
+	SourceBriefsLoaded bool
+}
+
+// sessionStableEntry caches compiled stable blocks across turns.
+type sessionStableEntry struct {
+	Key    string
+	Prompt string
+}
+
+// SessionPromptCache tracks per-session stable prompt blocks and per-turn scratch.
+type SessionPromptCache struct {
+	// Bounded by session; eviction recompiles the stable block.
+	stable scopedstore.LRU[*sessionStableEntry]
+	// Bounded by session; eviction restarts its turn sequence.
+	promptTurnSeq scopedstore.LRU[int]
+	// Bounded per turn and cleared at EndTurn.
+	turns scopedstore.LRU[*TurnAssemblyScratch]
+	// Bounded by session and consumed at BeginTurn.
+	pendingModeCauses scopedstore.LRU[[]surface.ModeTransitionCause]
+}
+
+// BeginTurn starts a turn that delivers pendingKickIDs.
+func (c *SessionPromptCache) BeginTurn(sessionID string, pendingKickIDs ...string) {
+	if c == nil {
+		return
+	}
+	seq := c.nextPromptTurnSeq(sessionID)
+	turn := &TurnAssemblyScratch{PromptTurnSeq: seq}
+	for _, id := range pendingKickIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			turn.PendingKickIDs = append(turn.PendingKickIDs, id)
+		}
+	}
+	if causes := c.takePendingModeCauses(sessionID); len(causes) > 0 {
+		turn.ModeTransitionCauses = causes
+	}
+	c.turns.Store(sessionID, turn)
+}
+
+func (c *SessionPromptCache) nextPromptTurnSeq(sessionID string) int {
+	if c == nil || sessionID == "" {
+		return 0
+	}
+	next := 1
+	if prev, ok := c.promptTurnSeq.Load(sessionID); ok && prev > 0 {
+		next = prev + 1
+	}
+	c.promptTurnSeq.Store(sessionID, next)
+	return next
+}
+
+// PushModeTransitionCause records an explicit execution-mode entry for the active or next turn.
+func (c *SessionPromptCache) PushModeTransitionCause(sessionID string, cause surface.ModeTransitionCause) {
+	if c == nil || sessionID == "" {
+		return
+	}
+	if turn, ok := c.turns.Load(sessionID); ok && turn != nil {
+		if len(turn.ModeTransitionCauses) > 0 {
+			return
+		}
+		turn.ModeTransitionCauses = append(turn.ModeTransitionCauses, cause)
+		return
+	}
+	if _, loaded := c.pendingModeCauses.Load(sessionID); loaded {
+		return
+	}
+	c.pendingModeCauses.Store(sessionID, []surface.ModeTransitionCause{cause})
+}
+
+func (c *SessionPromptCache) takePendingModeCauses(sessionID string) []surface.ModeTransitionCause {
+	if c == nil || sessionID == "" {
+		return nil
+	}
+	causes, ok := c.pendingModeCauses.LoadAndDelete(sessionID)
+	if !ok || len(causes) == 0 {
+		return nil
+	}
+	return causes
+}
+
+func (c *SessionPromptCache) EndTurn(sessionID string) {
+	if c == nil {
+		return
+	}
+	c.turns.Delete(sessionID)
+}
+func (c *SessionPromptCache) SetTurnSurfaceID(sessionID, surfaceID string) {
+	if c == nil {
+		return
+	}
+	turn := c.LoadTurn(sessionID)
+	turn.SurfaceID = strings.TrimSpace(surfaceID)
+}
+
+// TurnSurfaceID returns the coordinator surface for the active prompt turn.
+func (c *SessionPromptCache) TurnSurfaceID(sessionID string) string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.LoadTurn(sessionID).SurfaceID)
+}
+
+func (c *SessionPromptCache) LoadTurn(sessionID string) *TurnAssemblyScratch {
+	if c == nil {
+		return &TurnAssemblyScratch{}
+	}
+	if turn, ok := c.turns.Load(sessionID); ok && turn != nil {
+		return turn
+	}
+	turn := &TurnAssemblyScratch{}
+	c.turns.Store(sessionID, turn)
+	return turn
+}
+
+func (c *SessionPromptCache) LoadStable(sessionID, key string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	entry, ok := c.stable.Load(sessionID)
+	if !ok || entry == nil || entry.Key != key {
+		return "", false
+	}
+	return entry.Prompt, true
+}
+
+func (c *SessionPromptCache) StoreStable(sessionID, key, prompt string) {
+	if c == nil {
+		return
+	}
+	c.stable.Store(sessionID, &sessionStableEntry{Key: key, Prompt: prompt})
+}
+
+func boardInjectFingerprint(hash, phase string) string {
+	return hashString(strings.TrimSpace(hash) + "\x00" + strings.TrimSpace(phase))
+}
+
+// WorkerLegFingerprint hashes stable fields rendered into the worker L3 block.
+// Volatile peer state (sibling notes, reservations) uses WorkerLegVolatileFingerprint.
+func WorkerLegFingerprint(ctx inject.WorkerLegContext) string {
+	failed := append([]string(nil), ctx.FailedLeaves...)
+	sort.Strings(failed)
+	tools := append([]string(nil), ctx.LegTools...)
+	sort.Strings(tools)
+	criteria := append([]string(nil), ctx.CompletionCriteria...)
+	sort.Strings(criteria)
+	checklist := append([]string(nil), ctx.Checklist...)
+	sort.Strings(checklist)
+
+	parts := []string{
+		strings.TrimSpace(ctx.LegID),
+		strings.TrimSpace(ctx.AgentType),
+		strings.TrimSpace(ctx.WorkflowID),
+		strings.TrimSpace(ctx.PhaseID),
+		strings.TrimSpace(ctx.TopologyPattern),
+		boolString(ctx.RequiresIsolation),
+		strings.Join(failed, ","),
+		strings.Join(criteria, ","),
+		strings.Join(tools, ","),
+		strings.Join(checklist, ","),
+	}
+	return hashString(strings.Join(parts, "\x1e"))
+}
+
+// WorkerLegVolatileFingerprint hashes peer broadcast state appended to the leg block.
+// Returns empty when there is nothing to deliver this turn.
+func WorkerLegVolatileFingerprint(ctx inject.WorkerLegContext) string {
+	notes := volatileSiblingNotesFingerprint(ctx.SiblingNotes)
+	paths := volatileReservedPathsFingerprint(ctx.ReservedPaths)
+	if notes == "" && paths == "" {
+		return ""
+	}
+	return hashString(notes + "\x1e" + paths)
+}
+
+// volatileSiblingNotesFingerprint preserves feed order.
+func volatileSiblingNotesFingerprint(notes []inject.SiblingNote) string {
+	if len(notes) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(notes))
+	for _, note := range notes {
+		parts = append(parts,
+			strings.TrimSpace(note.Agent)+"\x1f"+
+				strings.TrimSpace(note.Summary)+"\x1f"+
+				strings.TrimSpace(note.Ref),
+		)
+	}
+	return strings.Join(parts, "\x1e")
+}
+
+// volatileReservedPathsFingerprint preserves roster order for the leg inject block.
+func volatileReservedPathsFingerprint(paths []inject.ReservedPath) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(paths))
+	for _, hold := range paths {
+		parts = append(parts,
+			strings.TrimSpace(hold.Path)+"\x1f"+
+				strings.TrimSpace(hold.JobID)+"\x1f"+
+				strings.TrimSpace(hold.LegLabel),
+		)
+	}
+	return strings.Join(parts, "\x1e")
+}
+
+func boolString(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
+}
+
+func hashString(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:8])
+}

@@ -1,0 +1,9 @@
+{
+  "capture_id": "progress-refresh-replay",
+  "description": "Trimmed replay — prior-run progress goal survives into a new survey run until run-scoped bootstrap refreshes Goal and resets Plan.",
+  "prior_run_id": "run-prior-auth",
+  "new_run_id": "run-survey-repo",
+  "prior_goal": "Implement auth middleware for the API",
+  "user_prompt": "Survey this repo and produce a research brief on its architecture",
+  "stale_progress_content": "# Goal\n\nImplement auth middleware for the API\n\n## Plan\n- [x] Map existing auth hooks\n- [ ] Wire middleware\n"
+}

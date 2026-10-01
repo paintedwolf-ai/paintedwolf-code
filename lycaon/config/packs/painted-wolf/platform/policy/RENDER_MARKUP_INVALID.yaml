@@ -1,0 +1,36 @@
+oar: '1.0'
+id: RENDER_MARKUP_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RENDER_MARKUP_INVALID"
+effect: block
+copy:
+  what: 'render_view could not prepare the document: {{ paintedwolf.rejection_reason }}.'
+  cause: Input shape, viewport, or document preparation failed. A brand stylesheet or kit-document failure is not
+    necessarily an argument error.
+  why: The host validates authored markup before launching the browser.
+  fix: Inspect the reported preparation stage. Correct an invalid input according to the current schema; for project
+    stylesheet or kit failures, repair that source before retrying. Preserve intended content.
+  instead: Branch on Code RENDER_MARKUP_INVALID; fix render_view arguments
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: render_view markup or mime is invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_MARKUP_INVALID'

@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: That message is gone
+message: >-
+  The message you asked to rewind to is no longer in this chat. It may
+  already have been removed by an earlier rewind.
+suggested_action: Reload the chat and pick a message that is still there.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - no longer in this chat

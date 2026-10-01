@@ -1,0 +1,9 @@
+id: worker-leg-default
+description: "Baseline leg discipline for all workers"
+triggers:
+  topology_patterns: ["*"]
+  phase_ids: ["*"]
+checklist:
+  - "Branch on rejection Code:, never prose"
+  - "Claim evidence_passed:* only from inspector JSONL anchors"
+fallback: true

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-pick-path"
+description = "Show the native folder / file open or save panel, returning the chosen path and, for file and save picks, the grant carrying byte access to it."
+commands.allow = ["pick_path"]

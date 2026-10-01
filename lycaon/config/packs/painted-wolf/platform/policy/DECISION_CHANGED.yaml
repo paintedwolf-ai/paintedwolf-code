@@ -1,0 +1,33 @@
+oar: '1.0'
+id: DECISION_CHANGED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "DECISION_CHANGED"
+effect: block
+copy:
+  what: The pending decision for worker {{ paintedwolf.job_id }} changed.
+  cause: The offered decision no longer matches the stored question and options.
+  why: A decision answer must resume the same suspended worker and answer the current question.
+  fix: Read the current decision with `pack_board`, then answer its current option with `answer_decision`.
+  instead: Inspect the current worker state before retrying.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: The pending decision for worker {{ paintedwolf.job_id }} changed.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: worker-1
+    status: complete
+  expect_contains:
+  - 'Code: DECISION_CHANGED'
+  - worker-1
+  - pack_board
+selector:
+  tool:
+  - answer_decision

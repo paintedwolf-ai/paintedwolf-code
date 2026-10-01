@@ -1,0 +1,22 @@
+title: Disable security observability
+id: 2fa1968b-1273-4d70-a6fe-b5a6f650d973
+status: stable
+description: Disables audit, logging, monitoring, alerting, or detection controls.
+references:
+  - https://attack.mitre.org/techniques/T1562/001/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    ActionEffect: disable
+    TargetScope: service
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.defense-evasion]

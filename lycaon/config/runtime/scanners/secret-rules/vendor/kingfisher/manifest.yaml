@@ -1,0 +1,264 @@
+source:
+  name: kingfisher
+  version: v1.110.0
+  commit: 484f860400bf9b47fff55f1a4379875dd98c792a
+  repository: https://github.com/mongodb/kingfisher
+  license: Apache-2.0
+policy:
+  minimum_confidence: medium
+  validation: offline-only
+  outbound_exclusions:
+    kingfisher.algolia.1: combined admin/search rule replaced outbound by admin-only context
+    kingfisher.amazonoauth.1: public client identifier
+    kingfisher.asana.1: public client identifier
+    kingfisher.azuresearch.key.1: combined admin/query shape replaced outbound by admin-only context
+    kingfisher.bitbucket.1: public client identifier
+    kingfisher.branchio.2: test credential
+    kingfisher.braintree.1: publishable client credential
+    kingfisher.configcat.1: read-only client SDK key
+    kingfisher.configcat.2: read-only client SDK key
+    kingfisher.contentful.1: client-distributed read-only delivery token
+    kingfisher.crossmint.2: browser-distributed client API key
+    kingfisher.customerio.1: browser-distributed tracking key
+    kingfisher.datadog.4: browser-visible client token
+    kingfisher.devcycle.1: client-distributed SDK key
+    kingfisher.devcycle.2: mobile-distributed SDK key
+    kingfisher.easypost.1: test credential
+    kingfisher.ebay.1: public client identifier
+    kingfisher.ebay.2: sandbox client identifier
+    kingfisher.firebase.2: device registration token, not an authentication credential
+    kingfisher.flagsmith.2: client-distributed environment key
+    kingfisher.flutterwave.1: publishable key
+    kingfisher.gcp.1: metadata object does not require credential material
+    kingfisher.gcp.3: generic provider-labeled assignment
+    kingfisher.ghost.2: public-content client API key
+    kingfisher.jwt.1: bearer context is required for outbound screening
+    kingfisher.jwt.2: bearer context is required for outbound screening
+    kingfisher.linkedin.1: public client identifier
+    kingfisher.lob.2: publishable key
+    kingfisher.looker.2: public client identifier
+    kingfisher.kucoin.1: API key identifier requires secret and passphrase
+    kingfisher.mapbox.1: public access token
+    kingfisher.messagebird.2: public client identifier
+    kingfisher.midtrans.1: combined client/server rule replaced outbound by server-only rule
+    kingfisher.midtrans.2: combined client/server rule replaced outbound by server-only rule
+    kingfisher.mixpanel.1: combined API key/secret rule replaced outbound by secret-only rule
+    kingfisher.mixpanel.3: providerless combined API key/secret rule
+    kingfisher.newrelic.2: public account identifier
+    kingfisher.newrelic.3: browser-visible token
+    kingfisher.pollinations.2: publishable key
+    kingfisher.posthog.1: browser-distributed project API key
+    kingfisher.pubnub.1: client-distributed publish key
+    kingfisher.pubnub.2: client-distributed subscription key
+    kingfisher.ramp.1: public client identifier
+    kingfisher.razorpay.2: test credential
+    kingfisher.reactapp.1: username, not a credential
+    kingfisher.reactapp.2: generic framework password assignment
+    kingfisher.sentry.4: client-facing ingestion DSN
+    kingfisher.stripe.1: publishable key
+    kingfisher.supabase.4: publishable key
+    kingfisher.twitter.4: OAuth 1 access token requires signing secrets
+inventory:
+  files: 612
+  upstream_rules: 1051
+  imported_rules: 859
+  skipped:
+    example_mismatch: 7
+    hidden: 158
+    incompatible_regex: 4
+    low_confidence: 21
+    no_secret_capture: 2
+  excluded_rules:
+    kingfisher.adobe.2: hidden
+    kingfisher.adobe.4: hidden
+    kingfisher.age.1: hidden
+    kingfisher.age.3: hidden
+    kingfisher.agora.1: hidden
+    kingfisher.aikido.2: hidden
+    kingfisher.airtable.3: low_confidence
+    kingfisher.akamai.1: hidden
+    kingfisher.akamai.3: hidden
+    kingfisher.akamai.4: hidden
+    kingfisher.algolia.2: hidden
+    kingfisher.alibabacloud.1: hidden
+    kingfisher.alibabacloud.3: hidden
+    kingfisher.alibabacloud.4: hidden
+    kingfisher.anypoint.2: hidden
+    kingfisher.artifactory.2: hidden
+    kingfisher.auth0.1: hidden
+    kingfisher.auth0.3: hidden
+    kingfisher.aws.1: hidden
+    kingfisher.aws.2: example_mismatch
+    kingfisher.aws.4: incompatible_regex
+    kingfisher.azure.4: hidden
+    kingfisher.azure.7: hidden
+    kingfisher.azure.8: hidden
+    kingfisher.azure.devops.1: hidden
+    kingfisher.azure.notificationhub.1: hidden
+    kingfisher.azure.notificationhub.2: hidden
+    kingfisher.azure.notificationhub.3: hidden
+    kingfisher.azureapim.2: hidden
+    kingfisher.azurebatch.2: hidden
+    kingfisher.azurecosmosdb.2: example_mismatch
+    kingfisher.azureopenai.host.1: hidden
+    kingfisher.azuresastoken.1: incompatible_regex
+    kingfisher.azurespeech.1: hidden
+    kingfisher.azurestorage.1: hidden
+    kingfisher.azuretranslator.1: hidden
+    kingfisher.bitfinex.1: hidden
+    kingfisher.blynk.10: hidden
+    kingfisher.blynk.11: hidden
+    kingfisher.branchio.3: hidden
+    kingfisher.browserstack.2: hidden
+    kingfisher.canva.2: hidden
+    kingfisher.censys.1: hidden
+    kingfisher.cielo.1: hidden
+    kingfisher.cisco.4: hidden
+    kingfisher.clickhouse.2: hidden
+    kingfisher.clojars.1: hidden
+    kingfisher.cloudinary.2: hidden
+    kingfisher.cloudinary.3: hidden
+    kingfisher.confluence.2: hidden
+    kingfisher.confluent.1: hidden
+    kingfisher.contentstack.2: hidden
+    kingfisher.coveralls.1: hidden
+    kingfisher.curl.1: low_confidence
+    kingfisher.curl.2: low_confidence
+    kingfisher.cypress.2: hidden
+    kingfisher.databricks.3: hidden
+    kingfisher.datadog.1: hidden
+    kingfisher.deviantart.2: hidden
+    kingfisher.discord.3: hidden
+    kingfisher.dockerhub.2: hidden
+    kingfisher.docusign.2: hidden
+    kingfisher.docusign.3: hidden
+    kingfisher.docusign.4: hidden
+    kingfisher.dotnet.connstring.2: hidden
+    kingfisher.duo.1: hidden
+    kingfisher.dwolla.1: hidden
+    kingfisher.dwolla.3: hidden
+    kingfisher.dynatrace.2: hidden
+    kingfisher.endorlabs.1: hidden
+    kingfisher.exoscale.2: hidden
+    kingfisher.facebook.1: hidden
+    kingfisher.filezilla.1: low_confidence
+    kingfisher.filezilla.2: low_confidence
+    kingfisher.foursquare.1: hidden
+    kingfisher.freshdesk.1: hidden
+    kingfisher.generic.1: low_confidence
+    kingfisher.generic.2: low_confidence
+    kingfisher.generic.3: low_confidence
+    kingfisher.generic.4: low_confidence
+    kingfisher.generic.5: low_confidence
+    kingfisher.generic.6: low_confidence
+    kingfisher.generic.8: low_confidence
+    kingfisher.generic.9: low_confidence
+    kingfisher.github.7: hidden
+    kingfisher.google.1: hidden
+    kingfisher.google.4: incompatible_regex
+    kingfisher.grafana.4: hidden
+    kingfisher.helpscout.1: hidden
+    kingfisher.html.1: low_confidence
+    kingfisher.html.2: low_confidence
+    kingfisher.http.1: low_confidence
+    kingfisher.http.2: low_confidence
+    kingfisher.huawei.1: hidden
+    kingfisher.intra42.1: hidden
+    kingfisher.intra42.3: hidden
+    kingfisher.jamf.1: hidden
+    kingfisher.jamf.2: hidden
+    kingfisher.jdbc.1: example_mismatch
+    kingfisher.jfrog.1: hidden
+    kingfisher.jira.1: hidden
+    kingfisher.jira.4: hidden
+    kingfisher.kairos.1: hidden
+    kingfisher.keenio.2: hidden
+    kingfisher.keycloak.1: hidden
+    kingfisher.kraken.2: hidden
+    kingfisher.kubernetes.1: hidden
+    kingfisher.kucoin.3: hidden
+    kingfisher.lacework.1: hidden
+    kingfisher.langfuse.2: hidden
+    kingfisher.lark.4: hidden
+    kingfisher.launchdarkly.2: hidden
+    kingfisher.livekit.1: hidden
+    kingfisher.livekit.3: hidden
+    kingfisher.looker.1: hidden
+    kingfisher.mattermost.1: hidden
+    kingfisher.maxmind.2: hidden
+    kingfisher.miro.3: hidden
+    kingfisher.mixpanel.4: hidden
+    kingfisher.mongodb.2: hidden
+    kingfisher.mongodb.3: example_mismatch
+    kingfisher.mux.2: hidden
+    kingfisher.mysql.1: example_mismatch
+    kingfisher.nylas.api_uri.1: hidden
+    kingfisher.octopusdeploy.1: hidden
+    kingfisher.okta.2: hidden
+    kingfisher.onelogin.1: hidden
+    kingfisher.onelogin.3: hidden
+    kingfisher.openshift.1: hidden
+    kingfisher.ovh.1: hidden
+    kingfisher.ovh.3: hidden
+    kingfisher.paypal.1: hidden
+    kingfisher.pinata.1: hidden
+    kingfisher.pingidentity.1: hidden
+    kingfisher.plaid.1: hidden
+    kingfisher.planetscale.2: hidden
+    kingfisher.plivo.1: hidden
+    kingfisher.polymarket.1: hidden
+    kingfisher.polymarket.2: hidden
+    kingfisher.polymarket.4: hidden
+    kingfisher.postgres.1: no_secret_capture
+    kingfisher.pusher.1: hidden
+    kingfisher.razorpay.3: hidden
+    kingfisher.rdp.1: incompatible_regex
+    kingfisher.redis.3: low_confidence
+    kingfisher.ringcentral.1: hidden
+    kingfisher.ringcentral.3: hidden
+    kingfisher.ringcentral.4: hidden
+    kingfisher.riot.1: hidden
+    kingfisher.s3uri.1: hidden
+    kingfisher.salesforce.2: hidden
+    kingfisher.samsara.2: low_confidence
+    kingfisher.saucelabs.1: hidden
+    kingfisher.saucelabs.2: hidden
+    kingfisher.sendbird.1: hidden
+    kingfisher.shopify.2: hidden
+    kingfisher.slack.2: example_mismatch
+    kingfisher.slack.8: low_confidence
+    kingfisher.snowflake.3: hidden
+    kingfisher.sonarqube.2: hidden
+    kingfisher.sourcegraph.3: no_secret_capture
+    kingfisher.sshpass.1: low_confidence
+    kingfisher.stream.1: hidden
+    kingfisher.stytch.1: hidden
+    kingfisher.sumologic.1: hidden
+    kingfisher.supabase.3: hidden
+    kingfisher.tableau.2: hidden
+    kingfisher.tableau.3: hidden
+    kingfisher.tencent.1: hidden
+    kingfisher.testkube.2: hidden
+    kingfisher.testkube.3: hidden
+    kingfisher.tigris.1: hidden
+    kingfisher.trello.2: hidden
+    kingfisher.triggerdev.3: hidden
+    kingfisher.truenas.3: hidden
+    kingfisher.twilio.1: hidden
+    kingfisher.twitter.2: hidden
+    kingfisher.upstash.2: hidden
+    kingfisher.upstash.3: hidden
+    kingfisher.uri.1: example_mismatch
+    kingfisher.voiceflow.2: hidden
+    kingfisher.vonage.1: hidden
+    kingfisher.webex.1: hidden
+    kingfisher.webex.3: hidden
+    kingfisher.wechat.1: hidden
+    kingfisher.wiz.1: hidden
+    kingfisher.wpengine.2: hidden
+    kingfisher.yahoo.1: hidden
+    kingfisher.zendesk.1: hidden
+    kingfisher.zendesk.2: hidden
+    kingfisher.zohocrm.2: hidden
+    kingfisher.zoom.1: hidden
+rules_digest: 408147df8a583849b56121ae084cdf3615a13c1a950839179853e9cc79f433c3

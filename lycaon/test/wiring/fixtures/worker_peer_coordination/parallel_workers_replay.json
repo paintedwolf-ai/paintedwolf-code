@@ -1,0 +1,21 @@
+{
+  "capture_id": "parallel-workers-replay",
+  "fixture_name": "parallel_workers_replay",
+  "parent_session_id": "8176e266-8a28-4fbc-91b8-0ad6b90e0141",
+  "description": "Synthetic replay of parallel ShellSim fan-out: delegation-keyed sibling notes, overlay integrate guards, batch-scoped inject.",
+  "note_summary": "config resolver lives in internal/config/resolve.go:40",
+  "note_ref": "internal/config/resolve.go:40",
+  "prior_run_note_summary": "prior batch finding on legacy.go",
+  "overlay_read_path": "/Users/me/.config/paintedwolf/worker-branches/deadbeef/job-scratch-a/shellsim/builtins.py",
+  "promote_overlay_id": "job-line-shift",
+  "worker_a": {
+    "job_id": "job-scratch-a",
+    "child_session_id": "child-scratch-a",
+    "overlay_suffix": "job-scratch-a"
+  },
+  "worker_b": {
+    "job_id": "job-scratch-b",
+    "child_session_id": "child-scratch-b",
+    "overlay_suffix": "job-scratch-b"
+  }
+}

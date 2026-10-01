@@ -1,0 +1,9 @@
+'on': inject.skill_procedure
+effect: inform
+render: skill-procedure
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - each provider request of a turn with a preloaded skill

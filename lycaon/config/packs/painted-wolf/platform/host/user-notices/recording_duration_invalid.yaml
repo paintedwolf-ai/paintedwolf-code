@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Recording duration isn't valid
+message: Recording duration must be a non-negative number of milliseconds.
+suggested_action: Retry the save with a valid duration.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [non-negative, valid duration]

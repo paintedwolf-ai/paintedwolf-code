@@ -1,0 +1,143 @@
+rules:
+- id: lycaon.terraform.public-admin-ingress
+  languages:
+  - hcl
+  severity: ERROR
+  message: A security group exposes administrative ports to the internet
+  metadata:
+    category: security
+    cwe: CWE-284
+    confidence: HIGH
+    technology:
+    - hcl
+    references:
+    - https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
+    - https://learn.microsoft.com/en-us/troubleshoot/windows-server/remote/ports-used-by-rds
+  patterns:
+  - pattern-inside: resource "aws_security_group" $NAME { ... }
+  - pattern-either:
+    - patterns:
+      - pattern-inside: ingress { ... protocol = $PROTOCOL ... from_port = $FROM ... to_port = $TO ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?(tcp|6)"?$
+      - metavariable-comparison:
+          metavariable: $FROM
+          comparison: ($FROM <= 22 and $TO >= 22) or ($FROM <= 3389 and $TO >= 3389)
+    - patterns:
+      - pattern-inside: ingress { ... protocol = $PROTOCOL ... from_port = $FROM ... to_port = $TO ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?(udp|17)"?$
+      - metavariable-comparison:
+          metavariable: $FROM
+          comparison: $FROM <= 3389 and $TO >= 3389
+    - patterns:
+      - pattern-inside: ingress { ... protocol = $PROTOCOL ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?-1"?$
+  - pattern-either:
+    - pattern: cidr_blocks = [..., "0.0.0.0/0", ...]
+    - pattern: ipv6_cidr_blocks = [..., "::/0", ...]
+- id: lycaon.terraform.public-ingress-rule
+  languages:
+  - hcl
+  severity: ERROR
+  message: A standalone security group rule exposes an administrative port
+  metadata:
+    category: security
+    cwe: CWE-284
+    confidence: HIGH
+    technology:
+    - hcl
+    references:
+    - https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
+    - https://learn.microsoft.com/en-us/troubleshoot/windows-server/remote/ports-used-by-rds
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: resource "aws_vpc_security_group_ingress_rule" $NAME { ... ip_protocol = $PROTOCOL ... from_port
+          = $FROM ... to_port = $TO ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?(tcp|6)"?$
+      - metavariable-comparison:
+          metavariable: $FROM
+          comparison: ($FROM <= 22 and $TO >= 22) or ($FROM <= 3389 and $TO >= 3389)
+    - patterns:
+      - pattern-inside: resource "aws_vpc_security_group_ingress_rule" $NAME { ... ip_protocol = $PROTOCOL ... from_port
+          = $FROM ... to_port = $TO ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?(udp|17)"?$
+      - metavariable-comparison:
+          metavariable: $FROM
+          comparison: $FROM <= 3389 and $TO >= 3389
+    - patterns:
+      - pattern-inside: resource "aws_vpc_security_group_ingress_rule" $NAME { ... ip_protocol = $PROTOCOL ... }
+      - metavariable-regex:
+          metavariable: $PROTOCOL
+          regex: ^"?-1"?$
+  - pattern-either:
+    - pattern: cidr_ipv4 = "0.0.0.0/0"
+    - pattern: cidr_ipv6 = "::/0"
+- id: lycaon.terraform.iam-admin-policy
+  languages:
+  - hcl
+  severity: ERROR
+  message: An IAM statement allows every action on every resource
+  metadata:
+    category: security
+    cwe: CWE-269
+    confidence: HIGH
+    technology:
+    - hcl
+  patterns:
+  - pattern: statement { ... effect = "Allow" ... actions = ["*"] ... resources = ["*"] ... }
+  - pattern-not-inside: statement { ... condition { ... } ... }
+- id: lycaon.terraform.rds-encryption-disabled
+  languages:
+  - hcl
+  severity: ERROR
+  message: Database storage encryption is explicitly disabled
+  metadata:
+    category: security
+    cwe: CWE-311
+    confidence: HIGH
+    technology:
+    - hcl
+  patterns:
+  - pattern-either:
+    - pattern-inside: resource "aws_db_instance" $NAME { ... }
+    - pattern-inside: resource "aws_rds_cluster" $NAME { ... }
+  - pattern: storage_encrypted = false
+- id: lycaon.terraform.gcp-open-database
+  languages:
+  - hcl
+  severity: ERROR
+  message: Cloud SQL authorizes connections from every IPv4 address
+  metadata:
+    category: security
+    cwe: CWE-284
+    confidence: HIGH
+    technology:
+    - hcl
+  patterns:
+  - pattern-inside: resource "google_sql_database_instance" $NAME { ... }
+  - pattern-inside: authorized_networks { ... }
+  - pattern: value = "0.0.0.0/0"
+- id: lycaon.terraform.azure-storage-http
+  languages:
+  - hcl
+  severity: ERROR
+  message: Azure storage permits plaintext HTTP transport
+  metadata:
+    category: security
+    cwe: CWE-319
+    confidence: HIGH
+    technology:
+    - hcl
+  patterns:
+  - pattern-inside: resource "azurerm_storage_account" $NAME { ... }
+  - pattern: https_traffic_only_enabled = false

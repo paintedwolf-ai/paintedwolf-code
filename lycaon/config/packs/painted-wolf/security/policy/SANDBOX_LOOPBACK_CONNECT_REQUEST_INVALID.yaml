@@ -1,0 +1,29 @@
+oar: '1.0'
+id: SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID"
+effect: block
+copy:
+  what: The local service connection request was invalid.
+  cause: 'The loopback_connect request failed structured validation: {{ paintedwolf.rejection_reason }}.'
+  why: Bind authority and client connection authority are separate, so the host needs an exact typed request for
+    the sandbox profile to match.
+  fix: On an invocation supporting loopback_connect, declare the intended ports as 1–8 integers from 1 through 65535.
+    An empty object requests any port only on process surfaces that support it; HTTP requests require exact ports.
+  instead: Branch on Code; correct or remove the local connection request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_loopback_connect
+x-paintedwolf-message: structured local service connection request invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID'
+  - local service connection

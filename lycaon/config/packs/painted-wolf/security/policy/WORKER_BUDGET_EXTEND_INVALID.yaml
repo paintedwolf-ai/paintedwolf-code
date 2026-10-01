@@ -1,0 +1,33 @@
+oar: '1.0'
+id: WORKER_BUDGET_EXTEND_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.host_max
+    - paintedwolf.max_tool_loops
+    - paintedwolf.min_required
+when: paintedwolf.rejection_code == "WORKER_BUDGET_EXTEND_INVALID"
+effect: block
+copy:
+  what: max_tool_loops must be within host worker budget bounds
+  cause: You sent max_tool_loops {{ paintedwolf.max_tool_loops }} outside **[{{ paintedwolf.min_required }}, {{ paintedwolf.host_max }}]**
+  why: The host enforces one ceiling for all workers
+  fix: Set max_tool_loops between **{{ paintedwolf.min_required }}** and **{{ paintedwolf.host_max }}**
+  instead: Branch on Code; set max_tool_loops within host bounds
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extend_worker_budget
+x-paintedwolf-message: extend_worker_budget max_tool_loops {{ paintedwolf.max_tool_loops }} is out of range (maximum {{ paintedwolf.host_max }}, minimum {{ paintedwolf.min_required }})
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      host_max: 120
+      job_id: job-1
+      max_tool_loops: 200
+      min_required: 2
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKER_BUDGET_EXTEND_INVALID'

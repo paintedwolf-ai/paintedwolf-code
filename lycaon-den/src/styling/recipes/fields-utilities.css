@@ -1,0 +1,566 @@
+@utility den-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+  margin-bottom: 0;
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+@utility den-field-hint {
+  font-size: var(--text-den-caption);
+  font-weight: 400;
+  color: var(--den-text-muted);
+}
+
+@utility den-field-error {
+  font-size: var(--text-den-caption);
+  font-weight: 400;
+  color: var(--den-danger-text);
+}
+
+@utility den-input {
+  min-height: max(24px, calc(var(--text-den-input) * 1.25 + 0.75em));
+  height: auto;
+  padding: 0.35em var(--spacing-den-6);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  /* Enabled fields use the paper fill, not a gray tint. */
+  background-color: var(--den-control-bg);
+  font-size: var(--text-den-input);
+  font-weight: 400;
+  color: var(--den-text);
+  transition:
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    background-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
+  }
+  &:focus {
+    outline: none;
+    border-color: var(--den-accent-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:disabled {
+    background-color: var(--den-control-bg-disabled);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+  &[aria-invalid="true"] {
+    border-color: color-mix(in srgb, var(--den-danger) 55%, var(--den-line));
+  }
+}
+
+@utility den-select {
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--den-text);
+  font-size: var(--text-den-input);
+
+  &[data-disabled="true"] {
+    color: var(--den-text-muted);
+  }
+
+  &[data-fill="true"] {
+    width: 100%;
+  }
+}
+
+@utility den-select__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  width: 100%;
+  min-height: max(1.7143rem, calc(var(--text-den-input) * 1.25 + 0.75em));
+  padding: 0.35em var(--spacing-den-4) 0.35em var(--spacing-den-6);
+  border: none;
+  border-radius: var(--den-radius);
+  /* Dropdown triggers use the recessed control plane. */
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel-inset);
+  /* Rests muted; hover, focus, and the open-popup rule restore full text. */
+  color: var(--den-text-muted);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    box-shadow var(--den-duration) var(--den-ease),
+    background-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-tint-1);
+    color: var(--den-text);
+  }
+
+  &:focus-visible {
+    outline: none;
+    color: var(--den-text);
+    box-shadow:
+      var(--den-bevel-inset),
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+
+  &:disabled {
+    background: var(--den-control-bg-disabled);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  &[aria-pressed="true"]:not(:disabled) {
+    background: color-mix(in srgb, var(--den-accent-signal) 8%, var(--den-surface-offset));
+    color: var(--den-accent-text);
+  }
+
+  &[aria-pressed="true"]:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--den-accent-signal) 14%, var(--den-surface-offset));
+  }
+}
+
+@utility den-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-select__caret {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin: -4px 2px 0 4px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--den-text-muted);
+  transform: rotate(45deg);
+  transition: transform var(--den-duration) var(--den-ease);
+
+  [data-open="true"] & {
+    margin-top: 4px;
+    transform: rotate(225deg);
+  }
+}
+
+/* Popup triggers share a recessed track and paint their states independently. */
+@utility den-trigger-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: var(--den-radius);
+  /* Same recessed plane a lone dropdown trigger rests on. */
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel-inset);
+  color: var(--den-text);
+  font-size: var(--text-den-input);
+}
+
+@utility den-trigger-group__segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  min-width: 0;
+  /* The hit target includes the inset around the state fill. */
+  padding: 5px var(--spacing-den-4) 5px var(--spacing-den-6);
+  border: 0;
+  border-radius: var(--den-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-weight: 400;
+  /* Matching chip line height keeps adjacent controls aligned at every text scale. */
+  line-height: calc(var(--text-den-label) * 1.5);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--den-duration) var(--den-ease);
+
+  /* Label and caret ride above the fill. */
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* The inset fill stays concentric with the segment corners. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    z-index: 0;
+    border-radius: calc(var(--den-radius) - 3px);
+    transition:
+      background-color var(--den-duration) var(--den-ease),
+      box-shadow var(--den-duration) var(--den-ease);
+  }
+
+  /* Inset separators leave the track border continuous. */
+  &:not(:first-child)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    z-index: 1;
+    background: var(--den-line-quiet);
+    transition: opacity var(--den-duration) var(--den-ease);
+  }
+
+  /* A filled segment draws its own edge; the seam beside it would double it. */
+  &[data-open="true"]::before,
+  &[aria-pressed="true"]::before,
+  [data-open="true"] + &::before,
+  [aria-pressed="true"] + &::before {
+    opacity: 0;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--den-text);
+
+    &::after {
+      background: var(--den-tint-1);
+    }
+  }
+
+  &:focus-visible {
+    outline: none;
+    color: var(--den-text);
+
+    &::after {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+    }
+  }
+
+  /* Raised surface while popup is open. */
+  &[data-open="true"]:not(:disabled) {
+    color: var(--den-text);
+
+    &::after {
+      background: var(--den-surface-raised);
+      box-shadow: var(--den-bevel);
+    }
+  }
+
+  &[data-open="true"]:focus-visible::after {
+    box-shadow:
+      var(--den-bevel),
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+
+  /* Accent tone when non-default choices are selected. */
+  &[aria-pressed="true"]:not(:disabled) {
+    color: var(--den-accent-text);
+
+    &::after {
+      background: color-mix(in srgb, var(--den-accent-signal) 8%, var(--den-surface-offset));
+    }
+  }
+
+  &[aria-pressed="true"]:hover:not(:disabled)::after {
+    background: color-mix(in srgb, var(--den-accent-signal) 14%, var(--den-surface-offset));
+  }
+
+  &[aria-pressed="true"][data-open="true"]:not(:disabled)::after {
+    background: color-mix(in srgb, var(--den-accent-signal) 10%, var(--den-surface-raised));
+    box-shadow: var(--den-bevel);
+  }
+
+  /* Dim ink for disabled segment without altering recessed track. */
+  &:disabled {
+    color: var(--den-text-muted);
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+/* Frame shared by anchored menus, listboxes, and popovers. */
+@utility den-menu-surface {
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  outline: none;
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-lg);
+}
+
+@utility den-select__listbox {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  color: var(--den-text);
+}
+
+/* Unlayered, so the floor outranks the scrollport frame's base min-width. */
+.den-select__listbox[data-den-scrollport] {
+  min-width: 10rem;
+}
+
+@utility den-select__listbox-content {
+  padding: 4px;
+}
+
+@utility den-select__group {
+  padding: 8px 9px 4px 28px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 650;
+
+  &:not(:first-child) {
+    margin-top: 4px;
+    border-top: 1px solid var(--den-line-quiet);
+  }
+}
+
+@utility den-select__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-den-3);
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: var(--den-radius-sm);
+  cursor: default;
+  user-select: none;
+
+  &[aria-disabled="true"] {
+    opacity: 0.45;
+  }
+
+  &.den-select__option--active:not([aria-disabled="true"]) {
+    background: var(--den-selection-hover);
+  }
+}
+
+@utility den-select__check {
+  width: 0.8571rem;
+  flex: 0 0 12px;
+  color: var(--den-accent-text);
+  font-size: var(--text-den-caption);
+  line-height: 1.45;
+}
+
+@utility den-select__option-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+@utility den-select__option-label {
+  overflow: hidden;
+  color: var(--den-text);
+  font-size: var(--text-den-input);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-select__option-description {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.35;
+}
+
+@utility den-rules-input {
+  min-height: max(1.7143rem, calc(var(--text-den-input) * 1.25 + 0.75em));
+  height: auto;
+  padding: 0 var(--spacing-den-6);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background-color: var(--den-control-bg);
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+  transition:
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    background-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
+  }
+  &:focus {
+    outline: none;
+    border-color: var(--den-accent-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:disabled {
+    background-color: var(--den-control-bg-disabled);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility den-number-input {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+  border-radius: var(--den-radius);
+
+  &:focus-within {
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+}
+
+@utility den-number-input__field {
+  min-width: 0;
+  border-radius: var(--den-radius);
+
+  &:focus {
+    box-shadow: none;
+  }
+
+}
+
+@utility den-disclosure-caret {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-right: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--den-text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--den-duration) var(--den-ease);
+
+  details[open] > summary & {
+    transform: rotate(45deg);
+  }
+}
+
+@utility den-choice-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-den-5);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-text);
+  cursor: pointer;
+  user-select: none;
+
+  &:has(:disabled) {
+    cursor: not-allowed;
+  }
+}
+
+@utility den-radio {
+  appearance: none;
+  -webkit-appearance: none;
+  width: max(1.7143rem, 1.1em);
+  height: max(1.7143rem, 1.1em);
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  /* A ring whose centered dot grows in when checked. */
+  background: radial-gradient(
+      circle closest-side,
+      var(--den-accent-signal) calc(100% - 0.5px),
+      transparent 100%
+    )
+    center / 0 0 no-repeat;
+  box-shadow: 0 0 0 1.5px var(--den-control-line) inset;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-size var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+
+  &:not(:checked):hover:not(:disabled) {
+    box-shadow: 0 0 0 1.5px
+      color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-control-line)) inset;
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 1.5px var(--den-accent-signal) inset,
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:checked {
+    background-size: 50% 50%;
+    box-shadow: 0 0 0 1.5px var(--den-accent-signal) inset;
+  }
+  &:checked:focus-visible {
+    box-shadow:
+      0 0 0 1.5px var(--den-accent-signal) inset,
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+@utility den-settings-credential-modes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-4);
+}
+
+@utility den-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: max(1.7143rem, 1.1em);
+  height: max(1.7143rem, 1.1em);
+  margin: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--den-control-line) inset;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+
+  &:not(:checked):hover:not(:disabled) {
+    box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-control-line)) inset;
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 1px var(--den-accent-signal) inset,
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:checked {
+    background: var(--den-accent);
+    box-shadow: var(--den-bevel-plate);
+  }
+  &:checked:active:not(:disabled) {
+    filter: var(--den-plate-pressed);
+  }
+  &:checked::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    box-sizing: border-box;
+    width: 4px;
+    height: 9px;
+    border: solid var(--den-on-accent);
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -60%) rotate(45deg);
+  }
+  &:checked:focus-visible {
+    box-shadow:
+      var(--den-bevel-plate),
+      0 0 0 3px color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+  }
+  &:disabled {
+    /* Keep disabled controls visible inside dimmed rows. */
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+

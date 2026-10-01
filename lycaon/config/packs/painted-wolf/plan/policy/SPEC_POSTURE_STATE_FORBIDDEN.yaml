@@ -1,0 +1,29 @@
+oar: '1.0'
+id: SPEC_POSTURE_STATE_FORBIDDEN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_STATE_FORBIDDEN"
+effect: block
+copy:
+  cause: State tracking tools are forbidden in spec posture
+  why: Use `write`/`edit` on the blueprint file only; state tracking is build-only
+  fix: Use `write`/`edit` on the blueprint file only; state tracking is build-only
+  instead: Use `write`/`edit` on the blueprint file; state tracking tools are build-only
+  what: State tracking tools are forbidden in spec posture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: State tracking tools are forbidden in spec posture
+x-paintedwolf-scenarios:
+- id: spec_posture_state_smoke
+  tool: state_start
+  vars:
+    tool: state_start
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_STATE_FORBIDDEN'
+  - Use
+x-paintedwolf-audience:
+- coordinator

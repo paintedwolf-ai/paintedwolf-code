@@ -1,0 +1,37 @@
+oar: '1.0'
+id: LIST_DIR_NOT_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - list_dir
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.can_read
+when: paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
+effect: block
+copy:
+  what: list_dir path {{ paintedwolf.path }} is not a directory.
+  cause: list_dir traverses directories; the selected path names a file.
+  why: File content and directory membership are separate observations.
+  fix: '{% if paintedwolf.can_read %}Use read for the selected file’s content.{% else %}File content requires
+    a reader offered on the current surface.{% endif %} For directory membership, list the intended parent
+    directory instead.'
+  instead: Branch on Code; use read for a file or choose a directory
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:list_dir
+x-paintedwolf-message: list_dir path is not a directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: docs/README.md
+    profile: explore_readonly
+    tool: list_dir
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: LIST_DIR_NOT_DIRECTORY'

@@ -1,0 +1,7 @@
+id: painted-wolf/platform:composer-recall-next
+title: "Recall next prompt"
+palette: false
+scope: "composer"
+action:
+  kind: native_ui
+  handler: "composer.recallNext"

@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-insert-blank-line
+title: "Insert line below"
+scope: files
+category: editing
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.insertBlankLine"

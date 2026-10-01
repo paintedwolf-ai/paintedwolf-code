@@ -1,0 +1,30 @@
+emit: banner
+category: informational
+severity: warn
+message: Overlay {{ paintedwolf.overlay_id }} has {{ paintedwolf.hunk_count }} hunks on {{ paintedwolf.conflict_paths
+  }} — use full-file resolutions
+what: Paths {{ paintedwolf.conflict_paths }} exceed the {{ paintedwolf.threshold }}-hunk picking threshold
+  (up to {{ paintedwolf.hunk_count }} hunks).
+cause: 'A large hunk count does not determine conflict_tier. Check each path: line_shift indicates offset drift;
+  overlapping_edit requires reconciling both edits.'
+why: Review a merged proposal or compose full-file content for high-count conflicts instead of spending the
+  turn on isolated hunk picks.
+fix: Use current preview_overlay ready_resolutions and conflict_digest branch_delta. Preserve both intents
+  with reviewed merged content or hunks. keep_theirs replaces the whole primary file; keep_ours discards this
+  path’s worker changes. Choose either only deliberately, after leg completion and current-revision evidence
+  pass.
+instead: Do not `task(implementer)` while overlays still pending; full-file merge is valid when you want one
+  atomic landing
+scenarios:
+- id: default
+  vars:
+    conflict_paths:
+    - shellsim/builtins.py
+    hunk_count: 84
+    overlay_id: job-notes
+    spill_path: promote-spills/job-notes.json
+    threshold: 10
+  expect_contains:
+  - BANNER_PROMOTE_HIGH_CONFLICT
+  - promote_overlay
+id: BANNER_PROMOTE_HIGH_CONFLICT

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Extension unit not found"
+message: "That extension unit does not exist."
+suggested_action: "Refresh the Extensions list."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "does not exist"

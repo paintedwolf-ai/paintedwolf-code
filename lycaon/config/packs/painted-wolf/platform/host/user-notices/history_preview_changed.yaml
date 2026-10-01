@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "History changed"
+message: "Stored history changed after the preview was made, so nothing was removed."
+suggested_action: "Preview again, then confirm."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "after the preview was made"

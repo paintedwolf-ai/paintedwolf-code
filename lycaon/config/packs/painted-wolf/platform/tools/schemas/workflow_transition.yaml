@@ -1,0 +1,11 @@
+description: >-
+  Fire choice leave by transition_id (Phase exit). Pending input latches block;
+  human_approval_awaiting does not.
+schema:
+  type: object
+  properties:
+    transition_id:
+      description: "Choice-leave transition id from the current phase."
+      type: string
+  required: [transition_id]
+  additionalProperties: false

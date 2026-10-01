@@ -1,0 +1,54 @@
+components:
+  schemas:
+    SourcePresentationCreate:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [operation_id, intent_revision]
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+        intent_revision:
+          type: string
+          format: uuid
+    SourcePresentation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, view]
+      properties:
+        id:
+          type: string
+          format: uuid
+        view:
+          $ref: "views.yaml#/components/schemas/SourceView"
+
+    SourceViewportInterest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [presentation_id, sequence, start, end, direction]
+      properties:
+        presentation_id:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+        start:
+          type: integer
+          format: int64
+          minimum: 0
+        end:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Exclusive; greater than start.
+        direction:
+          type: integer
+          minimum: -1
+          maximum: 1
+      description: Replaceable viewport demand in one immutable presentation. Visible rows precede symmetric nearby preparation; direction breaks ties. This resource is ephemeral and does not change disclosure intent or extent.

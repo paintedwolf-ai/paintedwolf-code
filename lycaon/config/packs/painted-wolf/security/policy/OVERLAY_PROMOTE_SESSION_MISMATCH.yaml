@@ -1,0 +1,32 @@
+oar: '1.0'
+id: OVERLAY_PROMOTE_SESSION_MISMATCH
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_SESSION_MISMATCH"
+effect: block
+copy:
+  what: Overlay {{ paintedwolf.job_id }} belongs to a different parent session and cannot be promoted from
+    here
+  cause: The overlay_id was copied from another session's transcript or pulse roster, or a child coordinator
+    tried to touch a sibling coordinator's overlay
+  why: Cross-session promote/reject would orphan stacked children and bypass the spawning coordinator's grounding
+  fix: Re-read this session's pulse roster for valid overlay_ids; coordinate via the parent if the overlay
+    genuinely needs a cross-session action
+  instead: Branch on Code; only act on overlay_ids from this session's own pulse roster
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Overlay {{ paintedwolf.job_id }} belongs to a different parent session and cannot be
+  promoted from here
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: ov-foreign
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_PROMOTE_SESSION_MISMATCH'

@@ -1,0 +1,14 @@
+title: Document core crates (`lycaon/internal/documentcore/native`)
+manifest:
+  kind: cargo
+  path: lycaon/internal/documentcore/native/Cargo.toml
+  lock: lycaon/internal/documentcore/native/Cargo.lock
+  dependabot_group: cargo-dependencies
+
+packages:
+  yrs:
+    urgency: high
+    friction: high
+    updates: hold
+    notes: |
+      Exact pin; see the document core engine row. Bump together with Den's `yjs`.

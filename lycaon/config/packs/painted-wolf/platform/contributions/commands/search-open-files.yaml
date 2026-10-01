@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-open-files
+title: "Search files"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "search.openFiles"

@@ -1,0 +1,121 @@
+@utility den-network-chicklet {
+  border: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  &:not([open]) > .den-network-chicklet-body,
+  &:not([open]) > .den-network-chicklet-hosts {
+    display: none;
+  }
+}
+
+@utility den-network-chicklet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+@utility den-network-chicklet-section-label {
+  margin: 6px 10px 0;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+}
+
+@utility den-network-chicklet-note {
+  margin: 6px 10px 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text);
+}
+
+@utility den-network-chicklet-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@utility den-network-chicklet-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: max(24px, calc(var(--text-den-hint) * 1.3 + 0.375em));
+  padding: 0.2em 0.55em;
+  cursor: pointer;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  list-style: none;
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@utility den-network-chicklet-icon {
+  font-size: var(--text-den-hint);
+  line-height: 1;
+}
+
+@utility den-network-chicklet-label {
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-network-chicklet-count {
+  color: var(--den-text-muted);
+}
+
+@utility den-network-chicklet-hosts {
+  margin: 0;
+  padding: 4px 10px 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+}
+
+@utility den-network-chicklet-host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-hint);
+  font-family: var(--den-font-mono);
+  color: var(--den-text);
+}
+
+@utility den-network-chicklet-host--blocked {
+  color: var(--den-text-muted);
+  text-decoration: line-through;
+}
+
+@utility den-network-chicklet-host-tag {
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-overline);
+  text-decoration: none;
+  color: var(--den-danger);
+}
+
+@utility den-network-chicklet-host-block {
+  margin-left: auto;
+  border: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
+  border-radius: 4px;
+  background: transparent;
+  padding: 1px 7px;
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  cursor: pointer;
+  &:hover {
+    color: var(--den-danger);
+    border-color: color-mix(in srgb, var(--den-danger) 60%, transparent);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+

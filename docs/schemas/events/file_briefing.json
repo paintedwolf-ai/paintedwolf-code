@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/file_briefing.json",
+  "$ref": "../../openapi/components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FileBriefingEvent"
+}

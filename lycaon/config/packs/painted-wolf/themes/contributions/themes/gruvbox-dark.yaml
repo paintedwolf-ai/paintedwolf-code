@@ -1,0 +1,89 @@
+id: painted-wolf/themes:gruvbox-dark
+name: Gruvbox Dark
+appearance: dark
+
+# High-contrast palette; a faint edge would read as a rendering slip.
+bevel:
+  strength: 1.4
+
+# Dark0 carries the page and dark0_hard carries the chrome.
+# Bright hues preserve the palette's warm contrast on the dark ground.
+window_colors:
+  main: "#83a598"
+  anchors: ["#83a598", "#b8bb26", "#fabd2f", "#fb4934"]
+  hue_spread: 28
+  chroma_min: 0.04
+  chroma_max: 0.18
+
+tokens:
+  background: "#282828" # dark0
+  surface: "#282828"
+  surface-elevated: "#3c3836" # dark1
+  surface-chrome: "#1d2021" # dark0_hard
+  surface-offset: "#3c3836" # dark1
+  surface-raised: "#504945" # dark2
+  border: "#504945" # dark2
+  text: "#ebdbb2" # light1
+  text-muted: "#a89984" # light4
+  accent: "#83a598" # bright_blue
+  accent-warm: "#fe8019" # bright_orange
+  accent-text: "#83a598"
+  accent-signal: "#83a598"
+  danger: "#fb4934" # bright_red
+  warning: "#fabd2f" # bright_yellow
+  status-positive: "#b8bb26" # bright_green
+  status-running: "#fe8019" # bright_orange
+  draft-accent: "#8ec07c" # bright_aqua
+  tint-hue: "#665c54" # dark3
+  # One rung above surface-offset, so a chosen fill stays visible on it.
+  selection: "#504945" # dark2
+  selection-strong: "#665c54" # dark3
+  caret: "#ebdbb2"
+  diff-add-hue: "#b8bb26"
+  diff-delete-hue: "#fb4934"
+  cost-coordinator: "#fabd2f"
+  cost-workers: "#83a598"
+  cost-summarizer: "#b8bb26"
+  identity-1: "#83a598"
+  identity-2: "#8ec07c"
+  identity-3: "#b8bb26"
+  identity-4: "#fe8019"
+  identity-5: "#d3869b"
+
+syntax:
+  keyword: "#fb4934"
+  string: "#b8bb26"
+  number: "#d3869b" # bright_purple
+  constant: "#d3869b"
+  variable: "#ebdbb2"
+  type: "#fabd2f"
+  function: "#b8bb26"
+  property: "#83a598"
+  operator: "#8ec07c"
+  punctuation: "#ebdbb2"
+  tag: "#8ec07c"
+  meta: "#fe8019"
+  invalid: "#fb4934"
+  link: "#83a598"
+  heading: { color: "#b8bb26", bold: true }
+  inserted: "#b8bb26"
+  deleted: "#fb4934"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#928374", italic: true }
+  strikethrough: {}
+  comment: { color: "#928374", italic: true }
+
+# Heavy strokes and square forms carry the palette's geometry.
+icons:
+  # The heavier square stroke applies to every glyph.
+  stroke:
+    weight: 1.5
+    cap: butt
+    join: miter
+  geometry:
+    find: '<circle cx="6.75" cy="6.75" r="4"/><path d="M10 10 13.75 13.75"/>'
+    goto-line: '<path d="M2.5 4h11"/><path d="M2.5 8h11"/><path d="M2.5 12h6.5"/>'
+    copy: '<rect x="6" y="6" width="8" height="8"/><path d="M10.25 3.25V2H2v8h1.25"/>'
+    check: '<path d="M2.5 8.25 6.25 12 13.5 4.5"/>'
+    more: '<rect x="1.25" y="6.5" width="3" height="3"/><rect x="6.5" y="6.5" width="3" height="3"/><rect x="11.75" y="6.5" width="3" height="3"/>'

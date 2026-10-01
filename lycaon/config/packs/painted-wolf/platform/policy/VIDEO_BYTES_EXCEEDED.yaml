@@ -1,0 +1,37 @@
+oar: '1.0'
+id: VIDEO_BYTES_EXCEEDED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.bytes
+  - paintedwolf.max_bytes
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_BYTES_EXCEEDED"
+effect: block
+copy:
+  what: '{{ tool }} cannot view {{ paintedwolf.path }} because its {{ paintedwolf.bytes }} bytes exceed the {{ paintedwolf.max_bytes
+    }}-byte video limit.'
+  cause: The file is larger than the video byte limit, checked before any bytes are read.
+  why: The decoder holds the whole recording in memory while it draws frames.
+  fix: Trim the recording to the moments that matter, or export it at a lower bitrate, and view that file.
+  instead: Branch on Code VIDEO_BYTES_EXCEEDED; view a shorter or smaller copy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video file exceeds the video byte limit
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    bytes: 268435456
+    max_bytes: 134217728
+    path: recordings/long.mp4
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_BYTES_EXCEEDED'

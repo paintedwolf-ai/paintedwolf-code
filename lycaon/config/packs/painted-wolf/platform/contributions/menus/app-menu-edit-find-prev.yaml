@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-find-prev
+slot: "app_menu.edit"
+command: painted-wolf/platform:find-prev
+group: "0"
+order: 3
+label: "Find previous"

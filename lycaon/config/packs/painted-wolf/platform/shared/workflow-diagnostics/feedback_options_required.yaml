@@ -1,0 +1,5 @@
+code: feedback_options_required
+message: |
+  Phase {{phase}}: choice feedback requires at least two options.
+replacement: |
+  Add options: with two or more entries.

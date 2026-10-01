@@ -1,0 +1,52 @@
+paths:
+  /v1/projects/{id}/source/workspace:
+    get:
+      tags: [projects]
+      operationId: getSourceWorkspace
+      summary: Resolve the physical source workspace for a project and chat
+      description: >
+        Identity and physical roots of the tree the Files surfaces enumerate,
+        derived from the project's session-resolved root set. The root map is
+        authoritative for both file reads and human path actions such as Copy
+        path, Reveal, and Open in editor. The identity addresses a tree for
+        listings, events, and watcher coverage; it is not a history identity,
+        and nothing durable is keyed by it. Editor documents follow the logical
+        file and need no workspace.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      responses:
+        '200': {description: Physical workspace identity and resolved roots, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/source-workspace.yaml#/components/schemas/SourceWorkspace}}}}
+        '404': {description: Project or requested session not found, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/agent-presence:
+    get:
+      tags: [projects]
+      operationId: getAgentPresence
+      summary: Agent sessions in the project's files
+      description: >-
+        What each chat in the project, with its workers, is reading, is about to
+        change, and has drafted. The projection is
+        ephemeral: it lives in host memory, is bounded per chat, and is empty
+        after a host restart. Live updates arrive on the project-scoped
+        `agent_presence` SSE topic, one complete chat value per event.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '200': {description: Current agent presence, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/agent-presence.yaml#/components/schemas/AgentPresenceSnapshot}}}}
+        '404': {description: Project not found, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest

@@ -1,0 +1,10 @@
+# Readiness comes from the captured MCP generation.
+# provider_id names the catalog provider.
+id: example/editor-surface:tracker
+provider_id: example-tracker
+required_tools:
+  - get_issue
+  - list_repositories
+  - create_issue
+  - search_issues
+purpose: Read the issue a summary is being written against.

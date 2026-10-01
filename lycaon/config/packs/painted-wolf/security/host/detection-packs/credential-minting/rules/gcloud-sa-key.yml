@@ -1,0 +1,23 @@
+title: Create a Google Cloud service-account key
+id: 3e7d5e54-6a01-4d4d-8f95-3a4b5c6d7e83
+description: Creates a service-account key; the private key material is written to the output or a file.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: gcloud
+    CommandLine|contains:
+      - ' iam service-accounts keys create'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

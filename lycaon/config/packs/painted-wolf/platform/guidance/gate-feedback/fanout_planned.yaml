@@ -1,0 +1,13 @@
+id: fanout_planned
+kind: workflow-fanout
+purpose: |
+  The phase requires a structured fanout plan before execution.
+missing_signals:
+  - id: plan_missing
+    when: "true"
+    detail: "No fanout plan is recorded for this phase."
+    fix: "Call fanout_plan with the required legs and threat model."
+satisfy_coordinator:
+  - "Call fanout_plan with the required legs and threat model."
+satisfy:
+  - "Record the phase fanout with fanout_plan."

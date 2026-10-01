@@ -1,0 +1,28 @@
+# Named path allowlists for tool profiles (SSOT).
+# Profiles set read_scope / write_scope — enforcement is generic in internal/sandbox.
+
+scopes:
+  coordinator_orchestration:
+    description: Blueprint paths for coordinator read/write
+    read:
+      - "${overlay_dir}/blueprints/**"
+    write:
+      - "${overlay_dir}/blueprints/**"
+
+  coordinator_product_read:
+    description: Orchestration paths plus bounded product source read (coordinator r/o)
+    read:
+      - "${overlay_dir}/blueprints/**"
+      - "**"
+
+  coordinator_product_write:
+    description: Product tree writes for coordinator investigate surface
+    # The project overlay is not denied here: its trust surfaces are agent
+    # policy, which the approval gate reviews per posture.
+    write:
+      - "**"
+
+  plan_write:
+    description: Blueprint markdown writes under convention
+    write:
+      - "${overlay_dir}/blueprints/**"

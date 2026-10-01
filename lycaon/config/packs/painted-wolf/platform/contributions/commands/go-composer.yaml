@@ -1,0 +1,14 @@
+id: painted-wolf/platform:go-composer
+title: "Focus composer"
+scope: "global"
+keywords:
+  - "message"
+  - "focus composer"
+when:
+  any:
+    - fact: "view_mounted"
+      is: "composer"
+    - fact: "chat_navigable"
+action:
+  kind: native_ui
+  handler: "go.composer"

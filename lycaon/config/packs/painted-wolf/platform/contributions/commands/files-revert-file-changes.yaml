@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-revert-file-changes
+title: "Restore comparison baseline"
+scope: "files"
+keywords:
+  - "revert file changes"
+  - "undo file changes"
+  - "reject file changes"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.revertFileChanges"

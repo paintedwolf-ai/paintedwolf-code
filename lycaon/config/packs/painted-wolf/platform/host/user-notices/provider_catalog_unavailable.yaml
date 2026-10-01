@@ -1,0 +1,21 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+retryable: true
+context_schema:
+  required:
+    - provider_id
+    - model
+title: Model catalog unavailable
+message: >-
+  Could not load the model catalog from {{ provider_id }} to validate {{ model }}.
+  The requested model assignment was not applied.
+suggested_action: Check the provider connection and credentials, then try again.
+scenarios:
+  - id: default
+    vars:
+      provider_id: cloud-1
+      model: candidate
+    expect_contains:
+      - cloud-1
+      - candidate
+      - not applied

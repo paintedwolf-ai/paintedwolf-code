@@ -1,0 +1,5 @@
+code: invalid_icon
+message: |
+  Unknown icon slot {{icon}}.
+replacement: |
+  Name a host icon slot. An unknown name falls back to the generic workflow mark.

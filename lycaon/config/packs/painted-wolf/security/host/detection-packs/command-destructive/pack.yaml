@@ -1,0 +1,3 @@
+id: command-destructive
+label: Destructive shell
+description: Precise shell commands that write to or format a block device.

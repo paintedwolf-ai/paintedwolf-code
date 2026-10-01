@@ -1,0 +1,43 @@
+# How an agent uses the hermetic design kit, returned in the render_view /
+# capture_page catalog payload. Read by internal/browser/designkit.
+#
+# icon_naming is the naming recipe; the full glyph list would not fit a prompt.
+
+fonts: >-
+  Use CSS font-family with single-quoted catalog names inside HTML style attrs
+  (e.g. style="font-family:'Fraunces'"). Host injects OFL @font-face data URLs —
+  no CDN <link> or https url().
+
+icon_naming: |-
+  Kit icons use Lucide-style kebab-case names. Guess from English:
+  • base noun: search, settings, user, mail, house (alias: home)
+  • state: {noun}-off, {noun}-plus, {noun}-check, {noun}-x (bell-off, user-plus)
+  • shape-prefixed status (current Lucide): circle-check, circle-alert, triangle-alert — aliases check-circle / alert-triangle still work
+  • direction: arrow-*, chevron-*, chevrons-*
+  • common synonyms resolve: close→x, delete→trash-2, menu→menu, gear→settings, email→mail, chat→message-circle, photo→image, dashboard→layout-dashboard
+  Use: <svg class="kit-icon"><use href="#kit-NAME"/></svg>. Prefer names from kit.icon_groups after the first render_view.
+
+themes: >-
+  Pass theme: "light" or "dark" on render_view (default light). Sets
+  data-kit-theme and --kit-* tokens.
+
+viewports: >-
+  Pass viewport.preset (phone|tablet|desktop|…) or explicit width/height. The
+  canvas captures the whole document by default — the preset supplies the width
+  and the layout frame, and a taller layout is captured past it (vh units stay
+  bound to the frame, reported as canvas.frame_height). Pass viewport.fit
+  "viewport" to stop at the frame and crop below it.
+
+tokens: >-
+  Prefer --kit-bg/fg/muted/accent/border/surface, --kit-text-*, --kit-space-*,
+  .kit-font-*, .kit-media-16x9, .kit-avatar, .kit-surface.
+
+# {brand_css} is replaced with the project overlay's relative path.
+brand: Optional project file {brand_css} is appended when present (hermetic overlay).
+
+assets: >-
+  Reference project files as http://lycaon.asset/<root-relative-path> — offline,
+  no CDN. Images via <img src>/CSS url() (png/jpeg/webp/gif/svg); stylesheets via
+  <link rel="stylesheet" href="http://lycaon.asset/…"> or
+  @import url(http://lycaon.asset/…). Byte-capped; paths under .git/ denied;
+  render fails fast on a missing or disallowed asset.

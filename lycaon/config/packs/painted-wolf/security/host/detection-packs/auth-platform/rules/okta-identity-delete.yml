@@ -1,0 +1,30 @@
+title: Delete an Okta user or group
+id: 402b2134-9fd0-438e-8ff3-f4c88e86037f
+description: Removes a user or a group from the directory, along with the access that came with it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_okta_client:
+    Image: okta-cli-client
+    CommandLine|contains:
+      - ' user delete'
+      - ' user deactivate'
+      - ' group delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_okta_client and not filter_rehearsal and not filter_local

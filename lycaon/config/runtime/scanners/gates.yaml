@@ -1,0 +1,24 @@
+gates:
+  proactive_categories:
+    - security
+    - secret
+  landed_change:
+    enabled: true
+    scope: path_scoped
+  cadence:
+    refresh_settle_ms: 45000
+    max_defer_ms: 900000
+    write_burst_settle_ms: 4000
+    reconcile_interval_ms: 60000
+    drift_min_paths: 8
+    drift_ratio: 0.25
+  agent_budget:
+    max_hints_per_injection: 8
+    max_message_chars: 200
+    max_guidance_findings: 500
+    max_query_results: 20
+    min_severity: medium
+    prioritize: [error, warning]
+    dedupe_by: fingerprint_primary
+    prefer_paths: touched_by_leg
+  block_on: [error]

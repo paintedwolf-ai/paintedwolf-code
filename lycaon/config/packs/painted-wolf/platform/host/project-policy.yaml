@@ -1,0 +1,42 @@
+# Project-root deny policy.
+# The shared predicate also refuses ancestors of these paths.
+
+# Contract tests require parity with the confinement catalog.
+deny_path_prefixes:
+  - ~/.ssh
+  - ~/.aws
+  - ~/.gnupg
+  - ~/.kube
+  - ~/.config/gh
+  - ~/.config/gcloud
+  - ~/.azure
+  - ~/.docker/config.json
+  - ~/.docker/contexts
+  - ~/.docker/daemon.json
+  - ~/.docker/cli-plugins
+  - ~/.docker/plugins
+  - ~/.netrc
+  - ~/.git-credentials
+  - ~/.terraform.d
+  - ~/.config/op
+  - ~/Library/Keychains
+  - ~/.npmrc
+  - ~/.pypirc
+  - ~/.cargo/credentials.toml
+  - ~/.m2/settings.xml
+  - ~/.gradle/gradle.properties
+  # Key material added with the credential floor split.
+  - ~/.config/sops/age
+  - ~/.age
+  - ~/.docker/trust
+  - ~/.password-store
+  - ~/.local/share/keyrings
+  # Catalogued credential stores the pack names.
+  - ~/.config/containers/auth.json
+  - ~/.oci
+  - ~/.config/glab-cli
+  - ~/.terraformrc
+  - ~/.config/rclone/rclone.conf
+  - ~/.vault-token
+
+require_under_home: false

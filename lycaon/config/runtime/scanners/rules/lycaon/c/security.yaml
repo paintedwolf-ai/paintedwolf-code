@@ -1,0 +1,19 @@
+rules:
+- id: lycaon.c.return-stack-address
+  languages:
+  - c
+  - cpp
+  severity: ERROR
+  message: The returned pointer outlives a local stack variable
+  metadata:
+    category: security
+    cwe: CWE-562
+    confidence: HIGH
+    technology:
+    - c
+  patterns:
+  - pattern-either:
+    - pattern: $TYPE $LOCAL = $VALUE; ... return &$LOCAL;
+    - pattern: $TYPE $LOCAL; ... return &$LOCAL;
+  - pattern-not-inside: static $TYPE $LOCAL = $VALUE; ... return &$LOCAL;
+  - pattern-not-inside: static $TYPE $LOCAL; ... return &$LOCAL;

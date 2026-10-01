@@ -1,0 +1,19 @@
+# delete — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    delete:
+        tool: delete
+        tier_hint: recoverable
+        what_changes: Delete {{ path }} from the working tree.
+        who_affected: The named path in this project.
+        if_wrong: Recoverable from git when the file was tracked.
+        allow_line: deleting files in this project
+        scenarios:
+            - id: default
+              vars:
+                path: tmp/scratch.txt
+                project: my-app
+              expect_contains:
+                - Delete
+                - working tree

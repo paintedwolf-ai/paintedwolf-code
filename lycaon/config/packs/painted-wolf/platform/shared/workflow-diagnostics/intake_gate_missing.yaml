@@ -1,0 +1,5 @@
+code: intake_gate_missing
+message: |
+  Phase {{phase}} declares intake but lacks the matching decision/consulted gate.
+replacement: |
+  Add user_decision_received or hitl_consulted for the intake key.

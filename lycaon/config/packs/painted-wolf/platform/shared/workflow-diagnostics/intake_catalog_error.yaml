@@ -1,0 +1,5 @@
+code: intake_catalog_error
+message: |
+  Intake catalog error on phase {{phase}}: {{detail}}.
+replacement: |
+  Fix the intake: block.

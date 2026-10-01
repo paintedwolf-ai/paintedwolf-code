@@ -1,0 +1,35 @@
+oar: '1.0'
+id: INVEST_HANDLE_NOT_OBSERVED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.surface
+    - paintedwolf.unobserved_cited_handles
+when: paintedwolf.surface == "implement_investigate" && size(paintedwolf.unobserved_cited_handles) > 0
+effect: block
+copy:
+  what: Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
+  cause: An evidence handle or path did not match the evidence ledger for this chat
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: 'Repair only the trailing citation metadata. Copy an exact observed handle into evidence, or an observed path, line and verbatim excerpt. Move observed URL citations to cited_urls; omit entries with no matching receipt.'
+  instead: 'Use existing coordinator or worker observations that support the pinned report; citation repair does not reopen tool calls.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_investigate
+x-paintedwolf-evidence:
+  ui_label: Evidence handles
+  ui_check_id: evidence_handles
+  in_session_retry: true
+x-paintedwolf-message: 'Investigate cited evidence not observed in the report evidence'
+x-paintedwolf-scenarios:
+  - id: ungrounded_path
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: src/missing.go:1
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: INVEST_HANDLE_NOT_OBSERVED'

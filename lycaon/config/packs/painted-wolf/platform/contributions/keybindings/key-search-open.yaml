@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-open
+command: painted-wolf/platform:search-open
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+K"
+  windows:
+    - "Mod+K"
+  linux:
+    - "Mod+K"

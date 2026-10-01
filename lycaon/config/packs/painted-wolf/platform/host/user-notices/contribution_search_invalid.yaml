@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Search results unavailable
+message: The extension provider returned search results in a format this source cannot use.
+suggested_action: Check the extension and its MCP provider for compatible versions, then search again.

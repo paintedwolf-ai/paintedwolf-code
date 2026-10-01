@@ -1,0 +1,19 @@
+[[permission]]
+identifier = "allow-path-kind"
+description = "Classify a path under attached project roots as file, folder, or missing."
+commands.allow = ["path_kind"]
+
+[[permission]]
+identifier = "allow-read-path-bytes"
+description = "Read bytes of a file under attached project roots (in-root images only)."
+commands.allow = ["read_path_bytes"]
+
+[[permission]]
+identifier = "allow-import-path-kind"
+description = "Classify a native drop before importing it as an immutable attachment snapshot."
+commands.allow = ["import_path_kind"]
+
+[[permission]]
+identifier = "allow-import-external-attachment"
+description = "Stream a user-dropped external file into the active project's attachment store."
+commands.allow = ["import_external_attachment"]

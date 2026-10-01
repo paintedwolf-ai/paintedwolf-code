@@ -1,0 +1,10 @@
+id: supervisor-parallel
+pattern: supervisor
+iteration_cap: 8
+supervisor:
+  strategy: parallel
+  profile_ids:
+    - coordinator
+    - implementer
+    - code-reviewer
+  max_agents: 5

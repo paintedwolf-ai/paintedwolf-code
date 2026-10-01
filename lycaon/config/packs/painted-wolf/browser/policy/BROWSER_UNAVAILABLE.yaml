@@ -1,0 +1,38 @@
+oar: '1.0'
+id: BROWSER_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "BROWSER_UNAVAILABLE"
+effect: block
+copy:
+  what: The browser could not complete {{ tool }}{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.
+  cause: Browser provisioning, launch, or the active page operation failed; the structured reason identifies the
+    failing stage.
+  why: Authored mockups and live captures rasterize through a pinned headless browser subprocess supervised by the
+    host.
+  fix: Retry after the host restores browser readiness or resolves the reported page failure. Browser provisioning
+    belongs to the host or user, not an unrelated shell server. If only the live page failed and a working render
+    tool is offered, an authored mock may show the design, but it does not verify that page. Retain any required
+    live validation as unfinished.
+  instead: Branch on Code BROWSER_UNAVAILABLE; resolve the observed browser prerequisite and keep visual claims
+    tied to actual output
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_browser
+x-paintedwolf-message: Headless browser unavailable for mockup rasterization
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: BROWSER_UNAVAILABLE'

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-chat-previous-message
+command: painted-wolf/platform:chat-previous-message
+scope: global
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+PageUp"
+  windows:
+    - "Alt+PageUp"
+  linux:
+    - "Alt+PageUp"

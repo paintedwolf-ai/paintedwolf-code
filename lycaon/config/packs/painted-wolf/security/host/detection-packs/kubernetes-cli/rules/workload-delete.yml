@@ -1,0 +1,45 @@
+title: Delete a workload or persistent volume
+id: d2249ce1-f2f0-41af-81a7-29611097cf43
+description: Deletes a deployment, statefulset, or persistent volume claim.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  selection_delete:
+    CommandLine|contains: ' delete '
+  # A pod is rescheduled; these are not. Short names need a trailing space so
+  # `pv` does not match `pv-test`.
+  selection_workload:
+    CommandLine|contains:
+      - ' deployment'
+      - ' deploy '
+      - ' statefulset'
+      - ' sts '
+      - ' daemonset'
+      - ' ds '
+      - ' pvc'
+      - ' persistentvolumeclaim'
+      - ' persistentvolume'
+      - ' pv '
+      - ' crd'
+      - ' customresourcedefinition'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_delete and selection_workload and not filter_rehearsal and not filter_local

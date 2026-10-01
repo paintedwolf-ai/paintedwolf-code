@@ -1,0 +1,10 @@
+id: plan-review-addenda
+extends: worker-leg-default
+description: "Plan review phase checklist"
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "plan", "*"]
+  phase_ids: ["plan", "review_test"]
+checklist:
+  - "Read plan and leg context; do not modify plan files"
+  - "List risks, gaps, and assumptions — output is advisory only"
+  - "Never claim workflow phase gates or evidence leaves are satisfied"

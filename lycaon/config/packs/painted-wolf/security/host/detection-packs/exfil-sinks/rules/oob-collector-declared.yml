@@ -1,0 +1,89 @@
+title: Declares a public webhook or OOB-interaction collector as a destination
+id: 79b4de62-87ba-42f4-a4a1-bae9ea86ce88
+description: >-
+  A command line, a structured tool argument, or a direct-IP capability's
+  declared hostname names a webhook tester or out-of-band interaction
+  catcher. These providers have no read side and no build-time dependency
+  use, so naming one is already the signal.
+references:
+  - https://attack.mitre.org/techniques/T1567/
+  - https://github.com/SigmaHQ/sigma/blob/master/rules/network/dns/net_dns_external_service_interaction_domains.yml
+author: Painted Wolf Code
+date: '2026-08-21'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # The four dotted entries are subdomain-scoped, matching the egress rule: their
+  # apexes are product sites, and only a per-token host is a collector.
+  selection_command:
+    CommandLine|contains:
+      - webhook.site
+      - requestcatcher.com
+      - beeceptor.com
+      - typedwebhook.tools
+      - pipedream.net
+      - interact.sh
+      - oastify.com
+      - oast.pro
+      - oast.live
+      - oast.site
+      - oast.online
+      - oast.fun
+      - oast.me
+      - burpcollaborator.net
+      - .canarytokens.com
+      - .ceye.io
+      - .dnslog.cn
+      - .requestbin.net
+  selection_toolarg:
+    ToolArg|contains:
+      - webhook.site
+      - requestcatcher.com
+      - beeceptor.com
+      - typedwebhook.tools
+      - pipedream.net
+      - interact.sh
+      - oastify.com
+      - oast.pro
+      - oast.live
+      - oast.site
+      - oast.online
+      - oast.fun
+      - oast.me
+      - burpcollaborator.net
+      - .canarytokens.com
+      - .ceye.io
+      - .dnslog.cn
+      - .requestbin.net
+  selection_declared:
+    DeclaredDestination|contains:
+      - webhook.site
+      - requestcatcher.com
+      - beeceptor.com
+      - typedwebhook.tools
+      - pipedream.net
+      - interact.sh
+      - oastify.com
+      - oast.pro
+      - oast.live
+      - oast.site
+      - oast.online
+      - oast.fun
+      - oast.me
+      - burpcollaborator.net
+      - .canarytokens.com
+      - .ceye.io
+      - .dnslog.cn
+      - .requestbin.net
+  filter_rehearsal:
+    Argv|re: '^(--help|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_command or selection_toolarg or selection_declared) and not filter_rehearsal and not filter_local

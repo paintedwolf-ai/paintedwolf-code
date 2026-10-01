@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COMMAND_IN_FLIGHT
+kind: policy
+anchor: tool.rejected
+selector:
+  tool: [command, verify]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.handles_text
+when: paintedwolf.rejection_code == "COMMAND_IN_FLIGHT"
+effect: block
+copy:
+  what: An awaited command job is already live for this session ({{ paintedwolf.handles_text }}).
+  cause: Awaited commands use one default lane so a slow command remains controllable instead of being obscured by overlapping work.
+  why: Launching another awaited command would create implicit concurrency and resource contention.
+  fix: Inspect, wait for, or stop the live handle. If the work is genuinely independent, retry once with allow_concurrent:true.
+  instead: Reuse the live job or make concurrency explicit
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_job
+x-paintedwolf-message: awaited command job already in flight
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handles: [command-1]
+      handles_text: command-1
+    expect_contains:
+      - 'Code: COMMAND_IN_FLIGHT'
+      - command-1
+      - allow_concurrent

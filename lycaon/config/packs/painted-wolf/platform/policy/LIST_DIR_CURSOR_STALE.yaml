@@ -1,0 +1,31 @@
+oar: '1.0'
+id: LIST_DIR_CURSOR_STALE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - list_dir
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "LIST_DIR_CURSOR_STALE"
+effect: block
+copy:
+  what: '`list_dir` received a cursor that is not valid for this scope and source generation.'
+  cause: The source changed or the cursor belongs to another path set or pattern.
+  why: A cursor advances only the exact view that issued it.
+  fix: Call list_dir with path only to start a new map. Copy the returned continuation arguments exactly.
+  instead: Remove cursor and retry the same scope once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:list_dir
+x-paintedwolf-message: '`list_dir` cursor is stale for this scope'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: list_dir
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: LIST_DIR_CURSOR_STALE'

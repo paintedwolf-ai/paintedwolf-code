@@ -1,0 +1,70 @@
+id: editor_file
+description: >
+  Editor selection turns — file tools plus bounded readiness probes. No shell,
+  network content fetch, MCP, or spawn/delegate. Used by inline edit and the
+  seven selection verbs.
+tools:
+  recall: sticky
+  read: sticky
+  write: sticky
+  edit: sticky
+  replace_lines: sticky
+  code_rewrite: sticky
+  restore_version: sticky
+  summarize: sticky
+  grep: sticky
+  find: sticky
+  list_dir: sticky
+  stat: sticky
+  wc: true
+  jq: sticky
+  jq_edit: true
+  scan_query: sticky
+  scan_list: sticky
+  record_finding: sticky
+  pack_board: sticky
+  surface_note: sticky
+  wait: sticky
+  skills_read: sticky
+  secret_generate: sticky
+  secret_list: sticky
+  secret_revoke: sticky
+  held_result: true
+  held_stop: true
+wait_conditions: [http_ready, port_ready]
+deny_tools:
+  - command
+  - command_output
+  - command_stop
+  - web_search
+  - fetch_url
+  - terminal_open
+  - terminal_send
+  - terminal_read
+  - terminal_snapshot
+  - terminal_close
+  - page_open
+  - page_act
+  - page_snapshot
+  - page_close
+  - render_view
+  - capture_page
+  - measure_page
+  - delegate_*
+  - state_*
+  - handoff_*
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  - chmod
+  - chown
+  - delete
+  - copy
+  - move
+  - mkdir
+  - extract_archive
+  - verify
+  - survey_repo
+  - mcp_*

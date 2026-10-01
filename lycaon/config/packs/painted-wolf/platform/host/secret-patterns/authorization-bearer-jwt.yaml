@@ -1,0 +1,8 @@
+id: authorization-bearer-jwt
+title: Bearer JSON Web Token
+regex: '(?i)\bauthorization\b[''" ]*[:=][ ''"]*bearer[ \t]+(ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.(?:[a-zA-Z0-9/\\_-]{10,}={0,2})?)'
+keywords:
+  - authorization
+severity: critical
+secret_group: 1
+entropy: 3

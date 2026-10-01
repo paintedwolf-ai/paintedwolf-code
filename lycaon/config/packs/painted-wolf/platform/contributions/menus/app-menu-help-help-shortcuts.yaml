@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-help-help-shortcuts
+slot: "app_menu.help"
+command: painted-wolf/platform:help-shortcuts
+group: "0"
+order: 1
+label: "Keyboard shortcuts"

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-select-parent-syntax
+command: painted-wolf/platform:editor-select-parent-syntax
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+I"
+  windows:
+    - "Mod+Shift+I"
+  linux:
+    - "Mod+Shift+I"

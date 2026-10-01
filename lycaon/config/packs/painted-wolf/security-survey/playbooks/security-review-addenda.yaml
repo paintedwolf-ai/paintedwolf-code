@@ -1,0 +1,10 @@
+id: security-review-addenda
+extends: worker-leg-default
+description: "Security advisory review checklist"
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "*"]
+  phase_ids: ["review_test", "closeout"]
+checklist:
+  - "Read-only review of plan or change set per Leg tools"
+  - "Cite security risks against the change's stated or inferred threat model; output is advisory only"
+  - "Never assert security evidence leaves are satisfied in chat"

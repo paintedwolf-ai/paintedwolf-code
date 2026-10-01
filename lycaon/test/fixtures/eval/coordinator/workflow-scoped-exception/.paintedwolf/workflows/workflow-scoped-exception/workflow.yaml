@@ -1,0 +1,186 @@
+{
+  "id": "workflow-scoped-exception",
+  "version": "1.0.0",
+  "name": "Scoped exception and atomic release",
+  "description": "Resolve the two production components and their atomic release group.",
+  "trigger": "/workflow-scoped-exception",
+  "request": {
+    "question": "Which release should this workflow process?"
+  },
+  "initial_posture": "build",
+  "agents": [
+    {
+      "id": "coordinator",
+      "tools": "all"
+    }
+  ],
+  "phases": [
+    {
+      "id": "api_disposition",
+      "activity_label": "Api disposition",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/api_disposition.md",
+      "review_loop": {
+        "evidence_key": "api_disposition",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "component": "string",
+          "revision": "string",
+          "disposition": "string",
+          "exception": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:api_disposition"
+      ],
+      "next": "web_disposition"
+    },
+    {
+      "id": "web_disposition",
+      "activity_label": "Web disposition",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/web_disposition.md",
+      "review_loop": {
+        "evidence_key": "web_disposition",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "component": "string",
+          "revision": "string",
+          "disposition": "string",
+          "exception": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:web_disposition"
+      ],
+      "next": "select_action"
+    },
+    {
+      "id": "select_action",
+      "activity_label": "Select action",
+      "coordinator_surface": "recon_reconcile",
+      "surface_template": "agents/select_action.md",
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "choice_transition_required"
+      ],
+      "next": "release",
+      "transitions": [
+        {
+          "id": "release",
+          "to": "release",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Release"
+        },
+        {
+          "id": "hold",
+          "to": "hold",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Hold"
+        }
+      ]
+    },
+    {
+      "id": "hold",
+      "activity_label": "Hold",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/hold.md",
+      "review_loop": {
+        "evidence_key": "hold",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "action": "string",
+          "api": "string",
+          "web": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:hold"
+      ],
+      "next": "release_index"
+    },
+    {
+      "id": "release",
+      "activity_label": "Release",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/release.md",
+      "review_loop": {
+        "evidence_key": "release",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "action": "string",
+          "api": "string",
+          "web": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:release"
+      ],
+      "next": "release_index"
+    },
+    {
+      "id": "release_index",
+      "activity_label": "Release index",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/release_index.md",
+      "review_loop": {
+        "evidence_key": "release_index",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "api": "string",
+          "web": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:release_index"
+      ],
+      "next": "done"
+    },
+    {
+      "id": "done",
+      "activity_label": "Complete",
+      "terminal": true,
+      "complete_when": "orchestration_complete"
+    }
+  ],
+  "controls": {
+    "phase_advance": "host"
+  }
+}

@@ -1,0 +1,149 @@
+components:
+  schemas:
+    SourceViewExtent:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "rows"
+        - "complete"
+      properties:
+        rows:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+          maximum: 9007199254740991
+        complete:
+          type: "boolean"
+    SourceViewSpan:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "start"
+        - "end"
+      properties:
+        start:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+        end:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+    SourceViewCreate:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeViewCreate"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonViewCreate"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeViewCreate"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonViewCreate"
+    SourceViewFailure:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "code"
+        - "message"
+      properties:
+        code:
+          type: "string"
+          enum:
+            - "unavailable"
+            - "resource_limit"
+            - "preparation_failed"
+            - "expired"
+        message:
+          type: "string"
+          maxLength: 4096
+    SourceView:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeView"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonView"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeView"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonView"
+    SourceViewUpdate:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeViewUpdate"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonViewUpdate"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeViewUpdate"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonViewUpdate"
+    SourceViewFrame:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeFrame"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonFrame"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeFrame"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonFrame"
+    SourceViewLocation:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeLocation"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonLocation"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeLocation"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonLocation"
+    SourceViewSearchPage:
+      oneOf:
+        -
+          $ref: "tree.yaml#/components/schemas/SourceTreeSearchPage"
+        -
+          $ref: "comparison.yaml#/components/schemas/SourceComparisonSearchPage"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          tree: "tree.yaml#/components/schemas/SourceTreeSearchPage"
+          comparison: "comparison.yaml#/components/schemas/SourceComparisonSearchPage"
+    SourceViewEvent:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "view_id"
+        - "kind"
+        - "intent_revision"
+        - "projection_revision"
+        - "invalidated"
+        - "terminal"
+      properties:
+        view_id:
+          type: "string"
+          format: "uuid"
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+            - "comparison"
+        intent_revision:
+          type: "string"
+          format: uuid
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        invalidated:
+          type: "boolean"
+        terminal:
+          type: "boolean"
+

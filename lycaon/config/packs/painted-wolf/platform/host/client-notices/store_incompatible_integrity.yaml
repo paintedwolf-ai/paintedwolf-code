@@ -1,0 +1,11 @@
+scope: app
+title: Your data needs attention
+message: >-
+  Your conversation history did not pass its integrity check. Restoring the
+  recovery snapshot from {time} is the safe way forward.
+scenarios:
+  - id: default
+    expect_contains:
+      - integrity check
+      - recovery snapshot
+      - "{time}"

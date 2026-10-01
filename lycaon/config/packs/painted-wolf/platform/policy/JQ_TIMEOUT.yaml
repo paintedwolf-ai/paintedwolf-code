@@ -1,0 +1,36 @@
+oar: '1.0'
+id: JQ_TIMEOUT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - jq
+  - jq_edit
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.timeout_ms
+when: paintedwolf.rejection_code == "JQ_TIMEOUT"
+effect: block
+copy:
+  what: jq query exceeded the {{ paintedwolf.timeout_ms }}ms execution budget.
+  cause: The program ran too long — often an unbounded generator (e.g. range/repeat/recurse).
+  why: The timeout bounds compute; structured rejects let agents branch without parsing free-form errors.
+  fix: Bound computation inside the query, for example with jq’s limit(n; expr) when that matches the intended
+    result. The tool’s output limit only pages computed values and cannot stop an unbounded generator. Preserve
+    any unmet coverage requirement.
+  instead: Branch on Code; simplify the query before retrying
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq query exceeded its execution budget
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: explore_readonly
+    timeout_ms: '5000'
+    tool: jq
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: JQ_TIMEOUT'

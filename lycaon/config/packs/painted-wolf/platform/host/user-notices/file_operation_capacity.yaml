@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Too many file operations"
+message: "Too many file operations are waiting to run."
+suggested_action: "Wait a moment and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "waiting to run"
+retryable: true

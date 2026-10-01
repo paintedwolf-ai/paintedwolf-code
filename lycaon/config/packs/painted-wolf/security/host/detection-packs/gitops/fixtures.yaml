@@ -1,0 +1,71 @@
+fixtures:
+- rule: workload-delete
+  positive:
+  - argocd app delete prod-api --yes
+  - argocd app delete-resource prod-api --kind Deployment --resource-name api
+  - argocd appset delete prod-apps
+  - flux delete kustomization apps --silent
+  - flux delete helmrelease redis --silent
+  - sudo argocd app delete prod-api --yes
+  negative:
+  - argocd app list
+  - argocd app get prod-api
+  - argocd app sync prod-api
+  - argocd app delete prod-api --help
+  - flux get kustomizations
+  - flux delete kustomization apps --help
+- rule: controller-uninstall
+  positive:
+  - flux uninstall --silent
+  - flux uninstall --keep-namespace --silent
+  - sudo flux uninstall --silent
+  negative:
+  - flux install
+  - flux check
+  - flux uninstall --dry-run
+  - flux uninstall --help
+- rule: project-delete
+  positive:
+  - argocd proj delete platform
+  - sudo argocd proj delete platform
+  negative:
+  - argocd proj list
+  - argocd proj get platform
+  - argocd proj create platform
+  - argocd proj delete platform --help
+- rule: credential-mint
+  positive:
+  - argocd account generate-token --account ci
+  - argocd proj role create-token platform deployer
+  - argocd cluster rotate-auth https://kubernetes.default.svc
+  - sudo argocd account generate-token --account ci
+  negative:
+  - argocd account list
+  - argocd account get --account ci
+  - argocd proj role list-tokens platform deployer
+  - argocd account generate-token --help
+- rule: access-widen
+  positive:
+  - argocd proj role add-policy platform deployer --action create --permission allow --object '*'
+  - argocd proj role add-group platform deployer platform-team
+  - argocd proj allow-cluster-resource platform '' Namespace
+  - argocd proj allow-namespace-resource platform '' Secret
+  - argocd account update-password --account ci
+  - sudo argocd proj role add-group platform deployer platform-team
+  negative:
+  - argocd proj role list platform
+  - argocd proj role remove-group platform deployer platform-team
+  - argocd proj deny-cluster-resource platform '' Namespace
+  - argocd proj role add-group platform deployer platform-team --help
+- rule: reconcile-suspend
+  positive:
+  - flux suspend kustomization apps
+  - flux suspend helmrelease redis
+  - argocd cluster rm https://kubernetes.default.svc
+  - sudo flux suspend kustomization apps
+  negative:
+  - flux resume kustomization apps
+  - flux get kustomizations
+  - argocd cluster list
+  - argocd cluster add prod-context
+  - flux suspend kustomization apps --help

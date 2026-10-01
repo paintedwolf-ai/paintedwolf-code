@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-select-next-occurrence
+title: "Select next occurrence"
+scope: "files"
+keywords:
+  - "mod+d"
+  - "multi cursor"
+  - "next occurrence"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.selectNextOccurrence"

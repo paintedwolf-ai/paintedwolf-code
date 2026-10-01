@@ -1,0 +1,18 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': process.refused
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-process-refused
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - wait() process_done condition — the kernel refused a running command/verify
+    job an operation
+  required:
+  - process_done
+  - command_output
+  - command_stop
+  forbidden:
+  - workflow_advance

@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-save-bytes"
+description = "Write an export to the destination a save-panel grant names."
+commands.allow = ["save_bytes"]
+
+[[permission]]
+identifier = "allow-backup-transfer"
+description = "Stream an archive through a picker grant to or from the local engine."
+commands.allow = ["transfer_backup", "cancel_backup_transfer"]

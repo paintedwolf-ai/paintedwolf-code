@@ -1,0 +1,29 @@
+@utility den-workflow-start-card {
+margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 30%, var(--den-border));
+  background: var(--den-tint-1);
+}
+
+
+@utility den-workflow-start-card-actions {
+display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+
+@utility den-workflow-start-card-hint {
+margin: 0 0 10px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+
+@utility den-workflow-start-card-lead {
+margin: 0 0 6px;
+  font-size: var(--text-den-body);
+}
+
+

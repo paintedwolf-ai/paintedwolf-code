@@ -1,0 +1,8 @@
+# PersonRole — what a person may do on this host.
+name: PersonRole
+description: The authority a person holds on this host.
+go_const_prefix: PersonRole
+values:
+  - id: owner
+    comment: >-
+      holds the host's device credential and every authority on it

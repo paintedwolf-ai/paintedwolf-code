@@ -1,0 +1,33 @@
+title: Delete a Stripe customer or product
+id: e10f44c5-6524-44d2-95a9-3406b8cb8065
+description: Sends a raw DELETE to the Stripe API, permanently removing a customer or product.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # `stripe delete` is a generic REST passthrough — the object type lives in the
+  # path, not a subcommand — so this matches the verb plus a v1 API path rather
+  # than a fixed noun list. Without -c/--confirm the command prompts and waits
+  # rather than deleting, so the flag marks the unattended form.
+  selection_image:
+    Image: stripe
+    CommandLine|contains: ' delete /v1/'
+  selection_confirm:
+    CommandLine|re: '(?i)\s(-c\b|--confirm\b)'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_confirm and not filter_rehearsal and not filter_local

@@ -1,0 +1,58 @@
+oar: '1.0'
+id: GIT_REPO_CONFIG_UNSAFE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_ref
+    - git_branches
+    - git_restore
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+    - git_commit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.keys
+when: paintedwolf.rejection_code == "GIT_REPO_CONFIG_UNSAFE"
+effect: block
+copy:
+  what: Cannot run git here — this repository's own config declares commands the app will not run ({{ paintedwolf.keys }}).
+  cause: Repository config can name a content filter, merge driver, or proxy program, and git would execute it on ordinary staging, checkout and diff.
+  why: Hooks and behavior keys are neutralized per invocation, but repository-defined filter and merge drivers can execute commands with no inert replacement. The bundled host-defined LFS filter is handled separately; other executable drivers must not run or be silently skipped.
+  fix: Inspect the repository's .git/config, and use git in your own terminal for this repository if the declared commands are expected.
+  instead: Report the refusal to the user; do not retry the git tool for this repository
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_repo_config
+x-paintedwolf-message: repository git config declares unrunnable commands
+x-paintedwolf-scenarios:
+  - id: filter
+    vars:
+      detail: bad args
+      keys: filter.crypt
+      profile: implement
+      tool: git_status
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: GIT_REPO_CONFIG_UNSAFE'
+      - terminal
+  - id: proxy
+    vars:
+      detail: bad args
+      keys: core.gitProxy
+      profile: implement
+      tool: git_diff
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: GIT_REPO_CONFIG_UNSAFE'
+      - terminal

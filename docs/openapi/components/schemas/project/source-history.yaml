@@ -1,0 +1,86 @@
+components:
+  schemas:
+    SourceHistoryAction:
+      x-go-generate: true
+      type: object
+      required: [id, label, kind, root_id, path, is_dir, removes_path]
+      additionalProperties: false
+      description: The host-owned lifecycle operation currently available in one history direction.
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          description: Sentence-case action label suitable for a button tooltip or menu row.
+        kind:
+          type: string
+          enum: [create, rename, move, copy, trash, delete]
+          description: trash is a Files deletion that moved the entry to the system Trash; delete is an agent deletion that removed it from disk. Both keep a complete recovery copy.
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: Root-relative path the history action will create, remove, or move.
+        from_path:
+          type: string
+        to_path:
+          type: string
+        is_dir:
+          type: boolean
+        removes_path:
+          type: boolean
+          description: True when the action removes or retargets the current project path and dirty editor state must be resolved first.
+    SourceHistoryState:
+      x-go-generate: true
+      type: object
+      required: [undo, redo]
+      additionalProperties: false
+      description: Current host-authoritative lifecycle history heads for one project.
+      properties:
+        undo:
+          x-go-type: "*SourceHistoryAction"
+          oneOf:
+          - $ref: '#/components/schemas/SourceHistoryAction'
+          - type: 'null'
+        redo:
+          x-go-type: "*SourceHistoryAction"
+          oneOf:
+          - $ref: '#/components/schemas/SourceHistoryAction'
+          - type: 'null'
+    SourceHistoryMutationRequest:
+      x-go-generate: true
+      type: object
+      required: [operation_id, expected_entry_id]
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; exact retries return the original result.
+        expected_entry_id:
+          type: string
+          format: uuid
+          description: Exact undo or redo head displayed to the user; a moved head returns 409.
+    SourceHistoryMutationResponse:
+      x-go-generate: true
+      type: object
+      required: [entry_id, root_id, path, op, is_dir]
+      additionalProperties: false
+      description: Canonical filesystem transition produced by undo or redo.
+      properties:
+        entry_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        from_path:
+          type: string
+        op:
+          $ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'
+        is_dir:
+          type: boolean

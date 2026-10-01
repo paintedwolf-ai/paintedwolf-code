@@ -1,0 +1,7 @@
+# 2026/08/25 17:52:45.710801 [TestOrdTSImmutabilityAcrossPatches] [rapid] draw created_sec: 0
+# 2026/08/25 17:52:45.710886 [TestOrdTSImmutabilityAcrossPatches] append: load evidence ledger: SQL logic error: no such column: body (1)
+# 
+v0.4.8#12691474926475493819
+0x0
+0x0
+0x0

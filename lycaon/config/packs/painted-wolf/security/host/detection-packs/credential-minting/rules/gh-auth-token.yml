@@ -1,0 +1,23 @@
+title: Print the GitHub CLI token
+id: 6bab8b87-9d34-4a7a-9c28-6d7e8f9a0b16
+description: Prints the OAuth token the GitHub CLI holds for the active host.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: gh
+    CommandLine|contains:
+      - ' auth token'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

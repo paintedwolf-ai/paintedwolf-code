@@ -1,0 +1,295 @@
+/* List surfaces share pane and column geometry. */
+
+/* --- Detail pane --- */
+
+.den-detail-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--den-text);
+  /* Same inset as the list rows — the two columns read as one ruled page. */
+  --den-detail-inset-x: var(--den-stage-inset-x);
+}
+
+/* Shared header geometry keeps the divider aligned across the split. */
+.den-detail-pane__head,
+.den-list-header {
+  box-sizing: border-box;
+  height: var(--den-list-head-h);
+  padding-block: 6px;
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-detail-pane__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-4);
+  padding-inline: var(--den-detail-inset-x);
+  /* Keep the hairline aligned with the adjacent column header. */
+  overflow: hidden;
+}
+
+.den-detail-pane__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-detail-pane__meta {
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Auto margin keeps the close control at the trailing edge when metadata is empty. */
+.den-detail-pane__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5714rem;
+  height: 1.5714rem;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-title);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.den-detail-pane__close:hover {
+  background: color-mix(in srgb, var(--den-text-muted) 12%, transparent);
+  color: var(--den-text);
+}
+
+/* The pane body is the ONE scroll surface for detail content — nothing inside
+   it may scroll again. */
+.den-detail-pane__body {
+  flex: 1;
+  min-height: 0;
+}
+
+.den-detail-pane__body-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-5);
+  padding: var(--spacing-den-6) var(--den-detail-inset-x)
+    var(--spacing-den-8);
+}
+
+/* --- Column header --- */
+
+/* Shared insets and gaps align the header with its rows. */
+.den-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--den-list-cols);
+  align-items: center;
+  gap: var(--den-list-gap);
+  padding-inline: var(--den-stage-inset-x);
+  background: var(--den-background);
+}
+
+.den-list-header__cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.den-list-header__cell--end {
+  justify-content: flex-end;
+}
+
+.den-list-header__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.den-list-header__sort:hover {
+  color: var(--den-text);
+}
+
+.den-list-header__cell--sorted .den-list-header__sort {
+  color: var(--den-text);
+}
+
+.den-list-header__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: inherit;
+}
+
+.den-list-header__cell:not(.den-list-header__cell--sorted)
+  .den-list-header__label {
+  color: var(--den-text-muted);
+}
+
+.den-list-header__glyph {
+  flex-shrink: 0;
+  width: 0.5714rem;
+  font-size: var(--text-den-micro);
+  line-height: 1;
+}
+
+/* Sits in the gap between columns so the hit target never overlaps the label. */
+.den-list-header__grip {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  right: calc(var(--den-list-gap) / -2 - 3px);
+  width: 7px;
+  z-index: 1;
+}
+
+.den-list-header__grip::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 2px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--den-duration) var(--den-ease);
+}
+
+.den-list-header__grip:hover::before,
+.den-list-header__grip:focus-visible::before,
+.den-list--column-resizing .den-list-header__grip::before {
+  background: color-mix(in srgb, var(--den-accent-signal) 55%, var(--den-line));
+}
+
+.den-list--column-resizing,
+.den-list--column-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* --- Column rows --- */
+
+.den-list-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--den-list-cols);
+  align-items: center;
+  gap: var(--den-list-gap);
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+.den-list-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-list-cell--end {
+  text-align: right;
+}
+
+/* The grip is centred in the gap; nudge the header labels' hit target so the
+   two never overlap on the narrowest column. */
+.den-list-header__cell:last-child {
+  padding-right: 0;
+}
+
+/* Optional columns are shed in createFittedColumns, which drops the cell and
+   its track together; hiding the cell here would leave its track reserved. */
+
+/* --- Stage splitter --- */
+
+/* Container geometry determines the grip. Two classes override the width cursor. */
+.den-browse-body .den-browse-split {
+  flex-shrink: 0;
+  align-self: stretch;
+  position: relative;
+  z-index: 3;
+  width: 7px;
+  background: var(--den-background);
+  cursor: col-resize;
+  /* ResizeHandle's "auto" axis reads this; the container query overrides it. */
+  --den-resize-axis: width;
+}
+
+.den-browse-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--den-line);
+  transition:
+    background var(--den-duration) var(--den-ease),
+    width var(--den-duration) var(--den-ease),
+    height var(--den-duration) var(--den-ease);
+}
+
+.den-browse-split:hover::before,
+.den-browse-split:focus-visible::before,
+.den-stage--split-resizing .den-browse-split::before {
+  background: color-mix(in srgb, var(--den-accent-signal) 55%, var(--den-line));
+  width: 2px;
+}
+
+:where(.den-browse-stage[data-browse-band~="max-700"]) {
+  .den-browse-body .den-browse-split {
+    width: auto;
+    height: 7px;
+    cursor: row-resize;
+    --den-resize-axis: height;
+  }
+
+  .den-browse-split::before {
+    top: 3px;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 1px;
+  }
+
+  .den-browse-split:hover::before,
+  .den-browse-split:focus-visible::before,
+  .den-stage--split-resizing .den-browse-split::before {
+    width: auto;
+    height: 2px;
+  }
+}
+
+.den-stage--split-resizing,
+.den-stage--split-resizing * {
+  user-select: none !important;
+}
+
+.den-stage--split-resizing .den-browse-main,
+.den-stage--split-resizing .den-browse-detail {
+  pointer-events: none;
+}

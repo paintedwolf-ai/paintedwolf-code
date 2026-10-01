@@ -1,0 +1,17 @@
+# Capture applies ignore rules; catalog uses them only for traversal priority.
+# Bundled directory-priority.yaml patterns apply independently of ignore_files.
+# Ongoing host discovery has no repository-size ceiling. Readers batch and spill
+# their working sets. Explicit device or trusted project scope budgets are optional.
+version: 1
+budgets:
+  capture:
+    directory_entries: 0
+    subtree_entries: 0
+    walk_entries: 0
+  catalog:
+    directory_entries: 0
+    subtree_entries: 0
+    walk_entries: 0
+ignore_files:
+  capture: true
+  catalog_priority: true

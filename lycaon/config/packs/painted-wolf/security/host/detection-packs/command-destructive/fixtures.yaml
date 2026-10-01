@@ -1,0 +1,74 @@
+fixtures:
+- rule: disk-device-write
+  positive:
+  - dd if=/dev/zero of=/dev/sda bs=1M count=100
+  - mkfs.ext4 /dev/sdb1
+  - mkfs.xfs /dev/sdb1
+  - mkfs.vfat -F32 /dev/sdc1
+  - mkfs /dev/sdb1
+  - newfs_hfs /dev/disk2s2
+  - diskutil eraseDisk JHFS+ MyDisk /dev/disk2
+  - diskutil partitionDisk /dev/disk2 1 GPT JHFS+ Data 100%
+  - diskutil secureErase freespace 0 /dev/disk2
+  - dd of=/dev/sda if=/dev/zero bs=4M
+  negative:
+  - dd if=image.iso of=backup.img
+  - diskutil list
+  - dd if=/dev/urandom of=/dev/null bs=1m count=10
+  - dd if=disk.img of=/dev/stdout
+  - mkfs.ext4 --help
+  - diskutil info /dev/disk2
+  - diskutil help erase
+- rule: recursive-delete
+  positive:
+  - rm -rf /tmp/outside/build
+  - command: git clean -xfd
+    args: {cwd: /tmp/outside}
+  - find /tmp/outside -name '*.tmp' -delete
+  - rm -vrf /tmp/outside/build
+  - rm -fr /tmp/outside/build
+  - command: git clean -fdx
+    args: {cwd: /tmp/outside}
+  negative:
+  - rm build/artifact.tar
+  - git clean -n
+  - find . -name '*.tmp'
+  - rm -r build
+- rule: secure-erase
+  positive:
+  - shred -u /tmp/outside/secrets.env
+  - truncate -s 0 /tmp/outside/app.log
+  - srm /tmp/outside/secrets.env
+  - wipe -f secrets.env
+  - truncate --size=0 /tmp/outside/app.log
+  negative:
+  - cat secrets.env
+  - truncate -s 1M sparse.img
+  - shred --help
+  - truncate -s 0 app.log --help
+- rule: permissions-open
+  positive:
+  - chmod 777 /srv/shared
+  - chmod -R 666 /srv/data
+  - chmod o+w /etc/motd
+  - chmod -R a+rwx /srv/site
+  - chmod 4755 /usr/local/bin/tool
+  - chown -R deploy:deploy /srv/app
+  negative:
+  - chmod +x /usr/local/bin/tool
+  - chmod 755 /usr/local/bin/tool
+  # Recursive permission tightening is inert.
+  - chmod -R 700 /srv/private
+  - chmod -R 644 /srv/docs
+  - chmod -R go-rwx /srv/private
+  - chmod --help
+- rule: cron-remove
+  positive:
+  - crontab -r
+  - crontab -r deploy
+  - crontab -u deploy -r
+  negative:
+  - crontab -l
+  - crontab -e
+  - crontab mycron.txt
+  - crontab -r --help

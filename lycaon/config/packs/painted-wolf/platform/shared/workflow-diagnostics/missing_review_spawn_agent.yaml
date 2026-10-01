@@ -1,0 +1,5 @@
+code: missing_review_spawn_agent
+message: |
+  review_loop on phase {{phase}} requires task({{agent}}) but surface {{surface}} cannot spawn that agent.
+replacement: |
+  Name a coordinator_surface whose spawn roster includes {{agent}}, or drop {{agent}} from required_agents / if_spawnable.

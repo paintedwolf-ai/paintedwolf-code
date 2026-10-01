@@ -1,0 +1,9 @@
+emit: banner
+category: informational
+severity: info
+message: The board view contains no rendered entries.
+cause: This pack_board result explicitly reports board_chars as zero.
+why: An empty board view does not establish that the task or its verification obligations are complete.
+fix: Continue from the current task, progress checklist, and workflow obligations. Verify completed work when appropriate; ask the user only for a blocking decision. Do not repeat pack_board unless state changed.
+instead: Use the existing task state to choose the next action
+id: BOARD_EMPTY_SKIP_TO_VERIFY

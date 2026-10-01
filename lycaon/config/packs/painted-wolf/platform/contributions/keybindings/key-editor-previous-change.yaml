@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-previous-change
+command: painted-wolf/platform:editor-previous-change
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+Shift+F8"
+  windows:
+    - "Alt+Shift+F8"
+  linux:
+    - "Alt+Shift+F8"

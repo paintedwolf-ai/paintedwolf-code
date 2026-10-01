@@ -1,0 +1,41 @@
+{
+  "id": "prof-anchor-map-omitting-a-core-anchor-rejected",
+  "title": "Every core anchor appears exactly once across core and unsupported",
+  "covers": [
+    "OAR-PROF-2",
+    "OAR-FACT-24"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ANY",
+      "effect": "warn"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke"
+        },
+        "unsupported": [
+          "tool.handler"
+        ]
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "error": "OAR-PROF-2"
+  }
+}

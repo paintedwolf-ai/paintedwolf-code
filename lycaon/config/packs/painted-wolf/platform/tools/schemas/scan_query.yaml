@@ -1,0 +1,60 @@
+tags: [scans]
+description: >-
+  Page findings for one or more scans. One id queries one scan; the exact id array
+  returned by scan_pack queries that pack as a cross-engine aggregate. Narrow with
+  rule_id, path, code, or level rather than reading every finding. When a result is
+  truncated, page it with offset — do not re-run the scan.
+schema:
+  type: object
+  properties:
+    scan_ids:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      description: Complete scan identifiers to query together.
+      items:
+        type: string
+    rule_id:
+      type: string
+      description: Return only findings from this rule.
+    path:
+      type: string
+      description: Return only findings under this project-relative path.
+    code:
+      type: string
+      description: Return only findings carrying this engine code.
+    level:
+      type: string
+      # Pinned to api.AllFindingLevelValues() by TestScanToolCatalogEnumsMatchWire.
+      enum: [critical, high, medium, low, info, unknown]
+      description: Return only findings at this severity level.
+    offset:
+      type: integer
+      description: Skip this many matching findings (use when the previous page was truncated).
+    kind:
+      type: string
+      description: Finding kind, for example sca or secret.
+    advisory_id:
+      type: string
+      description: Exact OSV, CVE, or GHSA identifier, including recorded aliases.
+    fingerprint:
+      type: string
+      description: Exact primary finding fingerprint.
+    view:
+      type: string
+      enum: [findings, groups]
+      description: Groups returns a compact rule or advisory/package index with occurrence counts and representative locations; pagination applies to groups.
+    limit:
+      type: integer
+      description: Maximum findings per page.
+    dedupe:
+      type: boolean
+      description: Collapse duplicate rule+path rows.
+    introduced_since:
+      type: string
+      description: RFC 3339 time. Return only findings this scanner series first observed at or after it — what recent edits introduced.
+    fixed_since:
+      type: string
+      description: RFC 3339 time. Also return, in fixed_findings, the findings the series recorded as fixed at or after it.
+  required: [scan_ids]
+  additionalProperties: false

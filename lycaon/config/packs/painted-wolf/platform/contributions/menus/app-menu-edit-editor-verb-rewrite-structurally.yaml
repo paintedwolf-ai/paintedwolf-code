@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-rewrite-structurally
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-rewrite-structurally
+group: "1"
+order: 12
+label: "Rewrite structurally"

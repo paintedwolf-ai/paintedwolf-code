@@ -1,0 +1,29 @@
+oar: '1.0'
+id: WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.has_completion_report
+    - paintedwolf.workflow_report_phase_pending
+    - paintedwolf.phase
+when: paintedwolf.has_completion_report && paintedwolf.workflow_report_phase_pending
+effect: block
+copy:
+  what: Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`.
+  cause: The coordinator produced a closing report before the host state machine reached the manifest's report phase.
+  why: Accepting the report here would finish the conversation while leaving the workflow active in an earlier phase.
+  fix: Complete the active phase using its structured gate action or wait for its host-managed work to settle. Deliver the completion report only after the workflow enters its report phase.
+  instead: Complete phase `{{ paintedwolf.phase }}` before claiming completion. If no justified recovery remains, an honest blocked report with verification.method blocked and its reason can end the turn without passing or advancing the workflow gate.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Close out blocked — the workflow has not reached its report phase
+x-paintedwolf-scenarios:
+  - id: report_before_report_phase
+    vars:
+      phase: ingest
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT'
+      - ingest
+      - report phase

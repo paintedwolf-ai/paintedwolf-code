@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-toggle-block-comment
+command: painted-wolf/platform:editor-toggle-block-comment
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+Shift+A"
+  windows:
+    - "Alt+Shift+A"
+  linux:
+    - "Alt+Shift+A"

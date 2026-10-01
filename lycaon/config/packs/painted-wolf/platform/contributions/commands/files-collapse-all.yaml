@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-collapse-all
+title: "Collapse all folders in tree"
+scope: "files"
+keywords:
+  - "collapse all"
+  - "fold folders"
+  - "close folders"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.collapseAll"

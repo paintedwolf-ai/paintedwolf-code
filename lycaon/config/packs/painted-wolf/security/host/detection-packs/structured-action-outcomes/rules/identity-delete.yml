@@ -1,0 +1,19 @@
+title: Delete a user or service identity
+id: fc1b374b-4d21-4506-b4a5-e22a504b57b0
+status: stable
+description: Permanently deletes a specifically named user, identity, or service account.
+references: [https://attack.mitre.org/techniques/T1531/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:identity-delete', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

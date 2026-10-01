@@ -1,0 +1,1124 @@
+# Native tool manifest.
+native:
+  filesystem:
+    - read
+    - write
+    - edit
+    - replace_lines
+    - restore_version
+    - code_rewrite
+    - grep
+    - find
+    - jq
+    - jq_edit
+    - stat
+    - wc
+    - list_dir
+    - chmod
+    - delete
+    - copy
+    - move
+    - mkdir
+    - chown
+    - diff
+    - extract_archive
+  git:
+    - git_status
+    - git_diff
+    - git_log
+    - git_commit
+    - git_show
+    - git_blame
+    - git_restore
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+  meta:
+    - request_tools
+    - verify
+    - survey_repo
+    - summarize
+    - skills_read
+    - surface_note
+    - complete_leg
+    - recall
+    - source_history
+    - secret_generate
+    - secret_list
+    - secret_revoke
+  visual:
+    - render_view
+    - view_image
+    - view_video
+    - capture_page
+    - measure_page
+    - page_open
+    - page_act
+    - page_snapshot
+    - page_close
+  terminal:
+    - terminal_open
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+  processes:
+    - process_list
+    - process_signal
+  network:
+    - http_request
+
+# Grant predicates target declared command or path arguments.
+# Codegen: ./task codegen:native-tool-contracts
+grant_target_scope:
+  command: command
+  verify: command
+  terminal_open: command
+  write: path
+  edit: path
+  replace_lines: path
+  restore_version: path
+  code_rewrite: path
+  jq_edit: path
+
+# Multi-root modes declare labeled paths, union discovery, command cwd, or no path.
+# Codegen: ./task codegen:native-tool-contracts
+multi_root:
+  path:
+    - read
+    - write
+    - edit
+    - replace_lines
+    - restore_version
+    - code_rewrite
+    - stat
+    - wc
+    - delete
+    - chmod
+    - chown
+    - copy
+    - move
+    - mkdir
+    - extract_archive
+    - diff
+    - jq
+    - jq_edit
+    - scan_pack
+    - pack_board
+    - source_history
+    - view_image
+    - view_video
+    - git_status
+    - git_diff
+    - git_log
+    - git_commit
+    - git_show
+    - git_blame
+    - git_restore
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+  discovery:
+    - find
+    - grep
+    - list_dir
+    - survey_repo
+    - summarize
+  command:
+    - command
+    - verify
+    - terminal_open
+  none:
+    - process_list
+    - process_signal
+    - command_output
+    - command_stop
+    - held_result
+    - held_stop
+    - request_tools
+    - complete_leg
+    - recall
+    - task
+    - wait
+    # skills_read addresses a host resource through the selected skill.
+    - skills_read
+    - workflow_transition
+    - record_finding
+    - surface_note
+    - update_progress
+    - request_decision
+    - request_budget
+    - handoff_init
+    - handoff_reserve
+    - handoff_release
+    - handoff_release_all
+    - handoff_health
+    - delegate_init
+    - delegate_decompose
+    - delegate_dispatch
+    - delegate_status
+    - workflow_compose
+    - workflow_compose_from_template
+    - workflow_catalog_summaries
+    - workflow_persist
+    - workflow_user_feedback
+    - ask_user
+    - workflow_advance
+    - fanout_plan
+    - submit_verdict
+    - parse_extract_json
+    - parse_validate
+    - parse_evaluation
+    - parse_decomposition
+    - parse_delegation_plan
+    - plan_append_review_evidence
+    - state_update
+    - state_close
+    - state_start
+    - state_query
+    - web_search
+    - fetch_url
+    - http_request
+    - secret_generate
+    - secret_list
+    - secret_revoke
+    - worker_cancel
+    - extend_worker_budget
+    - decline_worker_budget
+    - promote_overlay
+    - reject_overlay
+    - preview_overlay
+    - answer_decision
+    - scan_list
+    - scan_summary
+    - scan_query
+    - scan_compare
+    - render_view
+    - capture_page
+    - measure_page
+    - page_open
+    - page_act
+    - page_snapshot
+    - page_close
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+
+# These write tools require the worker's private branch before execution.
+# Codegen: ./task codegen:worker-branch-tools
+requires_worker_branch:
+  - write
+  - edit
+  - replace_lines
+  - restore_version
+  - code_rewrite
+  - jq_edit
+  - delete
+  - mkdir
+  - copy
+  - move
+  - chmod
+  - chown
+  - extract_archive
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  - command
+  - verify
+  - terminal_open
+
+# Tools whose arguments carry file content the model authored. Read by human
+# content review, the coordinator write-surface rejects, and worker completion
+# proof; a tool missing here writes past content review.
+#
+# Narrower than mutates_path: copy, move, and extract_archive change bytes on
+# disk and author none, so a review card for one would show nothing.
+# content_apply is host-produced, so rules selecting on this fact see it even
+# though the review gate is called with the originating tool.
+# Codegen: ./task codegen:native-tool-contracts
+mutates_content:
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - content_apply
+
+# Tools that mutate a path named in their own structured arguments. The approval
+# gate reads this to classify a declared file target as a write crossing (so a
+# sensitive location declared `mode: write` matches) and to run the
+# protected-sink deny. A tool absent here declares reads only.
+#
+# Narrower than requires_worker_branch, which also lists command / verify /
+# terminal_open: those reach the tree through a subprocess and declare no path.
+# Codegen: ./task codegen:native-tool-contracts
+mutates_path:
+  - write
+  - edit
+  - replace_lines
+  - restore_version
+  - code_rewrite
+  - jq_edit
+  - content_apply
+  - delete
+  - copy
+  - move
+  - mkdir
+  - chmod
+  - chown
+  - extract_archive
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  # fetch_url writes only when the model supplies `dest`; those remote-origin
+  # bytes classify as a write crossing, not a fetch.
+  - fetch_url
+  # http_request writes only when the model supplies `response_path`; the same
+  # remote-origin classification applies.
+  - http_request
+  # render_view writes only when the model supplies `dest`.
+  - render_view
+
+# The argument naming an AF_UNIX socket a native tool dials itself. The
+# executor reviews that socket as exact socket authority, the same subject
+# capability_request.socket_paths gives a subprocess.
+# Codegen: ./task codegen:native-tool-contracts
+socket_arg:
+  http_request: unix_socket
+
+# Tools whose arguments resolve managed-secret references, and the outbound
+# screen that reviews the resolved execution copy. command and terminal screens
+# run in the executor over process arguments; http_request screens its own wire
+# copy. MCP tools carry the mcp surface on their dynamic contract. Every other
+# tool keeps a reference as literal text.
+# Codegen: ./task codegen:native-tool-contracts
+secret_reference_surface:
+  command: command
+  verify: command
+  terminal_open: terminal
+  terminal_send: terminal
+  http_request: http_request
+  write: file
+  edit: file
+  replace_lines: file
+  jq_edit: file
+
+# Value slots that resolve managed-secret references for file-surface tools.
+# Tools not listed resolve across the entire argument tree.
+# Codegen: ./task codegen:native-tool-contracts
+secret_reference_args:
+  write:
+    - content
+  edit:
+    - old_string
+    - new_string
+  replace_lines:
+    - new_content
+    - "operations.[].new_content"
+  jq_edit:
+    - vars
+
+
+# Tools whose execution can create a host subprocess. The approval gate derives
+# unobserved-channel facts from this structural inventory.
+# Codegen: ./task codegen:native-tool-contracts
+spawns_process:
+  - command
+  - verify
+  - terminal_open
+  - scan_pack
+  - render_view
+  - view_image
+  - view_video
+  - capture_page
+  - measure_page
+  - page_open
+
+# Structured authority/evidence surfaces accepted by each execution tool.
+# Runtime preflight and invocation receipts consume the generated contract;
+# schemas and prompt contracts are checked against this catalog.
+execution_capabilities:
+  write: [file_change]
+  edit: [file_change]
+  replace_lines: [file_change]
+  restore_version: [file_change]
+  code_rewrite: [file_change]
+  jq_edit: [file_change]
+  copy: [file_change]
+  move: [file_change]
+  delete: [file_change]
+  mkdir: [file_change]
+  chmod: [file_change]
+  chown: [file_change]
+  extract_archive: [file_change]
+  git_restore: [file_change]
+  git_checkout: [file_change]
+  git_merge: [file_change]
+  git_stash: [file_change]
+  http_request:
+    - loopback_connect
+  wait:
+    - loopback_connect
+  # A url-mode page target is a local service with http_request's reach, so it
+  # takes the same port-narrowed grant. project_dir captures open no socket.
+  capture_page:
+    - loopback_connect
+  measure_page:
+    - loopback_connect
+  page_open:
+    - loopback_connect
+  command:
+    - host_resource
+    - socket
+    - direct_ip
+    - process_control
+    - host_execution
+    - local_listen
+    - loopback_connect
+    - terminal_capture
+    - write_root
+    - read_path
+    - package_execution
+  verify:
+    - host_resource
+    - socket
+    - direct_ip
+    - process_control
+    - host_execution
+    - local_listen
+    - loopback_connect
+    - write_root
+    - read_path
+    - package_execution
+  # A pty is the same spawn under a tty, so it takes the same bounded
+  # capabilities. direct_ip is the exception: its lease covers one action with
+  # unobserved destinations, which a session held across turns would outlive.
+  terminal_open:
+    - host_resource
+    - socket
+    - local_listen
+    - loopback_connect
+    - write_root
+    - read_path
+    - package_execution
+  terminal_send:
+    - held_terminal_input
+
+# Listing one family member on a surface grants the rest. resource_implied
+# names the control tools made available by a live resource.
+families:
+  processes:
+    - process_list
+    - process_signal
+  command:
+    - command
+    - command_output
+    - command_stop
+  held_call:
+    - held_result
+    - held_stop
+  terminal:
+    - terminal_open
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+  page:
+    - page_open
+    - page_act
+    - page_snapshot
+    - page_close
+
+# Companions load with a tool a request selects. The file-mutation tools rank
+# near one another on a need to create or change files, and a turn that does
+# one of them does the others next; loading them together saves the round trip.
+companions:
+  write: [edit, replace_lines]
+  edit: [write, replace_lines]
+  replace_lines: [write, edit]
+
+resource_implied:
+  command_jobs:
+    - command_output
+    - command_stop
+    - wait
+  held_calls:
+    - held_result
+    - held_stop
+    - wait
+  terminals:
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+  pages:
+    - page_act
+    - page_snapshot
+    - page_close
+
+# Wait limits and output framing leave execution authority unchanged.
+# Arguments absent from this list contribute to the grant identity.
+# Codegen: ./task codegen:native-tool-contracts
+grant_identity_neutral_args:
+  command:
+    - timeout_ms
+    - wait_ms
+    - terminal_capture
+  verify:
+    - timeout_ms
+    - wait_ms
+  grep:
+    - max_matches
+    - offset
+    - context_lines
+  read:
+    - limit
+    - offset
+  find:
+    - offset
+    - max_results
+  source_history:
+    - limit
+    - before_ordinal
+  fetch_url:
+    - parallel
+  web_search:
+    - parallel
+  scan_pack:
+    - completion
+    - timeout_ms
+  view_image:
+    - scale
+    - viewport
+  view_video:
+    - times_ms
+    - start_ms
+    - end_ms
+    - count
+    - crop
+
+# Tools whose arguments carry a free-form payload that can be split across calls.
+# Only these are told to chunk on TOOL_ARGS_TRUNCATED; elsewhere a cut argument
+# stream is a runaway, and there is no second half to send.
+# Codegen: ./task codegen:native-tool-contracts
+chunkable_payload:
+  - write
+  - replace_lines
+  - code_rewrite
+
+# Bookkeeping calls that neither observe the tree nor act on it; a batch of
+# these leaves the coordinator's read-only survey streak unchanged.
+# Codegen: ./task codegen:native-tool-contracts
+survey_neutral:
+  - request_tools
+  - update_progress
+
+# In-process tools execute synchronously within the caller's context deadline.
+# Codegen: ./task codegen:native-tool-contracts
+bounded_in_process:
+  - read
+  - write
+  - edit
+  - replace_lines
+  - restore_version
+  - code_rewrite
+  - grep
+  - find
+  - jq
+  - jq_edit
+  - stat
+  - wc
+  - list_dir
+  - chmod
+  - delete
+  - copy
+  - move
+  - mkdir
+  - chown
+  - diff
+  - extract_archive
+  - git_status
+  - git_diff
+  - git_log
+  - git_commit
+  - git_show
+  - git_blame
+  - git_restore
+  - git_ref
+  - git_branches
+  - git_compare
+  - git_checkout
+  - git_merge
+  - git_stash
+  - git_stash_list
+
+# Read-only tools whose call may outlive its foreground wait. Past the budget the
+# turn continues with a handle and the call keeps running, so a tool that blocks
+# on shared infrastructure cannot hold the coordinator. A tool that records an
+# effect is not listed: its attempt must settle inside the turn that made it.
+# Codegen: ./task codegen:native-tool-contracts
+detach_after_budget:
+  - find
+  - grep
+  - wc
+  - list_dir
+  - summarize
+  - survey_repo
+  - diff
+  - git_status
+  - git_diff
+  - git_log
+  - git_show
+  - git_blame
+  - git_compare
+  - git_branches
+  - git_ref
+  - git_stash_list
+
+# Session shape a tool belongs to. A profile grants capability and cannot say
+# which shape is running: explore_readonly serves scout legs and editor inspect
+# turns alike. Absent means either shape.
+#   worker_child      — writes to leg state that only a spawned leg has
+#   addressed_session — speaks to the user, so it runs where they are reading
+# Codegen: ./task codegen:native-tool-contracts
+session_scope:
+  git_checkout: addressed_session
+  git_merge: addressed_session
+  git_stash: addressed_session
+  complete_leg: worker_child
+  request_decision: worker_child
+  request_budget: worker_child
+  surface_note: addressed_session
+
+# Connected servers register these prefixes after boot.
+# Other profile patterns resolve against the registered tool set.
+runtime_registered_prefixes:
+  - mcp_
+
+# Rule-selectable host identities have no model-facing tool schema.
+host_produced_tools:
+  - content_apply
+
+# Approval presentation class for each tool.
+approval_reversibility:
+  process_list: reversible
+  process_signal: recoverable
+  answer_decision: reversible
+  ask_user: reversible
+  command: recoverable
+  command_output: reversible
+  held_result: reversible
+  held_stop: reversible
+  complete_leg: reversible
+  command_stop: recoverable
+  capture_page: recoverable
+  chmod: recoverable
+  chown: recoverable
+  code_rewrite: reversible
+  copy: recoverable
+  decline_worker_budget: reversible
+  delegate_decompose: reversible
+  delegate_dispatch: reversible
+  delegate_init: reversible
+  delegate_status: reversible
+  delete: recoverable
+  diff: reversible
+  edit: reversible
+  extend_worker_budget: reversible
+  extract_archive: recoverable
+  fetch_url: recoverable
+  http_request: recoverable
+  fanout_plan: reversible
+  find: reversible
+  git_blame: reversible
+  git_branches: reversible
+  git_commit: recoverable
+  git_diff: reversible
+  git_log: reversible
+  git_ref: reversible
+  git_restore: recoverable
+  git_compare: reversible
+  git_checkout: recoverable
+  git_merge: recoverable
+  git_stash: recoverable
+  git_stash_list: reversible
+  git_show: reversible
+  git_status: reversible
+  grep: reversible
+  handoff_health: reversible
+  handoff_init: reversible
+  handoff_release: reversible
+  handoff_release_all: reversible
+  handoff_reserve: reversible
+  jq: reversible
+  jq_edit: reversible
+  list_dir: reversible
+  measure_page: recoverable
+  mkdir: recoverable
+  move: recoverable
+  pack_board: reversible
+  parse_decomposition: reversible
+  parse_delegation_plan: reversible
+  parse_evaluation: reversible
+  parse_extract_json: reversible
+  parse_validate: reversible
+  page_act: recoverable
+  page_close: recoverable
+  page_open: recoverable
+  page_snapshot: recoverable
+  preview_overlay: reversible
+  plan_append_review_evidence: reversible
+  promote_overlay: reversible
+  read: reversible
+  recall: reversible
+  record_finding: reversible
+  reject_overlay: reversible
+  render_view: recoverable
+  replace_lines: reversible
+  restore_version: reversible
+  request_budget: reversible
+  request_decision: reversible
+  request_tools: reversible
+  secret_generate: reversible
+  secret_list: reversible
+  secret_revoke: irreversible
+  scan_compare: reversible
+  scan_list: reversible
+  scan_pack: reversible
+  scan_query: reversible
+  scan_summary: reversible
+  state_close: reversible
+  state_query: reversible
+  state_start: reversible
+  state_update: reversible
+  stat: reversible
+  submit_verdict: reversible
+  summarize: reversible
+  survey_repo: reversible
+  skills_read: reversible
+  source_history: reversible
+  surface_note: reversible
+  task: recoverable
+  terminal_close: recoverable
+  terminal_open: recoverable
+  terminal_read: recoverable
+  terminal_send: recoverable
+  terminal_snapshot: recoverable
+  update_progress: reversible
+  verify: reversible
+  view_image: reversible
+  view_video: reversible
+  wait: reversible
+  wc: reversible
+  web_search: recoverable
+  worker_cancel: reversible
+  workflow_advance: reversible
+  workflow_catalog_summaries: reversible
+  workflow_compose: reversible
+  workflow_compose_from_template: reversible
+  workflow_persist: reversible
+  workflow_transition: reversible
+  workflow_user_feedback: reversible
+  write: reversible
+
+# Subsystem owner for commit and recovery.
+owner:
+  process_list: processes
+  process_signal: processes
+  answer_decision: worker_decisions
+  ask_user: checkpoints
+  command: processes
+  command_output: processes
+  held_result: held_calls
+  held_stop: held_calls
+  complete_leg: workers
+  command_stop: processes
+  capture_page: browser
+  chmod: filesystem
+  chown: filesystem
+  code_rewrite: filesystem
+  copy: filesystem
+  decline_worker_budget: workers
+  delegate_decompose: delegation
+  delegate_dispatch: delegation
+  delegate_init: delegation
+  delegate_status: delegation
+  delete: filesystem
+  diff: filesystem
+  edit: filesystem
+  extend_worker_budget: workers
+  extract_archive: filesystem
+  fanout_plan: blueprints
+  fetch_url: web_research
+  http_request: outbound_http
+  find: filesystem
+  git_blame: git
+  git_branches: git
+  git_commit: git
+  git_diff: git
+  git_log: git
+  git_ref: git
+  git_restore: git
+  git_compare: git
+  git_checkout: git
+  git_merge: git
+  git_stash: git
+  git_stash_list: git
+  git_show: git
+  git_status: git
+  grep: filesystem
+  handoff_health: handoff
+  handoff_init: handoff
+  handoff_release: handoff
+  handoff_release_all: handoff
+  handoff_reserve: handoff
+  jq: filesystem
+  jq_edit: filesystem
+  list_dir: filesystem
+  measure_page: browser
+  mkdir: filesystem
+  move: filesystem
+  pack_board: board
+  page_act: browser
+  page_close: browser
+  page_open: browser
+  page_snapshot: browser
+  parse_decomposition: parsing
+  parse_delegation_plan: parsing
+  parse_evaluation: parsing
+  parse_extract_json: parsing
+  parse_validate: parsing
+  plan_append_review_evidence: blueprints
+  preview_overlay: worker_merge
+  promote_overlay: worker_merge
+  read: filesystem
+  recall: sessions
+  record_finding: findings
+  reject_overlay: worker_merge
+  render_view: visual
+  replace_lines: filesystem
+  restore_version: filesystem
+  request_budget: workers
+  request_decision: checkpoints
+  request_tools: tool_surface
+  secret_generate: secrets
+  secret_list: secrets
+  secret_revoke: secrets
+  scan_compare: scans
+  scan_list: scans
+  scan_pack: scans
+  scan_query: scans
+  scan_summary: scans
+  skills_read: skills
+  source_history: source_ledger
+  state_close: workflow_state
+  state_query: workflow_state
+  state_start: workflow_state
+  state_update: workflow_state
+  stat: filesystem
+  submit_verdict: workflow_verdicts
+  summarize: summarization
+  surface_note: sessions
+  survey_repo: survey
+  task: workers
+  terminal_close: terminals
+  terminal_open: terminals
+  terminal_read: terminals
+  terminal_send: terminals
+  terminal_snapshot: terminals
+  update_progress: progress
+  verify: processes
+  view_image: visual
+  view_video: visual
+  wait: loop_wake
+  wc: filesystem
+  web_search: web_research
+  worker_cancel: workers
+  workflow_advance: workflows
+  workflow_catalog_summaries: workflows
+  workflow_compose: workflows
+  workflow_compose_from_template: workflows
+  workflow_persist: workflows
+  workflow_transition: workflows
+  workflow_user_feedback: workflows
+  write: filesystem
+
+# Sibling execution policy for each tool.
+batch_policy:
+  process_list: serial
+  process_signal: serial
+  answer_decision: serial
+  ask_user: serial
+  command: serial
+  command_output: serial
+  held_result: serial
+  held_stop: serial
+  complete_leg: serial
+  command_stop: serial
+  capture_page: serial
+  chmod: serial
+  chown: serial
+  code_rewrite: serial
+  copy: serial
+  decline_worker_budget: serial
+  delegate_decompose: serial
+  delegate_dispatch: serial
+  delegate_init: serial
+  delegate_status: shared
+  delete: serial
+  diff: shared
+  edit: serial
+  extend_worker_budget: serial
+  extract_archive: serial
+  fetch_url: same_tool
+  http_request: serial
+  fanout_plan: serial
+  find: shared
+  git_blame: shared
+  git_branches: shared
+  git_commit: serial
+  git_diff: shared
+  git_log: shared
+  git_ref: shared
+  git_restore: serial
+  git_compare: shared
+  git_checkout: serial
+  git_merge: serial
+  git_stash: serial
+  git_stash_list: shared
+  git_show: shared
+  git_status: shared
+  grep: shared
+  handoff_health: shared
+  handoff_init: serial
+  handoff_release: serial
+  handoff_release_all: serial
+  handoff_reserve: serial
+  jq: shared
+  jq_edit: serial
+  list_dir: shared
+  measure_page: serial
+  mkdir: serial
+  move: serial
+  pack_board: serial
+  parse_decomposition: shared
+  parse_delegation_plan: shared
+  parse_evaluation: shared
+  parse_extract_json: shared
+  parse_validate: shared
+  page_act: serial
+  page_close: serial
+  page_open: serial
+  page_snapshot: serial
+  preview_overlay: shared
+  plan_append_review_evidence: serial
+  promote_overlay: serial
+  read: shared
+  recall: shared
+  record_finding: serial
+  reject_overlay: serial
+  render_view: serial
+  replace_lines: serial
+  restore_version: serial
+  request_budget: serial
+  request_decision: serial
+  request_tools: serial
+  secret_generate: serial
+  secret_list: shared
+  secret_revoke: serial
+  scan_compare: shared
+  scan_list: shared
+  scan_pack: serial
+  scan_query: shared
+  scan_summary: shared
+  state_close: serial
+  state_query: shared
+  state_start: serial
+  state_update: serial
+  stat: shared
+  submit_verdict: serial
+  summarize: same_tool
+  survey_repo: shared
+  skills_read: shared
+  source_history: shared
+  surface_note: serial
+  task: serial
+  terminal_close: serial
+  terminal_open: serial
+  terminal_read: serial
+  terminal_send: serial
+  terminal_snapshot: serial
+  update_progress: serial
+  verify: serial
+  view_image: shared
+  view_video: shared
+  wait: serial
+  wc: shared
+  web_search: same_tool
+  worker_cancel: serial
+  workflow_advance: serial
+  workflow_catalog_summaries: shared
+  workflow_compose: serial
+  workflow_compose_from_template: serial
+  workflow_persist: serial
+  workflow_transition: serial
+  workflow_user_feedback: serial
+  write: serial
+
+# Boolean schema arguments that explicitly enable otherwise serial same-tool
+# calls in one assistant response. Omission preserves serial execution.
+batch_opt_in_arg:
+  fetch_url: parallel
+  web_search: parallel
+
+# Per-tool caps for concurrent batches. The host cap remains the ceiling.
+batch_concurrency_limit:
+  fetch_url: 4
+  summarize: 4
+  web_search: 4
+
+# Presence of the named argument keeps that call serial even when opted in.
+batch_serial_when_arg:
+  fetch_url: dest
+
+# Execution-order exceptions for one assistant tool-call slice.
+turn_order:
+  complete_leg: terminal
+  request_decision: terminal
+  summarize: late
+  wait: terminal
+
+# Durability shape for each tool operation.
+lifecycle:
+  process_list: read_only
+  process_signal: effect_attempt
+  answer_decision: db_transaction
+  ask_user: db_transaction
+  command: effect_attempt
+  command_output: ephemeral_control
+  held_result: ephemeral_control
+  held_stop: ephemeral_control
+  complete_leg: db_transaction
+  command_stop: ephemeral_control
+  capture_page: effect_attempt
+  chmod: effect_attempt
+  chown: effect_attempt
+  code_rewrite: effect_attempt
+  copy: effect_attempt
+  decline_worker_budget: db_transaction
+  delegate_decompose: db_transaction
+  delegate_dispatch: db_transaction
+  delegate_init: db_transaction
+  delegate_status: read_only
+  delete: effect_attempt
+  diff: read_only
+  edit: effect_attempt
+  extend_worker_budget: db_transaction
+  extract_archive: effect_attempt
+  fetch_url: effect_attempt
+  http_request: effect_attempt
+  fanout_plan: db_transaction
+  find: read_only
+  git_blame: read_only
+  git_branches: read_only
+  git_commit: effect_attempt
+  git_diff: read_only
+  git_log: read_only
+  git_ref: read_only
+  git_restore: effect_attempt
+  git_compare: read_only
+  git_checkout: effect_attempt
+  git_merge: effect_attempt
+  git_stash: effect_attempt
+  git_stash_list: read_only
+  git_show: read_only
+  git_status: read_only
+  grep: read_only
+  handoff_health: read_only
+  handoff_init: db_transaction
+  handoff_release: db_transaction
+  handoff_release_all: db_transaction
+  handoff_reserve: db_transaction
+  jq: read_only
+  jq_edit: effect_attempt
+  list_dir: read_only
+  measure_page: effect_attempt
+  mkdir: effect_attempt
+  move: effect_attempt
+  pack_board: read_only
+  parse_decomposition: read_only
+  parse_delegation_plan: read_only
+  parse_evaluation: read_only
+  parse_extract_json: read_only
+  parse_validate: read_only
+  page_act: effect_attempt
+  page_close: ephemeral_control
+  page_open: effect_attempt
+  page_snapshot: effect_attempt
+  preview_overlay: read_only
+  plan_append_review_evidence: effect_attempt
+  promote_overlay: journaled_mutation
+  read: read_only
+  recall: read_only
+  record_finding: db_transaction
+  reject_overlay: effect_attempt
+  render_view: effect_attempt
+  replace_lines: effect_attempt
+  restore_version: effect_attempt
+  request_budget: db_transaction
+  request_decision: db_transaction
+  request_tools: ephemeral_control
+  secret_generate: db_transaction
+  secret_list: read_only
+  secret_revoke: db_transaction
+  scan_compare: read_only
+  scan_list: read_only
+  scan_pack: durable_job
+  scan_query: read_only
+  scan_summary: read_only
+  state_close: db_transaction
+  state_query: read_only
+  state_start: db_transaction
+  state_update: db_transaction
+  stat: read_only
+  submit_verdict: db_transaction
+  summarize: read_only
+  survey_repo: read_only
+  skills_read: read_only
+  source_history: read_only
+  surface_note: db_transaction
+  task: durable_job
+  terminal_close: ephemeral_control
+  terminal_open: effect_attempt
+  terminal_read: ephemeral_control
+  terminal_send: ephemeral_control
+  terminal_snapshot: ephemeral_control
+  update_progress: db_transaction
+  verify: effect_attempt
+  view_image: read_only
+  view_video: read_only
+  wait: db_transaction
+  wc: read_only
+  web_search: effect_attempt
+  worker_cancel: effect_attempt
+  workflow_advance: db_transaction
+  workflow_catalog_summaries: read_only
+  workflow_compose: db_transaction
+  workflow_compose_from_template: db_transaction
+  workflow_persist: effect_attempt
+  workflow_transition: db_transaction
+  workflow_user_feedback: read_only
+  write: effect_attempt

@@ -1,0 +1,6 @@
+description: >-
+  Pending user feedback for the active run. Wait for the host card — do not infer answers.
+schema:
+  type: object
+  properties: {}
+  additionalProperties: false

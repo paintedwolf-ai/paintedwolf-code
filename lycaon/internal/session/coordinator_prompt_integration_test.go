@@ -1,0 +1,156 @@
+//go:build integration
+
+package session_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+type coordinatorPromptFixture struct {
+	mgr   *session.Manager
+	rec   *llm.RecordingClient
+	wfMgr *workflow.RunManager
+	sess  *wire.Session
+	brief string
+}
+
+func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
+	t.Helper()
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	root := configlayout.FindModuleRoot()
+	sqlDB := testdbfixture.Open(t, "tripartite-prompt.db")
+
+	store := store.NewSQL(sqlDB)
+	inner := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
+	rec := llm.NewRecordingClient(inner)
+	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	agents := orchestration.NewMemoryAgentRegistry()
+	testutil.FailErr(t, "load agent registry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
+	mgr.SetAgentRegistry(agents)
+	wirePromptTestManager(t, mgr)
+	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+
+	sessionWF := workflow.NewSessionWorkflowSQLStore(sqlDB)
+	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	testutil.FailErr(t, "build conditions registry", err)
+	policy, err := workflow.LoadComposePolicy()
+	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
+	composer := &workflow.Composer{
+		SessionStore: sessionWF, Registry: condReg, Agents: agents, Policy: policy,
+	}
+	manifestReg, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
+	wfMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), store, manifestReg, nil)
+	wfMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
+	wfMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(sqlDB)
+	dir := t.TempDir()
+	blueprintStore := blueprint.NewFileStoreForTest(dir)
+	blueprintMgr := blueprint.NewManager(blueprintStore)
+	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.BlueprintGet = blueprintMgr
+	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: sessionWF, ConfigRoot: root})
+
+	ctx := context.Background()
+
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+
+	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session in store", err)
+	manifest := `id: hotfix-session
+version: 1.0.0
+extends: plan@1.0.0
+phases:
+  - id: research
+    activity_label: Gathering requirements
+    next: build
+  - id: build
+    activity_label: Implementing the change
+    on_enter:
+      set_posture: build
+    complete_when: delegation_closeout_complete
+`
+	result, err := composer.Compose(ctx, workflow.ComposeRequest{
+		SessionID:      sess.ID,
+		ManifestYAML:   []byte(manifest),
+		SessionPosture: sess.Posture,
+		CreatedBy:      workflow.ComposeActorCoordinator,
+	})
+	testutil.FailErr(t, "compose workflow manifest", err)
+	if _, err := wfMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: "hotfix-session", WorkflowVersion: "1.0.0", Request: "test request"}); err != nil {
+		testutil.FailErr(t, "wfMgr.StartHuman failed", err)
+	}
+	return coordinatorPromptFixture{mgr: mgr, rec: rec, wfMgr: wfMgr, sess: sess, brief: result.EffectiveSummary.CoordinatorBrief}
+}
+
+func firstCoordinatorPromptRequest(t *testing.T, fix coordinatorPromptFixture, prompt string) modelcall.CompletionRequest {
+	t.Helper()
+	before := len(fix.rec.AllRequests())
+	_, err := fix.mgr.Prompt(t.Context(), fix.sess.ID, prompt)
+	testutil.FailErr(t, "run coordinator prompt", err)
+	requests := fix.rec.AllRequests()
+	if len(requests) <= before {
+		t.Fatal("coordinator prompt made no model request")
+	}
+	return requests[before]
+}
+
+func TestPromptPrependsCoordinatorBriefOnSecondTurn(t *testing.T) {
+	fix := setupCoordinatorPromptFixture(t)
+	for _, prompt := range []string{"what is our workflow plan", "review the current workflow again"} {
+		req := firstCoordinatorPromptRequest(t, fix, prompt)
+		found := false
+		for _, msg := range req.Messages {
+			if msg.Role != wire.MessageRoleSystem || !strings.Contains(msg.Content, inject.ActiveWorkflowInjectSentinel) {
+				continue
+			}
+			found = true
+			if !strings.Contains(msg.Content, fix.brief) {
+				t.Fatalf("active workflow inject lost composed brief %q: %s", fix.brief, msg.Content)
+			}
+		}
+		if !found {
+			t.Fatal("first model request of user turn omitted active workflow context")
+		}
+	}
+}
+
+func TestPromptIncludesFailedLeavesAfterAdvance409(t *testing.T) {
+	fix := setupCoordinatorPromptFixture(t)
+	ctx := context.Background()
+	run, err := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	if err != nil || run == nil {
+		t.Fatal("missing active run")
+	}
+	if _, err := fix.wfMgr.Advance(ctx, run.ID); err == nil {
+		t.Fatal("expected phase gate error")
+	}
+	req := firstCoordinatorPromptRequest(t, fix, "why blocked")
+	for _, msg := range req.Messages {
+		if msg.Role == wire.MessageRoleSystem && strings.Contains(msg.Content, "failed_leaves") {
+			return
+		}
+	}
+	t.Fatal("expected failed_leaves in coordinator context block")
+}

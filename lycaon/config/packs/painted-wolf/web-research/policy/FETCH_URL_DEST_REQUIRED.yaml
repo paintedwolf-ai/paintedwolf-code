@@ -1,0 +1,35 @@
+oar: '1.0'
+id: FETCH_URL_DEST_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.content_type
+when: paintedwolf.rejection_code == "FETCH_URL_DEST_REQUIRED"
+effect: block
+copy:
+  what: mode=raw fetched a non-image binary resource ({{ paintedwolf.content_type }}) without dest.
+  cause: Non-image binary assets must land as project files — image resources can be perceived directly without dest.
+  why: Putting binary blobs in model context is wasteful and unusable for build work.
+  fix: For non-image binary resources, supply an appropriate file destination within the actual write scope
+    and keep mode=raw. For images, omit dest; fetch_url screens and perceives them directly.
+    The previous response was fetched but not saved; changing the call may fetch it again.
+    Do not invent a filename unrelated to the task.
+  instead: Branch on Code FETCH_URL_DEST_REQUIRED; supply dest
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url binary raw requires dest
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    content_type: image/png
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: FETCH_URL_DEST_REQUIRED'

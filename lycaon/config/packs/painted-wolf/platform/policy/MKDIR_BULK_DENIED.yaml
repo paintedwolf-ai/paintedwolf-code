@@ -1,0 +1,37 @@
+oar: '1.0'
+id: MKDIR_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - mkdir
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_paths
+when: paintedwolf.rejection_code == "MKDIR_BULK_DENIED"
+effect: block
+copy:
+  cause: The explicit directory set exceeds the per-call bound.
+  why: Directory creation must preserve the intended targets across batches.
+  fix: Split the intended paths into batches of at most {{ paintedwolf.max_paths }}. Retain successful creation
+    receipts before retrying an interrupted batch.
+  instead: Keep each batch bounded and preserve completed results
+  what: mkdir received {{ paintedwolf.requested }} paths; the current bound is {{ paintedwolf.max_paths }}.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mkdir
+x-paintedwolf-message: mkdir:mkdir batch exceeds max paths
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: mkdir
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MKDIR_BULK_DENIED'

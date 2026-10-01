@@ -1,0 +1,20 @@
+description: >-
+  Save a session-composed workflow to ${overlay_dir}/workflows/<workflow_id>/workflow.yaml
+  (requires user confirmation).
+schema:
+  type: object
+  properties:
+    workflow_id:
+      description: "Workflow id to persist."
+      type: string
+    version:
+      description: "Workflow version string to persist."
+      type: string
+    confirm:
+      description: "Must be true only after explicit user approval."
+      type: boolean
+    trigger:
+      description: "Optional trigger label stored with the workflow."
+      type: string
+  required: [workflow_id, version, confirm]
+  additionalProperties: false

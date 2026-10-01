@@ -1,0 +1,41 @@
+oar: '1.0'
+id: ASK_USER_ARTIFACT_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ref
+  - paintedwolf.rejection_reason
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_ARTIFACT_NOT_FOUND"
+effect: block
+copy:
+  what: The artifact {{ paintedwolf.ref }} could not be resolved{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.
+  cause: The reference is malformed or absent, or the artifact store is unavailable; the structured reason identifies
+    which.
+  why: The feedback card cannot preview a missing artifact.
+  fix: Use a UUID returned by an artifact-producing tool in this conversation tree. If the store is unavailable,
+    restore that host service before retrying. Omit artifacts only when the decision can be answered without reviewing
+    them; do not replace required visual evidence with an unsupported claim.
+  instead: Branch on Code ASK_USER_ARTIFACT_NOT_FOUND; use a known session-tree artifact UUID from producer tool
+    JSON
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: artifact ref was not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Code: ASK_USER_ARTIFACT_NOT_FOUND'
+  - artifact

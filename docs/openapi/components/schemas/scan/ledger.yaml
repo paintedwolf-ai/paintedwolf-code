@@ -1,0 +1,195 @@
+components:
+  schemas:
+    FindingIgnore:
+      x-go-generate: true
+      type: object
+      description: >-
+        The project's decision about one finding, as the ledger cached it from
+        the ignore file. It never claims the finding is gone: the scanner still
+        reports it, and the entry only says nobody intends to act.
+      required: [entry_id]
+      additionalProperties: false
+      properties:
+        entry_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        reason:
+          type: string
+        matched_on:
+          type: string
+          description: >-
+            The predicates the entry decided on, so a row can point at its
+            decision without the reader opening the file.
+        justification:
+          $ref: findings.yaml#/components/schemas/FindingIgnoreJustification
+        expires_on:
+          type: string
+          format: date
+          description: A calendar day, exclusive.
+        expired:
+          type: boolean
+          description: >-
+            True for a decision that has lapsed. The finding has already
+            returned to the open list; this is what says why it came back.
+    FindingAbsence:
+      x-go-generate: true
+      type: object
+      description: >-
+        What the host knows about a finding no longer being reported: the
+        coverage the scan that stopped seeing it established, and whether the
+        scanner's execution identity has moved since. Facts, not a verdict —
+        FindingLedgerState reads them into fixed, not_observed, or unverified.
+      required: [observed_at, execution_moved]
+      additionalProperties: false
+      properties:
+        observed_at:
+          type: string
+          format: date-time
+        scan_id:
+          type: string
+          format: uuid
+        coverage_status:
+          $ref: execution.yaml#/components/schemas/ScanCoverageStatus
+        execution_moved:
+          type: boolean
+    FindingLedgerEntry:
+      x-go-generate: true
+      type: object
+      description: One finding as the project holds it now.
+      required: [finding, state, scanner_id, first_seen_at, last_seen_at, observations]
+      additionalProperties: false
+      properties:
+        finding:
+          $ref: findings.yaml#/components/schemas/SecurityFinding
+        state:
+          $ref: findings.yaml#/components/schemas/FindingLedgerState
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          description: >-
+            The newest observation that still stands behind the row: for an
+            open finding, the completion of the scan whose authoritative set
+            holds it; for one that left, the last time a scanner reported it
+            present.
+        observations:
+          type: integer
+          minimum: 1
+        last_scan_id:
+          type: string
+          format: uuid
+          description: The run that recorded the row's last event, for drill-down.
+        absence:
+          x-go-pointer: true
+          $ref: "#/components/schemas/FindingAbsence"
+        ignore:
+          x-go-pointer: true
+          $ref: "#/components/schemas/FindingIgnore"
+    FindingLedgerCounts:
+      x-go-generate: true
+      type: object
+      description: >-
+        The project's whole ledger by state, independent of a query's filters,
+        so a filtered page never reads as the project total. The states
+        partition the ledger exactly: every row is counted once. Fixed,
+        not_observed, and unverified stay separate: a bounded pass is not a
+        fix, and folding them together is how a scan gap becomes a clean bill.
+      required: [open, reopened, fixed, not_observed, unverified, ignored]
+      additionalProperties: false
+      properties:
+        open: {type: integer, minimum: 0}
+        reopened: {type: integer, minimum: 0}
+        fixed: {type: integer, minimum: 0}
+        not_observed: {type: integer, minimum: 0}
+        unverified: {type: integer, minimum: 0}
+        ignored: {type: integer, minimum: 0}
+    FindingLedgerQueryRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          description: >-
+            Case-insensitive substring over the finding message, rule id,
+            location uri, and advisory ids. A filter over stored fields, not a
+            ranking or a classifier.
+        levels:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/FindingLevel
+        states:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/FindingLedgerState
+        scanner_ids:
+          x-go-name: "ScannerIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+        kind:
+          type: string
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        path:
+          type: string
+          description: Location uri prefix.
+        advisory_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        fingerprint:
+          type: string
+        code:
+          type: string
+          description: Hint code (properties.lycaon.hint_code).
+        introduced_since_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        sort:
+          $ref: findings.yaml#/components/schemas/FindingLedgerSort
+        order:
+          type: string
+          enum: [asc, desc]
+        cursor:
+          type: string
+          description: Opaque pagination cursor.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+    FindingLedgerResponse:
+      x-go-generate: true
+      type: object
+      required: [project_id, entries, counts, by_level, total_match]
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindingLedgerEntry"
+        counts:
+          $ref: "#/components/schemas/FindingLedgerCounts"
+        by_level:
+          type: object
+          description: >-
+            The whole ledger counted by normalized level, every level present
+            including the ones at zero.
+          additionalProperties:
+            type: integer
+            minimum: 0
+        total_match:
+          type: integer
+          minimum: 0
+        next_cursor:
+          type: string

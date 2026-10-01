@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/queue.json",
+  "$ref": "../../openapi/components/schemas/queue.yaml#/components/schemas/QueueEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QueueEvent"
+}

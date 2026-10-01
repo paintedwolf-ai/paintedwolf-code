@@ -1,0 +1,397 @@
+language: c
+comment:
+- //
+limits: 'Allocation lifetime checks are not enabled: pointer aliases can replace allocations, and syntactic dereference matches include unevaluated sizeof operands. Risk examples are context-only. Stack-address and selected unsafe-API checks remain; wrappers and cross-file flows require additional analysis.'
+cases:
+- name: raptor-double-free-vulnerable-context-only
+  file: sample.c
+  source: 'void f(void *p) { free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: raptor-double-free-safe
+  file: sample.c
+  source: 'void f(void *p) { free(p); p=0; }
+
+    '
+  want: []
+  covers: []
+- name: use-after-free-vulnerable-context-only
+  file: sample.c
+  source: 'int f(int *p) { free(p); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: use-after-free-safe
+  file: sample.c
+  source: 'int f(int *p) { int n=*p; free(p); return n; }
+
+    '
+  want: []
+  covers: []
+- name: raptor-ret-stack-address-vulnerable
+  file: sample.c
+  source: 'int *f(void) { int value=1; return &value; }
+
+    '
+  want:
+  - lycaon.c.return-stack-address
+  covers: []
+- name: raptor-ret-stack-address-safe
+  file: sample.c
+  source: 'int f(void) { int value=1; return value; }
+
+    '
+  want: []
+  covers:
+  - lycaon.c.return-stack-address
+- name: format-string-input-context-only
+  file: sample.c
+  source: 'void f(void) { printf(getenv("MESSAGE")); }
+
+    '
+  want: []
+  covers: []
+- name: format-string-input-safe
+  file: sample.c
+  source: 'void f(void) { printf("%s",getenv("MESSAGE")); }
+
+    '
+  want: []
+  covers: []
+- name: shell-input-context-only
+  file: sample.c
+  source: 'void f(void) { system(getenv("COMMAND")); }
+
+    '
+  want: []
+  covers: []
+- name: shell-input-safe
+  file: sample.c
+  source: 'void f(void) { system("echo ready"); }
+
+    '
+  want: []
+  covers: []
+- name: static-storage-address
+  file: sample.c
+  source: 'int *f(void) { static int value=1; return &value; }
+
+    '
+  want: []
+  covers:
+  - lycaon.c.return-stack-address
+- name: unbounded-input
+  file: sample.c
+  source: 'void read_input() { char buffer[20]; gets(buffer); }
+
+    '
+  want:
+  - raptor-insecure-api-gets
+  covers: []
+- name: bounded-input
+  file: sample.c
+  source: 'void read_input() { char buffer[20]; fgets(buffer,sizeof(buffer),stdin); }
+
+    '
+  want: []
+  covers:
+  - raptor-insecure-api-gets
+- name: precision-reallocated-array
+  file: sample.c
+  source: 'void f() { int *p = malloc(16); free(p); p = malloc(16); p[0] = 1; free(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-free
+  file: sample.c
+  source: 'void f() { void *p = 0; free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-exclusive-free-branches
+  file: sample.c
+  source: 'void f(void *p, int flag) { if(flag) { free(p); } else { free(p); } }
+
+    '
+  want: []
+  covers: []
+- name: precision-static-storage-address
+  file: sample.c
+  source: 'int *f(){ static int value; return &value; }
+
+    '
+  want: []
+  covers: []
+- name: precision-allocated-double-free-context-only
+  file: sample.c
+  source: 'void f(){ int *p = malloc(4); free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-reassigned-double-free-context-only
+  file: sample.c
+  source: 'void f(){ int *p = 0; p = malloc(4); free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-return-after-free
+  file: sample.c
+  source: 'void *f(){ void *p = 0; free(p); return p; }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-argument-after-free
+  file: sample.c
+  source: 'void f(){ void *p=0; free(p); accept_optional(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-read-after-reassignment
+  file: sample.c
+  source: 'int f(){ int *p=malloc(4); free(p); p=malloc(4); return p[0]; }
+
+    '
+  want: []
+  covers: []
+- name: precision-dereference-after-free-context-only
+  file: sample.c
+  source: 'int f(int *p){ free(p); return p[0]; }
+
+    '
+  want: []
+  covers: []
+- name: precision-memcpy-after-free-context-only
+  file: sample.c
+  source: 'void f(void *dst, void *p){ free(p); memcpy(dst,p,4); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-address-replacement
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    void f(int *p) { free(p); replace(&p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-address-replacement-read
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); replace(&p); if (!p) return 0; int result = *p; free(p); return result; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-address-escape-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    void replace(int **p);
+
+    void f(int *p) { free(p); replace(&p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-independent-pointer-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    void f(int *p, int *q) { free(p); replace(&q); free(p); free(q); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-independent-pointer-read-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p, int *q) { free(p); replace(&q); free(q); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-double-free-before-escape-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    void f(int *p) { free(p); free(p); replace(&p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-read-before-escape-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); int value = *p; replace(&p); free(p); return value; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-replacement-then-double-free-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    void f(int *p) { free(p); replace(&p); free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-replacement-then-use-after-free-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); replace(&p); free(p); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-assignment-then-use-after-free-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    int f(int *p) { free(p); p = calloc(1, sizeof *p); free(p); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-nested-block-replacement
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    void f(int *p) { free(p); { replace(&p); free(p); } }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-nested-block-replacement-read
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); { replace(&p); if (!p) return 0; int value = *p; free(p); return value; } }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-nested-block-read-before-escape-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); { int value = *p; replace(&p); free(p); return value; } }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-nested-block-new-free-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static void replace(int **p) { *p = calloc(1, sizeof **p); }
+
+    int f(int *p) { free(p); { replace(&p); free(p); return *p; } }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-nested-replacement-call
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    static int replace(int **p) { *p = calloc(1, sizeof **p); return *p != NULL; }
+
+    void consume(int value);
+
+    void f(int *p) { free(p); consume(replace(&p)); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-argument-order-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    int replace(int **p);
+
+    int consume(int ready, int value);
+
+    int f(int *p) { free(p); return consume(replace(&p), *p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-unevaluated-address-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    void consume(size_t value);
+
+    void f(int *p) { free(p); consume(sizeof(&p)); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-unevaluated-address-read-context-only
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    void consume(size_t value);
+
+    int f(int *p) { free(p); consume(sizeof(&p)); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: lifetime-local-alias-replacement
+  file: sample.c
+  source: "#include <stdlib.h>\nvoid f(void) {\n    int *p = malloc(sizeof *p);\n    int **slot = &p;\n    free(p);\n    *slot = malloc(sizeof *p);\n    free(p);\n}\n"
+  want: []
+  covers: []
+- name: lifetime-local-alias-replacement-read
+  file: sample.c
+  source: "#include <stdlib.h>\nint f(void) {\n    int *p = malloc(sizeof *p);\n    int **slot = &p;\n    free(p);\n    *slot = calloc(1, sizeof *p);\n    if (!p) return 0;\n    int result = *p;\n    free(p);\n    return result;\n}\n"
+  want: []
+  covers: []
+- name: lifetime-unevaluated-dereference
+  file: sample.c
+  source: '#include <stdlib.h>
+
+    size_t f(int *p) { free(p); return sizeof *p; }
+
+    '
+  want: []
+  covers: []

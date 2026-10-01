@@ -1,0 +1,14 @@
+id: painted-wolf/platform:go-chat
+title: "Focus chat"
+scope: "global"
+keywords:
+  - "conversation"
+  - "focus chat"
+when:
+  any:
+    - fact: "view_mounted"
+      is: "chat"
+    - fact: "chat_navigable"
+action:
+  kind: native_ui
+  handler: "go.chat"

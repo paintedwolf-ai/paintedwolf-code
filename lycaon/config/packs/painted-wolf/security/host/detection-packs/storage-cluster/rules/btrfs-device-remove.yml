@@ -1,0 +1,25 @@
+title: Remove a device from a Btrfs filesystem
+id: 934133af-80b2-4fd4-8714-ee39fe735316
+description: Removes a device from a multi-device Btrfs filesystem, reducing its redundancy.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: btrfs
+    CommandLine|contains: ' device remove'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and not filter_rehearsal and not filter_local

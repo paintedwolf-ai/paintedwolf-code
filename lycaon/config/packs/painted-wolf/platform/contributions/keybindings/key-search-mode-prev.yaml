@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-mode-prev
+command: painted-wolf/platform:search-mode-prev
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+["
+  windows:
+    - "Mod+Shift+["
+  linux:
+    - "Mod+Shift+["

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "signing_generation": 1,
+  "embedded_generation": 1,
+  "generations": [
+    {
+      "generation": 1,
+      "public_key": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1MUIyOEQyMjEzMjExMgpSV1FTSVJNaWpiSlJBemRsVnpiZ0tzbjVUVi9uWE5jV3hhMXIyNmxya0tNYTVxcjhlbDdjaGhvRgo=",
+      "successor": null,
+      "bridge_version": null
+    }
+  ]
+}

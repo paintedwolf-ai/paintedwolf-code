@@ -1,0 +1,197 @@
+# Bundled MCP provider recipes. GET /v1/mcp/recipes serves this file.
+# Add copies a row into the user overlay, disabled. Auth is declared here.
+#
+# auth:
+#   static_token — paste a token; Sign in is not offered
+#   oauth        — Sign in via dynamic client registration
+#   none         — no credential chrome
+#
+# credential_wire (default bearer):
+#   bearer      — Authorization: Bearer <secret>
+#   token_token — Authorization: Token token=<secret>
+#   header      — <credential_header>: <secret>
+#
+# Local recipes use command (stdio) or a loopback url. Web recipes use a remote https url.
+# OAuth recipes use discovered dynamic client registration.
+
+recipes:
+  # --- Local ---
+  - id: playwright
+    label: Playwright
+    hint: Official Microsoft Playwright MCP. Runs locally via npx; the first enable may download the package and a browser.
+    docs_url: https://playwright.dev/docs/getting-started-mcp
+    command: npx
+    args: ["@playwright/mcp@latest"]
+    auth: none
+
+  - id: chrome-devtools
+    label: Chrome DevTools
+    hint: Official Chrome DevTools MCP for inspecting a live Chrome session. Runs locally via npx; first enable may download the package.
+    docs_url: https://github.com/ChromeDevTools/chrome-devtools-mcp
+    command: npx
+    args: ["-y", "chrome-devtools-mcp@latest"]
+    auth: none
+
+  - id: github-local
+    label: GitHub (local)
+    hint: Official GitHub MCP in Docker for github.com, GHES, or when the remote host is unavailable. Docker must be running. After add, set GITHUB_PERSONAL_ACCESS_TOKEN in Env; for GHES or ghe.com also set GITHUB_HOST.
+    docs_url: https://github.com/github/github-mcp-server
+    command: docker
+    args:
+      - run
+      - -i
+      - --rm
+      - -e
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - -e
+      - GITHUB_HOST
+      - ghcr.io/github/github-mcp-server
+    auth: none
+    env_keys:
+      - key: GITHUB_PERSONAL_ACCESS_TOKEN
+        label: GitHub personal access token
+      - key: GITHUB_HOST
+        label: GitHub Enterprise host (optional for github.com)
+
+  - id: supabase-local
+    label: Supabase (local)
+    hint: Official Supabase CLI local MCP. Start the stack with supabase start, then enable this loopback URL.
+    docs_url: https://supabase.com/docs/guides/ai-tools/mcp
+    url: http://127.0.0.1:54321/mcp
+    auth: none
+
+  - id: circleci-cli
+    label: CircleCI CLI
+    hint: CircleCI CLI built-in MCP (preview). Install the CircleCI CLI, then circleci auth login or set CIRCLE_TOKEN in Env.
+    docs_url: https://circleci.com/docs/guides/toolkit/connecting-to-the-circleci-cli-mcp/
+    command: circleci
+    args: ["mcp", "start"]
+    auth: none
+    env_keys:
+      - key: CIRCLE_TOKEN
+        label: CircleCI personal API token (optional if already logged in)
+
+  - id: sequential-thinking
+    label: Sequential thinking
+    hint: Official MCP reference for structured step-by-step reasoning. Runs locally via npx; first enable may download the package.
+    docs_url: https://github.com/modelcontextprotocol/servers
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    auth: none
+
+  # --- Web / hosted ---
+  - id: github
+    label: GitHub
+    hint: "Official remote GitHub MCP. Paste a personal access token as Bearer. Browser sign-in requires a host-specific registered GitHub App, which this distributed host cannot safely embed."
+    docs_url: https://github.com/github/github-mcp-server
+    url: https://api.githubcopilot.com/mcp
+    auth: static_token
+    credential_label: GitHub personal access token
+    credential_hint: "Sent as Authorization: Bearer."
+
+  - id: gitlab
+    label: GitLab
+    hint: Official GitLab.com MCP. Sign in with your GitLab account. Self-managed instances use Custom with that host's /api/v4/mcp URL.
+    docs_url: https://docs.gitlab.com/user/model_context_protocol/mcp_server/
+    url: https://gitlab.com/api/v4/mcp
+    auth: oauth
+
+  - id: notion
+    label: Notion
+    hint: Official Notion MCP. Sign in with your Notion workspace.
+    docs_url: https://developers.notion.com/docs/mcp
+    url: https://mcp.notion.com/mcp
+    auth: oauth
+
+  - id: linear
+    label: Linear
+    hint: Official Linear MCP. Sign in with your Linear workspace, or paste an API key as Bearer.
+    docs_url: https://linear.app/docs/mcp
+    url: https://mcp.linear.app/mcp
+    auth: oauth
+
+  - id: atlassian
+    label: Atlassian
+    hint: Official Atlassian Rovo MCP. Sign in with your Atlassian account.
+    docs_url: https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/
+    url: https://mcp.atlassian.com/v1/mcp/authv2
+    auth: oauth
+
+  - id: supabase
+    label: Supabase
+    hint: Official hosted Supabase MCP. Sign in with your Supabase organization. Local CLI stacks use Supabase (local).
+    docs_url: https://supabase.com/docs/guides/ai-tools/mcp
+    url: https://mcp.supabase.com/mcp
+    auth: oauth
+
+  - id: neon
+    label: Neon
+    hint: Official hosted Neon MCP. Sign in with your Neon account, or paste an API key in Bearer.
+    docs_url: https://neon.com/docs/ai/neon-mcp-server
+    url: https://mcp.neon.tech/mcp
+    auth: oauth
+
+  - id: sentry
+    label: Sentry
+    hint: Official Sentry MCP. Sign in with your Sentry organization.
+    docs_url: https://docs.sentry.io/product/sentry-mcp/
+    url: https://mcp.sentry.dev/mcp
+    auth: oauth
+
+  - id: posthog
+    label: PostHog
+    hint: Official hosted PostHog MCP. Sign in with your PostHog account, or paste a personal API key in Bearer.
+    docs_url: https://posthog.com/docs/model-context-protocol
+    url: https://mcp.posthog.com/mcp
+    auth: oauth
+
+  - id: circleci
+    label: CircleCI
+    hint: Official hosted CircleCI MCP. Sign in with your CircleCI account, or paste a personal API token in Bearer. Local CLI MCP is a separate Local recipe.
+    docs_url: https://circleci.com/docs/guides/toolkit/connecting-to-the-circleci-mcp-server/
+    url: https://mcp.circleci.com/v1/mcp
+    auth: oauth
+
+  - id: stripe
+    label: Stripe
+    hint: Official Stripe MCP. Sign in with your Stripe account, or paste a restricted API key as Bearer.
+    docs_url: https://docs.stripe.com/mcp
+    url: https://mcp.stripe.com
+    auth: oauth
+
+  - id: huggingface
+    label: Hugging Face
+    hint: Official Hugging Face Hub MCP. Paste an access token — Sign in is not offered for this host.
+    docs_url: https://huggingface.co/docs/hub/main/agents-mcp
+    url: https://huggingface.co/mcp
+    auth: static_token
+    credential_label: Access token
+    credential_hint: Create a token at huggingface.co/settings/tokens with the Hub scopes this provider needs, then paste it here.
+
+  - id: context7
+    label: Context7
+    hint: Upstash Context7 docs MCP. Paste an API key sent as the CONTEXT7_API_KEY header.
+    docs_url: https://github.com/upstash/context7
+    url: https://mcp.context7.com/mcp
+    auth: static_token
+    credential_wire: header
+    credential_header: CONTEXT7_API_KEY
+    credential_label: API key
+    credential_hint: Create a key at context7.com/dashboard (starts with ctx7sk), then paste it here.
+
+  - id: firecrawl
+    label: Firecrawl
+    hint: Official Firecrawl MCP. Sign in for full tools, or use Custom with https://mcp.firecrawl.dev/v2/mcp and an API key as Bearer.
+    docs_url: https://docs.firecrawl.dev/mcp-server
+    url: https://mcp.firecrawl.dev/v2/mcp-oauth
+    auth: oauth
+
+  - id: pagerduty
+    label: PagerDuty
+    hint: Official PagerDuty MCP. Paste a user API token — this provider does not accept Sign in. EU accounts use Custom with https://mcp.eu.pagerduty.com/mcp and the same Token token= placement.
+    docs_url: https://pagerduty.github.io/pagerduty-mcp-server/docs/remote-server/setup
+    url: https://mcp.pagerduty.com/mcp
+    auth: static_token
+    credential_wire: token_token
+    credential_label: API token
+    credential_hint: Sent as Token token=. Create a user API token in PagerDuty (Profile, User Settings, API Access), then paste it here.

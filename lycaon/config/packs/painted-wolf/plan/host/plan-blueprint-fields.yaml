@@ -1,0 +1,16 @@
+# Blueprint gates read YAML frontmatter, comparing trimmed, lowercase field values.
+# A declared title distinct from `blueprint` or `plan` enables path retargeting.
+# research_depth shares workflow.DepthLevel; TestPlanDepthVocabularyMatchesWorkflowDepth
+# checks that the vocabularies agree.
+fields:
+  - key: research_depth
+    values:
+      # none: every fact the approach needs is already in hand.
+      - id: none
+        opens_research: false
+      # light: one or two questions, with the files that answer them named.
+      - id: light
+        opens_research: true
+      # thorough: the shape of the change is what research has to find.
+      - id: thorough
+        opens_research: true

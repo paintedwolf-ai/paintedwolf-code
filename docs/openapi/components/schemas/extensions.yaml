@@ -1,0 +1,736 @@
+components:
+  schemas:
+    ExtensionsDesiredScope:
+      type: string
+      description: Desired-state write scope.
+      enum:
+        - project
+        - device
+    ExtensionPackKind:
+      type: string
+      enum:
+        - stock
+        - git
+        - path
+    ExtensionMetaPackStatus:
+      type: string
+      enum:
+        - complete
+        - partial
+        - inactive
+    ExtensionBlockedReason:
+      type: string
+      enum:
+        - requires
+        - requires_scanners
+        - compatibility
+        - disabled
+        - invalid
+        - integrity
+    ExtensionUnitStatus:
+      type: string
+      enum:
+        - loaded
+        - disabled
+        - conflict
+        - owned
+    ExtensionPackSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - version
+        - extension_api
+        - installation_state
+        - installation_scope
+        - dependencies
+        - kind
+        - enabled
+        - removable
+        - unit_count
+        - has_profile
+        - contributing
+        - meta_pack_ids
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        name:
+          type: string
+        version:
+          type: string
+          description: Installed canonical SemVer from extension.yaml
+        version_constraint:
+          type: string
+          description: Root constraint from extensions.yaml; absent for transitive and stock packages
+        resolved_revision:
+          type: string
+          description: Exact immutable Git revision from the scope lock
+        integrity:
+          type: string
+          description: SHA-256 package tree integrity from the scope lock
+        extension_api:
+          type: string
+          description: Host API constraint declared by the package
+        installation_state:
+          type: string
+          enum: [stock, release, pinned, development]
+        installation_scope:
+          type: string
+          enum: [stock, device, transitive]
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+          description: Direct dependency package ids mapped to requested SemVer constraints
+        dependency_of:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+        ref:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ExtensionPackKind'
+        enabled:
+          type: boolean
+        removable:
+          type: boolean
+        unit_count:
+          type: integer
+          minimum: 0
+        has_profile:
+          type: boolean
+        blocked_reason:
+          $ref: '#/components/schemas/ExtensionBlockedReason'
+        unmet_requires_scanners:
+          type: array
+          items:
+            type: string
+          description: Scanner ids that must be enabled and runnable in Scanners Settings; never auto-enabled here
+        contributing:
+          type: boolean
+        needs_reload:
+          type: boolean
+          description: Linked folder changed on disk; the pack still contributes current bytes until Reload from disk
+        feature:
+          type: string
+          description: Optional feature/capability label from extension.yaml
+        meta_pack_ids:
+          x-go-name: "MetaPackIDs"
+          type: array
+          items:
+            type: string
+          description: Discovered meta-pack ids that list this pack as a member
+        installed_from:
+          type: string
+          description: Project id that accepted this pack as a suggestion.
+        referenced_by:
+          type: integer
+          minimum: 0
+          description: How many projects currently suggest this pack.
+    ExtensionMetaPackSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - version
+        - kind
+        - status
+        - members
+        - conflicts_with
+        - extends
+        - diagnostics
+        - removable
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        name:
+          type: string
+        version:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ExtensionPackKind'
+        status:
+          $ref: '#/components/schemas/ExtensionMetaPackStatus'
+        members:
+          type: array
+          items:
+            type: string
+        conflicts_with:
+          type: array
+          items:
+            type: string
+        extends:
+          type: array
+          items:
+            type: string
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionDiagnostic'
+        removable:
+          type: boolean
+    ExtensionDiagnostic:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - severity
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ExtensionDiagnosticSeverity'
+        unit_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_./%:-]+$"
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        mcp_provider_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        scanner_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+    ExtensionDiagnosticSeverity:
+      type: string
+      description: >-
+        Whether the catalog is doing what the desired state asked. `error` means
+        content that was asked for is not in effect; `warning` means it is in
+        effect but not as written; `info` reports a choice back. Derived from the
+        code, never authored.
+      enum:
+        - error
+        - warning
+        - info
+    ExtensionUnitContribution:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - pack_id
+        - path
+      properties:
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        path:
+          type: string
+        content:
+          type: string
+          description: Contribution body (UTF-8 YAML/md) for inspect panes
+    ExtensionUnitSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - status
+        - contributions
+        - project_disable_allowed
+      properties:
+        project_disable_allowed:
+          type: boolean
+          description: Whether project scope may disable this unit under the host catalog floor.
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_./%:-]+$"
+        kind:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExtensionUnitStatus'
+        winner_pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionUnitContribution'
+    ExtensionUnitDetail:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - status
+        - contributions
+        - project_disable_allowed
+      properties:
+        project_disable_allowed:
+          type: boolean
+          description: Whether project scope may disable this unit under the host catalog floor.
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_./%:-]+$"
+        kind:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExtensionUnitStatus'
+        winner_pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionUnitContribution'
+        content:
+          type: string
+          description: Winner body when status is loaded or owned
+    ExtensionsCatalogView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        One catalog generation, whole. Packs, the units they resolve to, the
+        diagnostics against them, and the desired state that selected them come
+        from one resolve, so no two fields can disagree about the same pack.
+        Every mutation returns this too — a write reports the catalog in force
+        exactly as a read does, which is what lets a client apply the result
+        instead of asking again.
+      required:
+        - revision
+        - packs
+        - meta_packs
+        - diagnostics
+        - units
+        - desired
+        - desired_path
+        - ok
+      properties:
+        revision:
+          type: string
+          description: >-
+            Extension-state revision. Identifies this generation, carries into the
+            next mutation as expected_revision, and is the ETag on reads.
+        packs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionPackSummary'
+        meta_packs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionMetaPackSummary'
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionDiagnostic'
+        units:
+          type: array
+          description: Effective units this generation resolved
+          items:
+            $ref: '#/components/schemas/ExtensionUnitSummary'
+        desired:
+          $ref: '#/components/schemas/ExtensionDesiredState'
+        desired_path:
+          type: string
+          description: The intent file this generation was resolved from
+        conflicts:
+          type: integer
+          minimum: 0
+        ok:
+          x-go-name: "OK"
+          type: boolean
+          description: False when any unit is in conflict
+    ExtensionMetaPackInstallRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - source
+        - expected_revision
+      properties:
+        source:
+          type: string
+        version:
+          type: string
+          description: SemVer constraint; defaults to * and is mutually exclusive with ref
+        ref:
+          type: string
+          description: Exact Git ref; mutually exclusive with version
+        expected_revision:
+          type: string
+    ExtensionDesiredPack:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        source:
+          type: string
+        version:
+          type: string
+          description: SemVer constraint for release selection
+        ref:
+          type: string
+          description: Exact Git ref pin; mutually exclusive with version
+        development:
+          type: boolean
+          description: Link an author directory; disk changes contribute immediately and mark the pack for Reload from disk
+        enabled:
+          type: [boolean, "null"]
+        installed_from:
+          type: string
+          format: uuid
+          description: Project id that accepted this pack as a suggestion.
+    ExtensionConfigurationValue:
+      description: A non-secret configuration scalar or string list
+      oneOf:
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            type: string
+    ExtensionDesiredState:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - format
+        - packs
+        - disabled
+        - own
+      properties:
+        format:
+          type: integer
+        packs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionDesiredPack'
+        disabled:
+          type: array
+          items:
+            type: string
+        own:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          x-go-type: "map[string]map[string]any"
+          type: object
+          description: Per-pack behavior values (pack id → property → value)
+          additionalProperties:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/ExtensionConfigurationValue'
+        declined:
+          type: array
+          items:
+            type: string
+          description: Device-wide pack ids declined from project suggestions.
+        yaml:
+          type: string
+          description: Merged desired state as YAML for Desired state tab
+        scope_note:
+          type: string
+          description: e.g. device vs project merge note
+    ExtensionRevisionRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: string
+          description: Extension-state revision the caller last observed
+    ExtensionConfigurationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        packs:
+          x-go-type: "map[string]map[string]any"
+          type: object
+          minProperties: 1
+          description: Pack id to complete replacement block; an empty block removes that pack configuration
+          additionalProperties:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/ExtensionConfigurationValue'
+        expected_revision:
+          type: string
+    ExtensionInstallRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - source
+        - expected_revision
+      properties:
+        source:
+          type: string
+          description: Git URL, file://, or path:…
+        version:
+          type: string
+          description: SemVer constraint; defaults to * and is mutually exclusive with ref
+        ref:
+          type: string
+          description: Exact Git ref pin; mutually exclusive with version
+        expected_revision:
+          type: string
+    ExtensionInstallResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        An install reports the generation it committed like every other write,
+        plus the package identity only an install resolves.
+      required:
+        - view
+        - pack_id
+        - package_root
+      properties:
+        view:
+          $ref: '#/components/schemas/ExtensionsCatalogView'
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        package_root:
+          type: string
+        resolved_revision:
+          type: string
+        version:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    UpdateExtensionPackRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: expected_revision and at least one change.
+      minProperties: 2
+      required:
+        - expected_revision
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean
+        expected_revision:
+          type: string
+    UpdateExtensionUnitRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: expected_revision and at least one change.
+      minProperties: 2
+      required:
+        - expected_revision
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean
+        own_pack_id:
+          type: [string, "null"]
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+          description: Selected winner pack id, or null to clear the explicit own selection
+        expected_revision:
+          type: string
+    UpdateExtensionMetaPackRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: expected_revision and at least one change.
+      minProperties: 2
+      required:
+        - expected_revision
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean
+        expected_revision:
+          type: string
+    ExtensionPackUpdateStatus:
+      x-go-generate: true
+      x-go-field-order: ["pack_id", "available", "current_version", "candidate_version", "current_revision", "candidate_revision", "changes", "message"]
+      type: object
+      additionalProperties: false
+      required:
+        - pack_id
+        - available
+        - changes
+      properties:
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        available:
+          type: boolean
+        current_version:
+          type: string
+        candidate_version:
+          type: string
+        current_revision:
+          type: string
+        candidate_revision:
+          type: string
+        message:
+          type: string
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionPackageChange'
+    ExtensionPackageChange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - pack_id
+        - kind
+      properties:
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        current_version:
+          type: string
+        candidate_version:
+          type: string
+        current_revision:
+          type: string
+        candidate_revision:
+          type: string
+        kind:
+          type: string
+          enum: [added, removed, upgraded, downgraded, revised, unchanged]
+    ExtensionPackActionResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        Update and Reload report the generation they committed, plus the package
+        identity the re-resolve settled on.
+      required:
+        - view
+        - pack_id
+      properties:
+        view:
+          $ref: '#/components/schemas/ExtensionsCatalogView'
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        resolved_revision:
+          type: string
+        version:
+          type: string
+        message:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    ExtensionMutationResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        The catalog generation this mutation committed, plus what only a write
+        can report. A caller applies this and is current; it never has to read
+        back the state it just wrote.
+      required:
+        - view
+      properties:
+        view:
+          $ref: '#/components/schemas/ExtensionsCatalogView'
+        warnings:
+          type: array
+          items:
+            type: string
+    ExtensionSuggestionStatus:
+      type: string
+      enum: [available, installed, declined, version_mismatch]
+    ExtensionSuggestion:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source
+        - status
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+        source:
+          type: string
+        version:
+          type: string
+          description: Version constraint from the project suggestion.
+        ref:
+          type: string
+        contributes:
+          type: string
+          description: Untrusted display summary of what the pack would add.
+        installed_version:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExtensionSuggestionStatus'
+        configuration:
+          type: object
+          additionalProperties: {}
+          description: Suggested configuration values. Display only; never applied from the repo.
+    ExtensionSuggestionsResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - project_id
+        - suggestion_revision
+        - suggestions
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        suggestion_revision:
+          type: string
+          description: Digest of the exact parsed project proposal returned in this response.
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionSuggestion'
+    ExtensionSuggestionsAcceptRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - pack_ids
+        - expected_revision
+        - expected_suggestion_revision
+      properties:
+        pack_ids:
+          x-go-name: "PackIDs"
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+          minItems: 1
+        expected_revision:
+          type: string
+        expected_suggestion_revision:
+          type: string
+          description: Must match the proposal returned by GET; changes are rejected before install.

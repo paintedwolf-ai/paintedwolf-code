@@ -1,0 +1,19 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+title: Model cannot see images
+message: >-
+  The active model does not accept image inputs. Your image was saved in the
+  chat transcript but the model cannot see it. Switch to a vision-capable
+  model in Settings → AI providers to have the model describe or act on the image.
+suggested_action: Pick a vision-capable model, or continue with text-only prompts.
+action: open_ai_providers
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - cannot see
+      - vision
+
+  # Rewind. Copy never says "checkpoint" — that word belongs to the
+  # approval plane, and the user-facing words here are Edit and Rewind.

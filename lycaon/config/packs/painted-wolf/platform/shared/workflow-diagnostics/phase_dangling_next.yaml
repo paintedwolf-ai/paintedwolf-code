@@ -1,0 +1,5 @@
+code: phase_dangling_next
+message: |
+  Phase {{phase}} next {{next}} is not a declared phase.
+replacement: |
+  Fix next to a declared phase id or leave it empty for terminal.

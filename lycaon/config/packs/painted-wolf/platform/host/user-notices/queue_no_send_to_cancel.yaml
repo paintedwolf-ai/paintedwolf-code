@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Nothing to cancel
+message: That message already reached the turn, so there is nothing left to cancel.
+suggested_action: Send a new message if you want to change direction.
+scenarios:
+  - id: default
+    expect_contains:
+      - nothing left to cancel

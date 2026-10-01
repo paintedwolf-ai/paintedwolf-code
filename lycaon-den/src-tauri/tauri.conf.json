@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Painted Wolf Code",
+  "mainBinaryName": "painted-wolf-code",
+  "version": "1.0.0",
+  "identifier": "dev.paintedwolf.code",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "Painted Wolf Code",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; base-uri 'self'; form-action 'self'; frame-src 'none'; object-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' asset: http://asset.localhost blob: data:; font-src 'self'; media-src 'self'",
+      "devCsp": "default-src 'self'; base-uri 'self'; form-action 'self'; frame-src 'none'; object-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' asset: http://asset.localhost blob: data:; font-src 'self'; media-src 'self'"
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": "^((mailto:[^\\s]+)|(tel:[^\\s]+)|(https?://[^\\s]+))$"
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1MUIyOEQyMjEzMjExMgpSV1FTSVJNaWpiSlJBemRsVnpiZ0tzbjVUVi9uWE5jV3hhMXIyNmxya0tNYTVxcjhlbDdjaGhvRgo=",
+      "endpoints": [
+        "https://downloads.paintedwolf.dev/updates/stable/key-1/latest.json"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "externalBin": [
+      "binaries/pw",
+      "binaries/pw-logs",
+      "binaries/bialy"
+    ],
+    "resources": {
+      "engine-root/": "engine-root/",
+      "THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.icon",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "bundleVersion": "1",
+      "minimumSystemVersion": "14.0",
+      "entitlements": "entitlements.plist",
+      "dmg": {
+        "background": "dmg/background.png",
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 225
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 225
+        }
+      }
+    }
+  }
+}

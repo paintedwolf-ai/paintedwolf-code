@@ -1,0 +1,277 @@
+PreflightReport:
+  x-go-generate: true
+  type: object
+  required:
+  - overall
+  - probes
+  - attachment_capabilities
+  additionalProperties: false
+  properties:
+    overall:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - blocked
+      description: >-
+        Worst status across all probes. `degraded` means a capability is
+        unavailable while the app still works; `blocked` means it cannot
+        function.
+    probes:
+      type: array
+      description: Probe results in registration order.
+      items:
+        $ref: '#/PreflightProbe'
+    attachment_capabilities:
+      $ref: '#/AttachmentCapabilities'
+
+AttachmentCapabilities:
+  x-go-generate: true
+  type: object
+  description: >
+    Composer affordances, grouped by the plane each byte bound protects. These
+    let the client show limits before an upload; admission is decided by the host
+    on the upload route, never here.
+  required:
+  - auto_attach_paste_bytes
+  - max_inline_text_bytes
+  - max_attachments
+  - max_references
+  - max_images
+  - max_upload_bytes
+  - max_image_bytes
+  - max_body_bytes
+  - max_turn_bytes
+  - max_body_preview_bytes
+  - max_large_text_preview_bytes
+  - max_turn_preview_bytes
+  - max_document_bytes
+  - max_video_bytes
+  - image_mime_types
+  - video_mime_types
+  - text_mime_types
+  - text_extensions
+  - text_basenames
+  additionalProperties: false
+  properties:
+    auto_attach_paste_bytes:
+      type: integer
+      minimum: 1
+      description: Composer plane — a UTF-8 plain-text paste at or above this size becomes a text attachment
+    max_inline_text_bytes:
+      type: integer
+      minimum: 1
+      description: Prompt plane — largest UTF-8 user-prose body accepted inline
+    max_attachments:
+      type: integer
+      minimum: 1
+      description: Byte-carrying attachments permitted on one turn
+    max_references:
+      type: integer
+      minimum: 1
+      description: Jailed coordinate references permitted on one turn
+    max_images:
+      type: integer
+      minimum: 1
+    max_upload_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Transport plane — largest single upload body accepted off the wire
+    max_image_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Transport plane — largest raster accepted
+    max_body_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Materialization plane — largest body permitted to land on disk
+    max_turn_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Materialization plane — total attachment bytes one turn may reference
+    max_body_preview_bytes:
+      type: integer
+      minimum: 1
+      description: Prompt plane — ordinary per-body preview ceiling
+    max_large_text_preview_bytes:
+      type: integer
+      minimum: 1
+      description: Prompt plane — per-body preview ceiling for text at or above auto_attach_paste_bytes
+    max_turn_preview_bytes:
+      type: integer
+      minimum: 1
+      description: Prompt plane — aggregate body-preview bytes admitted across all attachments and references on one turn
+    max_document_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Largest body the host will parse as a document (extraction is in-memory)
+    max_video_bytes:
+      x-go-type: "int64"
+      type: integer
+      minimum: 1
+      description: Largest video the host decodes for its frames (the decoder holds it in memory)
+    image_mime_types:
+      x-go-name: "ImageMIMETypes"
+      type: array
+      items:
+        type: string
+    video_mime_types:
+      x-go-name: "VideoMIMETypes"
+      type: array
+      description: Video containers the host accepts; whether a file's codec plays is decided at upload
+      items:
+        type: string
+    text_mime_types:
+      x-go-name: "TextMIMETypes"
+      type: array
+      items:
+        type: string
+    text_extensions:
+      type: array
+      items:
+        type: string
+    text_basenames:
+      type: array
+      items:
+        type: string
+
+PreflightProbe:
+  x-go-generate: true
+  x-go-field-order: ["id", "status", "code", "detail", "tier", "scope", "resolution", "catastrophic_detail", "title", "message", "suggested_action", "actions"]
+  type: object
+  required:
+  - id
+  - status
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      description: Stable probe id, e.g. `git_engine`.
+    status:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - blocked
+    code:
+      type: string
+      description: >-
+        User-notice code for a non-ok result, e.g. `GIT_ENGINE_UNAVAILABLE`. Absent
+        when status is `ok`.
+    tier:
+      $ref: './notice-tier.generated.yaml#/components/schemas/NoticeTier'
+      description: >-
+        Whether this result leaves the app usable. Host-declared in the
+        user-notice catalog; clients must not derive it from `status`.
+    scope:
+      $ref: './notice-scope.generated.yaml#/components/schemas/NoticeScope'
+      description: >-
+        Where this result renders. Host-declared; clients must not infer
+        placement from the surface the notice arrived on.
+    resolution:
+      type: string
+      description: >-
+        Which declared resolution produced `tier`/`scope`. One code can mean two
+        different conditions — `OS_BELOW_FLOOR` blocks the app when the OS is
+        genuinely too old but is only a missing capability when the version could
+        not be read — so the resolution, not the code, is the unit of
+        partitioning. `default` for unconditional notices.
+    catastrophic_detail:
+      x-go-pointer: true
+      $ref: '#/CatastrophicDetail'
+    detail:
+      type: object
+      additionalProperties:
+        type: string
+      description: >-
+        Structured facts for the copy template (e.g. `want`/`got`). Never a path
+        under the user's home directory and never a secret.
+    title:
+      type: string
+      description: Rendered catalog title. Den displays wire copy only.
+    message:
+      type: string
+      description: Rendered catalog message.
+    suggested_action:
+      type: string
+      description: >-
+        Rendered catalog remedy. Preflight reports and never remediates — the
+        app does not run this on the user's behalf.
+    actions:
+      type: array
+      items:
+        $ref: './notice-action.generated.yaml#/components/schemas/NoticeAction'
+      description: Structured in-app destinations for the remedy; clients never infer them from copy.
+
+CatastrophicDetail:
+  x-go-generate: true
+  type: object
+  description: >-
+    Support-report facts for a catastrophic result, shown on the stop screen and
+    copyable by the user.
+
+    This is the one payload a user can read before the app is usable, so it is
+    what gets pasted into a public issue. Every field is an allowlisted,
+    machine-anonymous fact. It excludes: absolute paths, anything
+    under the user's home directory, hostname, user name, project or session
+    ids, project names, provider ids, environment dumps, and log tails. The host
+    builds it at one chokepoint so redaction cannot be bypassed per probe.
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+      description: The user-notice code, e.g. `OS_BELOW_FLOOR`.
+    resolution:
+      type: string
+      description: Which declared resolution applied.
+    probe_id:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      description: Stable probe id that produced the result.
+    app_version:
+      type: string
+      description: Host version string.
+    build:
+      type: string
+      description: >-
+        VCS revision when the binary was stamped with one. Absent for unstamped
+        builds rather than reported as empty.
+    schema_version:
+      type: integer
+      description: Durable store schema version the host expects.
+    os_name:
+      x-go-name: "OSName"
+      type: string
+      description: Operating system name, e.g. `macOS`.
+    os_version:
+      x-go-name: "OSVersion"
+      type: string
+      description: Operating system version, when it could be read.
+    os_floor:
+      x-go-name: "OSFloor"
+      type: string
+      description: Minimum operating system version this build supports.
+    arch:
+      type: string
+      description: CPU architecture, e.g. `arm64`.
+    config_dir_label:
+      type: string
+      description: >-
+        Human label for the configuration directory (e.g. `~/.config/paintedwolf`),
+        never an absolute path.
+    facts:
+      type: object
+      additionalProperties:
+        type: string
+      description: The probe's redacted detail map, passed through unchanged.
+    observed_at:
+      x-go-type: "string"
+      type: string
+      format: date-time
+      description: When the host observed the condition.

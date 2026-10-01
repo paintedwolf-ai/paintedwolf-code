@@ -1,0 +1,26 @@
+tags: [filesystem]
+description: "Copy files within write scope (files only; never use command cp). Replaces command: cp(1)."
+schema:
+  type: object
+  properties:
+    copies:
+      description: "Batch of from→to file copies (max 10)."
+      type: array
+      maxItems: 10
+      items:
+        type: object
+        properties:
+          from:
+            type: string
+            description: Repo-relative source file
+          to:
+            type: string
+            description: Repo-relative destination file
+        required: [from, to]
+        additionalProperties: false
+    max_file_bytes:
+      type: integer
+      minimum: 1
+      description: Per-file byte cap (default 10485760)
+  required: [copies]
+  additionalProperties: false

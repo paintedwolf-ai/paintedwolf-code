@@ -1,0 +1,29 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.review_expected_call
+    - paintedwolf.review_reason
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVALID"
+effect: block
+copy:
+  what: "The verdict payload does not match the active review phase contract."
+  cause: "{{ paintedwolf.review_reason }}"
+  why: "The host records only the declared verdict schema and top-level citation channels."
+  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Keep cited_evidence and cited_urls top-level; evidence-handle objects use handle, not evidence."
+  instead: "Correct only the invalid fields and resubmit the current expected call with observed citations."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: submit_verdict payload does not match the active phase contract.
+x-paintedwolf-scenarios:
+  - id: nested_citations
+    vars:
+      review_reason: 'verdict has undeclared field(s): cited_evidence'
+      review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED}, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])'
+    expect_contains: ['Code: SUBMIT_VERDICT_INVALID', 'cited_evidence', 'expected']
+x-paintedwolf-emit: guard:workflow

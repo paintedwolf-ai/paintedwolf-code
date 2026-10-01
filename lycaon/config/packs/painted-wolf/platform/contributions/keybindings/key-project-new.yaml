@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-project-new
+command: painted-wolf/platform:project-new
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+N"
+  windows:
+    - "Mod+Shift+N"
+  linux:
+    - "Mod+Shift+N"

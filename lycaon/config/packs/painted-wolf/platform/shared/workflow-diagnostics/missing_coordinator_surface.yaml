@@ -1,0 +1,5 @@
+code: missing_coordinator_surface
+message: |
+  Phase {{phase}} prompts the coordinator or waits on topology_report_delivered and must name coordinator_surface.
+replacement: |
+  Set phases[{{phase}}].coordinator_surface to a surface that compiles the leave tools for that phase.

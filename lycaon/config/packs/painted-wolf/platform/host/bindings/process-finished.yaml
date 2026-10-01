@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': process.finished
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-process-finished
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - wait() process_done condition — a command/verify process reached terminal
+    status
+  required:
+  - process_done
+  - command_output
+  forbidden:
+  - workflow_advance

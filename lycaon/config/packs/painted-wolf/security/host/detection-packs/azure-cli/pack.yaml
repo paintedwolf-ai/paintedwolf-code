@@ -1,0 +1,6 @@
+id: azure-cli
+label: Azure CLI
+description: >-
+  Precise Azure CLI operations that disable monitoring controls, delete a
+  resource group, permanently purge Key Vault material, or open a resource to
+  the public network.

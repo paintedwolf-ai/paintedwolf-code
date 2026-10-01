@@ -1,0 +1,16 @@
+# These intentionally large top-level gates run in their own race lane so
+# count-balanced root-package shards remain bounded on hosted runners.
+TestParseGoNewMakeTypeArgumentDiffCorpus
+TestPythonIncrementalSingleByteDeleteSweepMatchesFresh
+TestIncrementalInvariantGateC
+TestIncrementalInvariantGateCSS
+TestIncrementalInvariantGateGo
+TestIncrementalInvariantGateJSON
+TestIncrementalInvariantGateJavaScript
+TestIncrementalInvariantGatePython
+TestPythonRootHasErrorAgreementGate
+TestIncrementalInvariantGateRust
+TestW5EditorLatencyGate
+TestW5DeterminismAcrossFreshParsers
+TestW5JavaScriptFamilyTransientErrorGate
+TestValidateQueryPatternsFleetSweepSmoke

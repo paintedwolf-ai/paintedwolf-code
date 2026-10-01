@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "endpoint": "https://api.together.xyz/v1",
+      "model": "Qwen/Qwen3.5-9B",
+      "precision": "FP8",
+      "weights_revision": null,
+      "source": "https://docs.together.ai/docs/serverless/models",
+      "observed_at": "2026-09-08"
+    },
+    {
+      "endpoint": "https://api.together.xyz/v1",
+      "model": "zai-org/GLM-5.3-Flash",
+      "precision": "FP8",
+      "weights_revision": null,
+      "source": "https://docs.together.ai/docs/serverless/models",
+      "observed_at": "2026-09-08"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-select-line
+command: painted-wolf/platform:editor-select-line
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+Shift+L"
+  windows:
+    - "Alt+Shift+L"
+  linux:
+    - "Alt+Shift+L"

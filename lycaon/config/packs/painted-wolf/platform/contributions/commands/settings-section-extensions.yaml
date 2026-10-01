@@ -1,0 +1,9 @@
+id: painted-wolf/platform:settings-section-extensions
+title: "Settings: extensions"
+scope: "global"
+keywords:
+  - "extensions"
+  - "packs"
+action:
+  kind: native_ui
+  handler: "settings.section.extensions"

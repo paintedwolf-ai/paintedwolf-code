@@ -1,0 +1,10 @@
+id: fireworks-api-key
+title: Fireworks API key
+regex: '\b(fw_[A-Za-z0-9_-]{20,})\b'
+keywords:
+  - fw_
+severity: critical
+secret_group: 1
+entropy: 3.5
+allowlist_stopwords:
+  - your_api_key_here

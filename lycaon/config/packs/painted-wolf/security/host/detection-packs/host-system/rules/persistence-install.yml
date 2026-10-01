@@ -1,0 +1,41 @@
+title: Install a background job or startup item
+id: c7ccc549-8071-4651-9f3c-155fa83d77ba
+description: Registers work the machine will run on its own, on a schedule or at boot.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  # The mirror of service-control, which covers stopping and disabling. Reversible
+  # by the matching disable/unload, so it shares that band.
+  # `crontab -r`/`-l` are flags, not a file — a non-flag argument is the install
+  # form, and it replaces whatever crontab was there.
+  selection_crontab_install:
+    Image: crontab
+    CommandLine|re: '\scrontab\s+[^-\s]\S*'
+  selection_systemd_enable:
+    Image: systemctl
+    CommandLine|contains: ' enable'
+  selection_launchd_load:
+    Image: launchctl
+    CommandLine|contains:
+      - ' load '
+      - ' bootstrap '
+      - ' enable '
+  selection_at:
+    Image:
+      - at
+      - batch
+  filter_rehearsal:
+    Argv|re: '^(--help|-l|list|is-enabled)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_crontab_install or selection_systemd_enable or selection_launchd_load or selection_at) and not filter_rehearsal and not filter_local

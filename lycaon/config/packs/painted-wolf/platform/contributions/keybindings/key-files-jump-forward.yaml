@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-jump-forward
+command: painted-wolf/platform:files-jump-forward
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+Shift+-"
+  windows:
+    - "Mod+Shift+-"
+  linux:
+    - "Mod+Shift+-"

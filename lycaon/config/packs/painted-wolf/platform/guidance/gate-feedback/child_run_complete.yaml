@@ -1,0 +1,13 @@
+id: child_run_complete
+kind: child-workflow
+purpose: |
+  The invoked child workflow run must reach a terminal complete state before the parent advances.
+missing_signals:
+  - id: child_running
+    when: "true"
+    detail: "The child workflow run is still active."
+    fix: "Wait for the child build run to finish."
+satisfy_auto:
+  - "Wait for the child implement run to complete."
+satisfy:
+  - "Wait for the child implement run to complete."

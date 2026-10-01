@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-composer-recall-prev
+command: painted-wolf/platform:composer-recall-prev
+scope: "composer"
+allow_in_input: true
+bindings:
+  macos:
+    - "ArrowUp"
+  windows:
+    - "ArrowUp"
+  linux:
+    - "ArrowUp"

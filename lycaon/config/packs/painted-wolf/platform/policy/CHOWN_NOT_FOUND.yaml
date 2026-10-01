@@ -1,0 +1,36 @@
+oar: '1.0'
+id: CHOWN_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chown
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "CHOWN_NOT_FOUND"
+effect: block
+copy:
+  cause: The requested path or its resolved target is absent.
+  why: Ownership changes require an existing target.
+  fix: Confirm the intended path with an offered discovery tool, or remove an unintended missing path. Do not
+    create files solely to make the ownership operation succeed.
+  instead: Branch on Code CHOWN_NOT_FOUND; resolve the intended existing path
+  what: The target for chown path {{ paintedwolf.path }} does not exist.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
+x-paintedwolf-message: chown:chown path does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: scripts/run.sh
+    profile: implement
+    tool: chown
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHOWN_NOT_FOUND'

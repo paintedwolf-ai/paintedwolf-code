@@ -1,0 +1,1631 @@
+// Package gotreesitter implements a pure Go tree-sitter runtime.
+//
+// This file defines the core data structures that mirror tree-sitter's
+// TSLanguage C struct and related types. They form the foundation on
+// which the lexer, parser, query engine, and syntax tree are built.
+package gotreesitter
+
+import (
+	"slices"
+	"sync"
+	"sync/atomic"
+	"unsafe"
+)
+
+// Symbol is a grammar symbol ID (terminal or nonterminal).
+type Symbol uint16
+
+// StateID is a parser state index. uint32 supports grammars with >65K states
+// (e.g. COBOL with 67K states from 1071 rules).
+type StateID uint32
+
+// FieldID is a named field index.
+type FieldID uint16
+
+// ParseActionType identifies the kind of parse action.
+type ParseActionType uint8
+
+const (
+	ParseActionShift ParseActionType = iota
+	ParseActionReduce
+	ParseActionAccept
+	ParseActionRecover
+)
+
+const (
+	// RuntimeLanguageVersion is the maximum tree-sitter language version this
+	// runtime is known to support.
+	RuntimeLanguageVersion uint32 = 15
+	// MinCompatibleLanguageVersion is the minimum accepted language version.
+	MinCompatibleLanguageVersion uint32 = 13
+)
+
+// ParseAction is a single parser action from the parse table.
+type ParseAction struct {
+	Type              ParseActionType
+	State             StateID // target state (shift/recover)
+	Symbol            Symbol  // reduced symbol (reduce)
+	ChildCount        uint8   // children consumed (reduce)
+	DynamicPrecedence int16   // precedence (reduce)
+	ProductionID      uint16  // which production (reduce)
+	Extra             bool    // is this an extra token (shift)
+	ExtraChain        bool    // does this shift enter a nonterminal extra chain
+	Repetition        bool    // is this a repetition (shift)
+}
+
+// ParseActionEntry is a group of actions for a (state, symbol) pair.
+type ParseActionEntry struct {
+	Reusable bool
+	Actions  []ParseAction
+}
+
+// LexState is one state in the table-driven lexer DFA.
+type LexState struct {
+	AcceptToken    Symbol // 0 if this state doesn't accept
+	AcceptPriority int16  // lower = higher priority (0 for ts2go blobs = longest-match)
+	Skip           bool   // true if accepted chars are whitespace
+	Default        int    // default next state (-1 if none)
+	EOF            int    // state on EOF (-1 if none)
+	Transitions    []LexTransition
+}
+
+// LexTransition maps a character range to a next state.
+type LexTransition struct {
+	Lo, Hi    rune // inclusive character range
+	NextState int
+	// Skip mirrors tree-sitter's SKIP(state): consume the matched rune
+	// and continue lexing while resetting token start.
+	Skip bool
+}
+
+// LexMode maps a parser state to its lexer configuration.
+type LexMode struct {
+	LexState                  uint16
+	ExternalLexState          uint16
+	ReservedWordSetID         uint16
+	AfterWhitespaceLexState   uint16 // DFA start state to use after whitespace (0 = same as LexState)
+	LexStateID                uint32 // widened DFA start state for grammargen tables with >64K lexer states
+	AfterWhitespaceLexStateID uint32
+}
+
+// LexStateIndex returns the DFA start state for this lex mode. Older grammar
+// blobs only populate the uint16 LexState field; grammargen-generated tables
+// can populate LexStateID when the DFA table exceeds 64K states.
+func (m LexMode) LexStateIndex() uint32 {
+	if m.LexStateID != 0 {
+		return m.LexStateID
+	}
+	if m.LexState == ^uint16(0) {
+		return ^uint32(0)
+	}
+	return uint32(m.LexState)
+}
+
+// AfterWhitespaceLexStateIndex returns the alternate DFA start state used
+// after whitespace, or zero when the primary lex state should be used.
+func (m LexMode) AfterWhitespaceLexStateIndex() uint32 {
+	if m.AfterWhitespaceLexStateID != 0 {
+		return m.AfterWhitespaceLexStateID
+	}
+	if m.AfterWhitespaceLexState == ^uint16(0) {
+		return ^uint32(0)
+	}
+	return uint32(m.AfterWhitespaceLexState)
+}
+
+func (m *LexMode) SetLexStateIndex(idx uint32) {
+	if m == nil {
+		return
+	}
+	m.LexStateID = idx
+	if idx == ^uint32(0) {
+		m.LexState = ^uint16(0)
+		return
+	}
+	m.LexState = uint16(idx)
+}
+
+func (m *LexMode) SetAfterWhitespaceLexStateIndex(idx uint32) {
+	if m == nil {
+		return
+	}
+	m.AfterWhitespaceLexStateID = idx
+	if idx == ^uint32(0) {
+		m.AfterWhitespaceLexState = ^uint16(0)
+		return
+	}
+	m.AfterWhitespaceLexState = uint16(idx)
+}
+
+// LanguageMetadata holds the grammar's semantic version (ABI 15+).
+type LanguageMetadata struct {
+	MajorVersion uint8
+	MinorVersion uint8
+	PatchVersion uint8
+}
+
+// SymbolMetadata holds display information about a symbol.
+type SymbolMetadata struct {
+	Name               string
+	Visible            bool
+	Named              bool
+	Supertype          bool
+	GeneratedRepeatAux bool
+}
+
+// FieldMapEntry maps a child index to a field name.
+type FieldMapEntry struct {
+	FieldID    FieldID
+	ChildIndex uint8
+	Inherited  bool
+}
+
+// ProductionSignature records the raw RHS symbols for a grammar production.
+// It is generated by grammargen, where the normalized grammar still has RHS
+// structure. Legacy ts2go blobs leave this empty.
+type ProductionSignature struct {
+	LHS          Symbol
+	ProductionID uint16
+	RHS          []Symbol
+}
+
+// UnaryWrapperFlatteningRule identifies one exact public-parent, wrapper, leaf,
+// and parser-state chain that native materialization must flatten. Runtime
+// profiles attach these rules only to certified grammar artifacts.
+type UnaryWrapperFlatteningRule struct {
+	PublicParent        Symbol
+	Wrapper             Symbol
+	Leaf                Symbol
+	WrapperPreGotoState StateID
+}
+
+// ExternalScanner is the interface for language-specific external scanners.
+// Languages like Python and JavaScript need these for indent tracking,
+// template literals, regex vs division, etc.
+//
+// The value returned by Create must be accepted by Destroy/Serialize/
+// Deserialize/Scan for that scanner implementation. Most scanners use a
+// concrete payload pointer type and will panic on mismatched payload types.
+type ExternalScanner interface {
+	Create() any
+	Destroy(payload any)
+	Serialize(payload any, buf []byte) int
+	Deserialize(payload any, buf []byte)
+	Scan(payload any, lexer *ExternalLexer, validSymbols []bool) bool
+}
+
+// IncrementalReuseExternalScanner is implemented by external scanners that can
+// safely participate in DFA subtree reuse during incremental parses. Scanners
+// with serialized mutable state, such as Python's indentation stack, should
+// leave this unimplemented so edited incremental parses fall back to the
+// conservative full-reparse path.
+type IncrementalReuseExternalScanner interface {
+	ExternalScanner
+	SupportsIncrementalReuse() bool
+}
+
+// ErrorTreeIncrementalReuseExternalScanner is an optional refinement for a
+// scanner whose checkpoints are certified on clean old trees but whose parser
+// recovery ownership has not yet been certified. Returning false makes a
+// changed edit over an error-bearing old tree take the fresh-parse fallback.
+// Independently reauthenticated token-invariant leaf edits may still return
+// before this gate.
+type ErrorTreeIncrementalReuseExternalScanner interface {
+	ExternalScanner
+	SupportsIncrementalReuseFromErrorTree() bool
+}
+
+// CheckpointedExternalScanner is implemented by stateful external scanners
+// whose non-empty serialized payload is a complete checkpoint of every value
+// that can affect a later Scan call. The runtime records that checkpoint at
+// token boundaries and restores it when fast-forwarding across a reused
+// subtree. A scanner may return a zero-length serialization for a reachable
+// state that cannot be represented exactly; that boundary is recorded as
+// checkpoint-absent and fails closed for incremental reuse.
+//
+// Implementations must encode the empty payload as a non-empty byte sequence:
+// a zero-length serialization is reserved by the checkpoint store to mean
+// "checkpoint absent". A non-empty serialization must never truncate, alias,
+// or otherwise collide with a different scanner state. Returning true is a
+// soundness claim; an incomplete non-empty checkpoint can cause silent
+// incremental corruption.
+type CheckpointedExternalScanner interface {
+	ExternalScanner
+	UsesExternalScannerCheckpoints() bool
+}
+
+// IncrementalPrefixFrontierExternalScanner is an optional refinement for a
+// checkpointed scanner whose state can depend on reductions before the next
+// top-level sibling. A changed-length or changed-point edit before that
+// sibling must take the fresh-parse fallback unless the parser can prove the
+// old reduction frontier. Python uses this gate for indentation ownership.
+type IncrementalPrefixFrontierExternalScanner interface {
+	ExternalScanner
+	RequiresIncrementalPrefixFrontierProof() bool
+}
+
+// CheckpointlessExternalScannerReuse is implemented by checkpointed scanners
+// that can additionally prove subtree reuse safe when a candidate node has no
+// scanner checkpoint. Most stateful scanners must not implement this: absence
+// of a checkpoint then fails closed.
+type CheckpointlessExternalScannerReuse interface {
+	ExternalScanner
+	AllowsIncrementalReuseWithoutCheckpoint() bool
+}
+
+// StatelessExternalScanner is implemented by external scanners that carry no
+// serialized state across tokens. Their Scan decision is a pure function of the
+// byte stream at the lexer position and the valid-symbol set, and the
+// valid-symbol set is itself a pure function of the LR parser state. For such a
+// scanner the state at any boundary equals the state a fresh parse holds there,
+// so the scanner-quiescence proof obligation (campaign O(edit) workstream W4)
+// is discharged at every boundary. Go's automatic-semicolon scanner is the
+// reference example; see external_scanner_quiescence.go for the proof.
+//
+// A scanner implements this only when it can meet every quiescence obligation.
+// The classifier reads the marker as a proof, so an incorrect true is silent
+// incremental corruption.
+type StatelessExternalScanner interface {
+	ExternalScanner
+	ExternalScannerIsStateless() bool
+}
+
+// FailurePreservingExternalScanner is implemented by external scanners whose
+// Scan method does not mutate serialized scanner payload state before returning
+// false. The token source can defer snapshotting until retry is actually needed.
+type FailurePreservingExternalScanner interface {
+	ExternalScanner
+	PreservesStateOnScanFailure() bool
+}
+
+// FailureStateRetainingExternalScanner is implemented by scanners that can
+// change serialized state before Scan returns false. The changed state is part
+// of the scanner contract and must remain live for the next scan.
+//
+// Scanners without this capability keep the default transactional contract.
+// The token source restores their start state after a failed scan.
+// Retention takes precedence if a scanner reports both failure capabilities.
+type FailureStateRetainingExternalScanner interface {
+	ExternalScanner
+	RetainsStateOnScanFailure() bool
+}
+
+// ReduceChainTerminalAction describes the action class expected after a
+// generated reduce-chain hint finishes applying deterministic reductions.
+type ReduceChainTerminalAction uint8
+
+const (
+	ReduceChainTerminalNoAction ReduceChainTerminalAction = iota
+	ReduceChainTerminalSingleReduce
+	ReduceChainTerminalSingleShift
+	ReduceChainTerminalSingleAccept
+	ReduceChainTerminalSingleOther
+	ReduceChainTerminalMulti
+)
+
+// ReduceChainHint describes a terminal-verified parser hot path for a
+// deterministic reduce chain. The runtime still applies normal reduce
+// semantics and stops before the terminal action; this metadata only lets it
+// avoid repeated generic action dispatch for approved state/lookahead pairs.
+type ReduceChainHint struct {
+	StartState     StateID
+	Lookahead      Symbol
+	TerminalStates []StateID
+	TerminalAction ReduceChainTerminalAction
+	MaxSteps       uint16
+}
+
+// ConflictPolicyKind identifies a deterministic conflict policy class.
+type ConflictPolicyKind uint8
+
+const (
+	ConflictPolicyNone ConflictPolicyKind = iota
+	ConflictPolicyRepetitionShift
+	ConflictPolicyShift
+	// ConflictPolicyRecoveredRepetitionReduce is an exact-row certification
+	// for a recovered lineage. It chooses the single reduce from a
+	// {1 reduce, 1 repetition shift} row only after the lineage has previously
+	// entered recovery and only while no recovery action is currently active.
+	// Like other conflict policies, it is disabled during incremental reuse.
+	//
+	// Keep new kinds append-only: Language blobs encode these numeric values.
+	ConflictPolicyRecoveredRepetitionReduce
+	// ConflictPolicyRepetitionReduce is an exact-row certification for the
+	// ordinary C repetition fold: one reduce wins over one repetition shift.
+	ConflictPolicyRepetitionReduce
+	// ConflictPolicyDeclaredReduceReduceHighestSymbol resolves a row whose
+	// actions are all plain REDUCE and all reduce a symbol declared together
+	// in the grammar's own conflicts list. C's ts_stack_merge folds such rows
+	// deterministically: when the competing reductions later wrap into
+	// shape-equivalent subtrees (same symbol, span, and child count one level
+	// up), ts_stack_merge's shallow equivalence test keeps whichever subtree
+	// was established first without a deep content comparison, and arrival
+	// order is set by table-action order (the last action in a multi-action
+	// row runs immediately; earlier actions are deferred and lose). Because
+	// the generator lists same-row actions by ascending symbol id, "last
+	// processed" is "highest symbol id" for this shape. See
+	// declaredReduceReduceHighestSymbolConflictChoice.
+	ConflictPolicyDeclaredReduceReduceHighestSymbol
+)
+
+// ConflictPolicy describes one table row/lookahead conflict that can be
+// collapsed deterministically after validating the action shape.
+type ConflictPolicy struct {
+	State     StateID
+	Lookahead Symbol
+	Kind      ConflictPolicyKind
+	// CompactOnly prevents the production GLR parser from applying this
+	// policy. The compact scheduler can still use it after its safety gates.
+	CompactOnly bool
+	// CompactMinFrontierHeaders limits this policy to a compact scheduler
+	// frontier with at least this many live headers. Production ignores this
+	// gate when CompactOnly is false.
+	CompactMinFrontierHeaders uint16
+
+	// ReduceSymbols, when non-empty, requires every reduce in the conflict to
+	// reduce one of these symbols. The generic action-shape validator still
+	// requires at least one reduce.
+	ReduceSymbols []Symbol
+}
+
+// CompactRecoveryTerminalAliasRule certifies one terminal alias that can
+// survive compact strategy-2 recovery. ResumeState and ResumeSymbol identify
+// the exact recovery resume. AliasSymbol identifies the published leaf.
+//
+// Exact built-in profiles bind these values to one grammar blob. Languages
+// without a rule keep the accepted-root leaf audit fail-closed.
+type CompactRecoveryTerminalAliasRule struct {
+	ResumeState  StateID
+	ResumeSymbol Symbol
+	AliasSymbol  Symbol
+}
+
+// ConflictPolicyAnyState and ConflictPolicyAnyLookahead are sentinel State/
+// Lookahead values matching every state or every lookahead symbol instead of
+// one exact table row. They support policies scoped by state and/or reduce
+// symbol identity when enumerating every reachable row would add lookup cost
+// without strengthening the action-shape check. Built-in wildcard policies
+// are hand-certified and blob-SHA-pinned; callers supplying ConflictPolicies
+// directly are responsible for scoping their own wildcard policies safely.
+const (
+	ConflictPolicyAnyState     StateID = ^StateID(0)
+	ConflictPolicyAnyLookahead Symbol  = ^Symbol(0)
+)
+
+// ExternalScannerFullParseRetryPolicy controls whether a full parse with an
+// external scanner may schedule the generic second retry ladder after the
+// normal retry ladder has already selected its best tree.
+//
+// Keep new values append-only: Language blobs encode these numeric values.
+type ExternalScannerFullParseRetryPolicy uint8
+
+const (
+	// ExternalScannerFullParseRetryDefault preserves the generic behavior: an
+	// accepted error-bearing tree may schedule one more full retry ladder.
+	ExternalScannerFullParseRetryDefault ExternalScannerFullParseRetryPolicy = iota
+
+	// ExternalScannerFullParseRetrySkipRepeat certifies that the tree selected
+	// by the first retry ladder is authoritative. The parser retains that exact
+	// selected tree and does not schedule the extra external-scanner retry.
+	ExternalScannerFullParseRetrySkipRepeat
+)
+
+// FullParseAcceptedErrorRetryProfile certifies narrow full-parse retry
+// policies. When a fresh full parse accepts an error-bearing tree that covers
+// EOF, the parser may keep the initial GLR stack ceiling after the ordinary
+// same-stack merge retry or skip that ladder entirely. A grammar may also cap
+// retries or select a narrower widening target for a fresh, error-bearing
+// no-stacks result after proving the generic ladder does not improve the
+// selected tree. The zero value preserves the conservative generic ladder.
+//
+// Keep fields append-only: Language blobs encode this structure.
+type FullParseAcceptedErrorRetryProfile struct {
+	MinSourceBytes                 uint32
+	InitialStackCeiling            uint16
+	SkipCompleteAcceptedErrorRetry bool
+	FreshErrorNoStacksMaxPasses    uint8
+	// SkipCompleteMaxEntryScratchPeak limits complete-tree and fresh-result skips
+	// to a certified peak number of live GLR scratch entries. Zero is unbounded.
+	SkipCompleteMaxEntryScratchPeak uint32
+	// FreshErrorNoStacksRetryMaxStacks replaces the generic widened-stack
+	// target for a fresh error-bearing no-stacks parse. Zero keeps the generic
+	// target. Incremental fallbacks and explicit environment overrides ignore it.
+	FreshErrorNoStacksRetryMaxStacks uint16
+	// SkipInitialCompleteAcceptedErrorMergeRetry skips only the first
+	// same-stack merge retry for a fresh, complete accepted-error parse. Later
+	// widened-stack and merge retries remain available. Incremental fallbacks
+	// and explicit stack/merge environment overrides ignore it.
+	SkipInitialCompleteAcceptedErrorMergeRetry bool
+	// SkipCompleteMinSourceBytes limits complete-tree and fresh-result skips to
+	// sources at least this large. Zero preserves the unbounded behavior.
+	SkipCompleteMinSourceBytes uint32
+	// ReuseCleanWideForWideRetry certifies that the complete accepted-error tree
+	// from the non-recovery widened-stack pass is identical to the following
+	// recovery-enabled widened-stack pass. The parser may retain that tree and
+	// substitute it at the recovery-wide slot while preserving retry accounting.
+	ReuseCleanWideForWideRetry bool
+	// ReuseCleanWideMinSourceBytes limits clean-wide reuse to the certified
+	// large-source class. Zero disables the policy even when the boolean is set.
+	ReuseCleanWideMinSourceBytes uint32
+	// GSSConvergenceAcceptedErrorMergePerKey sets the exact merge width for an
+	// accepted-error retry after a certified cap-one full parse. Zero keeps the
+	// other retry policies. Explicit environment settings disable this policy.
+	GSSConvergenceAcceptedErrorMergePerKey uint16
+	// SkipFreshCompleteAcceptedErrorRetry keeps the initial fresh full-parse
+	// result when it is a complete accepted-error tree. It does not suppress a
+	// later merge retry after a no-stacks or node-limit result.
+	SkipFreshCompleteAcceptedErrorRetry bool
+}
+
+// ResultCompatibilityCapability records result-tree shapes that a language
+// produces natively and therefore does not need the runtime to repair after
+// parsing. Keep capability values append-only: Language blobs encode these
+// numeric bits, and a zero value deliberately preserves legacy behavior.
+type ResultCompatibilityCapability uint64
+
+const (
+	ResultCompatibilityCSharpNativeNotNull                ResultCompatibilityCapability = 1 << 0
+	ResultCompatibilityCSharpNativeUnicodeIdentifiers     ResultCompatibilityCapability = 1 << 1
+	ResultCompatibilityCSharpNativeScopedLambdaStatements ResultCompatibilityCapability = 1 << 2
+	ResultCompatibilityCSharpNativeScopedLambdaBlocks     ResultCompatibilityCapability = 1 << 3
+	ResultCompatibilityCSharpNativeQueryExpressions       ResultCompatibilityCapability = 1 << 4
+	// ResultCompatibilityNativeCollapsedChildren records the v0.46 exact-profile
+	// certification receipt for collapsed-child rows. It admits exact built-ins
+	// and true adapted clones; native retention then keys off exact registered
+	// parent/raw-child metadata identities. A matching display name or pair-level
+	// metadata alone is insufficient. Keep the bit append-only because Language
+	// blobs encode capability values.
+	ResultCompatibilityNativeCollapsedChildren ResultCompatibilityCapability = 1 << 5
+	// ResultCompatibilityNativeRecoveredStructure permits receipt checks for
+	// error-bearing native roots. Consumers must also verify the complete source
+	// span, raw top-level spans, and the isolated-error shape.
+	ResultCompatibilityNativeRecoveredStructure ResultCompatibilityCapability = 1 << 6
+)
+
+// CompactRecoverEOFArtifactReceipt is the locked-C certification data for one
+// compact recover_eof boundary. A zero BlobSHA256 disables this route. The
+// receipt binds the exact grammar artifact to the terminal, parser boundary,
+// and compact scheduler facts for the locked-C-certified witness.
+//
+// The work fields are intentionally explicit. They prevent a Boolean grant
+// from admitting a parse after an unmodeled shift, reduction, conflict, fork,
+// or recovery operation changes the pre-EOF lineage.
+type CompactRecoverEOFArtifactReceipt struct {
+	BlobSHA256        [32]byte
+	TerminalSymbol    Symbol
+	EOFState          StateID
+	EOFByteOffset     uint32
+	Passes            uint64
+	Elections         uint64
+	ActionLookups     uint64
+	Dispatches        uint64
+	OrdinaryShifts    uint64
+	OrdinaryCohorts   uint64
+	ExtraShifts       uint64
+	ExtraCohorts      uint64
+	Reductions        uint64
+	Conflicts         uint64
+	ConflictActions   uint64
+	Forks             uint64
+	RepetitionFolds   uint64
+	RecoveryWork      uint64
+	NoActionDrops     uint64
+	ReductionPauses   uint64
+	Accepts           uint64
+	Canonicalizations uint64
+	PeakHeaders       uint64
+}
+
+// Language holds all data needed to parse a specific language.
+// It mirrors tree-sitter's TSLanguage C struct, translated into
+// idiomatic Go types with slice-based tables instead of raw pointers.
+type Language struct {
+	Name string
+	// GeneratedByGrammargen is true for languages assembled by grammargen at
+	// runtime rather than decoded from a checked-in ts2go blob.
+	GeneratedByGrammargen bool
+
+	// CRecoveryCostCompetitionCapable records parser.c/table evidence that the
+	// grammar exposes the C recovery surface: RECOVER actions plus an
+	// ERROR_STATE lex mode. It is capability metadata only, not a default-on
+	// parity certification.
+	CRecoveryCostCompetitionCapable bool
+
+	// CRecoveryCostCompetitionEnabledByDefault explicitly certifies that the
+	// faithful C recovery-cost competition gate is parity-safe as default
+	// behavior for this language. Runtime gating also requires capability
+	// metadata and conservative table validation.
+	CRecoveryCostCompetitionEnabledByDefault bool
+
+	// WantsForest opts this language into the GSS-forest GLR fast path.
+	// Consumers generating a Language via grammargen set this (directly or via
+	// grammargen.Grammar.WantsForest) to enable forest for their own grammar. This
+	// bypasses the byte-range parity certification built-ins undergo — the
+	// decline->production fallback still prevents hard failures on declined inputs,
+	// but a clean-but-different tree is the consumer's responsibility.
+	WantsForest bool
+
+	// LanguageVersion is the tree-sitter language ABI version.
+	// A value of 0 means "unknown/unspecified" and is treated as compatible.
+	LanguageVersion uint32
+
+	// Counts
+	SymbolCount        uint32
+	TokenCount         uint32
+	ExternalTokenCount uint32
+	StateCount         uint32
+	LargeStateCount    uint32
+	FieldCount         uint32
+	ProductionIDCount  uint32
+
+	// Symbol metadata
+	SymbolNames    []string
+	SymbolMetadata []SymbolMetadata
+	FieldNames     []string // index 0 is ""
+
+	// Parse tables
+	ParseTable         [][]uint16 // dense: [state][symbol] -> action index
+	SmallParseTable    []uint16   // compressed sparse table
+	SmallParseTableMap []uint32   // state -> offset into SmallParseTable
+	ParseActions       []ParseActionEntry
+	// LargeStateGotos stores nonterminal GOTO targets that do not fit in the
+	// uint16 parse-table cells used by tree-sitter C tables. Keys are
+	// uint64(state)<<32 | uint64(symbol). Terminal actions must never live here.
+	//
+	// This is the only exported map field on Language, which matters for blob
+	// serialization: gob's map codec iterates via reflect's randomized
+	// MapRange, so blob encoders never gob-encode this field directly when
+	// it's non-empty (today, only c_sharp populates it). See
+	// large_state_gotos_trailer.go for the deterministic encode/decode path.
+	LargeStateGotos map[uint64]StateID
+
+	// ReduceChainHints are optional generated hot-path hints for deterministic
+	// reduce runs. They are only consumed when reduce-chain hints are enabled.
+	ReduceChainHints []ReduceChainHint
+
+	// ConflictPolicies are optional deterministic conflict policies derived
+	// from grammar tables.
+	ConflictPolicies []ConflictPolicy
+
+	// Lex tables
+	LexModes            []LexMode
+	LexStates           []LexState // main lexer DFA
+	KeywordLexStates    []LexState // keyword lexer DFA (optional)
+	KeywordCaptureToken Symbol
+	// LayoutFallbackLexState is an optional broad DFA start state used only in
+	// layout-entry parser states. It lets the runtime avoid skipping over
+	// zero-width external layout markers before the layout scanner fires.
+	LayoutFallbackLexState    uint16
+	HasLayoutFallbackLexState bool
+
+	// Field mapping
+	FieldMapSlices  [][2]uint16 // [production_id] -> (index, length)
+	FieldMapEntries []FieldMapEntry
+
+	// Alias sequences
+	AliasSequences [][]Symbol // [production_id][child_index] -> alias symbol
+
+	// ProductionSignatures records LHS/RHS shape for grammargen productions.
+	// It is separate from ProductionID because ProductionID is deliberately
+	// compacted by field/alias pattern and is not a unique RHS identity.
+	ProductionSignatures []ProductionSignature
+
+	// Primary state IDs (for table dedup)
+	PrimaryStateIDs []StateID
+
+	// ABI 15: Reserved words — flat array indexed by
+	// (reserved_word_set_id * MaxReservedWordSetSize + i), terminated by 0.
+	ReservedWords          []Symbol
+	MaxReservedWordSetSize uint16
+
+	// ABI 15: Supertype hierarchy
+	SupertypeSymbols    []Symbol
+	SupertypeMapSlices  [][2]uint16 // [supertype_symbol] -> (index, length)
+	SupertypeMapEntries []Symbol
+
+	// HiddenChoicePassthroughSymbols marks generated hidden nonterminals whose
+	// productions are only neutral single-symbol pass-throughs. These wrappers
+	// are structural parser routes, not tree nodes; checked-in blobs leave this
+	// nil to preserve legacy behavior.
+	HiddenChoicePassthroughSymbols []bool
+
+	// ABI 15: Grammar semantic version
+	Metadata LanguageMetadata
+
+	// External scanner (nil if not needed)
+	ExternalScanner ExternalScanner
+	ExternalSymbols []Symbol // external token index -> symbol
+	// grammarBlobSHA256 identifies the exact compressed grammar bytes that
+	// produced this Language. Keep it private so blob encoding stays stable.
+	grammarBlobSHA256      [32]byte
+	grammarBlobSHA256Valid bool
+	// ImmediateTokens is a bitmask of symbol IDs that are token.immediate() tokens.
+	// When the lexer matches one of these after consuming whitespace, the match
+	// should be rejected — immediate tokens must match at the original position.
+	// nil means no immediate tokens (common for ts2go grammars).
+	ImmediateTokens []bool
+	// ZeroWidthTokens is a bitmask of symbol IDs whose DFA terminal pattern can
+	// intentionally match empty input. nil means this information is unavailable,
+	// which preserves historical lexer behavior for ts2go blobs.
+	ZeroWidthTokens []bool
+
+	// ExternalLexStates maps external lex state IDs (from LexMode.ExternalLexState)
+	// to a boolean slice indicating which external tokens are valid. Row 0 is
+	// always all-false (no external tokens valid). When non-nil, this table is
+	// used instead of parse-action-table probing to compute validSymbols for the
+	// external scanner, matching C tree-sitter's ts_external_scanner_states.
+	ExternalLexStates [][]bool
+
+	// InitialState is the parser's start state. In tree-sitter grammars
+	// this is always 1 (state 0 is reserved for error recovery). For
+	// hand-built grammars it defaults to 0.
+	InitialState StateID
+
+	// Lazily-built lookup maps for O(1) name resolution.
+	symbolNameMap            map[string]Symbol
+	symbolNameNamedMap       map[symbolNameNamedKey]Symbol
+	visibleSymbolNameMap     map[symbolNameNamedKey]Symbol
+	tokenSymbolNameMap       map[string][]Symbol
+	publicSymbolMap          []Symbol // internal symbol → canonical public symbol
+	publicNamedSymbolMap     []Symbol // internal symbol -> canonical public named symbol
+	publicAnonymousSymbolMap []Symbol // internal symbol -> canonical public anonymous symbol
+	fieldNameMap             map[string]FieldID
+
+	// Shape masks over the names of ANONYMOUS token symbols, built alongside
+	// tokenSymbolNameMap. anonTokenNameFirstByteMask has the bit for the first
+	// byte of each such name; anonTokenNameLenMask has bit min(len,64)-1 for
+	// each such name's byte length. anonymousTokenNameShapePossible uses them
+	// as an exact pre-filter: when either bit for a candidate text is clear,
+	// no anonymous token symbol's name can equal that text, so per-token
+	// literal-promotion probes (promoteActiveLiteralForCurrentState) can skip
+	// the string-map lookup entirely. A set bit proves nothing — callers fall
+	// through to the full lookup — so the filter can never change results.
+	anonTokenNameFirstByteMask [4]uint64
+	anonTokenNameLenMask       uint64
+
+	symbolMapOnce sync.Once
+	fieldMapOnce  sync.Once
+
+	// ASCII fast-path for the lexer DFA. lexAsciiTable[stateID][byte] encodes
+	// the result of the transition scan for ASCII input (bytes 0x00–0x7F).
+	// Bit 31 set = skip transition; bits 30–0 = next state (0x7FFF_FFFF = no match).
+	lexAsciiTable        [][128]int32
+	lexAsciiOnce         sync.Once
+	keywordLexAsciiTable [][128]int32
+	keywordLexAsciiOnce  sync.Once
+	lexModeStarts        []lexModeStart
+	lexModeStartOnce     sync.Once
+	keywordPrefilter     keywordLexPrefilter
+	keywordPrefilterOnce sync.Once
+	zeroWidthInfo        languageZeroWidthInfo
+	zeroWidthInfoOnce    sync.Once
+
+	// cRecoveryGateCache memoizes DiagnoseCRecoveryGate (parser_recover_c.go),
+	// which otherwise re-scans the full parse tables on every call. The entry
+	// is keyed by a fingerprint of every input the diagnosis reads, so
+	// post-load mutations (external scanner / ExternalLexStates attach)
+	// invalidate it. See cRecoveryGateCacheKeyFor.
+	cRecoveryGateCache atomic.Pointer[cRecoveryGateCacheEntry]
+
+	// compactTables memoizes the converted compact-parser (parsercorephase0)
+	// action and reduction tables for the Phase-3 admission candidate route. The
+	// conversion reads only immutable language data, so one build serves every
+	// Parser of this Language. compactTables is typed as any because the concrete
+	// type (*parserCoreLanguageTables) only exists under the default build; the
+	// emergency opt-out tag gts_no_parsercorephase0 never touches it.
+	//
+	// The cache lives on the Language rather than in a process-wide map, so it
+	// never outlives the Language it describes. A global identity-keyed map would
+	// pin every Language (and its multi-megabyte decoded grammar and lex tables)
+	// for the process lifetime, which leaks memory for callers that build many
+	// transient languages. See acquireParserCoreLanguageTables.
+	compactTablesOnce sync.Once
+	compactTables     any   // *parserCoreLanguageTables under the default build
+	compactTablesErr  error // the build error, memoized alongside compactTables
+
+	// compactTableIdentityOnce assigns one immutable identity to the parser
+	// table producer. Loaded blobs use their exact blob hash. In-memory
+	// generated languages use a process-local token until they are encoded.
+	compactTableIdentityOnce sync.Once
+	compactTableIdentity     [32]byte
+
+	// corridorProgram memoizes the compiled C4 bytecode corridor program for
+	// this Language (spec.c4-bytecode-isa.v1 section 3.6: the stream is
+	// memoized per *Language beside compactTables and dies with the Language).
+	// It is typed as any for the same reason compactTables is: the concrete
+	// type (*ParserCoreCorridorProgram) only exists under the default build.
+	// A grammar whose compile hits an unsupported construct simply keeps the
+	// generic lane, so a non-nil corridorProgramErr is never fatal.
+	corridorProgramOnce sync.Once
+	corridorProgram     any   // *ParserCoreCorridorProgram under the default build
+	corridorProgramErr  error // the compile error, memoized alongside corridorProgram
+
+	// parserDerivedOnce memoizes the per-language derived parser tables that
+	// NewParser previously rebuilt on every call. The tables are pure functions
+	// of the decoded grammar tables (ParseTable, SmallParseTable, ParseActions,
+	// SymbolMetadata), which are immutable after decode. The cache lives on the
+	// Language for the same retention reason as compactTables above.
+	parserDerivedOnce sync.Once
+	parserDerived     *parserDerivedTables
+
+	// NonTerminalAliasMap mirrors tree-sitter C's ts_non_terminal_alias_map.
+	// Rows are indexed by nonterminal symbol and contain aliases that require
+	// preserving the wrapper during alias-bearing reductions. This is cold
+	// metadata and intentionally lives in the struct's cold tail so parser hot
+	// field offsets stay stable.
+	NonTerminalAliasMap [][]Symbol
+
+	// ExternalScannerFullParseRetryPolicy is a certified language-level policy
+	// for scheduling the extra external-scanner full-parse retry. Zero preserves
+	// the generic behavior for legacy blobs and caller-constructed languages.
+	ExternalScannerFullParseRetryPolicy ExternalScannerFullParseRetryPolicy
+
+	// FullParseAcceptedErrorRetryProfile is certified against an exact language
+	// blob. Zero preserves widened-stack and no-stacks retries for legacy blobs,
+	// caller-constructed languages, and language overrides.
+	FullParseAcceptedErrorRetryProfile FullParseAcceptedErrorRetryProfile
+
+	// AutomaticForestMemoryAllowanceBytes bounds only the speculative forest
+	// phase used by automatic dispatch. Zero preserves the full parse budget for
+	// legacy blobs, caller-constructed languages, language overrides, and
+	// explicit ParseForestExperimental calls. Built-in values are certified and
+	// attached only after exact blob-identity verification.
+	AutomaticForestMemoryAllowanceBytes int64
+
+	// AutomaticForestEnabledByDefault certifies the speculative forest route for
+	// this exact language artifact. Checked-in built-ins receive this bit only
+	// from an exact-blob runtime profile; legacy blobs, same-name custom grammars,
+	// adapted grammars, and overrides retain the conservative false default.
+	AutomaticForestEnabledByDefault bool
+
+	// FullParseArenaDensityCapEnabled explicitly opts this language into the ASCII
+	// structural-density arena cap. Checked-in built-ins are enabled automatically
+	// only through an exact-blob runtime profile. Callers may explicitly opt in
+	// custom or adapted languages; false preserves the baseline arena policy.
+	FullParseArenaDensityCapEnabled bool
+
+	// FullParseGSSConvergenceEnabled certifies faithful convergence for this
+	// language artifact. The parser keeps clean alternatives in the graph when
+	// one stack survives each merge group. Checked-in languages receive this
+	// setting only through an exact blob profile. Callers can enable it for
+	// custom languages after equivalent tree tests. An explicit merge limit of
+	// one also enables this behavior for a fresh full parse.
+	FullParseGSSConvergenceEnabled bool
+
+	// NativeResultCompatibility identifies result-tree shapes produced natively
+	// by this exact language artifact. Zero keeps conservative post-parse
+	// compatibility fallbacks for legacy blobs, generated grammars, caller-built
+	// languages, and overrides whose native behavior has not been certified.
+	NativeResultCompatibility ResultCompatibilityCapability
+
+	// NativeUnaryWrapperFlattening identifies exact same-span unary wrappers
+	// that C omits below a public parent in one parser state. Exact runtime
+	// profiles populate the symbol and state identities. Custom and stale
+	// artifacts keep the wrappers.
+	NativeUnaryWrapperFlattening []UnaryWrapperFlatteningRule
+
+	// CompactConvergedReductionSplitDropsCertified permits the compact
+	// fresh-full route to accept after it drops a no-action head descended from
+	// a converged-path reduction split. Exact built-in artifact profiles set
+	// this only after C-oracle parity proves that production selects the same
+	// surviving path. Custom and adapted languages fail closed by default.
+	CompactConvergedReductionSplitDropsCertified bool
+
+	// CompactEOFAcceptNoActionSiblingsCertified permits one authenticated EOF
+	// accept head to discard siblings that have no action for that same EOF.
+	// Exact built-in profiles set this only after C-oracle parity proves the
+	// accepted head matches production. Custom and adapted languages fail closed.
+	CompactEOFAcceptNoActionSiblingsCertified bool
+
+	// CompactPrimaryAcceptanceDerivationCertified permits the compact fresh-full
+	// route to select one primary derivation over secondary conflict derivations.
+	// The primary score must be at least every secondary score. Exact built-in
+	// profiles set this only after C-oracle parity proves production selects it.
+	CompactPrimaryAcceptanceDerivationCertified bool
+
+	// CompactAcceptanceStructuralElectionCertified permits the compact route
+	// to apply C's raw subtree ordering to a clean, tied acceptance frontier.
+	// Exact built-in profiles set this only after the locked C oracle proves
+	// the compact derivation order and result for that grammar artifact.
+	// Custom, adapted, and stale artifacts retain the false default.
+	CompactAcceptanceStructuralElectionCertified bool
+
+	// CompactMixedGSSMergeCertified permits one boundary merge to join flat
+	// and graph-structured stack forms with C's physical receiver ownership.
+	// Exact built-in profiles set this only after locked C parity proves the
+	// mixed representation path for that grammar artifact. Custom, adapted,
+	// and stale artifacts retain the false default.
+	CompactMixedGSSMergeCertified bool
+
+	// CompactLexerSkippedPrefixTilingCertified permits an internal compact
+	// reduction gap when the next accepted terminal carries exact DFA evidence
+	// for the complete skipped prefix. Exact built-in profiles set this only
+	// after locked-C parity proves the result for that grammar artifact.
+	// Custom, adapted, and stale artifacts retain the false default.
+	CompactLexerSkippedPrefixTilingCertified bool
+
+	// ExactStackNodeEquivalenceCertified preserves deep stack-node alternatives
+	// until generic result selection. Exact built-in profiles set this only when
+	// bounded equivalence can merge parity-relevant shapes. Custom, adapted, and
+	// stale artifacts retain bounded equivalence unless callers opt in.
+	ExactStackNodeEquivalenceCertified bool
+
+	// CompactPackedGSSVersionOrderCertified permits the compact fresh-full route
+	// to use C's physical stack-version transaction order for packed graph-
+	// structured stack reductions. The transaction includes action-slot ownership,
+	// same-round scheduling, bounded wave-order pop traversal, C-equivalent link
+	// packing, boundary packing, and packed-child election. Exact built-in
+	// profiles set this only after locked-C receipts and memory-budget tests
+	// certify the complete bundle. Custom, adapted, and stale artifacts retain
+	// the false default.
+	CompactPackedGSSVersionOrderCertified bool
+
+	// CompactStrategy2ErrorRegionCertified permits the compact fresh-full route
+	// to attempt native strategy-2 recovery (error-region absorb and
+	// condense-resume, campaign v7 tranche B3 stage S3) for a true no-table-
+	// action point: close in-progress productions on a single deterministic
+	// path, open an ERROR region, absorb tokens the table cannot place, and
+	// resume once the pre-error state accepts the current token. Exact
+	// built-in profiles set this only after C-oracle parity proves the
+	// resulting tree matches the pinned C oracle exactly for the certified
+	// witness class. Custom and adapted languages fail closed: an
+	// uncertified grammar keeps declining to production at the same
+	// no-action point exactly as before this stage landed.
+	CompactStrategy2ErrorRegionCertified bool
+
+	// CompactRecoverEOFCertified permits one exact EOF no-action lineage to
+	// publish tree-sitter's non-extra ERROR root from recover_eof. It is a
+	// compatibility marker. The compact route also requires the explicit,
+	// artifact-bound CompactRecoverEOFArtifactReceipt below.
+	CompactRecoverEOFCertified bool
+
+	// CompactRecoverEOFArtifactReceipt carries locked-C boundary and scheduler
+	// facts for the one recover_eof route certified on this language artifact.
+	// Its zero value disables the route, including when the compatibility marker
+	// above is set by an older caller.
+	CompactRecoverEOFArtifactReceipt CompactRecoverEOFArtifactReceipt
+
+	// CompactStackSummaryRecoveryCertified permits the compact fresh-full
+	// route to scan C's bounded stack summary at a no-action point. A
+	// successful scan forks the head into an ancestor-recovered lineage and
+	// an error-absorb lineage.
+	//
+	// The fork also requires CompactStrategy2ErrorRegionCertified. Both
+	// lineages continue to acceptance, where C-compatible error pricing selects
+	// the result. Exact built-in profiles must certify the complete competition.
+	// Custom and adapted languages retain the false default.
+	CompactStackSummaryRecoveryCertified bool
+
+	// CompactMissingTokenInsertionCertified permits the compact fresh-full
+	// route to scan for C's missing-token recovery candidate. A successful
+	// scan forks the head into missing and error-absorb lineages.
+	//
+	// The fork also requires CompactStrategy2ErrorRegionCertified. Both
+	// lineages continue to acceptance, where C-compatible error pricing selects
+	// the result. Exact built-in profiles must certify the complete competition.
+	// Custom and adapted languages retain the false default.
+	CompactMissingTokenInsertionCertified bool
+
+	// CompactS5EOFMissingInsertionCertified permits the compact fresh-full
+	// route to run S5 reductions and missing-token insertion when the elected
+	// token is EOF. This is distinct from CompactRecoverEOFCertified: S5
+	// publishes a grammar root with a missing leaf, not a recover_eof ERROR
+	// root. Exact built-in profiles set this only after locked-C parity proves
+	// the complete EOF competition. Custom and adapted languages retain the
+	// false default.
+	CompactS5EOFMissingInsertionCertified bool
+
+	// CompactFaithfulS5RecoveryCertified permits the complete S5 scan
+	// to merge equivalent physical recovery heads. The legacy bounded S5 path
+	// remains active without this exact artifact capability.
+	CompactFaithfulS5RecoveryCertified bool
+
+	// CompactOwnedEOFRecoveryCertified permits the bounded owned EOF route.
+	// The admission runner binds its required mechanisms as one bundle.
+	// Publication requires executed version-owned EOF recovery, without prior
+	// shared recovery or sibling drops. Other recovery grants remain separate.
+	// Custom, adapted, and stale artifacts retain the false default.
+	CompactOwnedEOFRecoveryCertified bool
+
+	// CompactRecoveryTrailingLineageRetirementCertified permits the compact
+	// scheduler to retire one trailing no-action missing lineage after the
+	// earlier error-absorb lineage consumed the same elected token. This is the
+	// exact two-version shape that C removes in its recovery condense tail.
+	// Exact built-in profiles must certify the complete transition. Custom,
+	// adapted, and stale artifacts retain the false default.
+	CompactRecoveryTrailingLineageRetirementCertified bool
+
+	// CompactRecoveryErrorModeKeywordCaptureCertified permits the compact
+	// scheduler to apply the grammar's keyword lexer after an error-mode lex
+	// returns the keyword-capture token. C performs this second lex while the
+	// recovery stack is in ERROR_STATE. Exact built-in profiles must certify
+	// the complete recovery election. Custom, adapted, and stale artifacts
+	// retain the false default.
+	CompactRecoveryErrorModeKeywordCaptureCertified bool
+
+	// CompactRecoveryTerminalAliasRules permits the accepted-root leaf audit to
+	// authenticate a materialized terminal alias after one certified recovery
+	// resume. The materializer must also prove the exact raw terminal and alias
+	// node relationship. Exact built-in profiles bind each rule to one grammar
+	// blob. Custom, adapted, and stale artifacts retain an empty rule set.
+	CompactRecoveryTerminalAliasRules []CompactRecoveryTerminalAliasRule
+
+	// CompactRecoveryPlainFirstCertified preserves the ordinary compact lexer
+	// for the first attempt. After a fail-closed decline, the route retries with
+	// C error-mode lexing and the certified S3/S5 recovery mechanisms.
+	//
+	// Exact built-in profiles set this only when C-oracle differentials prove
+	// that the retry adds recovery routes without removing clean routes. Custom,
+	// adapted, and stale artifacts keep the direct recovery attempt.
+	CompactRecoveryPlainFirstCertified bool
+
+	// LineContinuationEscapeByte declares the single byte this language's
+	// scanner treats as a line-continuation escape when immediately followed
+	// by a newline (LF, or CR+LF) — for example PowerShell's backtick. C
+	// tree-sitter's scanner consumes an escape+newline pair as ordinary
+	// skipped trivia, the same treatment bytesAreParserPadding (mid-parse gap
+	// classification) and parserTailAllowsCleanAcceptance (accepted-stack and
+	// accepted-tree tail classification) already give backslash+newline
+	// unconditionally. Backslash needs no per-language gate because no
+	// grammar this parser loads leaves a bare backslash+newline as an
+	// uncovered gap that must not be crossed: languages whose grammar assigns
+	// backslash+newline its own meaning (for example Python's line_continuation
+	// node) tokenize it as a real, accounted-for node rather than leaving a
+	// gap for these padding checks to ever see. An arbitrary escape byte
+	// cannot get that same unconditional treatment because it can collide
+	// with unrelated grammar meaning elsewhere (for example backtick opens a
+	// Markdown fence and a shell command substitution), so acceptance
+	// requires this explicit per-language declaration. Zero (the default)
+	// declares no continuation escape and leaves padding classification
+	// exactly as it was before this field existed. Exact built-in profiles
+	// set this only after C-oracle parity confirms the escape+newline pair is
+	// scanner-owned padding for the certified blob (see
+	// grammars/runtime_profiles.go). Custom, adapted, and generated languages
+	// default to zero and are unaffected.
+	LineContinuationEscapeByte byte
+}
+
+type symbolNameNamedKey struct {
+	name  string
+	named bool
+}
+
+type languageZeroWidthInfo struct {
+	hasTokens              bool
+	hasStartAccept         bool
+	sentinelSymbol         Symbol
+	hasZeroWidthSentinel   bool
+	zeroWidthSentinelKnown bool
+}
+
+type keywordLexPrefilter struct {
+	allowAll bool
+	hasAny   bool
+	first    [4]uint64
+	lengths  [4]uint64
+}
+
+type lexModeStart struct {
+	lexState                uint32
+	afterWhitespaceLexState uint32
+}
+
+const lexAsciiNoMatch = int32(0x7FFF_FFFF)
+const lexAsciiSkipBit = int32(-1 << 31) // bit 31
+
+// LexAsciiTable returns the pre-built ASCII fast-path transition table for the
+// main lexer DFA. The table is built once per Language. Entry format:
+//
+//	bit 31 set  → skip transition (consume and reset token start)
+//	bits 0-30   → next state ID (lexAsciiNoMatch if no transition)
+func (l *Language) LexAsciiTable() [][128]int32 {
+	if l == nil {
+		return nil
+	}
+	l.lexAsciiOnce.Do(func() {
+		l.lexAsciiTable = buildLexAsciiTable(l.LexStates)
+	})
+	return l.lexAsciiTable
+}
+
+// KeywordLexAsciiTable returns the ASCII fast-path table for the keyword lexer DFA.
+func (l *Language) KeywordLexAsciiTable() [][128]int32 {
+	if l == nil || len(l.KeywordLexStates) == 0 {
+		return nil
+	}
+	l.keywordLexAsciiOnce.Do(func() {
+		l.keywordLexAsciiTable = buildLexAsciiTable(l.KeywordLexStates)
+	})
+	return l.keywordLexAsciiTable
+}
+
+func (l *Language) keywordLexCouldMatch(source []byte, start, end int) bool {
+	if l == nil || len(l.KeywordLexStates) == 0 {
+		return true
+	}
+	l.keywordPrefilterOnce.Do(func() {
+		l.keywordPrefilter = l.buildKeywordLexPrefilter()
+	})
+	filter := l.keywordPrefilter
+	if filter.allowAll {
+		return true
+	}
+	if !filter.hasAny || start < 0 || end <= start || end > len(source) {
+		return false
+	}
+	n := end - start
+	if n >= 256 {
+		return false
+	}
+	if filter.lengths[n/64]&(uint64(1)<<uint(n%64)) == 0 {
+		return false
+	}
+	first := source[start]
+	return filter.first[first/64]&(uint64(1)<<uint(first%64)) != 0
+}
+
+func (l *Language) buildKeywordLexPrefilter() keywordLexPrefilter {
+	if l == nil || len(l.KeywordLexStates) == 0 {
+		return keywordLexPrefilter{allowAll: true}
+	}
+	// Derive the first-character and accepted-length sets directly from the
+	// keyword lex DFA rather than from symbol names. Keyword literals are not
+	// always equal to their symbol names (e.g. bass maps the literal "_" to the
+	// "ignore" symbol), so a name-based prefilter would wrongly reject the
+	// literal and block keyword promotion. The keyword DFA, which actually
+	// recognizes the literals, is the authoritative source.
+	//
+	// The DFA always starts at state 0 (see lexKeywordSource). We BFS by depth:
+	// the byte ranges leaving state 0 give the valid first characters, and the
+	// depth at which any accept state is reached gives a valid length. If the
+	// DFA uses constructs we cannot bound conservatively (default transitions,
+	// non-ASCII ranges), fall back to allowAll so we never produce a false
+	// negative.
+	states := l.KeywordLexStates
+	const maxLen = 255
+	var filter keywordLexPrefilter
+
+	type frame struct {
+		state int
+		depth int
+	}
+	visited := make(map[frame]bool)
+	queue := []frame{{state: 0, depth: 0}}
+	for len(queue) > 0 {
+		f := queue[0]
+		queue = queue[1:]
+		if f.state < 0 || f.state >= len(states) {
+			return keywordLexPrefilter{allowAll: true}
+		}
+		if visited[f] {
+			continue
+		}
+		visited[f] = true
+		if f.depth > maxLen {
+			return keywordLexPrefilter{allowAll: true}
+		}
+
+		st := states[f.state]
+		if st.AcceptToken != 0 && f.depth > 0 {
+			filter.hasAny = true
+			filter.lengths[f.depth/64] |= uint64(1) << uint(f.depth%64)
+		}
+		// A default transition can be taken by any byte, which would make the
+		// first-character set unbounded; bail out conservatively.
+		if st.Default >= 0 {
+			return keywordLexPrefilter{allowAll: true}
+		}
+		for _, tr := range st.Transitions {
+			if tr.NextState < 0 {
+				continue
+			}
+			if tr.Lo < 0 || tr.Hi > 0x7F || tr.Hi < tr.Lo {
+				// Non-ASCII (or malformed) ranges cannot be represented in the
+				// 256-bit first set without risking a false negative.
+				return keywordLexPrefilter{allowAll: true}
+			}
+			if f.depth == 0 {
+				for c := tr.Lo; c <= tr.Hi; c++ {
+					filter.first[c/64] |= uint64(1) << uint(c%64)
+				}
+			}
+			queue = append(queue, frame{state: tr.NextState, depth: f.depth + 1})
+		}
+	}
+	if !filter.hasAny {
+		return keywordLexPrefilter{allowAll: true}
+	}
+	return filter
+}
+
+func (l *Language) LexModeStarts() []lexModeStart {
+	if l == nil || len(l.LexModes) == 0 {
+		return nil
+	}
+	l.lexModeStartOnce.Do(func() {
+		starts := make([]lexModeStart, len(l.LexModes))
+		for i, mode := range l.LexModes {
+			starts[i] = lexModeStart{
+				lexState:                mode.LexStateIndex(),
+				afterWhitespaceLexState: mode.AfterWhitespaceLexStateIndex(),
+			}
+		}
+		l.lexModeStarts = starts
+	})
+	return l.lexModeStarts
+}
+
+func buildLexAsciiTable(states []LexState) [][128]int32 {
+	tbl := make([][128]int32, len(states))
+	for si := range states {
+		row := &tbl[si]
+		for c := 0; c < 128; c++ {
+			row[c] = lexAsciiNoMatch
+		}
+		remaining := 128
+		for ti := range states[si].Transitions {
+			if remaining == 0 {
+				break
+			}
+			tr := &states[si].Transitions[ti]
+			if tr.Hi < 0 || tr.Lo >= 128 {
+				continue
+			}
+			lo := tr.Lo
+			if lo < 0 {
+				lo = 0
+			}
+			hi := tr.Hi
+			if hi > 127 {
+				hi = 127
+			}
+			v := int32(tr.NextState)
+			if tr.Skip {
+				v |= lexAsciiSkipBit
+			}
+			for c := int(lo); c <= int(hi); c++ {
+				if row[c] == lexAsciiNoMatch {
+					row[c] = v
+					remaining--
+				}
+			}
+		}
+	}
+	return tbl
+}
+
+// Version returns the tree-sitter language ABI version.
+func (l *Language) Version() uint32 {
+	if l == nil {
+		return 0
+	}
+	return l.LanguageVersion
+}
+
+// GrammarBlobSHA256 returns the exact compressed grammar blob identity.
+func (l *Language) GrammarBlobSHA256() ([32]byte, bool) {
+	if l == nil || !l.grammarBlobSHA256Valid {
+		return [32]byte{}, false
+	}
+	return l.grammarBlobSHA256, true
+}
+
+func compactRecoverEOFArtifactConfigured(l *Language) bool {
+	if l == nil || !l.CompactRecoverEOFCertified {
+		return false
+	}
+	receipt := l.CompactRecoverEOFArtifactReceipt
+	if receipt.BlobSHA256 == ([32]byte{}) {
+		return false
+	}
+	blob, ok := l.GrammarBlobSHA256()
+	return ok && blob == receipt.BlobSHA256
+}
+
+var nextCompactTableIdentity atomic.Uint64
+
+func (l *Language) parserCoreTableIdentity() ([32]byte, bool) {
+	if l == nil {
+		return [32]byte{}, false
+	}
+	l.compactTableIdentityOnce.Do(func() {
+		if blob, ok := l.GrammarBlobSHA256(); ok {
+			l.compactTableIdentity = blob
+			return
+		}
+		id := nextCompactTableIdentity.Add(1)
+		for i := 0; i < 8; i++ {
+			l.compactTableIdentity[i] = byte(id >> (8 * i))
+		}
+	})
+	return l.compactTableIdentity, true
+}
+
+// CompatibleWithRuntime reports whether this language can be parsed by the
+// current runtime version. Unspecified versions (0) are treated as compatible.
+func (l *Language) CompatibleWithRuntime() bool {
+	v := l.Version()
+	if v == 0 {
+		return true
+	}
+	return v >= MinCompatibleLanguageVersion && v <= RuntimeLanguageVersion
+}
+
+// Size returns an approximate number of bytes retained by the decoded language
+// tables and lazily-built lookup caches. It is intended for diagnostics and
+// cache policy decisions, not as an exact Go heap accounting API.
+func (l *Language) Size() int64 {
+	if l == nil {
+		return 0
+	}
+	size := int64(unsafe.Sizeof(*l))
+	size += languageStringBytes(l.Name)
+	size += languageStringsSize(l.SymbolNames)
+	size += languageSliceSize(l.SymbolMetadata)
+	size += languageStringsSize(l.FieldNames)
+	size += languageTable2DUint16Size(l.ParseTable)
+	size += languageSliceSize(l.SmallParseTable)
+	size += languageSliceSize(l.SmallParseTableMap)
+	size += languageParseActionsSize(l.ParseActions)
+	size += languageStateIDMapSize(l.LargeStateGotos)
+	size += languageReduceChainHintsSize(l.ReduceChainHints)
+	size += languageLexStatesSize(l.LexStates)
+	size += languageLexStatesSize(l.KeywordLexStates)
+	size += languageSliceSize(l.LexModes)
+	size += languageSliceSize(l.FieldMapSlices)
+	size += languageSliceSize(l.FieldMapEntries)
+	size += languageSymbolTable2DSize(l.AliasSequences)
+	size += languageSymbolTable2DSize(l.NonTerminalAliasMap)
+	size += languageSliceSize(l.PrimaryStateIDs)
+	size += languageSliceSize(l.ReservedWords)
+	size += languageSliceSize(l.SupertypeSymbols)
+	size += languageSliceSize(l.SupertypeMapSlices)
+	size += languageSliceSize(l.SupertypeMapEntries)
+	size += languageSliceSize(l.ExternalSymbols)
+	size += languageSliceSize(l.ImmediateTokens)
+	size += languageSliceSize(l.ZeroWidthTokens)
+	size += languageBoolTable2DSize(l.ExternalLexStates)
+	size += languageSymbolMapSize(l.symbolNameMap)
+	size += languageSymbolNamedMapSize(l.symbolNameNamedMap)
+	size += languageSymbolNamedMapSize(l.visibleSymbolNameMap)
+	size += languageTokenSymbolMapSize(l.tokenSymbolNameMap)
+	size += languageSliceSize(l.publicSymbolMap)
+	size += languageSliceSize(l.publicNamedSymbolMap)
+	size += languageSliceSize(l.publicAnonymousSymbolMap)
+	size += languageFieldMapSize(l.fieldNameMap)
+	size += languageSliceSize(l.lexAsciiTable)
+	size += languageSliceSize(l.keywordLexAsciiTable)
+	size += languageSliceSize(l.lexModeStarts)
+	return size
+}
+
+func languageStringBytes(s string) int64 {
+	return int64(len(s))
+}
+
+func languageSliceSize[T any](s []T) int64 {
+	var zero T
+	return int64(cap(s)) * int64(unsafe.Sizeof(zero))
+}
+
+func languageStringsSize(ss []string) int64 {
+	size := languageSliceSize(ss)
+	for _, s := range ss {
+		size += languageStringBytes(s)
+	}
+	return size
+}
+
+func languageTable2DUint16Size(table [][]uint16) int64 {
+	size := languageSliceSize(table)
+	for _, row := range table {
+		size += languageSliceSize(row)
+	}
+	return size
+}
+
+func languageSymbolTable2DSize(table [][]Symbol) int64 {
+	size := languageSliceSize(table)
+	for _, row := range table {
+		size += languageSliceSize(row)
+	}
+	return size
+}
+
+func languageBoolTable2DSize(table [][]bool) int64 {
+	size := languageSliceSize(table)
+	for _, row := range table {
+		size += languageSliceSize(row)
+	}
+	return size
+}
+
+func languageParseActionsSize(actions []ParseActionEntry) int64 {
+	size := languageSliceSize(actions)
+	for _, entry := range actions {
+		size += languageSliceSize(entry.Actions)
+	}
+	return size
+}
+
+func languageStateIDMapSize(m map[uint64]StateID) int64 {
+	return int64(len(m)) * int64(unsafe.Sizeof(uint64(0))+unsafe.Sizeof(StateID(0)))
+}
+
+func languageReduceChainHintsSize(hints []ReduceChainHint) int64 {
+	size := languageSliceSize(hints)
+	for _, hint := range hints {
+		size += languageSliceSize(hint.TerminalStates)
+	}
+	return size
+}
+
+func languageLexStatesSize(states []LexState) int64 {
+	size := languageSliceSize(states)
+	for _, state := range states {
+		size += languageSliceSize(state.Transitions)
+	}
+	return size
+}
+
+func languageSymbolMapSize(m map[string]Symbol) int64 {
+	size := int64(0)
+	for k := range m {
+		size += languageStringBytes(k) + int64(unsafe.Sizeof(Symbol(0)))
+	}
+	return size
+}
+
+func languageSymbolNamedMapSize(m map[symbolNameNamedKey]Symbol) int64 {
+	size := int64(0)
+	for k := range m {
+		size += languageStringBytes(k.name) + int64(unsafe.Sizeof(k.named)) + int64(unsafe.Sizeof(Symbol(0)))
+	}
+	return size
+}
+
+func languageTokenSymbolMapSize(m map[string][]Symbol) int64 {
+	size := int64(0)
+	for k, syms := range m {
+		size += languageStringBytes(k) + languageSliceSize(syms)
+	}
+	return size
+}
+
+func languageFieldMapSize(m map[string]FieldID) int64 {
+	size := int64(0)
+	for k := range m {
+		size += languageStringBytes(k) + int64(unsafe.Sizeof(FieldID(0)))
+	}
+	return size
+}
+
+// SymbolByName returns the symbol ID for a given name, or (0, false) if not found.
+// The "_" wildcard returns (0, true) as a special case.
+// Builds an internal map on first call for O(1) subsequent lookups.
+func (l *Language) SymbolByName(name string) (Symbol, bool) {
+	if name == "_" {
+		return 0, true
+	}
+	l.buildSymbolMaps()
+	sym, ok := l.symbolNameMap[name]
+	return sym, ok
+}
+
+func (l *Language) symbolByNameAndNamed(name string, named bool) (Symbol, bool) {
+	if name == "_" {
+		return 0, true
+	}
+	l.buildSymbolMaps()
+	sym, ok := l.symbolNameNamedMap[symbolNameNamedKey{name: name, named: named}]
+	return sym, ok
+}
+
+func (l *Language) visibleSymbolByNameAndNamed(name string, named bool) (Symbol, bool) {
+	if name == "_" {
+		return 0, true
+	}
+	l.buildSymbolMaps()
+	sym, ok := l.visibleSymbolNameMap[symbolNameNamedKey{name: name, named: named}]
+	return sym, ok
+}
+
+func (l *Language) symbolByNamePreferNamed(name string) (Symbol, bool) {
+	if sym, ok := l.symbolByNameAndNamed(name, true); ok {
+		return sym, true
+	}
+	return l.SymbolByName(name)
+}
+
+// TokenSymbolsByName returns all terminal token symbols whose display name
+// matches name. The returned symbols are in grammar order.
+func (l *Language) TokenSymbolsByName(name string) []Symbol {
+	l.buildSymbolMaps()
+	return l.tokenSymbolNameMap[name]
+}
+
+// anonymousTokenNameShapePossible reports whether some ANONYMOUS token
+// symbol's name could equal text, judged only by text's first byte and byte
+// length against the masks built in buildSymbolMaps. false is definitive (no
+// anonymous token symbol is named text); true only means "possible" and the
+// caller must still do the exact lookup. Used as an allocation-free hot-path
+// pre-filter by promoteActiveLiteralForCurrentState, where the overwhelmingly
+// common inputs are ordinary identifiers that match no literal name.
+func (l *Language) anonymousTokenNameShapePossible(text string) bool {
+	if l == nil {
+		return false
+	}
+	if len(text) == 0 {
+		return false
+	}
+	l.buildSymbolMaps()
+	lenBit := len(text) - 1
+	if lenBit > 63 {
+		lenBit = 63
+	}
+	if l.anonTokenNameLenMask&(1<<uint(lenBit)) == 0 {
+		return false
+	}
+	b := text[0]
+	return l.anonTokenNameFirstByteMask[b>>6]&(1<<(b&63)) != 0
+}
+
+// PublicSymbol maps an internal symbol to its canonical public form.
+// Multiple internal symbols may share the same visible name (e.g.
+// HTML's _start_tag_name and _end_tag_name both display as "tag_name").
+// PublicSymbol returns the first symbol with that name, matching what
+// SymbolByName returns. This ensures query patterns compiled with
+// SymbolByName match nodes regardless of which alias produced them.
+func (l *Language) PublicSymbol(sym Symbol) Symbol {
+	if l == nil {
+		return sym
+	}
+	l.buildSymbolMaps()
+	if int(sym) < len(l.publicSymbolMap) {
+		return l.publicSymbolMap[sym]
+	}
+	return sym
+}
+
+// PublicSymbolForNamedness maps an internal symbol to the canonical public
+// symbol with the same display name and requested namedness. This lets query
+// matching distinguish named nodes from anonymous tokens that share text.
+func (l *Language) PublicSymbolForNamedness(sym Symbol, named bool) Symbol {
+	if l == nil {
+		return sym
+	}
+	l.buildSymbolMaps()
+	idx := int(sym)
+	if idx < 0 || idx >= len(l.SymbolNames) {
+		return sym
+	}
+	if named {
+		if idx < len(l.publicNamedSymbolMap) {
+			return l.publicNamedSymbolMap[idx]
+		}
+		return sym
+	}
+	if idx < len(l.publicAnonymousSymbolMap) {
+		return l.publicAnonymousSymbolMap[idx]
+	}
+	return sym
+}
+
+func (l *Language) buildSymbolMaps() {
+	l.symbolMapOnce.Do(func() {
+		l.symbolNameMap = make(map[string]Symbol, len(l.SymbolNames))
+		l.symbolNameNamedMap = make(map[symbolNameNamedKey]Symbol, len(l.SymbolNames))
+		l.visibleSymbolNameMap = make(map[symbolNameNamedKey]Symbol, len(l.SymbolNames))
+		l.tokenSymbolNameMap = make(map[string][]Symbol)
+		l.publicSymbolMap = make([]Symbol, len(l.SymbolNames))
+		l.publicNamedSymbolMap = make([]Symbol, len(l.SymbolNames))
+		l.publicAnonymousSymbolMap = make([]Symbol, len(l.SymbolNames))
+
+		tokenCount := int(l.TokenCount)
+		if tokenCount > len(l.SymbolNames) {
+			tokenCount = len(l.SymbolNames)
+		}
+
+		for i, sn := range l.SymbolNames {
+			sym := Symbol(i)
+			if sn == "" {
+				l.publicSymbolMap[i] = sym
+				l.publicNamedSymbolMap[i] = sym
+				l.publicAnonymousSymbolMap[i] = sym
+				continue
+			}
+			// Keep the first match so duplicate names remain deterministic.
+			if _, exists := l.symbolNameMap[sn]; !exists {
+				l.symbolNameMap[sn] = sym
+			}
+			named := false
+			if i < len(l.SymbolMetadata) {
+				named = l.SymbolMetadata[i].Named
+			}
+			key := symbolNameNamedKey{name: sn, named: named}
+			if _, exists := l.symbolNameNamedMap[key]; !exists {
+				l.symbolNameNamedMap[key] = sym
+			}
+			if i < len(l.SymbolMetadata) && l.SymbolMetadata[i].Visible {
+				if _, exists := l.visibleSymbolNameMap[key]; !exists {
+					l.visibleSymbolNameMap[key] = sym
+				}
+			}
+			if i < tokenCount {
+				l.tokenSymbolNameMap[sn] = append(l.tokenSymbolNameMap[sn], sym)
+				if !named {
+					l.anonTokenNameFirstByteMask[sn[0]>>6] |= 1 << (sn[0] & 63)
+					lenBit := len(sn) - 1
+					if lenBit > 63 {
+						lenBit = 63
+					}
+					l.anonTokenNameLenMask |= 1 << uint(lenBit)
+				}
+			}
+		}
+		for i, sn := range l.SymbolNames {
+			sym := Symbol(i)
+			if sn == "" {
+				l.publicSymbolMap[i] = sym
+				l.publicNamedSymbolMap[i] = sym
+				l.publicAnonymousSymbolMap[i] = sym
+				continue
+			}
+			l.publicSymbolMap[i] = l.symbolNameMap[sn]
+			if namedSym, exists := l.symbolNameNamedMap[symbolNameNamedKey{name: sn, named: true}]; exists {
+				l.publicNamedSymbolMap[i] = namedSym
+			} else {
+				l.publicNamedSymbolMap[i] = l.symbolNameMap[sn]
+			}
+			if anonSym, exists := l.symbolNameNamedMap[symbolNameNamedKey{name: sn, named: false}]; exists {
+				l.publicAnonymousSymbolMap[i] = anonSym
+			} else {
+				l.publicAnonymousSymbolMap[i] = l.symbolNameMap[sn]
+			}
+		}
+	})
+}
+
+// IsSupertype reports whether sym is a supertype symbol.
+func (l *Language) IsSupertype(sym Symbol) bool {
+	if l == nil {
+		return false
+	}
+	return slices.Contains(l.SupertypeSymbols, sym)
+}
+
+// SupertypeChildren returns the subtype symbols for a given supertype.
+// Returns nil if sym is not a supertype or has no entries.
+func (l *Language) SupertypeChildren(sym Symbol) []Symbol {
+	if l == nil {
+		return nil
+	}
+	idx := int(sym)
+	if idx >= len(l.SupertypeMapSlices) {
+		return nil
+	}
+	slice := l.SupertypeMapSlices[idx]
+	start, length := int(slice[0]), int(slice[1])
+	if length == 0 {
+		return nil
+	}
+	if start+length > len(l.SupertypeMapEntries) {
+		return nil
+	}
+	return l.SupertypeMapEntries[start : start+length]
+}
+
+// FieldByName returns the field ID for a given name, or (0, false) if not found.
+// Builds an internal map on first call for O(1) subsequent lookups.
+func (l *Language) FieldByName(name string) (FieldID, bool) {
+	l.fieldMapOnce.Do(func() {
+		l.fieldNameMap = make(map[string]FieldID, len(l.FieldNames))
+		for i, fn := range l.FieldNames {
+			if fn != "" {
+				l.fieldNameMap[fn] = FieldID(i)
+			}
+		}
+	})
+	fid, ok := l.fieldNameMap[name]
+	return fid, ok
+}

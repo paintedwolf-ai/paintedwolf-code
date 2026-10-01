@@ -1,0 +1,3 @@
+default_ambient_workflow:
+  id: implement
+  version: "1.0.0"

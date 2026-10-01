@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/house-rules
+name: Example — House Rules
+version: 1.0.0
+description: One rule that stops a thing this repo does not want agents doing.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

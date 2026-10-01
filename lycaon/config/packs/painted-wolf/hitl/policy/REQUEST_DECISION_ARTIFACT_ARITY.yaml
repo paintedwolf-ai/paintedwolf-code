@@ -1,0 +1,36 @@
+oar: '1.0'
+id: REQUEST_DECISION_ARTIFACT_ARITY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - request_decision
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.count
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_ARITY"
+effect: block
+copy:
+  what: request_decision compare mode received {{ paintedwolf.count }} artifacts; it requires 2–4 distinct
+    artifacts.
+  cause: artifact_ids has an invalid number of entries.
+  why: The compare card labels each submitted artifact.
+  fix: Pass 2–4 distinct observed artifact UUIDs for the intended comparison, or artifact_id for a single review.
+    Do not drop required candidates silently.
+  instead: Branch on Code REQUEST_DECISION_ARTIFACT_ARITY; pass a valid artifact count
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_decision
+x-paintedwolf-message: compare requires 2 to 4 artifacts
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: worker
+    tool: request_decision
+  expect_contains:
+  - 'Code: REQUEST_DECISION_ARTIFACT_ARITY'
+  - artifact

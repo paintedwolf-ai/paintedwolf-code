@@ -1,0 +1,19 @@
+# chown — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    chown:
+        tool: chown
+        tier_hint: irreversible
+        what_changes: Change ownership on {{ path }}.
+        who_affected: The named path — ownership affects who can access the file.
+        if_wrong: Ownership changes can lock you out until reversed with sufficient privileges.
+        allow_line: changing file ownership
+        scenarios:
+            - id: default
+              vars:
+                path: data/db
+                project: my-app
+              expect_contains:
+                - ownership
+                - path

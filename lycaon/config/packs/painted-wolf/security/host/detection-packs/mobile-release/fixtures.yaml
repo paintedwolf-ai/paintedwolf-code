@@ -1,0 +1,41 @@
+fixtures:
+- rule: store-submit
+  positive:
+  - fastlane deliver --submit_for_review
+  - eas submit --platform ios
+  - fastlane supply --track production
+  - fastlane pilot upload
+  - xcrun altool --upload-app -f app.ipa -u ci@example.test -p @keychain:AC_PASSWORD
+  - xcrun notarytool submit app.zip --keychain-profile AC --wait
+  - eas update --branch production --message 'Fix checkout crash'
+  - eas update --channel preview
+  - eas update
+  negative:
+  - fastlane scan
+  - eas build --platform ios
+  - fastlane deliver --help
+  - xcrun altool --validate-app -f app.ipa
+  - eas build --auto-submit
+  - expo publish
+  - eas update:configure
+  - eas update:list
+  - eas update:view abc123
+  - eas updates
+- rule: signing-material-change
+  positive:
+  - fastlane match nuke distribution
+  - keytool -genkeypair -alias release -keystore release.jks
+  - fastlane cert create
+  - fastlane sigh renew
+  - apksigner rotate --in old.jks --out rotated.lineage
+  - eas credentials:configure-build --platform ios
+  - keytool -genkey -alias upload -keystore upload.jks
+  negative:
+  - fastlane match readonly
+  - keytool -list -keystore release.jks
+  - fastlane match nuke distribution --help
+  - apksigner verify app-release.apk
+  - eas build --platform ios
+  - eas credentials
+  - eas credentials --platform ios
+  - keytool -list -genkeypair -alias release -keystore release.jks

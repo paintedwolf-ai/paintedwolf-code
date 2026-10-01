@@ -1,0 +1,14 @@
+description: Read a held call by its handle, running or settled with its original outcome, codes, and result. wait_ms waits up to 30 s for a running call.
+schema:
+  type: object
+  properties:
+    handle:
+      description: Identifier returned by the initiating asynchronous invocation.
+      type: string
+    wait_ms:
+      description: Duration in milliseconds to pause awaiting completion before returning current status.
+      type: integer
+      minimum: 0
+      maximum: 30000
+  required: [handle]
+  additionalProperties: false

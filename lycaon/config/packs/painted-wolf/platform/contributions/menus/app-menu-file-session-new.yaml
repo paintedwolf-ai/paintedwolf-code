@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-session-new
+slot: "app_menu.file"
+command: painted-wolf/platform:session-new
+group: "0"
+order: 1
+label: "New session"

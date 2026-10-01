@@ -1,0 +1,5 @@
+id: vector-database
+label: Vector database platforms
+description: >-
+  Pinecone and Weaviate CLI operations that destroy a project, organization,
+  index, collection, or tenant, or wipe all vectors in a namespace.

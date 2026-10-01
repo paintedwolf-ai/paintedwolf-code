@@ -1,0 +1,6 @@
+id: sourcegraph-access-token
+upstream_id: sourcegraph-access-token
+enabled: false
+# The upstream alternative accepts an unprefixed 40-hex value whenever
+# "sourcegraph" appears elsewhere in the payload. The pinned Kingfisher rules
+# retain the prefixed and tightly contextual Sourcegraph token shapes.

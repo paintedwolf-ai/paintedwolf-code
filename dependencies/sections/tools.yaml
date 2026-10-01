@@ -1,0 +1,85 @@
+title: Development, build, and verification tools
+
+rows:
+  - id: task
+    name: Task (`task`)
+    pins:
+      - shell scripts/task.sh TASK_VERSION
+    upstream:
+      - go-module github.com/go-task/task/v3
+    urgency: moderate
+    urgency_reason: |
+      Runs every repository target behind the verification queue.
+    friction: moderate
+    friction_reason: |
+      Pinned in `scripts/task.sh`, which reinstalls when the pin changes. Check the queue with
+      `./task test:runner` after a bump.
+
+  - id: golangci-lint
+    name: golangci-lint
+    pins:
+      - shell scripts/lint-go.sh GOLANGCI_VERSION
+    upstream:
+      - go-module github.com/golangci/golangci-lint/v2
+    urgency: moderate
+    friction: moderate
+    notes: |
+      Pinned in `scripts/lint-go.sh` and configured in `lycaon/.golangci.yml`. New linters and
+      checks usually need code fixes.
+
+  - id: deadcode
+    name: deadcode
+    pins:
+      - shell scripts/deadcode-check.sh DEADCODE_VERSION
+    upstream:
+      - go-module golang.org/x/tools
+    urgency: moderate
+    friction: low
+    notes: |
+      Pinned in `scripts/deadcode-check.sh`, with exclusions in `lycaon/.deadcode-exclude`.
+
+  - id: sqlc
+    name: sqlc
+    pins:
+      - shell scripts/sqlc-version.sh SQLC_VERSION
+    upstream:
+      - go-module github.com/sqlc-dev/sqlc
+    urgency: low
+    friction: moderate
+    notes: |
+      Codegen only. Review regenerated queries from `./task db:sqlc`, then run `db:sqlc:check`
+      and `db:sqlc:vet`.
+
+  - id: oasdiff
+    name: oasdiff
+    pins:
+      - shell scripts/diff-openapi.sh OASDIFF_VERSION
+    upstream:
+      - go-module github.com/oasdiff/oasdiff
+    urgency: low
+    friction: low
+    notes: |
+      Reports breaking wire changes for release review (`./task openapi:diff`).
+
+  - id: go-licenses
+    name: go-licenses
+    pins:
+      - shell scripts/licenses-notices.sh GO_LICENSES_VERSION
+    upstream:
+      - go-module github.com/google/go-licenses/v2
+    urgency: moderate
+    friction: low
+    notes: |
+      `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` and fails closed on unknown
+      licenses.
+
+  - id: cargo-about
+    name: cargo-about
+    pins:
+      - shell scripts/licenses-notices.sh CARGO_ABOUT_VERSION
+    upstream:
+      - crate cargo-about
+    urgency: moderate
+    friction: low
+    notes: |
+      Rust half of `./task licenses:notices`.

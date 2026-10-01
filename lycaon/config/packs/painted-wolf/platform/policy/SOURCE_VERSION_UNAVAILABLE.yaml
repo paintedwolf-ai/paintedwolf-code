@@ -1,0 +1,34 @@
+oar: '1.0'
+id: SOURCE_VERSION_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - source_history
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+when: paintedwolf.rejection_code == "SOURCE_VERSION_UNAVAILABLE"
+effect: block
+copy:
+  what: Content for source version is unavailable — {{ paintedwolf.detail }}.
+  cause: The version is recorded in the ledger, but its exact bytes were not captured or are no longer addressable.
+  why: Large files, binary content, and metadata-only observations retain ledger coordinates without content blobs.
+  fix: Inspect metadata via mode effects or lines instead of requesting content.
+  instead: Branch on Code; query metadata instead of content
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
+x-paintedwolf-message: content for source version is unavailable
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: exact content for this version is unavailable
+      profile: implement
+      tool: source_history
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_UNAVAILABLE'

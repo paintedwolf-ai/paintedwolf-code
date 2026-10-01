@@ -1,0 +1,28 @@
+oar: '1.0'
+id: PROGRESS_SYNTHESIS_RECONCILE_ONLY
+kind: invariant
+anchor: coordinator.pre_invoke
+selector:
+  tool: [update_progress]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.progress_reconcile_needed
+    - paintedwolf.surface
+when: paintedwolf.surface == "implement_synthesis" && paintedwolf.progress_reconcile_needed
+effect: block
+copy:
+  what: You called **`update_progress`** on **`implement_synthesis`**, but the proposed checklist would add new scope or reopen finished rows.
+  cause: On the read-only report turn, update_progress may only close or N/A existing rows — not add new deliverables
+  why: New plan scope belongs on **`implement_investigate`** before the report turn; synthesis holds the report once the plan is terminal
+  fix: Close finished rows with **`- [x]`** or **`- [~]`** only — no new **`- [ ]`** rows and do not reopen done steps — then deliver the final report
+  instead: Reconcile the existing **`## Progress`** in place — close or N/A rows only — then deliver the final report
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Report-turn update_progress may only reconcile the existing checklist
+x-paintedwolf-scenarios:
+  - id: new_scope
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PROGRESS_SYNTHESIS_RECONCILE_ONLY'
+      - update_progress

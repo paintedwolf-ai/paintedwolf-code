@@ -1,0 +1,14 @@
+# Bundled pricing feed catalog. Fixed HTTPS endpoints only — no user URL overlay.
+# models-dev projects rates from the shared modelfeed document (no second api.json GET).
+sources:
+  - id: models-dev
+    kind: models-dev
+    label: "Models.dev"
+  - id: litellm
+    kind: litellm
+    label: "LiteLLM"
+    url: "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+  - id: ai-pricing-fyi
+    kind: ai-pricing-fyi
+    label: "AI Pricing"
+    url: "https://ai-pricing.fyi/v1/prices/current"

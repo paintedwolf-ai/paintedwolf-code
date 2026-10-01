@@ -1,0 +1,25 @@
+tags: [git, inspection]
+description: "Read paged commit history from a branch, tag, commit, or revision range. Use ref for revisions and path only for a file. main..feature lists commits unique to feature; main...feature lists both sides. Follow next_offset to continue. Replaces command: git log."
+schema:
+  type: object
+  properties:
+    ref:
+      type: string
+      description: "Revision or two/three-dot range (default HEAD)."
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 80
+      description: "Commits per page (default 10, or 50 with path)."
+    offset:
+      type: integer
+      minimum: 0
+      maximum: 1000000
+      description: "Start at this commit offset; use next_offset from the preceding page."
+    path:
+      type: string
+      description: "Optional repo-relative file path; this never selects a branch."
+    all:
+      type: boolean
+      description: "Query commits across all refs and branches (replaces git log --all)."
+  additionalProperties: false

@@ -1,0 +1,49 @@
+title: Delete an identity or close an account
+id: ca1d5228-f4af-4ef3-bfcb-a067c2dc5f95
+description: >-
+  Removes a user, role, or user pool, or closes an account, taking its access and
+  everything scoped to it.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  verbs_identity_destroy:
+    ApiAction:
+      - 'iam:delete-user'
+      - 'iam:delete-role'
+      - 'iam:delete-group'
+      - 'iam:delete-instance-profile'
+      - 'iam:delete-saml-provider'
+      - 'iam:delete-open-id-connect-provider'
+      - 'cognito-idp:delete-user-pool'
+      - 'organizations:close-account'
+      - 'organizations:delete-organization'
+      - 'sso-admin:delete-permission-set'
+      - 'identitystore:delete-user'
+      - 'identitystore:delete-group'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and verbs_identity_destroy
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

@@ -1,0 +1,419 @@
+rules:
+- id: lycaon.java.sql-injection
+  languages:
+  - java
+  severity: ERROR
+  message: Request input reaches SQL text; use bound parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - java
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+        $T $V, ...) { ... }
+
+        '
+    - pattern-not: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: $STMT.executeQuery($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $STMT.executeUpdate($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $CONN.prepareStatement($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern-either:
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).query($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).queryForObject($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).queryForList($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).queryForMap($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).queryForRowSet($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).queryForStream($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).update($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).batchUpdate($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).execute($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).query($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).queryForObject($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).queryForList($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).queryForMap($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).queryForRowSet($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).queryForStream($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).update($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).batchUpdate($SQL,
+          ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $J).execute($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).query($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).queryForObject($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).queryForList($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).queryForMap($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).queryForRowSet($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).queryForStream($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).update($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).batchUpdate($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+          $J).execute($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).query($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).queryForObject($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).queryForList($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).queryForMap($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).queryForRowSet($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).queryForStream($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).update($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).batchUpdate($SQL, ...)
+      - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
+          $J).execute($SQL, ...)
+    - focus-metavariable: $SQL
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.java.command-injection
+  languages:
+  - java
+  severity: ERROR
+  message: Request input reaches an executable command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - java
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+        $T $V, ...) { ... }
+
+        '
+    - pattern-not: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: Runtime.getRuntime().exec($CMD)
+    - metavariable-pattern:
+        metavariable: $CMD
+        patterns:
+        - pattern-not: new String[] {$PROGRAM, ...}
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: new ProcessBuilder("sh","-c",$CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: Runtime.getRuntime().exec(new String[] {$PROGRAM, ...})
+    - focus-metavariable: $PROGRAM
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.java.path-traversal
+  languages:
+  - java
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - java
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+        $T $V, ...) { ... }
+
+        '
+    - pattern-not: '$RET $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern: '$RET $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+        $T $V, ...) { ... }
+
+        '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: new FileInputStream($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: Files.readString(Paths.get($PATH))
+    - focus-metavariable: $PATH
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.java.open-redirect
+  languages:
+  - java
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - java
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $RES.sendRedirect($URL)
+    - focus-metavariable: $URL
+- id: lycaon.java.weak-cipher
+  languages:
+  - java
+  severity: ERROR
+  message: DES encryption is cryptographically broken
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - java
+  pattern-either:
+  - pattern: Cipher.getInstance("DES")
+  - pattern: Cipher.getInstance("DES/ECB/PKCS5Padding")
+- id: lycaon.java.ecb-encryption
+  languages:
+  - java
+  severity: ERROR
+  message: ECB encryption reveals repeated plaintext blocks
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - java
+  pattern-either:
+  - pattern: Cipher.getInstance("AES/ECB/PKCS5Padding")
+  - pattern: Cipher.getInstance("AES/ECB/NoPadding")
+- id: lycaon.java.rsa-without-padding
+  languages:
+  - java
+  severity: ERROR
+  message: RSA encryption explicitly omits cryptographic padding
+  metadata:
+    category: security
+    cwe: CWE-780
+    confidence: HIGH
+    technology:
+    - java
+  pattern: Cipher.getInstance("RSA/ECB/NoPadding")
+- id: lycaon.java.trust-manager-empty-check
+  languages:
+  - java
+  severity: ERROR
+  message: The TLS trust manager accepts server certificates without checking them
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - java
+  pattern: class $CLASS implements X509TrustManager { ... public void checkServerTrusted(...)
+    { } ... }
+- id: lycaon.java.hostname-verifier-accept-all
+  languages:
+  - java
+  severity: ERROR
+  message: The TLS hostname verifier unconditionally accepts the peer hostname
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - java
+  pattern: $CONNECTION.setHostnameVerifier(($HOST,$SESSION) -> true)
+- id: lycaon.java.ldap-injection
+  languages:
+  - java
+  severity: ERROR
+  message: Request input reaches an LDAP search filter; bind filter arguments
+  metadata:
+    category: security
+    cwe: CWE-90
+    confidence: HIGH
+    technology:
+    - java
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: (javax.naming.directory.DirContext $CTX).search($BASE,$FILTER,...)
+    - focus-metavariable: $FILTER

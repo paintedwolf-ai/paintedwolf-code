@@ -1,0 +1,10 @@
+scope: app
+title: That snapshot cannot be restored
+message: >-
+  The recovery snapshot uses a different data format. Restore a compatible
+  backup instead.
+scenarios:
+  - id: default
+    expect_contains:
+      - cannot be restored
+      - compatible backup

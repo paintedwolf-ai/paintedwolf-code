@@ -1,0 +1,38 @@
+title: Discard uncommitted work
+id: e125025c-d5eb-42a9-baff-478ee9bb29b8
+description: Throws away uncommitted changes in the working tree or index.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-14'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: git
+  # Uncommitted work has never been written to an object, so nothing in the
+  # repository can bring it back.
+  verbs_discard:
+    CommandLine|contains:
+      - ' reset --hard'
+      - ' checkout --'
+      - ' checkout -f'
+      - ' restore --staged --worktree'
+      - ' restore .'
+      - ' stash drop'
+      - ' stash clear'
+  native_stash_drop:
+    Tool: git_stash
+    ToolArg: action=drop
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image and verbs_discard or native_stash_drop) and not filter_rehearsal and not filter_local

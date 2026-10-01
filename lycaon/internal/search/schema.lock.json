@@ -1,0 +1,52 @@
+{
+  "table": "evidence_index",
+  "project_id_role": "attribution_and_origin_ranking_not_isolation_filter",
+  "default_scope": "global",
+  "columns": [
+    { "name": "id", "type": "TEXT", "pk": true },
+    { "name": "project_id", "type": "TEXT", "not_null": true },
+    { "name": "source", "type": "TEXT", "not_null": true },
+    { "name": "hit_kind", "type": "TEXT", "not_null": true },
+    { "name": "session_id", "type": "TEXT" },
+    { "name": "root_session_id", "type": "TEXT" },
+    { "name": "message_id", "type": "TEXT" },
+    { "name": "source_ref", "type": "TEXT" },
+    { "name": "leg_id", "type": "TEXT" },
+    { "name": "handle", "type": "TEXT" },
+    { "name": "kind", "type": "TEXT" },
+    { "name": "shape", "type": "TEXT" },
+    { "name": "role", "type": "TEXT" },
+    { "name": "path", "type": "TEXT" },
+    { "name": "line", "type": "INTEGER" },
+    { "name": "url", "type": "TEXT" },
+    { "name": "snippet", "type": "TEXT" },
+    { "name": "verified", "type": "INTEGER" },
+    { "name": "hint_code", "type": "TEXT" },
+    { "name": "check_id", "type": "TEXT" },
+    { "name": "trust", "type": "TEXT" },
+    { "name": "truncated", "type": "INTEGER" },
+    { "name": "ts", "type": "TEXT" },
+    { "name": "workflow_run_id", "type": "TEXT" },
+    { "name": "verdict", "type": "TEXT" },
+    { "name": "untrusted", "type": "INTEGER" },
+    { "name": "tombstoned", "type": "INTEGER", "not_null": true }
+  ],
+  "composite_index": {
+    "name": "idx_evidence_index_project_kind_ts",
+    "columns": ["project_id", "kind", "ts"]
+  },
+  "fts_tables": [
+    {
+      "name": "messages_fts",
+      "content_table": "messages",
+      "external_content": true,
+      "columns": ["content", "kind"]
+    },
+    {
+      "name": "evidence_fts",
+      "content_table": "evidence_index",
+      "external_content": true,
+      "columns": ["snippet", "path", "url"]
+    }
+  ]
+}

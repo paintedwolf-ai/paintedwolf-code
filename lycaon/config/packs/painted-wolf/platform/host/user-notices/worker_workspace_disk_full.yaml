@@ -1,0 +1,29 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker workspace storage full
+message: >-
+  {% if reason == "capacity_preflight" -%}
+  Preparing this isolated workspace requires about {{ required }}, but the
+  application-data volume has only {{ available }} available. No worker changes
+  were applied to the project.
+  {%- else -%}
+  The application-data volume ran out of available space while preparing this
+  worker's isolated workspace. No worker changes were applied to the project.
+  {%- endif %}
+suggested_action: >-
+  Free space or clear reusable workspace caches in Settings, then retry the worker.
+scenarios:
+  - id: generic
+    vars: {}
+    expect_contains:
+      - available space
+      - No worker changes
+  - id: capacity_preflight
+    vars:
+      reason: capacity_preflight
+      required: 30.0 GiB
+      available: 12.0 GiB
+    expect_contains:
+      - 30.0 GiB
+      - 12.0 GiB

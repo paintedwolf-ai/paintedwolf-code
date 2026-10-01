@@ -1,0 +1,37 @@
+oar: '1.0'
+id: WORKER_BRANCH_CLAIM_FAILED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "WORKER_BRANCH_CLAIM_FAILED"
+effect: block
+copy:
+  what: Isolating tool **{{ tool }}** could not claim a private write-worker branch.
+  cause: The host failed to create or attach the worker overlay (`{{ paintedwolf.rejection_reason }}`).
+  why: Without a private branch, mutations would land on the live project tree or process tools would run without
+    isolation.
+  fix: Preserve the current worker, task and overlay identities. Report the failed isolation boundary through the
+    current completion or decision channel. Resume mutation only after the host can attach the required private
+    branch.
+  instead: Retain existing results and state that this operation was not executed; do not create replacement work
+    or write into the parent workspace to bypass isolation.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_branch_claim
+x-paintedwolf-message: worker branch claim failed — private overlay unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    agent_type: implementer
+    job_id: abc123
+    path: src/main.go
+    profile: implement
+    reason: worker branch claim failed
+    tool: write
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_BRANCH_CLAIM_FAILED'

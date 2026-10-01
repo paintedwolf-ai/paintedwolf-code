@@ -1,0 +1,18 @@
+# terminal_close — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    terminal_close:
+        tool: terminal_close
+        tier_hint: recoverable
+        what_changes: Tears down a held pty process.
+        who_affected: This session — the process is killed and the handle is removed.
+        if_wrong: Closing ends the interactive process; reopen with terminal_open if needed.
+        allow_line: closing a held terminal
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - terminal
+                - session

@@ -1,0 +1,24 @@
+oar: '1.0'
+id: ASK_USER_RESPONSE_TYPE_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [ask_user]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.response_type]
+when: paintedwolf.rejection_code == "ASK_USER_RESPONSE_TYPE_INVALID"
+effect: block
+copy:
+  what: "The requested response_type {{ paintedwolf.response_type }} is not supported."
+  cause: "The response channel must be one of the types declared by the current ask_user schema."
+  why: Preserve the response channel and protected-input lifecycle before creating a user question.
+  fix: "Choose the matching supported response_type from the tool schema. Preserve secret for protected input; changing the question text cannot fix an invalid channel."
+  instead: Correct the structured request without downgrading protected input
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: "The requested response_type {{ paintedwolf.response_type }} is not supported."
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {"response_type": "unsupported", "profile": "coordinator", "tool": "ask_user"}
+    expect_contains: ['Rejected:', 'Code: ASK_USER_RESPONSE_TYPE_INVALID']

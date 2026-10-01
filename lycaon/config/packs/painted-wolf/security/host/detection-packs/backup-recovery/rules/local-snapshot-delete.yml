@@ -1,0 +1,29 @@
+title: Delete a Time Machine backup
+id: 35c8e64d-2b7d-4cd5-90df-77cc75bddfe2
+description: Removes a stored Time Machine snapshot from this machine's backup history.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # snapshot-delete covers repositories that live elsewhere; a Time Machine store
+  # is this machine's own disk, and the card says so.
+  selection_tmutil:
+    Image: tmutil
+    CommandLine|contains: ' delete'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_tmutil and not filter_rehearsal and not filter_local

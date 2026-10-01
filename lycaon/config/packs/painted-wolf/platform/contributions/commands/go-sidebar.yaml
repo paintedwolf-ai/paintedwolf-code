@@ -1,0 +1,14 @@
+id: painted-wolf/platform:go-sidebar
+title: "Focus sidebar"
+scope: "global"
+keywords:
+  - "navigation"
+  - "focus sidebar"
+when:
+  all:
+    - fact: "sidebar_expanded"
+    - fact: "view_mounted"
+      is: "sidebar"
+action:
+  kind: native_ui
+  handler: "go.sidebar"

@@ -1,0 +1,10 @@
+name: ConsequenceCode
+go_const_prefix: ConsequenceCode
+values:
+  - id: secret
+  - id: detection
+  - id: write_root
+  - id: local_socket
+  - id: local_listen
+  - id: loopback_connect
+  - id: direct_ip

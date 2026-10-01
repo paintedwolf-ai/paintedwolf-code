@@ -1,0 +1,40 @@
+oar: '1.0'
+id: STRUCTURAL_LANG_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - grep
+  - code_rewrite
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.path
+  - paintedwolf.unknown_target
+  - paintedwolf.structural_languages
+when: paintedwolf.rejection_code == "STRUCTURAL_LANG_UNKNOWN"
+effect: block
+copy:
+  what: "structural matching on {{ paintedwolf.path }} could not resolve language \u2014 {{ paintedwolf.detail\
+    \ }}."
+  cause: The explicit lang you passed is not a registered tree-sitter grammar name.
+  why: Structural matching needs a grammar to parse both the pattern and the file.
+  fix: 'Supported editor grammars include: {{ paintedwolf.structural_languages }}. Omit lang only when extension
+    inference identifies the actual language. Do not rename a file to disguise unsupported syntax.'
+  instead: Branch on Code; fix the lang name (or omit it) and retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:structural
+x-paintedwolf-message: structural lang is not a known grammar
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: unknown grammar "xyz"
+    path: internal/foo.go
+    profile: implement
+    tool: grep
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: STRUCTURAL_LANG_UNKNOWN'

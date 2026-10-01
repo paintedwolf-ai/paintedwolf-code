@@ -1,0 +1,99 @@
+title: Grant or widen access
+id: 376fb4c4-e401-48f1-93f6-5e4051e3d85d
+description: >-
+  Attaches a policy, adds a principal to a privileged group, or widens a resource
+  policy so more identities can reach it.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  svc_identity:
+    ApiAction|startswith:
+      - 'iam:'
+      - 'sts:'
+      - 'organizations:'
+      - 'sso:'
+      - 'sso-admin:'
+      - 'identitystore:'
+      - 'cognito-idp:'
+      - 'cognito-identity:'
+      - 'ram:'
+  # Each service in the axis needs a verb that reaches it.
+  verbs_identity_grant:
+    ApiAction|contains:
+      - ':attach-'
+      - ':put-user-policy'
+      - ':put-role-policy'
+      - ':put-group-policy'
+      - ':create-policy-version'
+      - ':set-default-policy-version'
+      - ':update-assume-role-policy'
+      - ':add-user-to-group'
+      - ':put-permissions-boundary'
+      - ':create-account-assignment'
+      - ':provision-permission-set'
+      - ':put-inline-policy-to-permission-set'
+      - ':create-group-membership'
+      - ':admin-add-user-to-group'
+      - ':create-resource-share'
+      - ':associate-resource-share'
+  verbs_resource_grant:
+    ApiAction|contains:
+      - ':create-grant'
+      - ':put-key-policy'
+      - ':put-bucket-policy'
+      - ':put-resource-policy'
+      - ':set-repository-policy'
+      - ':add-permission'
+      - ':modify-snapshot-attribute'
+      - ':authorize-security-group-ingress'
+      - ':authorize-db-security-group-ingress'
+      - ':create-vpc-endpoint-service-permissions'
+  # The grantee decides: `--acl private` tightens rather than grants.
+  selection_acl_write:
+    ApiAction|contains:
+      - ':put-bucket-acl'
+      - ':put-object-acl'
+  selection_public_grantee:
+    CommandLine|contains:
+      - ' --acl public-read'
+      - ' --acl public-read-write'
+      - ' --acl authenticated-read'
+      - 'groups/global/allusers'
+      - 'groups/global/authenticatedusers'
+  # Queue and topic attribute writes carry both access policy and ordinary
+  # settings. A visibility timeout is not a grant; the Policy attribute is.
+  selection_attribute_write:
+    ApiAction|contains:
+      - ':set-queue-attributes'
+      - ':set-topic-attributes'
+  selection_policy_attribute:
+    CommandLine|re: '(?i)(--attribute-name\s+policy\b|["\x27]policy["\x27]\s*:)'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and ((svc_identity and verbs_identity_grant) or verbs_resource_grant
+    or (selection_acl_write and selection_public_grantee)
+    or (selection_attribute_write and selection_policy_attribute))
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

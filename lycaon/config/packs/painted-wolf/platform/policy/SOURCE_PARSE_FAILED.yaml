@@ -1,0 +1,85 @@
+oar: '1.0'
+id: SOURCE_PARSE_FAILED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [read, grep, code_rewrite]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.path
+    - paintedwolf.rejection_code
+    - paintedwolf.parse_timed_out
+    - paintedwolf.parse_canceled
+    - paintedwolf.parse_reason
+    - paintedwolf.parse_language
+    - paintedwolf.parse_phase
+    - paintedwolf.parse_timeout_ms
+    - paintedwolf.parse_elapsed_ms
+    - paintedwolf.parse_source_bytes
+    - paintedwolf.parse_reached_bytes
+    - paintedwolf.parse_failure
+    - paintedwolf.parse_config
+when: paintedwolf.rejection_code == "SOURCE_PARSE_FAILED"
+effect: block
+copy:
+  what: '{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing failed inside the host.'
+  cause: >-
+    {{ paintedwolf.parse_failure }}. Snapshot: {{ paintedwolf.parse_phase }}.
+  why: >-
+    This is a host analysis failure. It does not establish a syntax error or an absence of matches.
+  fix: >-
+    {% if paintedwolf.parse_timed_out %}Report this host parser timeout with the path and measured limits. The host owner can adjust analysis_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry after that change; preserve the proposed work and continue independent work.{% else %}{% if paintedwolf.parse_canceled %}The request was canceled or its enclosing deadline expired. Preserve the proposed work and resume only under an active request. Raising the parser timeout does not clear cancellation.{% else %}Report the exact parser failure and path to the coordinator or user. A parser resource limit, internal error, or invalid host configuration needs a host-side correction. Preserve the proposed work until the host can validate it.{% endif %}{% endif %} For source reads, use read with explicit line ranges; for structural search, use grep with structural=false to inspect text. These alternatives do not establish syntax health.
+  instead: Preserve the work and report the host failure with these diagnostics
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_parse
+x-paintedwolf-message: source parser did not provide a syntax verdict
+x-paintedwolf-scenarios:
+  - id: panic
+    vars:
+      path: Sources/Game/Level.swift
+      tool: code_rewrite
+      parse_reason: panic
+      parse_timed_out: false
+      parse_canceled: false
+      parse_language: swift
+      parse_phase: source
+      parse_timeout_ms: 30000
+      parse_elapsed_ms: 30001
+      parse_source_bytes: 6236
+      parse_reached_bytes: 318
+      parse_failure: 'swift parsing stopped: panic (timeout 30000 ms, elapsed 30001 ms, source 6236 bytes, reached 318 bytes)'
+      parse_config: config/packs/painted-wolf/platform/host/source-parsing.yaml
+    expect_contains: ['Code: SOURCE_PARSE_FAILED', 'panic', '6236']
+  - id: configuration
+    vars:
+      path: Sources/Game/Level.swift
+      tool: code_rewrite
+      parse_reason: configuration
+      parse_timed_out: false
+      parse_canceled: false
+      parse_language: swift
+      parse_phase: source
+      parse_timeout_ms: 30000
+      parse_elapsed_ms: 30001
+      parse_source_bytes: 6236
+      parse_reached_bytes: 318
+      parse_failure: 'swift parsing stopped: configuration (timeout 30000 ms, elapsed 30001 ms, source 6236 bytes, reached 318 bytes)'
+      parse_config: config/packs/painted-wolf/platform/host/source-parsing.yaml
+    expect_contains: ['Code: SOURCE_PARSE_FAILED', 'configuration', '6236']
+  - id: no_tree
+    vars:
+      path: Sources/Game/Level.swift
+      tool: code_rewrite
+      parse_reason: no_tree
+      parse_timed_out: false
+      parse_canceled: false
+      parse_language: swift
+      parse_phase: source
+      parse_timeout_ms: 30000
+      parse_elapsed_ms: 30001
+      parse_source_bytes: 6236
+      parse_reached_bytes: 318
+      parse_failure: 'swift parsing stopped: no_tree (timeout 30000 ms, elapsed 30001 ms, source 6236 bytes, reached 318 bytes)'
+      parse_config: config/packs/painted-wolf/platform/host/source-parsing.yaml
+    expect_contains: ['Code: SOURCE_PARSE_FAILED', 'no_tree', '6236']

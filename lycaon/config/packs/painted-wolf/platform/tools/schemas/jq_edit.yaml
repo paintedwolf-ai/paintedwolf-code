@@ -1,0 +1,34 @@
+tags: [edit, filesystem]
+description: "Update a JSON, YAML, or TOML document with a jq program and write the result in the same format, in place or to dest. The program returns the whole document (`.a.b = 1`, `del(.x)`, `.items |= map(...)`). Unchanged values keep their literals, key order, and YAML comments; syntax a rewrite would lose is refused (JQ_EDIT_LOSSY)."
+schema:
+  additionalProperties: false
+  properties:
+    dest:
+      description: Repo-relative file to write instead of path; path is then only read.
+      type: string
+    format:
+      description: auto detects format from extension.
+      enum:
+        - auto
+        - json
+        - yaml
+        - toml
+      type: string
+    path:
+      description: Repo-relative path to the document.
+      type: string
+    query:
+      description: jq program returning the updated document.
+      type: string
+    vars:
+      description: Variables passed to the jq program as $name. Values resolve managed secret references.
+      type: object
+      additionalProperties:
+        type: string
+    resolve_secret_references:
+      description: Whether to resolve managed secret references in vars. Defaults to true.
+      type: boolean
+  required:
+    - path
+    - query
+  type: object

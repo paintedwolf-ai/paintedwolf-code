@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-list-confirm
+command: painted-wolf/platform:list-confirm
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Enter"
+  windows:
+    - "Enter"
+  linux:
+    - "Enter"

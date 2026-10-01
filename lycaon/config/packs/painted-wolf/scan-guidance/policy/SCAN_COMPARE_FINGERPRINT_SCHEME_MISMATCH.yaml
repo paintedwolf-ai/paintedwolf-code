@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SCAN_COMPARE_FINGERPRINT_SCHEME_MISMATCH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - scan_compare
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_FINGERPRINT_SCHEME_MISMATCH"
+effect: block
+copy:
+  what: The two scans use different finding fingerprint schemes.
+  cause: Their finding identities were generated under incompatible normalization rules.
+  why: Cross-scheme matching would misclassify persisted, introduced, or resolved findings.
+  fix: Compare scans with the same fingerprint scheme, or establish a new baseline under the current scheme.
+  instead: Branch on Code; keep comparison within one fingerprint scheme
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: Finding identity scheme changed — comparison is incompatible
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: incompatible scans
+      path: src/main.go
+      profile: coordinator
+      tool: scan_compare
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SCAN_COMPARE_FINGERPRINT_SCHEME_MISMATCH'

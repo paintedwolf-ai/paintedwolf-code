@@ -1,0 +1,62 @@
+{
+  "id": "eval-suppressor-is-evaluated-first",
+  "title": "A suppressor is evaluated before the rule it names, even when the base order puts the block first",
+  "covers": [
+    "OAR-EVAL-18",
+    "OAR-EVAL-1"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "BROAD_BLOCK",
+      "effect": "block"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "NARROW_WARN",
+      "effect": "warn",
+      "overrides": [
+        "BROAD_BLOCK"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "NARROW_WARN",
+    "applied": [
+      "oar.test/NARROW_WARN:fired",
+      "oar.test/BROAD_BLOCK:suppressed"
+    ]
+  }
+}

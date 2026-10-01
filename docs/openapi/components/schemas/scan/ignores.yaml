@@ -1,0 +1,125 @@
+components:
+  schemas:
+    FindingIgnoreEntry:
+      x-go-generate: true
+      type: object
+      description: >-
+        One decision in a project's ignore file. Every predicate is optional
+        and they conjoin: a finding is ignored when it matches all of the ones
+        present. They are host-owned facts wherever the host has one, so a
+        single entry covers every scanner that reports the same thing. An entry
+        naming no predicate is refused.
+      required: [reason]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Assigned by the host; stable so a client can withdraw this entry.
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: >-
+            Repo-relative glob over the finding's primary location. A bare
+            directory covers everything under it.
+        kind:
+          $ref: findings.yaml#/components/schemas/FindingKind
+        scanner:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Narrows the entry to one engine; empty spans all of them.
+        rule:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/*?\[\]^-]+$'
+          description: Engine vocabulary, matched as a glob (`*`, `?`, `[...]`).
+        advisory:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+          description: >-
+            Any published id of one vulnerability; matches every alias the host
+            resolved for it.
+        fingerprint:
+          type: string
+          description: Names exactly one finding.
+        reason:
+          type: string
+        justification:
+          $ref: findings.yaml#/components/schemas/FindingIgnoreJustification
+        expires_on:
+          type: string
+          format: date
+          description: A calendar day (YYYY-MM-DD), exclusive.
+    FindingIgnoreRule:
+      x-go-generate: true
+      type: object
+      description: >-
+        One loaded entry with the provenance a client needs to know whether it
+        can withdraw it. Bundled entries ship with the binary and belong to no
+        project. `id` is the host's key and is always present, so a listing and
+        a ledger row agree about which decision they mean; an entry written by
+        hand without an `id` of its own is keyed by its predicates and is not
+        withdrawable through this API.
+      required: [id, reason, source, matches, withdrawable]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        kind:
+          $ref: findings.yaml#/components/schemas/FindingKind
+        scanner:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        rule:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/*?\[\]^-]+$'
+          description: Engine vocabulary, matched as a glob (`*`, `?`, `[...]`).
+        advisory:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        fingerprint:
+          type: string
+        reason:
+          type: string
+        justification:
+          $ref: findings.yaml#/components/schemas/FindingIgnoreJustification
+        expires_on:
+          type: string
+          format: date
+        source:
+          type: string
+          enum: [bundled, project]
+        expired:
+          type: boolean
+        withdrawable:
+          type: boolean
+          description: >-
+            Whether this API can remove the entry. False for bundled entries and
+            for a hand-written one with no id; those are edited in the file.
+        matches:
+          type: integer
+          minimum: 0
+          description: How many of the project's ledger rows the entry covers now.
+    FindingIgnoreListResponse:
+      x-go-generate: true
+      type: object
+      required: [project_id, path, rules]
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: The project overlay file the decisions are written to.
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindingIgnoreRule"

@@ -1,0 +1,5 @@
+id: incident-observability
+label: Observability and on-call
+description: >-
+  Operations that erase indexed log data, delete a monitor or dashboard, or stop
+  a service from paging on-call.

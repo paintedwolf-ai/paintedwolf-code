@@ -1,0 +1,40 @@
+.den-composer-slash-suggestions {
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--den-border);
+  border-radius: 8px;
+  background: var(--den-surface-elevated);
+}
+
+.den-composer-slash-suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: max(24px, calc(var(--text-den-hint) * 1.4 + 0.75em));
+  padding: 0.375em 0.5em;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.den-composer-slash-suggestion:hover,
+.den-composer-slash-suggestion--active {
+  background: var(--den-tint-2);
+}
+
+.den-composer-slash-suggestion-trigger {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+}
+
+.den-composer-slash-suggestion-label {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: No worktree
+message: This chat has no worktree.
+suggested_action: Create a worktree from the Git tab when you want a separate checkout.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - no worktree

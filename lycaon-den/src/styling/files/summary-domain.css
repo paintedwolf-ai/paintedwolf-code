@@ -1,0 +1,147 @@
+.den-file-summary__title {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--den-text);
+  cursor: pointer;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-file-summary__context {
+  display: block;
+  margin-top: 3px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-file-summary__preview {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
+}
+
+.den-file-summary__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-den-micro);
+}
+
+.den-file-summary__state {
+  margin: 7px 0 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.den-file-summary button:hover,
+.den-file-summary button:focus-visible {
+  color: var(--den-text);
+}
+
+.den-file-summary__action {
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-accent-signal);
+  font: inherit;
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+}
+
+.den-file-summary__action:hover { text-decoration: underline; }
+
+.den-file-summary__action:focus-visible {
+  outline: 1px solid var(--den-accent-signal);
+  outline-offset: 2px;
+}
+
+.den-rename-scope {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border: none;
+  border-radius: var(--den-radius);
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel-inset);
+}
+
+.den-rename-scope__option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 8px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.den-rename-scope__option--on {
+  background: var(--den-selection);
+  color: var(--den-text);
+  box-shadow:
+    var(--den-shadow-xs),
+    inset 0 0 0 1px var(--den-border);
+}
+
+.den-rename-scope__title {
+  color: var(--den-text);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+}
+
+.den-rename-scope__detail {
+  font-size: var(--text-den-overline);
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.den-rename-scope__option--on .den-rename-scope__detail {
+  color: var(--den-accent-text);
+  opacity: 1;
+}
+
+.den-files-editor__crumb-symbol {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--den-accent-text);
+  font-weight: 600;
+}
+
+.den-files-editor__crumb-symbol-kind {
+  padding: 0 5px;
+  border: 1px solid var(--den-line);
+  border-radius: 4px;
+  font-size: var(--text-den-micro);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+/* Clears the file undo toast until dragged. */

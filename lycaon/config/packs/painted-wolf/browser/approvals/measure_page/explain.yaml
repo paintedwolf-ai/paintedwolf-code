@@ -1,0 +1,18 @@
+# measure_page — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    measure_page:
+        tool: measure_page
+        tier_hint: recoverable
+        what_changes: Measure render-tree geometry for a page.
+        who_affected: This session — a headless browser collects layout numbers from the target page.
+        if_wrong: Read-only measurement; no project files are mutated.
+        allow_line: measuring page geometry
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Measure
+                - geometry

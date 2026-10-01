@@ -1,0 +1,39 @@
+oar: '1.0'
+id: FETCH_URL_BLOCKED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.can_capture_page
+  - paintedwolf.can_measure_page
+when: paintedwolf.rejection_code == "FETCH_URL_BLOCKED"
+effect: block
+copy:
+  what: 'fetch_url refused the destination: {{ paintedwolf.detail }}.'
+  cause: The host SSRF guard only allows public addresses — loopback, private, and link-local targets are refused.
+  why: Fetching internal or metadata endpoints would leave the project sandbox.
+  fix: Use a public HTTP(S) destination only when it is the intended resource. {% if paintedwolf.can_capture_page
+    %}For an intended local project page, the offered `capture_page` tool can operate within its own target and
+    approval rules.{% else %}{% if paintedwolf.can_measure_page %}For an intended local project page, the offered
+    `measure_page` tool can operate within its own target and approval rules.{% else %}This response offers no
+    local-page capture recovery; report the required local access instead of routing around the boundary.{%
+    endif %}{% endif %}
+  instead: Branch on Code FETCH_URL_BLOCKED; use a public URL
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url blocked this host
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: 127.0.0.1 is not a public address
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: FETCH_URL_BLOCKED'

@@ -1,0 +1,37 @@
+oar: '1.0'
+id: PROGRESS_TOO_MANY_LINES
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - update_progress
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.line_count
+  - paintedwolf.max_lines
+when: paintedwolf.rejection_code == "PROGRESS_TOO_MANY_LINES"
+effect: block
+copy:
+  what: update_progress had {{ paintedwolf.line_count }} checklist lines; the limit is {{ paintedwolf.max_lines
+    }}.
+  cause: The submitted checklist exceeds the current row bound.
+  why: The progress checklist stays bounded to user-facing results
+  fix: Represent all required results within {{ paintedwolf.max_lines }} top-level - [ ]/- [x]/- [~]/- [>]
+    rows, grouping related results without dropping unresolved work or changing its status.
+  instead: Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress checklist has too many checklist lines
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    line_count: 9
+    max_lines: 8
+    tool: update_progress
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROGRESS_TOO_MANY_LINES'
+  - update_progress

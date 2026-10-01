@@ -1,0 +1,832 @@
+components:
+  schemas:
+    ContributionCondition:
+      x-go-generate: true
+      type: object
+      description: >-
+        Structured predicate tree over the closed fact vocabulary. Exactly one
+        of all, any, not, or fact is set per node.
+      additionalProperties: false
+      properties:
+        all:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionCondition'
+        any:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionCondition'
+        'not':
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+        fact:
+          type: string
+        is:
+          type: string
+    ContributionExecutor:
+      type: string
+      description: Which executor dispatches a command; fixed by the action kind.
+      enum:
+      - den
+      - host
+    ContributionInvocationScope:
+      type: string
+      description: >-
+        Which invoke route a host-executed command uses. Den-executed commands
+        are "den" and never call an invoke route.
+      enum:
+      - den
+      - project
+      - session
+    ContributionActionKind:
+      type: string
+      enum:
+      - editor_action
+      - workflow_start
+      - mcp_tool
+      - composer_prefill
+      - navigate
+      - external_link
+      - native_ui
+      - operation
+    ContributionInputField:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - type
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        title:
+          type: string
+        type:
+          type: string
+          enum: [boolean, string, number, enum, string_list, project_path]
+        description:
+          type: string
+        required:
+          type: boolean
+        values:
+          type: array
+          items:
+            type: string
+        default: {}
+        min:
+          x-go-pointer: true
+          type: number
+        max:
+          x-go-pointer: true
+          type: number
+    ContributionChoice:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9_.-]+$'}
+        label: {type: string}
+        description: {type: string}
+        detail: {type: string}
+    ContributionChoiceSource:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [requirement, tool]
+      properties:
+        requirement: {type: string}
+        tool: {type: string}
+        inputs:
+          type: object
+          additionalProperties: {type: string}
+    ContributionInteractionPredicate:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [step, is]
+      properties:
+        step: {type: string}
+        is: {}
+    ContributionInteractionStep:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, title, kind]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9_.-]+$'}
+        title: {type: string}
+        description: {type: string}
+        kind:
+          type: string
+          enum: [string, number, boolean, choice, project_path, confirmation]
+        required: {type: boolean}
+        values:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionChoice'}
+        min: { x-go-pointer: true, type: number}
+        max: { x-go-pointer: true, type: number}
+        multiple: {type: boolean}
+        source: { x-go-pointer: true, $ref: '#/components/schemas/ContributionChoiceSource'}
+        if: { x-go-pointer: true, $ref: '#/components/schemas/ContributionInteractionPredicate'}
+    ContributionInteraction:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionInteractionStep'}
+    ContributionCommand:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - provider
+      - title
+      - executor
+      - invocation
+      - action_kind
+      - icon
+      - result_treatment
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        provider:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        scope:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        icon:
+          type: string
+        palette:
+          x-go-pointer: true
+          type: boolean
+          description: Whether Crossbar offers this command. Absent means yes.
+        executor:
+          x-go-type: "string"
+          $ref: '#/components/schemas/ContributionExecutor'
+        invocation:
+          x-go-type: "string"
+          $ref: '#/components/schemas/ContributionInvocationScope'
+        action_kind:
+          x-go-type: "string"
+          $ref: '#/components/schemas/ContributionActionKind'
+        handler_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+          description: Stock Den handler id; present only for native_ui.
+        action_ref:
+          type: string
+          description: Referenced editor-action contribution id.
+        when:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+        enablement:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+        input:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionInputField'
+        interaction:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionInteraction'
+        result_treatment:
+          type: string
+          enum: [output, discard, effect, receipt]
+    ContributionMenu:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - slot
+      - command
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        slot:
+          type: string
+        command:
+          type: string
+        group:
+          type: string
+        order:
+          type: integer
+        label:
+          type: string
+        when:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+        state:
+          description: >-
+            Condition the toggle reflects. With state_label the item reads
+            state_label while it holds; without it the item carries a checkmark.
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+        state_label:
+          type: string
+    ContributionKeybinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - command
+      - scope
+      - bindings
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        command:
+          type: string
+        scope:
+          type: string
+        allow_in_input:
+          type: boolean
+        bindings:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        when:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContributionCondition'
+    ContributionBindingDefault:
+      x-go-generate: true
+      type: object
+      description: >-
+        One resolved default chord per platform, scope, and chord identity.
+        A missing active id means equal-provenance candidates deactivated
+        each other.
+      additionalProperties: false
+      required:
+      - platform
+      - scope
+      - chord
+      - candidates
+      properties:
+        platform:
+          type: string
+        scope:
+          type: string
+        chord:
+          type: string
+        active:
+          type: string
+        candidates:
+          type: array
+          items:
+            type: string
+    ContributionEditorAction:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - title
+      - target_kind
+      - preset
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        title:
+          type: string
+        target_kind:
+          type: string
+        target_required:
+          type: boolean
+        preset:
+          type: string
+    ContributionSyntaxStyle:
+      x-go-generate: true
+      type: object
+      description: One compiled syntax scope. Colors are literal; the three
+        flags are the complete typography surface of a theme.
+      additionalProperties: false
+      required:
+      - color
+      properties:
+        color:
+          type: string
+        italic:
+          type: boolean
+        bold:
+          type: boolean
+        underline:
+          type: boolean
+    ContributionIconNode:
+      x-go-generate: true
+      type: object
+      description: >-
+        One shape in a themed glyph, already validated against the host's
+        closed element and attribute vocabularies. Den builds an element from
+        this and sets each attribute individually — no authored string ever
+        becomes markup, so there is no sanitizer to get wrong.
+      additionalProperties: false
+      required:
+      - tag
+      properties:
+        tag:
+          type: string
+          enum: [path, circle, rect, ellipse, line, polyline, polygon, g]
+        attrs:
+          type: object
+          description: Geometry attributes. Paint is currentColor or none.
+          additionalProperties:
+            type: string
+        children:
+          type: array
+          description: Non-empty only for a group.
+          items:
+            $ref: '#/components/schemas/ContributionIconNode'
+    ContributionIconStroke:
+      x-go-generate: true
+      type: object
+      description: >-
+        The theme's handwriting, applied to every stroked glyph including the
+        ones it never redrew. Weight multiplies each slot's host-defined width,
+        so the product's relative weights survive a restyle. Stroke never
+        contributes to layout, so none of this can move anything.
+      additionalProperties: false
+      required: [weight, cap, join]
+      properties:
+        weight:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
+        cap:
+          type: string
+          enum: [butt, round, square]
+        join:
+          type: string
+          enum: [miter, round, bevel]
+    ContributionWindowColors:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Theme-authored OKLCH color family for editor windows. Den samples this recipe by stable window identity and enforces display contrast.
+      required: [main, anchors, hue_spread, chroma_min, chroma_max]
+      properties:
+        main: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        anchors:
+          type: array
+          minItems: 1
+          maxItems: 12
+          items: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        hue_spread: {type: number, minimum: 0, maximum: 180}
+        chroma_min: {type: number, minimum: 0, maximum: 0.4}
+        chroma_max: {type: number, minimum: 0, maximum: 0.4}
+    ContributionAgentColors:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Theme-authored color family for agent chats. Den gives each chat a lightness step around one muted hue and enforces display contrast.
+      required: [main, lightness_step, chroma]
+      properties:
+        main: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        lightness_step: {type: number, minimum: 0.02, maximum: 0.25}
+        chroma: {type: number, minimum: 0, maximum: 0.12}
+    ContributionTheme:
+      x-go-generate: true
+      x-go-field-order: ["id", "name", "appearance", "tokens", "syntax", "icons", "icon_stroke", "window_colors", "agent_colors", "logomark", "provider"]
+      type: object
+      description: >-
+        One compiled theme. Values are total — every base token and syntax
+        scope resolved through host derivations and the scope fold. Den applies
+        these, and generates window colors from the resolved palette recipe.
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - appearance
+      - tokens
+      - syntax
+      - logomark
+      - icon_stroke
+      - window_colors
+      - agent_colors
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        name:
+          type: string
+        provider:
+          type: string
+          description: Pack id that declared this theme.
+        appearance:
+          type: string
+          enum: [light, dark]
+        tokens:
+          type: object
+          description: Base-plane token id to literal color.
+          additionalProperties:
+            type: string
+        syntax:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ContributionSyntaxStyle'
+        icons:
+          type: object
+          description: >-
+            Glyphs this theme overrides, keyed by host icon slot. Partial by
+            design: an absent slot keeps the host glyph, because a glyph has
+            no derivation. The host defines the frame — viewBox, rendered size,
+            stroke weight, paint — so a themed glyph can never resize a
+            control or carry its own color.
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ContributionIconNode'
+        window_colors:
+          $ref: '#/components/schemas/ContributionWindowColors'
+        agent_colors:
+          $ref: '#/components/schemas/ContributionAgentColors'
+        icon_stroke:
+          $ref: '#/components/schemas/ContributionIconStroke'
+        logomark:
+          type: string
+          enum: [shown, hidden]
+          description: >-
+            Whether the product logomark paints under this theme. A theme may
+            quiet the mark; it can never substitute one, so this carries a
+            visibility and never artwork. Hiding reserves the mark's box, so a
+            theme swap does not relayout the window.
+    ContributionConfigurationProperty:
+      x-go-generate: true
+      type: object
+      description: >-
+        One declared setting with its effective value. `value` is desired state
+        when present and the declared default otherwise.
+      additionalProperties: false
+      required:
+      - id
+      - type
+      - description
+      - scope
+      - is_default
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        type:
+          type: string
+        description:
+          type: string
+        default: {}
+        value:
+          x-go-type: "any"
+          description: The value in force for this property.
+        is_default:
+          type: boolean
+          description: >-
+            True when no desired-state value applied and `value` is the
+            declaration's own default.
+        scope:
+          type: array
+          items:
+            type: string
+        enum:
+          type: array
+          items:
+            type: string
+        min:
+          x-go-pointer: true
+          type: number
+        max:
+          x-go-pointer: true
+          type: number
+    ContributionRequirement:
+      x-go-generate: true
+      type: object
+      description: One MCP requirement joined against the captured resource generation.
+      additionalProperties: false
+      required:
+      - id
+      - provider_id
+      - ready
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+        provider_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        purpose:
+          type: string
+        ready:
+          type: boolean
+        reason:
+          type: string
+          description: provider_missing, provider_disabled, provider_not_ready, or tool_missing.
+        missing_tools:
+          type: array
+          items:
+            type: string
+    ContributionNote:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        unit_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_./%:-]+$"
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+    ContributionSearchSource:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, provider, label, prefix, requirement, tool, min_query_length, max_results, ready, activation_command]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$'}
+        provider: {type: string}
+        label: {type: string}
+        prefix: {type: string}
+        requirement: {type: string}
+        tool: {type: string}
+        min_query_length: {type: integer}
+        max_results: {type: integer}
+        ready: {type: boolean}
+        disabled_reason: {type: string}
+        activation_command: {type: string}
+    ContributionOperation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, provider, action_kind, result_treatment]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$'}
+        provider: {type: string}
+        input:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionInputField'}
+        output:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionInputField'}
+        action_kind: { x-go-type: "string", $ref: '#/components/schemas/ContributionActionKind'}
+        action_ref: {type: string}
+        result_treatment:
+          type: string
+          enum: [output, discard, effect, receipt]
+    ContributionFrameResponse:
+      x-go-generate: true
+      type: object
+      description: >-
+        One complete projection of a captured contribution frame. Pure
+        projection; never an independent source of truth.
+      additionalProperties: false
+      required:
+      - frame_revision
+      - commands
+      - menus
+      - keybindings
+      - binding_defaults
+      - editor_actions
+      - themes
+      - configuration
+      - requirements
+      - search_sources
+      - operations
+      - notes
+      properties:
+        frame_revision:
+          type: string
+        commands:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionCommand'
+        menus:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionMenu'
+        keybindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionKeybinding'
+        binding_defaults:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionBindingDefault'
+        editor_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionEditorAction'
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionTheme'
+        configuration:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionConfigurationProperty'
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionRequirement'
+        search_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionSearchSource'
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionOperation'
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContributionNote'
+    CommandInvokeContext:
+      x-go-generate: true
+      type: object
+      description: >-
+        Structured invocation coordinates. The host resolves and verifies
+        these against machine state; a Den boolean is never authority.
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        document_revision:
+          type: integer
+        start_line:
+          type: integer
+        end_line:
+          type: integer
+        symbol:
+          type: string
+        finding_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        instruction:
+          type: string
+          description: >-
+            Human instruction for editor actions declaring an instruction
+            target. Prompt content only; it never widens the preset boundary.
+    CommandInvokeRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - operation_id
+      - frame_revision
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Idempotency receipt; a UUID minted by the caller. An exact retry replays the stored response verbatim; reusing this id for a different invocation returns 409 idempotency_conflict.
+        frame_revision:
+          type: string
+          description: The frame the caller resolved the command from.
+        context:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandInvokeContext'
+        args:
+          type: object
+          additionalProperties: {}
+          description: Values for the command's declared input schema.
+    CommandUIEffect:
+      x-go-generate: true
+      type: object
+      description: Closed typed UI effect returned by host-validated presentation actions.
+      additionalProperties: false
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          enum:
+          - composer_prefill
+          - navigate
+          - external_link
+        text:
+          type: string
+        destination:
+          type: string
+        url:
+          type: string
+    CommandInvokeError:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          $ref: './api-error-code.generated.yaml#/components/schemas/ApiErrorCode'
+        message: {type: string}
+    CommandInvokeResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - frame_revision
+      properties:
+        status:
+          type: string
+          enum:
+          - completed
+          - accepted
+          - failed
+        frame_revision:
+          type: string
+          description: The frame the host executed against.
+        ui_effect:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandUIEffect'
+        message_id:
+          type: string
+          format: uuid
+          description: The user message an accepted editor action submitted.
+        workflow_run_id:
+          type: string
+          format: uuid
+          description: Run id for accepted workflow starts.
+        output:
+          type: string
+          description: Tool result text for completed MCP tool calls.
+        error:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandInvokeError'
+    ContributionChoiceRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [frame_revision]
+      properties:
+        frame_revision: {type: string}
+        answers:
+          type: object
+          additionalProperties: {}
+    ContributionChoiceResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [frame_revision, provider, choices]
+      properties:
+        frame_revision: {type: string}
+        provider: {type: string}
+        choices:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionChoice'}
+    ContributionSearchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [frame_revision, query]
+      properties:
+        frame_revision: {type: string}
+        query: {type: string}
+    ContributionSearchResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9_.-]+$'}
+        title: {type: string}
+        description: {type: string}
+        detail: {type: string}
+        kind: {type: string}
+        arguments:
+          type: object
+          additionalProperties: {}
+    ContributionSearchResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [frame_revision, source_id, provider, results]
+      properties:
+        frame_revision: {type: string}
+        source_id: {type: string, pattern: '^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$'}
+        provider: {type: string}
+        results:
+          type: array
+          items: {$ref: '#/components/schemas/ContributionSearchResult'}

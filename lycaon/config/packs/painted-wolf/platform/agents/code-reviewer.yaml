@@ -1,0 +1,21 @@
+id: code-reviewer
+name: Code reviewer
+description: Read-only diff review with structured findings
+tool_profile: explore_readonly
+exec_mode: none
+skills:
+  - evolve-a-system
+  - trace-a-system-invariant
+  - design-and-debug-tests
+  - triage-security-findings
+capabilities:
+  - review
+topology_roles:
+  - worker
+  - gate
+dispatch_lanes:
+  - read
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/code-reviewer.md

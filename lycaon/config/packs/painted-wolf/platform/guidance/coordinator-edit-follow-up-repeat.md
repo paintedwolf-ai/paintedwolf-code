@@ -1,0 +1,1 @@
+Second consecutive user follow-up since your inline edits. If it reports the same breakage, your model of the change is wrong — stop patching the quoted symptom. Re-derive how the affected code actually fits together, audit the whole change rather than the last error, and say what you verified when you hand it back.

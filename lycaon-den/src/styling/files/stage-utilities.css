@@ -1,0 +1,100 @@
+@utility project-files-stage-boundary {
+  position: relative;
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Cross-fades loading and content layers. */
+@utility project-files-stage-boundary__loading {
+  display: flex;
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity var(--den-stage-fade-duration) var(--den-ease);
+}
+
+@utility project-files-stage-boundary__loading--ready {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity var(--den-stage-fade-duration) var(--den-ease),
+    visibility 0s linear var(--den-stage-fade-duration);
+}
+
+@utility project-files-stage-boundary__content {
+  display: flex;
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  --den-retained-transition:
+    opacity var(--den-stage-fade-duration) var(--den-ease),
+    filter var(--den-stage-fade-duration) var(--den-ease),
+    visibility 0s linear var(--den-stage-fade-duration);
+}
+
+@utility project-files-stage-boundary__content--ready {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  --den-retained-transition:
+    opacity var(--den-stage-fade-duration) var(--den-ease),
+    filter var(--den-stage-fade-duration) var(--den-ease);
+}
+
+@utility den-files-tree {
+  font-size: var(--text-den-label);
+}
+
+/* Body padding keeps the scrollbar at the pane edge and aligns pinned rows. */
+@utility den-files-tree-body {
+  padding: 0 var(--den-files-tree-inset, 1px) 16px;
+}
+
+/* Flexible width aligns status adornments at the trailing edge. */
+@utility den-files-tree__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-files-tree__drag-ghost-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@utility den-move-source-dialog__crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 1.75rem;
+}
+
+@utility den-move-source-dialog__list {
+  max-height: min(45vh, 22rem);
+}
+
+@utility den-files-history-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+@utility den-files-history-toast__message {
+  flex: 1;
+  min-width: 0;
+}
+

@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Commit not found
+message: >-
+  The repository for this folder does not have that commit, so the working file
+  was left unchanged.
+suggested_action: Refresh the file's history and choose a listed commit.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - does not have that commit
+      - left unchanged

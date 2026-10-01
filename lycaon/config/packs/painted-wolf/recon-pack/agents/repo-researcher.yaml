@@ -1,0 +1,18 @@
+id: repo-researcher
+name: Repo researcher
+description: Read-only codebase survey — grep/find/read, architecture traces, targeted file analysis; scope.mode read
+tool_profile: explore_readonly
+exec_mode: none
+skills:
+  - investigate-code-history
+  - trace-a-system-invariant
+capabilities:
+  - research
+  - metadata
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/repo-researcher.md

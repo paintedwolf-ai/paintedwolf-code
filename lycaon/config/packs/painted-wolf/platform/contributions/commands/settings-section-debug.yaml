@@ -1,0 +1,12 @@
+id: painted-wolf/platform:settings-section-debug
+title: "Settings: advanced"
+scope: "global"
+keywords:
+  - "advanced"
+  - "budgets"
+  - "data"
+  - "diagnostics"
+  - "cache"
+action:
+  kind: native_ui
+  handler: "settings.section.debug"

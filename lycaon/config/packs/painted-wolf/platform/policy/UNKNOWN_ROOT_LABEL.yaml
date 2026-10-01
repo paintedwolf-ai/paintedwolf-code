@@ -1,0 +1,32 @@
+oar: '1.0'
+id: UNKNOWN_ROOT_LABEL
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.profile_surveys_project_tree
+when: paintedwolf.rejection_code == "UNKNOWN_ROOT_LABEL"
+effect: block
+copy:
+  what: The @label/ prefix names a folder label that is not attached to this project.
+  cause: The supplied label does not resolve in the currently attached root set; the host does not infer a
+    replacement label.
+  why: Paths must resolve to an attached folder — unknown labels are never guessed.
+  fix: Use the actual workspace roots block to identify the intended root. A bare relative path addresses the
+    active folder; a known @label/ prefix selects that attached folder. Do not choose an unrelated label merely
+    to make the path resolve.
+  instead: Use a bare relative path for the primary folder, or @<label>/ for a non-primary folder
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:path
+x-paintedwolf-message: unknown root label in path
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: '@missing/src/main.go'
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: UNKNOWN_ROOT_LABEL'

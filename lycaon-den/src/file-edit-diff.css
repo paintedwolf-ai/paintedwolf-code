@@ -1,0 +1,365 @@
+.den-file-edit-diff {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
+  border-radius: var(--den-radius-lg);
+  background: var(--den-surface);
+  overflow: hidden;
+}
+.den-worker-msg--file-edit .den-file-edit-diff {
+  border-color: color-mix(in srgb, var(--den-line) 85%, transparent);
+}
+.den-file-edit-diff-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+  background: var(--den-tint-1);
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+}
+.den-file-edit-diff-disclosure {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.den-file-edit-diff-disclosure:hover {
+  background: color-mix(in srgb, var(--den-text-muted) 12%, transparent);
+}
+.den-file-edit-diff-disclosure:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+.den-file-edit-diff-header:hover {
+  background: var(--den-tint-2);
+}
+.den-file-edit-diff-header:focus-within {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: -2px;
+}
+.den-file-edit-diff[data-expanded="false"] .den-file-edit-diff-header {
+  border-bottom: none;
+}
+.den-file-edit-diff-caret--open {
+  transform: rotate(90deg);
+}
+.den-file-edit-diff-fill {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 8px;
+}
+.den-file-edit-diff-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+.den-file-edit-diff-fullscreen-btn:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+.den-file-edit-diff-stat {
+  flex-shrink: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.den-file-edit-diff-stat-add {
+  color: var(--den-diff-add-hue);
+}
+.den-file-edit-diff-stat-del {
+  margin-left: 5px;
+  color: var(--den-diff-delete-hue);
+}
+.den-file-edit-diff-stat--noop {
+  font-family: inherit;
+  color: var(--den-text-muted);
+}
+.den-file-edit-diff-writes {
+  flex-shrink: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  white-space: nowrap;
+}
+
+.den-file-edit-diff-strip {
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+  background: var(--den-tint-1);
+}
+.den-file-edit-diff-strip__content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+}
+.den-file-edit-diff-step {
+  appearance: none;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.den-file-edit-diff-step:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+.den-file-edit-diff-step[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 40%, transparent);
+  background: color-mix(in srgb, var(--den-accent-signal) 15%, transparent);
+  color: var(--den-accent-text);
+}
+.den-file-edit-diff-step:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+.den-file-edit-diff-step-sep {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 1px;
+  margin: 0 4px;
+  background: var(--den-line);
+}
+.den-file-edit-diff-noop {
+  margin: 0;
+  padding: 14px 12px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.den-file-edit-diff-body {
+  display: flex;
+  flex-direction: column;
+}
+/* Content clipping follows the animated shell height. */
+.den-file-edit-diff[data-animating="true"]:not([data-closing="true"]) .den-file-edit-diff-body {
+  animation: den-file-edit-diff-body-reveal var(--den-duration-drawer) var(--den-ease) forwards;
+}
+.den-file-edit-diff[data-closing="true"] .den-file-edit-diff-body {
+  animation: den-file-edit-diff-body-hide var(--den-duration-drawer) var(--den-ease) forwards;
+}
+
+@keyframes den-file-edit-diff-body-reveal {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0% 0);
+  }
+}
+@keyframes den-file-edit-diff-body-hide {
+  from {
+    clip-path: inset(0 0 0% 0);
+  }
+  to {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-file-edit-diff[data-animating="true"] .den-file-edit-diff-body,
+  .den-file-edit-diff[data-closing="true"] .den-file-edit-diff-body {
+    animation: none;
+  }
+}
+
+.den-file-edit-diff-viewport {
+  overflow: hidden;
+  position: relative;
+}
+
+/* Diffs take natural height; the page scrolls, not the diff. */
+.den-file-edit-diff .den-source-reader,
+.den-file-edit-diff .den-source-reader__editor > .cm-editor {
+  height: auto;
+}
+.den-file-edit-diff .den-source-reader__editors {
+  flex: none;
+}
+/* Horizontal scroll containers pass vertical gestures to the page. */
+.den-file-edit-diff .cm-scroller {
+  overscroll-behavior-y: auto;
+}
+
+.den-file-edit-diff-details {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  background: var(--den-surface);
+  flex-wrap: wrap;
+}
+.den-file-edit-diff-details-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.den-file-edit-diff-details-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.den-file-edit-diff-details-badge[data-change="added"] {
+  background: var(--den-diff-add-line);
+  color: var(--den-diff-add-hue);
+}
+.den-file-edit-diff-details-badge[data-change="deleted"] {
+  background: var(--den-diff-delete-line);
+  color: var(--den-diff-delete-hue);
+}
+.den-file-edit-diff-details-lang {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.den-file-edit-diff-details-lines {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.den-file-edit-diff-details-btn {
+  margin-inline-start: auto;
+}
+
+.den-file-edit-diff-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+  background: var(--den-tint-1);
+}
+
+.den-diff-group {
+  position: relative;
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  overflow: hidden;
+}
+/* The overlay border adds no height to the row. */
+.den-diff-group::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--den-line);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.den-diff-group > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--den-transcript-card-row-h);
+  padding: 0 var(--den-transcript-card-inset-x);
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+.den-diff-group > summary::-webkit-details-marker {
+  display: none;
+}
+.den-diff-group > summary:hover {
+  background: var(--den-tint-2);
+}
+.den-diff-group > summary:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: -2px;
+}
+.den-diff-group[open] > summary {
+  border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
+}
+.den-diff-group-summary {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.den-diff-group-files {
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text);
+}
+.den-diff-group-stat {
+  flex-shrink: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.den-diff-group-writes {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  white-space: nowrap;
+}
+.den-diff-group-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Rows inside a diff group drop card chrome. */
+.den-file-edit-diff[data-chrome="row"] {
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+.den-diff-group-list > .den-file-edit-diff[data-chrome="row"]:last-child {
+  border-bottom: none;
+}
+.den-file-edit-diff[data-chrome="row"] > .den-file-edit-diff-header {
+  min-height: 29px;
+  padding: 5px 12px;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.den-file-edit-diff[data-chrome="row"] > .den-file-edit-diff-header:hover,
+.den-file-edit-diff[data-chrome="row"][data-expanded="true"]
+  > .den-file-edit-diff-header {
+  background: color-mix(in srgb, var(--den-text) 4%, transparent);
+}
+.den-file-edit-diff[data-chrome="row"] .den-file-edit-diff-disclosure:hover {
+  background: transparent;
+}
+.den-file-edit-diff[data-chrome="row"][data-expanded="true"] .den-row-mark::after {
+  transform: scaleY(0);
+}
+.den-file-edit-diff[data-chrome="row"][data-expanded="true"] .den-row-mark::before {
+  background: var(--den-text);
+}
+.den-file-edit-diff[data-chrome="row"] .den-file-edit-diff-strip,
+.den-file-edit-diff[data-chrome="row"] .den-file-edit-diff-footer {
+  background: transparent;
+}
+
+.den-overlay__body.den-diff-viewer__diff-body { overflow: hidden; }

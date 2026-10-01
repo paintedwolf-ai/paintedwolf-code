@@ -1,0 +1,40 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - scan_id
+    - status
+title: Scan results unavailable
+message: >-
+  {% if status == "pending" %}This scan is queued. Its results are not ready yet.
+  {% elif status == "running" %}This scan is still running. Its results are not ready yet.
+  {% elif status == "failed" %}This scan failed before producing completed results.
+  {% elif status == "timed_out" %}This scan reached its time limit before producing completed results.
+  {% elif status == "canceled" %}This scan was canceled before producing completed results.
+  {% elif status == "superseded" %}A newer run replaced this scan.
+  {% else %}This request needs results from a completed scan.{% endif %}
+suggested_action: >-
+  {% if status == "pending" or status == "running" %}Wait for the scan to finish. Results load automatically in Security scanners.
+  {% else %}Select a completed run in Security scanners or start a full scan.{% endif %}
+scenarios:
+  - id: pending
+    vars: { status: pending }
+    expect_contains: [queued, automatically]
+  - id: running
+    vars: { status: running }
+    expect_contains: [still running, automatically]
+  - id: failed
+    vars: { status: failed }
+    expect_contains: [failed, Select a completed run]
+  - id: timed_out
+    vars: { status: timed_out }
+    expect_contains: [time limit, Select a completed run]
+  - id: canceled
+    vars: { status: canceled }
+    expect_contains: [canceled, Select a completed run]
+  - id: superseded
+    vars: { status: superseded }
+    expect_contains: [newer run, Select a completed run]
+  - id: default
+    vars: {}
+    expect_contains: [completed scan, Select a completed run]

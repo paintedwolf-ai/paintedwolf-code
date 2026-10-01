@@ -1,0 +1,33 @@
+title: Delete a GitOps-managed application
+id: 975d2702-3fe4-4d83-b38d-510d574386d9
+description: Removes a managed application or resource; Argo CD cascades by default to everything it deployed in the cluster.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # Argo CD cascades to the application's cluster resources unless told not to,
+  # so this reaches further than the record it names.
+  selection_argocd:
+    Image: argocd
+    CommandLine|contains:
+      - ' app delete'
+      - ' app delete-resource'
+      - ' appset delete'
+  selection_flux:
+    Image: flux
+    CommandLine|contains: ' delete '
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_argocd or selection_flux) and not filter_rehearsal and not filter_local

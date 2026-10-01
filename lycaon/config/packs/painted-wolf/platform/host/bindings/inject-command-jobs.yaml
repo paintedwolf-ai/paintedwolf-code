@@ -1,0 +1,10 @@
+# Inform Binding — assembly-only command lifecycle inject.
+'on': inject.command_jobs
+effect: inform
+render: command-jobs
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator or worker assembly while command jobs are live

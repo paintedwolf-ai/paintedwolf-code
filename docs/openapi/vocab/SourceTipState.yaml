@@ -1,0 +1,6 @@
+# SourceTipState represents deletion with `absent`, rather than an empty hash.
+name: SourceTipState
+go_const_prefix: SourceTipState
+values:
+  - id: content
+  - id: absent

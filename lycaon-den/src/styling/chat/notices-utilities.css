@@ -1,0 +1,154 @@
+@utility den-notice {
+display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  animation: notice-in 160ms ease-out;
+}
+
+
+@utility den-notice-action {
+margin: 4px 0 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  /* Ids, paths and endpoints wrap rather than widen the card. */
+  overflow-wrap: anywhere;
+}
+
+@utility den-notice-body {
+min-width: 0;
+}
+
+
+@utility den-notice-controls {
+display: flex;
+  align-items: start;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+
+@utility den-notice-dismiss {
+width: 1.8571rem;
+  height: 1.8571rem;
+  font-size: var(--text-den-title);
+  line-height: 1;
+}
+
+
+@utility den-notice-kind {
+margin-right: 6px;
+  font-size: var(--text-den-micro);
+  font-weight: 700;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-notice-message {
+margin: 6px 0 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text);
+  overflow-wrap: anywhere;
+}
+
+
+@utility den-notice-rail {
+flex-shrink: 0;
+  border-top: 1px solid var(--den-border);
+  border-bottom: 1px solid var(--den-border);
+  background: var(--den-surface);
+}
+
+
+@utility den-notice-rail-header {
+display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 16px 0;
+}
+
+
+@utility den-notice-rail-heading {
+font-size: var(--text-den-caption);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-notice-rail-list {
+  /* The cap scales with text and fits one expanded notice. */
+  max-height: min(22rem, 40vh);
+}
+
+
+@utility den-notice-rail-list__content {
+list-style: none;
+  margin: 0;
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Cards respond to the rail width. */
+  container-type: inline-size;
+  container-name: den-notice-rail;
+}
+
+
+@utility den-notice-summary {
+display: grid;
+  gap: 2px;
+}
+
+
+@utility den-notice-teaser {
+margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+
+@utility den-notice-title {
+margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--den-text);
+  overflow-wrap: anywhere;
+}
+
+
+@utility den-notice-toggle {
+display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.8571rem;
+  /* Reserved label width prevents reflow when toggled. */
+  min-width: 4rem;
+  padding: 0 8px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  &:hover {
+    background: var(--den-tint-2);
+    color: var(--den-text);
+  }
+}
+
+@utility den-notice-toggle-glyph {
+display: none;
+}
+
+

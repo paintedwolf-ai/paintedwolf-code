@@ -1,0 +1,202 @@
+components:
+  schemas:
+    ExternalAccessVisibility:
+      type: string
+      description: >
+        Primitive per-effect visibility. observed = host saw the destination through
+        mediation; declared = request context only; unobserved = authority existed for
+        effects the host could not observe; none = affirmatively absent for this record.
+      enum:
+      - observed
+      - declared
+      - unobserved
+      - none
+    ExternalAccessVisibilitySummary:
+      type: string
+      description: >
+        Derived action-level summary. mixed = observed mediated endpoints coexist with
+        unobserved direct/daemon authority; unknown = incomplete or malformed detail;
+        none = affirmatively no exceptional access on this record.
+      enum:
+      - observed
+      - declared
+      - unobserved
+      - mixed
+      - none
+      - unknown
+    ExternalAccessMode:
+      type: string
+      description: Exceptional external-access mode present on an action.
+      enum:
+      - mediated_http
+      - mediated_socks
+      - local_socket
+      - direct_ip
+      - full_bypass
+    ExternalAccessTransport:
+      type: string
+      description: Mediated transport that observed an endpoint.
+      enum:
+      - http_connect
+      - http_request
+      - socks_tcp
+    ExternalAccessDecision:
+      type: string
+      description: Host decision for an observed mediated endpoint.
+      enum:
+      - allow
+      - deny
+    ExternalAccessEndpoint:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - host
+      - port
+      - transport
+      - visibility
+      - decision
+      - attempt_count
+      properties:
+        host:
+          type: string
+        port:
+          x-go-type: "uint16"
+          type: integer
+          minimum: 0
+          maximum: 65535
+        transport:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessTransport
+        visibility:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibility
+          description: Observed endpoints always use observed.
+        decision:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessDecision
+        attempt_count:
+          type: integer
+          minimum: 1
+        allowed_count:
+          x-go-pointer: true
+          type: integer
+          minimum: 0
+        denied_count:
+          x-go-pointer: true
+          type: integer
+          minimum: 0
+    ExternalAccessSocketAuthority:
+      type: string
+      description: Fixed authority class for an applied local-service socket grant.
+      enum:
+      - outside_sandbox_daemon
+    ExternalAccessSocket:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - approved_path
+      - resolved_path
+      - scope
+      - capability_visibility
+      - connection_visibility
+      - inner_effect_visibility
+      - authority
+      properties:
+        approved_path:
+          type: string
+        resolved_path:
+          type: string
+        scope:
+          type: string
+          description: Grant lifetime scope (for example chat or current_action).
+        capability_visibility:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibility
+          description: Fixed observed — the host applied the capability.
+        connection_visibility:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibility
+          description: Fixed unobserved — the platform sandbox supplies no connect telemetry.
+        inner_effect_visibility:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibility
+          description: Fixed unobserved — daemon/container inner effects are not observed.
+        authority:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessSocketAuthority
+    ExternalAccessDirectScope:
+      type: string
+      description: Fixed scope for one-action direct IP.
+      enum:
+      - current_action
+    ExternalAccessDirect:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - scope
+      - actual_destination_visibility
+      properties:
+        scope:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessDirectScope
+        actual_destination_visibility:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibility
+          description: Fixed unobserved — direct actual destinations are never observed.
+    ExternalAccessDetection:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - pack_id
+      - rule_id
+      - level
+      properties:
+        pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_./%-]+$"
+        rule_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        rule_title:
+          type: string
+        level:
+          type: string
+        action_id:
+          type: string
+          format: uuid
+          description: Exact action id the winning detection citation is bound to.
+    ExternalAccess:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - modes
+      - visibility_summary
+      properties:
+        modes:
+          type: array
+          items:
+            $ref: external-access.yaml#/components/schemas/ExternalAccessMode
+        visibility_summary:
+          $ref: external-access.yaml#/components/schemas/ExternalAccessVisibilitySummary
+        endpoints:
+          type: array
+          description: >
+            Deduped observed mediated endpoints (host+port+transport+decision) with
+            attempt counts. Declarations never appear here.
+          items:
+            $ref: external-access.yaml#/components/schemas/ExternalAccessEndpoint
+        sockets:
+          type: array
+          maxItems: 8
+          description: Applied local-service socket grants (authority available, not observed connects).
+          items:
+            $ref: external-access.yaml#/components/schemas/ExternalAccessSocket
+        declared_destinations:
+          type: array
+          items:
+            type: string
+          description: >
+            Declared destination strings for context only. Never treated as observed endpoints.
+        direct:
+          x-go-pointer: true
+          $ref: external-access.yaml#/components/schemas/ExternalAccessDirect
+        detections:
+          type: array
+          items:
+            $ref: external-access.yaml#/components/schemas/ExternalAccessDetection

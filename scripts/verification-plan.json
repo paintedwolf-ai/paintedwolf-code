@@ -1,0 +1,897 @@
+{
+  "groups": {
+    "default": [
+      "check-fast"
+    ],
+    "check-fast": [
+      "build",
+      "lint:fast",
+      "den:typecheck",
+      "den:lint",
+      "den:test:fast",
+      "test:short"
+    ],
+    "oar:verify": [
+      "test:oar",
+      "oar:conformance"
+    ],
+    "check": [
+      "build",
+      "build:cross",
+      "check:drift",
+      "openapi:lint",
+      "validate:workflows",
+      "oar:verify",
+      "check:tests",
+      "test:fail-messages:check",
+      "comments:check",
+      "lint:full",
+      "lint:vuln"
+    ],
+    "check:tests": [
+      "test:runner",
+      "test:full",
+      "den:typecheck",
+      "den:lint",
+      "den:test",
+      "den:test:rust",
+      "den:webkit:scroll"
+    ],
+    "check:drift": [
+      "codegen:wire-enums:check",
+      "codegen:web-research-catalog:check",
+      "codegen:contribution-facts:check",
+      "codegen:contribution-inventory:check",
+      "codegen:theme-tokens:check",
+      "codegen:dependency-inventory:check",
+      "codegen:den-fonts:check",
+      "codegen:client-notices:check",
+      "codegen:host-markers:check",
+      "codegen:detection-packs:check",
+      "openapi:bundle:check",
+      "codegen:tool-command-equivalence:check",
+      "codegen:guidance-registry:check",
+      "oar:vendor:check",
+      "scan:rules:vendor:check",
+      "secret-mint:vendor:check",
+      "lint:vuln:vendor:check",
+      "codegen:native-tool-contracts:check",
+      "codegen:worker-branch-tools:check",
+      "codegen:approval-explanations:check",
+      "codegen:tool-presentation:check",
+      "codegen:den-types:check",
+      "db:sqlc:check",
+      "db:sqlc:vet",
+      "docs:links"
+    ]
+  },
+  "go": {
+    "test:oar": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/oarcore",
+        "./internal/oar",
+        "./internal/oarcopy",
+        "./internal/guidance",
+        "./internal/toolvocab",
+        "./internal/catalogview",
+        "./internal/tools"
+      ]
+    },
+    "test:digest": {
+      "options": [],
+      "packages": [
+        "./..."
+      ]
+    },
+    "test:short": {
+      "options": [],
+      "packages": [
+        "./..."
+      ],
+      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)"
+    },
+    "test:wiring": {
+      "options": [],
+      "packages": [
+        "./test/wiring/..."
+      ]
+    },
+    "test:integration": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration"
+      ],
+      "packages": [
+        "./internal/...",
+        "./test/integration/...",
+        "./test/property/..."
+      ]
+    },
+    "test:stress": {
+      "options": [
+        "--full",
+        "--tags",
+        "stress",
+        "--timeout",
+        "90m"
+      ],
+      "packages": [
+        "./internal/db",
+        "./internal/findings",
+        "./internal/git",
+        "./internal/sourcecatalog",
+        "./internal/sourceledger",
+        "./internal/session/store",
+        "./internal/sourcecomparison"
+      ],
+      "flags": [
+        "-p=1",
+        "-parallel=1",
+        "-run=^TestStress"
+      ]
+    },
+    "test:full": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration",
+        "--timeout",
+        "40m"
+      ],
+      "packages": [
+        "./..."
+      ],
+      "bundled": true
+    },
+    "test:contract": {
+      "options": [
+        "--timeout",
+        "15m"
+      ],
+      "packages": [
+        "./test/contract/..."
+      ]
+    },
+    "test:security": {
+      "options": [
+        "--full",
+        "--timeout",
+        "40m"
+      ],
+      "packages": [
+        "./test/security/..."
+      ]
+    },
+    "test:race": {
+      "options": [
+        "--full",
+        "--race",
+        "--tags",
+        "integration",
+        "--timeout",
+        "15m"
+      ],
+      "packages": [
+        "./..."
+      ],
+      "exclude": "/test/security$"
+    }
+  },
+  "tasks": {
+    "den:harness:test": [
+      "den:harness:test"
+    ],
+    "build": [
+      "build"
+    ],
+    "build:cross": [
+      "build:cross"
+    ],
+    "codegen:approval-explanations:check": [
+      "codegen:approval-explanations:check"
+    ],
+    "codegen:client-notices:check": [
+      "codegen:client-notices:check"
+    ],
+    "codegen:contribution-facts:check": [
+      "codegen:contribution-facts:check"
+    ],
+    "codegen:contribution-inventory:check": [
+      "codegen:contribution-inventory:check"
+    ],
+    "codegen:den-fonts:check": [
+      "codegen:den-fonts:check"
+    ],
+    "codegen:den-types:check": [
+      "codegen:den-types:check"
+    ],
+    "codegen:detection-packs:check": [
+      "codegen:detection-packs:check"
+    ],
+    "codegen:guidance-registry:check": [
+      "codegen:guidance-registry:check"
+    ],
+    "codegen:host-markers:check": [
+      "codegen:host-markers:check"
+    ],
+    "codegen:native-tool-contracts:check": [
+      "codegen:native-tool-contracts:check"
+    ],
+    "codegen:theme-tokens:check": [
+      "codegen:theme-tokens:check"
+    ],
+    "codegen:dependency-inventory:check": [
+      "codegen:dependency-inventory:check"
+    ],
+    "codegen:tool-command-equivalence:check": [
+      "codegen:tool-command-equivalence:check"
+    ],
+    "codegen:tool-presentation:check": [
+      "codegen:tool-presentation:check"
+    ],
+    "codegen:web-research-catalog:check": [
+      "codegen:web-research-catalog:check"
+    ],
+    "codegen:wire-enums:check": [
+      "codegen:wire-enums:check"
+    ],
+    "codegen:worker-branch-tools:check": [
+      "codegen:worker-branch-tools:check"
+    ],
+    "comments:check": [
+      "comments:check"
+    ],
+    "db:sqlc:check": [
+      "db:sqlc:check"
+    ],
+    "db:sqlc:vet": [
+      "db:sqlc:vet"
+    ],
+    "den:lint": [
+      "den:lint"
+    ],
+    "den:lint:full": [
+      "den:lint:full"
+    ],
+    "den:test": [
+      "den:test"
+    ],
+    "den:test:digest": [
+      "den:test:digest"
+    ],
+    "den:test:fast": [
+      "den:test:fast"
+    ],
+    "den:test:rust": [
+      "den:test:rust"
+    ],
+    "den:typecheck": [
+      "den:typecheck"
+    ],
+    "docs:links": [
+      "docs:links"
+    ],
+    "lint:fast": [
+      "lint:fast"
+    ],
+    "lint:full": [
+      "lint:full"
+    ],
+    "lint:vuln": [
+      "lint:vuln"
+    ],
+    "oar:conformance": [
+      "oar:conformance"
+    ],
+    "oar:vendor:check": [
+      "oar:vendor:check"
+    ],
+    "openapi:bundle:check": [
+      "openapi:bundle:check"
+    ],
+    "openapi:lint": [
+      "openapi:lint"
+    ],
+    "scan:rules:vendor:check": [
+      "scan:rules:vendor:check"
+    ],
+    "secret-mint:vendor:check": [
+      "secret-mint:vendor:check"
+    ],
+    "test:fail-messages:check": [
+      "test:fail-messages:check"
+    ],
+    "test:runner": [
+      "test:runner"
+    ],
+    "validate:workflows": [
+      "validate:workflows"
+    ],
+    "lint:vuln:vendor:check": [
+      "lint:vuln:vendor:check"
+    ],
+    "den:webkit:scroll": [
+      "den:webkit:scroll"
+    ],
+    "decide:test": [
+      "decide:test"
+    ]
+  },
+  "private": [
+    "check:tests",
+    "check:drift"
+  ],
+  "selection": {
+    "test:digest": "go",
+    "test:oar": "go",
+    "test:short": "go",
+    "test:wiring": "go",
+    "test:integration": "go",
+    "test:stress": "go",
+    "test:full": "go",
+    "test:contract": "go",
+    "test:security": "go",
+    "test:race": "go",
+    "den:test:digest": "vitest",
+    "den:harness:test": "playwright",
+    "lint:fast": "passthrough",
+    "lint:full": "passthrough",
+    "oar:conformance": "passthrough"
+  },
+  "resources": {
+    "den:harness:test": {
+      "locks": [
+        "harness",
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "go": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
+    "build": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "build:cross": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:detection-packs:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "lint:fast": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
+    },
+    "lint:full": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
+    },
+    "lint:vuln": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "den:test": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:test:digest": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:test:fast": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:lint": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:lint:full": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:typecheck": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
+    },
+    "den:test:rust": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "go:bundled": {
+      "locks": [
+        "go",
+        "scanners"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "codegen:approval-explanations:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:client-notices:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:contribution-facts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:contribution-inventory:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:den-fonts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:den-types:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:guidance-registry:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:host-markers:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:native-tool-contracts:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:theme-tokens:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:dependency-inventory:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:tool-command-equivalence:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:tool-presentation:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:web-research-catalog:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:wire-enums:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "codegen:worker-branch-tools:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "comments:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "db:sqlc:check": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "db:sqlc:vet": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "docs:links": {
+      "locks": [],
+      "workers": 1
+    },
+    "oar:conformance": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "oar:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "openapi:bundle:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "openapi:lint": {
+      "locks": [],
+      "workers": 1
+    },
+    "scan:rules:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "secret-mint:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "test:fail-messages:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "validate:workflows": {
+      "locks": [],
+      "workers": "shared"
+    },
+    "build:lycaon-dev": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "upgrade:corpus:seed": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "upgrade:corpus:boot": {
+      "locks": [
+        "dev-engine",
+        "scanners"
+      ],
+      "workers": "shared"
+    },
+    "gocache:trim": {
+      "locks": [
+        "gocache",
+        "lint"
+      ],
+      "workers": 1
+    },
+    "lint:vuln:vendor:check": {
+      "locks": [],
+      "workers": 1
+    },
+    "den:webkit:scroll": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "build:decide": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "decide:test": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    }
+  },
+  "environment": {
+    "names": [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "TMPDIR",
+      "TZ",
+      "LANG",
+      "COMMAND_MODE",
+      "__CF_USER_TEXT_ENCODING",
+      "CC",
+      "CXX",
+      "SDKROOT",
+      "DEVELOPER_DIR",
+      "MACOSX_DEPLOYMENT_TARGET",
+      "CI",
+      "BENCHMARK",
+      "FUZZTIME",
+      "RUSTFLAGS",
+      "RUSTDOCFLAGS",
+      "NODE_OPTIONS",
+      "NODE_EXTRA_CA_CERTS",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR"
+    ],
+    "prefixes": [
+      "LC_",
+      "GO",
+      "CGO_",
+      "CARGO_",
+      "RUSTUP_",
+      "RUST_",
+      "PW_",
+      "OPENGREP_",
+      "VITE_",
+      "VITEST_",
+      "PLAYWRIGHT_",
+      "UPDATE_",
+      "COVERAGE_",
+      "XDG_",
+      "NPM_CONFIG_",
+      "BUN_",
+      "GITHUB_",
+      "RUNNER_"
+    ]
+  },
+  "ci": {
+    "build": {
+      "targets": [
+        "build",
+        "build:cross"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "contracts": {
+      "targets": [
+        "check:drift",
+        "openapi:lint",
+        "validate:workflows",
+        "oar:verify"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "lint": {
+      "targets": [
+        "lint:full",
+        "test:fail-messages:check",
+        "comments:check"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "vulnerabilities": {
+      "targets": [
+        "lint:vuln"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "runner": {
+      "targets": [
+        "test:runner"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "behavior": {
+      "targets": [
+        "test:full"
+      ],
+      "minutes": 150,
+      "profiles": [
+        "check",
+        "release",
+        "nightly"
+      ],
+      "suite": "behavior",
+      "native": false
+    },
+    "frontend": {
+      "targets": [
+        "den:typecheck",
+        "den:lint",
+        "den:test"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "native": {
+      "targets": [
+        "den:test:rust"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": true
+    },
+    "webkit": {
+      "targets": [
+        "den:webkit:scroll"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release"
+      ],
+      "suite": "all",
+      "native": true,
+      "runner": "macos-14"
+    },
+    "race": {
+      "targets": [
+        "test:race"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "race",
+      "native": false
+    },
+    "fuzz": {
+      "targets": [
+        "test:fuzz"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "fuzz",
+      "native": false
+    },
+    "stress": {
+      "targets": [
+        "test:stress"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "performance",
+      "native": false
+    },
+    "go-coverage": {
+      "targets": [
+        "check:coverage"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "coverage",
+      "native": false
+    },
+    "frontend-coverage": {
+      "targets": [
+        "den:coverage-check"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "coverage",
+      "native": false
+    },
+    "transcript-scale": {
+      "targets": [
+        "den:test:transcript-scale"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "release",
+        "nightly"
+      ],
+      "suite": "performance",
+      "native": false
+    },
+    "vulnerability-freshness": {
+      "targets": [
+        "lint:vuln:fresh"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "benchmarks": {
+      "targets": [
+        "perf:bench"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "native": false
+    },
+    "sidecar-performance": {
+      "targets": [
+        "perf:sidecar"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "native": false
+    },
+    "sidecar-soak": {
+      "targets": [
+        "perf:soak"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "performance",
+      "native": false
+    }
+  }
+}

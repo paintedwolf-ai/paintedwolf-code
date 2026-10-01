@@ -1,0 +1,25 @@
+[
+  {
+    "release": "R17",
+    "region": "east",
+    "revision": "e1",
+    "artifact": "east-v1",
+    "dependencies": {}
+  },
+  {
+    "release": "R17",
+    "region": "west",
+    "revision": "w1",
+    "artifact": "west-v1",
+    "dependencies": {
+      "east": "e1"
+    }
+  },
+  {
+    "release": "R17",
+    "region": "north",
+    "revision": "n1",
+    "artifact": "north-v1",
+    "dependencies": {}
+  }
+]

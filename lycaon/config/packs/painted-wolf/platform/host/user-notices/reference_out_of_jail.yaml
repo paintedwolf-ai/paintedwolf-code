@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Path outside project
+message: >-
+  That path is outside your project folders.
+suggested_action: Drop or attach something from inside an attached project folder.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - outside your project folders

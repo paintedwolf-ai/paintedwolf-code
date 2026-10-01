@@ -1,0 +1,23 @@
+title: Move money to a target
+id: 04f1ccb9-33d4-4aad-b54e-e3439c74223d
+status: stable
+description: Pays out or transfers a specified amount to a specified target.
+references:
+  - https://attack.mitre.org/techniques/T1657/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    ActionEffect: [payout, transfer]
+    AmountPresent: 'true'
+    TargetPresent: 'true'
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

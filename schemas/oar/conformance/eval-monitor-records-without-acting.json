@@ -1,0 +1,62 @@
+{
+  "id": "eval-monitor-records-without-acting",
+  "title": "A monitored rule is evaluated and recorded, contributes no decision and applies no side-effect",
+  "covers": [
+    "OAR-EVAL-10",
+    "OAR-OPS-1",
+    "OAR-CONF-11",
+    "OAR-FIRE-2"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "WATCHED",
+      "effect": "block",
+      "enforcement": "monitor",
+      "on_fire": [
+        "increment_counter"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/WATCHED:monitored_fired"
+    ],
+    "on_fire": [],
+    "counters": {
+      "oar.test/WATCHED": {
+        "fire_count": 0
+      }
+    }
+  }
+}

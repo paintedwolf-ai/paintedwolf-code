@@ -1,0 +1,5 @@
+id: object-storage
+label: Object storage tools
+description: >-
+  Cross-provider object storage tools (rclone, MinIO client, s5cmd) that delete
+  a bucket or its objects, or overwrite a destination to match a source.

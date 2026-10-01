@@ -1,0 +1,5 @@
+id: bulk-data-export
+label: Bulk data export
+description: >-
+  A database dump or archive piped straight into something that sends it off
+  this machine.

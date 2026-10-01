@@ -1,0 +1,5 @@
+code: decision_gate_phase_missing
+message: |
+  user_decision_received gate references missing phase {{phase}}.
+replacement: |
+  Align the gate with a phase that declares intake decisions.

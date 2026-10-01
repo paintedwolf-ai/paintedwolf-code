@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Request method isn't supported
+message: This API route does not support the requested operation.
+suggested_action: Refresh the app and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - does not support

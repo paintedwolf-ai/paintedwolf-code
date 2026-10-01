@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/onboarding-copy
+name: Example — Onboarding Copy
+version: 1.0.0
+description: Change what the model reads and what the human reads — templates, partials, approval copy, notices.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

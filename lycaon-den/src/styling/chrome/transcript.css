@@ -1,0 +1,484 @@
+.bubble {
+  position: relative;
+}
+
+/* Entry fades ignore scroll motion. */
+.den-enter-fade:not(.den-stage-boot) {
+  animation: den-enter-reveal var(--den-enter-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1) backwards;
+}
+
+.den-prepared-surface {
+  position: relative;
+  min-height: 6rem;
+}
+
+.den-presentation-wait {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  padding: 7px 11px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-md);
+  color: var(--den-text);
+  font-size: var(--text-den-compact);
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+}
+
+.den-retained-presentation {
+  transition: var(--den-retained-transition,
+    opacity var(--den-stage-fade-duration) var(--den-ease),
+    filter var(--den-stage-fade-duration) var(--den-ease));
+}
+
+.den-retained-presentation[data-retained="true"] {
+  opacity: 0.45;
+  filter: grayscale(0.72);
+  pointer-events: none;
+  user-select: none;
+}
+
+.den-resident-surface[data-presentation="preparing"] {
+  visibility: hidden;
+  clip-path: inset(50%);
+}
+
+.den-surface-deck {
+  display: grid;
+  position: relative;
+  min-width: 0;
+  min-height: 6rem;
+}
+
+.den-surface-deck > .den-resident-surface {
+  grid-area: 1 / 1;
+  position: relative;
+  inset: auto;
+}
+
+.den-surface-deck > .den-resident-surface--idle {
+  display: none;
+}
+
+.den-surface-deck > .den-resident-surface--pending {
+  position: absolute;
+  inset: 0;
+}
+
+.den-stage-boot {
+  opacity: 0;
+  pointer-events: none;
+}
+.den-stage-boot[data-boot="ready"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.den-stage-boot.den-enter-fade {
+  animation: den-enter-reveal var(--den-stage-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1) both;
+}
+
+/* Shell arrivals use the stage timing. */
+.den-stage-enter-fade {
+  animation: den-enter-reveal var(--den-stage-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1) backwards;
+}
+
+.den-exit-fade {
+  animation: den-exit-conceal var(--den-stage-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes den-exit-conceal {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Shared load-in changes opacity only and keeps its publication timing. */
+  .den-enter-fade:not(.den-stage-boot) {
+    animation-duration: var(--den-enter-fade-duration) !important;
+  }
+  .den-stage-boot.den-enter-fade,
+  .den-stage-enter-fade {
+    animation-duration: var(--den-stage-fade-duration) !important;
+  }
+  .den-exit-fade {
+    animation: none;
+    opacity: 0;
+  }
+  .den-retained-presentation {
+    transition: none;
+  }
+}
+
+.den-transcript-day {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  width: 100%;
+  max-width: 48rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.den-transcript-day__label {
+  padding-inline: 2px;
+  white-space: nowrap;
+}
+
+.den-transcript-gap {
+  align-self: center;
+  margin: 0;
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.den-transcript-unread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--den-accent-text);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.den-transcript-unread__rule {
+  height: 1px;
+  background: color-mix(in srgb, var(--den-accent-signal) 55%, transparent);
+}
+
+.den-transcript-unread__label {
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* The anchor a turn seam holds: quiet, but always readable. */
+.den-turn-tail {
+  align-self: center;
+  min-height: 1lh;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 6px;
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.den-turn-tail__dot {
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+}
+
+.den-msg-actions__time {
+  position: relative;
+  z-index: 1;
+  padding-inline: 8px 6px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.den-msg-actions__sep {
+  width: 1px;
+  height: 14px;
+  margin-inline: 2px;
+  background: var(--den-line);
+}
+
+/* Cancels the row's part gap so the time sits closer under its bubble. */
+.den-msg-time-below {
+  align-self: flex-end;
+  margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
+  padding-inline-end: 4px;
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.bubble--user {
+  align-self: flex-end;
+  max-width: var(--transcript-user-width);
+  padding: var(--transcript-user-padding-y) var(--transcript-user-padding-x);
+  border-radius: var(--den-radius-lg);
+  border: 1px solid var(--den-user-prompt-border);
+  background: var(--den-user-prompt-fill);
+  font-size: var(--text-den-body);
+  line-height: var(--transcript-user-line-height);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  user-select: text;
+}
+
+/* Mark the queue head while it waits for the next boundary. */
+.bubble--reserved {
+  border-style: dashed;
+}
+
+/* Floats above the message's top-right corner without taking space. */
+.den-msg-actions {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease 240ms;
+}
+
+.bubble:hover > .den-msg-actions,
+.bubble:focus-within > .den-msg-actions,
+.den-msg-actions:hover,
+.den-msg-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 80ms ease 0ms;
+}
+
+/* Bridges the gap into the message bubble. */
+.den-msg-actions::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 6px;
+  pointer-events: none;
+}
+
+.bubble:hover > .den-msg-actions::after,
+.bubble:focus-within > .den-msg-actions::after,
+.den-msg-actions:hover::after {
+  pointer-events: auto;
+}
+
+.den-msg-actions__btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.den-msg-actions__btn[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.den-msg-actions__btn--danger:hover:not([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--den-danger) 9%, transparent);
+  color: var(--den-danger-text);
+}
+
+.den-tooltip {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--den-text) 92%, var(--den-background));
+  color: var(--den-background);
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-micro);
+  font-weight: 450;
+  line-height: 1.4;
+  /* Long tooltip content wraps within the viewport. */
+  max-width: min(22rem, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-tooltip,
+  .den-msg-actions {
+    transition: none;
+  }
+}
+
+.bubble--assistant {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  line-height: var(--transcript-prose-line-height);
+  color: var(--den-text);
+  word-wrap: break-word;
+  user-select: text;
+}
+
+.assistant-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--transcript-part-gap);
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.assistant-turn .bubble {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.den-turn-walk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: var(--den-transcript-card-width);
+  max-width: 100%;
+  padding: 11px 12px 11px 14px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: color-mix(in srgb, var(--den-surface-elevated) 88%, transparent);
+  box-shadow: var(--den-shadow-xs);
+}
+
+.den-turn-walk__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.den-turn-walk__copy strong {
+  color: var(--den-text);
+  font-size: var(--text-den-caption);
+  font-weight: 650;
+}
+
+.den-turn-walk__copy span {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-turn-walk__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.den-turn-walk__action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 42%, var(--den-line));
+  border-radius: var(--den-radius-sm);
+  background: color-mix(in srgb, var(--den-accent-signal) 10%, transparent);
+  color: var(--den-accent-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-den-caption);
+  font-weight: 650;
+}
+
+.den-turn-walk__action:hover {
+  background: color-mix(in srgb, var(--den-accent-signal) 17%, transparent);
+}
+
+.den-turn-walk__action:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: 2px;
+}
+
+/* Walk's metrics without its accent fill. */
+.den-turn-walk__action--quiet {
+  border-color: var(--den-line);
+  background: transparent;
+  color: var(--den-text);
+}
+
+.den-turn-walk__action--quiet:hover {
+  background: color-mix(in srgb, var(--den-text) 6%, transparent);
+}
+
+:where(.den-split-col--chat[data-chat-band~="max-520"]) {
+  .den-turn-walk {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .den-turn-walk__actions {
+    display: flex;
+  }
+
+  .den-turn-walk__action {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
+
+
+/* The attribute outranks the scrollport frame's base position. */
+.den-window-host[data-den-scrollport] {
+  position: absolute;
+  inset: 0;
+  background: var(--den-background);
+}
+/* Fills the scrollport so the card can center against the whole window. */
+.den-window-host__surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.den-window-host__chrome-drag {
+  position: absolute;
+  inset: 0;
+}
+.den-window-host__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+/* Window controls remain available without the tab rail. */
+.den-window-host__controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: var(--den-unified-chrome-row);
+}

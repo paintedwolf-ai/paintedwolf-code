@@ -1,0 +1,95 @@
+id: painted-wolf/themes:catppuccin-latte
+name: Catppuccin Latte
+appearance: light
+
+# The surfaces step in soft pastel rungs; lighter edges keep them soft.
+bevel:
+  strength: 0.8
+
+# Derived status inks preserve Latte's pastel hues on the light page.
+# Teal keeps added lines visible and separates them from red deletes.
+window_colors:
+  main: "#8839ef"
+  anchors: ["#8839ef", "#40a02b", "#1e66f5", "#df8e1d"]
+  hue_spread: 28
+  chroma_min: 0.04
+  chroma_max: 0.18
+
+tokens:
+  background: "#eff1f5" # base
+  surface: "#eff1f5"
+  surface-elevated: "#ccd0da" # surface0
+  surface-chrome: "#e6e9ef" # mantle
+  # Light steps the other way: a seated block sits under the page, and the page
+  # itself is the lift, so surface-raised stays derived.
+  surface-offset: "#dce0e8" # crust
+  brand-field: "#e6e9ef" # mantle plate
+  border: "#bcc0cc" # surface1
+  text: "#4c4f69"
+  text-muted: "#6c6f85" # subtext0
+  accent: "#8839ef" # mauve
+  accent-warm: "#ea76cb" # pink
+  accent-text: "#8839ef"
+  accent-signal: "#8839ef"
+  danger: "#d20f39" # red
+  warning: "#df8e1d" # yellow; warning-text derives separately
+  status-positive: "#40a02b" # green
+  status-running: "#fe640b" # peach
+  draft-accent: "#179299" # teal
+  tint-hue: "#9ca0b0" # overlay0
+  # One rung past surface-offset, so a chosen fill stays visible on it.
+  selection: "#ccd0da" # surface0
+  selection-strong: "#bcc0cc" # surface1
+  caret: "#dc8a78" # rosewater
+  diff-add-hue: "#179299" # teal keeps adds visible
+  diff-delete-hue: "#d20f39"
+  cost-coordinator: "#fe640b"
+  cost-workers: "#1e66f5"
+  cost-summarizer: "#40a02b"
+  identity-1: "#8839ef"
+  identity-2: "#1e66f5"
+  identity-3: "#40a02b"
+  identity-4: "#fe640b"
+  identity-5: "#179299"
+
+syntax:
+  keyword: "#8839ef"
+  string: "#40a02b"
+  number: "#fe640b"
+  constant: "#fe640b"
+  variable: "#4c4f69"
+  type: "#df8e1d"
+  function: "#1e66f5"
+  property: "#1e66f5" # blue — JSON keys
+  operator: "#04a5e5" # sky
+  punctuation: "#7c7f93" # overlay2
+  tag: "#1e66f5"
+  meta: "#df8e1d" # yellow — annotations and metadata
+  invalid: "#d20f39"
+  link: "#1e66f5"
+  heading: { color: "#1e66f5", bold: true }
+  inserted: "#40a02b"
+  deleted: "#d20f39"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#7c7f93", italic: true }
+  strikethrough: {}
+  comment: { color: "#7c7f93", italic: true }
+  string.escape: "#ea76cb" # pink
+  string.regexp: "#ea76cb"
+  variable.parameter: "#e64553" # maroon
+  variable.special: "#d20f39"
+  keyword.self: "#d20f39"
+  function.macro: "#dc8a78" # rosewater
+  property.attribute: "#df8e1d"
+
+icons:
+  # The round join applies to every stroked glyph.
+  stroke:
+    join: round
+  geometry:
+    find: '<circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6 13.5 13.5"/>'
+    goto-line: '<path d="M6.5 3 5 13"/><path d="M11 3 9.5 13"/><path d="M3.5 6.25h9.5"/><path d="M3 9.75h9.5"/>'
+    copy: '<rect x="5.75" y="5.75" width="7.75" height="7.75" rx="2.75"/><path d="M10.25 3.6A1.6 1.6 0 0 0 8.65 2H4.6A2.6 2.6 0 0 0 2 4.6v4.05a1.6 1.6 0 0 0 1.6 1.6"/>'
+    check: '<path d="M3.5 8.6 6.4 11.5 12.5 5.2"/>'
+    more: '<circle cx="2.9" cy="8" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="13.1" cy="8" r="1.6"/>'

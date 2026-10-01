@@ -1,0 +1,644 @@
+paths:
+  "/v1/projects/{id}/source/views":
+    post:
+      tags:
+        - "projects"
+      operationId: "createSourceView"
+      x-person-action: none
+      summary: "Create a source view"
+      parameters:
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+      description: "Accept a tree or comparison view without waiting for complete preparation. operation_id is idempotent within the authenticated person, project, and client identity. Agent capture exclusions never restrict this human presentation. The host validates the selected source and workspace; client_id grants no authority. On every view, presentation, and interest route, a handle the host does not retain for the caller (never issued, expired, released, evicted, or issued before a restart) answers 404 source_view_not_found; reopen with the same intent. A view addressed by a deleted chat ends with it, and creating one answers session_not_found. An address in a folder that is not attached answers root_not_found. "
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceViewCreate"
+      responses:
+        "201":
+          description: "Create a source view"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceView"
+          headers:
+            Location:
+              description: "The retained resource URL."
+              schema:
+                type: "string"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: Session or root not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "415":
+          $ref: "../components/responses.yaml#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "../components/responses.yaml#/components/responses/TooManyRequests"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/comparison-digests":
+    post:
+      tags:
+        - "projects"
+      operationId: "digestSourceComparisons"
+      x-person-action: none
+      summary: "Measure comparisons without opening views"
+      parameters:
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+      description: "Answers each comparison's line counts and changes-presentation size, in request order, without opening views. Measuring neither decorates nor retains a document. A failed source answers its own failure; the others still answer."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "../components/schemas/source-views/comparison.yaml#/components/schemas/SourceComparisonDigestRequest"
+      responses:
+        "200":
+          description: "Measure comparisons without opening views"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/comparison.yaml#/components/schemas/SourceComparisonDigests"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "415":
+          $ref: "../components/responses.yaml#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "../components/responses.yaml#/components/responses/TooManyRequests"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/views/{view_id}":
+    get:
+      tags:
+        - "projects"
+      operationId: "getSourceView"
+      summary: "Read source view state and revisions"
+      parameters:
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+      responses:
+        "200":
+          description: "Read source view state and revisions"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceView"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: View not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+    delete:
+      tags:
+        - "projects"
+      operationId: "releaseSourceView"
+      x-person-action: none
+      summary: "Release a source view and its work interests"
+      parameters:
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+      description: "A stage detach does not release the view. Releasing a view cannot invalidate shared resources pinned by other views or active reads. Release needs no live chat. A view the host does not retain answers source_view_not_found; a client treats that as already released."
+      responses:
+        "204":
+          description: "Release a source view and its work interests"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  "/v1/projects/{id}/source/views/{view_id}/apply":
+    post:
+      tags:
+        - "projects"
+      operationId: "applySourceViewIntent"
+      x-person-action: none
+      summary: "Change source presentation intent"
+      parameters:
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+      description: "Deduplicate operation_id before checking expected_intent_revision. A different body with the same operation_id is rejected. Tree reveal and disclosure are explicit mutations; frame and locate reads never expand folders."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceViewUpdate"
+      responses:
+        "200":
+          description: "Change source presentation intent"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceView"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: View not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "409":
+          description: Source view revision changed
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "415":
+          $ref: "../components/responses.yaml#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "../components/responses.yaml#/components/responses/TooManyRequests"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/rows":
+    get:
+      tags:
+        - "projects"
+      operationId: "getSourceViewRows"
+      x-positional-window: true
+      summary: "Read a bounded coherent source frame"
+      parameters:
+        - name: presentation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+        -
+          name: "offset"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 0
+            format: "int64"
+          description: "Display row offset in this presentation, or relative to the resolved anchor. Anchored reads clamp to the last row."
+        -
+          name: "limit"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 200
+            default: 200
+        -
+          name: "anchor"
+          in: "query"
+          schema:
+            type: "string"
+            maxLength: 131072
+          description: "Base64url-encoded JSON SourceTreeAddress or SourceComparisonAnchor. This is a coordinate, not an authorization credential."
+        -
+          name: "context_before"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 0
+            maximum: 199
+            default: 0
+          description: "Include up to this many display rows before the resolved anchor plus offset. Requires an anchor and must be less than limit. The returned span and anchor describe the first returned row."
+        -
+          name: "retain"
+          in: "query"
+          schema:
+            type: "string"
+            maxLength: 8192
+          description: "For tree frames, a JSON array of at most 32 SourceTreeFramePrefix proofs from retained frames. The response validates the largest unchanged prefix in the returned snapshot."
+      description: "At most 200 rows and 256 KiB including ancestor and layout context, read from the immutable presentation. Reads never discover directories, advance revisions, or change the extent. Endpoint bodies and full child arrays are not returned."
+      responses:
+        "200":
+          description: "Read a bounded coherent source frame"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceViewFrame"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: Presentation or view not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "409":
+          description: Source view revision changed
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/locate":
+    get:
+      tags:
+        - "projects"
+      operationId: "locateSourceView"
+      summary: "Locate an address without changing disclosure"
+      parameters:
+        - name: presentation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+        -
+          name: "anchor"
+          in: "query"
+          schema:
+            type: "string"
+            maxLength: 131072
+          description: "Base64url-encoded JSON SourceTreeAddress or SourceComparisonAnchor. Supply either anchor, or line and side for a comparison."
+        -
+          name: "line"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 1
+          description: "One-based source line; comparison views only."
+        -
+          name: "side"
+          in: "query"
+          schema:
+            type: "string"
+            enum:
+              - "before"
+              - "after"
+          description: "Required with line."
+      responses:
+        "200":
+          description: "Locate an address without changing disclosure"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceViewLocation"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: Presentation or view not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search":
+    get:
+      tags:
+        - "projects"
+      operationId: "searchSourceView"
+      summary: "Find within one source presentation"
+      parameters:
+        - name: presentation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        -
+          name: "view_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+        -
+          name: "q"
+          in: "query"
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 4096
+          required: true
+        -
+          name: "case_sensitive"
+          in: "query"
+          schema:
+            type: "boolean"
+        -
+          name: "cursor"
+          in: "query"
+          schema:
+            type: "string"
+        -
+          name: "limit"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 200
+            default: 200
+      description: "Continuations are opaque and bound to the query and projection revision. Comparison search reads pinned source text; tree search reads labels in the current projection. This does not replace repository-wide source search."
+      responses:
+        "200":
+          description: "Find within one source presentation"
+          content:
+            "application/json":
+              schema:
+                $ref: "../components/schemas/source-views/views.yaml#/components/schemas/SourceViewSearchPage"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: Presentation or view not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+
+  "/v1/projects/{id}/source/views/{view_id}/presentations":
+    post:
+      tags: [projects]
+      operationId: createSourcePresentation
+      x-person-action: none
+      summary: Acquire an immutable source presentation
+      description: Retain complete coordinates for the requested intent revision. Preparation returns source_view_preparing without acquiring a resource. Retrying operation_id returns the same retained resource. Progress events cannot replace this presentation.
+      parameters:
+        - $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        - name: view_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/source-views/presentation.yaml#/components/schemas/SourcePresentationCreate"
+      responses:
+        "201":
+          description: Retained presentation with exact extent
+          content:
+            application/json:
+              schema:
+                $ref: "../components/schemas/source-views/presentation.yaml#/components/schemas/SourcePresentation"
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: View not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "415":
+          $ref: "../components/responses.yaml#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "../components/responses.yaml#/components/responses/TooManyRequests"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}":
+    delete:
+      tags: [projects]
+      operationId: releaseSourcePresentation
+      x-person-action: none
+      summary: Release a source presentation
+      description: Release is idempotent. A presentation belongs to one view; under any other view it is not retained and is already released.
+      parameters:
+        - $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        - name: view_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: presentation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Presentation released after its last active read
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+
+  "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}":
+    put:
+      parameters:
+        - $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        - name: view_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: interest_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      tags: [projects]
+      operationId: replaceSourceViewportInterest
+      x-person-action: none
+      summary: Replace source viewport demand
+      description: Newer sequences supersede previous demand for this consumer. Preparation is bounded and never changes presentation coordinates. Reordered older requests are ignored. Interests expire after thirty seconds without replacement. A presentation_id this view no longer presents answers source_view_revision_changed, as a navigation basis does.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/source-views/presentation.yaml#/components/schemas/SourceViewportInterest"
+      responses:
+        "204":
+          description: Viewport demand accepted
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        "404":
+          description: Presentation or view not found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "409":
+          description: Source view revision changed
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        "415":
+          $ref: "../components/responses.yaml#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "../components/responses.yaml#/components/responses/TooManyRequests"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+    delete:
+      parameters:
+        - $ref: "../components/parameters.yaml#/components/parameters/ProjectId"
+        - name: view_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: interest_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      tags: [projects]
+      operationId: releaseSourceViewportInterest
+      x-person-action: none
+      summary: Release source viewport demand
+      responses:
+        "204":
+          description: Viewport demand released
+        default:
+          $ref: "../components/responses.yaml#/components/responses/Error"
+        "401":
+          $ref: "../components/responses.yaml#/components/responses/Unauthorized"
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict

@@ -1,0 +1,5 @@
+id: aws-cli
+label: AWS CLI
+description: >-
+  Precise AWS CLI operations that disable audit controls, detach an account from
+  its organization, or remove an entire S3 bucket or its contents.

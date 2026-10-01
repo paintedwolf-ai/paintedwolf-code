@@ -1,0 +1,40 @@
+oar: '1.0'
+id: REPLACE_LINES_INVALID_RANGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - replace_lines
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.end_line
+  - paintedwolf.path
+  - paintedwolf.start_line
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "REPLACE_LINES_INVALID_RANGE"
+effect: block
+copy:
+  what: replace_lines on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
+    }} — {{ paintedwolf.rejection_reason }}.
+  cause: start_line and end_line are 1-based inclusive; end_line must be >= start_line.
+  why: Line-range edits need a valid window before splicing file content.
+  fix: Re-read with offset/limit, then pass start_line and end_line from the numbered read content.
+  instead: Branch on Code; fix the line range and retry replace_lines
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:replace_lines
+x-paintedwolf-message: replace_lines line range is invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    end_line: 10
+    path: internal/foo.go
+    profile: implement
+    reason: end_line must be >= start_line
+    start_line: 20
+    tool: replace_lines
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: REPLACE_LINES_INVALID_RANGE'

@@ -1,0 +1,39 @@
+oar: '1.0'
+id: ASK_USER_OPTIONS_TOO_MANY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ask_option_count
+  - paintedwolf.ask_option_limit
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_OPTIONS_TOO_MANY"
+effect: block
+copy:
+  what: The choice request has {{ paintedwolf.ask_option_count }} options after cleaning; the current limit
+    is {{ paintedwolf.ask_option_limit }}.
+  cause: The option count exceeds the decision card bound.
+  why: Excess options are rejected rather than silently removed.
+  fix: Use at most {{ paintedwolf.ask_option_limit }} meaningful options (two to four preferred), or ask a
+    narrower question. Do not duplicate the host’s free-text alternative.
+  instead: Branch on Code ASK_USER_OPTIONS_TOO_MANY; narrow the option set to the current limit
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: too many choice options
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    count: '7'
+    detail: stub
+    max_options: '6'
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Code: ASK_USER_OPTIONS_TOO_MANY'
+  - options

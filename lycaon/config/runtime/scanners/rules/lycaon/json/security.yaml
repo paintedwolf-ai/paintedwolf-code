@@ -1,0 +1,47 @@
+rules:
+- id: lycaon.json.iam-admin-policy
+  languages:
+  - json
+  severity: ERROR
+  message: An IAM statement allows every action on every resource
+  metadata:
+    category: security
+    cwe: CWE-269
+    confidence: HIGH
+    technology:
+    - json
+  patterns:
+  - pattern-either:
+    - pattern: '{"Effect":"Allow", "Action":"*", "Resource":"*", ...}'
+    - pattern: '{"Effect":"Allow", "Action":["*"], "Resource":["*"], ...}'
+  - pattern-not: '{"Condition": $CONDITION, ...}'
+- id: lycaon.json.package-remote-install
+  languages:
+  - json
+  severity: ERROR
+  message: A package installation hook directly executes a downloaded script
+  metadata:
+    category: security
+    cwe: CWE-494
+    confidence: HIGH
+    technology:
+    - json
+  patterns:
+  - pattern: '{"scripts":{"postinstall":"$SCRIPT",...},...}'
+  - metavariable-pattern:
+      metavariable: $SCRIPT
+      language: bash
+      pattern-either:
+      - patterns:
+        - pattern: curl ... $URL ... | sh ...
+        - metavariable-regex:
+            metavariable: $URL
+            regex: ^["']?https?://
+      - patterns:
+        - pattern: curl ... $URL ... | bash ...
+        - metavariable-regex:
+            metavariable: $URL
+            regex: ^["']?https?://
+  paths:
+    include:
+    - '**/package.json'

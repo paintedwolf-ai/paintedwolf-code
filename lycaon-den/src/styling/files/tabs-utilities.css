@@ -1,0 +1,105 @@
+/* Matches the tab strip's drag band, so the tree column drags too. */
+@utility den-files-tree-pane__drag-band {
+  display: none;
+  flex: 0 0 var(--den-files-tab-drag-band);
+
+  .project-files-view:not(.project-files-view--document) & {
+    display: block;
+  }
+}
+
+@utility den-files-tabs-scroller {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility den-files-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  min-height: calc(var(--den-files-tab-drag-band) + 2.4286rem);
+  min-width: min-content;
+}
+
+@utility den-files-tabs-overflow__chev {
+  font-size: var(--text-den-subhead);
+  line-height: 1;
+}
+
+@utility den-files-tabs-overflow__count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-den-caption);
+}
+
+@utility den-files-tab__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  padding: 0 2px 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+@utility den-files-tab__name {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-inline: 0.15em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-hint);
+}
+
+@utility den-files-tab__name-start {
+  /* Italic glyphs overhang the clipped stem beside the suffix. */
+  padding-inline: 0.15em;
+  margin-inline: -0.15em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+@utility den-files-tab__name-end {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@utility den-files-open-list__rows {
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Filtering replaces children inside this stable content box. */
+@utility den-files-open-list__rows-body {
+  min-width: 0;
+  padding-inline-end: calc(var(--den-scrollbar-size) + 4px);
+}
+
+@utility den-files-open-list__row--after-pin {
+  margin-top: 5px;
+  padding-top: 6px;
+}
+
+@utility den-files-open-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

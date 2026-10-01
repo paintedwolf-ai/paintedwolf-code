@@ -1,0 +1,24 @@
+[[permission]]
+identifier = "allow-shell-command-status"
+description = "Report whether the pw shell command is installed and on PATH."
+commands.allow = ["shell_command_status"]
+
+[[permission]]
+identifier = "allow-install-shell-command"
+description = "Symlink pw and pw-logs into ~/.local/bin."
+commands.allow = ["install_shell_command"]
+
+[[permission]]
+identifier = "allow-uninstall-shell-command"
+description = "Remove pw and pw-logs symlinks from ~/.local/bin."
+commands.allow = ["uninstall_shell_command"]
+
+[[permission]]
+identifier = "allow-add-shell-command-path"
+description = "Append a marked ~/.local/bin PATH block to the default shell profile."
+commands.allow = ["add_shell_command_path"]
+
+[[permission]]
+identifier = "allow-remove-shell-command-path"
+description = "Remove the marked ~/.local/bin PATH block from the default shell profile."
+commands.allow = ["remove_shell_command_path"]

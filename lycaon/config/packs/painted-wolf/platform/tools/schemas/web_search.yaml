@@ -1,0 +1,37 @@
+tags: [web, research]
+description: Search the web by time window. The host selects Direct search or custom providers from Settings → Web research.
+schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: >-
+        Search subject. Years in query text do not filter recency.
+        Keep a year that names the subject ("CVE-2025-1234"); use period for
+        the time window.
+    period:
+      type: string
+      description: >-
+        Omit for "current": today's state, ranking recent pages first.
+        Use a year or ascending range ("2025", "2024-2025") only for questions
+        about that window, such as an incident, release, or CVE. This ranks
+        that window's pages first without preferring recent pages.
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 30
+      description: Max results (default 10, max 30)
+    parallel:
+      type: boolean
+      default: false
+      description: >-
+        Run up to 4 sibling web_search calls in this response concurrently only
+        when their queries are already known and independent. Omit for serial execution.
+    unredact:
+      type: string
+      maxLength: 64
+      description: >-
+        Redaction receipt token from a prior result of this call. Requests user
+        approval to send the real value; the host decides. Never invent a token.
+  required: [query]
+  additionalProperties: false

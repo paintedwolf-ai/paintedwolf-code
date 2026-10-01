@@ -1,0 +1,16 @@
+id: painted-wolf/platform:files-toggle-comparison
+title: "Toggle comparison"
+scope: "files"
+keywords:
+  - "eye"
+  - "lens"
+  - "toggle diff"
+  - "compare"
+  - "compare before current"
+  - "historical comparison"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.toggleComparison"

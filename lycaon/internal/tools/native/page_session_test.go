@@ -1,0 +1,30 @@
+package native
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/browser"
+	"github.com/lycaon/lycaon/internal/browser/pagesession"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/page"
+)
+
+func TestPageOpenMissingTarget(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	pool := browser.NewPool("")
+	defer pool.Close()
+	pages := pagesession.NewRegistry(pagesession.DefaultConfig())
+	defer pages.Close(t.Context())
+	testutil.FailErr(t, "register", RegisterPageSessionTools(reg, pool, pages, nil, nil))
+	_, err := reg.Run(context.Background(), page.OpenToolName, map[string]any{}, tools.ToolContext{
+		SessionID: "s", Out: &tools.ToolInvocationOut{},
+	})
+	rej := &tools.ToolReject{}
+	ok := errors.As(err, &rej)
+	if !ok || rej.Code != "CAPTURE_TARGET_INVALID" {
+		t.Fatalf("err=%v", err)
+	}
+}

@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Not found
+message: >-
+  What this request pointed at does not exist any more.
+suggested_action: >-
+  Reload the view and try again — the item was most likely removed or renamed.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - does not exist
+      - Reload

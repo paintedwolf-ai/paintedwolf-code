@@ -1,0 +1,73 @@
+id: painted-wolf/platform:daylight
+name: Daylight
+appearance: light
+
+# Paper stays flat: the planes below separate regions, hairlines draw them, and
+# only surfaces that genuinely float carry a shadow.
+window_colors:
+  main: "#b85c38"
+  anchors: ["#b85c38", "#5d7a55", "#2563eb", "#8250df", "#c97a00"]
+  hue_spread: 28
+  chroma_min: 0.04
+  chroma_max: 0.18
+
+# Agent chats share one slate hue, muted almost to gray; each chat is a lightness step.
+agent_colors:
+  main: "#6e7689"
+  lightness_step: 0.1
+  chroma: 0.025
+
+tokens:
+  background: "#ffffff"
+  surface: "#ffffff"
+  surface-elevated: "#ffffff"
+  border: "#d3d2cf"
+  text: "#1c1b1a"
+  text-muted: "#6e6c67"
+  accent: "#b85c38"
+  accent-warm: "#b05c32"
+  accent-text: "#9d4e2b"
+  accent-signal: "#b85c38"
+  on-accent: "#ffffff"
+  # A pale selection keeps syntax colors legible.
+  selection-strong: "#f2e2db"
+  status-positive: "#5d7a55"
+  # Ochre separates running work from danger and success.
+  status-running: "#c87941"
+  danger: "#c2453f"
+  warning: "#c97a00"
+  draft-accent: "#7a9e6a"
+  # Added lines take a clear green; the olive success hue reads gray as a fill.
+  diff-add-hue: "#2d8a4e"
+  tint-hue: "#8a8884"
+  cost-coordinator: "#d97706"
+  cost-workers: "#2563eb"
+  cost-summarizer: "#16a34a"
+
+# Syntax colors are calibrated for white paper. Each clears 6.5:1 so change
+# fills have room to show, and keywords stay off the removal red.
+syntax:
+  keyword: "#9a1f73"
+  string: "#0a3069"
+  number: "#0550ae"
+  constant: "#0550ae"
+  variable: "#1c1b1a"
+  type: "#953800"
+  function: "#6639ba"
+  property: "#0550ae"
+  operator: "#0550ae"
+  keyword.self: "#0550ae"
+  string.escape: "#0550ae"
+  variable.special: "#0550ae"
+  tag: "#116329"
+  meta: "#525c67"
+  invalid: "#a40e26"
+  link: "#0a3069"
+  heading: { color: "#0550ae", bold: true }
+  inserted: "#116329"
+  deleted: "#a40e26"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#525c67", italic: true }
+  strikethrough: { }
+  comment: { color: "#525c67", italic: true }

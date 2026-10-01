@@ -1,0 +1,18 @@
+tags: [git, inspection]
+description: "Show commit or file at ref JSON (`available`, `show` with kind diff/blob). Replaces command: git show."
+schema:
+  type: object
+  properties:
+    ref:
+      type: string
+      description: Git ref (default HEAD)
+    path:
+      type: string
+      description: Optional repo-relative path for HEAD:path blob view
+    max_bytes:
+      type: integer
+      description: Max output bytes (default 256 KiB)
+    stat:
+      type: boolean
+      description: Return commit diffstat summary instead of full diff hunks (replaces git show --stat)
+  additionalProperties: false

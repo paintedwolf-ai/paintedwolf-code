@@ -1,0 +1,8 @@
+{
+  "title": "Plan review",
+  "run_id": "run_01HSYNTHESISONLY0000000000",
+  "project": "acme/app",
+  "completed_at": "2026-07-08T16:00:00Z",
+  "head_sha": "d4e5f6a",
+  "synthesis": "## Summary\n\nThe proposed approach is sound; no adjudication verdict was recorded."
+}

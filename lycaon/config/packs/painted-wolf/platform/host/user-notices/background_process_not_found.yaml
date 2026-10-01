@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Background job not found
+message: >-
+  That background job is not running any more.
+suggested_action: >-
+  It finished or was canceled — check its output in the chat.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not running
+      - finished or was canceled

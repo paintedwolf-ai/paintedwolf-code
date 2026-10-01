@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-new-file
+title: "New file in tree"
+scope: "files"
+keywords:
+  - "new file"
+  - "create file"
+  - "add file"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.newFile"

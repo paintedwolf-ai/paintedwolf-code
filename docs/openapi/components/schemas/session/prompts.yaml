@@ -1,0 +1,342 @@
+components:
+  schemas:
+    PromptAttachmentPart:
+      x-go-generate: true
+      type: object
+      description: >
+        Names an attachment the client already streamed to the upload route.
+        Bodies never ride the prompt envelope, so this carries no bytes: the host
+        re-derives filename and media type from the stored body, and the blob id is
+        the only client-supplied value.
+      required:
+      - blob_id
+      additionalProperties: false
+      properties:
+        blob_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Stable blob id returned by uploadAttachment
+    PromptSecretReferencePart:
+      x-go-generate: true
+      type: object
+      description: A typed selection of a managed-secret reference. It never carries protected bytes.
+      required: [reference]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+          pattern: '^\{\{paintedwolf-secret:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}\}$'
+          description: Value-free managed-secret reference returned by the host.
+    CreateComposerSecretRequest:
+      x-go-generate: true
+      type: object
+      description: Protects selected draft bytes without storing them in composer state.
+      required: [name, secret_value, operation_id]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        purpose:
+          type: string
+          maxLength: 240
+        secret_value:
+          type: string
+          minLength: 4
+          writeOnly: true
+          description: >-
+            Protected value redacted from request capture. The floor is the
+            length the outbound screen can recognize; the host refuses a
+            shorter selection rather than hand back a reference that protects
+            nothing.
+        operation_id:
+          type: string
+          format: uuid
+    AttachmentUploadResponse:
+      x-go-generate: true
+      type: object
+      description: Receipt for one materialized attachment body.
+      required:
+      - blob_id
+      - filename
+      - mime
+      - kind
+      - bytes
+      additionalProperties: false
+      properties:
+        blob_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Stable sha256 id over the stored body and sanitized filename
+        filename:
+          type: string
+          description: Sanitized leaf name the host stored the body under
+        mime:
+          type: string
+          description: Media type the host detected from the stored bytes
+        kind:
+          $ref: "#/components/schemas/AttachmentKind"
+        bytes:
+          type: integer
+          format: int64
+          description: Materialized byte count after any container was decoded away
+        video:
+          x-go-pointer: true
+          $ref: "#/components/schemas/AttachmentVideoFacts"
+    AttachmentVideoFacts:
+      x-go-generate: true
+      type: object
+      description: >
+        What the host's decoder read from a video at upload. Present only on video
+        receipts; a video the decoder cannot play is refused instead.
+      required:
+      - duration_ms
+      - width
+      - height
+      additionalProperties: false
+      properties:
+        duration_ms:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+    AttachmentKind:
+      type: string
+      description: Routing family the host detected for a materialized attachment.
+      enum:
+      - image
+      - text
+      - document
+      - video
+    PromptReferenceKind:
+      type: string
+      description: >
+        Attachment-reference family. Path kinds are jailed under an attached project
+        root; artifact re-links an existing VisualArtifact; search-hit re-serves a
+        stored evidence_index snippet. Never carries bytes or a server-opened absolute path.
+      enum:
+      - path-file
+      - path-folder
+      - artifact
+      - search-hit
+    PromptReferencePart:
+      description: >
+        A pointer to something already on disk (under an attached project root), an
+        existing visual artifact, or a stored search hit. Carries jailed coordinates
+        only — never bytes and never an absolute filesystem path the server opens.
+        The host fences path/folder refs so the agent reads them in place with its
+        own jailed tools.
+      oneOf:
+      - $ref: "#/components/schemas/PromptReferencePathFile"
+      - $ref: "#/components/schemas/PromptReferencePathFolder"
+      - $ref: "#/components/schemas/PromptReferenceArtifact"
+      - $ref: "#/components/schemas/PromptReferenceSearchHit"
+      discriminator:
+        propertyName: kind
+        mapping:
+          path-file: "#/components/schemas/PromptReferencePathFile"
+          path-folder: "#/components/schemas/PromptReferencePathFolder"
+          artifact: "#/components/schemas/PromptReferenceArtifact"
+          search-hit: "#/components/schemas/PromptReferenceSearchHit"
+    PromptReferencePathFile:
+      type: object
+      required: [kind, project_id, path]
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/PromptReferenceKind"
+          enum: [path-file]
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+          description: Attached-root id the path resolves under.
+        path:
+          type: string
+          description: Project-relative path; never absolute; jailed under root_id.
+        start_line:
+          type: integer
+          minimum: 1
+          description: Inclusive 1-based start line for a selection range.
+        end_line:
+          type: integer
+          minimum: 1
+          description: Inclusive 1-based end line; defaults to start_line.
+    PromptReferencePathFolder:
+      type: object
+      required: [kind, project_id, path]
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/PromptReferenceKind"
+          enum: [path-folder]
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+          description: Attached-root id the path resolves under.
+        path:
+          type: string
+          description: Project-relative folder path; never absolute; jailed under root_id.
+    PromptReferenceArtifact:
+      type: object
+      required: [kind, project_id, artifact_id]
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/PromptReferenceKind"
+          enum: [artifact]
+        project_id:
+          type: string
+          format: uuid
+        artifact_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Existing VisualArtifact id.
+    PromptReferenceSearchHit:
+      type: object
+      required: [kind, project_id, source_ref]
+      additionalProperties: false
+      properties:
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/PromptReferenceKind"
+          enum: [search-hit]
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: Session the hit came from, when it has one.
+        source_ref:
+          type: string
+          description: Indexed row's source_ref.
+        hit_kind:
+          type: string
+          description: Indexed row's hit_kind.
+    PromptRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - text
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
+        text:
+          type: string
+          description: User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
+        attachments:
+          type: array
+          maxItems: 8
+          description: >
+            Handles for bodies already streamed to the attachment upload route —
+            text, documents, and rasters alike. No bytes, no URLs, no paths.
+          items:
+            $ref: "#/components/schemas/PromptAttachmentPart"
+        references:
+          type: array
+          maxItems: 64
+          description: >
+            On-disk, artifact, and search-hit references; no bytes. Counted
+            separately from uploaded attachments.
+          items:
+            $ref: "#/components/schemas/PromptReferencePart"
+        secrets:
+          type: array
+          maxItems: 32
+          description: Typed managed-secret selections. Raw token syntax in text is rejected.
+          items:
+            $ref: "#/components/schemas/PromptSecretReferencePart"
+    AbortSessionRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          description: Optional note for worker cancellation envelopes
+    PromptAcceptedResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - status
+      - operation_id
+      - message_id
+      - session_revision
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          description: >-
+            Durable submission state observed at admission or replay. queued means the
+            turn is waiting for session execution; eligible text-only turns may also
+            appear in the editable next-turn draft. canceled means the user removed a
+            waiting draft item before it ran.
+          enum:
+          - queued
+          - running
+          - complete
+          - failed
+          - interrupted
+          - canceled
+        operation_id:
+          type: string
+          format: uuid
+          description: Durable idempotency identity of this prompt action.
+        message_id:
+          type: string
+          format: uuid
+          description: >-
+            Durable message id of the transcript user row minted for this prompt.
+            Clients correlate a submission with its transcript row by id.
+        session_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Session event revision minted after the submission was admitted.
+            Every session event with a greater revision reflects this
+            submission, so the sender can treat the prompt as in flight until
+            it applies one.
+            Session events published earlier can still arrive after this
+            response and describe the session before admission. 0 means the
+            host publishes no session events.
+    PromptStreamChunk:
+      x-go-generate: true
+      type: object
+      required:
+      - token
+      - done
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          description: Message text chunk
+        reset:
+          type: boolean
+          description: Selects replacement instead of append
+        tool_calls:
+          type: array
+          items:
+            $ref: tool-results.yaml#/components/schemas/ToolCall
+          description: Replaces the in-flight tool-call list when present
+        done:
+          type: boolean
+          description: True when this chunk terminates the stream

@@ -1,0 +1,218 @@
+# Exact structured-operation identities for the reviewed GCP and Azure CLI
+# Sigma packs. Levels and effect tags always come from source_pack; this catalog
+# supplies provider identities and the minimum context needed to preserve each
+# source rule's meaning.
+version: 1
+providers:
+  - id: gcp
+    source_pack: gcloud-cli
+    output_pack: gcp-structured-actions
+    label: Google Cloud structured actions
+    description: >-
+      Exact Google Cloud IAM permissions and API operations corresponding
+      one-for-one with every reviewed gcloud-cli Sigma rule.
+    fixture_tool: mcp_gcp_call
+    fixture_subject: gcp.call
+    read_operation: resourcemanager.projects.get
+    sources:
+      - name: google_cloud_iam_permissions
+        url: https://cloud.google.com/iam/docs/permissions-reference
+        retrieved: 2026-08-11
+        licence: CC-BY-4.0
+      - name: google_cloud_cli_reference
+        url: https://cloud.google.com/sdk/gcloud/reference
+        retrieved: 2026-08-11
+        licence: CC-BY-4.0
+    rules:
+      - source_rule: audit-disable
+        variants:
+          - operations:
+              - logging.sinks.delete
+              - securitycenter.notificationconfig.delete
+      - source_rule: credential-mint
+        variants:
+          - operations: [iam.serviceAccountKeys.create]
+      - source_rule: database-exposure
+        variants:
+          - operations: [cloudsql.instances.update]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(authorized_network|authorized_networks|authorizedNetworks)=.*(0[.]0[.]0[.]0/0|::/0).*$'
+            fixture_args: {authorized_networks: 0.0.0.0/0}
+          - operations: [cloudsql.users.update]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(password|new_password)=.+$'
+            fixture_args: {password: fixture-password}
+      - source_rule: iam-grant
+        variants:
+          - operations:
+              - resourcemanager.projects.setIamPolicy
+              - resourcemanager.folders.setIamPolicy
+              - resourcemanager.organizations.setIamPolicy
+              - iam.serviceAccounts.setIamPolicy
+              - iam.roles.create
+              - iam.roles.update
+      - source_rule: identity-destroy
+        variants:
+          - operations:
+              - iam.serviceAccounts.delete
+              - iam.workloadIdentityPools.delete
+              - resourcemanager.folders.delete
+      - source_rule: project-delete
+        variants:
+          - operations: [resourcemanager.projects.delete]
+      - source_rule: public-exposure
+        exclude_any:
+          - '(?i)^(.*[.])?(mode|effect|operation_mode)=(remove|revoke|delete)$'
+        variants:
+          - operations: [storage.buckets.setIamPolicy]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(member|members|principal|principals)=.*(allusers|allauthenticatedusers).*$'
+            fixture_args: {member: allUsers}
+          - operations: [compute.firewalls.create, compute.firewalls.update]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(source_range|source_ranges|sourceRanges)=.*(0[.]0[.]0[.]0/0|::/0).*$'
+            fixture_args: {source_ranges: 0.0.0.0/0}
+      - source_rule: remote-execution
+        variants:
+          - operations: [compute.instances.setMetadata, compute.projects.setCommonInstanceMetadata]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(key|metadata_key|metadataKey)=ssh-keys$'
+                  - '(?i)^(.*[.])?(ssh_key|ssh_keys|sshKeys)=.+$'
+            fixture_args: {metadata_key: ssh-keys}
+      - source_rule: resource-destroy
+        variants:
+          - operations: [cloudsql.instances.delete, container.clusters.delete]
+      - source_rule: secret-read
+        variants:
+          - operations:
+              - secretmanager.versions.access
+              - cloudkms.cryptoKeyVersions.useToDecrypt
+              - cloudkms.projects.locations.keyRings.cryptoKeys.decrypt
+      - source_rule: service-disrupt
+        variants:
+          - operations: [compute.instances.stop]
+          - operations: [container.clusters.update]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(node_count|num_nodes|size)=0$'
+            fixture_args: {node_count: '0'}
+      - source_rule: session-credentials
+        variants:
+          - operations: [iam.serviceAccounts.getAccessToken, container.clusters.getCredentials]
+      - source_rule: storage-object-destroy
+        variants:
+          - operations: [storage.objects.delete, storage.buckets.delete]
+
+  - id: azure
+    source_pack: azure-cli
+    output_pack: azure-structured-actions
+    label: Azure structured actions
+    description: >-
+      Exact Azure RBAC, Microsoft Entra, and resource-provider operations
+      corresponding one-for-one with every reviewed azure-cli Sigma rule.
+    fixture_tool: mcp_azure_call
+    fixture_subject: azure.call
+    read_operation: Microsoft.Resources/subscriptions/resourceGroups/read
+    sources:
+      - name: azure_resource_provider_operations
+        url: https://learn.microsoft.com/en-us/azure/role-based-access-control/resource-provider-operations
+        retrieved: 2026-08-11
+        licence: Microsoft Learn terms
+      - name: microsoft_entra_custom_role_permissions
+        url: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/custom-available-permissions
+        retrieved: 2026-08-11
+        licence: Microsoft Learn terms
+      - name: azure_cli_reference
+        url: https://learn.microsoft.com/en-us/cli/azure/reference-index
+        retrieved: 2026-08-11
+        licence: Microsoft Learn terms
+    rules:
+      - source_rule: audit-disable
+        variants:
+          - operations:
+              - Microsoft.Insights/diagnosticSettings/delete
+              - Microsoft.Authorization/policyAssignments/delete
+      - source_rule: credential-mint
+        variants:
+          - operations:
+              - microsoft.directory/applications/credentials/update
+              - microsoft.directory/servicePrincipals/credentials/update
+      - source_rule: deployment-apply
+        variants:
+          - operations: [Microsoft.Resources/deployments/write]
+      - source_rule: group-delete
+        variants:
+          - operations:
+              - Microsoft.Resources/subscriptions/resourceGroups/delete
+              - Microsoft.Resources/resourceGroups/delete
+      - source_rule: iam-grant
+        variants:
+          - operations:
+              - Microsoft.Authorization/roleAssignments/write
+              - Microsoft.KeyVault/vaults/accessPolicies/write
+              - microsoft.directory/servicePrincipals/create
+              - microsoft.directory/servicePrincipals/createAsOwner
+              - microsoft.directory/servicePrincipals/permissions/update
+      - source_rule: keyvault-purge
+        variants:
+          - operations:
+              - Microsoft.KeyVault/locations/deletedVaults/purge/action
+              - Microsoft.KeyVault/vaults/keys/purge/action
+              - Microsoft.KeyVault/vaults/secrets/purge/action
+              - Microsoft.KeyVault/vaults/certificates/purge/action
+      - source_rule: protection-removal
+        variants:
+          - operations:
+              - Microsoft.Authorization/locks/delete
+              - Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems/delete
+      - source_rule: public-exposure
+        variants:
+          - operations: [Microsoft.Storage/storageAccounts/write]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(allow_blob_public_access|allowBlobPublicAccess)=true$'
+                  - '(?i)^(.*[.])?(public_network_access|publicNetworkAccess)=enabled$'
+            fixture_args: {allow_blob_public_access: 'true'}
+          - operations: [Microsoft.Sql/servers/firewallRules/write]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(start_ip_address|startIpAddress)=0[.]0[.]0[.]0$'
+              - any:
+                  - '(?i)^(.*[.])?(end_ip_address|endIpAddress)=255[.]255[.]255[.]255$'
+            fixture_args: {start_ip_address: 0.0.0.0, end_ip_address: 255.255.255.255}
+          - operations: [Microsoft.Network/networkSecurityGroups/securityRules/write]
+            require_all:
+              - any:
+                  - '(?i)^(.*[.])?(source_address_prefix|source_address_prefixes|sourceAddressPrefix)=([*]|internet|0[.]0[.]0[.]0/0|::/0)$'
+            fixture_args: {source_address_prefix: Internet}
+      - source_rule: resource-destroy
+        variants:
+          - operations: [Microsoft.Sql/servers/databases/delete, Microsoft.Compute/disks/delete]
+      - source_rule: remote-execution
+        variants:
+          - operations:
+              - Microsoft.Compute/virtualMachines/runCommand/action
+              - Microsoft.Compute/virtualMachineScaleSets/virtualMachines/runCommand/action
+              - Microsoft.ContainerInstance/containerGroups/containers/exec/action
+              - Microsoft.ContainerService/managedClusters/runCommand/action
+      - source_rule: secret-read
+        variants:
+          - operations:
+              - Microsoft.KeyVault/vaults/secrets/getSecret/action
+              - Microsoft.Storage/storageAccounts/listKeys/action
+      - source_rule: service-disrupt
+        variants:
+          - operations:
+              - Microsoft.Compute/virtualMachines/deallocate/action
+              - Microsoft.Compute/virtualMachines/powerOff/action
+              - Microsoft.Web/sites/stop/action
+      - source_rule: session-credentials
+        variants:
+          - operations:
+              - Microsoft.ContainerService/managedClusters/listClusterUserCredential/action
+              - Microsoft.ContainerService/managedClusters/listClusterAdminCredential/action

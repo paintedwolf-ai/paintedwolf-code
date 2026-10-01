@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-new-file
+slot: "app_menu.file"
+command: painted-wolf/platform:files-new-file
+group: "1"
+order: 3
+label: "New file…"

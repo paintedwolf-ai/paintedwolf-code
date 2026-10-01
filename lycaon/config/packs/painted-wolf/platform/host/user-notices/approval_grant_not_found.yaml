@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Approval not found
+message: >-
+  This approval is not held on this device any more. It may have expired or been revoked already.
+suggested_action: Refresh the approvals list.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not held on this device

@@ -1,0 +1,21 @@
+tags: [scans]
+description: >-
+  Diff two complete scans — returns the findings introduced, resolved, and unchanged
+  since the baseline. After a fix, pass the post-fix scan as new_scan_id and omit
+  old_scan_id: the host resolves the previous complete scan in the same category.
+  Use it to prove a fix landed; a board Scan: tail is not proof.
+schema:
+  type: object
+  properties:
+    old_scan_id:
+      type: string
+      description: >-
+        Earlier completed scan identifier. Omit it to select the preceding result
+        in the category of new_scan_id.
+    new_scan_id:
+      type: string
+      description: >-
+        The post-fix or latest full scan id from scan_list or scan_pack per_scan.
+        Board assessment ids are not scan ids.
+  required: [new_scan_id]
+  additionalProperties: false

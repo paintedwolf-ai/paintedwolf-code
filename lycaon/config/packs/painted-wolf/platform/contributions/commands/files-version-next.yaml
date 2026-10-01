@@ -1,0 +1,15 @@
+id: painted-wolf/platform:files-version-next
+title: "Next version"
+scope: files
+keywords:
+  - "next version"
+  - "later version"
+  - "version history step"
+category: navigation
+when:
+  all:
+    - fact: files_stage_active
+    - fact: files_version_historical
+action:
+  kind: native_ui
+  handler: "files.nextVersion"

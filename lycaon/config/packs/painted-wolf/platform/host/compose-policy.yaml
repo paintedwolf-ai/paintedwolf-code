@@ -1,0 +1,20 @@
+# Compose-time policy schema.
+max_phases: 5
+require_extends: true
+coordinator_only: true
+
+allowed_extends:
+  - plan@1.0.0
+  - default-pipeline@1.0.0
+
+posture_required_gates:
+  vet:
+    - evidence_passed:security
+  build:
+    - delegation_closeout_complete
+  orchestrate:
+    - delegation_closeout_complete
+
+required_phase_ids_when_extends:
+  plan@1.0.0:
+    - build

@@ -1,0 +1,25 @@
+title: Shadow a core program on the executable search path
+id: aa1864a2-06e4-4ccf-bbb5-adf5ad99f20b
+status: stable
+description: >-
+  Places or rewrites a file named after a shell, privilege, SSH, fetch,
+  interpreter, or C-toolchain program in a local bin directory that precedes the
+  system directories on PATH, so later invocations of that name run this file
+  instead of the real program. The name set covers only programs already present
+  on any host and installed by a package manager rather than by dropping a file,
+  which separates a shadow from an install. A
+  hand-placed download under a different name is not matched and falls through to
+  the permission floor.
+references:
+  - https://attack.mitre.org/techniques/T1574/007/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, chmod, chown, git_restore]
+    TargetFile|re: '^(/usr/local/(bin|sbin)|/opt/homebrew/(bin|sbin)|/opt/local/(bin|sbin)|~[/][.]local/bin|~[/]bin)/(sh|bash|zsh|dash|ksh|fish|env|sudo|su|doas|ssh|scp|sftp|ssh-add|ssh-agent|ssh-keygen|git|curl|wget|python|python3|perl|ruby|awk|sed|grep|find|xargs|tar|dd|cp|mv|rm|ls|cat|chmod|chown|openssl|make|install|cc|gcc|g[+][+]|clang|clang[+][+]|ld)$'
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.persistence]

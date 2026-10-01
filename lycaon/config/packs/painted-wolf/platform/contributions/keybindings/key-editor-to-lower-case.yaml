@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-to-lower-case
+command: painted-wolf/platform:editor-to-lower-case
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+L"
+  windows:
+    - "Leader D"
+  linux:
+    - "Leader D"

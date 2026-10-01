@@ -1,0 +1,110 @@
+# Dependencies
+lycaon-den/node_modules/
+/node_modules/
+
+# Frontend build and bundled engine output
+lycaon-den/dist/
+lycaon-den/src-tauri/binaries/
+lycaon-den/src-tauri/host-bundle/
+lycaon-den/src-tauri/engine-root/
+
+# Generated third-party notices
+/THIRD-PARTY-NOTICES.md
+lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
+
+# Stray SQLite databases from engine runs launched with a relative --db path
+/*.db
+/*.db-wal
+/*.db-shm
+
+# Local task output and environment
+.direnv/
+.task/
+
+# Python bytecode from scripts/ tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+
+# Go
+.bin/
+lycaon/bin/
+lycaon/lycaon
+*.exe
+*.test
+*.out
+go.work.sum
+
+# Vendored fixtures include extensions matched by the build-output patterns.
+!lycaon/config/runtime/scanners/rules/vendor/**
+
+# OS metadata, including files inside vendored catalogs
+.DS_Store
+._*
+.AppleDouble/
+Thumbs.db
+Desktop.ini
+
+# Runtime data inside project overlays
+**/.paintedwolf/store.db
+**/.paintedwolf-dev/store.db
+**/.paintedwolf/store.db-wal
+**/.paintedwolf/store.db-shm
+**/.paintedwolf-dev/store.db-wal
+**/.paintedwolf-dev/store.db-shm
+**/.paintedwolf/den/
+**/.paintedwolf-dev/den/
+**/.paintedwolf/bundled/
+**/.paintedwolf-dev/bundled/
+**/.paintedwolf/audit/
+**/.paintedwolf-dev/audit/
+
+# Local dependency caches created inside the repo by confined tooling
+.gomodcache/
+.buncache/
+.tmp/
+/tmp/
+
+# Accidental project overlays from tests/tools run inside package dirs
+**/.paintedwolf/evidence/
+**/.paintedwolf/cache/
+**/.paintedwolf-dev/evidence/
+**/.paintedwolf-dev/cache/
+# Package-dir project roots (e.g. go test cwd under internal/workflow)
+lycaon/internal/**/.paintedwolf/
+lycaon/internal/**/.paintedwolf-dev/
+# Generated helper binaries
+lycaon/codegen-*
+
+lycaon/test/testdata/**/.paintedwolf/
+lycaon/test/testdata/**/.paintedwolf-dev/
+
+# Local debug capture exports
+**/llm-requests.jsonl
+!lycaon/test/fixtures/eval/capture/llm-requests.jsonl
+**/http-requests.jsonl
+**/sse-events.jsonl
+**/sidecar.log
+!lycaon/test/fixtures/eval/capture/sidecar.log
+
+# Local editor state
+.cursor/**/*.log
+*.swp
+*.swo
+.idea/workspace.xml
+.idea/tasks.xml
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+.venv-decide/
+lycaon/internal/decide/native/target/

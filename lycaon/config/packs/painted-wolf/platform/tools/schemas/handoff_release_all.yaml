@@ -1,0 +1,11 @@
+description: Release every path reservation held by the caller agent on the session plane.
+schema:
+  type: object
+  properties:
+    session_id:
+      description: "Parent session id (defaults to caller session)."
+      type: string
+    agent:
+      description: "Worker job id or agent id (defaults to caller binding)."
+      type: string
+  additionalProperties: false

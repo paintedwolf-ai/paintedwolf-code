@@ -1,0 +1,20 @@
+# Factory-default mint values that may not rank in the zxcvbn passwords list.
+# Original first-party catalog YAML is CC-BY-4.0.
+# Vendor factory defaults only, not bulk password corpora.
+
+passwords:
+  - changeme
+  - toor
+  - postgres
+  - redis
+  - mysql
+  - mariadb
+  - rabbitmq
+  - keycloak
+  - adminadmin
+  - passw0rd
+  - p@ssw0rd
+  - default
+  - secret
+  - testpass
+  - test1234

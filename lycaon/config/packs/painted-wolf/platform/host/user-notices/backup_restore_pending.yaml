@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Backup restore awaits restart
+message: A backup restore is already staged. Restart the app to finish applying it.
+suggested_action: Restart the app before importing another backup.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - A backup restore is already staged.

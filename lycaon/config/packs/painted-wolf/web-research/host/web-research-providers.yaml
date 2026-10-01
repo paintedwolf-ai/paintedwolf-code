@@ -1,0 +1,731 @@
+# Web research custom providers — bundled catalog SSOT.
+# Direct search (wire id "direct") is NOT listed here; it is the built-in mode side.
+# Wire enum + pkg/api consts + Den catalog TS are generated from this file:
+#   ./task codegen:web-research-catalog
+# kind: keyed | keyed_extra | keyless_endpoint | keyless
+# roles: [results] (default) | [results, seeds] — participation axes for custom fan-out and direct seeds
+# Only high-signal general indexes act as crawl seeds.
+# Specialized sources remain results-only to bound direct fan-out.
+# default_enabled and pacing are keyless-only (see docs/tools.md)
+# family selects a shared runtime adapter; custom uses a dedicated builder.
+# family_params: runtime-only (ignored by ./task codegen:web-research-catalog).
+# Family parameters configure adapter-specific fields.
+
+providers:
+  - id: brave
+    kind: keyed
+    label: Brave Search
+    credential_slot: brave-search
+    api_key_env: BRAVE_SEARCH_API_KEY
+    test_query: test
+    hint: Get a key from Brave Search API.
+
+  - id: marginalia
+    kind: keyed
+    label: Marginalia Search
+    credential_slot: marginalia
+    api_key_env: MARGINALIA_API_KEY
+    test_query: test
+    hint: Get a key from Marginalia Search for independent open-web results.
+
+  - id: google_cse
+    kind: keyed_extra
+    label: Google Programmable Search
+    credential_slot: google-cse
+    api_key_env: GOOGLE_CSE_API_KEY
+    extra_fields:
+      - name: search_engine_id
+        env: GOOGLE_CSE_SEARCH_ENGINE_ID
+        label: Search engine ID (cx)
+    test_query: test
+    hint: API key plus Programmable Search Engine ID (cx) from Google Cloud Console.
+
+  - id: tavily
+    kind: keyed
+    label: Tavily
+    credential_slot: tavily
+    api_key_env: TAVILY_API_KEY
+    test_query: test
+    hint: Get an API key from Tavily for agent-oriented web search.
+
+  - id: kagi
+    kind: keyed
+    label: Kagi
+    credential_slot: kagi
+    api_key_env: KAGI_API_KEY
+    test_query: test
+    hint: Get a Kagi Search API key (Bearer authorization).
+
+  - id: serper
+    kind: keyed
+    label: Serper
+    credential_slot: serper
+    api_key_env: SERPER_API_KEY
+    test_query: test
+    hint: Get an API key from serper.dev for Google results via API.
+
+  - id: searxng
+    kind: keyless_endpoint
+    label: SearxNG
+    default_endpoint: ""
+    allow_private_endpoint: true
+    optional_credential_slot: searxng
+    api_key_env: SEARXNG_API_KEY
+    test_query: test
+    hint: Self-hosted SearxNG instance base URL (optional API key if your instance requires it). LAN / private IPs are allowed here — do not point this at cloud metadata or loopback admin ports.
+
+  - id: mwmbl
+    kind: keyless
+    label: Mwmbl
+    default_endpoint: https://mwmbl.org
+    test_query: test
+    hint: Public Mwmbl search API. Override the endpoint only if you run your own instance.
+
+  - id: hn
+    kind: keyless
+    label: Hacker News
+    default_endpoint: https://hn.algolia.com
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: Algolia-powered Hacker News story search — no configuration required.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: wikipedia
+    kind: keyless
+    family: mediawiki_rest
+    label: Wikipedia
+    default_endpoint: https://en.wikipedia.org
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: English Wikipedia page search via the MediaWiki REST API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: nixos_wiki
+    kind: keyless
+    family: mediawiki_rest
+    label: NixOS Wiki
+    default_endpoint: https://wiki.nixos.org
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: flakes
+    hint: Official NixOS Wiki search via the MediaWiki REST API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: gentoo_wiki
+    kind: keyless
+    family: mediawiki_action
+    label: Gentoo Wiki
+    default_endpoint: https://wiki.gentoo.org
+    roles: [results]
+    default_enabled: true
+    test_query: systemd
+    hint: Gentoo Wiki search via the MediaWiki action API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: mankier
+    kind: keyless
+    label: ManKier
+    default_endpoint: https://www.mankier.com
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: systemd
+    hint: Linux man page search via the public ManKier API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: ietf_rfc
+    kind: keyless
+    label: IETF RFCs
+    default_endpoint: https://datatracker.ietf.org
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: HTTP Semantics
+    hint: Published RFC search via the IETF Datatracker API — results open on rfc-editor.org.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: discourse_rust
+    kind: keyless
+    family: discourse
+    label: Rust Users Forum
+    default_endpoint: https://users.rust-lang.org
+    roles: [results]
+    default_enabled: true
+    test_query: async trait
+    hint: Rust users forum search via the public Discourse JSON API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: discourse_golang
+    kind: keyless
+    family: discourse
+    label: Go Forum
+    default_endpoint: https://forum.golangbridge.org
+    roles: [results]
+    default_enabled: true
+    test_query: context cancel
+    hint: Go Forum search via the public Discourse JSON API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: mdn
+    kind: keyless
+    label: MDN Web Docs
+    default_endpoint: https://developer.mozilla.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: MDN Web Docs search — no configuration required.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: stackexchange
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: stackoverflow
+    label: Stack Overflow
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: Stack Overflow Q&A search. Optional API key raises daily quota.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: stackexchange_apple
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: apple
+    label: Apple Stack Exchange
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: Apple platform Q&A (macOS, iOS, iPadOS) via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: stackexchange_superuser
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: superuser
+    label: Super User
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: Desktop and Windows Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: stackexchange_askubuntu
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: askubuntu
+    label: Ask Ubuntu
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: systemd
+    hint: Ubuntu Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: stackexchange_serverfault
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: serverfault
+    label: Server Fault
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: nginx
+    hint: Server administration Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: stackexchange_unix
+    kind: keyless
+    family: stackexchange
+    family_params:
+      site: unix
+    label: Unix & Linux
+    default_endpoint: https://api.stackexchange.com
+    optional_credential_slot: stackexchange
+    api_key_env: STACKEXCHANGE_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: systemd
+    hint: Unix and Linux Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 250
+      cooldown_429_s: 900
+      shared_key: stackexchange
+
+  - id: microsoft_learn
+    kind: keyless
+    label: Microsoft Learn
+    default_endpoint: https://learn.microsoft.com
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Official Microsoft documentation search (Windows, .NET, Azure, PowerShell) via the public Learn MCP endpoint.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: arxiv
+    kind: keyless
+    label: arXiv
+    default_endpoint: https://export.arxiv.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: arXiv paper search via the Atom API — respect the upstream pace.
+    pacing:
+      min_interval_ms: 3000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: github
+    kind: keyless
+    label: GitHub
+    default_endpoint: https://api.github.com
+    optional_credential_slot: github
+    api_key_env: GITHUB_SEARCH_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: test
+    hint: Searches GitHub issues and pull requests without a token. Add a personal access token to also search code and raise rate limits.
+    pacing:
+      min_interval_ms: 6000
+      daily_cap: 500
+      cooldown_429_s: 900
+
+  - id: gitlab
+    kind: keyless
+    label: GitLab
+    default_endpoint: https://gitlab.com
+    optional_credential_slot: gitlab
+    api_key_env: GITLAB_SEARCH_API_KEY
+    roles: [results, seeds]
+    default_enabled: true
+    test_query: gitlab
+    hint: Public GitLab project search. An optional personal access token raises limits and includes projects visible to the token.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: gdelt
+    kind: keyless
+    label: GDELT
+    default_endpoint: https://api.gdeltproject.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Global news article search via the GDELT DOC API — respect the upstream one-request-per-five-seconds pace.
+    pacing:
+      min_interval_ms: 5000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: openalex
+    kind: keyless
+    label: OpenAlex
+    default_endpoint: https://api.openalex.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Scholarly works search across published literature — keyless with polite-pool mailto on each request.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: crossref
+    kind: keyless
+    label: Crossref
+    default_endpoint: https://api.crossref.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Scholarly works and DOI search across publishers — keyless with polite-pool mailto on each request.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: europepmc
+    kind: keyless
+    label: Europe PMC
+    default_endpoint: https://www.ebi.ac.uk
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Biomedical and life-sciences literature search via the Europe PMC REST API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: wikidata
+    kind: keyless
+    label: Wikidata
+    default_endpoint: https://www.wikidata.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Language-neutral entity and concept lookup (CC0) via the Wikidata API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: wiktionary
+    kind: keyless
+    family: mediawiki_rest
+    label: Wiktionary
+    default_endpoint: https://en.wiktionary.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Dictionary and word search via the MediaWiki REST API. Point the endpoint at another language subdomain (e.g. https://fr.wiktionary.org) for non-English lookups.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: internetarchive
+    kind: keyless
+    label: Internet Archive
+    default_endpoint: https://archive.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Search books, media, and archived material via the Internet Archive advanced search API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: openlibrary
+    kind: keyless
+    label: Open Library
+    default_endpoint: https://openlibrary.org
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Book and author search via the Open Library public API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: huggingface
+    kind: keyless
+    label: Hugging Face
+    default_endpoint: https://huggingface.co
+    roles: [results]
+    default_enabled: true
+    test_query: test
+    hint: Model hub search for ML checkpoints and pipelines — no configuration required.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: crates_io
+    kind: keyless
+    family: custom
+    label: crates.io
+    default_endpoint: https://crates.io
+    roles: [results]
+    default_enabled: true
+    test_query: serde
+    hint: Rust crate search via crates.io — includes docs.rs documentation pages for crawling.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: pkg_go_dev
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: pkg_go_dev
+    label: Go Packages
+    default_endpoint: https://pkg.go.dev
+    roles: [results]
+    default_enabled: true
+    test_query: encoding/json
+    hint: Go module and package search via the pkg.go.dev v1beta API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: npm
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: npm
+    label: npm
+    default_endpoint: https://registry.npmjs.org
+    roles: [results]
+    default_enabled: true
+    test_query: express
+    hint: JavaScript and TypeScript package search via the public npm registry API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: jsr
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: jsr
+    label: JSR
+    default_endpoint: https://jsr.io
+    roles: [results]
+    default_enabled: true
+    test_query: hono
+    hint: Modern JavaScript and TypeScript package search on JSR.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: nuget
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: nuget
+    label: NuGet
+    default_endpoint: https://azuresearch-usnc.nuget.org
+    roles: [results]
+    default_enabled: true
+    test_query: Newtonsoft.Json
+    hint: .NET package search via the public NuGet query API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: rubygems
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: rubygems
+    label: RubyGems
+    default_endpoint: https://rubygems.org
+    roles: [results]
+    default_enabled: true
+    test_query: rails
+    hint: Ruby gem search via the public RubyGems JSON API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: maven_central
+    kind: keyless
+    family: custom
+    label: Maven Central
+    default_endpoint: https://search.maven.org
+    roles: [results]
+    default_enabled: true
+    test_query: jackson
+    hint: JVM artifact search via Maven Central's public Solr API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: packagist
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: packagist
+    label: Packagist
+    default_endpoint: https://packagist.org
+    roles: [results]
+    default_enabled: true
+    test_query: symfony
+    hint: PHP and Composer package search via Packagist's public API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: pub_dev
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: pub_dev
+    label: pub.dev
+    default_endpoint: https://pub.dev
+    roles: [results]
+    default_enabled: true
+    test_query: http
+    hint: Dart and Flutter package search via the public pub.dev API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: hex
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: hex
+    label: Hex
+    default_endpoint: https://hex.pm
+    roles: [results]
+    default_enabled: true
+    test_query: phoenix
+    hint: Elixir and Erlang package search via the public Hex.pm API.
+    pacing:
+      min_interval_ms: 500
+      daily_cap: 5000
+      cooldown_429_s: 300
+
+  - id: cran
+    kind: keyless
+    family: custom
+    label: CRAN (R)
+    default_endpoint: https://search.r-pkg.org
+    roles: [results]
+    default_enabled: true
+    test_query: ggplot2
+    hint: R package search via the METACRAN (search.r-pkg.org) index over CRAN.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: hackage
+    kind: keyless
+    family: package_registry
+    family_params:
+      shape: hackage
+    label: Hackage
+    default_endpoint: https://hackage.haskell.org
+    roles: [results]
+    default_enabled: true
+    test_query: lens
+    hint: Haskell package search via the public Hackage API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: metacpan
+    kind: keyless
+    family: custom
+    label: MetaCPAN
+    default_endpoint: https://fastapi.metacpan.org
+    roles: [results]
+    default_enabled: true
+    test_query: Moose
+    hint: Perl distribution search via the public MetaCPAN API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: nvd
+    kind: keyless
+    label: NVD
+    default_endpoint: https://services.nvd.nist.gov
+    roles: [results]
+    default_enabled: true
+    test_query: log4j
+    hint: CVE keyword search via the National Vulnerability Database API.
+    pacing:
+      min_interval_ms: 6000
+      daily_cap: 500
+      cooldown_429_s: 900
+
+  - id: css_tricks
+    kind: keyless
+    label: CSS-Tricks
+    default_endpoint: https://css-tricks.com
+    roles: [results]
+    default_enabled: true
+    test_query: grid
+    hint: Front-end articles and references via the site's public WordPress REST API.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600
+
+  - id: caniuse
+    kind: keyless
+    label: Can I Use
+    default_endpoint: https://caniuse.com
+    roles: [results]
+    default_enabled: true
+    test_query: grid
+    hint: Browser compatibility feature search via the site's public query endpoint.
+    pacing:
+      min_interval_ms: 1000
+      daily_cap: 2000
+      cooldown_429_s: 600

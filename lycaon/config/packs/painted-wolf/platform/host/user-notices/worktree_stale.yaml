@@ -1,0 +1,13 @@
+surfaces: [http, host_error]
+notification: { tier: non_catastrophic, scope: session }
+title: Worktree missing
+message: This chat's worktree is missing. Use Return to project folder in the Git tab to continue.
+suggested_action: Choose Return to project folder in the Git tab.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - worktree is missing

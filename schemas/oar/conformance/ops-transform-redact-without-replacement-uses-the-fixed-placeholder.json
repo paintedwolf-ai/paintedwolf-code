@@ -1,0 +1,85 @@
+{
+  "id": "ops-transform-redact-without-replacement-uses-the-fixed-placeholder",
+  "title": "redact with no replacement substitutes exactly the code points [REDACTED]",
+  "covers": [
+    "OAR-OPS-13",
+    "OAR-OPS-21"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "DEFAULT_REDACT",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "size(pii_entities) > 0",
+      "transform": {
+        "action": "redact",
+        "target": "pii_entities"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 or 555-0199 now",
+    "facts": {
+      "pii_entities": [
+        {
+          "start": 5,
+          "end": 13
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "DEFAULT_REDACT",
+    "content": "call [REDACTED] or 555-0199 now"
+  }
+}

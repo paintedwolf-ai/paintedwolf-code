@@ -1,0 +1,30 @@
+oar: '1.0'
+id: WORKFLOW_TRANSITION_ACTOR_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_ACTOR_DENIED"
+effect: block
+copy:
+  what: This choice leave does not list coordinator in actors
+  cause: The edge ACL excludes the coordinator actor
+  why: Only fire arms where actors includes coordinator
+  fix: "Use only a transition permitted for the coordinator and appropriate to the task. If the selected transition requires a human, leave that decision to the human. Do not choose a different outcome merely to bypass the actor restriction."
+  instead: "Preserve the current phase and wait for the authorized actor when coordinator advancement is not permitted."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: coordinator is not an allowed actor on this choice transition
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    phase: decide
+    tool: workflow_transition
+    transition_id: side_quest
+  expect_contains:
+  - 'Code: WORKFLOW_TRANSITION_ACTOR_DENIED'
+  - coordinator
+x-paintedwolf-emit: guard:workflow

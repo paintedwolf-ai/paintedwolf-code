@@ -1,0 +1,37 @@
+name: Retain verification evidence
+description: Preserve receipts, diagnostics, and timings for every hosted verdict
+inputs:
+  name:
+    description: Unique artifact name within the workflow run
+    required: true
+  status:
+    description: Job status before evidence collection
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve artifact directory
+      id: paths
+      shell: bash
+      run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
+
+    - name: Summarize verification
+      shell: bash
+      env:
+        VERIFICATION_STATUS: ${{ inputs.status }}
+      run: python3 scripts/ci_verification.py report "$VERIFICATION_STATUS"
+
+    - name: Upload verification evidence
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ inputs.name }}
+        path: |
+          ${{ steps.paths.outputs.artifact-root }}/ci/
+          ${{ steps.paths.outputs.artifact-root }}/verification/
+          ${{ steps.paths.outputs.artifact-root }}/last-run/
+          ${{ steps.paths.outputs.artifact-root }}/perf/
+          lycaon-den/test-results/
+          lycaon-den/playwright-report/
+        if-no-files-found: warn
+        retention-days: 14

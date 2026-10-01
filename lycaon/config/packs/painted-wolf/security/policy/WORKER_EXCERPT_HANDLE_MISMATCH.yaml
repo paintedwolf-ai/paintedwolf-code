@@ -1,0 +1,28 @@
+emit: banner
+category: informational
+severity: info
+message: Worker finding excerpt traced to evidence — reviewer confirm
+what: Worker cited {{ paintedwolf.offender_count }} finding excerpt(s) that did not verbatim-match
+  the resolved evidence body.
+cause: findings[].excerpt may paraphrase, reflow, or cite the wrong line while the
+  path was observed — citations link from path/line/excerpt and the host surfaces
+  reviewer confirm instead of blocking the leg
+why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{%
+  endif %}'
+fix: 'Re-read the cited content and prefer verbatim file excerpts in findings; put
+  counts/sizes/negative results in brief, never as a finding excerpt{% if paintedwolf.observed_paths_sample %} (seen: {{ paintedwolf.observed_paths_sample }}){% endif %}.'
+instead: Traced findings complete the leg; prefer verbatim excerpts to reduce reviewer-confirm
+  noise
+evidence:
+  ui_label: Finding excerpts
+  ui_check_id: finding_excerpts
+scenarios:
+- id: line_out_of_range
+  vars:
+    offender_count: 1
+    offenders_omitted: 0
+    offenders_sample: read#1:50
+  expect_contains:
+  - 'Code: WORKER_EXCERPT_HANDLE_MISMATCH'
+  - verbatim
+id: WORKER_EXCERPT_HANDLE_MISMATCH

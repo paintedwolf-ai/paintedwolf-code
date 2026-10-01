@@ -1,0 +1,54 @@
+rules:
+- id: lycaon.solidity.tx-origin-authorization
+  languages:
+  - solidity
+  severity: ERROR
+  message: Authorization uses tx.origin and can be confused by an intermediary contract
+  metadata:
+    category: security
+    cwe: CWE-862
+    confidence: HIGH
+    technology:
+    - solidity
+  patterns:
+  - pattern-either:
+    - pattern: require(tx.origin == $OWNER, ...)
+    - pattern: require($OWNER == tx.origin, ...)
+  - metavariable-pattern:
+      metavariable: $OWNER
+      patterns:
+      - pattern-not: msg.sender
+      - pattern-not: tx.origin
+- id: lycaon.solidity.user-controlled-delegatecall
+  languages:
+  - solidity
+  severity: ERROR
+  message: An external caller directly supplies the delegatecall target
+  metadata:
+    category: security
+    cwe: CWE-829
+    confidence: HIGH
+    technology:
+    - solidity
+  patterns:
+  - pattern-inside: function $FN(address $TARGET, ...) external { ... }
+  - pattern: $TARGET.delegatecall(...)
+  - pattern-not-inside: function $FN(...) external { ... require(msg.sender == $OWNER, ...); ... }
+- id: lycaon.solidity.unchecked-send
+  languages:
+  - solidity
+  severity: WARNING
+  message: The result of an Ether send is discarded
+  metadata:
+    category: security
+    cwe: CWE-252
+    confidence: MEDIUM
+    technology:
+    - solidity
+  patterns:
+  - pattern: $TARGET.send($AMOUNT);
+  - pattern-not-inside: require($TARGET.send($AMOUNT), ...)
+  - pattern-not-inside: require($TARGET.send($AMOUNT))
+  - pattern-not-inside: $X = $TARGET.send($AMOUNT)
+  - pattern-not-inside: return $TARGET.send($AMOUNT);
+  - pattern-not-inside: require(...);

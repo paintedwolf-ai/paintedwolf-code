@@ -1,0 +1,80 @@
+oar: '1.0'
+id: READ_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.can_read
+  - paintedwolf.can_list_dir
+  - paintedwolf.can_find
+  - paintedwolf.can_grep
+when: paintedwolf.rejection_code == "READ_IS_DIRECTORY"
+effect: block
+copy:
+  what: '{{ tool }} needs a file path; {{ paintedwolf.path }} is a directory.'
+  cause: This operation consumes file contents. A symbol lookup also requires a concrete file path.
+  why: Separating file read from directory listing keeps survey JSON structured and capped.
+  fix: '{% if paintedwolf.can_list_dir %}Call `list_dir(path="{{ paintedwolf.path }}")` for one level;
+    use path "." for the repo root.{% endif %}{% if paintedwolf.can_find %} Use `find` with type dir for
+    a directory tree or a file filter to locate candidate files.{% endif %}{% if paintedwolf.can_grep
+    %} To locate a symbol across files, use `grep` with path="{{ paintedwolf.path }}" and structural true,
+    or text grep to narrow.{% endif %}{% if paintedwolf.can_read %} Read a resulting concrete file with
+    `read(path=<file>, symbol=<name>)` or a bounded line range.{% endif %} If the needed discovery tool
+    is absent, use an already observed file path or report the missing path information to the caller.'
+  instead: Choose the actual file needed for the operation; do not repeat the directory request or assume
+    a missing tool can be called.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
+x-paintedwolf-message: read path is a directory
+x-paintedwolf-scenarios:
+- id: root
+  vars:
+    path: .
+    profile: coordinator
+    tool: read
+    can_list_dir: true
+    can_find: true
+    can_grep: true
+    can_read: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_IS_DIRECTORY'
+  - list_dir
+- id: default
+  vars:
+    path: lycaon/internal
+    profile: explore_readonly
+    tool: read
+    can_list_dir: true
+    can_find: true
+    can_grep: true
+    can_read: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_IS_DIRECTORY'
+- id: symbol_lookup
+  vars:
+    path: internal/session
+    profile: explore_readonly
+    tool: read
+    can_list_dir: true
+    can_find: true
+    can_grep: true
+    can_read: true
+  expect_contains:
+  - 'Code: READ_IS_DIRECTORY'
+  - grep
+  - structural
+- id: narrow_profile
+  vars:
+    tool: read
+    path: plans
+    can_read: true
+    can_grep: true
+  expect_contains:
+  - structural
+  - concrete file

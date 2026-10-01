@@ -1,0 +1,11 @@
+id: painted-wolf/platform:go-all-chats
+title: "Show all chats"
+scope: "global"
+keywords:
+  - "all chats"
+  - "chats"
+  - "sessions"
+  - "history"
+action:
+  kind: native_ui
+  handler: "go.allChats"

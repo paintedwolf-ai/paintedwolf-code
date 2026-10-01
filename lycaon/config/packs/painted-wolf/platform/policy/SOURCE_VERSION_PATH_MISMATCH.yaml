@@ -1,0 +1,36 @@
+oar: '1.0'
+id: SOURCE_VERSION_PATH_MISMATCH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - source_history
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "SOURCE_VERSION_PATH_MISMATCH"
+effect: block
+copy:
+  what: Source version path mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
+  cause: The provided version id does not match the target path requested.
+  why: Historical versions are bound to specific file paths within the project tree.
+  fix: Pass the correct path corresponding to the recorded version id.
+  instead: Branch on Code; match path to version_id
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
+x-paintedwolf-message: version id belongs to a different path
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: version v1 belongs to main.go, not other.go
+      path: other.go
+      profile: implement
+      tool: source_history
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_PATH_MISMATCH'

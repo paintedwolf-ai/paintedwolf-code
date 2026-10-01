@@ -1,0 +1,3 @@
+# Path jail. Path allowlists live in path-scopes.yaml (referenced by tool profiles).
+project_root_required: true
+reject_symlink_escape: true

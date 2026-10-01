@@ -1,0 +1,45 @@
+title: Apply a change across a fleet
+id: e9530edd-08c9-4ca9-a8d6-517ef87ceb2c
+description: Runs a configuration change against every host an inventory names.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # A playbook run and a chef-client run are converges by construction, so the
+  # program alone is the signal. Everything else here also answers read-only
+  # questions, so those need the verb that changes something.
+  selection_run_is_converge:
+    Image:
+      - ansible-playbook
+      - chef-client
+  selection_ansible_adhoc:
+    Image: ansible
+    CommandLine|re: '(?i)\s-m\s+(shell|command|raw|script|copy|file|template|service|systemd|package|yum|apt|dnf|user|group|cron|lineinfile|replace|unarchive|git|reboot)\b'
+  selection_salt:
+    Image: salt
+    CommandLine|re: '(?i)\s(state\.(apply|highstate|sls|single)|cmd\.(run|script)|pkg\.(install|removed?)|service\.(restart|stop|start)|file\.(managed|remove))\b'
+  selection_puppet:
+    Image: puppet
+    CommandLine|re: '(?i)\s(agent|apply|resource)\b'
+  selection_knife:
+    Image: knife
+    CommandLine|contains:
+      - ' ssh '
+      - ' bootstrap '
+  selection_pulumi_up:
+    Image: pulumi
+    CommandLine|contains: ' up '
+  filter_rehearsal:
+    Argv|re: '^(--help|--check|--list-hosts|--list-tasks|--list-tags|--syntax-check|--noop|preview|test[.]ping)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_run_is_converge or selection_ansible_adhoc or selection_salt or selection_puppet or selection_knife or selection_pulumi_up) and not filter_rehearsal and not filter_local

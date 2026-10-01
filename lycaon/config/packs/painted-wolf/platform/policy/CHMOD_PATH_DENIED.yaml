@@ -1,0 +1,36 @@
+oar: '1.0'
+id: CHMOD_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chmod
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "CHMOD_PATH_DENIED"
+effect: block
+copy:
+  what: Permission changes are denied for {{ paintedwolf.path }}.
+  cause: The target crosses a host write-protection boundary.
+  why: Permission changes cannot bypass protected-path authority.
+  fix: Leave the protected target unchanged. A different path is appropriate only if it is the task’s actual
+    intended target; another tool or matching write glob cannot override this floor.
+  instead: Branch on Code CHMOD_PATH_DENIED; preserve the protected-path boundary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
+x-paintedwolf-message: chmod path matches a hard deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: chmod
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHMOD_PATH_DENIED'

@@ -1,0 +1,5 @@
+code: feedback_gate_phase_missing
+message: |
+  user_feedback_received gate references missing phase {{phase}}.
+replacement: |
+  Align the gate suffix with a phase that declares request_user_feedback.

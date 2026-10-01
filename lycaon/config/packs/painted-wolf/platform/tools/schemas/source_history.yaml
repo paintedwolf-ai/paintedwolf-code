@@ -1,0 +1,34 @@
+tags: [edit, history]
+description: "Query the source ledger for file effects (mode=effects), current line authorship (mode=lines), this session's paths (mode=mine), historical version content (mode=version), or version diffs (mode=diff). Includes uncommitted state. Actors: you / agent / user / external / mixed / unknown. Missing history is reported explicitly."
+schema:
+  type: object
+  properties:
+    mode:
+      type: string
+      enum: [effects, lines, mine, version, diff]
+      description: effects (default) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions
+    path:
+      type: string
+      description: Repo-relative file path (required for effects, lines, version, and diff; ignored for mine)
+    version_id:
+      type: string
+      description: version or diff mode — retained source version ID from an effect row or read receipt
+    base_version_id:
+      type: string
+      description: diff mode — earlier source version ID to diff against (defaults to the version's parent version; can be "current" or "head" to compare against the working file)
+    offset:
+      type: integer
+      description: version mode — 1-based line offset to start reading from (default 1)
+    limit:
+      type: integer
+      description: effects mode — max effects per page (default 20, max 100); version mode — max lines to read (default 200, max 2000)
+    start_line:
+      type: integer
+      description: lines mode — restrict attribution to intervals overlapping this 1-based start
+    end_line:
+      type: integer
+      description: lines mode — restrict attribution to intervals overlapping through this line
+    before_ordinal:
+      type: integer
+      description: effects mode — paging cursor from a previous result's next_before_ordinal
+  additionalProperties: false

@@ -1,0 +1,144 @@
+.den-scans-coverage {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px var(--den-stage-inset-x);
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-scans-coverage__line {
+  flex: 1 1 0%;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-scans-coverage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  white-space: nowrap;
+}
+
+.den-scans-coverage-chip__dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-border);
+}
+
+.den-scans-coverage-chip[data-state="seen"] .den-scans-coverage-chip__dot {
+  background: var(--den-status-positive);
+}
+
+.den-scans-coverage-chip[data-state="partial"] .den-scans-coverage-chip__dot,
+.den-scans-coverage-chip[data-state="empty"] .den-scans-coverage-chip__dot,
+.den-scans-coverage-chip[data-state="unavailable"] .den-scans-coverage-chip__dot {
+  background: transparent;
+  border: 1px solid var(--den-border);
+}
+
+.den-scans-coverage-chip[data-state="unseen"] .den-scans-coverage-chip__dot {
+  background: var(--den-accent-signal);
+}
+
+/* Reserve primary-weight label width to prevent toggle resizing. */
+.den-scans-full-scan-toggle .den-stable-label-sizer {
+  font-weight: 600;
+}
+
+.den-scans-full-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+}
+
+.den-scans-full-panel__scanner-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+
+.den-scans-full-panel__scanner-note {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+.den-scans-fixed {
+  padding: 10px var(--den-stage-inset-x) 14px;
+  border-top: 1px solid var(--den-line);
+}
+
+.den-scans-fixed__title {
+  margin: 0 0 6px;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-scans-fixed__row {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-scans-fixed__row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-scans-level {
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  color: var(--den-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.den-scans-level--critical {
+  color: var(--den-danger-text);
+}
+
+.den-scans-level--high {
+  color: var(--den-warning-text);
+}
+
+.den-scans-level--medium {
+  color: var(--den-status-running);
+}
+
+.den-scans-level--low,
+.den-scans-level--info {
+  color: var(--den-text-muted);
+}
+
+.den-scans-advisory-kind {
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--den-danger-text);
+}
+

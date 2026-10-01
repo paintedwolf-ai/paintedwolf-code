@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Sign-in is not available
+message: This host cannot start MCP authorization right now.
+suggested_action: Try again after restarting the app.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - authorization
+      - restarting

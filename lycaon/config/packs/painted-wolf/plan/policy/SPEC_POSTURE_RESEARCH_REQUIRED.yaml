@@ -1,0 +1,36 @@
+oar: '1.0'
+id: SPEC_POSTURE_RESEARCH_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_RESEARCH_REQUIRED"
+effect: block
+copy:
+  what: Critic tasks are blocked until research is satisfied and you have left research.
+  cause: Research still open — finish it before critics
+  why: Critic tasks are blocked while research is still open.
+  fix: '1. Dispatch `task(repo-researcher|path-explorer, …)` if facts are still missing.
+
+    2. On research, leave per Phase exit (host stamps research_satisfied).
+
+    3. Continue expand → approve on the default path (optional critique returns when that path is available).
+
+    '
+  instead: Finish research → leave research → expand
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Research still open — finish it before critics
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: task
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_RESEARCH_REQUIRED'
+x-paintedwolf-audience:
+- coordinator

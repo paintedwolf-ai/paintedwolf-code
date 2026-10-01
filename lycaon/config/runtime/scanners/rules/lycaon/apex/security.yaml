@@ -1,0 +1,38 @@
+rules:
+- id: lycaon.apex.soql-injection
+  languages:
+  - apex
+  severity: ERROR
+  message: Request input reaches SOQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - apex
+  mode: taint
+  pattern-sources:
+  - pattern: ApexPages.currentPage().getParameters().get(...)
+    exact: true
+  - pattern: RestContext.request.params.get(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Database.query($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: Database.queryWithBinds($SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: Database.getQueryLocator($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: Database.countQuery($SQL)
+    - focus-metavariable: $SQL
+  pattern-sanitizers:
+  - pattern: Integer.valueOf(...)
+    exact: true
+  - pattern: Long.valueOf(...)
+    exact: true
+  - pattern: Decimal.valueOf(...)
+    exact: true

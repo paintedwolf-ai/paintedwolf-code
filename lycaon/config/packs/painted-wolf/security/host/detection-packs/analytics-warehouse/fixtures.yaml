@@ -1,0 +1,46 @@
+fixtures:
+- rule: catalog-delete
+  positive:
+  - databricks catalogs delete --name legacy_catalog --force
+  - databricks schemas delete --full-name legacy_catalog.raw --force
+  - databricks unity-catalog catalogs delete --full-name legacy_catalog
+  - bq rm -r -f old_dataset
+  - bq rm -f my_dataset.my_table
+  - bq rm --force old_dataset
+  - BQ RM -F old_dataset
+  - sudo databricks catalogs delete --name legacy_catalog --force
+  negative:
+  - databricks catalogs list
+  - databricks schemas get --full-name legacy_catalog.raw
+  - bq rm -r old_dataset
+  - bq show my_dataset.my_table
+  - bq mk -f old_dataset
+  - databricks catalogs delete --name legacy_catalog --force --help
+- rule: cluster-permanent-delete
+  positive:
+  - databricks clusters permanent-delete --cluster-id 0812-123456-abc123
+  - sudo databricks clusters permanent-delete --cluster-id 0812-123456-abc123
+  negative:
+  - databricks clusters delete --cluster-id 0812-123456-abc123
+  - databricks clusters list
+  - databricks clusters permanent-delete --cluster-id 0812-123456-abc123 --help
+- rule: warehouse-grant
+  positive:
+  - databricks grants update legacy_catalog --json '{"changes":[{"principal":"bot","add":["ALL_PRIVILEGES"]}]}'
+  - sudo databricks grants update legacy_catalog --json '{}'
+  negative:
+  - databricks grants get legacy_catalog
+  - databricks grants update legacy_catalog --json '{}' --help
+- rule: snowflake-object-drop
+  positive:
+  - snow object drop database legacy_db
+  - snow object drop schema legacy_db.raw
+  - snow object drop table legacy_db.raw.events
+  - sudo snow object drop database legacy_db
+  negative:
+  - snow object list database
+  - snow object describe database legacy_db
+  - snow object drop warehouse compute_wh
+  - snow object drop role legacy_role
+  - snow object drop database legacy_db --help
+  - snow sql -q 'SELECT 1'

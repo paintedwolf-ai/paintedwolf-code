@@ -1,0 +1,267 @@
+/* Workflows panel — zones, run header, lifecycle controls, picker. */
+.den-workflows-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0.5rem 0.65rem 0.65rem;
+}
+
+.den-workflows-tab__zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.den-workflows-tab__zone--picker {
+  border-top: 1px solid var(--den-line);
+  padding-top: 10px;
+}
+
+.den-workflows-tab__hint {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  line-height: 1.45;
+}
+
+.den-workflows-tab__error {
+  margin: 0;
+  color: var(--den-danger-text);
+  font-size: var(--text-den-hint);
+}
+
+.den-workflows-tab__run-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.den-workflows-tab__run-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.den-workflows-tab__run-name {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-workflows-tab__status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--den-text-muted);
+}
+
+.den-workflows-tab__status[data-status="running"] {
+  background: var(--den-accent-signal);
+}
+
+.den-workflows-tab__status[data-status="paused"],
+.den-workflows-tab__status[data-status="paused_on_child"] {
+  background: var(--den-warning);
+}
+
+.den-workflows-tab__status[data-status="failed"] {
+  background: var(--den-danger);
+}
+
+/* Inside the run-head button, so it carries no shape. */
+.den-workflows-tab__status-pill {
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+.den-workflows-tab__status-pill[data-status="running"] {
+  color: var(--den-accent-text);
+}
+
+.den-workflows-tab__status-pill[data-status="paused"],
+.den-workflows-tab__status-pill[data-status="paused_on_child"] {
+  color: var(--den-warning);
+}
+
+.den-workflows-tab__status-pill[data-status="failed"] {
+  color: var(--den-danger-text);
+}
+
+.den-workflows-tab__phase {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.den-workflows-tab__phase-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.den-workflows-tab__phase-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--den-border);
+}
+
+.den-workflows-tab__phase-seg[data-done] {
+  background: var(--den-accent);
+}
+
+.den-workflows-tab__phase-label {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-workflows-tab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.den-workflows-tab__actions-spacer {
+  flex: 1;
+}
+
+.den-report-download {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.den-report-download__error {
+  font-size: var(--text-den-caption);
+  color: var(--den-danger-text);
+}
+
+.den-report-download__transcript {
+  margin-top: 8px;
+  margin-left: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-accent-text);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.den-report-download__transcript:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.den-workflows-tab__gate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-border));
+  border-radius: var(--den-radius);
+  background: color-mix(in srgb, var(--den-accent-signal) 8%, transparent);
+  color: var(--den-accent-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.den-workflows-tab__gate:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.den-workflows-tab__gate-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+}
+
+.den-workflows-tab__gate-cta {
+  flex-shrink: 0;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+}
+
+.den-workflows-tab__resting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.den-workflows-tab__resting-label {
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+}
+
+.den-workflows-tab__picker-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--den-border);
+  border-radius: 8px;
+  background: var(--den-surface-elevated);
+}
+
+.den-workflows-tab__picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.den-workflows-tab__picker-row:hover:not(:disabled) {
+  background: var(--den-tint-1);
+}
+
+.den-workflows-tab__picker-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.den-workflows-tab__picker-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-workflows-tab__picker-row-trigger {
+  flex-shrink: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+

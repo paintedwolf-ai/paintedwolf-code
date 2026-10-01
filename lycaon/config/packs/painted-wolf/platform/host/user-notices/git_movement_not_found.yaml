@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Git change not found"
+message: "That Git change is no longer recorded."
+suggested_action: "Refresh the Git history and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer recorded"

@@ -1,0 +1,14 @@
+scope: app
+title: Finish restoring
+message: >-
+  The restore is staged and your previous data is preserved. Finish restoring
+  to reopen your data.
+suggested_action: >-
+  The app could not finish automatically. Quit and reopen it to apply the
+  staged restore.
+scenarios:
+  - id: default
+    expect_contains:
+      - restore is staged
+      - previous data is preserved
+      - Finish restoring

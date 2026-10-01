@@ -1,0 +1,55 @@
+language: hack
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: request-eval-vulnerable
+  file: sample.hack
+  source: '<?hh
+
+    function run(): void { eval($_GET["code"]); }
+
+    '
+  want:
+  - lycaon.hack.request-eval
+  covers: []
+- name: request-eval-safe
+  file: sample.hack
+  source: '<?hh
+
+    function run(): void { json_decode($_GET["data"]); }
+
+    '
+  want: []
+  covers:
+  - lycaon.hack.request-eval
+- name: request-command-injection-flow
+  file: app.hack
+  source: '<?hh
+
+    function handler(): void { $command = $_GET["cmd"]; shell_exec($command); }
+
+    '
+  want:
+  - lycaon.hack.request-command-injection
+  covers: &id001
+  - lycaon.hack.request-command-injection
+- name: request-command-injection-constant
+  file: app.hack
+  source: '<?hh
+
+    function handler(): void { $command = $_GET["cmd"]; shell_exec("date"); }
+
+    '
+  want: []
+  covers:
+  - lycaon.hack.request-command-injection
+- name: request-command-injection-safe-api
+  file: app.hack
+  source: '<?hh
+
+    function handler(): void { $command = $_GET["cmd"]; json_decode($command); }
+
+    '
+  want: []
+  covers: *id001

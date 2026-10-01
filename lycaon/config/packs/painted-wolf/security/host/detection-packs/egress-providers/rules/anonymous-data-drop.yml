@@ -1,0 +1,46 @@
+title: Reached an anonymous paste or file-drop service
+id: 77068cbb-38a6-4efb-aa9a-47667987fd18
+description: >-
+  Connected to a no-signup paste or file-upload host built for one-off,
+  disposable sharing from the command line. These hosts do have an
+  occasional legitimate read side — someone sharing a log or a snippet — so a
+  hit here cannot tell that apart from a secret dropped for pickup.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+author: Painted Wolf Code
+date: '2026-08-21'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - pastebin.com
+      - 0x0.st
+      - transfer.sh
+      - file.io
+      - termbin.com
+      - catbox.moe
+      - clbin.com
+      - rentry.co
+      - privatebin.net
+      - privatebin.io
+      - dpaste.com
+      - ghostbin.com
+      - gofile.io
+      - filebin.net
+      - temp.sh
+      - paste.rs
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .pastebin.com
+      - .file.io
+      - .catbox.moe
+      - .gofile.io
+      - .filebin.net
+  condition: selection_host or selection_suffix

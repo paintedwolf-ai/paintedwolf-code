@@ -1,0 +1,50 @@
+oar: '1.0'
+id: READ_BINARY_DENIED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bytes
+  - paintedwolf.path
+  - paintedwolf.binary_denied
+  - paintedwolf.can_stat
+  - paintedwolf.is_image
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "READ_BINARY_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} could not decode {{ paintedwolf.path }} ({{ paintedwolf.bytes }} input bytes) as supported bounded
+    text.'
+  cause: 'The text reader reported: {{ paintedwolf.rejection_reason }}.'
+  why: Binary content, unsupported encoding, or a decoding bound cannot be treated as readable source text.
+  fix: '{% if paintedwolf.is_image %}Use view_image to inspect and perceive this image.{% else %}{% if paintedwolf.can_stat %}Use stat if metadata answers the question.{% else %}Use an offered metadata
+    inspector if metadata answers the question.{% endif %}{% endif %} A different text file cannot substitute for required
+    evidence from this asset. Preserve the unresolved content requirement.'
+  instead: Diagnose the text-decoding failure; do not invent replacement evidence
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
+x-paintedwolf-message: read refused binary file content
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    bytes: 6148
+    path: .DS_Store
+    profile: explore_readonly
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_BINARY_DENIED'
+- id: image_file
+  vars:
+    bytes: 4096
+    is_image: true
+    path: assets/logo.png
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_BINARY_DENIED'
+  - 'Use view_image to inspect and perceive this image.'

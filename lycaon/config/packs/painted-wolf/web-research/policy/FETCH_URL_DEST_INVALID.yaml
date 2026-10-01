@@ -1,0 +1,30 @@
+oar: '1.0'
+id: FETCH_URL_DEST_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - fetch_url
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "FETCH_URL_DEST_INVALID"
+effect: block
+copy:
+  what: fetch_url was called with dest while mode was not raw.
+  cause: Project writes belong to the raw asset path; text mode is research extract only.
+  why: Mixing dest with text mode would mutate the tree while claiming a read-only page extract.
+  fix: Pass mode=raw with dest, or drop dest for a text extract.
+  instead: Branch on Code FETCH_URL_DEST_INVALID; use mode=raw or omit dest
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url dest is only valid with mode=raw
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      dest: assets/logo.png
+      tool: fetch_url
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: FETCH_URL_DEST_INVALID'

@@ -1,0 +1,30 @@
+oar: '1.0'
+id: WORKFLOW_TRANSITION_NOT_ARMED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_NOT_ARMED"
+effect: block
+copy:
+  what: 'The optional when: predicate on this edge evaluated false'
+  cause: 'when: readiness on the chosen transition is not met'
+  why: 'Satisfy the edge when: condition before calling workflow_transition'
+  fix: "Inspect the current phase's declared readiness condition and the corresponding host state. Satisfy only genuinely unmet requirements through offered controls, then retry the same transition if it is appropriate."
+  instead: "Wait when readiness depends on existing work or human input; do not recreate completed work or force a different transition."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: 'choice transition when: readiness is not satisfied'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    phase: decide
+    tool: workflow_transition
+    transition_id: critique
+  expect_contains:
+  - 'Code: WORKFLOW_TRANSITION_NOT_ARMED'
+  - readiness
+x-paintedwolf-emit: guard:workflow

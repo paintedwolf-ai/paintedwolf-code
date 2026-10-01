@@ -1,0 +1,203 @@
+rules:
+- id: lycaon.php.command-injection
+  languages:
+  - php
+  severity: ERROR
+  message: Request input reaches a shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: system($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: exec($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: shell_exec($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: passthru($CMD)
+    - focus-metavariable: $CMD
+  pattern-sanitizers:
+  - patterns:
+    - pattern: escapeshellarg(...)
+    - pattern-not-inside: trim(escapeshellarg(...), "'")
+    exact: true
+- id: lycaon.php.sql-injection
+  languages:
+  - php
+  severity: ERROR
+  message: Request input reaches SQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB->query($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB->exec($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: mysqli_query($DB,$SQL)
+    - focus-metavariable: $SQL
+  pattern-sanitizers:
+  - pattern: intval(...)
+    exact: true
+  - pattern: floatval(...)
+    exact: true
+  - pattern: (int) $VALUE
+    exact: true
+  - pattern: (float) $VALUE
+    exact: true
+- id: lycaon.php.code-injection
+  languages:
+  - php
+  severity: ERROR
+  message: Request input reaches PHP evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: eval($CODE)
+    - focus-metavariable: $CODE
+- id: lycaon.php.path-traversal
+  languages:
+  - php
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: fopen($PATH, ...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: readfile($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: file_get_contents($PATH)
+    - focus-metavariable: $PATH
+- id: lycaon.php.unsafe-deserialization
+  languages:
+  - php
+  severity: ERROR
+  message: Request input reaches PHP object deserialization
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: unserialize($DATA)
+    - focus-metavariable: $DATA
+- id: lycaon.php.xss
+  languages:
+  - php
+  severity: ERROR
+  message: Request input is emitted as HTML without escaping
+  metadata:
+    category: security
+    cwe: CWE-79
+    confidence: HIGH
+    technology:
+    - php
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  - pattern: $_REQUEST[...]
+    exact: true
+  - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: echo $HTML;
+    - focus-metavariable: $HTML
+  pattern-sanitizers:
+  - pattern: htmlspecialchars(...)
+    exact: true
+  - pattern: htmlentities(...)
+    exact: true
+- id: lycaon.php.tls-verification-disabled
+  languages:
+  - php
+  severity: ERROR
+  message: cURL disables TLS certificate verification
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - php
+  pattern: curl_setopt($C, CURLOPT_SSL_VERIFYPEER, false)

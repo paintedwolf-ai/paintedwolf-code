@@ -1,0 +1,7 @@
+# What an operator writes instead of forking the pack: silence one rule, and
+# roll another out in monitor mode before enforcing it.
+oar_config: "1.0"
+disable:
+  - example.hygiene/REPEAT_LOOP_WARN
+enforcement:
+  example.security/MCP_PROVIDER_DISABLED: monitor

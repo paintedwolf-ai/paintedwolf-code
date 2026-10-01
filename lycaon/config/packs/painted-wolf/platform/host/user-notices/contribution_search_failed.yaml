@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Extension search failed
+message: The extension provider could not complete this search.
+suggested_action: Check the provider connection in Settings → MCP providers, then search again.

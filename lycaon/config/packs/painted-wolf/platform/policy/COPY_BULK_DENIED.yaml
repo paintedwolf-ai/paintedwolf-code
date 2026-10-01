@@ -1,0 +1,37 @@
+oar: '1.0'
+id: COPY_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - copy
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_pairs
+when: paintedwolf.rejection_code == "COPY_BULK_DENIED"
+effect: block
+copy:
+  cause: The explicit source–destination batch exceeds its bound.
+  why: Each source must remain paired with its intended destination.
+  fix: Split the intended pairs into batches of at most {{ paintedwolf.max_pairs }}. Preserve pair order where
+    one copy depends on another; do not broaden the target set.
+  instead: Reduce the pair count while retaining each source–destination assignment
+  what: copy received {{ paintedwolf.requested }} pairs; the limit is {{ paintedwolf.max_pairs }} per call.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
+x-paintedwolf-message: copy:copy batch exceeds max pairs
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: copy
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COPY_BULK_DENIED'

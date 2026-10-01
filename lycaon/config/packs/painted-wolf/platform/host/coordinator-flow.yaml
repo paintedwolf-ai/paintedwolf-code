@@ -1,0 +1,78 @@
+# Coordinator surface selection — first-hit decision table.
+# Evaluator: lycaon/internal/coordinator/surface/flow_eval.go
+# Facts: SurfaceFacts + IsKnownFact. ResolveTurnProfile is the sole consumer.
+#
+# A read-only posture keeps this routing and swaps only the destination: each
+# row that would offer or defer a mutating tool dispatches to its observe_
+# counterpart.
+
+hit_policy: first
+rules:
+  - when: { has_compose_draft: true }
+    surface: workflow_compose
+
+  # A read-only session promotes nothing, so vet routes away from this surface
+  # rather than being handed its tools.
+  - when: { overlay_promote_pending: ">0" }
+    surface:
+      dispatch_on: posture
+      cases: { vet: observe_investigate }
+      default: implement_overlay_promote
+
+  # The host owns the phase's pending work; the person's turns get an answer
+  # until it settles, whatever surface the phase declares. Host-opened turns
+  # keep the phase's surface and park at their first tool boundary.
+  - when: { phase_host_held: true, visible_user_turn: true }
+    surface: await_host
+
+  - when: { manifest_bound_surface: present }
+    surface:
+      use_fact: manifest_bound_surface
+
+  - when: { child_subroutine_blocks_investigate: true, visible_user_turn: true }
+    surface: implement_dispatch
+
+  # An orchestrate-mode request keeps the dispatch surface until its batch is out:
+  # a refused or corrected dispatch is a later call of the same request, and
+  # pulling `task` from under it would strand the batch.
+  - when: { workflow_declared_mode: orchestrate, workers_in_flight: 0, batch_ready_for_synthesis: false }
+    surface: implement_dispatch
+
+  - when: { workflow_declared_mode: orchestrate, workers_in_flight: ">0" }
+    surface: implement_park
+
+  - when: { workflow_declared_mode: investigate, investigate_hard_block: false }
+    surface: &investigate
+      dispatch_on: posture
+      cases: { vet: observe_investigate }
+      default: implement_investigate
+
+  - when: { investigate_default_eligible: true, investigate_hard_block: false, workflow_declared_mode: absent }
+    surface: *investigate
+
+  - when: { worker_task_finished_turn: true, workers_in_flight: ">0" }
+    surface: implement_dispatch
+
+  - when: { workers_in_flight: ">0" }
+    surface: implement_park
+
+  - when: { wrapup_gates_loaded: true, open_repair_since_user_intent: true }
+    surface: *investigate
+
+  - when: { wrapup_gates_loaded: true, progress_missing: true, progress_gated_tool_attempted_since_intent: true }
+    surface: *investigate
+
+  - when: { wrapup_gates_loaded: true, batch_ready_for_synthesis: true }
+    surface:
+      dispatch_on: posture
+      cases: { vet: observe_synthesis }
+      default: implement_synthesis
+
+  - when: { host_cycle_turn: true, progress_has_open_steps: true, workflow_declared_mode: orchestrate }
+    surface: implement_dispatch
+
+  - when: { host_cycle_turn: true }
+    surface: *investigate
+
+default:
+  surface: *investigate

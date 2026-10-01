@@ -1,0 +1,230 @@
+{
+  "title": "Options",
+  "headline": "Option A — bounded buffer with early rejection — is the only shape whose failure mode reaches the producer.",
+  "run_id": "b71e4a02-5c88-4d13-96af-2e0f7d6b4c95",
+  "project": "acme/app",
+  "started_at": "2026-07-14T08:51:12Z",
+  "completed_at": "2026-07-14T09:22:31Z",
+  "head_sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+  "workflow": {
+    "id": "options",
+    "version": "1.2.0"
+  },
+  "workforce": {
+    "provider": "anthropic",
+    "model": "claude-opus-5",
+    "agents": [
+      {
+        "type": "option-drafter",
+        "legs": 3
+      },
+      {
+        "type": "judge",
+        "legs": 1
+      }
+    ]
+  },
+  "synthesis": "## Options: how the ingest queue should shed load\n\nThree approaches were drafted independently and judged against the same brief: keep p99 admission latency under 200ms when the upstream producer bursts to ten times its steady rate, without dropping an event the producer believes it delivered.\n\n### The options as drafted\n\n| Option | Shape | What it costs |\n|---|---|---|\n| **A — Bounded buffer, reject early** | A fixed in-memory ring in front of the writer. When the ring is full the admission handler returns 429 with a retry hint, so the producer keeps the event and retries it. | The producer must implement retry with backoff. Nothing else changes, and the failure mode is one the producer already handles for network errors. |\n| **B — Spill to disk** | Overflow is written to a local segment file and drained when the writer catches up. Admission never fails while disk remains. | A second durability story: segments must be fsynced, replayed on restart, and garbage collected. Disk-full becomes a new failure mode with no back-pressure signal. |\n| **C — Shed by priority** | Events carry a class; under pressure the low class is dropped and the high class is admitted. | Requires the producer to classify every event correctly, and the classification becomes a contract the receiver cannot verify. Silent loss is invisible to the producer. |\n\n### Why A\n\nOption A is the only one whose failure mode the producer can observe. B moves the problem rather than solving it — the queue still has a bound, it is just the disk, and reaching it is now silent and unrecoverable. C makes correctness depend on a classification the receiving side cannot check, which turns a load problem into a data-integrity problem.\n\nA's cost is real: the producer needs retry with backoff. That work is bounded, it is the producer's own code, and it makes back-pressure explicit rather than hiding it behind a buffer that will eventually fill anyway.\n\n### What this does not settle\n\n- The ring's size is left open. It should be derived from the measured drain rate rather than guessed.\n- If a future producer cannot retry, B becomes worth revisiting for that path alone — not for the default.\n",
+  "limits": [
+    "No load test was run; the 200ms target is unverified against any of the three shapes.",
+    "The ring size is left open and should be derived from a measured drain rate."
+  ],
+  "verdicts": [
+    {
+      "phase": "judge",
+      "label": "Judging the drafted options",
+      "decision": "SELECTED",
+      "recorded_at": "2026-07-14T09:19:02Z",
+      "fields": [
+        {
+          "name": "winner",
+          "value": "A — bounded buffer with early rejection"
+        },
+        {
+          "name": "rationale",
+          "value": "A is the only option whose failure mode reaches the producer. B replaces a bounded queue with a larger bounded queue and adds a silent, unrecoverable failure at the new bound; C makes correctness depend on a classification the receiver cannot verify. A's cost — retry with backoff at the producer — is bounded, local, and already implemented for network errors."
+        }
+      ],
+      "claims": [
+        {
+          "id": "judge-1",
+          "statement": "Option B does not remove the bound, it moves it to the disk, where exhaustion produces no back-pressure signal and cannot be recovered without operator action.",
+          "cited_evidence": [
+            {
+              "path": "docs/ingest-design.md",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "id": "judge-2",
+          "statement": "Option C's priority classification is set by the producer and cannot be validated by the consumer, so a misclassification presents as silent data loss rather than as an error.",
+          "cited_evidence": [
+            {
+              "path": "internal/ingest/classify.go",
+              "line": 31
+            }
+          ]
+        },
+        {
+          "id": "judge-3",
+          "statement": "The producer already implements retry with exponential backoff for transport errors, so option A's added cost is a status-code branch rather than new machinery.",
+          "cited_evidence": [
+            {
+              "handle": "grep#7"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "handle": "read#1",
+      "kind": "read",
+      "path": "docs/ingest-design.md",
+      "line": 140,
+      "line_end": 144,
+      "excerpt": "140 ## Durability\n141\n142 Segments are fsynced on rotation only; a crash between rotations loses the tail of the open segment.",
+      "trust_tier": "structured",
+      "cited_by": [
+        "report",
+        "judge-1"
+      ]
+    },
+    {
+      "handle": "read#2",
+      "kind": "read",
+      "path": "internal/ingest/classify.go",
+      "line": 31,
+      "excerpt": "31 // Class is set by the producer and is not validated here.",
+      "trust_tier": "structured",
+      "cited_by": [
+        "report",
+        "judge-2"
+      ]
+    },
+    {
+      "handle": "grep#7",
+      "kind": "grep",
+      "path": "internal/producer",
+      "excerpt": "retry.go:58: backoff := b.Next()",
+      "trust_tier": "structured",
+      "matches": 9,
+      "match_files": 2,
+      "cited_by": [
+        "judge-3"
+      ]
+    }
+  ],
+  "evidence_total": 3,
+  "summary": "Three approaches to shedding load on the ingest queue were drafted independently and judged against one brief. Option A — a bounded buffer that rejects early — is the only shape whose failure mode reaches the producer, and it is recommended. The ring's size is left open and should be measured rather than guessed.",
+  "findings_label": "Options",
+  "findings": [
+    {
+      "id": "A",
+      "title": "Bounded buffer that rejects early",
+      "status": "selected",
+      "impact": "The only shape whose failure mode reaches the producer: a full ring returns 429 and the producer keeps the event.",
+      "action": "Adopt. The producer already retries transport errors, so the added cost is a status-code branch.",
+      "where": [
+        {
+          "path": "internal/ingest/admit.go",
+          "line": 42
+        }
+      ],
+      "disposition": "act"
+    },
+    {
+      "id": "B",
+      "title": "Spill overflow to disk",
+      "status": "rejected",
+      "impact": "Moves the bound to the disk rather than removing it, and exhaustion there is silent and unrecoverable without an operator.",
+      "action": "Revisit only for a future producer that cannot retry, never as the default.",
+      "where": [
+        {
+          "path": "docs/ingest-design.md",
+          "line": 142
+        }
+      ],
+      "disposition": "held"
+    },
+    {
+      "id": "C",
+      "title": "Shed by producer-declared priority",
+      "status": "rejected",
+      "impact": "Correctness would depend on a classification the receiver cannot verify, turning a load problem into silent data loss.",
+      "action": "Do not adopt.",
+      "where": [
+        {
+          "path": "internal/ingest/classify.go",
+          "line": 31
+        }
+      ],
+      "disposition": "held"
+    }
+  ],
+  "ask": {
+    "do": "Approve the bounded buffer so the build can start.",
+    "effort": "small",
+    "why": "It is the only design where a full buffer tells the sender to retry instead of losing events."
+  },
+  "brief": {
+    "question": "How clear is the choice?",
+    "levels": [
+      {
+        "label": "No good option",
+        "means": "None of the options meets the goal; the question needs reframing.",
+        "tone": "high"
+      },
+      {
+        "label": "Close call",
+        "means": "The winner leads, but not by more than the uncertainty.",
+        "tone": "medium"
+      },
+      {
+        "label": "Clear",
+        "means": "One option is better on every measure that mattered.",
+        "tone": "good"
+      }
+    ],
+    "worst": 2,
+    "best": 2,
+    "basis": "the winner leads on every criterion by more than the uncertainty",
+    "dimensions": [
+      "Meets the goal",
+      "Leads on every criterion",
+      "Lead beyond uncertainty"
+    ],
+    "rated": [
+      {
+        "number": 1,
+        "title": "Bounded buffer that rejects early",
+        "answers": [
+          "Yes",
+          "Yes",
+          "Yes"
+        ],
+        "worst": 2,
+        "best": 2
+      }
+    ]
+  },
+  "checks": [
+    {
+      "kind": "area",
+      "subject": "Bounded buffer",
+      "state": "checked"
+    },
+    {
+      "kind": "area",
+      "subject": "Spill to disk",
+      "state": "checked"
+    },
+    {
+      "kind": "area",
+      "subject": "Priority shedding",
+      "state": "checked"
+    }
+  ]
+}

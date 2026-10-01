@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-undo-lifecycle
+title: "Undo file operation"
+scope: "files"
+keywords:
+  - "undo move"
+  - "undo rename"
+  - "undo trash"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.undoLifecycle"

@@ -1,0 +1,30 @@
+tags: [git, mutation]
+description: "Save explicit repository paths temporarily, apply a saved stash, or explicitly drop one. Save preserves unrelated edits and index entries. Apply retains the stash even on success; use drop separately after verifying restoration. Conflicts and partial effects are reported in structured state. Replaces command: git stash."
+schema:
+  type: object
+  properties:
+    action: {type: string, enum: [save, apply, drop], description: "Choose whether to capture selected changes, restore a saved entry, or remove it."}
+    paths:
+      type: array
+      minItems: 1
+      maxItems: 500
+      items: {type: string, minLength: 1}
+      description: "Required for save; exact repo-relative files or directories. Whole-tree implicit stashing is unavailable."
+    ref: {type: string, minLength: 1, description: "Required for apply/drop: object ID or selector from git_stash_list."}
+    message: {type: string, description: "Optional description for save."}
+    include_untracked: {type: boolean, default: false, description: "Include untracked files within the explicit save paths."}
+    reinstate_index: {type: boolean, default: false, description: "Restore the saved staging state on apply."}
+  required: [action]
+  allOf:
+    - if: {properties: {action: {const: save}}}
+      then:
+        required: [paths]
+        properties: {ref: false, reinstate_index: {const: false}}
+    - if: {properties: {action: {enum: [apply, drop]}}}
+      then:
+        required: [ref]
+        properties: {paths: false, message: false, include_untracked: {const: false}}
+    - if: {properties: {action: {const: drop}}}
+      then:
+        properties: {reinstate_index: {const: false}}
+  additionalProperties: false

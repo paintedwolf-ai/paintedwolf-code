@@ -1,0 +1,59 @@
+fixtures:
+- rule: app-delete
+  positive:
+  - auth0 apps delete abc123 --force
+  - auth0 apps rm abc123 --force
+  - sudo auth0 apps delete abc123 --force
+  negative:
+  - auth0 apps list
+  - auth0 apps show abc123
+  - auth0 apps delete abc123
+  - auth0 apps delete abc123 --help
+  - auth0 apps delete abc123 --force --help
+- rule: user-delete
+  # Auth0 user ids contain a literal '|' (e.g. auth0|abc123), which a real
+  # shell treats as a pipe unless the id is quoted — quoted here as it would
+  # have to be in practice.
+  positive:
+  - auth0 users delete 'auth0|abc123' --force
+  - auth0 users rm 'auth0|abc123' --force
+  - sudo auth0 users delete 'auth0|abc123' --force
+  negative:
+  - auth0 users list
+  - auth0 users show 'auth0|abc123'
+  - auth0 users delete 'auth0|abc123'
+  - auth0 users delete 'auth0|abc123' --force --help
+- rule: auth-logic-delete
+  positive:
+  - auth0 actions delete abc123 --force
+  - auth0 rules delete abc123 --force
+  - auth0 rules rm abc123 --force
+  - sudo auth0 actions delete abc123 --force
+  negative:
+  - auth0 actions list
+  - auth0 rules list
+  - auth0 actions delete abc123
+  - auth0 rules delete abc123
+  - auth0 actions delete abc123 --force --help
+- rule: okta-app-delete
+  positive:
+  - okta apps delete 0oa1b2c3d4e5 --force
+  - okta-cli-client application delete --appId 0oa1b2c3d4e5
+  - okta-cli-client application deactivate --appId 0oa1b2c3d4e5
+  - sudo okta apps delete 0oa1b2c3d4e5 --force
+  negative:
+  - okta apps create
+  - okta-cli-client application list
+  - okta-cli-client application get --appId 0oa1b2c3d4e5
+  - okta apps delete 0oa1b2c3d4e5 --help
+- rule: okta-identity-delete
+  positive:
+  - okta-cli-client user delete --userId 00u1b2c3d4e5
+  - okta-cli-client user deactivate --userId 00u1b2c3d4e5
+  - okta-cli-client group delete --groupId 00g1b2c3d4e5
+  - sudo okta-cli-client user delete --userId 00u1b2c3d4e5
+  negative:
+  - okta-cli-client user list
+  - okta-cli-client group get --groupId 00g1b2c3d4e5
+  - okta-cli-client user create --data '{}'
+  - okta-cli-client user delete --userId 00u1b2c3d4e5 --help

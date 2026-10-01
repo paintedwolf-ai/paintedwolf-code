@@ -1,0 +1,103 @@
+{
+  "id": "fact-detector-observations-are-rule-local",
+  "title": "A detector finding produced for one rule is not visible to a later rule",
+  "covers": [
+    "OAR-FACT-11"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "A_FIXTURE",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "jailbreak_score > 0.5"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "B_NOOP",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://noop"
+      },
+      "when": "jailbreak_score > 0.5"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://fixture",
+        "detector://noop"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.output",
+    "detector_facts": {
+      "jailbreak_score": 0.9
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "A_FIXTURE",
+    "rule": "oar.test/A_FIXTURE",
+    "advisories": [
+      {
+        "code": "A_FIXTURE",
+        "rule": "oar.test/A_FIXTURE"
+      }
+    ],
+    "applied": [
+      "oar.test/A_FIXTURE:fired",
+      "oar.test/B_NOOP:passed"
+    ]
+  }
+}

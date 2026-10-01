@@ -1,0 +1,54 @@
+{
+  "id": "cfg-unknown-rule-reference-rejected",
+  "title": "A configuration naming a rule that is not loaded is rejected, naming it",
+  "covers": [
+    "OAR-CFG-4",
+    "OAR-CONF-7"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "PRESENT",
+      "effect": "warn"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "config": [
+      {
+        "oar_config": "1.0",
+        "disable": [
+          "ABSENT"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "error": "ABSENT"
+  }
+}

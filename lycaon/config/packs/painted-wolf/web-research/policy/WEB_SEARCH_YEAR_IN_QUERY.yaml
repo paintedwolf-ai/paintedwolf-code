@@ -1,0 +1,14 @@
+emit: banner
+category: expected_behavior
+severity: info
+message: The query contains {{ paintedwolf.year }} with no explicit search period.
+what: The query contains {{ paintedwolf.year }} as a standalone word, while the search used its default period.
+cause: A year in query text does not set the search time window.
+why: The date window and query terms are separate inputs; this observation does not determine which period the user intended.
+fix: If the requested date window is {{ paintedwolf.year }}, set period="{{ paintedwolf.year }}". If the year names the subject, keep the query and evaluate the returned hits as they are.
+instead: Change the period only when the task calls for that window.
+scenarios:
+- id: bare_year
+  vars: {year: '2025'}
+  expect_contains: ['Code: WEB_SEARCH_YEAR_IN_QUERY', 'period']
+id: WEB_SEARCH_YEAR_IN_QUERY

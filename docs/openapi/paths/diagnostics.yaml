@@ -1,0 +1,27 @@
+paths:
+  /v1/diagnostics/export:
+    get:
+      tags:
+      - health
+      operationId: exportDiagnostics
+      summary: Redacted local diagnostics bundle
+      description: >-
+        Assembles a zip containing health, the preflight report, resolved config,
+        and recent log tails — every byte passed through the shared secret
+        scrubber, with secret stores excluded entirely. The response is bytes for
+        the user to save. Nothing is uploaded.
+      responses:
+        '200':
+          description: Zip archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Diagnostics export assembly failed (diagnostics_export_failed)
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Export format not supported
+message: >-
+  Chat transcripts can be exported as Markdown or JSON only; the
+  requested format is not one of those.
+suggested_action: Choose Markdown or JSON and export again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Markdown or JSON

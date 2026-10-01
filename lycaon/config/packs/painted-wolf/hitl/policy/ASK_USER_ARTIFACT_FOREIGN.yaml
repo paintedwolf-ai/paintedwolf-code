@@ -1,0 +1,34 @@
+oar: '1.0'
+id: ASK_USER_ARTIFACT_FOREIGN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ref
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_ARTIFACT_FOREIGN"
+effect: block
+copy:
+  what: The artifact {{ paintedwolf.ref }} is outside this conversation’s session tree.
+  cause: Tree-scoped lookup denied this reference; no foreign artifact details are exposed.
+  why: Asks may only attach artifacts from the current coordinator session tree.
+  fix: Use an artifact produced under this session tree (worker or coordinator).
+  instead: Branch on Code ASK_USER_ARTIFACT_FOREIGN; attach an in-tree artifact_id
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: artifacts entry is outside this session tree
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Code: ASK_USER_ARTIFACT_FOREIGN'
+  - artifact

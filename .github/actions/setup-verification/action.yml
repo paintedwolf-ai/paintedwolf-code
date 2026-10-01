@@ -1,0 +1,64 @@
+name: Set up verification
+description: Install pinned toolchains and dependencies for hosted verification
+inputs:
+  native:
+    description: Install the Tauri shell build dependencies
+    default: 'false'
+    required: false
+outputs:
+  artifact-root:
+    description: Checkout artifact directory
+    value: ${{ steps.paths.outputs.artifact-root }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve artifact directory
+      id: paths
+      shell: bash
+      run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: lycaon/go.mod
+        cache-dependency-path: |
+          lycaon/go.sum
+          scripts/commentlint/go.sum
+
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version-file: .bun-version
+
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version-file: .node-version
+
+    - name: Install the pinned Rust toolchain
+      shell: bash
+      run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+    - name: Install Tauri Linux build dependencies
+      if: runner.os == 'Linux' && inputs.native == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
+          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      if: inputs.native == 'true'
+      with:
+        workspaces: lycaon-den/src-tauri
+
+    - name: Set up maintained OpenGrep
+      if: runner.os == 'macOS'
+      uses: ./.github/actions/setup-opengrep
+
+    - name: Install frontend dependencies
+      shell: bash
+      working-directory: lycaon-den
+      run: bun install --frozen-lockfile
+
+    - name: Generate third-party notices
+      shell: bash
+      run: ./task licenses:notices

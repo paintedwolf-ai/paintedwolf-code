@@ -1,0 +1,49 @@
+title: Write to a block device
+id: a3687cae-daa4-43df-ab98-3d8418eff1fd
+description: Overwrites or formats a block device, destroying data on it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_dd:
+    Image: dd
+    CommandLine|contains: ' of=/dev/'
+  selection_mkfs:
+    Image|startswith: mkfs
+  selection_newfs:
+    Image:
+      - newfs
+      - newfs_hfs
+  selection_diskutil:
+    Image:
+      - diskutil
+    CommandLine|contains:
+      - ' erase'
+      - ' partition'
+      - ' reformat'
+      - ' zeroDisk'
+      - ' secureErase'
+  # These /dev entries are character devices that discard what is written to
+  # them, so a write there destroys nothing this rule is about.
+  filter_discard_target:
+    CommandLine|contains:
+      - ' of=/dev/null'
+      - ' of=/dev/zero'
+      - ' of=/dev/stdout'
+      - ' of=/dev/stderr'
+      - ' of=/dev/tty'
+  filter_rehearsal:
+    Argv|re: '^(--help|help)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_dd or selection_mkfs or selection_newfs or selection_diskutil) and not filter_discard_target and not filter_rehearsal and not filter_local

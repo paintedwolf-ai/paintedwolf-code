@@ -1,0 +1,13 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': phase.exit_required
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-phase-exit-required
+tier: builtin
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - turn ended while the active workflow phase requires an exit action
+  required:
+  - workflow_advance

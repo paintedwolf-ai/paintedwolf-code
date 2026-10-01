@@ -1,0 +1,12 @@
+id: painted-wolf/platform:session-prev
+title: "Previous session"
+icon: arrow-up
+scope: "global"
+keywords:
+  - "prev session"
+  - "earlier session"
+when:
+  fact: "project_open"
+action:
+  kind: native_ui
+  handler: "session.prev"

@@ -1,0 +1,4 @@
+# Audit / authz ledger runtime config.
+audit:
+  # When true, authz_events detail_json may include raw argv for tool events.
+  capture_raw_argv: false

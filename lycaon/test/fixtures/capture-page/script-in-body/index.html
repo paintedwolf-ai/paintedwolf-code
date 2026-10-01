@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><title>Script in body</title><style>.log { color: #333; }</style></head>
+<body>
+<div id="log"></div>
+<script>
+const uniqueScriptMarker = "SCRIPT_SOURCE_MUST_NOT_APPEAR_IN_TREE";
+const log = document.getElementById("log");
+const row = document.createElement("div");
+row.textContent = "rendered row";
+log.appendChild(row);
+</script>
+</body></html>

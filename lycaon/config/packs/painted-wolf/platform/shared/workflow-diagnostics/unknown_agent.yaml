@@ -1,0 +1,5 @@
+code: unknown_agent
+message: |
+  Unknown agent {{agent}}.
+replacement: |
+  Use an agent id from config/catalog/agents.

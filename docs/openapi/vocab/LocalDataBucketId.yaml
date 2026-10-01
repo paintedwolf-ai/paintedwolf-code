@@ -1,0 +1,20 @@
+# LocalDataBucketId — rebuildable buckets listed under Settings → Advanced → Cache.
+name: LocalDataBucketId
+description: Closed set of rebuildable local-data bucket ids.
+go_const_prefix: LocalDataBucket
+go_file: local_data_bucket_ids.generated.go
+values:
+  - id: web_index
+  - id: source_observations
+  - id: source_catalog
+  - id: fetch_cache
+  - id: osv_cache
+    go: OSVCache
+  - id: modelfeed
+  - id: pricing_cache
+  - id: browser_cache
+  - id: extension_cache
+  - id: debug_logs
+  - id: scan_scratch
+  - id: worker_branches
+  - id: session_scratch

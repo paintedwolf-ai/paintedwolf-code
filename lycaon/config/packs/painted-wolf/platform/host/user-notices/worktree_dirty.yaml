@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Worktree has changes
+message: The worktree has uncommitted changes. Commit or discard them first.
+suggested_action: Commit or discard the worktree changes, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - uncommitted changes

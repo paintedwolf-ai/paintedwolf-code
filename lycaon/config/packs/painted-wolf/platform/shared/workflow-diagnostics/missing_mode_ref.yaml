@@ -1,0 +1,5 @@
+code: missing_mode_ref
+message: |
+  Mode ref {{mode_ref}} does not resolve to a prompt file ({{path}}).
+replacement: |
+  Add the coordinator-mode partial under config/packs/painted-wolf/platform/agents/prompts/.

@@ -1,0 +1,67 @@
+oar: '1.0'
+id: SANDBOX_WORKTREE_BEHIND_INDEX
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.worktree_stale_paths
+    - paintedwolf.worktree_leftover_paths
+    - paintedwolf.worktree_conflict_paths
+when: >-
+  paintedwolf.confine_applied
+  && (size(paintedwolf.worktree_stale_paths) > 0
+  || size(paintedwolf.worktree_leftover_paths) > 0
+  || size(paintedwolf.worktree_conflict_paths) > 0)
+on_error: fail_open
+effect: warn
+copy:
+  what: >-
+    `{{ tool }}` changed the Git index for agent-policy files the sandbox kept
+    unchanged in the worktree.
+  cause: >-
+    The worktree still holds the earlier content of
+    {% if paintedwolf.worktree_stale_paths %}{{ paintedwolf.worktree_stale_paths }}{% endif %}{% if paintedwolf.worktree_leftover_paths %}
+    {{ paintedwolf.worktree_leftover_paths }} (no longer in the index){% endif %}{% if paintedwolf.worktree_conflict_paths %}
+    {{ paintedwolf.worktree_conflict_paths }} (unmerged, without conflict markers){% endif %}.
+    Git can exit 0 when it cannot update a file.
+  why: >-
+    Later reads, diffs, and commits would mix the index's new state with the
+    worktree's old one.
+  fix: >-
+    If the command meant to update these files (a checkout, merge, reset
+    --hard, pull, or stash), finish the update with native tools, whose changes
+    follow the project approval posture: git_restore for stale files, delete for
+    files the index dropped, and edit to resolve unmerged files. If the command
+    only changed staging, no action is needed.
+  instead: Finish the update with git_restore, delete, or edit — do not rerun the
+    Git command under the same sandbox
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: Git index changed for agent-policy files the sandbox kept in the worktree
+x-paintedwolf-scenarios:
+  - id: branch_switch
+    vars:
+      tool: command
+      worktree_stale_paths: [AGENTS.md, lycaon/AGENTS.md]
+      worktree_leftover_paths: []
+      worktree_conflict_paths: []
+    expect_contains:
+      - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
+      - git_restore
+      - lycaon/AGENTS.md
+  - id: merge_conflict
+    vars:
+      tool: command
+      worktree_stale_paths: []
+      worktree_leftover_paths: []
+      worktree_conflict_paths: [.paintedwolf/skills/review/SKILL.md]
+    expect_contains:
+      - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
+      - unmerged

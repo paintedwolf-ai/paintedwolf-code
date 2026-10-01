@@ -1,0 +1,27 @@
+tags: [git, mutation]
+description: "Merge a revision into the current branch. Rehearses and reviews file effects. Conflicts are explicit and retain the merge state: edit resolutions, then continue with explicit paths; abort only when asked to discard merge work. Check status and after state, not diagnostics, for success. Replaces command: git merge."
+schema:
+  type: object
+  properties:
+    action: {type: string, enum: [start, continue, abort], default: start, description: "Begin, finish after resolving conflicts, or abandon the active merge."}
+    ref: {type: string, minLength: 1, description: "Revision to merge for start."}
+    mode: {type: string, enum: [ff, ff_only, no_ff], default: ff, description: "Allow fast-forward, require fast-forward, or create a merge commit."}
+    commit: {type: boolean, default: true, description: "Record the merge commit on start. false stages the merge result and leaves the merge active; finish it with continue."}
+    message: {type: string, description: "Optional merge commit message."}
+    paths:
+      type: array
+      maxItems: 500
+      items: {type: string, minLength: 1}
+      description: "Explicit resolved paths to stage when continuing a merge."
+  allOf:
+    - if: {properties: {action: {const: start}}}
+      then:
+        required: [ref]
+        properties: {paths: false}
+    - if: {required: [action], properties: {action: {const: continue}}}
+      then:
+        properties: {ref: false, mode: false, commit: false}
+    - if: {required: [action], properties: {action: {const: abort}}}
+      then:
+        properties: {ref: false, mode: false, commit: false, paths: false, message: false}
+  additionalProperties: false

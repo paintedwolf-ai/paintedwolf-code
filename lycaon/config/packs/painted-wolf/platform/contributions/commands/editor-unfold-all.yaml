@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-unfold-all
+title: "Unfold all"
+scope: files
+category: editing
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.unfoldAll"

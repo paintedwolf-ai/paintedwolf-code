@@ -1,0 +1,52 @@
+{
+  "id": "sel-anchor-clause-is-core",
+  "title": "The core fact anchor may be named by a clause without any requires",
+  "covers": [
+    "OAR-SEL-7",
+    "OAR-FACT-15"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ONLY_PRE_INVOKE",
+      "effect": "warn",
+      "selector": {
+        "anchor": [
+          "tool.pre_invoke"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "ONLY_PRE_INVOKE"
+  }
+}

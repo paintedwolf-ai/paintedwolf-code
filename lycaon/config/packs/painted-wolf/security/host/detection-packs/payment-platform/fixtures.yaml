@@ -1,0 +1,17 @@
+fixtures:
+- rule: object-delete
+  positive:
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 -c
+  - stripe delete /v1/products/prod_9s6XKzkNRiz8i3 --confirm
+  - stripe delete /v1/subscriptions/sub_9s6XKzkNRiz8i3 -c
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 --confirm --live
+  - sudo stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 -c
+  - STRIPE DELETE /V1/CUSTOMERS/cus_9s6XKzkNRiz8i3 -C
+  negative:
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3
+  - stripe get /v1/customers/cus_9s6XKzkNRiz8i3
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 -c --help
+  - stripe post /v1/customers -d name=test
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 --currency usd
+  - stripe delete /v2/customers/cus_9s6XKzkNRiz8i3 -c
+  - stripe delete /v1/customers/cus_9s6XKzkNRiz8i3 -confirm

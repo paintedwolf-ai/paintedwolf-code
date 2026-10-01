@@ -1,0 +1,668 @@
+rules:
+- id: lycaon.python.command-injection
+  languages:
+  - python
+  severity: ERROR
+  message: Request input reaches a shell command; use a fixed program and separate arguments
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: &id001
+  - pattern: flask.request.args.get(...)
+    exact: true
+  - pattern: flask.request.args[...]
+    exact: true
+  - pattern: flask.request.form.get(...)
+    exact: true
+  - pattern: flask.request.form[...]
+    exact: true
+  - pattern: flask.request.json[...]
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.GET
+      - pattern: $REQ.GET[...]
+      - pattern: $REQ.GET.get(...)
+      - pattern: $REQ.GET.getlist(...)
+      - pattern: $REQ.POST
+      - pattern: $REQ.POST[...]
+      - pattern: $REQ.POST.get(...)
+      - pattern: $REQ.POST.getlist(...)
+      - pattern: $REQ.COOKIES
+      - pattern: $REQ.COOKIES[...]
+      - pattern: $REQ.COOKIES.get(...)
+      - pattern: $REQ.headers
+      - pattern: $REQ.headers[...]
+      - pattern: $REQ.headers.get(...)
+      - pattern: $REQ.body
+    - metavariable-type:
+        metavariable: $REQ
+        type: django.http.HttpRequest
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: request.GET
+      - pattern: request.GET[...]
+      - pattern: request.GET.get(...)
+      - pattern: request.GET.getlist(...)
+      - pattern: request.POST
+      - pattern: request.POST[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST.getlist(...)
+      - pattern: request.COOKIES
+      - pattern: request.COOKIES[...]
+      - pattern: request.COOKIES.get(...)
+      - pattern: request.headers
+      - pattern: request.headers[...]
+      - pattern: request.headers.get(...)
+      - pattern: request.body
+    - pattern-not-inside: 'request = ...
+
+        ...
+
+        '
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.query_params
+      - pattern: $REQ.query_params[...]
+      - pattern: $REQ.query_params.get(...)
+      - pattern: $REQ.query_params.getlist(...)
+      - pattern: $REQ.path_params
+      - pattern: $REQ.path_params[...]
+      - pattern: $REQ.path_params.get(...)
+      - pattern: $REQ.headers
+      - pattern: $REQ.headers[...]
+      - pattern: $REQ.headers.get(...)
+      - pattern: $REQ.cookies
+      - pattern: $REQ.cookies[...]
+      - pattern: $REQ.cookies.get(...)
+      - pattern: await $REQ.json()
+      - pattern: await $REQ.body()
+      - pattern: await $REQ.form()
+    - metavariable-type:
+        metavariable: $REQ
+        type: fastapi.Request
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.query_params
+      - pattern: $REQ.query_params[...]
+      - pattern: $REQ.query_params.get(...)
+      - pattern: $REQ.query_params.getlist(...)
+      - pattern: $REQ.path_params
+      - pattern: $REQ.path_params[...]
+      - pattern: $REQ.path_params.get(...)
+      - pattern: $REQ.headers
+      - pattern: $REQ.headers[...]
+      - pattern: $REQ.headers.get(...)
+      - pattern: $REQ.cookies
+      - pattern: $REQ.cookies[...]
+      - pattern: $REQ.cookies.get(...)
+      - pattern: await $REQ.json()
+      - pattern: await $REQ.body()
+      - pattern: await $REQ.form()
+    - metavariable-type:
+        metavariable: $REQ
+        type: starlette.requests.Request
+    exact: true
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-inside: |-
+            $APP = $FACTORY(...)
+            ...
+        - metavariable-name:
+            metavariable: $FACTORY
+            module: fastapi
+            symbol:
+            - FastAPI
+      - patterns:
+        - pattern-inside: |-
+            $APP = $FACTORY(...)
+            ...
+        - metavariable-name:
+            metavariable: $FACTORY
+            module: fastapi
+            symbol:
+            - APIRouter
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|trace|api_route)$
+    - pattern-not-inside: |-
+        $APP = ...
+        ...
+        $APP = ...
+        ...
+    - pattern-not-inside: |-
+        def $OUTER(..., $APP, ...):
+            ...
+    - pattern-not-inside: |-
+        $APP.$METHOD = ...
+        ...
+    - pattern-either:
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str, ...):
+                ...
+        - pattern-not: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = $DEFAULT, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = "...", ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = None, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Query(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Query(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Path(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Path(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Header(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Header(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Cookie(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Cookie(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Body(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Body(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str = fastapi.Form(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str, fastapi.Form(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None, ...):
+                ...
+        - pattern-not: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = $DEFAULT, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = "...", ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = None, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Query(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Query(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Path(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Path(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Header(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Header(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Cookie(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Cookie(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Body(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Body(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: str | None = fastapi.Form(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[str | None, fastapi.Form(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str], ...):
+                ...
+        - pattern-not: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = $DEFAULT, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = "...", ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = None, ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Query(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Query(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Path(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Path(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Header(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Header(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Cookie(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Cookie(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Body(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Body(...)], ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Optional[str] = fastapi.Form(...), ...):
+                ...
+      - patterns:
+        - pattern: |-
+            @$APP.$METHOD(...)
+            def $F(..., $PARAM: typing.Annotated[typing.Optional[str], fastapi.Form(...)], ...):
+                ...
+    - focus-metavariable: $PARAM
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: os.system($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: os.popen($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: subprocess.run($CMD, ..., shell=True, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: subprocess.Popen($CMD, ..., shell=True, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: subprocess.call($CMD, ..., shell=True, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: subprocess.check_call($CMD, ..., shell=True, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: subprocess.check_output($CMD, ..., shell=True, ...)
+    - focus-metavariable: $CMD
+  pattern-sanitizers:
+  - pattern: shlex.quote(...)
+    exact: true
+- id: lycaon.python.sql-injection
+  languages:
+  - python
+  severity: ERROR
+  message: Request input reaches SQL text; bind values as query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.execute($SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB.executemany($SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $MODEL.objects.raw($SQL, ...)
+    - focus-metavariable: $SQL
+  pattern-sanitizers:
+  - pattern-either:
+    - patterns:
+      - pattern: $CONVERTER(...)
+      - metavariable-regex:
+          metavariable: $CONVERTER
+          regex: ^(int|float)$
+      - metavariable-name:
+          metavariable: $CONVERTER
+          kind: unbound
+    - patterns:
+      - pattern: $CONVERTER(...)
+      - metavariable-regex:
+          metavariable: $CONVERTER
+          regex: ^(int|float)$
+      - metavariable-name:
+          metavariable: $CONVERTER
+          module: builtins
+          symbol:
+          - int
+    - patterns:
+      - pattern: $CONVERTER(...)
+      - metavariable-regex:
+          metavariable: $CONVERTER
+          regex: ^(int|float)$
+      - metavariable-name:
+          metavariable: $CONVERTER
+          module: builtins
+          symbol:
+          - float
+    exact: true
+- id: lycaon.python.path-traversal
+  languages:
+  - python
+  severity: ERROR
+  message: Request input selects a filesystem path; enforce a trusted root
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: open($PATH, ...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: pathlib.Path($PATH).read_text(...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: flask.send_file($PATH, ...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: django.http.FileResponse($PATH, ...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: fastapi.responses.FileResponse($PATH, ...)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: starlette.responses.FileResponse($PATH, ...)
+    - focus-metavariable: $PATH
+- id: lycaon.python.ssrf
+  languages:
+  - python
+  severity: ERROR
+  message: Request input selects a server-side HTTP destination; validate allowed origins
+  metadata:
+    category: security
+    cwe: CWE-918
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: requests.get($URL, ...)
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: requests.post($URL, ...)
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: urllib.request.urlopen($URL, ...)
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: httpx.get($URL, ...)
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: httpx.post($URL, ...)
+    - focus-metavariable: $URL
+  pattern-sanitizers:
+  - patterns:
+    - pattern: $BASE + $REST
+    - metavariable-regex:
+        metavariable: $BASE
+        regex: ^["']https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[^"'\\]*["']$
+    exact: true
+- id: lycaon.python.code-injection
+  languages:
+  - python
+  severity: ERROR
+  message: Request input reaches dynamic Python evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: eval($CODE, ...)
+    - focus-metavariable: $CODE
+  - patterns:
+    - pattern: exec($CODE, ...)
+    - focus-metavariable: $CODE
+- id: lycaon.python.unsafe-deserialization
+  languages:
+  - python
+  severity: ERROR
+  message: Request input reaches an executable deserializer; use a data-only format
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: pickle.loads($DATA, ...)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: pickle.load($DATA, ...)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: yaml.unsafe_load($DATA, ...)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: yaml.load($DATA, Loader=yaml.UnsafeLoader)
+    - focus-metavariable: $DATA
+- id: lycaon.python.template-injection
+  languages:
+  - python
+  severity: ERROR
+  message: Request input becomes a template; pass it as template data
+  metadata:
+    category: security
+    cwe: CWE-1336
+    confidence: HIGH
+    technology:
+    - python
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: flask.render_template_string($TEMPLATE, ...)
+    - focus-metavariable: $TEMPLATE
+  - patterns:
+    - pattern: jinja2.Template($TEMPLATE, ...)
+    - focus-metavariable: $TEMPLATE
+  - patterns:
+    - pattern: django.template.Template($TEMPLATE, ...)
+    - focus-metavariable: $TEMPLATE
+- id: lycaon.python.tls-verification-disabled
+  languages:
+  - python
+  severity: ERROR
+  message: TLS certificate verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - python
+  pattern-either:
+  - pattern: requests.$METHOD(..., verify=False, ...)
+  - pattern: ssl._create_unverified_context(...)
+- id: lycaon.python.archive-fully-trusted
+  languages:
+  - python
+  severity: ERROR
+  message: Archive extraction explicitly permits unsafe paths and links
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - python
+  pattern: $TAR.extractall(..., filter="fully_trusted", ...)
+- id: lycaon.python.weak-rsa-key
+  languages:
+  - python
+  severity: ERROR
+  message: RSA key generation uses fewer than 2048 bits
+  metadata:
+    category: security
+    cwe: CWE-326
+    confidence: HIGH
+    technology:
+    - python
+  patterns:
+  - pattern: rsa.generate_private_key(...,key_size=$BITS,...)
+  - metavariable-comparison:
+      metavariable: $BITS
+      comparison: $BITS < 2048
+- id: lycaon.python.xml-network-entities
+  languages:
+  - python
+  severity: ERROR
+  message: XML parsing explicitly resolves entities with network access enabled
+  metadata:
+    category: security
+    cwe: CWE-611
+    confidence: HIGH
+    technology:
+    - python
+  pattern: lxml.etree.XMLParser(...,resolve_entities=True,...,no_network=False,...)
+- id: lycaon.python.weak-cipher
+  languages:
+  - python
+  severity: ERROR
+  message: DES encryption is cryptographically broken
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - python
+  pattern: Crypto.Cipher.DES.new(...)

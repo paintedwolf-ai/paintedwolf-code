@@ -1,0 +1,5 @@
+code: review_loop_incomplete
+message: |
+  review_loop evidence_key {{key}} is missing gate-feedback or verdict fixture closure.
+replacement: |
+  Add gate-feedback YAML and a verdict fixture for this evidence key.

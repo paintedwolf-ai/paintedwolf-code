@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': coordinator.citation.grounding
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-citation-grounding
+tier: builtin
+invariants:
+  trigger_class: tool_rejection
+  fires_in:
+  - closeout citations rejected for untraced cited_evidence or cited_urls (handle/unverifiable
+    in-session retry; citations-required host-assembles)
+  required:
+  - citations fence
+  - cited_evidence
+  forbidden:
+  - workflow_advance

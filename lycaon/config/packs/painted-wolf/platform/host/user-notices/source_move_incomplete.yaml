@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - held_path
+    - reason
+title: "Move needs recovery"
+retryable: true
+message: "The move could not finish. {{ reason }}"
+suggested_action: "Keep the retained source in place. Resolve the reported issue, then retry to finish the move."
+scenarios:
+  - id: default
+    vars: {reason: "The destination is occupied."}
+    expect_contains: ["The move could not finish"]

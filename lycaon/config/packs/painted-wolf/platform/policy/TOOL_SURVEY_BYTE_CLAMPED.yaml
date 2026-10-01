@@ -1,0 +1,25 @@
+emit: banner
+category: informational
+severity: info
+message: >-
+  Survey output trimmed to the session byte cap: retained {{ paintedwolf.kept }} {{ paintedwolf.kept_unit }} in {{ paintedwolf.page_key }} from offset {{ paintedwolf.offset }}.
+  {% if paintedwolf.next_offset %}Continue with offset={{ paintedwolf.next_offset }} for the same scope and filters.{% else %}No advancing continuation was retained; narrow the scope or use an offered alternative instead of repeating this page.{% endif %}
+cause: Survey JSON exceeded max_tool_result_bytes before LLM history append
+why: >-
+  The projection preserves valid survey JSON and reports its actual continuation. A shortened page is not a failed tool call.
+fix: >-
+  When the payload provides next_offset, pass that value as the next call's offset, retaining the same path and filters. next_offset is a result field, not an input argument. Stop at the end or when no usable continuation is supplied.
+instead: >-
+  Branch on truncated and the returned next_offset; preserve the accepted page and do not repeat identical pagination arguments.
+scenarios:
+- id: default
+  vars:
+    kept: 40
+    kept_unit: entries
+    next_offset: 140
+    offset: 100
+    page_key: results
+  expect_contains:
+  - 'Code: TOOL_SURVEY_BYTE_CLAMPED'
+  - next_offset
+id: TOOL_SURVEY_BYTE_CLAMPED

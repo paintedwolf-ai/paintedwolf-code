@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COORDINATOR_OVERLAY_PATH_READ_FORBIDDEN
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.path
+    - paintedwolf.path_is_worker_branch
+when: paintedwolf.path_is_worker_branch
+effect: block
+copy:
+  what: 'The coordinator request names a private worker sandbox path: {{ paintedwolf.path }}.'
+  cause: Worker sandbox paths are not coordinator filesystem inputs.
+  why: Overlay previews carry the worker intent and structured merge/conflict state without bypassing workspace ownership.
+  fix: 'When preview_overlay is offered, use the existing overlay id and a repository-relative product path from the worker result. Inspect branch_delta and path_status before choosing a merge action. Otherwise use retained worker evidence and state any limitation on the current report turn.'
+  instead: 'Preserve the worker and overlay identities. Do not read private sandbox paths, guess another filesystem route, or restart work merely to inspect an overlay.'
+
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:path_is_worker_branch
+x-paintedwolf-message: 'Coordinator cannot access worker sandboxes — use `preview_overlay(path={{ paintedwolf.path }})`'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: src/main.rs
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_OVERLAY_PATH_READ_FORBIDDEN'
+      - preview_overlay

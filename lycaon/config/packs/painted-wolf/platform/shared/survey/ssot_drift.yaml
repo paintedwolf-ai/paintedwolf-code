@@ -1,0 +1,29 @@
+id: ssot_drift
+description: "Use when auditing where env/config/stores are duplicated (env reads, stores, route literals, config-vs-code constants)"
+probes:
+  - kind: grep
+    pattern: "os\\.Getenv|os\\.LookupEnv|os\\.Environ"
+    path: "."
+    label: env_reads
+    priority: 10
+  - kind: grep
+    pattern: "[\"']/v1/[A-Za-z0-9_./\\-{}:]*[\"']"
+    path: "."
+    label: route_literals
+    priority: 9
+    emit_cap: 40
+  - kind: find
+    name_glob: "*store*.go"
+    path: "."
+    label: store_files
+    priority: 7
+  - kind: find
+    name_glob: "*.sql.go"
+    path: "."
+    label: sql_stores
+    priority: 7
+  - kind: grep
+    pattern: "DefaultSession|bundledPath|UserConfigDir"
+    path: "."
+    label: config_constants
+    priority: 5

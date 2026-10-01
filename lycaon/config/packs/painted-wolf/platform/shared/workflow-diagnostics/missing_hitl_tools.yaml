@@ -1,0 +1,5 @@
+code: missing_hitl_tools
+message: |
+  Phase {{phase}} implies HITL tools but surface {{surface}} is missing {{tool}}.
+replacement: |
+  Add {{tool}} to the resolved surface tools (ask_user and wait are required when gates/on_enter imply tool-ask or intake).

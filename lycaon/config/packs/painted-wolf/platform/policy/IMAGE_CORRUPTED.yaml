@@ -1,0 +1,38 @@
+oar: '1.0'
+id: IMAGE_CORRUPTED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_image
+  - fetch_url
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.format
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "IMAGE_CORRUPTED"
+effect: block
+copy:
+  what: '{{ tool }} could not decode {{ paintedwolf.path }} as a valid {{ paintedwolf.format }} image.'
+  cause: 'The image decoder reported: {{ paintedwolf.rejection_reason }}.'
+  why: The file contents are corrupted, truncated, or not a valid image stream.
+  fix: Verify how the image was generated or downloaded, and re-generate or re-fetch it.
+  instead: Branch on Code IMAGE_CORRUPTED; re-author or re-fetch the image file
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
+x-paintedwolf-message: view_image decoded corrupted file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    format: png
+    path: assets/bad.png
+    profile: coordinator
+    reason: 'png: invalid format'
+    tool: view_image
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: IMAGE_CORRUPTED'

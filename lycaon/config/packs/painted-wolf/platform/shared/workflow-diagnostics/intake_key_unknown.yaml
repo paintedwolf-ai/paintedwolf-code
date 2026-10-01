@@ -1,0 +1,5 @@
+code: intake_key_unknown
+message: |
+  Intake key {{key}} on phase {{phase}} is unknown.
+replacement: |
+  Use a declared intake key.

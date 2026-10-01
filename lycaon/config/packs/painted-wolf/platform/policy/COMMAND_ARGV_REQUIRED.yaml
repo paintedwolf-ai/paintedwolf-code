@@ -1,0 +1,30 @@
+oar: '1.0'
+id: COMMAND_ARGV_REQUIRED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "COMMAND_ARGV_REQUIRED"
+effect: block
+copy:
+  what: '`command()` was called with neither `command` nor `pipeline`.'
+  cause: The host does not remember the last argv. Omitting both is not a retry and is not `verify()`.
+  why: Every `command()` call must carry the argv to run. A Code that says to reissue means pass `command` or `pipeline` again on this call.
+  fix: 'Pass `command: "…"` for one stage or `pipeline: ["…", "…"]` for a multi-stage run. Do not omit both.'
+  instead: 'Retry `command()` with `command` or `pipeline` (not both); omit-command is `verify()` only'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command() needs command or pipeline
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COMMAND_ARGV_REQUIRED'
+      - neither `command` nor `pipeline`

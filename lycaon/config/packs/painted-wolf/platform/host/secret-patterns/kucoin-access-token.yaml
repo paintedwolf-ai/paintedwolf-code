@@ -1,0 +1,5 @@
+id: kucoin-access-token
+upstream_id: kucoin-access-token
+title: KuCoin API key
+severity: critical
+enabled: false

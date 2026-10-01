@@ -1,0 +1,19 @@
+rules:
+- id: lycaon.vue.route-html-injection
+  languages:
+  - generic
+  severity: ERROR
+  message: Route query data is rendered directly as HTML
+  metadata:
+    category: security
+    cwe: CWE-79
+    confidence: HIGH
+    technology:
+    - vue
+    parser_mode: generic
+  patterns:
+  - pattern: v - html = " $ route . query . $KEY "
+  - pattern-not-inside: < ! -- ... -- >
+  paths:
+    include:
+    - '*.vue'

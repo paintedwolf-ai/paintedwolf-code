@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Scan not found
+message: This scan is no longer available.
+suggested_action: Reload the scan history and select another run.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [no longer available, Reload the scan history]

@@ -1,0 +1,49 @@
+oar: '1.0'
+id: HELD_CALL_DUPLICATE_RUNNING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - find
+    - grep
+    - wc
+    - list_dir
+    - summarize
+    - survey_repo
+    - diff
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_compare
+    - git_branches
+    - git_ref
+    - git_stash_list
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.handle
+when: paintedwolf.rejection_code == "HELD_CALL_DUPLICATE_RUNNING"
+effect: block
+copy:
+  what: This exact call is already running as held call {{ paintedwolf.handle }}.
+  cause: An identical call outlived its foreground wait and is still running.
+  why: Repeating it starts the same work again and cannot return a newer result.
+  fix: Wait on the handle, read it with held_result, or cancel it with held_stop.
+  instead: Continue with the running call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:held_call
+x-paintedwolf-message: identical call already held
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handle: held-1
+      profile: coordinator
+      tool: find
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: HELD_CALL_DUPLICATE_RUNNING'
+      - held_result

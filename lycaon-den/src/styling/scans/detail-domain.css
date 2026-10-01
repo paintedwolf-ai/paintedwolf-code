@@ -1,0 +1,90 @@
+/* Detail chrome and scrolling come from the shared pane. */
+.den-scans-detail-title {
+  margin: 0 0 4px;
+  font-size: var(--text-den-subhead);
+  font-weight: 550;
+  line-height: 1.45;
+  color: var(--den-text);
+  overflow-wrap: anywhere;
+}
+
+.den-scans-drill-grid {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 8px 12px;
+  margin: 0 0 16px;
+  font-size: var(--text-den-body);
+}
+
+.den-scans-drill-grid dt {
+  color: var(--den-text-muted);
+  margin: 0;
+  font-weight: 500;
+}
+
+.den-scans-drill-grid dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--den-text);
+}
+
+.den-scans-drill-grid ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--den-text);
+}
+
+.den-scans-mono {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  word-break: break-all;
+}
+
+.den-scans-snippet-label {
+  margin: 0 0 6px;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-scans-snippet {
+  border-radius: var(--den-radius-shell);
+  border: 1px solid var(--den-line);
+  background: var(--den-background);
+}
+
+.den-scans-snippet__content {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+/* Tighten fixed chrome on short stages. */
+@media (max-height: 620px) {
+  .den-scans-chrome-chips__filters {
+    padding-bottom: 6px;
+  }
+
+  .project-scans-view .den-browse-chrome__meta {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+:root[data-den-appearance="dark"] .den-scans-list-pane {
+  background: var(--den-background);
+}
+
+:root[data-den-appearance="dark"] .den-scans-row--active {
+  background: var(--den-selection);
+}
+
+:root[data-den-appearance="dark"] .den-scans-row:hover {
+  background: var(--den-selection-hover);
+}
+

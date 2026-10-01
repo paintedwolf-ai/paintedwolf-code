@@ -1,0 +1,5 @@
+code: missing_surface_template
+message: |
+  Surface template {{path}} does not exist.
+replacement: |
+  Point surface_template at an existing agents/… prompt under config/packs/painted-wolf/platform/agents/prompts/.

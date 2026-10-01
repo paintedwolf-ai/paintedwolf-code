@@ -1,0 +1,42 @@
+title: Delete a search index
+id: 46efefc9-80b0-448f-ad4d-d579af9aa216
+description: Deletes a named index and the documents in it from an Elasticsearch or OpenSearch cluster.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # There is no universal ES/OpenSearch CLI; the REST API is reached directly
+  # over curl. The default ports (9200 Elasticsearch, 9200/9250 OpenSearch) keep
+  # this from matching an unrelated DELETE to some other API — but every managed
+  # cluster serves on 443 instead, so the provider endpoint suffixes carry the
+  # same scoping job for those.
+  selection_curl:
+    Image: curl
+    CommandLine|re: '(?i)-X\s*DELETE|--request\s+DELETE'
+  selection_port:
+    CommandLine|re: ':92(00|50)\b'
+  selection_managed_endpoint:
+    CommandLine|contains:
+      - '.elastic-cloud.com'
+      - '.found.io'
+      - '.cloud.es.io'
+      - '.es.amazonaws.com'
+      - '.aoss.amazonaws.com'
+  # A DELETE against every index at once is a separate, louder rule.
+  filter_cluster_wide:
+    CommandLine|re: '/_all\b|/\*(\s|$|["'']?)'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_curl and (selection_port or selection_managed_endpoint) and not filter_cluster_wide and not filter_rehearsal and not filter_local

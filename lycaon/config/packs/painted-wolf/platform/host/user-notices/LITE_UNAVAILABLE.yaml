@@ -1,0 +1,83 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: >-
+  {% if reason == "refused" %}Helper model is not available{% elif reason == "silent" %}Helper model stopped answering{% elif reason == "overloaded" %}Helper model is busy{% else %}Can't reach the helper model{% endif %}
+message: >-
+  {% if reason == "refused" -%}
+  The small model used for titles, summaries, and drafts was declined by its
+  host{% if provider_id %} ({{ provider_id }}){% endif %}. Chat still uses your
+  main model. Names and extra summaries stay blank until a different helper
+  model is chosen.
+  {%- elif reason == "silent" -%}
+  The small model used for titles, summaries, and drafts accepted a request
+  but sent nothing back before its connection limit{% if provider_id %}
+  ({{ provider_id }}){% endif %}. Chat still uses your main model. Names and
+  extra summaries may stay blank until the helper answers again.
+  {%- elif reason == "overloaded" -%}
+  The host of the small model used for titles, summaries, and drafts kept
+  answering that it is at capacity{% if provider_id %} ({{ provider_id }}){% endif %}.
+  Chat still uses your main model. Names and extra summaries may stay blank
+  until the helper has room again.
+  {%- else -%}
+  Painted Wolf Code could not connect to the small model used for titles,
+  summaries, and drafts{% if provider_id %} ({{ provider_id }}){% endif %}.
+  Chat still uses your main model. Names and extra summaries may stay blank
+  until the helper is back.
+  {%- endif %}
+suggested_action: >-
+  {% if reason == "refused" -%}
+  Open Settings → AI providers and pick a different lite model. This one is not
+  available on the connected account.
+  {%- elif reason == "silent" -%}
+  If the helper runs on a local server, check that it is not stuck, or restart
+  it. Painted Wolf Code tries the helper again on its own.
+  {%- elif reason == "overloaded" -%}
+  Painted Wolf Code tries the helper again on its own. If this keeps happening,
+  open Settings → AI providers and choose a less busy lite model.
+  {%- else -%}
+  Open Settings → AI providers and check the lite model. If it is a local
+  server, make sure it is running, then use Test connection.
+  {%- endif %}
+action: open_ai_providers
+context_schema:
+  optional:
+    - reason
+    - provider_id
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - helper model
+      - AI providers
+  - id: unreachable
+    vars:
+      provider_id: ollama-1
+      reason: unreachable
+    expect_contains:
+      - could not connect
+      - ollama-1
+      - Test connection
+  - id: silent
+    vars:
+      provider_id: ollama-1
+      reason: silent
+    expect_contains:
+      - stopped answering
+      - sent nothing back
+      - ollama-1
+  - id: overloaded
+    vars:
+      provider_id: fireworks-1
+      reason: overloaded
+    expect_contains:
+      - at capacity
+      - fireworks-1
+      - AI providers
+  - id: refused
+    vars:
+      provider_id: together-ai-1
+      reason: refused
+    expect_contains:
+      - declined by its host
+      - together-ai-1
+      - AI providers

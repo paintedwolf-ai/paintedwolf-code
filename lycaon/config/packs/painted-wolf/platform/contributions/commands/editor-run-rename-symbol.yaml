@@ -1,0 +1,11 @@
+id: painted-wolf/platform:editor-run-rename-symbol
+title: "Run rename symbol"
+palette: false
+host_invoked: true
+scope: "files"
+category: "ai"
+when:
+  fact: editor_active
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-rename-symbol

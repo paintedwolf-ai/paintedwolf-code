@@ -1,0 +1,33 @@
+title: Force-remove or stop containers
+id: 1e9eba92-4405-415d-820d-ff276ad107d8
+description: Stops or force-removes running containers, or takes a compose stack down.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  selection_image:
+    Image:
+      - docker
+      - podman
+      - nerdctl
+  verbs_container_stop:
+    CommandLine|contains:
+      - ' rm -f'
+      - ' rm --force'
+      - ' kill '
+      - ' compose down'
+      - ' stack rm'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_container_stop and not filter_rehearsal and not filter_local

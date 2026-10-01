@@ -1,0 +1,11 @@
+# Tools that require a non-empty progress checklist before invoke on the coordinator root session.
+# SSOT for progress.IsProgressGatedTool.
+tools:
+  - task
+  - delegate_dispatch
+  - delegate_decompose
+  - write
+  - edit
+  - replace_lines
+  - restore_version
+  - jq_edit

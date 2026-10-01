@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Too many sockets"
+message: "This approval names more sockets than one grant allows."
+suggested_action: "Grant fewer sockets at a time."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "more sockets"

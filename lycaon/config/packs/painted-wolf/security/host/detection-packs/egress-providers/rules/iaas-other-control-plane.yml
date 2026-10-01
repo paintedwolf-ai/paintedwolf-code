@@ -1,0 +1,50 @@
+title: Reached another IaaS cloud API
+id: b16a2f3f-3c58-465c-aae7-ab8e4899e864
+description: >-
+  Connected to a non-hyperscaler infrastructure cloud API (compute, volumes,
+  object storage, or tokens). A hostname cannot tell a read from a destructive
+  call, so this is a coarse signal for scripts and SDKs.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - api.digitalocean.com
+      - api.linode.com
+      - api.vultr.com
+      - api.hetzner.cloud
+      - api.hetzner.com
+      - api.upcloud.com
+      - api.civo.com
+      - identity.oraclecloud.com
+      - cloud.ibm.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .digitaloceanspaces.com
+      - .linodeobjects.com
+      - .linode.com
+      - .vultr.com
+      - .hetzner.cloud
+      - .oraclecloud.com
+      - .oci.oraclecloud.com
+      - .cloud.ibm.com
+      - .aliyuncs.com
+      - .alibabacloud.com
+      - .scw.cloud
+      - .scaleway.com
+      - .ovh.com
+      - .ovhcloud.com
+      - .upcloud.com
+      - .civo.com
+      - .akamaiapis.net
+  condition: selection_host or selection_suffix

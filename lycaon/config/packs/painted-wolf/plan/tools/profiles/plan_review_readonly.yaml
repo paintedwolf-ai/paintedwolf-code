@@ -1,0 +1,52 @@
+id: plan_review_readonly
+description: Read-only plan review — read and grep on plan paths
+tools:
+  complete_leg: sticky
+  recall: sticky
+  read: sticky
+  record_finding: sticky
+  pack_board: sticky
+  request_decision: sticky
+  request_budget: sticky
+  grep: sticky
+  find: sticky
+  summarize: sticky
+  jq: sticky
+  list_dir: sticky
+  stat: sticky
+  wc: sticky
+  git_status: sticky
+  git_diff: sticky
+  diff: sticky
+  git_log: sticky
+  git_show: sticky
+  git_blame: sticky
+  source_history: sticky
+  git_ref: sticky
+  git_branches: sticky
+  git_compare: sticky
+  git_stash_list: sticky
+  skills_read: sticky
+  wait: sticky
+  held_result: true
+  held_stop: true
+deny_tools:
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - chmod
+  - delete
+  - chown
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  - command
+  - secret_*
+  - delegate_*
+  - state_*
+  - handoff_*
+wait_conditions: [http_ready, port_ready]

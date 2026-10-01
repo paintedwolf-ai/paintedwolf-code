@@ -1,0 +1,5 @@
+code: surface_missing_update_progress
+message: |
+  Surface {{surface}} lists progress-gated tools but omits update_progress.
+replacement: |
+  Add update_progress to the surface tools list in coordinator-surfaces.yaml.

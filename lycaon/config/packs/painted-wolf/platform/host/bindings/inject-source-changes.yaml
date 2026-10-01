@@ -1,0 +1,12 @@
+# Inform Binding — assembly-only source change brief.
+'on': inject.source_changes
+selector:
+  surface: coordinator
+effect: inform
+render: source-changes
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator assembly when the ledger recorded foreign changes since the previous turn

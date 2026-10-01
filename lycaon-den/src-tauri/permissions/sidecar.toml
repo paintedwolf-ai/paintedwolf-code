@@ -1,0 +1,34 @@
+[[permission]]
+identifier = "allow-start-sidecar"
+description = "Spawn the bundled Go engine and return port + bearer."
+commands.allow = ["start_sidecar"]
+
+[[permission]]
+identifier = "allow-export-startup-diagnostics"
+description = "Build a redacted diagnostics bundle without starting the engine."
+commands.allow = ["export_startup_diagnostics"]
+
+[[permission]]
+identifier = "allow-restart-sidecar"
+description = "Restart the bundled Go engine with a fresh bearer."
+commands.allow = ["restart_sidecar"]
+
+[[permission]]
+identifier = "allow-reset-credential-vault"
+description = "Delete the encrypted credential vault after explicit confirmation."
+commands.allow = ["reset_credential_vault"]
+
+[[permission]]
+identifier = "allow-cancel-sidecar-start"
+description = "Cancel an in-progress bundled engine launch."
+commands.allow = ["cancel_sidecar_start"]
+
+[[permission]]
+identifier = "allow-attach-existing-daemon"
+description = "Dev attach to an existing ./task den:sidecar daemon."
+commands.allow = ["attach_existing_daemon"]
+
+[[permission]]
+identifier = "allow-sidecar-info"
+description = "Read the cached engine port and bearer without spawning."
+commands.allow = ["sidecar_info"]

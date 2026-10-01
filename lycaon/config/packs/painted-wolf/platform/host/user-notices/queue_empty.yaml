@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Nothing to send
+message: There are no queued messages to send into this turn.
+suggested_action: Type a message and send it again.
+scenarios:
+  - id: default
+    expect_contains:
+      - no queued messages

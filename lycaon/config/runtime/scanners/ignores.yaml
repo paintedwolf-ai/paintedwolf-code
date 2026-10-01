@@ -1,0 +1,11 @@
+# Bundled finding ignores. An entry matches when all of its predicates match.
+# Project overlay: ${overlay_dir}/ignores.yaml
+version: 1
+findings:
+  - id: bundled-vendor-rule-fixtures
+    rule: opengrep:vendor.*
+    path: config/runtime/scanners/rules/**
+    reason: vendor rules self-matching bundled rule fixture trees during OpenGrep calibration
+  - id: bundled-gitleaks-allowlist-example
+    rule: gitleaks:allowlist-example
+    reason: documented example token in tests

@@ -1,0 +1,3 @@
+**Parallel read scouts (example):** "How is auth wired end-to-end?" → three `task(path-explorer, scope.mode: read, …)` legs in one turn — `internal/auth/`, `internal/session/`, `lycaon-den/src/api/` — then **`wait(timeout_ms=900000–1800000, conditions=[{kind: all_workers_idle}])`**, because this answer is only useful once every subtree has reported. A wave whose legs are useful one at a time takes `{kind: next_worker_done}` instead. Each brief names observable return shape (entrypoints, call chain, file:line cites).
+
+**Focus rules:** one bare **`list_dir(".")`** map per arc (coordinator or a single scout). Give parallel scouts distinct leg briefs and optional path hints so they do not duplicate the same root survey.

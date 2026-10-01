@@ -1,0 +1,38 @@
+title: Delete every resource in the all category
+id: e069f381-fecc-4549-855e-3b9742ff7274
+description: >-
+  Deletes every resource the API server puts in the "all" category — pods,
+  services, deployments, replica sets, stateful sets, daemon sets, jobs — across
+  the whole namespace in one call.
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  verbs_category_sweep:
+    CommandLine|contains:
+      - ' delete all '
+      - ' delete all,'
+  # The all flag removes the name filter.
+  selection_all_selector:
+    CommandLine|contains: ' --all'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_category_sweep and selection_all_selector and not filter_rehearsal and not filter_local

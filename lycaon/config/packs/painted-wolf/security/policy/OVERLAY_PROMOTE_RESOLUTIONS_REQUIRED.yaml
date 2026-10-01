@@ -1,0 +1,42 @@
+oar: '1.0'
+id: OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED"
+effect: block
+copy:
+  what: Overlay {{ paintedwolf.job_id }} needs resolutions{% if paintedwolf.path %} for `{{ paintedwolf.path
+    }}`{% endif %}
+  cause: promote_overlay was called on a conflicting overlay without a resolutions array, or a conflict path
+    was omitted
+  why: The host cannot guess merged content — the coordinator must supply explicit primary patches after reading
+    preview hunks or spill_path
+  fix: preview_overlay first — overlapping_edit → resolutions=[{path, hunks}] back-to-front; line_shift → [{path,
+    content}] from primary + branch_delta / spill
+  instead: preview_overlay first, then tier-appropriate resolutions for every conflict path, then promote_overlay
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: promote_overlay needs resolutions for overlay {{ paintedwolf.job_id }}{% if paintedwolf.path
+  %} on `{{ paintedwolf.path }}`{% endif %} — at least one conflict path is missing merged content
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-resolve
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED'
+  - job-resolve
+- id: missing_path
+  vars:
+    job_id: job-resolve
+    path: internal/auth/login.go
+  expect_contains:
+  - job-resolve
+  - internal/auth/login.go

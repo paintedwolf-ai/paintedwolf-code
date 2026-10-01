@@ -1,0 +1,12 @@
+id: security-survey-addenda
+extends: worker-leg-default
+description: Threat-model survey leg checklist
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "*"]
+  phase_ids: ["execute", "research"]
+checklist:
+  - "Orient with survey_repo or summarize; use only host-bound workflow scan ids"
+  - "Falsify intended controls by tracing entry points, defaults, callers, bypasses, and physical enforcement sinks"
+  - "Never pre-classify scanner warnings as noise"
+  - "State the target threat model; classify findings as vulnerability, hardening, accepted_residual, or model"
+  - "Unreviewed areas belong in remaining_risk; an empty vulnerability set is a successful closeout"

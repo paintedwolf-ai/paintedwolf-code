@@ -1,0 +1,96 @@
+name: lycaon-den
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lycaon-den-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+
+      # CI/check owns typechecking and the complete Vitest suite. The required e2e
+      # check depends on this job.
+      - name: Frontend seam canaries
+        timeout-minutes: 30
+        run: ./task den:test:fast
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: frontend-canaries-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  playwright-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+          cache-dependency-path: lycaon/go.sum
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+
+      - name: Playwright web E2E (Tier B)
+        timeout-minutes: 90
+        env:
+          # Keep traces and reports on disk so the failure-upload step below
+          # can capture them; the cleanup trap otherwise deletes them.
+          LYCAON_E2E_KEEP_ARTIFACTS: "1"
+        run: ./task e2e:den
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: playwright-web-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+      - name: E2E cleanup
+        timeout-minutes: 5
+        if: always()
+        run: ./task e2e:cleanup
+
+  playwright-desktop:
+    uses: ./.github/workflows/desktop-verification.yml
+
+  # The required branch check; it always runs.
+  e2e:
+    if: always()
+    needs: [vitest, playwright-web, playwright-desktop]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require every Den and end-to-end tier
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate

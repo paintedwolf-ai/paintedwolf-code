@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-editor-toggle-wrap
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-toggle-wrap
+group: "2"
+order: 7
+label: "Toggle word wrap"

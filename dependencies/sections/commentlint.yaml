@@ -1,0 +1,12 @@
+title: Comment linter module (`scripts/commentlint`)
+manifest:
+  kind: gomod
+  path: scripts/commentlint/go.mod
+  dependabot_group: go-dependencies
+
+packages:
+  github.com/odvcencio/gotreesitter:
+    urgency: low
+    friction: low
+    notes: |
+      Upstream module, independent of the vendored copy the host uses.

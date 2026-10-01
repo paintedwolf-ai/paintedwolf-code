@@ -1,0 +1,45 @@
+paths:
+  /v1/sessions/{id}/elevated-access:
+    get:
+      tags: [sessions]
+      operationId: getElevatedAccess
+      summary: Get live elevated access for a chat and its workers
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Host-selected standing elevated authority
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/elevated-access.yaml#/components/schemas/ElevatedAccessSummary
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+  /v1/sessions/{id}/elevated-access/revoke:
+    post:
+      tags: [sessions]
+      operationId: revokeElevatedAccess
+      x-person-action: record
+      summary: Revoke all currently applicable elevated-access approvals
+      description: Shared project and device records are revoked for all consumers. Running processes retain already-issued access.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Per-record outcomes and remaining live authority
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/elevated-access.yaml#/components/schemas/RevokeElevatedAccessResponse
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized

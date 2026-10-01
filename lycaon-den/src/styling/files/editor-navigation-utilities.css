@@ -1,0 +1,107 @@
+/* Keeps the filter above the scrolling symbol list. */
+@utility den-files-editor__symbol-menu--float {
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-files-editor__definition-picker {
+  --den-symbol-menu-max-width: min(420px, 80vw);
+  --den-symbol-menu-max-height: min(320px, 50vh);
+}
+
+@utility den-file-version__head {
+  flex: 0 0 auto;
+}
+
+/* Min-height lets the list shrink inside its flex parent. */
+@utility den-file-version__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@utility den-file-version__option--nested {
+  margin-left: 14px;
+}
+
+/* Marks the movement that introduced grouped commits. */
+@utility den-file-version__arrival {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 2px;
+}
+
+/* The seam between observed and commit history. */
+@utility den-file-version__boundary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 8px 7px;
+
+  &::before,
+  &::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: var(--den-line);
+  }
+
+  & span {
+    color: var(--den-text-muted);
+    font-size: var(--text-den-micro);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+}
+
+@utility den-file-version__when {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 2px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  /* The restore pill takes this slot while the row is under the pointer. */
+  .den-file-version__option:hover:has(.den-file-version__restore) &,
+  .den-file-version__option:focus-within:has(.den-file-version__restore) & {
+    display: none;
+  }
+}
+
+/* Hovering a row swaps its timestamp for the one-click restore pill. */
+@utility den-file-version__restore {
+  display: none;
+  flex: 0 0 auto;
+  align-self: center;
+  height: 20px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--den-text-muted) 45%, var(--den-line));
+  border-radius: var(--den-radius-pill);
+  background: var(--den-surface);
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  line-height: 18px;
+  cursor: pointer;
+
+  .den-file-version__option:hover &,
+  .den-file-version__option:focus-within & {
+    display: inline-flex;
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+    color: var(--den-accent-text);
+    outline: none;
+  }
+}
+
+@utility den-files-info__body {
+  flex: 1;
+  min-height: 0;
+}
+

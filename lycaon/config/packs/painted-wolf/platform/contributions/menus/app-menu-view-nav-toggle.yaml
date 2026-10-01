@@ -1,0 +1,9 @@
+id: painted-wolf/platform:app-menu-view-nav-toggle
+slot: "app_menu.view"
+command: painted-wolf/platform:nav-toggle
+group: "0"
+order: 1
+label: "Show sidebar"
+state:
+  fact: "sidebar_expanded"
+state_label: "Hide sidebar"

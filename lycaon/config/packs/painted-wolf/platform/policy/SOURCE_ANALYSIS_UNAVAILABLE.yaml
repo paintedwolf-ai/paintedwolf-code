@@ -1,0 +1,45 @@
+oar: '1.0'
+id: SOURCE_ANALYSIS_UNAVAILABLE
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [read, grep]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.source_analysis_unavailable
+    - paintedwolf.path
+    - paintedwolf.parse_failure_count
+    - paintedwolf.parse_paths
+    - paintedwolf.parse_failure
+when: paintedwolf.source_analysis_unavailable
+effect: warn
+copy:
+  what: 'Some source analysis is unavailable ({{ paintedwolf.parse_failure_count }} failure(s)): {{ paintedwolf.parse_paths }}.'
+  cause: 'First failure, {{ paintedwolf.path }}: {{ paintedwolf.parse_failure }}. Per-file diagnostics are retained in the result.'
+  why: 'Available text and completed matches remain useful, but missing symbols or matches do not establish their absence in the affected files.'
+  fix: >-
+    For files, use read with explicit line ranges or grep with structural=false to inspect text.
+    For inline content, inspect the supplied text directly.
+    Report the host parser failure to the coordinator or user; retry structural analysis after its cause is resolved.
+  instead: Keep completed results and account for the missing analysis explicitly
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:source_analysis
+x-paintedwolf-message: source analysis is unavailable for part of the result
+x-paintedwolf-scenarios:
+  - id: partial_search
+    vars:
+      tool: grep
+      path: Sources/Game/Level.swift
+      parse_failure_count: 1
+      parse_paths: [Sources/Game/Level.swift]
+      parse_failure: swift parsing stopped at timeout after 5000 ms
+    expect_contains: ['Code: SOURCE_ANALYSIS_UNAVAILABLE', 'structural=false', '5000 ms']
+  - id: outline
+    vars:
+      tool: read
+      path: Sources/Game/Level.swift
+      parse_failure_count: 1
+      parse_paths: [Sources/Game/Level.swift]
+      parse_failure: swift parsing stopped with memory_budget
+    expect_contains: ['Code: SOURCE_ANALYSIS_UNAVAILABLE', 'explicit line ranges', 'memory_budget']

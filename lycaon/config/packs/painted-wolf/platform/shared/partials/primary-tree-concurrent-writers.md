@@ -1,0 +1,1 @@
+**Other writers share this tree.** A read from earlier in the turn can be stale by the time you edit: re-read a file immediately before changing it, and keep the change to the lines you meant so a concurrent edit survives beside yours. Paths you did not write are live work — leave them, and never widen an edit to tidy them.

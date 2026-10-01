@@ -1,0 +1,18 @@
+description: "Count lines, bytes, and words in files or recursively in directories. bytes is the true file size; truncated marks counts taken from a capped scan. Replaces command: wc -l."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 50
+      description: Repo-relative file or directory paths (max 50)
+    words:
+      type: boolean
+      description: Include word counts (default true)
+    recursive:
+      type: boolean
+      description: When true, aggregate counts for all files under a directory path (max 500 files)
+  required: [paths]
+  additionalProperties: false

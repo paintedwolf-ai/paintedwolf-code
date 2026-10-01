@@ -1,0 +1,62 @@
+fixtures:
+- rule: stack-destroy
+  positive:
+  - pulumi destroy --yes
+  - cdk destroy ProdStack --force
+  - pulumi stack rm dev
+  - cdktf destroy prod
+  - sst destroy --stage prod
+  - crossplane delete managed s3bucket.aws.upbound.io my-bucket
+  negative:
+  - pulumi preview
+  - cdk diff ProdStack
+  - pulumi destroy --yes --help
+  - cdktf diff prod
+  - crossplane get managed
+  - cdk8s synth
+  - sst dev
+- rule: state-rewrite
+  positive:
+  - pulumi state delete urn:pulumi:prod::app::aws:s3/bucket:Bucket::data
+  - pulumi cancel
+  - pulumi state unprotect urn:pulumi:prod::app::aws:ec2/instance:Instance::web
+  - pulumi import aws:s3/bucket:Bucket data existing-bucket-name
+  - pulumi refresh --yes
+  - cdktf cancel
+  negative:
+  - pulumi stack ls
+  - pulumi preview --diff
+  - pulumi state delete urn:pulumi:prod::app::aws:s3/bucket:Bucket::data --help
+  - cdktf diff
+  - pulumi state export
+  - cdk cancel
+- rule: fleet-apply
+  positive:
+  - ansible-playbook -i inventory/prod site.yml
+  - salt '*' state.apply
+  - chef-client
+  - puppet agent -t
+  - knife bootstrap 10.0.0.5 -x ci
+  - pulumi up --yes
+  - ansible all -i inventory/prod -m shell -a "systemctl restart nginx"
+  - ansible web -m service -a "name=nginx state=restarted"
+  - knife ssh 'role:web' 'sudo chef-client'
+  - salt '*' cmd.run 'systemctl restart nginx'
+  negative:
+  - ansible-playbook -i inventory/prod site.yml --check
+  - ansible-inventory --list
+  - ansible-playbook --syntax-check site.yml
+  - pulumi preview
+  - pulumi stack ls
+  - salt-call --local test.ping
+  - knife --help
+  - puppet apply --noop
+  - ansible --version
+  - ansible all -m ping
+  - ansible all -m setup
+  - salt '*' test.ping
+  - salt '*' grains.items
+  - knife node list
+  - knife cookbook list
+  - puppet parser validate manifest.pp
+  - puppet --version

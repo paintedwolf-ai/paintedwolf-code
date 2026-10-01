@@ -1,0 +1,38 @@
+[
+  {
+    "id": "E1",
+    "release": "R17",
+    "component": "web",
+    "revision": "w3",
+    "environment": "production",
+    "check": "scan",
+    "status": "active"
+  },
+  {
+    "id": "E2",
+    "release": "R17",
+    "component": "api",
+    "revision": "a8",
+    "environment": "production",
+    "check": "scan",
+    "status": "active"
+  },
+  {
+    "id": "E3",
+    "release": "R17",
+    "component": "web",
+    "revision": "w4",
+    "environment": "staging",
+    "check": "scan",
+    "status": "active"
+  },
+  {
+    "id": "E4",
+    "release": "R17",
+    "component": "web",
+    "revision": "w4",
+    "environment": "production",
+    "check": "scan",
+    "status": "revoked"
+  }
+]

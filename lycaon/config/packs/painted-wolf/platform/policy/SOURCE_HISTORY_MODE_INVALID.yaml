@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SOURCE_HISTORY_MODE_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - source_history
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.mode
+when: paintedwolf.rejection_code == "SOURCE_HISTORY_MODE_INVALID"
+effect: block
+copy:
+  what: source_history does not know mode {{ paintedwolf.mode }}.
+  cause: mode selects the question — effects (what changed this file), lines (who wrote these lines), mine (what did this session author), version (read historical content), or diff (compare versions).
+  why: A structured reject names the closed mode set instead of guessing the caller's intent.
+  fix: Retry with mode effects, lines, mine, version, or diff. Omitting mode defaults to effects.
+  instead: Branch on Code; pick one of the five modes
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
+x-paintedwolf-message: source_history mode must be effects, lines, mine, version, or diff
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      mode: blame
+      profile: implement
+      tool: source_history
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_HISTORY_MODE_INVALID'

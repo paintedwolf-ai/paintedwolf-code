@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "File edit not found"
+message: "That file edit is no longer recorded."
+suggested_action: "Refresh the file history and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer recorded"

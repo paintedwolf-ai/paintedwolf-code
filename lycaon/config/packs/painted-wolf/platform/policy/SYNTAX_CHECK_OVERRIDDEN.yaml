@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SYNTAX_CHECK_OVERRIDDEN
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [write, edit, replace_lines, restore_version, code_rewrite, promote_overlay]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.syntax_check_overridden
+    - paintedwolf.syntax_override_reason
+    - paintedwolf.paths
+when: paintedwolf.syntax_check_overridden
+effect: warn
+copy:
+  what: 'Parser validation was explicitly overridden for {{ paintedwolf.paths }}.'
+  cause: 'Recorded reason: {{ paintedwolf.syntax_override_reason }}.'
+  why: 'This mutation has no host parser verdict; the other mutation checks still apply.'
+  fix: 'Verify the changed code with the project checks.'
+  instead: Retain the recorded override when reviewing this change
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:syntax_override
+x-paintedwolf-message: parser validation was explicitly overridden
+x-paintedwolf-scenarios:
+  - id: explicit_override
+    vars:
+      tool: write
+      paths: [Sources/Level.swift]
+      syntax_override_reason: Swift compiler accepts the candidate; host grammar misparses it
+    expect_contains: ['Code: SYNTAX_CHECK_OVERRIDDEN', 'Sources/Level.swift', 'Swift compiler']

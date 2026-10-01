@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - current_revision
+    - expected_revision
+use_defaults: true

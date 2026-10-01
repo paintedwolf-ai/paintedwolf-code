@@ -1,0 +1,205 @@
+title: Reached a data or AI cloud API
+id: 3ba2166d-9ce3-4542-b8b7-60f73018bc27
+description: >-
+  Connected to a managed warehouse, OLTP database, search, vector, ETL/ELT, or
+  model platform API. A hostname cannot tell a read from a wipe or charge, so
+  this is a coarse signal for scripts and SDKs.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      # Warehouses / lakehouses / analytics engines
+      - api.cloud.databricks.com
+      - api.clickhouse.cloud
+      - api.motherduck.com
+      - app.motherduck.com
+      - api.firebolt.io
+      - api.singlestore.com
+      - api.materialize.com
+      - api.tinybird.co
+      - api.startree.cloud
+      - galaxy.starburst.io
+      - api.starburst.io
+      - cloud.getdbt.com
+      - api.fivetran.com
+      - api.airbyte.com
+      - api.airbyte.co
+      - api.getcensus.com
+      - api.hightouch.com
+      - api.prefect.cloud
+      - api.dagster.cloud
+      - api.hex.tech
+      - app.hex.tech
+      - api.mode.com
+      - app.mode.com
+      - api.sigmacomputing.com
+      - api.thoughtspot.cloud
+      - api.fabric.microsoft.com
+      # OLTP / serverless DB
+      - cloud.mongodb.com
+      - api.planetscale.com
+      - api.neon.tech
+      - console.neon.tech
+      - api.supabase.com
+      - api.cockroachlabs.cloud
+      - api.turso.tech
+      - api.xata.io
+      - api.convex.dev
+      - api.convex.cloud
+      - accelerate.prisma-data.net
+      - api.prisma.io
+      - db.fauna.com
+      - api.fauna.com
+      - cloud.scylladb.com
+      - api.scylladb.com
+      - api.timescale.com
+      - api.yugabyte.cloud
+      - api.surrealdb.com
+      - api.hasura.io
+      - api.nhost.io
+      - api.appwrite.io
+      - api.redis.com
+      - api.redislabs.com
+      # Search / vector
+      - api.elastic-cloud.com
+      - api.meilisearch.com
+      - api.weaviate.io
+      - api.qdrant.io
+      - api.chroma.com
+      - api.algolia.com
+      - api.pinecone.io
+      - api.zilliz.com
+      - api.zillizcloud.com
+      - api.milvus.io
+      - api.turbopuffer.com
+      - api.lancedb.com
+      # Model APIs (scripts/SDKs)
+      - api.openai.com
+      - api.together.xyz
+      - api.anthropic.com
+      - api.fireworks.ai
+      - api.groq.com
+      - api.perplexity.ai
+      - api.cohere.com
+      - api.mistral.ai
+      - api.deepseek.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      # Warehouses / analytics
+      - .snowflakecomputing.com
+      - .snowflake.com
+      - .cloud.databricks.com
+      - .azuredatabricks.net
+      - .gcp.databricks.com
+      - .clickhouse.cloud
+      - .clickhouse.com
+      - .motherduck.com
+      - .firebolt.io
+      - .singlestore.com
+      - .svc.singlestore.com
+      - .materialize.com
+      - .materialize.cloud
+      - .tinybird.co
+      - .startree.cloud
+      - .starburst.io
+      - .starburstdata.com
+      - .getdbt.com
+      - .dbt.com
+      - .fivetran.com
+      - .airbyte.com
+      - .airbyte.co
+      - .getcensus.com
+      - .hightouch.com
+      - .prefect.cloud
+      - .prefect.io
+      - .dagster.cloud
+      - .hex.tech
+      - .mode.com
+      - .sigmacomputing.com
+      - .thoughtspot.cloud
+      - .thoughtspot.com
+      - .fabric.microsoft.com
+      - .pbidedicated.windows.net
+      - .analysis.windows.net
+      - .cloud.teradata.com
+      - .teradata.com
+      # OLTP / serverless DB
+      - .mongodb.net
+      - .mongodb.com
+      - .neon.tech
+      - .planetscale.com
+      - .supabase.co
+      - .supabase.com
+      - .cockroachlabs.cloud
+      - .cockroachdb.cloud
+      - .turso.io
+      - .turso.tech
+      - .xata.sh
+      - .xata.io
+      - .convex.cloud
+      - .convex.site
+      - .prisma-data.net
+      - .prisma.io
+      - .fauna.com
+      - .fauna.net
+      - .scylladb.com
+      - .timescale.com
+      - .tsdb.cloud.timescale.com
+      - .yugabyte.cloud
+      - .surreal.cloud
+      - .surrealdb.com
+      - .hasura.app
+      - .hasura.io
+      - .nhost.run
+      - .nhost.io
+      - .appwrite.io
+      - .appwrite.run
+      - .redis.cloud
+      - .redns.redis-cloud.com
+      - .redis.com
+      - .redislabs.com
+      - .dragonflydb.cloud
+      # Search / vector
+      - .elastic-cloud.com
+      - .elastic.co
+      - .es.io
+      - .meilisearch.io
+      - .meilisearch.com
+      - .weaviate.cloud
+      - .weaviate.io
+      - .qdrant.io
+      - .qdrant.tech
+      - .algolia.net
+      - .algolianet.com
+      - .algolia.com
+      - .typesense.net
+      - .typesense.com
+      - .pinecone.io
+      - .zillizcloud.com
+      - .zilliz.com
+      - .vectordb.zillizcloud.com
+      - .turbopuffer.com
+      - .lancedb.com
+      # Model APIs
+      - .together.xyz
+      - .fireworks.ai
+      - .openai.com
+      - .anthropic.com
+      - .cohere.com
+      - .cohere.ai
+      - .mistral.ai
+      - .deepseek.com
+      - .groq.com
+      - .perplexity.ai
+  condition: selection_host or selection_suffix

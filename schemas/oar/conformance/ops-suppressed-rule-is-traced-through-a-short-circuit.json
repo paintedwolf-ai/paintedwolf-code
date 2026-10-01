@@ -1,0 +1,71 @@
+{
+  "id": "ops-suppressed-rule-is-traced-through-a-short-circuit",
+  "title": "A rule suppressed by a blocking suppressor is recorded suppressed, not omitted as never considered",
+  "covers": [
+    "OAR-OPS-10",
+    "OAR-EVAL-14",
+    "OAR-EVAL-18"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "A_TARGET",
+      "effect": "warn"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "B_SUPPRESSOR",
+      "effect": "block",
+      "overrides": [
+        "A_TARGET"
+      ]
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "invariant",
+      "anchor": "tool.pre_invoke",
+      "id": "C_UNREACHED",
+      "effect": "nudge"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "block",
+    "code": "B_SUPPRESSOR",
+    "applied": [
+      "oar.test/B_SUPPRESSOR:fired",
+      "oar.test/A_TARGET:suppressed"
+    ]
+  }
+}

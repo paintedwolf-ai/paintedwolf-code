@@ -1,0 +1,52 @@
+oar: '1.0'
+id: CONTENT_APPLY_REJECTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - write
+    - edit
+    - replace_lines
+    - restore_version
+    - code_rewrite
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+    - paintedwolf.user_guidance
+when: paintedwolf.rejection_code == "CONTENT_APPLY_REJECTED"
+effect: block
+copy:
+  what: The user reviewed the proposed edit to `{{ paintedwolf.path }}` and rejected it at the edit-review checkpoint.
+  cause: A review_paths rule pauses edits at this path for human review; the user chose No.
+  why: The bytes were never written. Retrying the identical edit re-raises the same review and blocks the user.
+  fix: >-
+    {% if paintedwolf.user_guidance %}Follow the user's direction instead: {{ paintedwolf.user_guidance }}
+    {% else %}Propose a different edit, or ask the user what they want changed
+    at this path before editing it again.{% endif %}
+  instead: Branch on Code; revise the edit or ask — do not resubmit the same bytes
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:content_apply
+x-paintedwolf-message: the user rejected the reviewed edit
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: edit
+      path: src/api/client.ts
+      profile: implement
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: CONTENT_APPLY_REJECTED'
+      - src/api/client.ts
+  - id: with_guidance
+    vars:
+      tool: edit
+      path: src/api/client.ts
+      profile: implement
+      user_guidance: Keep the timeout at 5 seconds and add the abort signal only.
+    expect_contains:
+      - 'Code: CONTENT_APPLY_REJECTED'
+      - Keep the timeout at 5 seconds

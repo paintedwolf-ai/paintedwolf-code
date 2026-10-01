@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_proto
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "proto",
+		Extensions:     []string{".proto"},
+		Language:       ProtoLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "[\n  \"syntax\"\n  \"package\"\n  \"option\"\n  \"import\"\n  \"service\"\n  \"rpc\"\n  \"returns\"\n  \"message\"\n  \"enum\"\n  \"oneof\"\n  \"repeated\"\n  \"reserved\"\n  \"to\"\n] @keyword\n\n[\n  (key_type)\n  (type)\n  (message_name)\n  (enum_name)\n  (service_name)\n  (rpc_name)\n]@type\n\n(string) @string\n\n[\n  (int_lit)\n  (float_lit)\n] @number\n\n[\n  (true)\n  (false)\n] @constant.builtin\n\n(comment) @comment\n\n[\n  \"(\"\n  \")\"\n  \"[\"\n  \"]\"\n  \"{\"\n  \"}\"\n]  @punctuation.bracket\n\n",
+	})
+}

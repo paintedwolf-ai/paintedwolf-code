@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': project.root.detach_canceled
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-root-detach-canceled
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - DELETE /projects/{id}/roots/{root_id}?force=true when workers, overlays, or busy
+    sessions were stopped
+  required:
+  - canceled
+  - re-plan
+  forbidden:
+  - workflow_advance

@@ -1,0 +1,14 @@
+language: promql
+comment:
+- '#'
+limits: Tenant isolation and monitoring correctness depend on deployment policy; ordinary selectors are not security
+  findings.
+cases:
+- name: ordinary-source
+  file: sample.promql
+  source: |
+    sum(rate(http_requests_total[5m]))
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.promql

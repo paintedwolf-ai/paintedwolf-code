@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-home
+command: painted-wolf/platform:go-home
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader H"
+  windows:
+    - "Leader H"
+  linux:
+    - "Leader H"

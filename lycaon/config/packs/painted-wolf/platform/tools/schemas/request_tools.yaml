@@ -1,0 +1,9 @@
+description: "Load tools for the next concrete operation"
+schema:
+  type: object
+  properties:
+    need:
+      type: string
+      description: "Describe the operation and target in your own words: create files, edit lines, run a process, fetch a URL, or inspect git changes. The host matches it to tools; names are optional. Name the mechanism, not the goal."
+  required: [need]
+  additionalProperties: false

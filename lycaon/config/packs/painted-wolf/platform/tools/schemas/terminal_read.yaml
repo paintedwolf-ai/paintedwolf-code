@@ -1,0 +1,24 @@
+tags: [terminal]
+description: Read incremental pty output since the last read (idle/timeout bounded).
+schema:
+  type: object
+  properties:
+    id:
+      type: string
+      description: Handle from terminal_open.
+    idle_ms:
+      type: integer
+      minimum: 1
+      description: Quiet window before returning (default host idle).
+    timeout_ms:
+      type: integer
+      minimum: 1
+      description: Hard per-call cap (default host timeout).
+    max_bytes:
+      type: integer
+      minimum: 1024
+      maximum: 65536
+      default: 32768
+      description: Maximum lossless output page size in bytes; a continuation receipt identifies unread output.
+  required: [id]
+  additionalProperties: false

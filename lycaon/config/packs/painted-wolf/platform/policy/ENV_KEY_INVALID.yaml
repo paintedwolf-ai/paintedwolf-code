@@ -1,0 +1,35 @@
+oar: '1.0'
+id: ENV_KEY_INVALID
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ENV_KEY_INVALID"
+effect: block
+copy:
+  what: Inline env key rejected — {{ paintedwolf.rejection_reason }}
+  cause: Environment names must match [A-Za-z_][A-Za-z0-9_]*. Scrub-critical names and prefixes remain blocked case-insensitively.
+  why: Inherited env is sanitized before merge; blocked keys would steer binary resolution or bypass git hook scrubbing.
+  fix: Correct an invalid identifier without changing the intended variable’s meaning, or remove a blocked override.
+    Changing a blocked name’s case cannot grant access. Never include a secret value in recovery text.
+  instead: Use valid permitted names in the receiving tool’s env field
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_env_input
+x-paintedwolf-message: Invalid or blocked inline env key
+x-paintedwolf-scenarios:
+- id: blocked_git
+  vars:
+    profile: implement
+    reason: blocked env key GIT_EXEC_PATH
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ENV_KEY_INVALID'

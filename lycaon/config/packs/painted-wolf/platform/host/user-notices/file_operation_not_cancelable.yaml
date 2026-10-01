@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Too late to cancel"
+message: "The file operation is already saving its changes, so it can no longer be canceled."
+suggested_action: "Wait for it to finish, then undo it from the file history if needed."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "can no longer be canceled"

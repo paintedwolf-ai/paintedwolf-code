@@ -1,0 +1,5 @@
+id: cloud-hosting-other
+label: Other cloud providers
+description: >-
+  Operations on smaller cloud providers that delete a server, cluster, or
+  volume, or hand out an access token.

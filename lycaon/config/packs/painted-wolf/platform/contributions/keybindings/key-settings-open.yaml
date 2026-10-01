@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-settings-open
+command: painted-wolf/platform:settings-open
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+,"
+  windows:
+    - "Mod+,"
+  linux:
+    - "Mod+,"

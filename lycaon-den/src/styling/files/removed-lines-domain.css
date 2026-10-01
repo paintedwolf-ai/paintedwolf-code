@@ -1,0 +1,66 @@
+.files-removed-lines {
+  min-width: 300px;
+  max-width: min(640px, calc(100vw - 32px));
+  overflow: hidden;
+  font-family: var(--den-font-ui);
+}
+
+.files-removed-lines__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 11px;
+  border-bottom: 1px solid var(--den-line);
+}
+
+.files-removed-lines__title {
+  color: var(--den-text);
+  font-size: var(--text-den-label);
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.files-removed-lines__lines {
+  color: var(--den-text-muted);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.files-removed-lines__actions .den-theme-icon {
+  color: var(--den-text-muted);
+}
+
+.files-removed-lines__body {
+  max-height: 320px;
+  overflow: auto;
+  padding: 5px 0;
+  background: linear-gradient(var(--den-diff-delete-line), var(--den-diff-delete-line)), var(--den-background);
+  color: var(--den-text);
+}
+
+.files-removed-lines__num {
+  flex: 0 0 auto;
+  width: calc(3ch + 22px);
+  padding-right: 12px;
+  color: color-mix(in srgb, var(--den-text-muted) 72%, transparent);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.files-removed-lines__row .cm-deletedLine {
+  padding-right: 16px;
+  white-space: pre;
+}
+
+.files-removed-lines__row del {
+  text-decoration: none;
+}
+
+.files-removed-lines .cm-deletedText {
+  border-radius: 2px;
+  background: var(--den-diff-delete-word);
+}
+

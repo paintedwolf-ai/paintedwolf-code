@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-mode-evidence
+title: "Search mode: evidence"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "search.mode.evidence"

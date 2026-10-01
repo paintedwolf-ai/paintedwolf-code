@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "File not found"
+retryable: false
+message: "The selected file or folder is no longer available in this project."
+suggested_action: "Refresh the file list and select the current file or folder."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "The selected file or folder is no longer available in this project"

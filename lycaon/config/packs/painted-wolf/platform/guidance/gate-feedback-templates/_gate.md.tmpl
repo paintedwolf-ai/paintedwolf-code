@@ -1,0 +1,18 @@
+**Gate blocked: {{ gate.id }}** ({{ gate.kind }})
+
+{{ gate.purpose }}
+
+{% if matched_signals %}
+What's missing:
+{% for s in matched_signals %}
+- {{ s.detail }}
+  → {{ s.fix }}
+{% endfor %}
+{% else %}
+Gate `{{ gate.id }}` is unsatisfied; no matched signal detail is available for this leaf.
+{% endif %}
+
+To satisfy:
+{% for step in gate.satisfy %}
+{{ forloop.Counter }}. {{ step }}
+{% endfor %}

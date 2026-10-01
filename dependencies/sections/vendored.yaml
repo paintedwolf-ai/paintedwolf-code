@@ -1,0 +1,84 @@
+title: Vendored catalogs, datasets, and specifications
+intro: |
+  Copied into the repository, pinned to an upstream commit or release, and hash-verified by a
+  `:check` target.
+
+rows:
+  - id: gotreesitter
+    name: '`third_party/gotreesitter`'
+    pins:
+      - go-require lycaon/go.mod github.com/odvcencio/gotreesitter
+    upstream:
+      - go-module github.com/odvcencio/gotreesitter
+    urgency: moderate
+    urgency_reason: |
+      Parses repository source into symbols and outlines.
+    friction: high
+    friction_reason: |
+      `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only
+      PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The
+      rationale and update procedure are in
+      [`third_party/README.md`](../../third_party/README.md).
+
+  - id: vulndb
+    name: Go vulnerability database (`lycaon/vulndb`)
+    pins:
+      - label: snapshot
+        from: json lycaon/vulndb-provenance.json database_modified
+      - label: entries
+        from: json lycaon/vulndb-provenance.json entries
+      - label: modules
+        from: json lycaon/vulndb-provenance.json covered_modules
+    urgency: critical
+    urgency_reason: |
+      The offline `./task lint:vuln` gate reads this snapshot, and nightly `./task
+      lint:vuln:fresh` checks the live database. `vendor-vulndb.py` prunes the snapshot to `go
+      list -m all` and always keeps the `stdlib` and `toolchain` pseudo-modules, which that list
+      never names; `--check` fails if either row is missing. Both runs cover standard-library
+      advisories; the offline gate sees those published up to the pin.
+    friction: low
+    friction_reason: |
+      Re-materialize with `./task lint:vuln:vendor`. Because `lint:vuln:vendor:check` also
+      verifies the module set, every `go.mod` change needs a re-vendor.
+      `scripts/govulncheck-gate.py` enforces reviewed suppressions in
+      `lycaon/govulncheck-allowlist.yaml`.
+
+  - id: oar-spec
+    name: Open Agent Rules spec (`schemas/oar/`)
+    pins:
+      - label: OAR
+        from: json schemas/oar/vendor-manifest.json oar_version
+      - label: fixtures
+        from: json schemas/oar/vendor-manifest.json corpus_fixtures
+    urgency: moderate
+    friction: moderate
+    notes: |
+      Defines the policy grammar and observation vocabulary. `./task oar:vendor` copies from the
+      `open-agent-rules` checkout; then run `oar:vendor:check` and `oar:conformance`.
+
+  - id: scanner-rules
+    name: Vendored scanner rules
+    pins:
+      - label: catalogs
+        from: yaml-count lycaon/config/runtime/scanners/rules-provenance.yaml vendors
+    urgency: high
+    urgency_reason: |
+      Detection coverage for scanned project code.
+    friction: moderate
+    friction_reason: |
+      Pinned commits live in `rules-provenance.yaml`. Patches under `rules/patches/<id>/` keep
+      rules loadable by the shipped Opengrep; see the
+      [patch README](../../lycaon/config/runtime/scanners/rules/patches/README.md). Move a pin with
+      `./task scan:rules:vendor:bump -- <id>=<ref>`, then run `scan:rules:vendor:check`.
+
+  - id: zxcvbn
+    name: Common-password list (`secret-mint`)
+    pins:
+      - yaml lycaon/config/packs/painted-wolf/security/host/secret-mint/zxcvbn-provenance.yaml vendors.0.commit
+    upstream:
+      - github-commit dropbox/zxcvbn
+    urgency: low
+    friction: low
+    notes: |
+      Static dictionary for screening trivial passwords. Move with `./task
+      secret-mint:vendor:bump`, then run `secret-mint:vendor:check`.

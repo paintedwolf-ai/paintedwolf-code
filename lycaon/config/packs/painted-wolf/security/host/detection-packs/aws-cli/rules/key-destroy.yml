@@ -1,0 +1,45 @@
+title: Destroy key or secret material
+id: cc3fc3f6-1ad6-45ff-91d8-487707f7e92c
+description: >-
+  Schedules a KMS key for deletion, disables one, or removes a secret with no
+  recovery window, taking everything encrypted under it.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  # Key deletion can make all encrypted objects inaccessible.
+  verbs_key_destroy:
+    ApiAction:
+      - 'kms:schedule-key-deletion'
+      - 'kms:disable-key'
+      - 'kms:delete-imported-key-material'
+  # This flag removes the recovery window.
+  selection_secret_force:
+    ApiAction|contains: ':delete-secret'
+    CommandLine|contains: ' --force-delete-without-recovery'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and (verbs_key_destroy or selection_secret_force)
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

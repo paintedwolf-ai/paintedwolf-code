@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COORDINATOR_SYNTHESIS_WRAPUP_ONLY
+kind: invariant
+anchor: coordinator.pre_invoke
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.surface
+    - paintedwolf.synthesis_wrapup_tool_forbidden
+when: paintedwolf.surface == "implement_synthesis" && paintedwolf.synthesis_wrapup_tool_forbidden
+effect: block
+copy:
+  what: '{{ tool }} is not offered on the current synthesis report turn.'
+  cause: The request admits only its declared report and evidence-recovery tools.
+  why: This turn delivers a user report from observed results; it cannot reopen execution by invoking an unavailable tool.
+  fix: 'Use the current report format and retained evidence. Use only tools actually offered on this request for a remaining citation need; do not dispatch new work or replay mutations to finish the report.'
+  instead: 'Report any unresolved work honestly and end this turn. A formatting or citation repair does not authorize a new execution phase.'
+
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Tool not allowed on read-only report turn
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      profile: coordinator
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_SYNTHESIS_WRAPUP_ONLY'

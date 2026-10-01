@@ -1,0 +1,32 @@
+oar: '1.0'
+id: FETCH_URL_INVALID_URL
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+when: paintedwolf.rejection_code == "FETCH_URL_INVALID_URL"
+effect: block
+copy:
+  what: fetch_url rejected the URL input.
+  cause: 'URL validation reported: {{ paintedwolf.detail }}. An absolute HTTP(S) URL with a host is required.'
+  why: Only network-fetchable absolute URLs are in scope.
+  fix: Pass a full http(s) URL (for example https://example.com/path).
+  instead: Branch on Code FETCH_URL_INVALID_URL; fix the URL
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
+x-paintedwolf-message: fetch_url URL is invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: must use http or https
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: FETCH_URL_INVALID_URL'

@@ -1,0 +1,55 @@
+title: Grant access to everyone on the internet
+id: 403cad96-f95c-491f-b5ab-b41f93f36c81
+description: Grants public internet access to a Google Cloud resource.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - gcloud
+      - gsutil
+  # allUsers is a principal, not a verb: it appears in grant, list, and revoke
+  # commands alike, so the rule also requires the grant verb.
+  selection_public_principal:
+    CommandLine|contains:
+      - ' allusers'
+      - ' allauthenticatedusers'
+      - '=allusers'
+      - '=allauthenticatedusers'
+  verbs_public_grant:
+    CommandLine|contains:
+      - ' add-iam-policy-binding'
+      - ' set-iam-policy'
+      - ' iam ch '
+      - ' acl ch '
+      - ' add-members'
+  selection_firewall:
+    CommandLine|contains: ' firewall-rules '
+  selection_open_range:
+    CommandLine|contains:
+      - ' --source-ranges 0.0.0.0/0'
+      - ' --source-ranges=0.0.0.0/0'
+  selection_firewall_delete:
+    CommandLine|contains: ' firewall-rules delete'
+  filter_revoke:
+    CommandLine|contains:
+      - ' remove-iam-policy-binding'
+      - ' remove-members'
+      - ' iam ch -d '
+      - ' acl ch -d '
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|help)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and ((selection_public_principal and verbs_public_grant) or (selection_firewall and (selection_open_range or selection_firewall_delete))) and not filter_revoke and not filter_rehearsal and not filter_local

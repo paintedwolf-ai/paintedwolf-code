@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/containerd/containerd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/containerd/containerd/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.1.0"
+      },
+      {
+       "fixed": "2.1.9"
+      },
+      {
+       "introduced": "2.2.0"
+      },
+      {
+       "fixed": "2.2.5"
+      },
+      {
+       "introduced": "2.3.0"
+      },
+      {
+       "fixed": "2.3.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50195",
+  "GHSA-cvxm-645q-p574"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5338"
+ },
+ "details": "containerd: CRI checkpoint import allows local image tag poisoning in github.com/containerd/containerd",
+ "id": "GO-2026-5338",
+ "modified": "2026-06-25T18:43:19Z",
+ "published": "2026-06-25T18:43:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/containerd/containerd/security/advisories/GHSA-cvxm-645q-p574"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "containerd: CRI checkpoint import allows local image tag poisoning in github.com/containerd/containerd"
+}

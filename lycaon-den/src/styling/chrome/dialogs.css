@@ -1,0 +1,498 @@
+.den-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--den-overlay-scrim);
+}
+/* Modal chrome stays draggable while the underlying shell is inert. */
+.den-dialog-backdrop__chrome-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--den-titlebar-inset);
+}
+.den-dialog-backdrop__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+/* Shortcut help rides above the dialogs it explains. */
+.den-dialog-backdrop.den-shortcut-help-backdrop {
+  z-index: 60;
+}
+.den-dialog {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  box-shadow: var(--den-shadow-lg);
+}
+/* A folder tree needs more width than a prompt does. */
+.den-dialog.den-move-source-dialog {
+  width: min(32rem, calc(100vw - 32px));
+}
+/* Rewind can name many roots and long source paths. */
+.den-rewind-dialog .den-dialog__body {
+  overflow-wrap: anywhere;
+}
+
+/* Only the middle scrolls, so the actions stay inside the pane. */
+.den-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Full-viewport scrim for long settings pickers (Providers / Web research). */
+.den-dialog-backdrop--viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+/* Picker chrome stays fixed while its body scrolls. */
+.den-dialog--wide {
+  width: min(600px, 100%);
+}
+.den-dialog--sheet {
+  width: min(400px, calc(100vw - 48px));
+  height: min(440px, calc(100vh - 64px));
+  max-height: min(440px, calc(100vh - 64px));
+  overflow: hidden;
+}
+
+.den-dialog--sheet .den-dialog__header {
+  padding: 18px 20px 12px;
+}
+
+.den-dialog--sheet .den-dialog__list-content {
+  padding: 0 12px 10px;
+}
+
+.den-dialog--sheet .den-dialog__hint {
+  margin: 8px 20px 16px;
+}
+
+.den-dialog--sheet .den-dialog__row {
+  gap: 0;
+  padding: 5px 10px;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-dialog--sheet .den-dialog__row-title {
+  font-size: var(--text-den-body);
+  font-weight: 550;
+  line-height: 1.25;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__group {
+  margin: 8px 10px 2px;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__group:first-child {
+  margin-top: 4px;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__group ~ .den-settings-add-dialog__group {
+  margin-top: 18px;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__filter {
+  flex-shrink: 0;
+  margin: 4px 20px 12px;
+  width: calc(100% - 40px);
+  box-sizing: border-box;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__body-content {
+  padding: 8px 20px 16px;
+}
+
+.den-dialog--sheet .den-settings-add-dialog__footer {
+  padding: 14px 20px 18px;
+}
+
+/* The full-screen scrim keeps a draggable titlebar band. */
+.den-overlay {
+  --den-overlay-inset: 14px;
+  --den-overlay-inset-top: var(--den-overlay-inset);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding:
+    var(--den-overlay-inset-top)
+    var(--den-overlay-inset)
+    var(--den-overlay-inset)
+    var(--den-overlay-inset);
+  background: var(--den-overlay-scrim);
+  animation: den-overlay-in var(--den-duration-drawer) var(--den-ease) both;
+}
+.den-tauri .den-overlay {
+  --den-overlay-inset-top: 52px;
+}
+.den-overlay__chrome-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--den-overlay-inset-top);
+  z-index: 1;
+}
+.den-overlay__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.den-overlay__panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-lg);
+  box-shadow: var(--den-shadow-xl);
+  overflow: hidden;
+  animation: den-panel-in var(--den-duration-drawer) var(--den-ease) both;
+}
+.den-overlay__panel--prompt {
+  flex: none;
+  width: min(32rem, 100%);
+  max-height: min(32rem, 100%);
+  margin: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .den-overlay,
+  .den-overlay__panel {
+    animation: none;
+  }
+}
+.den-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+  background: var(--den-surface);
+}
+.den-overlay__header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.den-overlay__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+}
+.den-overlay__close {
+  flex-shrink: 0;
+  height: 2.2857rem;
+  width: 2.2857rem;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-hero);
+  line-height: 1;
+  cursor: pointer;
+}
+.den-overlay__body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Preserve app gutters and roughly 120 monospace columns. */
+.den-diff-viewer {
+  width: clamp(640px, calc(100vw - 120px), 1040px);
+  max-width: calc(100vw - 48px);
+  height: min(900px, calc(100vh - 40px));
+  margin: auto;
+}
+.den-diff-viewer__header {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 8px 8px 16px;
+  background: var(--den-surface);
+}
+.den-diff-viewer__path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-label);
+  overflow: hidden;
+}
+.den-diff-viewer__crumbs {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 1;
+  white-space: nowrap;
+}
+.den-diff-viewer__crumb {
+  color: var(--den-text-muted);
+}
+.den-diff-viewer__crumb-sep {
+  color: color-mix(in srgb, var(--den-text-muted) 55%, transparent);
+  padding: 0 3px;
+}
+.den-diff-viewer__path-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--den-text);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.den-diff-viewer__lang {
+  font-family: var(--den-font-ui);
+}
+.den-diff-viewer__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.den-diff-viewer__actions-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--den-line);
+}
+.den-diff-viewer__tool {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+.den-diff-viewer__tool:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+.den-diff-viewer__tool--ok {
+  color: var(--den-status-positive-text);
+}
+.den-diff-viewer__tool--ok:hover {
+  color: var(--den-status-positive-text);
+}
+.den-unsaved-dialog-backdrop {
+  /* Portaled to body above the fullscreen viewer overlay (z-index 50). */
+  position: fixed;
+  z-index: 90;
+}
+.den-unsaved-dialog__files {
+  margin: 0 16px 12px;
+  max-height: 160px;
+}
+.den-unsaved-dialog__files-content {
+  padding-left: 1.2em;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+.den-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 8px;
+  flex-shrink: 0;
+}
+.den-dialog__header h2 {
+  margin: 0;
+  font-size: var(--text-den-section);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.den-dialog__close {
+  border: none;
+  background: transparent;
+  font-size: var(--text-den-hero);
+  line-height: 1;
+  cursor: pointer;
+  color: var(--den-text-muted);
+  padding: 4px 8px;
+}
+.den-dialog__label {
+  margin: 0 16px 8px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+.den-dialog__hint {
+  margin: 8px 16px 16px;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+}
+.den-dialog__error {
+  margin: 0 16px 12px;
+  font-size: var(--text-den-body);
+  color: var(--den-danger-text);
+}
+.den-dialog__field {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  margin: 0 16px 14px;
+}
+.den-dialog__select {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  margin: 0 16px 14px;
+  font-size: var(--text-den-body);
+}
+.den-dialog__pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 14px;
+  padding: 7px 8px 7px 11px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+}
+.den-dialog__pick-path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-dialog__pick-path--empty {
+  color: var(--den-text-muted);
+}
+.den-dialog__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 14px;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+.den-inline-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--den-radius);
+  background: color-mix(in srgb, var(--den-danger) 8%, var(--den-background));
+  color: var(--den-danger-text);
+}
+.den-dialog .den-inline-notice {
+  margin: 0 16px 12px;
+}
+.den-inline-notice__title {
+  margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+}
+.den-inline-notice__message,
+.den-inline-notice__hint {
+  margin: 0;
+  font-size: var(--text-den-body);
+}
+.den-inline-notice__hint {
+  color: var(--den-text-muted);
+}
+.den-inline-notice__actions {
+  margin-top: 4px;
+}
+.den-dialog__list {
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+}
+.den-dialog__list-content {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px;
+}
+/* Holds a browsable height so the tree does not collapse to its rows. */
+.den-dialog__list.den-move-source-dialog__list {
+  min-height: 9rem;
+}
+.den-dialog__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.den-dialog__row:hover {
+  background: var(--den-tint-1);
+}
+.den-dialog__row-title {
+  font-size: var(--text-den-subhead);
+  font-weight: 500;
+}
+.den-dialog__row-sub {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.den-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--den-line);
+  flex-shrink: 0;
+  background: var(--den-background);
+}
+.den-dialog__footer-start {
+  margin-right: auto;
+}
+.den-dialog__footer-end {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.den-dialog__add {
+  width: 100%;
+}
+
+.chat-destination-project {
+  margin: 0 16px 12px;
+  min-height: 32px;
+}
+
+.chat-destination-row--suggested {
+  background: var(--den-tint-1);
+}
+

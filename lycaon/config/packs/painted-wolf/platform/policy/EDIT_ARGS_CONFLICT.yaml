@@ -1,0 +1,36 @@
+oar: '1.0'
+id: EDIT_ARGS_CONFLICT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+    - paintedwolf.conflict
+when: paintedwolf.rejection_code == "EDIT_ARGS_CONFLICT"
+effect: block
+copy:
+  what: 'edit received conflicting arguments: {{ paintedwolf.detail }}.'
+  cause: edit replaces one exact span — old_string plus a different new_string. replace_all repeats that span; it is not a second mode.
+  why: Structured rejects let agents branch without parsing free-form errors.
+  fix: Copy old_string from read (text after the line-number tab) and set a different new_string, then retry once.
+  instead: Branch on Code; fix args and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: 'edit arguments conflict: {{ paintedwolf.detail }}'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: conflict
+      handle: bg-1
+      path: src/main.go
+      profile: coordinator
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EDIT_ARGS_CONFLICT'

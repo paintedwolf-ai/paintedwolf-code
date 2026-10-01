@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.local/schemas/workflow_vocabulary.schema.json",
+  "title": "WorkflowVocabularyCatalog",
+  "type": "object",
+  "required": ["entries"],
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "layer", "status", "parameterized"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "layer": { "type": "string", "enum": ["core", "domain"] },
+        "domain": { "type": "string" },
+        "status": { "type": "string", "enum": ["shipped", "stub", "catalog"] },
+        "parameterized": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

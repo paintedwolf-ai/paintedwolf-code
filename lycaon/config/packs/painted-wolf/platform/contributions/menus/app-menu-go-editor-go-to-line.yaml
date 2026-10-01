@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-editor-go-to-line
+slot: "app_menu.go"
+command: painted-wolf/platform:editor-go-to-line
+group: "6"
+order: 24
+label: "Go to line…"

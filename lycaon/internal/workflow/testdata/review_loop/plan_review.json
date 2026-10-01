@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVED",
+  "bullets": "Scope matches the goal; the migration step is ordered before the read-path switch."
+}

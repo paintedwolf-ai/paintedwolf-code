@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COMMAND_OUTPUT_NO_LIVE_JOB
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command_output
+  - command_stop
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.handle
+when: paintedwolf.rejection_code == "COMMAND_OUTPUT_NO_LIVE_JOB"
+effect: block
+copy:
+  what: No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or
+    stopped.
+  cause: The requested handle was not found, and the session has no running command jobs. This does not establish
+    whether the handle expired, belongs elsewhere, or was never issued.
+  why: Retrying an unavailable handle cannot recover that execution’s output.
+  fix: Inspect the intended command’s retained result and lifecycle. Use a handle only if that execution actually
+    returned one and it is still retained. Do not restart completed work just to obtain a pollable job.
+  instead: Use the retained execution outcome; stop polling this unavailable handle
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: no live command job for handle {{ paintedwolf.handle }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: command-1
+    path: src/main.go
+    profile: coordinator
+    tool: command_output
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_OUTPUT_NO_LIVE_JOB'

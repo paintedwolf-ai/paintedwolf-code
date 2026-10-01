@@ -1,0 +1,56 @@
+id: design-doc
+version: 1.0.0
+trigger: /design-doc
+request:
+  question: What should the design doc cover?
+initial_posture: spec
+agents:
+  - { id: plan-writer, tools: profile }
+  - { id: repo-researcher, tools: profile }
+phases:
+  - id: clarify
+    activity_label: Clarifying the design
+    on_enter:
+      request_user_feedback:
+        prompt: "What is the scope of the design doc?"
+    complete_when: gates_satisfied
+    gates: [user_feedback_received:clarify]
+    coordinator_surface: plan_stub
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [plan-stub]
+    next: approve
+  - id: approve
+    activity_label: Waiting for your approval
+    on_enter:
+      request_user_feedback:
+        prompt: "Approve this design doc approach?"
+        response_type: single_choice
+        options: [approve, revise]
+    complete_when: gates_satisfied
+    gates: [user_decision_received:approve]
+    coordinator_surface: plan_approve
+    surface_template: agents/coordinator-surface-plan.md
+    next: execute
+  - id: execute
+    activity_label: Building the design
+    on_enter:
+      set_posture: build
+    invoke_workflow:
+      workflow_id: implement
+      version: "1.0.0"
+      blueprint: none
+    invoke_trigger: phase_enter
+    complete_when: gates_satisfied
+    gates: [child_run_complete]
+    coordinator_surface: plan_execute
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [plan-execute]
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml

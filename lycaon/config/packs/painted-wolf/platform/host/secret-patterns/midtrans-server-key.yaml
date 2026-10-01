@@ -1,0 +1,8 @@
+id: midtrans-server-key
+title: Midtrans server key
+regex: '\b((?:SB-)?Mid-server-[A-Za-z0-9_]{10,20})\b'
+keywords:
+  - mid-server-
+severity: critical
+secret_group: 1
+entropy: 2.8

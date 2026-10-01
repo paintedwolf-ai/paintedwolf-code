@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-files-add-selection-to-chat
+slot: "app_menu.edit"
+command: painted-wolf/platform:files-add-selection-to-chat
+group: "1"
+order: 6
+label: "Add selection to chat"

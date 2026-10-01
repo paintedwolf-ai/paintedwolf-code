@@ -1,0 +1,206 @@
+components:
+  schemas:
+    FullScanRequest:
+      x-go-generate: true
+      type: object
+      description: >-
+        A complete pass of every admitted file by the named scanners, or by
+        every selected scanner when none are named. The only way a full pass
+        starts; automatic scanning is incremental.
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [full]
+        scanner_ids:
+          x-go-name: "ScannerIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[a-zA-Z0-9_-]+$'
+        session_id:
+          type: string
+          format: uuid
+    FullScanResponse:
+      x-go-generate: true
+      type: object
+      description: >-
+        The pass each project root owes, as it stands after the request, and
+        the Security stage overview that already includes it. A request joins
+        an unfinished pass that covers its scanners, widens one that has not
+        started, and otherwise records a new pass.
+      required: [passes, overview]
+      additionalProperties: false
+      properties:
+        passes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFullPass"
+        overview:
+          $ref: "#/components/schemas/SecurityOverview"
+    SecurityBaseline:
+      x-go-generate: true
+      type: object
+      description: The generation automatic scanning measures change against.
+      required: [snapshot_id, created_at, file_count, unobserved_directories]
+      additionalProperties: false
+      properties:
+        snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        created_at:
+          type: string
+          format: date-time
+        file_count:
+          type: integer
+          minimum: 0
+        unobserved_directories:
+          type: integer
+          minimum: 0
+    SecurityFullPass:
+      x-go-generate: true
+      type: object
+      description: >-
+        One requested full pass. Every member reads every admitted file of the
+        same source generation, so members start together once each scanner
+        has finished earlier work. The pass is finished when no member is
+        waiting and every started member's scan is terminal.
+      required: [assessment_id, requested_at, members]
+      additionalProperties: false
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+          description: The pass id, which is also its security assessment id once it starts.
+        requested_at:
+          type: string
+          format: date-time
+        started_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: When the members were dispatched together; absent while any member waits.
+        completed_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        coverage_status:
+          $ref: execution.yaml#/components/schemas/ScanCoverageStatus
+        trigger:
+          $ref: execution.yaml#/components/schemas/ScanTrigger
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFullPassMember"
+    SecurityFullPassMember:
+      x-go-generate: true
+      type: object
+      description: One scanner of a full pass and how far it has come.
+      required: [scanner_id, phase]
+      additionalProperties: false
+      properties:
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        phase:
+          $ref: "#/components/schemas/FullPassMemberPhase"
+        scan:
+          x-go-pointer: true
+          $ref: execution.yaml#/components/schemas/CodeScan
+    FullPassMemberPhase:
+      type: string
+      description: >-
+        waiting_for_scanner means this scanner is still finishing earlier work
+        and the pass starts after it; waiting_for_pass means this scanner is
+        free and starts with the other members; started means scan holds the
+        member's run; not_started means the member left the pass before it
+        started (its scanner was deselected or could not be dispatched), so the
+        pass covers less than was requested.
+      enum:
+      - waiting_for_scanner
+      - waiting_for_pass
+      - started
+      - not_started
+    SecurityScannerState:
+      x-go-generate: true
+      type: object
+      required: [id, label, categories, available, running, watching, pass_superseded]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        label:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanCategory
+        available:
+          type: boolean
+        unavailable_reason:
+          x-go-name: "Unavailable"
+          type: string
+        last_full_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        running:
+          type: boolean
+        watching:
+          type: boolean
+          description: >-
+            True once the scanner holds a series for this project, so admitted
+            writes arm it. Automatic scanning is change-driven: an empty delta
+            produces no scan record, so an absence of recent runs under a
+            watching scanner means the tree was quiet, not that scanning
+            lapsed.
+        last_completed_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: When this scanner's series last finished a scan of any target.
+        pass_superseded:
+          type: boolean
+          description: >-
+            True when the execution identity the series last covered is not the
+            one this scanner would run now — a rule or engine change since its
+            results were established. Requires positive evidence of drift: a
+            series that has covered nothing has no pass to invalidate, and an
+            identity that cannot be resolved is never reported as a change.
+    SecurityOverview:
+      x-go-generate: true
+      type: object
+      description: >-
+        What the Security stage states above its findings: what change is
+        measured against, whether a full pass exists, and what is running now.
+      required: [project_id, enabled, scanners, introduced_since_baseline, fixed_since_baseline]
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        coverage_status:
+          x-go-name: "Coverage"
+          $ref: execution.yaml#/components/schemas/ScanCoverageStatus
+        baseline:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityBaseline"
+        last_full:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFullPass"
+        running:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFullPass"
+        scanners:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityScannerState"
+        introduced_since_baseline:
+          type: integer
+          minimum: 0
+        fixed_since_baseline:
+          type: integer
+          minimum: 0

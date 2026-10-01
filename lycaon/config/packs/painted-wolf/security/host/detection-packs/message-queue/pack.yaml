@@ -1,0 +1,5 @@
+id: message-queue
+label: Queues and streams
+description: >-
+  Streaming and queue operations that delete a topic, drop retained messages, or
+  move a consumer group's position.

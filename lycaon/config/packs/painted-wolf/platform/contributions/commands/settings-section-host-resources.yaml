@@ -1,0 +1,9 @@
+id: painted-wolf/platform:settings-section-host-resources
+title: "Settings: host resources"
+scope: "global"
+keywords:
+  - "host resources"
+  - "skills"
+action:
+  kind: native_ui
+  handler: "settings.advanced.host-resources"

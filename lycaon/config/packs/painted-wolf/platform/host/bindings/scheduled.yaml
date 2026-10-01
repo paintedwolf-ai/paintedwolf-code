@@ -1,0 +1,14 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': wait.timer.fired
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-scheduled
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - wait() deadline backstop
+  required:
+  - wait(
+  - conditions

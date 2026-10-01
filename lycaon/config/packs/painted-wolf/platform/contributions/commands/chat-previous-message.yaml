@@ -1,0 +1,7 @@
+id: painted-wolf/platform:chat-previous-message
+title: "Go to previous message"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "chat.previousMessage"

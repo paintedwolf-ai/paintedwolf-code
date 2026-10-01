@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "cmd/go"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "toolchain"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.10"
+      },
+      {
+       "introduced": "1.26.0-0"
+      },
+      {
+       "fixed": "1.26.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-39819"
+ ],
+ "credits": [
+  {
+   "name": "Harshit Gupta (Mr HAX)"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4978"
+ },
+ "details": "The \"go bug\" command writes to two files with predictable names in the system temporary directory (for example, \"/tmp\").\n\nAn attacker with access to the temporary directory can create a symlink in one of these names, causing \"go bug\" to overwrite the target of the symlink.",
+ "id": "GO-2026-4978",
+ "modified": "2026-05-07T19:21:40Z",
+ "published": "2026-05-07T19:21:40Z",
+ "references": [
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/78584"
+  },
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/763882"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/qcCIEXso47M"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Invoking \"go bug\" follows symlinks in predictable temporary filenames in cmd/go"
+}

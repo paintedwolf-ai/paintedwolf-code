@@ -1,0 +1,8 @@
+description: Report reservation counts for a handoff session plane.
+schema:
+  type: object
+  properties:
+    session_id:
+      description: "Parent session id (defaults to caller session)."
+      type: string
+  additionalProperties: false

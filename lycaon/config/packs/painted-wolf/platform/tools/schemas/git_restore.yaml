@@ -1,0 +1,21 @@
+tags: [git, mutation]
+description: "Restore explicit paths in the Git worktree, index, or both. Defaults to Git's ordinary worktree-from-index behavior. This discards selected state — use only when the user explicitly asked to revert named paths. Replaces command: git restore."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      description: Repo-relative paths to restore (max 20)
+    source:
+      type: string
+      description: Optional source tree (for example HEAD or a commit). Defaults to the index for worktree-only restore and HEAD when staged is true.
+    staged:
+      type: boolean
+      description: Restore the index. When neither staged nor worktree is true, worktree defaults to true.
+    worktree:
+      type: boolean
+      description: Restore the worktree. Set with staged to restore both.
+  required: [paths]
+  additionalProperties: false

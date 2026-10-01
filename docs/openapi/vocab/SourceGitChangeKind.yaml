@@ -1,0 +1,37 @@
+# SourceGitChangeKind — closed set of observed git ref movements recorded as
+# source history transitions. Kinds mirror git's own reflog action vocabulary;
+# `other` carries an action outside this set in the transition detail, and
+# `unknown` records a movement the reflog could not explain. Repo lifecycle
+# (`repo_appeared` / `repo_gone`) shares the timeline so a deleted or newly
+# initialized repository is a stated fact, not silence.
+name: SourceGitChangeKind
+go_const_prefix: SourceGitChange
+values:
+  - id: checkout
+    comment: HEAD moved by a branch switch or explicit checkout.
+  - id: commit
+    comment: A commit landed on the current branch.
+  - id: amend
+    comment: The branch tip was rewritten by commit --amend.
+  - id: merge
+    comment: A merge moved the branch tip.
+  - id: rebase
+    comment: A rebase rewrote the branch.
+  - id: pull
+    comment: A pull advanced the branch from its upstream.
+  - id: reset
+    comment: The branch tip was reset to another commit.
+  - id: cherry_pick
+    comment: A cherry-pick applied a commit onto the branch.
+  - id: revert
+    comment: A revert commit landed on the branch.
+  - id: clone
+    comment: The repository's initial clone reflog entry.
+  - id: repo_appeared
+    comment: A root that had no repository now has one.
+  - id: repo_gone
+    comment: A root's repository was removed or became unreadable.
+  - id: other
+    comment: A reflog action outside the closed set; detail carries the raw action.
+  - id: unknown
+    comment: HEAD moved but the reflog could not explain the movement.

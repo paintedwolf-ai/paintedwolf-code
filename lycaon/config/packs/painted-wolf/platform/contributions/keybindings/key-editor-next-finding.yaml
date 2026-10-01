@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-next-finding
+command: painted-wolf/platform:editor-next-finding
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "F8"
+  windows:
+    - "F8"
+  linux:
+    - "F8"

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-indent-less
+command: painted-wolf/platform:editor-indent-less
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+["
+  windows:
+    - "Mod+["
+  linux:
+    - "Mod+["

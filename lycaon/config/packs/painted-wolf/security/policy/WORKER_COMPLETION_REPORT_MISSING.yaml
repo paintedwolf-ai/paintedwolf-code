@@ -1,0 +1,33 @@
+oar: '1.0'
+id: WORKER_COMPLETION_REPORT_MISSING
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.missing
+when: paintedwolf.missing
+effect: block
+copy:
+  what: 'The worker ended without an accepted structured completion report.'
+  cause: 'The host could not obtain a usable completion report after the worker finish path.'
+  why: 'The report is missing; that does not establish whether the underlying assignment was completed.'
+  fix: 'Inspect the existing worker result and retained observations before deciding on follow-up. Ask for complete_leg on a resumed worker report turn; dispatch new work only for a specific unmet requirement, preserving the existing worker and overlay identities.'
+  instead: 'Treat the result as partial and state which report or evidence is missing. Do not rerun completed work merely to obtain a report.'
+# The leg is over when this fires; the reader is the dispatching coordinator,
+# whose tools the fix names.
+x-paintedwolf-audience:
+  - coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-message: 'Worker ended without an accepted completion report'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: missing report
+      path: src/main.go
+      profile: coordinator
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKER_COMPLETION_REPORT_MISSING'
+      - complete_leg

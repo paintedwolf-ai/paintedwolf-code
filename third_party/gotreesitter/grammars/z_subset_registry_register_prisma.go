@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_prisma
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "prisma",
+		Extensions:     []string{".prisma"},
+		Language:       PrismaLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "[\n \"datasource\"\n \"enum\"\n \"generator\"\n \"model\"\n \"view\"\n] @keyword\n\n(comment) @comment\n(developer_comment) @comment\n\n(number) @number\n(string) @string\n(false) @boolean\n(true) @boolean\n(arguments) @property\n(maybe) @punctuation\n(call_expression (identifier) @function)\n(enumeral) @constant\n(identifier) @variable\n\n(column_declaration (identifier) (column_type (identifier) @type))\n(attribute (identifier) @label)\n(attribute (call_expression (identifier) @label))\n(attribute (call_expression (member_expression (identifier) @label)))\n(block_attribute_declaration (identifier) @label)\n(block_attribute_declaration (call_expression (identifier) @label))\n(type_expression (identifier) @property)\n\n\n\"(\" @punctuation.bracket\n\")\" @punctuation.bracket\n\"[\" @punctuation.bracket\n\"]\" @punctuation.bracket\n\"{\" @punctuation.bracket\n\"}\" @punctuation.bracket\n\"=\" @operator\n\"@\" @label\n\"@@\" @label\n",
+	})
+}

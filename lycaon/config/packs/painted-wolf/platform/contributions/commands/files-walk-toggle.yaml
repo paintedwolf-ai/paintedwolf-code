@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-walk-toggle
+title: "Toggle walk mode"
+scope: "files"
+keywords:
+  - "walk"
+  - "timeline"
+  - "step through changes"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.walkToggle"

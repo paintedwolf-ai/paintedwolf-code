@@ -1,0 +1,10 @@
+# A template does nothing on its own. It reaches a prompt only because a binding
+# names it in render:. `on:` must be an anchor from the host anchor catalog —
+# an unknown anchor fails closed.
+'on': phase.entered
+selector:
+  surface: coordinator
+effect: inform
+render: example-house-style
+tier: workflow
+when: 'true'

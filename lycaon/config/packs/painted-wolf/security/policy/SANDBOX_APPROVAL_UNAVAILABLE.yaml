@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SANDBOX_APPROVAL_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_APPROVAL_UNAVAILABLE"
+effect: block
+copy:
+  what: The requested capability could not reach its approval boundary.
+  cause: '{% if paintedwolf.rejection_reason %}{{ paintedwolf.rejection_reason }}{% else %}The host did not install
+    the reviewed authority on this invocation.{% endif %}'
+  why: This is an approval-path failure, not a security verdict about the requested effect.
+  fix: Retry after the approval surface is available, or use an invocation that stays within the authority already
+    installed.
+  instead: Branch on Code; do not report the requested effect as forbidden
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_approval
+x-paintedwolf-message: capability approval was unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    reason: approval did not install authority
+  expect_contains:
+  - 'Code: SANDBOX_APPROVAL_UNAVAILABLE'
+  - not a security verdict

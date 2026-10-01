@@ -1,0 +1,8 @@
+id: credential-minting
+label: Credential-minting calls
+description: >-
+  Calls that issue a credential in their output. These raise no approval: they
+  mark the result as provenance evidence so the host recognizes the value
+  wherever it appears afterwards. Every shape rule needs its keyword within a few
+  dozen characters of a value, and a freshly minted token is printed far from the
+  words that name it, so shape alone never finds it at the moment it is created.

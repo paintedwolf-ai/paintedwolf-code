@@ -1,0 +1,12 @@
+description: Validate JSON.
+schema:
+  type: object
+  properties:
+    raw:
+      type: string
+      description: JSON text.
+    schema:
+      type: string
+      description: Optional JSON Schema.
+  required: [raw]
+  additionalProperties: false

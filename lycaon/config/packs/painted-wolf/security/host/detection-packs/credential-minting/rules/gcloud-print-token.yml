@@ -1,0 +1,24 @@
+title: Print a Google Cloud access token
+id: 2d6c4d43-5f90-4c3c-9e84-2f3a4b5c6d72
+description: Prints an OAuth access or identity token for the active Google Cloud credentials.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: gcloud
+    CommandLine|contains:
+      - ' auth print-access-token'
+      - ' auth print-identity-token'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

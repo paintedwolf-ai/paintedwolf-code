@@ -1,0 +1,23 @@
+post_turn:
+  # Delegation post-turn carries the circuit-breaker escalation gate only. Completion
+  # grounding is enforced at closeout via the worker ledger + CompletionCriteria —
+  # never by scanning coordinator prose.
+  mode: warn
+closeout:
+  mode: block
+# write.mode governs evidence grounding for findings (record_finding): blocks/warns on
+# ungrounded evidence-shaped typed citations. Prose leaks in a record_finding summary are
+# advisory only — same as worker/synthesis. When omitted, inherits post_turn.mode.
+write:
+  mode: block
+ambient:
+  post_turn:
+    mode: warn
+    # With workers: correlates WorkerQueue jobs with worker_summary tags on the parent session.
+    # With no workers: reads the coordinator's own citation-grounding audit (typed citations vs
+    # evidence ledger). Never scans prose. Inconsistencies are recorded as a per-turn audit.
+circuit_breaker:
+  max_ungrounded_warnings: 3
+  max_consecutive_ungrounded: 2
+  # flag raises an advisory; block stops the session at the threshold.
+  escalate_mode: flag

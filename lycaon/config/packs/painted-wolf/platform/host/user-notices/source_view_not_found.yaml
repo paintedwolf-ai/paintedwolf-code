@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Source view closed
+message: This source presentation is no longer open.
+suggested_action: Open the source again to continue.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - no longer open

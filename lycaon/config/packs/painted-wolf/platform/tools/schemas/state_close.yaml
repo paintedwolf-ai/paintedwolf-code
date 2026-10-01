@@ -1,0 +1,7 @@
+description: Exit the active workflow run for the session
+schema:
+  type: object
+  properties:
+    reason:
+      description: "Optional reason recorded when exiting the run."
+      type: string

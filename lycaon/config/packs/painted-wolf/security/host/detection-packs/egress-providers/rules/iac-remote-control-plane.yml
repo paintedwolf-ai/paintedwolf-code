@@ -1,0 +1,43 @@
+title: Reached a remote IaC or GitOps API
+id: 9bbbb2a9-9ddd-444a-a19c-96fd65119f83
+description: >-
+  Connected to a remote infrastructure-as-code or GitOps control plane (state,
+  runs, or registry). A hostname cannot tell a plan from an apply, so this is a
+  coarse signal for scripts and SDKs.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - app.terraform.io
+      - registry.terraform.io
+      - api.pulumi.com
+      - api.pulumi.io
+      - app.pulumi.com
+      - app.spacelift.io
+      - api.spacelift.io
+      - api.env0.com
+      - app.env0.com
+      - api.scalr.io
+      - api.harness.io
+      - app.harness.io
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .terraform.io
+      - .pulumi.com
+      - .pulumi.io
+      - .spacelift.io
+      - .env0.com
+      - .scalr.io
+      - .harness.io
+  condition: selection_host or selection_suffix

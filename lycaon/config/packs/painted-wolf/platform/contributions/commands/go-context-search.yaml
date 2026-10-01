@@ -1,0 +1,19 @@
+id: painted-wolf/platform:go-context-search
+title: "Show search"
+scope: "global"
+keywords:
+  - "search"
+  - "find in project"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "search"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.search"

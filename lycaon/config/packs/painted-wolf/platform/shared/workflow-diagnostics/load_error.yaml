@@ -1,0 +1,5 @@
+code: load_error
+message: |
+  Failed to load workflow catalog: {{detail}}.
+replacement: |
+  Fix YAML syntax or path errors and re-run validate.

@@ -1,0 +1,10 @@
+emit: banner
+category: expected_behavior
+severity: info
+message: workflow_advance is unavailable on phase {{ paintedwolf.phase }}; the host advances it when its gates pass
+what: This workflow phase uses host auto-advance when gates pass
+cause: The active phase effective advance policy is auto, not coordinator
+why: workflow_advance is only on phases where the coordinator drives the advance
+fix: Satisfy the phase gates and let the host advance, or wait for the next coordinator-advance phase
+instead: Do not call workflow_advance on host-auto phases
+id: WORKFLOW_ADVANCE_NOT_COORDINATOR_MODE

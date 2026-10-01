@@ -1,0 +1,46 @@
+oar: '1.0'
+id: HTTP_REQUEST_FAILED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - http_request
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.retryable
+  - paintedwolf.rejection_code
+  - paintedwolf.http_method
+  - paintedwolf.http_requests_started
+  - paintedwolf.http_responses_received
+  - paintedwolf.http_last_status
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "HTTP_REQUEST_FAILED"
+effect: block
+copy:
+  what: The HTTP request did not complete.{% if paintedwolf.http_requests_started %} The host started {{ paintedwolf.http_requests_started
+    }} exchange attempts for {{ paintedwolf.http_method }}.{% endif %}{% if paintedwolf.http_responses_received
+    %} It received {{ paintedwolf.http_responses_received }} responses; the last status was {{ paintedwolf.http_last_status
+    }}.{% endif %}
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: A later redirect, response transfer, or persistence failure can follow an exchange that already changed remote
+    state. Failure does not prove that the server received nothing.
+  fix: '{% if paintedwolf.retryable %}The transport fault may recover, but retryable does not establish that replay
+    is safe. Inspect the recorded response, redirects, and server state first. Retry only if the operation is known
+    to be repeatable or its idempotency contract prevents duplicate effects.{% else %}The host reports a non-retryable
+    failure. Correct the request or return the blocked dependency; do not repeat the identical call.{% endif %}'
+  instead: Keep the method, headers, body, and destination explicit in `http_request` when retrying
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: The HTTP request did not complete
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: implement
+    reason: connection refused
+    retryable: true
+    tool: http_request
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: HTTP_REQUEST_FAILED'

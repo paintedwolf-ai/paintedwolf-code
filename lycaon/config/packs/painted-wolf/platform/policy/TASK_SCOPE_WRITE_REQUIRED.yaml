@@ -1,0 +1,34 @@
+oar: '1.0'
+id: TASK_SCOPE_WRITE_REQUIRED
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  facts:
+    - paintedwolf.agent_type
+    - paintedwolf.profile_mutation_capable
+    - paintedwolf.scope_mode
+    - paintedwolf.tool_is_task
+when: paintedwolf.tool_is_task && paintedwolf.profile_mutation_capable && paintedwolf.scope_mode != "write"
+effect: block
+copy:
+  what: '**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay.'
+  cause: You dispatched a mutation-capable worker with read scope or omitted scope (defaults to read).
+  why: Read-scoped workers survey the primary tree; mutations require a write overlay merged via promote_overlay.
+  fix: 'Read-only survey or analysis → `task` with a read-only profile and `scope.mode: read`. Product edits or host mutations → `task(agent_type="{{ paintedwolf.agent_type }}", scope.mode: write)`. Optional paths may guide focus.'
+  instead: 'Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: mutation-capable profiles require scope.mode write
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      agent_type: implementer
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      scope_mode: read
+      scope_paths: []
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: TASK_SCOPE_WRITE_REQUIRED'

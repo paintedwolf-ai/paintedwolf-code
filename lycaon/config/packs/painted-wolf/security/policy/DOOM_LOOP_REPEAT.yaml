@@ -1,0 +1,86 @@
+oar: '1.0'
+id: DOOM_LOOP_REPEAT
+kind: invariant
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.code
+  - paintedwolf.count
+  - paintedwolf.worker_leg
+  - paintedwolf.repeat_count
+  - paintedwolf.same_code_reject_run
+  - paintedwolf.deferred_unactivated
+  - paintedwolf.handle
+  - paintedwolf.can_complete_leg
+  - paintedwolf.can_request_tools
+when: paintedwolf.repeat_count >= 8 || paintedwolf.same_code_reject_run >= 2
+effect: block
+on_fire:
+- increment_counter
+copy:
+  cause: The same tool+args invocation keeps repeating without a changed outcome
+  why: Replaying or cosmetically varying a call that already failed burns budget without advancing the current
+    objective.
+  fix: '{% if paintedwolf.handle %}Do not call `command_output` with the same cursor again. Call `wait(until_complete=true,
+    conditions=[{"kind":"process_done","handles":["{{ paintedwolf.handle }}"]}], reason="waiting for command
+    completion")` now. The host will wake this session when the command finishes or becomes unavailable. {% else
+    %}Stop this tool arc.{% if paintedwolf.deferred_unactivated %} {% if paintedwolf.can_request_tools %}If
+    the action you are trying to take needs a tool that is not in this turn''s schema, no retry will surface
+    it — call `request_tools` with that tool''s name, then take the action.{% endif %}{% endif %} {% if paintedwolf.worker_leg
+    %}Answer the leg from the evidence you already hold. If the question this call was chasing cannot be answered
+    that way, {% if paintedwolf.can_complete_leg %}call complete_leg now with `leg_status: partial`, name the
+    unanswered question in `remaining_risk`, and put the next step in `suggested_next_task`.{% else %}report
+    the dependency through the actual completion channel.{% endif %}{% else %}Reuse existing evidence, then
+    follow the active workflow Phase exit or current next action; use another tool only when that action requires
+    a named missing fact.{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from
+    its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}{% if
+    paintedwolf.can_complete_leg %}Call complete_leg this turn with `leg_status: partial`, name the unanswered
+    question in `remaining_risk`, and put the next step in `suggested_next_task`. A partial leg with cited
+    evidence is a result; more calls against this block are not.{% else %}Report the unresolved question through
+    the actual completion channel.{% endif %}{% else %}Resume the current next action from existing evidence
+    — do not retry or vary this call. {% endif %}{% endif %}'
+  what: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with
+    Code: {{ paintedwolf.code }}, so replaying it cannot succeed{% else %} after {{ paintedwolf.count }} repeats{%
+    endif %}.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:doom_loop
+x-paintedwolf-message: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts
+  all rejected with Code: {{ paintedwolf.code }}, so replaying it cannot succeed{% else %} after {{ paintedwolf.count
+  }} repeats{% endif %}.'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DOOM_LOOP_REPEAT'
+  - current next action
+- id: worker_leg
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: explore_readonly
+    tool: grep
+    worker_leg: true
+    can_complete_leg: true
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT'
+  - 'leg_status: partial'
+  - remaining_risk
+- id: command_output
+  vars:
+    count: 8
+    handle: cmd_docker_01
+    profile: coordinator
+    tool: command_output
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT'
+  - '"handles":["cmd_docker_01"]'
+  - process_done
+  - terminal envelope

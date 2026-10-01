@@ -1,0 +1,16 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': review_loop.decide
+selector:
+  surface: phase
+effect: inform
+render: coordinator-review-loop-decide
+tier: builtin
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - review_loop phase reached iteration_cap — coordinator must render a terminal verdict
+  required:
+  - terminal
+  - verdict
+  forbidden:
+  - workflow_advance

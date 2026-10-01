@@ -1,0 +1,36 @@
+title: Grant or widen cluster access
+id: 5f1aef50-4f5e-4740-aecb-1e351ee9eea0
+description: Creates a role binding or role that widens who can act on the cluster.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  verbs_rbac_grant:
+    CommandLine|contains:
+      - ' create clusterrolebinding'
+      - ' create rolebinding'
+      - ' create clusterrole'
+      - ' create role '
+      - ' adm policy add-cluster-role-to-'
+      - ' adm policy add-role-to-'
+      - ' adm policy add-scc-to-'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_rbac_grant and not filter_rehearsal and not filter_local

@@ -1,0 +1,5 @@
+code: missing_tool_for_advance_policy
+message: |
+  Coordinator-controlled advance on phase {{phase}} requires {{tool}} on surface {{surface}}.
+replacement: |
+  Add {{tool}} to the surface tools, or set advance.when_gate_met: auto.

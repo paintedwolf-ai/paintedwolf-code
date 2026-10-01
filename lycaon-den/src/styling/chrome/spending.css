@@ -1,0 +1,92 @@
+.spend-ceiling-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.spend-ceiling-readout__bar {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--den-border) 80%, transparent);
+  overflow: hidden;
+}
+.spend-ceiling-readout__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--den-accent-signal);
+}
+.spend-ceiling-readout--near .spend-ceiling-readout__fill {
+  background: color-mix(in srgb, var(--den-warning) 80%, var(--den-accent-signal));
+}
+.spend-ceiling-readout--near .den-settings-hint {
+  color: var(--den-warning);
+}
+/* Text retains its minimum width as actions wrap. */
+.system-nudge__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 17rem;
+  min-width: min(100%, 17rem);
+}
+.system-nudge__title {
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+/* Instructions wrap without truncation. */
+.system-nudge__sub {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+/* Host-authored remedy below the message. */
+.system-nudge__hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--den-text-muted);
+}
+.system-nudge__sub code {
+  font-size: var(--text-den-caption);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--den-text) 8%, transparent);
+}
+/* Link actions share the neighboring button alignment. */
+.system-nudge__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  /* Wrapped actions align to the trailing edge. */
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  font-size: var(--text-den-body);
+}
+/* Action labels wrap within the card. */
+.system-nudge__actions > * {
+  max-width: 100%;
+}
+/* The action gap supplies spacing between links. */
+.system-nudge__actions .btn-link {
+  margin-left: 0;
+}
+.system-nudge__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max(26px, 1.6em);
+  min-height: max(26px, 1.6em);
+  border-radius: var(--den-radius);
+  font-size: var(--text-den-title);
+  line-height: 1;
+  cursor: pointer;
+}
+

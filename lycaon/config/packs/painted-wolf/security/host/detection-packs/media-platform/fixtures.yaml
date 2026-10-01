@@ -1,0 +1,17 @@
+fixtures:
+- rule: asset-delete
+  positive:
+  - cld uploader destroy sample
+  - cld admin delete_resources image1,image2
+  - cld uploader destroy sample --invalidate
+  - cld admin delete_resources_by_prefix my_folder/
+  - cld admin delete_all_resources
+  - cld admin delete_folder my_folder
+  - sudo cld uploader destroy sample
+  negative:
+  - cld admin resources -o prefix my_folder/
+  - cld admin folders
+  - cld admin restore image1,image2
+  - cld uploader upload sample.jpg
+  - cld uploader destroy sample --help
+  - cld admin delete_resources image1,image2 --help

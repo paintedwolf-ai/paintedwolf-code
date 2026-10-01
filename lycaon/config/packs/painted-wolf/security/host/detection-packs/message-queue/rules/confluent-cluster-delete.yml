@@ -1,0 +1,31 @@
+title: Delete a managed Kafka cluster
+id: 2af7066f-2d4a-4e11-846c-919614d399a8
+description: Deletes an entire Confluent Cloud Kafka cluster and every topic in it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: confluent
+    CommandLine|contains: ' kafka cluster delete'
+  # Same gate as this pack's topic delete: without --force the command sits on
+  # an interactive confirmation and removes nothing.
+  selection_confirm:
+    CommandLine|contains: ' --force'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_confirm and not filter_rehearsal and not filter_local

@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Still working
+message: >-
+  This chat is in the middle of a turn, so it cannot be rewound yet.
+  Rewinding now would undo files while they are still being written.
+suggested_action: Stop the current turn, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - middle of a turn

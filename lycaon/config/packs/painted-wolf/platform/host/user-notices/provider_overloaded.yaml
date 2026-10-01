@@ -1,0 +1,37 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - status
+    - attempts
+title: Model host is overloaded
+message: >-
+  {% if provider_id -%}
+  {{ provider_id }} is at capacity (HTTP {% if status %}{{ status }}{% else %}503{% endif %}).
+  {%- else -%}
+  The model host is at capacity.
+  {%- endif %}
+  {% if attempts and attempts > 1 %}Painted Wolf tried {{ attempts }} times; the host is still too busy.{% else %}The host is still too busy.{% endif %}
+suggested_action: >-
+  Wait a moment and send again, or switch to a different model in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_provider
+    vars:
+      provider_id: together-ai-1
+      status: 503
+      attempts: 3
+    expect_contains:
+      - together-ai-1
+      - at capacity
+      - tried 3 times
+  - id: generic
+    vars: {}
+    expect_contains:
+      - at capacity

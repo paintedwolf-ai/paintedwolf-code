@@ -1,0 +1,1 @@
+Worker task started for `{{ agent_type }}`. Your assignment is pinned in this context. Follow your agent persona: bounded tools and a structured summary for the coordinator — do not paste whole files unless the prompt asks for specific line ranges.

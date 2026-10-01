@@ -1,0 +1,27 @@
+title: Change a global or system Git configuration
+id: f205c92b-84c4-4b06-8218-b532578ed113
+status: stable
+description: >-
+  Mutates a global, system, or bare-repository Git configuration file through a
+  native file action. These files set core.pager, core.editor, core.sshCommand,
+  core.hooksPath, credential.helper, diff textconv and alias entries, each of
+  which names a program Git then runs, so the file is code execution wearing the
+  shape of configuration. A work tree's own .git/config is refused outright by
+  the file tools and is not named here.
+references:
+  - https://git-scm.com/docs/git-config
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, git_restore, git_checkout, git_merge, git_stash]
+    TargetFile|re:
+      - '^~[/][.]gitconfig$'
+      - '^~[/][.]config/git/config$'
+      - '^(/etc|/usr/local/etc|/opt/homebrew/etc|/opt/local/etc)/gitconfig$'
+      - '(^|/)[^/]+[.]git/config([.]worktree)?$'
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.persistence]

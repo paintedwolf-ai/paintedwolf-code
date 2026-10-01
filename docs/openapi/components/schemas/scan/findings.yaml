@@ -1,0 +1,294 @@
+components:
+  schemas:
+    # Enum values from docs/openapi/vocab — do not hand-edit generated fragments.
+    ScanCategory:
+      $ref: ../scan-category.generated.yaml#/components/schemas/ScanCategory
+    FindingLevel:
+      $ref: ../finding-level.generated.yaml#/components/schemas/FindingLevel
+    FindingKind:
+      $ref: ../finding-kind.generated.yaml#/components/schemas/FindingKind
+    AdvisoryKind:
+      $ref: ../advisory-kind.generated.yaml#/components/schemas/AdvisoryKind
+    FindingDisposition:
+      $ref: ../finding-disposition.generated.yaml#/components/schemas/FindingDisposition
+    FindingLedgerState:
+      $ref: ../finding-ledger-state.generated.yaml#/components/schemas/FindingLedgerState
+    FindingLedgerSort:
+      $ref: ../finding-ledger-sort.generated.yaml#/components/schemas/FindingLedgerSort
+    FindingIgnoreJustification:
+      $ref: ../finding-ignore-justification.generated.yaml#/components/schemas/FindingIgnoreJustification
+    SecurityFindingLocation:
+      x-go-generate: true
+      type: object
+      required:
+      - uri
+      additionalProperties: false
+      properties:
+        uri:
+          type: string
+        start_line:
+          type: integer
+          minimum: 0
+        start_column:
+          type: integer
+          minimum: 0
+        end_line:
+          type: integer
+          minimum: 0
+        end_column:
+          type: integer
+          minimum: 0
+    SecurityFindingFingerprints:
+      x-go-generate: true
+      type: object
+      required:
+      - primary
+      additionalProperties: false
+      properties:
+        primary:
+          type: string
+    ToolDescriptor:
+      x-go-generate: true
+      type: object
+      required:
+      - driver_id
+      - name
+      additionalProperties: false
+      properties:
+        driver_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        name:
+          type: string
+        version:
+          type: string
+    AdvisoryPackageRef:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        ecosystem:
+          type: string
+    AdvisoryRef:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        One vulnerability under every id it is published as. osv_id is the
+        canonical id chosen from the whole alias set (a CVE when one is known,
+        else a GHSA, else the first ecosystem database id); the family lists
+        carry every id, canonical included.
+      properties:
+        osv_id:
+          x-go-name: "OSVID"
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        kind:
+          $ref: "#/components/schemas/AdvisoryKind"
+        cve_ids:
+          x-go-name: "CVEIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[a-zA-Z0-9_.:/-]+$'
+        ghsa_ids:
+          x-go-name: "GHSAIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[a-zA-Z0-9_.:/-]+$'
+        aliases:
+          description: >-
+            Ecosystem advisory database ids for the same vulnerability
+            (GO-, PYSEC-, RUSTSEC-, MAL-, ...).
+          type: array
+          items:
+            type: string
+        package:
+          x-go-pointer: true
+          $ref: "#/components/schemas/AdvisoryPackageRef"
+        severity_source:
+          type: string
+        cvss:
+          x-go-name: "CVSS"
+          type: array
+          items:
+            $ref: "#/components/schemas/AdvisoryCVSS"
+        fixed_versions:
+          type: array
+          items:
+            type: string
+        urls:
+          x-go-name: "URLs"
+          type: array
+          items:
+            type: string
+    AdvisoryCVSS:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [type, vector]
+      properties:
+        type:
+          type: string
+        vector:
+          type: string
+        score:
+          x-go-pointer: true
+          type: number
+          minimum: 0
+          maximum: 10
+    SecurityFindingLycaonProperties:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/FindingKind"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanCategory"
+        advisory:
+          x-go-pointer: true
+          $ref: "#/components/schemas/AdvisoryRef"
+        hint_code:
+          type: string
+        disposition:
+          $ref: "#/components/schemas/FindingDisposition"
+        sources:
+          type: array
+          items:
+            type: string
+    SecurityFindingProperties:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        lycaon:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingLycaonProperties"
+    SecurityFindingCallTrace:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - location
+      properties:
+        location:
+          $ref: "#/components/schemas/SecurityFindingLocation"
+        intermediates:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFindingLocation"
+        callee:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingCallTrace"
+    SecurityFindingDataflow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Engine-reported flow evidence. Presence does not establish path feasibility or exploitability.
+      properties:
+        source:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingCallTrace"
+        intermediates:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFindingLocation"
+        sink:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingCallTrace"
+    SecurityFinding:
+      x-go-generate: true
+      x-go-field-order: ["rule_id", "level", "message", "locations", "dataflow", "fingerprints", "tool", "properties", "history"]
+      type: object
+      required:
+      - rule_id
+      - level
+      - message
+      - locations
+      - fingerprints
+      - tool
+      additionalProperties: false
+      properties:
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        level:
+          $ref: "#/components/schemas/FindingLevel"
+        message:
+          type: string
+        locations:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SecurityFindingLocation"
+        fingerprints:
+          $ref: "#/components/schemas/SecurityFindingFingerprints"
+        dataflow:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingDataflow"
+        tool:
+          $ref: "#/components/schemas/ToolDescriptor"
+        properties:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingProperties"
+        history:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SecurityFindingHistory"
+    ScanIgnoredFinding:
+      x-go-generate: true
+      type: object
+      description: >-
+        A finding one of the project's ignore entries covered. The finding
+        stays in the scan's set; this says which decision kept it out of the
+        agent's view, and why.
+      required:
+      - reason
+      additionalProperties: false
+      properties:
+        fingerprint:
+          type: string
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        file:
+          type: string
+        entry_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        matched_on:
+          type: string
+          description: >-
+            The predicates the entry decided on, in the ignore file's own
+            vocabulary, so a reader can find the entry without opening it.
+        reason:
+          type: string
+        expires_on:
+          type: string
+          format: date
+    SecurityFindingHistory:
+      x-go-generate: true
+      type: object
+      description: >-
+        The generation that first showed this finding to its scanner series. A
+        full pass that re-observes a known finding keeps the history its first
+        observation gave it.
+      required: [introduced_at]
+      additionalProperties: false
+      properties:
+        introduced_at:
+          type: string
+          format: date-time
+        introduced_snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        introduced_scan_id:
+          type: string
+          format: uuid

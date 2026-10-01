@@ -1,0 +1,20 @@
+title: Publish external content
+id: 9983ecaa-1411-457c-b807-2f741140b7a9
+status: stable
+description: Publishes a post, comment, release, or other externally visible content.
+references:
+  - https://attack.mitre.org/techniques/T1646/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ActionEffect: publish}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable]

@@ -1,0 +1,9 @@
+id: exfil-sinks
+label: Data-exfiltration sink services
+description: >-
+  A command, native tool call, or declared raw-IP destination names a public
+  webhook/OOB-interaction collector, an anonymous paste/file-drop service, or a
+  consumer file storage service — caught at the point the destination was
+  written rather than at the network dial. Covers a shell command line, a
+  structured tool argument (for example fetch_url's url), and a direct-IP
+  capability's declared hostname.

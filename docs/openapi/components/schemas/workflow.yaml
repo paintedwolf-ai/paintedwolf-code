@@ -1,0 +1,1045 @@
+components:
+  schemas:
+    ComposeDecisionPhase:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - prompt
+      - options
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        prompt:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+    ComposeEffectiveSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - phases
+      - coordinator_brief
+      additionalProperties: false
+      properties:
+        extends:
+          type: string
+        phases:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposePhaseSummary
+        phases_removed_from_parent:
+          type: array
+          items:
+            type: string
+        posture_transitions:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposePostureTransition
+        execution_mode_transitions:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeExecutionModeTransition
+        default_execution_mode:
+          type: string
+          enum:
+          - investigate
+          - orchestrate
+          - state_derived
+        feedback_phases:
+          x-go-name: "Feedback"
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeFeedbackPhase
+        decision_phases:
+          x-go-name: "Decisions"
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeDecisionPhase
+        gates_by_phase:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        coordinator_brief:
+          type: string
+        requires_isolation:
+          type: boolean
+    ComposeFeedbackPhase:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - prompt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        prompt:
+          type: string
+    ComposeFromTemplateRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - template_id
+      - params
+      additionalProperties: false
+      properties:
+        template_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_/-]+$'
+        params:
+          type: object
+          additionalProperties: {}
+    ComposePhaseOnEnter:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        set_posture:
+          type: string
+        set_execution_mode:
+          type: string
+          enum:
+          - investigate
+          - orchestrate
+          - state_derived
+    ComposeExecutionModeTransition:
+      x-go-generate: true
+      type: object
+      required:
+      - phase
+      - mode
+      additionalProperties: false
+      properties:
+        phase:
+          type: string
+        mode:
+          type: string
+          enum:
+          - investigate
+          - orchestrate
+    ComposePhaseSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        complete_when:
+          type: string
+        next:
+          type: string
+        on_enter:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/ComposePhaseOnEnter
+        gates:
+          type: array
+          items:
+            type: string
+    ComposePostureTransition:
+      x-go-generate: true
+      type: object
+      required:
+      - phase
+      - posture
+      additionalProperties: false
+      properties:
+        phase:
+          type: string
+        posture:
+          type: string
+    ComposeValidationError:
+      x-go-generate: true
+      type: object
+      required:
+      - field
+      - code
+      - message
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        replacement:
+          type: string
+    ComposeValidationDetails:
+      x-go-generate: true
+      description: The `details` of a `workflow_validation_failed` error.
+      type: object
+      required:
+      - errors
+      additionalProperties: false
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeValidationError
+    ComposeWorkflowResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - summary
+      - effective_yaml
+      - effective_summary
+      additionalProperties: false
+      properties:
+        summary:
+          $ref: workflow.yaml#/components/schemas/WorkflowSummary
+        effective_yaml:
+          type: string
+        effective_summary:
+          $ref: workflow.yaml#/components/schemas/ComposeEffectiveSummary
+    CoordinatorRunContext:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+        run_status:
+          type: string
+        current_phase:
+          type: string
+        coordinator_brief:
+          type: string
+        failed_leaves:
+          type: array
+          items:
+            type: string
+        allowed_agents:
+          type: array
+          items:
+            type: string
+        requires_isolation:
+          type: boolean
+        has_compose_draft:
+          type: boolean
+        phase_execution_mode:
+          type: string
+          enum:
+          - investigate
+          - orchestrate
+        workflow_default_execution_mode:
+          type: string
+          enum:
+          - investigate
+          - orchestrate
+        pending_feedback:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/PendingFeedback
+        request:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/WorkflowRequestState
+        feedback_phases:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeFeedbackPhase
+        decision_phases:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeDecisionPhase
+        batch_phase:
+          x-go-type: "string"
+          $ref: workflow.yaml#/components/schemas/CoordinatorBatchPhase
+        batch_seq:
+          type: integer
+          minimum: 0
+        phase_coordinator_surface:
+          type: string
+        phase_surface_template:
+          type: string
+        phase_mode_refs:
+          type: array
+          items:
+            type: string
+        workflow_investigate_eligible:
+          x-go-pointer: true
+          type: boolean
+        advance_when_gate_met:
+          type: string
+          enum:
+          - auto
+          - coordinator
+        surface_profile:
+          type: string
+        phase_host_held:
+          type: boolean
+          description: The host holds the current phase until its obligations or topology legs settle; the coordinator only answers the person meanwhile.
+    CoordinatorBatchPhase:
+      $ref: coordinator-batch-phase.generated.yaml#/components/schemas/CoordinatorBatchPhase
+    ActiveWorkflowRunResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - run
+      additionalProperties: false
+      properties:
+        run:
+          x-go-pointer: true
+          nullable: true
+          $ref: workflow.yaml#/components/schemas/WorkflowRun
+    PendingFeedback:
+      x-go-generate: true
+      x-go-field-order: ["phase_id", "prompt", "response_type", "options", "allow_other", "artifact_id", "artifact_ids", "purpose", "issued_revision", "secret"]
+      type: object
+      description: Live coordinator→human ask awaiting a response.
+      required:
+      - phase_id
+      - prompt
+      additionalProperties: false
+      properties:
+        phase_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Route key and stable identity for the pending input.
+        prompt:
+          type: string
+          description: >-
+            Card question (ask_user one decision; markdown OK; host-capped at 800
+            code points so the prompt fits the 12rem composer-dock prompt area).
+        response_type:
+          type: string
+          enum: [text, single_choice, multi_choice, secret]
+          description: >-
+            Discriminates the resolve endpoint — text answers go to feedback,
+            choices to decisions, and secret values to the protected secret endpoint.
+        options:
+          type: array
+          items:
+            type: string
+          description: Choice options for single_choice/multi_choice asks.
+        allow_other:
+          type: boolean
+          description: Whether a free-text answer outside options is accepted (choice asks).
+        artifact_id:
+          type: string
+          format: uuid
+          description: Exact visual artifact under review.
+        artifact_ids:
+          x-go-name: "ArtifactIDs"
+          type: array
+          maxItems: 4
+          items:
+            type: string
+            format: uuid
+          description: Exact visual artifacts under comparison.
+        purpose:
+          type: string
+          enum: [clarify, review, compare, secret]
+        secret:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/SecretInputMeta
+        issued_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Run revision that issued this request; retained with the answer for audit.
+    PersistWorkflowRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - version
+      - confirm
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+        confirm:
+          type: boolean
+        trigger:
+          type: string
+    PersistWorkflowResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - summary
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        summary:
+          $ref: workflow.yaml#/components/schemas/WorkflowSummary
+    ResolveUserFeedbackRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      - response
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        response:
+          type: string
+        secrets:
+          type: array
+          maxItems: 32
+          items:
+            $ref: session/prompts.yaml#/components/schemas/PromptSecretReferencePart
+    ResolveUserSecretRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      - secret_value
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        secret_value:
+          type: string
+          minLength: 4
+          maxLength: 65536
+          writeOnly: true
+          description: >-
+            Raw value delivered only to protected storage; never returned. The
+            floor is the length the outbound screen can recognize; a shorter
+            answer is refused rather than protected in name only.
+    SecretInputMeta:
+      x-go-generate: true
+      type: object
+      required: [name, scope]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        purpose:
+          type: string
+        scope:
+          type: string
+          enum: [chat, project]
+          description: Chat scope lets only this chat and its workers use the reference; project scope lets later chats use it too.
+        agent_use_ttl_ms:
+          x-go-name: "AgentUseTTLMs"
+          type: integer
+          format: int64
+          minimum: 0
+          description: Optional lifetime before the agent can no longer substitute the capability. Authenticated human reveal remains available for recovery, and this does not alter an external credential.
+    ResolveWorkflowDecisionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        choice:
+          type: string
+        choices:
+          type: array
+          items:
+            type: string
+        comment:
+          type: string
+        secrets:
+          type: array
+          maxItems: 32
+          items:
+            $ref: session/prompts.yaml#/components/schemas/PromptSecretReferencePart
+    AdvanceWorkflowRunRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+    FireWorkflowTransitionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+    StartWorkflowRunRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - operation_id
+      - workflow_id
+      - workflow_version
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable client mutation identity. An exact retry returns the original run; reusing this id with different input is rejected with 409 idempotency_conflict.
+        workflow_id:
+          type: string
+          minLength: 1
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+          minLength: 1
+        preset_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Preset declared by the selected workflow version; its parameters apply before explicit parameters. An unknown preset is rejected.
+        request:
+          type: string
+          description: Explicit request attached to this workflow start. When omitted or blank, the manifest default is used or its open question is presented.
+        parameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: Values for parameters declared by the selected workflow. Unknown names and invalid values are rejected.
+        blueprint_path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        blueprint_title:
+          type: string
+        replace_run_id:
+          type: string
+          format: uuid
+          description: Active run the human reviewed when replacing a non-ambient lineage.
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Revision displayed with replace_run_id.
+    WorkflowControlRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - expected_revision
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        reason:
+          type: string
+    WorkflowEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        event:
+          $ref: workflow-event-kind.generated.yaml#/components/schemas/WorkflowEventKind
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_run_id:
+          type: string
+          format: uuid
+        run:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/WorkflowRun
+          description: |
+            Authoritative run state at publication, in the same enriched shape the
+            run endpoints return. Present on every run transition, so a client
+            applies the run from the stream rather than a refetch that races the
+            `message` rows naming it. Absent on events that are not a run
+            transition (persisted manifest, gate pending).
+        previous_phase:
+          type: string
+        phase:
+          type: string
+        status:
+          type: string
+        branch_instruction:
+          type: string
+        guidance:
+          type: array
+          items:
+            $ref: scan/execution.yaml#/components/schemas/ScanGuidanceSummary
+        path:
+          type: string
+        version:
+          type: string
+        created_by:
+          type: string
+    WorkflowRun:
+      x-go-generate: true
+      x-go-field-order: ["id", "session_id", "project_id", "parent_run_id", "workflow_id", "workflow_version", "attach_policy", "status", "revision", "current_phase", "blueprint_path", "pause_reason", "failure", "start_message_id", "end_message_id", "created_at", "updated_at", "paused_at", "completed_at", "ui"]
+      type: object
+      required:
+      - id
+      - session_id
+      - workflow_id
+      - workflow_version
+      - status
+      - revision
+      - current_phase
+      - created_at
+      - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        attach_policy:
+          type: string
+          description: |
+            Catalog attach policy for this run's manifest, persisted with the run.
+            `session_create` marks the ambient-capable recipe; ambient root also requires no parent_run_id.
+          enum:
+          - session_create
+        status:
+          $ref: workflow.yaml#/components/schemas/WorkflowRunStatus
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Monotonic mutable-state revision for stale-command rejection.
+        current_phase:
+          type: string
+        blueprint_path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        pause_reason:
+          type: string
+        failure:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/WorkflowFailure
+        start_message_id:
+          type: string
+          format: uuid
+        end_message_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        paused_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        completed_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        parent_run_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+        ui:
+          x-go-pointer: true
+          $ref: workflow.yaml#/components/schemas/WorkflowRunUi
+    WorkflowRunPage:
+      x-go-generate: true
+      type: object
+      required:
+      - runs
+      description: Stable newest-first keyset page of workflow-run history.
+      additionalProperties: false
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/WorkflowRun
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next older page, bound to this session and status filter.
+    WorkflowFailure:
+      x-go-generate: true
+      type: object
+      required:
+      - code
+      - message
+      - retryable
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: >-
+            Stable machine-readable terminal failure code. `REPORT_NOT_ACCEPTED`
+            ends a run whose report still failed the host's document check
+            when its repairs ran out; the report is stored with its defects and
+            stays downloadable.
+        message:
+          type: string
+        phase:
+          type: string
+        stage:
+          type: string
+        retryable:
+          type: boolean
+    WorkflowRunUi:
+      x-go-generate: true
+      type: object
+      required:
+      - current_phase_label
+      additionalProperties: false
+      properties:
+        current_phase_label:
+          type: string
+          description: Host-projected activity label from the active workflow manifest phase.
+        human_approval_awaiting:
+          type: boolean
+        request:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkflowRequestSpec'
+        request_state:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkflowRequestState'
+        report_available:
+          type: boolean
+          description: >-
+            Host-authorized document download after the workflow stored its
+            enabled report and reached a terminal state: an accepted report
+            completes the run, and one the host did not accept fails it with
+            `REPORT_NOT_ACCEPTED`.
+        phase_terminal:
+          type: boolean
+          description: >-
+            The current phase is the workflow's last. A run rests here with status
+            still "running" until the next advance finds no target, so a client that
+            paints activity from the phase label must stop when this is true.
+        plan_revision_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        pending_feedback:
+          x-go-pointer: true
+          $ref: '#/components/schemas/PendingFeedback'
+        choice_transitions:
+          type: array
+          description: >-
+            Human-actor choice leaves on the current phase (manifest order).
+            Coordinator-only edges are omitted. armed reflects optional when: readiness.
+          items:
+            $ref: '#/components/schemas/ChoiceTransitionUi'
+        phase_obligations:
+          type: array
+          description: Run-scoped status for the current phase's host obligations.
+          items:
+            $ref: '#/components/schemas/WorkflowRunObligation'
+        topology_legs:
+          type: array
+          description: Every leg the run's topology plans for its bound phases, in topology order, with the status of its dispatched worker; a leg not yet dispatched is pending.
+          items:
+            $ref: '#/components/schemas/WorkflowTopologyLeg'
+    WorkflowTopologyLeg:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - stage
+      - phase_id
+      - label
+      - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Stable within the run; a pipeline stage's name, or a fan-out subtask's position as `subtask-<n>`.
+        stage:
+          type: string
+          description: The topology stage a phase binds; every fan-out subtask belongs to stage `fan_out`.
+        phase_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        label:
+          type: string
+          description: The topology's label for the leg.
+        status:
+          $ref: delegation.yaml#/components/schemas/LegStatus
+        waits_for:
+          type: array
+          description: Ids of legs whose output this leg takes as input.
+          items:
+            type: string
+    WorkflowRunObligation:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      - status
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          description: Registered obligation kind, e.g. "scan".
+        status:
+          type: string
+          enum:
+          - 'off'
+          - empty
+          - pending
+          - complete
+          - failed
+          description: >-
+            off, complete, and failed settle the gate; empty means no tracked work.
+        error:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+          description: Kind-specific progress counters.
+    ChoiceTransitionUi:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - label
+      - armed
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        label:
+          type: string
+        armed:
+          type: boolean
+    WorkflowRunStatus:
+      type: string
+      enum:
+      - running
+      - paused
+      - paused_on_child
+      - complete
+      - failed
+      - canceled
+      - interrupted
+    WorkflowScope:
+      type: string
+      enum:
+      - bundled
+      - project
+      - session
+    WorkflowRequestSpec:
+      x-go-generate: true
+      type: object
+      required:
+      - cadence
+      - question
+      additionalProperties: false
+      properties:
+        cadence:
+          type: string
+          enum:
+          - once
+          - each_turn
+        question:
+          type: string
+        default:
+          type: string
+    WorkflowRequestState:
+      x-go-generate: true
+      type: object
+      required:
+      - cadence
+      - status
+      additionalProperties: false
+      properties:
+        cadence:
+          type: string
+          enum:
+          - once
+          - each_turn
+        status:
+          type: string
+          enum:
+          - waiting
+          - pending
+          - resolved
+        text:
+          type: string
+        source:
+          type: string
+          enum:
+          - explicit
+          - default
+          - answer
+          - inherited
+        sequence:
+          type: integer
+          minimum: 0
+    WorkflowSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - version
+      - name
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        version:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        trigger:
+          type: string
+        request:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkflowRequestSpec'
+        initial_posture:
+          type: string
+        topology:
+          type: string
+          description: Optional topology id under config/topologies/ for orchestrated pipeline runs
+        icon:
+          type: string
+          description: Semantic glyph name for launcher tiles (e.g. route, radar, shield)
+        featured:
+          type: boolean
+          description: Surfaces this workflow as a quick-start tile in the new-session launcher
+        requires_repo:
+          type: boolean
+          description: Workflow operates on an attached repo; launcher disables it for rootless draft sessions
+        supports_blueprints:
+          type: boolean
+          description: Manifest declares a blueprint block; surfaces in the Blueprints zone workflow launcher
+        report_enabled:
+          type: boolean
+          description: Opted-in workflow yields a downloadable grounded PDF report for completed runs
+        phases:
+          type: array
+          items:
+            type: string
+        presets:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/WorkflowPresetSummary
+        scope:
+          $ref: workflow.yaml#/components/schemas/WorkflowScope
+    WorkflowPresetSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - name
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        name:
+          type: string
+        description:
+          type: string
+        trigger:
+          type: string
+    WorkflowTemplateParameter:
+      x-go-generate: true
+      type: object
+      required:
+      - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+        required:
+          type: boolean
+        default: {}
+    WorkflowTemplateSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - description
+      - parameters
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_/-]+$'
+        description:
+          type: string
+        parameters:
+          type: object
+          additionalProperties:
+            $ref: workflow.yaml#/components/schemas/WorkflowTemplateParameter
+    ExcludedWorkflow:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - errors
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        version:
+          type: string
+        path:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: workflow.yaml#/components/schemas/ComposeValidationError
+    WorkflowListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - workflows
+      additionalProperties: false
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummary'
+        excluded:
+          type: object
+          description: Rejected workflow manifests keyed by their source path, with all validation diagnostics retained.
+          additionalProperties:
+            $ref: workflow.yaml#/components/schemas/ExcludedWorkflow
+    WorkflowTemplateListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - templates
+      additionalProperties: false
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTemplateSummary'

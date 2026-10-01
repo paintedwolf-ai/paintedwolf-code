@@ -1,0 +1,127 @@
+/* Context stages use their first row as titlebar chrome. */
+.den-shell-stage--pane:has(.den-browse-stage)
+  .den-shell-header:not(.den-shell-header-chat),
+.den-shell-stage--pane:has(.den-settings-panel)
+  .den-shell-header:not(.den-shell-header-chat),
+.den-shell-stage--pane:has(.home-view)
+  .den-shell-header:not(.den-shell-header-chat) {
+  min-height: 0;
+  height: auto;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Custom chrome keeps only the traffic-light strip above the stage chrome. */
+.den-custom-chrome
+  .den-shell-stage--pane:has(.den-browse-stage)
+  .den-shell-header:not(.den-shell-header-chat):has(.den-shell-header-titlebar),
+.den-custom-chrome
+  .den-shell-stage--pane:has(.den-settings-panel)
+  .den-shell-header:not(.den-shell-header-chat):has(.den-shell-header-titlebar),
+.den-custom-chrome
+  .den-shell-stage--pane:has(.home-view)
+  .den-shell-header:not(.den-shell-header-chat):has(.den-shell-header-titlebar) {
+  min-height: var(--den-titlebar-inset);
+}
+
+.den-custom-chrome
+  .den-shell-stage--pane:has(.den-browse-stage)
+  .den-shell-header:not(.den-shell-header-chat)
+  .den-shell-header-titlebar,
+.den-custom-chrome
+  .den-shell-stage--pane:has(.den-settings-panel)
+  .den-shell-header:not(.den-shell-header-chat)
+  .den-shell-header-titlebar,
+.den-custom-chrome
+  .den-shell-stage--pane:has(.home-view)
+  .den-shell-header:not(.den-shell-header-chat)
+  .den-shell-header-titlebar {
+  --den-titlebar-pad-top: 0px;
+  height: var(--den-titlebar-inset);
+  padding-top: 0;
+}
+
+.den-custom-chrome .den-shell-header-titlebar {
+  --den-titlebar-pad-top: calc(var(--den-titlebar-inset) + var(--den-tabs-top-gap));
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--den-z-chat-chrome);
+  flex: none;
+  order: unset;
+  height: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap) + var(--den-unified-chrome-row)
+  );
+  padding: var(--den-titlebar-pad-top) var(--den-chat-gutter-x) 0;
+}
+
+/* The leftmost titlebar reserves traffic-light space as responsive columns change. */
+.den-custom-chrome .den-shell-header--window-leading .den-shell-header-titlebar,
+.den-custom-chrome
+  .den-shell-stage-host--split:where(
+    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+  ):not([data-conversation-hidden])[data-stage-leading="false"]
+  .den-shell-header:not(.den-shell-header-chat)
+  .den-shell-header-titlebar {
+  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+}
+
+/* Reopen controls for a pane hidden at that window edge. */
+.den-shell-header-titlebar__edge {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Reopen controls align with the window buttons above the stage. */
+.den-tauri-macos.den-custom-chrome .den-shell-header-titlebar__edge {
+  align-self: flex-start;
+  margin-top: calc(
+    var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2 -
+      var(--den-titlebar-pad-top, 0px)
+  );
+}
+
+.den-custom-chrome .den-shell-header:has(.den-shell-header-titlebar) {
+  min-height: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap) + var(--den-unified-chrome-row)
+  );
+}
+
+/* Files shares its drag band with titlebar controls at a stable vertical position. */
+.den-custom-chrome .den-shell-stage--pane[data-stage="files"]
+  > .den-shell-header {
+  margin-bottom: calc(-1 * min(var(--den-files-tab-drag-band), var(--den-titlebar-inset)));
+  background: transparent;
+  pointer-events: none;
+}
+
+.den-custom-chrome .den-shell-stage--pane[data-stage="files"]
+  > .den-shell-header
+  .den-shell-chrome-drag-surface {
+  bottom: min(var(--den-files-tab-drag-band), var(--den-titlebar-inset));
+  pointer-events: auto;
+}
+
+.den-custom-chrome .den-shell-header-titlebar .den-shell-header-drawers {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.den-custom-chrome .den-shell-header-titlebar .den-shell-window-controls {
+  pointer-events: auto;
+}
+
+.den-custom-chrome .den-shell-header-drawers {
+  pointer-events: none;
+}
+
+
+.den-custom-chrome .den-shell-stage--pane[data-stage="files"]
+  > .den-shell-header :is(button, [role="button"]) {
+  pointer-events: auto;
+}

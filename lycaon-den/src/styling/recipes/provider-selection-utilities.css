@@ -1,0 +1,219 @@
+@utility den-settings-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+
+@utility den-settings-default-model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+  padding-bottom: var(--spacing-den-6);
+  margin-bottom: var(--spacing-den-2);
+  border-bottom: 1px solid var(--den-border);
+
+  & .den-select {
+    min-width: 220px;
+    max-width: 100%;
+  }
+}
+
+@utility den-settings-default-model-label {
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+/** Settings Add sheet — body / chrome pieces (size lives on .den-dialog--sheet). */
+@utility den-settings-add-dialog__body {
+  min-height: 0;
+  flex: 1;
+}
+
+@utility den-settings-add-dialog__body-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-5);
+  padding: 8px 20px 16px;
+}
+
+@utility den-settings-add-dialog__group {
+  margin: 8px 8px 2px;
+  padding: 0 2px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+
+  &:first-child {
+    margin-top: 4px;
+  }
+
+  /* Space between section headers (Run locally → Cloud, etc.). */
+  & ~ & {
+    margin-top: 18px;
+  }
+}
+
+@utility den-settings-add-dialog__filter {
+  flex-shrink: 0;
+  margin: 4px 20px 12px;
+  width: calc(100% - 40px);
+  box-sizing: border-box;
+}
+
+@utility den-settings-add-dialog__kind-scroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+@utility den-settings-add-dialog__kind-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 10px;
+}
+
+/** ModelSlotPicker trigger — den-select look on a button (not the den-select recipe). */
+@utility den-model-slot-trigger {
+  display: inline-flex;
+  align-items: center;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--spacing-den-6);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-line));
+  }
+
+  &:disabled {
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility den-model-slot-trigger__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-model-slot-trigger__title {
+  font-weight: 500;
+}
+
+/** Muted rate suffix shared by the picker and its trigger. */
+@utility den-model-slot-rates {
+  margin-left: 0.35em;
+  flex-shrink: 0;
+  font-weight: 400;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  line-height: 1.25;
+}
+
+@utility den-settings-add-dialog__picked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 550;
+  cursor: pointer;
+  align-self: flex-start;
+
+  &:hover {
+    color: var(--den-text);
+    background: var(--den-selection-hover);
+  }
+}
+
+@utility den-settings-add-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-den-3);
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--den-line);
+  flex-shrink: 0;
+}
+
+/** Solid white prefs card on the stage wash (defaults, enable, threat). */
+@utility den-settings-prefs-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-den-4) var(--spacing-den-6);
+  margin: 0;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+
+  & .den-select {
+    min-width: 160px;
+    max-width: 100%;
+  }
+
+  & .den-settings-default-model-label,
+  & .den-settings-pref-label {
+    font-size: var(--text-den-hint);
+    font-weight: 600;
+    color: var(--den-text-muted);
+  }
+
+  & .den-settings-hint {
+    margin: 0;
+    max-width: none;
+  }
+
+  & .den-settings-pref-row {
+    width: 100%;
+    padding: 0;
+    border-bottom: 0;
+  }
+}
+
+@utility den-settings-prefs-band__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-2);
+  min-width: 180px;
+  flex: 1 1 12rem;
+}
+
+@utility den-settings-prefs-band__warn {
+  /* Full-width warnings force subsequent fields onto the next flex row. */
+  max-width: none;
+  flex: 1 1 100%;
+}
+
+/** List card on the stage wash. */
+@utility den-settings-list-panel {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+  overflow: hidden;
+}
+
+/* Secrets navigates between inventory and forms inside one stable card. */

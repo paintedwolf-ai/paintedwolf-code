@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-editor-next-finding
+slot: "app_menu.go"
+command: painted-wolf/platform:editor-next-finding
+group: "6"
+order: 25
+label: "Next finding"

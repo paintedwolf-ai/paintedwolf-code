@@ -1,0 +1,120 @@
+components:
+  schemas:
+    QueueItem:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Durable prompt submission id for the waiting turn.
+        submitted_by:
+          type: string
+          format: uuid
+          description: Person who sent this message. Linked items share one sender.
+        text:
+          type: string
+        group_id:
+          type: string
+          format: uuid
+          description: >-
+            Shared id for "linked" items that drain together as one coalesced turn. Absent
+            when the item drains as its own turn.
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+      required:
+        - id
+        - submitted_by
+        - text
+        - created_at
+
+    QueueDraft:
+      x-go-generate: true
+      type: object
+      description: Editable projection of eligible text-only turns waiting to run.
+      additionalProperties: false
+      properties:
+        queue_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+        hold:
+          type: boolean
+          description: >-
+            When true, round-end draining is suppressed while the user edits the queue
+            (drag, link, reorder).
+        sending:
+          type: boolean
+          description: >-
+            True while the head item or linked head group is reserved for delivery into
+            the active turn at its next safe boundary. Reserved items cannot be edited
+            until they land, or until the reservation is released with cancel_send. A
+            running loop only reaches that boundary between provider calls and tool
+            batches, so a reservation can wait — indefinitely, while a tool approval is
+            parked — and cancel_send is the way back.
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - queue_items
+        - hold
+        - sending
+        - revision
+
+    QueueEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - revision
+
+    QueueMutateRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        op:
+          type: string
+          enum:
+          - reorder
+          - link
+          - unlink
+          - remove
+          - update
+          - hold
+          - fire_now
+          - send
+          - cancel_send
+        expected_revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+          minimum: 0
+          description: Queue revision the mutation was authored against; stale mutations are rejected atomically.
+        operation_id:
+          type: string
+          format: uuid
+        item_ids:
+          x-go-name: "ItemIDs"
+          type: array
+          items:
+            type: string
+            format: uuid
+        hold:
+          x-go-pointer: true
+          type: boolean
+        text:
+          x-go-pointer: true
+          type: string
+          description: >-
+            Replacement message body for op "update" (targets item_ids[0]).

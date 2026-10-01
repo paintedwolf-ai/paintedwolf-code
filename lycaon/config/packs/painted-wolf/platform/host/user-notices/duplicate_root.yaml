@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Folder already attached
+message: This folder is already attached to the project.
+suggested_action: Use the existing folder or choose another folder to add.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - This folder is already attached to the project.

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-new-folder
+slot: "app_menu.file"
+command: painted-wolf/platform:files-new-folder
+group: "1"
+order: 4
+label: "New folder…"

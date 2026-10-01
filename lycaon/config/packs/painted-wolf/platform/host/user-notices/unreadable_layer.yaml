@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: The MCP overlay could not be read
+message: The overlay file is not valid YAML, so none of its rows were applied.
+suggested_action: Fix the file at the path shown in Settings → MCP providers, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not valid YAML
+      - Settings

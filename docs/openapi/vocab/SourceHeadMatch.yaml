@@ -1,0 +1,13 @@
+# SourceHeadMatch compares the file's current bytes with the root's HEAD blob.
+# `unknown` means the repository, captured bytes, or comparison is unavailable.
+name: SourceHeadMatch
+go_const_prefix: SourceHeadMatch
+values:
+  - id: same
+    comment: The tip bytes equal the blob HEAD holds at this path.
+  - id: differs
+    comment: HEAD holds this path with different content.
+  - id: absent
+    comment: HEAD's tree has no entry at this path.
+  - id: unknown
+    comment: No repository, no captured bytes, or git could not answer.

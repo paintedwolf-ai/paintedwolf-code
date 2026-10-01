@@ -1,0 +1,247 @@
+components:
+  schemas:
+    SourceIndexState:
+      type: string
+      description: Readability of the selected roots. Ready means at least one root is readable, not that discovery is exhaustive; inspect per-root coverage.
+      enum: [warming, ready, failed]
+    SourceIndexRootCoverage:
+      x-go-generate: true
+      type: object
+      required: [root_id, state, discovery_complete, refreshing, bounded_directories, failed_directories]
+      additionalProperties: false
+      description: Readability and coverage are independent; completed discovery can still have omissions.
+      properties:
+        root_id: {type: string, format: uuid}
+        state: {$ref: '#/components/schemas/SourceIndexState'}
+        discovery_complete: {type: boolean}
+        refreshing: {type: boolean}
+        bounded_directories: {type: integer, minimum: 0}
+        failed_directories: {type: integer, minimum: 0}
+        error: {type: string}
+    SourceIndexResource:
+      x-go-generate: true
+      type: object
+      required: [kind, path]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [readme, agents, contributing]
+        path: {type: string}
+    SourceIndexRootSummary:
+      x-go-generate: true
+      type: object
+      required: [root_id, file_count, resources]
+      additionalProperties: false
+      properties:
+        root_id: {type: string, format: uuid}
+        file_count: {type: integer, minimum: 0}
+        resources:
+          type: array
+          items: {$ref: '#/components/schemas/SourceIndexResource'}
+    SourceIndexSummary:
+      x-go-generate: true
+      type: object
+      required: [state, revision, refreshing, file_count, roots, coverage]
+      additionalProperties: false
+      description: Counts and resources from readable generations, with explicit omissions and pending work for every selected root.
+      properties:
+        state: {$ref: '#/components/schemas/SourceIndexState'}
+        revision: { x-go-type: "uint64", type: integer, format: uint64}
+        refreshing: {type: boolean}
+        coverage:
+          type: array
+          items: {$ref: '#/components/schemas/SourceIndexRootCoverage'}
+        retry_after_ms:
+          type: integer
+          minimum: 1
+          description: >-
+            Milliseconds until the next poll while results are pending; increases with elapsed work time.
+        file_count: {type: integer, minimum: 0}
+        roots:
+          type: array
+          items: {$ref: '#/components/schemas/SourceIndexRootSummary'}
+    SourceSearchMatch:
+      x-go-generate: true
+      type: object
+      required: [root_id, path, highlights]
+      additionalProperties: false
+      properties:
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        highlights:
+          type: array
+          description: Ascending, disjoint parts of path the query matched. Empty when the query matched only the root folder's path or was empty.
+          items: {$ref: '#/components/schemas/SourceSearchHighlight'}
+    SourceSearchHighlight:
+      x-go-generate: true
+      type: object
+      required: [start, end]
+      additionalProperties: false
+      description: A half-open range of Unicode code point offsets into a matched path or name.
+      properties:
+        start: {type: integer, minimum: 0}
+        end: {type: integer, minimum: 1}
+    SourceSearchLocation:
+      x-go-generate: true
+      type: object
+      required: [line]
+      additionalProperties: false
+      description: The one-based line and column, or inclusive line range, a location on the query named. Opening a match goes there.
+      properties:
+        line: {type: integer, minimum: 1}
+        column: {type: integer, minimum: 1}
+        end_line: {type: integer, minimum: 1}
+    SourceSearchOutside:
+      x-go-generate: true
+      type: object
+      required: [path, kind]
+      additionalProperties: false
+      description: An absolute query that exists on this host outside every selected root.
+      properties:
+        path: {type: string, description: The path in the host's own spelling.}
+        kind: {type: string, enum: [file, directory]}
+    SourceSearchResponse:
+      x-go-generate: true
+      type: object
+      required: [state, revision, refreshing, matches, coverage]
+      additionalProperties: false
+      description: Available file matches, including while other selected roots are preparing or failed. Refresh while refreshing is true; inspect coverage before treating absence as exhaustive.
+      properties:
+        state: {$ref: '#/components/schemas/SourceIndexState'}
+        revision: { x-go-type: "uint64", type: integer, format: uint64}
+        refreshing: {type: boolean}
+        coverage:
+          type: array
+          items: {$ref: '#/components/schemas/SourceIndexRootCoverage'}
+        retry_after_ms:
+          type: integer
+          minimum: 1
+          description: >-
+            Milliseconds until the next poll while results are pending; increases with elapsed work time.
+        matches:
+          type: array
+          description: Files in rank order. Clients render this order as-is.
+          items: {$ref: '#/components/schemas/SourceSearchMatch'}
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceSearchLocation'
+        outside:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceSearchOutside'
+        next_cursor: {type: string}
+    # Enum values from docs/openapi/vocab/SourceEncoding.yaml — do not hand-edit.
+    SourceSymbolKind:
+      $ref: ../source-symbol-kind.generated.yaml#/components/schemas/SourceSymbolKind
+    SourceSymbol:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - kind
+      - line
+      additionalProperties: false
+      description: One declaration in document order for in-file navigation.
+      properties:
+        name:
+          type: string
+        kind:
+          $ref: '#/components/schemas/SourceSymbolKind'
+        line:
+          type: integer
+          minimum: 1
+          description: 1-based line of the declaration
+    SourceSymbolsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - symbols
+      - truncated
+      - sha256
+      additionalProperties: false
+      description: |
+        Per-file outline for symbol navigation. Unknown languages return an
+        empty list with 200 — never an error. Capped at 2 000 symbols.
+      properties:
+        sha256:
+          type: string
+          description: Editable source revision analyzed; empty when the source is not editable.
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceSymbol'
+        truncated:
+          type: boolean
+          description: True when the listing stopped at the 2 000 symbol cap
+    SourceDefinitionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - symbol
+      additionalProperties: false
+      description: |
+        Resolve declarations for one identifier under the active root. Den
+        sends the word under the caret; the host narrows whole-word search
+        hits to AST-confirmed declarations. Empty symbol is a client no-op.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: Pin resolution to one attached root (active root)
+        path:
+          type: string
+          description: Root-relative path of the buffer that issued the request
+        symbol:
+          type: string
+          description: Identifier under the caret (client word grab)
+        line:
+          type: integer
+          minimum: 1
+          description: 1-based caret line (ranking origin; optional)
+    SourceDefinitionCandidate:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - line
+      - kind
+      - snippet
+      additionalProperties: false
+      description: One AST-confirmed declaration. Mentions never appear here.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: Root-relative path of the declaring file
+        line:
+          type: integer
+          minimum: 1
+          description: 1-based declaration line
+        kind:
+          $ref: '#/components/schemas/SourceSymbolKind'
+        snippet:
+          type: string
+          description: Trimmed declaration line text
+    SourceDefinitionResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - candidates
+      - truncated
+      additionalProperties: false
+      description: |
+        Ranked declaration candidates for go-to-definition. Zero candidates
+        is a successful answer. truncated is true when caps, incomplete discovery,
+        read failures, or unavailable roots prevent an exhaustive lookup.
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceDefinitionCandidate'
+        truncated:
+          type: boolean
+          description: True whenever the lookup could not establish exhaustive coverage

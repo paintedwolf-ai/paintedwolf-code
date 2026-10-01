@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-next-finding
+title: "Go to next finding"
+scope: "files"
+keywords:
+  - "next finding"
+  - "next problem"
+  - "next diagnostic"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.nextFinding"

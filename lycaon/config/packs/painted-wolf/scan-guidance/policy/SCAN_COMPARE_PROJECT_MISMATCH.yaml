@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SCAN_COMPARE_PROJECT_MISMATCH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_compare
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.conflict
+when: paintedwolf.rejection_code == "SCAN_COMPARE_PROJECT_MISMATCH"
+effect: block
+copy:
+  what: old_scan_id or new_scan_id is not keyed to the session project root.
+  cause: Scan tools are host-bound — ids from another checkout or project cannot be compared here.
+  why: Compare enforces same canonical_path as the active session project.
+  fix: Use scans belonging to the active project and the intended comparison. Preserve assigned IDs and report
+    the mismatch for bound work; choosing another project or arbitrary new scans would change the task.
+  instead: Branch on Code; use scan ids from the active project only
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: Scan ids must belong to the active project
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: scan_compare
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_COMPARE_PROJECT_MISMATCH'

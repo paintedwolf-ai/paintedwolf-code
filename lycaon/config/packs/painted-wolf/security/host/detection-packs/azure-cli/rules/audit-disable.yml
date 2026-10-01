@@ -1,0 +1,47 @@
+title: Disable or delete a monitoring or policy control
+id: 6929d097-14a3-4786-b93d-9be3c0182984
+description: Disables or deletes Azure monitoring or policy controls.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: az
+  grp_audit:
+    CommandLine|contains:
+      - ' monitor '
+      - ' policy '
+      - ' security '
+      - ' sentinel '
+      - ' diagnostic-settings '
+  verbs_audit_destroy:
+    CommandLine|contains:
+      - ' delete'
+      - ' purge'
+      - ' remove'
+      - ' destroy'
+      - ' disable'
+      - ' revoke'
+  # A control switched off by argument rather than by a destructive verb.
+  selection_setting_off:
+    CommandLine|contains:
+      - ' security setting update'
+      - ' security auto-provisioning-setting update'
+    CommandLine|re: '(?i)--enabled\s+false'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and ((grp_audit and verbs_audit_destroy) or selection_setting_off)
+    and not filter_rehearsal and not filter_local

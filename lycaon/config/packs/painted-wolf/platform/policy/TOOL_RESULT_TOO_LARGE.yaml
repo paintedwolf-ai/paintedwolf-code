@@ -1,0 +1,78 @@
+oar: '1.0'
+id: TOOL_RESULT_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.execution_outcome
+  - paintedwolf.bare_repo_scope
+  - paintedwolf.bytes
+  - paintedwolf.cap
+  - paintedwolf.missing_args
+  - paintedwolf.opaque_overflow
+  - paintedwolf.path
+  - paintedwolf.unpaginated_survey
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "TOOL_RESULT_TOO_LARGE"
+effect: block
+copy:
+  what: '{{ tool }} returned {{ paintedwolf.bytes }} bytes, above the {{ paintedwolf.cap }}-byte output cap without
+    a continuation receipt; delivery of that payload was refused.'
+  cause: Execution returned {{ paintedwolf.execution_outcome }} before the output check. This refusal does not undo
+    completed changes or establish that nothing ran.
+  why: Output admission bounds retained data and requires a bounded, truthful result.
+  fix: Inspect existing results and the current state before choosing another operation. Do not repeat a mutation
+    merely to obtain smaller output. {% if paintedwolf.bare_repo_scope %}For a fresh read-only summary, use a subpath
+    instead of path={{ paintedwolf.path }}, or add a focused pattern. {% else %}{% if paintedwolf.unpaginated_survey
+    %}Use an independent bounded survey with pagination{% if paintedwolf.missing_args %} ({{ paintedwolf.missing_args
+    }}){% endif %} or a tighter scope. {% else %}{% if paintedwolf.opaque_overflow %}Use an existing process handle
+    or retained log only if one was actually returned. A new command must be independently needed and bound its
+    output; piping a mutating command through a text limiter does not make replay safe. {% else %}Use an independently
+    safe observation with a smaller result budget.{% endif %}{% endif %}{% endif %} Report any unavailable result
+    as a limitation; do not invent a spill path or continuation cursor.
+  instead: Preserve completed work; recover observations without replaying side effects
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: tool result is {{ paintedwolf.bytes }} bytes; spill cap is {{ paintedwolf.cap }}{% if paintedwolf.rejection_reason
+  %} ({{ paintedwolf.rejection_reason }}){% endif %}
+x-paintedwolf-scenarios:
+- id: bare_repo_scope
+  vars:
+    execution_outcome: completed
+    bytes: 70000000
+    cap: 67108864
+    path: .
+    profile: coordinator
+    reason: bare_repo_scope
+    tool: summarize
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_RESULT_TOO_LARGE'
+  - subpath
+- id: unpaginated_survey
+  vars:
+    execution_outcome: completed
+    bytes: 70000000
+    cap: 67108864
+    missing_args: offset, max_matches
+    profile: coordinator
+    reason: unpaginated_survey
+    tool: grep
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_RESULT_TOO_LARGE'
+  - pagination
+- id: opaque_overflow
+  vars:
+    execution_outcome: completed
+    bytes: 70000000
+    cap: 67108864
+    profile: coordinator
+    reason: opaque_overflow
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_RESULT_TOO_LARGE'

@@ -1,0 +1,18 @@
+# git_commit — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    git_commit:
+        tool: git_commit
+        tier_hint: recoverable
+        what_changes: Record a commit in this repository's local history.
+        who_affected: Your project — the commit becomes part of local git history.
+        if_wrong: Reversible locally with reset or amend; not shared until you push.
+        allow_line: recording commits in this repository
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - commit
+                - local history

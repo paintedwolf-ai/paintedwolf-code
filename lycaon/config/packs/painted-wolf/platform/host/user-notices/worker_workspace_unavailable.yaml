@@ -1,0 +1,15 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker workspace unavailable
+message: >-
+  Painted Wolf Code could not prepare this worker's isolated workspace. No
+  worker changes were applied to the project.
+suggested_action: >-
+  Retry the worker. If setup continues to fail, check project and application-data approvals and available space.
+scenarios:
+  - id: generic
+    vars: {}
+    expect_contains:
+      - isolated workspace
+      - No worker changes

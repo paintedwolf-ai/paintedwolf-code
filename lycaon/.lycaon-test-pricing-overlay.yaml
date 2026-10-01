@@ -1,0 +1,8 @@
+cost_tracking_enabled: false
+sources:
+    - id: models-dev
+      enabled: true
+    - id: litellm
+      enabled: false
+    - id: ai-pricing-fyi
+      enabled: false

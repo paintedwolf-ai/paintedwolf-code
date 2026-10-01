@@ -1,0 +1,277 @@
+components:
+  schemas:
+    SummarizeAnchor:
+      type: object
+      required:
+        - path
+        - line
+        - excerpt
+      properties:
+        handle:
+          type: string
+          description: Minted summarize#N handle after tool completion
+        path:
+          type: string
+        line:
+          type: integer
+        excerpt:
+          type: string
+          description: Verbatim line the anchor cites
+    SummarizeNextAction:
+      type: object
+      required: [tool, args, kind, reason]
+      properties:
+        tool:
+          type: string
+        args:
+          type: object
+          description: Arguments accepted directly by the named tool
+          properties:
+            path:
+              type: string
+            paths:
+              type: array
+              items:
+                type: string
+            task:
+              type: string
+            pattern:
+              type: string
+            cursor:
+              type: string
+            offset:
+              type: integer
+            limit:
+              type: integer
+        kind:
+          type: string
+          enum: [inspect, continue]
+        reason:
+          type: string
+    SummarizePack:
+      type: object
+      description: >-
+        Tiered briefing material the host assembles deterministically under a
+        token budget. The coordinator synthesizes prose from this pack inline —
+        there is no host-side LLM summary. Anchors and next_actions are derived
+        from this same pack.
+      properties:
+        identity:
+          type: array
+          description: Per-source orientation — path, size, language
+          items:
+            type: object
+            required:
+              - path
+              - kind
+            properties:
+              path:
+                type: string
+              kind:
+                type: string
+                description: file | dir_map | inline
+              line_count:
+                type: integer
+              language:
+                type: string
+              outline_source:
+                type: string
+              import_path:
+                type: string
+              log_digest:
+                type: string
+        skeleton:
+          type: array
+          description: Ranked definitions (or directory-map rows)
+          items:
+            type: object
+            required:
+              - path
+              - kind
+              - name
+            properties:
+              path:
+                type: string
+              kind:
+                type: string
+              name:
+                type: string
+              line:
+                type: integer
+        substance:
+          type: array
+          description: Symbol-anchored source windows (verbatim, line-numbered)
+          items:
+            type: object
+            required:
+              - path
+              - body
+            properties:
+              path:
+                type: string
+              handle:
+                type: string
+                description: Evidence handle for this source window
+              start_line:
+                type: integer
+              end_line:
+                type: integer
+              symbol:
+                type: string
+              body:
+                type: string
+        imports:
+          type: array
+          description: One-hop module edges
+          items:
+            type: object
+            required:
+              - from
+              - to
+            properties:
+              from:
+                type: string
+              to:
+                type: string
+              kind:
+                type: string
+                description: outbound | inbound
+        call_sites:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+              - excerpt
+            properties:
+              path:
+                type: string
+              line:
+                type: integer
+              excerpt:
+                type: string
+        neighbors:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+            properties:
+              path:
+                type: string
+              why:
+                type: string
+    SummarizeCoverage:
+      x-go-generate: true
+      type: object
+      description: Indexed coverage and represented material; warming views have unknown totals
+      required:
+        - complete
+      properties:
+        catalog_state:
+          type: string
+          description: warming | ready | failed; omitted for file, pattern, or inline summaries
+        catalog_refreshing:
+          type: boolean
+          description: Counts describe a completed indexed generation while reconciliation runs
+        complete:
+          type: boolean
+        catalog_revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+        files_total:
+          type: integer
+          description: Indexed files for directory views
+        files_represented:
+          type: integer
+        definitions_total:
+          type: integer
+        anchors_returned:
+          type: integer
+        matching_files_observed:
+          type: integer
+          description: Matching files observed across pattern pages
+        matches_observed:
+          type: integer
+          description: Matching lines observed so far within source read budgets, including prior pattern pages
+        match_samples_returned:
+          type: integer
+        children_total:
+          type: integer
+        children_returned:
+          type: integer
+        cursor:
+          type: string
+          description: Cursor used for this view
+        next_cursor:
+          type: string
+          description: Scope-bound continuation for the next directory or pattern page
+    SummarizeResponse:
+      x-tool-output: [summarize]
+      type: object
+      required:
+        - task
+        - coverage
+        - pack
+      properties:
+        task:
+          type: string
+        coverage:
+          $ref: summarize.yaml#/components/schemas/SummarizeCoverage
+        pack:
+          $ref: summarize.yaml#/components/schemas/SummarizePack
+        anchors:
+          type: array
+          items:
+            $ref: summarize.yaml#/components/schemas/SummarizeAnchor
+        next_actions:
+          type: array
+          description: Concrete follow-up tool calls — what to do next
+          items:
+            $ref: summarize.yaml#/components/schemas/SummarizeNextAction
+        sources_touched:
+          type: array
+          items:
+            type: string
+        gather:
+          type: object
+          description: Gather-phase report (operator visibility)
+          properties:
+            mode:
+              type: string
+              description: inline | repo | hybrid
+            path:
+              type: string
+            paths:
+              type: array
+              items:
+                type: string
+            pattern:
+              type: string
+            candidates:
+              type: integer
+            bytes:
+              type: integer
+            match_count:
+              type: integer
+              description: Pattern-matching lines examined when pattern is set
+            sample_matches:
+              type: array
+              description: >-
+                First grep hit lines when pattern is set — verbatim path/line/content
+                so agents can verify RE2 matches before trusting the pack.
+              items:
+                type: object
+                required:
+                  - path
+                  - line
+                  - content
+                properties:
+                  path:
+                    type: string
+                  line:
+                    type: integer
+                  content:
+                    type: string
+                    description: Verbatim matched line (may be truncated when very long)

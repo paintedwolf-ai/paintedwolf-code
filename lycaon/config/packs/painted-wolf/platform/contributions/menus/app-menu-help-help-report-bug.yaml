@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-help-help-report-bug
+slot: "app_menu.help"
+command: painted-wolf/platform:help-report-bug
+group: "1"
+order: 3

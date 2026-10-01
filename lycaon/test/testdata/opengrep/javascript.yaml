@@ -1,0 +1,1657 @@
+language: javascript
+comment:
+- //
+limits: Express and Fastify inputs require a recognized factory, route registration, typed plugin contract, or imported fastify-plugin wrapper. Request-shaped local objects and unregistered handlers do not establish HTTP input. Selected imported or typed Next.js App Router and Pages Router handlers are modeled. Same-file helpers and exported closures are followed; untyped exported Fastify plugin functions without a recognized registration or wrapper, server actions, and cross-file handlers remain unmodeled.
+cases:
+- name: command-injection-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { exec(req.query.command); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { execFile("printf", ["%s",req.query.text]); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: sql-injection-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { db.query("SELECT * FROM users WHERE name = " + req.query.name); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { db.query("SELECT * FROM users WHERE name = ?", [req.query.name]); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: path-traversal-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { readFileSync(req.query.path); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { readFileSync("config.json"); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.path-traversal
+- name: ssrf-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { fetch(req.query.url); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ssrf-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { fetch("https://example.com"); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: code-injection-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { eval(req.query.code); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { JSON.parse(req.query.data); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+- name: dom-xss-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { node.innerHTML = req.query.html; }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.dom-xss
+  covers: []
+- name: dom-xss-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { node.textContent = req.query.html; }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.dom-xss
+- name: open-redirect-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { res.redirect(req.query.next); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want:
+  - lycaon.javascript.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import fs from "node:fs";
+    import { readFileSync } from "node:fs";
+    import { exec } from "node:child_process";
+    function route(req,res) { res.redirect("/home"); }
+
+    _pw_fixture_app.get("/fixture", route);
+
+  want: []
+  covers:
+  - lycaon.javascript.open-redirect
+- name: tls-verification-disabled-vulnerable
+  file: sample.js
+  source: 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
+    '
+  want:
+  - lycaon.javascript.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.js
+  source: 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = "1"
+
+    '
+  want: []
+  covers:
+  - lycaon.javascript.tls-verification-disabled
+- name: jwt-verification-disabled-vulnerable
+  file: sample.js
+  source: 'jwt.verify(token, key, {algorithms:["none"]})
+
+    '
+  want:
+  - lycaon.javascript.jwt-verification-disabled
+  covers: []
+- name: jwt-verification-disabled-safe
+  file: sample.js
+  source: 'jwt.verify(token, key, {algorithms:["RS256"]})
+
+    '
+  want: []
+  covers:
+  - lycaon.javascript.jwt-verification-disabled
+- name: mongodb-query-object-vulnerable
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function run(req) { users.findOne(req.body); }
+
+    _pw_fixture_app.get("/fixture", run);
+
+  want:
+  - lycaon.javascript.mongodb-query-object
+  covers: []
+- name: mongodb-query-object-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function run(req) { users.findOne({name:String(req.body.name)}); }
+
+    _pw_fixture_app.get("/fixture", run);
+
+  want: []
+  covers:
+  - lycaon.javascript.mongodb-query-object
+- name: precision-browser-fetch
+  file: sample.js
+  source: 'fetch(location.hash.slice(1));
+
+    '
+  want: []
+  covers: []
+- name: precision-browser-fixed-origin-query
+  file: sample.js
+  source: 'fetch("https://example.com/search?q=" + encodeURIComponent(location.search));
+
+    '
+  want: []
+  covers: []
+- name: precision-fixed-origin-request-query
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function f(req){ fetch("https://example.com/search?q=" + encodeURIComponent(req.query.q)); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want: []
+  covers: []
+- name: precision-numeric-sql
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function f(req){ db.query("SELECT * FROM items LIMIT " + Number(req.query.count)); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want: []
+  covers: []
+- name: precision-unrelated-exec
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function exec(value) { return JSON.parse(value); }
+    function f(req) { exec(req.body.value); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want: []
+  covers: []
+- name: precision-unrelated-read-file
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function readFile(value) { return value; }
+    function f(req) { readFile(req.query.value); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want: []
+  covers: []
+- name: precision-imported-shell-alias
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {exec as run} from "child_process"; function f(req){ run(req.body.command); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-imported-file-alias
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {readFile as read} from "fs"; function f(req){ read(req.query.path); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: precision-dynamic-url-authority
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function f(req){ fetch("https://" + req.query.host + "/search"); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: precision-html-escape-is-not-sql-escape
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function f(req){ db.query(DOMPurify.sanitize(req.query.sql)); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: precision-node-named-alias
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {exec as run} from "node:child_process"; function f(req){ run(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-require-alias
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    const {exec: run}=require("node:child_process"); function f(req){ run(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-require-shorthand
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    const {exec}=require("node:child_process"); function f(req){ exec(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-namespace-import
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import * as commands from "node:child_process"; function f(req){ commands.exec(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-default-import
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import commands from "node:child_process"; function f(req){ commands.exec(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-require-namespace
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    const commands=require("node:child_process"); function f(req){ commands.exec(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-node-multi-import
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {exec,execSync} from "node:child_process"; function f(req){ exec(req.query.cmd); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: precision-shadowed-node-import
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    import {exec} from "node:child_process"; function f(req){ function exec(value) { return JSON.parse(value); } exec(req.body.value); }
+
+    _pw_fixture_app.get("/fixture", f);
+
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: ordinary-ssrf-safe-path
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-query
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/search?q=${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-port-query
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example:8443/search?q=${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-multiple
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/?a=${input}&b=${req.query.second}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-nested
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${`${input}`}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-at-suffix
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/@${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-fragment
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/#${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-safe-escaped-later-backtick
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/\`${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-authority-host
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-authority-userinfo
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-authority-prefix
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-authority-port
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example:${input}/path`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-authority-in-nested-template
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`${`https://${input}/path`}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-compound-and
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch((`https://fixed.example/${input}` && `${input}`));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-compound-conditional
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch((`https://fixed.example/${input}` ? `${input}` : "https://fallback.example/"));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-compound-sequence
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch((`https://fixed.example/${input}`, `${input}`));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-template-prefix-stripped
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${input}`.slice(22));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-template-prefix-replaced
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(`https://fixed.example/${input}`.replace("https://fixed.example/", ""));
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-tagged-unknown
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(tag`https://fixed.example/${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-tagged-return-substitution
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(first`https://fixed.example/${input}`);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-ordinary-tainted
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    function first(strings, value) { return value; }
+    async function handle(req) {
+     const input = req.query.url;
+     return fetch(input);
+    }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-alias-prefix-stripped
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; return fetch(url.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-inner-fetch
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch(`https://fixed.example/${await fetch(req.query.url)}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-alias-template-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-alias-template-reassigned
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; url = req.query.other; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-alias-template-branch
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; if(flag) url = req.query.other; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-concat-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch("https://fixed.example/" + req.query.url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-concat-alias-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = "https://fixed.example/" + req.query.url; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-concat-prefix-stripped
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = "https://fixed.example/" + req.query.url; return fetch(url.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-concat-nested-inner-fetch
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch("https://fixed.example/" + await fetch(req.query.url)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-axios-template-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.get(`https://fixed.example/?q=${req.query.url}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-axios-template-prefix-stripped
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.get(`https://fixed.example/${req.query.url}`.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-axios-post-template-safe
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.post(`https://fixed.example/?q=${req.query.url}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-axios-post-template-prefix-stripped
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return axios.post(`https://fixed.example/${req.query.url}`.slice(22)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-escaped-template-dollar
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch(`https://fixed.example/\${literal}${req.query.url}`); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: ordinary-ssrf-concat-nonliteral-prefix
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const prefix = req.query.prefix; return fetch(prefix + req.query.url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-unknown-transform-template
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { return fetch(transform(`https://fixed.example/${req.query.url}`)); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-captured-function-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-captured-arrow-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; const change = () => { url = req.query.other; }; change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-escaped-callback-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; mutate(() => { url = req.query.other; }); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-object-alias-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const config = {url: `https://fixed.example/${req.query.url}`}; const alias = config; alias.url = req.query.other; return fetch(config.url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-object-property-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const config = {url: `https://fixed.example/${req.query.url}`}; config.url = req.query.other; return fetch(config.url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-loop-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; while(flag) { url = req.query.other; flag = false; } return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-branch-both-writes
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; if(flag) url = req.query.other; else url = req.query.third; return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-argument-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change(value) { url = value; } change(req.query.other); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-alias-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { url = req.query.other; } const alias = change; alias(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-forward-named-helper-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { function change() { url = req.query.other; } let url = `https://fixed.example/${req.query.url}`; change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-conditional-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req, flag) { let url = `https://fixed.example/${req.query.url}`; function change() { if(flag) url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-named-helper-return-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; function change() { return url = req.query.other; } change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-symbolic-function-expression-write
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { let url = `https://fixed.example/${req.query.url}`; const change = function() { url = req.query.other; }; change(); return fetch(url); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-inner-block-shadow
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; { let url = req.query.other; return fetch(url); } }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-function-parameter-shadow
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; function send(url) { return fetch(url); } return send(req.query.other); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: ordinary-ssrf-const-alias-nested-local-shadow
+  file: sample.js
+  source: |
+    import _pw_fixture_express from "express";
+    const _pw_fixture_app = _pw_fixture_express();
+    async function handle(req) { const url = `https://fixed.example/${req.query.url}`; function send() { const url = req.query.other; return fetch(url); } return send(); }
+
+    _pw_fixture_app.get("/fixture", handle);
+
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: fastify-query-command
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    app.get("/run", async (request, reply) => {
+      exec(request.query.target);
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-body-sql
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.post("/rows", async (request, reply) => {
+      await db.query("SELECT * FROM t WHERE n = '" + request.body.name + "'");
+    });
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: fastify-params-path
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const fs = require("node:fs");
+    app.get("/files/:name", async (request, reply) => {
+      fs.readFileSync(request.params.name);
+    });
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: fastify-headers-command
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    app.get("/run", async (request, reply) => {
+      exec(request.headers["x-target"]);
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-route-object-headers-command
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    app.route({
+      method: "GET",
+      url: "/run",
+      handler: async (request, reply) => {
+        exec(request.headers["x-target"]);
+      },
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-options-argument-headers-command
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    app.get("/run", { schema: {} }, async (request, reply) => {
+      exec(request.headers["x-target"]);
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: fastify-parameterized-sql-quiet
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/rows", async (request, reply) => {
+      await db.query("SELECT * FROM t WHERE n = ?", [request.query.name]);
+    });
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: fastify-number-converted-sql-quiet
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/rows", async (request, reply) => {
+      await db.query("SELECT * FROM t WHERE id = " + Number(request.query.id));
+    });
+  want: []
+  covers:
+  - lycaon.javascript.sql-injection
+- name: fastify-hook-headers-quiet
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    app.addHook("onRequest", async (request, reply) => {
+      exec(request.headers["x-target"]);
+    });
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-unrelated-object-headers-quiet
+  file: sample.js
+  source: |
+    const { exec } = require("node:child_process");
+    const client = { headers: { "x-target": "ls" } };
+    exec(client.headers["x-target"]);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-fixed-authority-ssrf-quiet
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/proxy", async (request, reply) => {
+      await fetch(`https://api.example.com/v1/${request.query.id}`);
+    });
+  want: []
+  covers:
+  - lycaon.javascript.ssrf
+- name: fastify-variable-authority-ssrf
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/proxy", async (request, reply) => {
+      await fetch(request.query.url);
+    });
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: fastify-replaced-fixed-authority-ssrf
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/proxy", async (request, reply) => {
+      let url = "https://api.example.com/v1/";
+      url = request.query.url;
+      await fetch(url);
+    });
+  want:
+  - lycaon.javascript.ssrf
+  covers: []
+- name: fastify-same-file-wrapper-followed
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("node:child_process");
+    function spawn(value) {
+      exec(value);
+    }
+    app.get("/run", async (request, reply) => {
+      spawn(request.query.target);
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: bare-child-process-specifier-command
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("child_process");
+    app.get("/run", async (request, reply) => {
+      exec(request.query.target);
+    });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: bare-child-process-shadowed-binding-quiet
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    const { exec } = require("child_process");
+    function outer(exec) {
+      app.get("/run", async (request, reply) => {
+        exec(request.query.target);
+      });
+    }
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-plugin-reached-by-reference
+  file: sample.js
+  source: |
+    const _pw_fixture_app = require("fastify")();
+    const fs = require("node:fs");
+    const plugin = async (app) => {
+      app.get("/files/:name", async (request, reply) => {
+        fs.readFileSync(request.params.name);
+      });
+    };
+    module.exports = plugin;
+
+    _pw_fixture_app.register(plugin);
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: fastify-plugin-exported-through-fastify-plugin
+  file: sample.js
+  source: |
+    import fp from "fastify-plugin";
+    import fs from "node:fs";
+    const plugin = async (app) => {
+      app.get("/files/:name", async (request, reply) => {
+        fs.readFileSync(request.params.name);
+      });
+    };
+    export default fp(plugin);
+  want:
+  - lycaon.javascript.path-traversal
+  covers: []
+- name: fastify-query-collection-bound-then-read-sql
+  file: sample.js
+  source: |
+    import _pw_fixture_fastify from "fastify";
+    const app = _pw_fixture_fastify();
+    app.get("/rows", async (request, reply) => {
+      const query = request.query;
+      await db.query("SELECT * FROM t WHERE n = '" + query.name + "'");
+    });
+  want:
+  - lycaon.javascript.sql-injection
+  covers: []
+- name: ordinary-object-query-quiet
+  file: sample.js
+  source: |
+    import { exec } from "node:child_process";
+    const request = { query: { command: "echo fixed" } };
+    exec(request.query.command);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: ordinary-object-body-quiet
+  file: sample.js
+  source: |
+    import { exec } from "node:child_process";
+    const request = { body: { command: "echo fixed" } };
+    exec(request.body.command);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: ordinary-object-params-quiet
+  file: sample.js
+  source: |
+    import { exec } from "node:child_process";
+    const request = { params: { command: "echo fixed" } };
+    exec(request.params.command);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: ordinary-object-headers-quiet
+  file: sample.js
+  source: |
+    import { exec } from "node:child_process";
+    const request = { headers: { command: "echo fixed" } };
+    exec(request.headers.command);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: unregistered-handler-request-name-unmodeled
+  file: sample.js
+  source: |
+    import {exec} from "node:child_process";
+    function handler(request) {exec(request.query.command);}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-untyped-exported-plugin-unmodeled
+  file: sample.js
+  source: |
+    import fs from "node:fs";
+    async function plugin(app) {app.get("/file", (request,reply) => fs.readFileSync(request.query.name));}
+    export default plugin;
+  want: []
+  covers:
+  - lycaon.javascript.path-traversal
+- name: express-request-replacement
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app = express();
+    app.get("/", (request,response) => { request = {query: {command: "echo fixed"}}; exec(request.query.command); });
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-request-alias
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app = express();
+    app.get("/", (request,response) => { const alias = request; exec(alias.query.command); });
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: express-request-copy-overwritten
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app = express();
+    app.get("/", (request,response) => { const alias = request; alias.query = {command: "echo fixed"}; exec(alias.query.command); });
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-factory-shadowed-quiet
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    function setup(express) {const app=express(); app.get("/", (req,res) => exec(req.query.command));}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-comment-registration-quiet
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    function handler(req,res) {exec(req.query.command);}
+    // app.get("/",handler);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-factory-shadowed-quiet
+  file: sample.js
+  source: |
+    import fastify from "fastify";
+    import {exec} from "node:child_process";
+    function setup(fastify) {const app=fastify(); app.get("/", (req,res) => exec(req.query.command));}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-plugin-options-not-request
+  file: sample.js
+  source: |
+    import fp from "fastify-plugin";
+    import {exec} from "node:child_process";
+    export default fp(async function plugin(app,options) {exec(options.command);});
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: fastify-plugin-wrapper-shadowed-quiet
+  file: sample.js
+  source: |
+    import fp from "fastify-plugin";
+    import {exec} from "node:child_process";
+    function setup(fp) {return fp(async function plugin(app) {app.get("/", (req,res)=>exec(req.query.command));});}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-setting-route
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.set("host","127.0.0.1");
+    app.set("port",8080);
+    app.get("/", (req,res)=>exec(req.query.command));
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: express-configuration-readers
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.set("view engine","pug");
+    app.enable("trust proxy");
+    app.disable("x-powered-by");
+    app.enabled("trust proxy");
+    app.disabled("x-powered-by");
+    app.get("port");
+    app.engine("html", renderer);
+    app.get("/", (req,res)=>exec(req.query.command));
+  want:
+  - lycaon.javascript.command-injection
+  covers: []
+- name: express-configured-safe-handler
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.set("port",8080);
+    app.get("/", (req,res)=>exec("fixed"));
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-configured-object-quiet
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app={set(name,value){},get(path,handler){handler({query:{command:"fixed"}},{});}};
+    app.set("port",8080);
+    app.get("/", (req,res)=>exec(req.query.command));
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-configured-replaced-method
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.set=function(){this.get=function(path,handler){handler({query:{command:"fixed"}},{});};};
+    app.set("port",8080);
+    app.get("/", (req,res)=>exec(req.query.command));
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-configuration-does-not-restore-method
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.get=function(path,handler){handler({query:{command:"fixed"}},{});};
+    app.set("port",8080);
+    app.get("/", (req,res)=>exec(req.query.command));
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-configured-shadowed-factory
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    function configure(express){const app=express(); app.set("port",8080); app.get("/",(req,res)=>exec(req.query.command));}
+  want: []
+  covers:
+  - lycaon.javascript.command-injection
+- name: express-configuration-comment-quiet
+  file: sample.js
+  source: |
+    import express from "express";
+    import {exec} from "node:child_process";
+    const app=express();
+    app.set("port",8080);
+    function handler(req,res){exec(req.query.command);}
+    // app.get("/",handler);
+  want: []
+  covers:
+  - lycaon.javascript.command-injection

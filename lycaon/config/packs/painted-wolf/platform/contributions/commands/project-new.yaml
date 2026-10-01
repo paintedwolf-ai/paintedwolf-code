@@ -1,0 +1,11 @@
+id: painted-wolf/platform:project-new
+title: "New project"
+icon: new-project
+scope: "global"
+keywords:
+  - "add project"
+  - "create project"
+  - "open folder"
+action:
+  kind: native_ui
+  handler: "project.new"

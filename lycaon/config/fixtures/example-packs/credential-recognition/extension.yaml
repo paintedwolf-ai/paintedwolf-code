@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/credential-recognition
+name: Credential recognition
+version: 1.0.0
+compatibility:
+  extension_api: ^1.0.0
+  requires_capabilities: [host.credential_slots]
+dependencies:
+  painted-wolf/platform:
+    version: ^1.0.0

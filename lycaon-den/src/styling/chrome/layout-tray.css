@@ -1,0 +1,107 @@
+.den-layout-tray__section + .den-layout-tray__section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--den-line-quiet);
+}
+.den-layout-tray__heading {
+  padding: 1px 4px 7px;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+.den-layout-tray__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.den-layout-tray__tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.den-layout-tray__tile:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.den-layout-tray__tile--active {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 55%, transparent);
+  background: var(--den-selection);
+  color: var(--den-text);
+}
+.den-layout-tray__tile-label {
+  font-weight: 500;
+}
+.den-layout-tray__description {
+  margin: 8px 4px 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+}
+.den-layout-tray__description + .den-layout-tray__description {
+  margin-top: 4px;
+}
+.den-layout-tray__actions {
+  display: grid;
+  gap: 6px;
+}
+.den-layout-tray__action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.den-layout-tray__action:hover:not(:disabled) {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.den-layout-tray__action--active,
+.den-layout-tray__action--active:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 55%, transparent);
+  background: var(--den-selection);
+  color: var(--den-text);
+}
+.den-layout-tray__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.den-layout-tray__action kbd {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid var(--den-line);
+  border-radius: 4px;
+  background: var(--den-tint-1);
+  font-family: inherit;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.den-layout-tray__foot {
+  margin: 8px 0 0;
+  padding: 2px 5px 1px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}

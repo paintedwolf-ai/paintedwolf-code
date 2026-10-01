@@ -1,0 +1,7 @@
+id: painted-wolf/platform:chat-last-message
+title: "Go to latest message"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "chat.lastMessage"

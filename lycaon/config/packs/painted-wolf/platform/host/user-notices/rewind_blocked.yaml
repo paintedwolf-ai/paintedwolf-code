@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Rewind needs review
+message: This selection includes changes the host cannot safely reverse together.
+suggested_action: Refresh the rewind preview to review the affected files and conflicts.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - cannot safely reverse

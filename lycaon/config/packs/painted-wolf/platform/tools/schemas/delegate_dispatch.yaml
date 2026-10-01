@@ -1,0 +1,7 @@
+description: Dispatch a delegation leg to the worker queue
+schema:
+  type: object
+  properties:
+    leg_id:
+      description: "Queue leg identifier."
+      type: string

@@ -1,0 +1,455 @@
+partition: development
+projects:
+  - name: helper-python-command-service
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "Request text reaches the shell through a local service. The constant service invocation is safe; the direct request-to-shell finding must survive either mode."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        app = flask.Flask(__name__)
+        def run_report(command):
+            return os.system(command)
+        @app.get('/reports/run')
+        def run():
+            run_report(flask.request.args.get('command'))
+            run_report('date')
+            os.system(flask.request.args.get('direct'))
+            return 'done'
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 5
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 10
+  - name: helper-python-source-return
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "A helper reads the live Flask request and returns its command. A second helper returns a constant despite accepting request text; only the first shell call is vulnerable."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        app = flask.Flask(__name__)
+        def requested_command():
+            return flask.request.args.get('command')
+        def default_command(unused):
+            return 'date'
+        @app.get('/reports/run')
+        def run():
+            os.system(requested_command())
+            os.system(default_command(flask.request.args.get('ignored')))
+            return 'done'
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 10
+  - name: helper-python-selected-argument
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "The helper returns only its second argument. Request text used only as an unused audit label cannot control the first command; the second command is controlled by the request."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        def select_command(audit_label, command):
+            return command
+        def run():
+            value = flask.request.args.get('command')
+            os.system(select_command(value, 'date'))
+            os.system(select_command('requested report', value))
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 8
+  - name: helper-python-mutual-recursion
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "Two mutually recursive helpers eventually execute their first argument. A bounded countdown guarantees termination. A direct sink is a control for lost local findings."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        def dispatch(command, remaining):
+            if remaining <= 0:
+                return execute(command, remaining)
+            return execute(command, remaining - 1)
+        def execute(command, remaining):
+            if remaining > 0:
+                return dispatch(command, remaining - 1)
+            return os.system(command)
+        def run():
+            dispatch(flask.request.args.get('command'), 2)
+            os.system(flask.request.args.get('direct'))
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 10
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 13
+  - name: helper-python-inherited-source
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "The inherited constructor stores request text; the subclass executes that field. The separate direct sink must remain visible even when inheritance is unsupported."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        class Report:
+            def __init__(self, command):
+                self.command = command
+        class ShellReport(Report):
+            def execute(self):
+                return os.system(self.command)
+        def run():
+            report = ShellReport(flask.request.args.get('command'))
+            report.execute()
+            os.system(flask.request.args.get('direct'))
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 8
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 12
+  - name: helper-python-fixed-callback
+    language: "python"
+    framework: "flask"
+    review_status: "complete"
+    adjudication: "The selected callback ignores its argument and returns a constant. Both the direct constant helper and callback-mediated result remain safe despite request input."
+    families:
+      - lycaon.python.command-injection
+    files:
+      app.py: |
+        import flask
+        import os
+        def fixed_command(unused):
+            return 'date'
+        def apply_command(callback, value):
+            return callback(value)
+        def run():
+            value = flask.request.args.get('command')
+            os.system(fixed_command(value))
+            os.system(apply_command(fixed_command, value))
+    findings: []
+  - name: helper-javascript-command-service
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "An Express route invokes a local service with request text and a constant. The service shell sink is vulnerable; the direct request shell sink is a mode-preservation control."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.js: |
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        function runReport(command) {
+          exec(command);
+        }
+        app.get('/reports/run', (req, res) => {
+          runReport(req.query.command);
+          runReport('date');
+          exec(req.query.direct);
+          res.sendStatus(202);
+        });
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 5
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 10
+  - name: helper-javascript-selected-argument
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "Only the second helper argument determines the command. Passing request text as an unused label is safe, while passing it as the command is vulnerable."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.js: |
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        function selectCommand(label, command) { return command; }
+        app.get('/reports/run', (req, res) => {
+          exec(selectCommand(req.query.label, 'date'));
+          exec(selectCommand('requested report', req.query.command));
+          res.sendStatus(202);
+        });
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 7
+  - name: helper-javascript-mutual-recursion
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "Mutually recursive dispatch executes request command text after a finite countdown. A direct sink must remain visible irrespective of recursive summary support."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.js: |
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        function dispatch(command, count) { return execute(command, count - 1); }
+        function execute(command, count) {
+          if (count > 0) return dispatch(command, count);
+          exec(command);
+        }
+        app.get('/reports/run', (req, res) => {
+          dispatch(req.query.command, 2);
+          exec(req.query.direct);
+          res.sendStatus(202);
+        });
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 7
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 11
+    diagnostics:
+      intraprocedural:
+      - file: app.js
+        kind: file_partial_semantics
+        construct: closure_call_limit
+        line: 4
+        column: 44
+      - file: app.js
+        kind: file_partial_semantics
+        construct: closure_call_limit
+        line: 6
+        column: 25
+      intrafile: []
+  - name: helper-javascript-selected-callback
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "Request-controlled selection may choose a callback that returns request command text, so the first exec is vulnerable. A statically selected constant callback keeps the second exec safe."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.js: |
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        function passthrough(command) { return command; }
+        function fixedCommand(unused) { return 'date'; }
+        function applyCommand(callback, value) { return callback(value); }
+        app.get('/reports/run', (req, res) => {
+          const callback = req.query.mode === 'custom' ? passthrough : fixedCommand;
+          exec(applyCommand(callback, req.query.command));
+          exec(applyCommand(fixedCommand, req.query.command));
+          res.sendStatus(202);
+        });
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 9
+  - name: helper-typescript-service-method
+    language: "typescript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "A typed service method executes the supplied shell text. The route supplies request input; another invocation supplies a constant. The direct sink guards against mode regressions."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.ts: |
+        import express, { Request, Response } from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        class ReportService {
+          run(command: string): void { exec(command); }
+        }
+        app.get('/reports/run', (req: Request, res: Response) => {
+          const service = new ReportService();
+          service.run(String(req.query.command));
+          service.run('date');
+          exec(String(req.query.direct));
+          res.sendStatus(202);
+        });
+    findings:
+      - file: app.ts
+        rule: lycaon.javascript.command-injection
+        line: 5
+      - file: app.ts
+        rule: lycaon.javascript.command-injection
+        line: 11
+  - name: helper-typescript-fixed-method
+    language: "typescript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "The selected service method returns a fixed executable name and ignores request text. This is a safe constant-result helper, not a shell sanitization claim."
+    families:
+      - lycaon.javascript.command-injection
+    files:
+      app.ts: |
+        import express, { Request, Response } from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        class ReportService {
+          command(unused: unknown): string { return 'date'; }
+        }
+        app.get('/reports/run', (req: Request, res: Response) => {
+          const service = new ReportService();
+          exec(service.command(req.query.command));
+          res.sendStatus(202);
+        });
+    findings: []
+  - name: helper-go-query-service
+    language: "go"
+    framework: "net/http"
+    review_status: "complete"
+    adjudication: "A helper concatenates its supplied name into SQL; request input reaches that helper. A separate parameterized query is safe, and a direct concatenated query must survive both modes."
+    families:
+      - lycaon.go.sql-injection
+    files:
+      app.go: |
+        package reports
+        import "database/sql"
+        import "net/http"
+        func lookup(db *sql.DB, name string) {
+            db.Query("SELECT id FROM reports WHERE name = '" + name + "'")
+        }
+        func Handle(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+            lookup(db, r.FormValue("name"))
+            db.Query("SELECT id FROM reports WHERE name = ?", r.FormValue("safe"))
+            db.Query("SELECT id FROM reports WHERE name = '" + r.FormValue("direct") + "'")
+        }
+    findings:
+      - file: app.go
+        rule: lycaon.go.sql-injection
+        line: 5
+      - file: app.go
+        rule: lycaon.go.sql-injection
+        line: 10
+  - name: helper-go-fixed-query
+    language: "go"
+    framework: "net/http"
+    review_status: "complete"
+    adjudication: "A helper ignores its request-derived argument and returns a fixed SQL statement. A separate parameterized query safely binds the request value."
+    families:
+      - lycaon.go.sql-injection
+    files:
+      app.go: |
+        package reports
+        import "database/sql"
+        import "net/http"
+        func reportQuery(unused string) string { return "SELECT id FROM reports" }
+        func Handle(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+            db.Query(reportQuery(r.FormValue("ignored")))
+            db.Query("SELECT id FROM reports WHERE name = ?", r.FormValue("name"))
+        }
+    findings: []
+  - name: helper-java-command-service
+    language: "java"
+    framework: "servlet"
+    review_status: "complete"
+    adjudication: "The servlet request controls a helper executable string. The static conversion in the direct control preserves attacker control of the executable; constant service input is safe."
+    families:
+      - lycaon.java.command-injection
+    files:
+      ReportController.java: |
+        import jakarta.servlet.http.HttpServletRequest;
+        class ReportController {
+          static void runReport(String command) throws Exception {
+            Runtime.getRuntime().exec(command);
+          }
+          void handle(HttpServletRequest req) throws Exception {
+            runReport(req.getParameter("command"));
+            runReport("date");
+            Runtime.getRuntime().exec(java.util.Objects.toString(req.getParameter("direct")));
+          }
+        }
+    findings:
+      - file: ReportController.java
+        rule: lycaon.java.command-injection
+        line: 4
+      - file: ReportController.java
+        rule: lycaon.java.command-injection
+        line: 9
+  - name: helper-java-fixed-command
+    language: "java"
+    framework: "servlet"
+    review_status: "complete"
+    adjudication: "The command selector ignores the request-derived audit label and returns a fixed executable. Neither call permits request text to select the executed program."
+    families:
+      - lycaon.java.command-injection
+    files:
+      ReportController.java: |
+        import jakarta.servlet.http.HttpServletRequest;
+        class ReportController {
+          static String command(String unused) { return "date"; }
+          void handle(HttpServletRequest req) throws Exception {
+            Runtime.getRuntime().exec(command(req.getParameter("ignored")));
+            Runtime.getRuntime().exec("date");
+          }
+        }
+    findings: []
+  - name: helper-csharp-command-service
+    language: "c_sharp"
+    framework: "aspnet"
+    review_status: "complete"
+    adjudication: "Request query text controls the process executable through a service helper. A fixed executable call remains safe; a direct request invocation guards against mode regressions."
+    families:
+      - lycaon.csharp.command-injection
+    files:
+      ReportController.cs: |
+        using Microsoft.AspNetCore.Http;
+        using System.Diagnostics;
+        class ReportController {
+          static void RunReport(string command) {
+            Process.Start(command);
+          }
+          void Handle(HttpRequest req) {
+            RunReport(req.Query["command"]);
+            RunReport("date");
+            Process.Start(req.Query["direct"]);
+          }
+        }
+    findings:
+      - file: ReportController.cs
+        rule: lycaon.csharp.command-injection
+        line: 5
+      - file: ReportController.cs
+        rule: lycaon.csharp.command-injection
+        line: 10
+  - name: helper-csharp-fixed-command
+    language: "c_sharp"
+    framework: "aspnet"
+    review_status: "complete"
+    adjudication: "The helper ignores the request label and returns a constant process name; this safe result must not inherit unused argument taint."
+    families:
+      - lycaon.csharp.command-injection
+    files:
+      ReportController.cs: |
+        using Microsoft.AspNetCore.Http;
+        using System.Diagnostics;
+        class ReportController {
+          static string Command(string unused) { return "date"; }
+          void Handle(HttpRequest req) {
+            Process.Start(Command(req.Query["ignored"]));
+          }
+        }
+    findings: []

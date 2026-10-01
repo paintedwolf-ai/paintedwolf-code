@@ -1,0 +1,33 @@
+paths:
+  /v1/debug/den-perf:
+    post:
+      tags:
+      - debug
+      operationId: recordDenPerfEvents
+      x-person-action: none
+      summary: Ingest Den main-thread perf/stall events into the debug capture
+      description: |
+        Fire-and-forget sink for Den freeze attribution (longtask / loop-stall).
+        When LYCAON_DEN_PERF_DEBUG or LYCAON_DEBUG_ALL is on, events append to
+        den-perf.jsonl. When capture is off the handler still returns 204.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/debug.yaml#/components/schemas/DenPerfEventsRequest
+      responses:
+        '204':
+          description: Accepted (written or capture disabled)
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge

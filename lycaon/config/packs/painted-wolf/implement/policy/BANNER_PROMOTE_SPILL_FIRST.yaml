@@ -1,0 +1,16 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} has line_shift paths; use current preview proposals before repeated
+  primary reads.
+what: The current assessment identifies line_shift on one or more paths; inspect each path’s tier rather than
+  treating every conflict as offset drift.
+cause: Changes between base and current primary can shift line positions; branch_delta and the current preview
+  supply the relevant edits.
+why: Primary read archaeology is slower and error-prone than spill_path or scoped `preview_overlay(path=)`
+fix: Start with `preview_overlay(job_id="{{ paintedwolf.overlay_id }}")` and its reviewed ready_resolutions.
+  Scope path=… when more detail is needed{% if paintedwolf.spill_path %}; fuller assessment bodies are at {{
+  paintedwolf.spill_path }}{% endif %}. Compose merged content where required, after leg completion and current-revision
+  evidence pass.
+instead: Never loop `read()` on primary for merge reconstruction when spill_path is present
+id: BANNER_PROMOTE_SPILL_FIRST

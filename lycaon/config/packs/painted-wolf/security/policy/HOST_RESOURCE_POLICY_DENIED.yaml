@@ -1,0 +1,30 @@
+oar: '1.0'
+id: HOST_RESOURCE_POLICY_DENIED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+    - terminal_open
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.action_host_resource_denials
+when: 'size(paintedwolf.action_host_resource_denials) > 0'
+effect: block
+copy:
+  what: >-
+    Effective policy denies these requested host resources: {{ paintedwolf.action_host_resource_denials }}.
+  cause: The structured process request named a host resource whose device or project access posture is deny.
+  why: Host-resource policy is enforced before local-service or direct-network approval so a blocked resource cannot be recovered through a broader grant.
+  fix: Use an allowed route, or change the host-resource access posture in Settings if the policy is yours to change.
+  instead: Branch on Code; do not retry this host resource through a different command wrapper
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:host_resource_policy
+x-paintedwolf-message: host resource blocked by policy
+x-paintedwolf-scenarios:
+  - id: default
+    expect_contains:
+      - 'Code: HOST_RESOURCE_POLICY_DENIED'
+      - host resource

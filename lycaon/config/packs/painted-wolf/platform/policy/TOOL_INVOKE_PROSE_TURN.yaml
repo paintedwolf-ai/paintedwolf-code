@@ -1,0 +1,28 @@
+oar: '1.0'
+id: TOOL_INVOKE_PROSE_TURN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.can_complete_leg]
+when: paintedwolf.rejection_code == "TOOL_INVOKE_PROSE_TURN"
+effect: block
+copy:
+  cause: This turn has entered closeout; ordinary tool execution is closed.
+  why: Closeout must settle the work using the currently offered completion surface.
+  fix: '{% if paintedwolf.can_complete_leg %}Submit complete_leg with the actual completed, blocked, or failed result and its observed evidence.{% else %}Reply using the current closeout format and end the turn.{% endif %}'
+  instead: Complete the current closeout without starting another execution arc
+  what: This tool cannot run during closeout
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Tools cannot run on a prose-only turn
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TOOL_INVOKE_PROSE_TURN'

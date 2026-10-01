@@ -1,0 +1,10 @@
+emit: inject:active_workflow
+category: recoverable
+severity: error
+message: The workflow context is missing its composed draft or declared phase surface.
+what: The host cannot resolve a usable phase brief for the current workflow context.
+cause: There is no composed draft, recognized phase surface or coordinator brief in this context.
+why: Missing phase context is not evidence that a new workflow should be started.
+fix: Inspect the current workflow and its effective summary. Complete the declared composition step if needed; if a run already exists, preserve it and resolve its missing phase context rather than starting a duplicate.
+instead: Use the current workflow contract and explicit human start action; do not invent a start or composition API call.
+id: WORKFLOW_SESSION_COMPOSE_REQUIRED

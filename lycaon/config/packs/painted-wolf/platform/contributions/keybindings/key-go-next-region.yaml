@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-next-region
+command: painted-wolf/platform:go-next-region
+scope: global
+allow_in_input: true
+bindings:
+  macos:
+    - "F6"
+  windows:
+    - "F6"
+  linux:
+    - "F6"

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-fix-finding
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-fix-finding
+group: "1"
+order: 14
+label: "Fix this finding"

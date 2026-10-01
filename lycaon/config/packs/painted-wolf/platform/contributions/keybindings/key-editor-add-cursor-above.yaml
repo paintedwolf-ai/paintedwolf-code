@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-add-cursor-above
+command: painted-wolf/platform:editor-add-cursor-above
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+Shift+ArrowUp"
+  windows:
+    - "Mod+Shift+ArrowUp"
+  linux:
+    - "Mod+Shift+ArrowUp"

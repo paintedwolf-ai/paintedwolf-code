@@ -1,0 +1,19 @@
+title: Submit an application for distribution
+id: e7a99a6d-216b-427c-8aa8-6a4f87177667
+status: stable
+description: Submits or releases a named application build to an external review or distribution channel.
+references: [https://slsa.dev/spec/v1.2/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:app-submission', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

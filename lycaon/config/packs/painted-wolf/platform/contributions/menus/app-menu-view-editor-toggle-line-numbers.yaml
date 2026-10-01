@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-editor-toggle-line-numbers
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-toggle-line-numbers
+group: "2"
+order: 8
+label: "Toggle line numbers"

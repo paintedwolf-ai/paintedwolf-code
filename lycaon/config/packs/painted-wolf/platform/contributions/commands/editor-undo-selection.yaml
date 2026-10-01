@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-undo-selection
+title: "Undo selection"
+scope: "files"
+keywords:
+  - "soft undo"
+  - "selection undo"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.undoSelection"

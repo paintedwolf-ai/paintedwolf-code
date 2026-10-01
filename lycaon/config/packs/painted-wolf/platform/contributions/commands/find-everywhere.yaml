@@ -1,0 +1,7 @@
+id: painted-wolf/platform:find-everywhere
+title: "Find everywhere"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "find.everywhere"

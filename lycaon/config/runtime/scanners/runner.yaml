@@ -1,0 +1,8 @@
+runner:
+  max_concurrency: 2
+  reconcile_interval_ms: 60000
+  retry_delay_ms: 1000
+  process_priority: below_normal
+  result_spill_bytes: 4194304
+  chunk_files: 2000
+  file_timeout_ms: 30000

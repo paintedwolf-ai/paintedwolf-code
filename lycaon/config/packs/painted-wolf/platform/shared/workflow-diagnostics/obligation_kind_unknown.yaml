@@ -1,0 +1,5 @@
+code: obligation_kind_unknown
+message: |
+  Phase {{phase}} declares obligation kind {{kind}}, which is not registered on this host.
+replacement: |
+  Use a registered obligation kind. Registered kinds: {{kinds}}.

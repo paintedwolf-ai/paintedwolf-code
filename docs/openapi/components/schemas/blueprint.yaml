@@ -1,0 +1,187 @@
+components:
+  schemas:
+    BlueprintStatus:
+      type: string
+      enum:
+        - draft
+        - approved
+        - implementing
+        - done
+    CreateBlueprintRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - title
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        path:
+          type: string
+          description: Optional project-relative path under the overlay blueprints/ directory
+        source_workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+    UpdateBlueprintRequest:
+      x-go-generate: true
+      type: object
+      description: >
+        Partial update — supply content and/or title (at least one). Title writes
+        frontmatter. A provisional mint retargets onto the declared title once;
+        `path` on the response is identity after that write.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        content:
+          x-go-pointer: true
+          type: string
+        title:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Display title written to frontmatter; may retarget a provisional path once
+    BlueprintApproveRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - workflow_run_id
+        - expected_revision
+        - content_digest
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+        workflow_run_id:
+          type: string
+          format: uuid
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        content_digest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+    LaunchBlueprintRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        target_workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        defer_start:
+          type: boolean
+          description: >
+            When true, copy the source blueprint into a fresh draft and open a
+            session without starting the workflow run. Den arms the catalog
+            recipe; the next composer send starts the run bound to the seed.
+    LaunchBlueprintResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - session_id
+        - blueprint_id
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        workflow_run_id:
+          type: string
+          format: uuid
+          description: Omitted when defer_start seeded without starting a run.
+        blueprint_id:
+          type: string
+          format: uuid
+          description: UUID of the seeded blueprint copy.
+    BlueprintSummary:
+      x-go-generate: true
+      type: object
+      required:
+        - id
+        - title
+        - path
+        - status
+        - version
+        - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        source_workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        status:
+          $ref: '#/components/schemas/BlueprintStatus'
+        version:
+          type: integer
+        compatible_workflows:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+    Blueprint:
+      x-go-generate: true
+      type: object
+      required:
+        - id
+        - project_id
+        - title
+        - path
+        - content
+        - status
+        - version
+        - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        source_workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        content:
+          type: string
+        status:
+          $ref: '#/components/schemas/BlueprintStatus'
+        version:
+          type: integer
+        compatible_workflows:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+          description: When the blueprint file was last written. A file carries no creation time.
+    BlueprintListResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - blueprints
+      additionalProperties: false
+      properties:
+        blueprints:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintSummary'
+        truncated:
+          type: boolean
+          description: Present and true when older blueprints were cut from this answer.

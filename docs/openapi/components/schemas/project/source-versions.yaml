@@ -1,0 +1,311 @@
+components:
+  schemas:
+    SourceFileVersion:
+      x-go-generate: true
+      type: object
+      required: [id, file_id, workspace_kind, root_id, path, state, size_bytes, capture_state, capture_quality, landing, ordinal, turn, created_at]
+      additionalProperties: false
+      description: |
+        One retained state of a logical file. States a recorded effect produced
+        carry operation_id, effect_id, op, origin, and cause; states the ledger
+        kept without a causing action — a tracked baseline, a preserved
+        pre-image — omit all five. Absence is the signal that no action is
+        known, never an empty action.
+
+        An agent edit held in the person's open document is the third kind: it
+        names its operation, origin, and cause, but no effect and no op,
+        because nothing reached the working file. landing states that, and is
+        the only place a state's bytes were never the file's own.
+      properties:
+        contributors:
+          type: array
+          items: {$ref: 'source-walk.yaml#/components/schemas/SourceContributor'}
+          description: Authors of the publication; omitted for retained states without a producing effect.
+        id: {type: string, format: uuid}
+        file_id: {type: string, format: uuid}
+        workspace_kind:
+          x-go-type: "SourceWorkspaceKind"
+          allOf: [{$ref: 'source-workspace.yaml#/components/schemas/SourceWorkspaceKind'}]
+          description: Which kind of tree retained this state. A worker state names its overlay through worker_id.
+        parent_version_id: { x-go-pointer: true, type: string, format: uuid}
+        derived_from_version_id: { x-go-pointer: true, type: string, format: uuid}
+        operation_id: { x-go-pointer: true, type: string, format: uuid}
+        effect_id: { x-go-pointer: true, type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        state:
+          type: string
+          enum: [content, directory, absent, unresolved]
+        content_sha256: { x-go-name: "ContentSha256", type: string}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        capture_state:
+          type: string
+          enum: [stored, metadata_only, not_applicable]
+        capture_reason: {type: string}
+        capture_quality:
+          type: string
+          enum: [exact, observed, reconciled]
+        landing:
+          type: string
+          enum: [working_file, editor_document]
+          description: >-
+            Where these bytes landed. working_file is every state the file
+            itself held; editor_document is an agent edit that landed in the
+            person's open document and never reached disk, retained so they
+            can restore it after a reload or a discard.
+        op:
+          x-go-pointer: true
+          $ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'
+          description: Omitted when no recorded effect produced this state.
+        ordinal:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Position on the project's source-history clock, and the exclusive cursor for the next page.
+        origin:
+          x-go-pointer: true
+          $ref: 'source-walk.yaml#/components/schemas/SourceChangeOrigin'
+          description: Omitted when no recorded operation produced this state.
+        cause: { x-go-pointer: true, type: string}
+        actor_label: { x-go-pointer: true, type: string}
+        session_id: { x-go-pointer: true, type: string, format: uuid}
+        worker_id: { x-go-pointer: true, type: string, format: uuid}
+        turn: {type: integer}
+        tool_call_id:
+          x-go-pointer: true
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        batch_id: { x-go-pointer: true, type: string, format: uuid}
+        git_change:
+          x-go-pointer: true
+          $ref: 'source-walk.yaml#/components/schemas/SourceGitChange'
+          description: The observed ref movement the producing operation traced this state to; omitted for states with no git cause.
+        command:
+          x-go-pointer: true
+          $ref: 'source-walk.yaml#/components/schemas/SourceCommandWindow'
+          description: The command observation window open when this state was observed; omitted for states no window covered.
+        created_at: { x-go-name: "CreatedAt", type: string, format: date-time}
+    SourceTip:
+      x-go-generate: true
+      type: object
+      required: [state]
+      additionalProperties: false
+      description: |
+        What a file ends at. A deletion is an outcome, not a missing one: state
+        absent carries no sha256, so a deleted file stays addressable.
+      properties:
+        state:
+          $ref: ../source-tip-state.generated.yaml#/components/schemas/SourceTipState
+        sha256:
+          x-go-name: "Sha256"
+          type: string
+          description: Content hash. Present only when state is content.
+    SourceCommitRoot:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, head, available]
+      properties:
+        root_id: {type: string, format: uuid}
+        head: {type: string, description: 'Full HEAD object id; empty before the first commit.'}
+        available: {type: boolean}
+        error: {type: string}
+    SourceCommitComparison:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [head, status, op, availability, history_truncated]
+      description: |
+        Current Git comparison addressed by root_id and path, independent of
+        recorded effects. No event, timestamp or author is inferred from Git
+        status. file_id on the containing row is empty without retained history.
+      properties:
+        head: {type: string, description: 'Full HEAD object id; empty before the first commit.'}
+        status: {type: string, description: 'Two-column porcelain-v2 index/worktree status, or ?? for untracked.'}
+        op: {$ref: 'source-walk.yaml#/components/schemas/SourceChangeOp'}
+        availability: {type: string, description: 'Availability of current content; metadata-only paths remain listed.'}
+        history_truncated: {type: boolean, description: 'Only the latest recorded history fits this row; all retained versions remain available in the file version picker.'}
+    SourceFileCommit:
+      x-go-generate: true
+      type: object
+      required: [commit, subject, authored_at, committed_at, source_path]
+      additionalProperties: false
+      description: |
+        One commit of the file's git lineage, followed across renames. A
+        commit whose blob equals a retained version's bytes names it in
+        matches_version_id — one state, both identities. A commit whose bytes
+        the tracked working tree never held either names the observed ref
+        movement that brought it (arrival_git_change_id) or stands in the
+        git-history era. Timestamps are git's own claims and are display
+        metadata, never an ordering authority.
+      properties:
+        commit:
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+        subject: {type: string}
+        author_name: { x-go-pointer: true, type: string}
+        authored_at: { x-go-name: "AuthoredAt", type: string, format: date-time}
+        committed_at: { x-go-name: "CommittedAt", type: string, format: date-time}
+        source_path:
+          type: string
+          description: The file's path at this commit, relative to the repository toplevel — the address the commit resolves, whatever the file is called today.
+        blob_oid:
+          x-go-pointer: true
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+          description: Full git object id of the file's bytes at this commit; omitted when the commit removed the file.
+        matches_version_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: Retained version holding byte-identical content, by derived blob object id; the picker renders one row carrying both identities.
+        arrival_git_change_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: Id of the entry in this response's arrivals list — the observed ref movement whose window first made this commit reachable. Omitted when unknown or pre-tracking.
+    SourceFileVersionsResponse:
+      x-go-generate: true
+      type: object
+      required: [file_id, current, versions, commits, arrivals, git_history_state]
+      additionalProperties: false
+      properties:
+        file_id: {type: string, format: uuid}
+        current:
+          $ref: '#/components/schemas/SourceTip'
+          description: Tracked primary-workspace head for this logical file; absent also covers a worker-only file.
+        versions:
+          type: array
+          items: {$ref: '#/components/schemas/SourceFileVersion'}
+        commits:
+          type: array
+          items: {$ref: '#/components/schemas/SourceFileCommit'}
+          description: >-
+            One page of the file's git lineage, newest first. Empty under every
+            git_history_state except available, where an empty list is the
+            answer: the file has no commits under its tracked path.
+        arrivals:
+          type: array
+          items: {$ref: 'source-walk.yaml#/components/schemas/SourceGitChange'}
+          description: The observed ref movements this page's commits name as their arrival.
+        git_history_state:
+          $ref: '../source-git-history-state.generated.yaml#/components/schemas/SourceGitHistoryState'
+          description: >-
+            Whether the lane was asked and what came back. Read it before
+            reading commits: only available makes an empty list a statement
+            about the file, and timed_out and failed are facts about the query
+            that must never be presented as an absence of history.
+        tracked_at:
+          x-go-pointer: true
+          x-go-name: "TrackedAt"
+          type: string
+          format: date-time
+          description: When the ledger first retained a state of this file — the boundary between the observed timeline and history reconstructed from git.
+        next_cursor:
+          type: string
+          description: Opaque cursor continuing every requested lane that holds more. Omitted when all are exhausted.
+    SourceCommitRestoreRequest:
+      x-go-generate: true
+      type: object
+      required: [operation_id, file_id, root_id, path, source_path, blob_oid, base]
+      additionalProperties: false
+      description: |
+        Restores the file's bytes as one commit holds them. The bytes come
+        from the repository object store and are verified against blob_oid
+        before anything is written; the mutation lands through the ledger's
+        write door as an ordinary attributed restore.
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Idempotency key for this restore attempt.
+        file_id:
+          type: string
+          format: uuid
+          description: Logical file identity shown by the version picker.
+        root_id:
+          type: string
+          format: uuid
+          description: Root whose repository holds the commit and receives the restore.
+        path:
+          type: string
+          description: The file's current root-relative path — the restore target.
+        source_path:
+          type: string
+          description: The file's path at the commit, toplevel-relative, from the listed lineage.
+        blob_oid:
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+          description: Object id of the bytes being restored; the fetched content must hash to it.
+        base:
+          $ref: '#/components/schemas/SourceTip'
+          description: Reviewed current tip for compare-and-swap protection.
+    SourceCommitRestoreResponse:
+      x-go-generate: true
+      type: object
+      required: [commit, file_id, root_id, path, state, changed]
+      additionalProperties: false
+      properties:
+        commit:
+          type: string
+          pattern: '^[0-9a-f]{7,64}$'
+        previous_version_id:
+          type: string
+          format: uuid
+          description: The retained pre-restore state, the exact Undo target.
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        state:
+          $ref: ../source-tip-state.generated.yaml#/components/schemas/SourceTipState
+        sha256: { x-go-name: "Sha256", type: string}
+        changed: {type: boolean}
+    SourceVersionRestoreRequest:
+      x-go-generate: true
+      type: object
+      required: [operation_id, file_id, root_id, path, base]
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Idempotency key for this restore attempt.
+        file_id:
+          type: string
+          format: uuid
+          description: Logical file identity shown by the version picker.
+        root_id:
+          type: string
+          format: uuid
+          description: Attached project root that contains the working-file target.
+        path:
+          type: string
+          description: Current root-relative working-file path. Historical renames do not move it.
+        base:
+          $ref: '#/components/schemas/SourceTip'
+    SourceVersionRestoreResponse:
+      x-go-generate: true
+      type: object
+      required: [version_id, file_id, root_id, path, state, changed]
+      additionalProperties: false
+      properties:
+        version_id:
+          type: string
+          format: uuid
+          description: Immutable retained version selected by the user.
+        previous_version_id:
+          type: string
+          format: uuid
+          description: Exact pre-restore state for one-click Undo, when the logical file already had a primary-workspace head.
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        state:
+          $ref: ../source-tip-state.generated.yaml#/components/schemas/SourceTipState
+        sha256:
+          x-go-name: "Sha256"
+          type: string
+          description: Exact restored-byte hash when state is content.
+        changed:
+          type: boolean
+          description: False when the selected state already matched the working file.

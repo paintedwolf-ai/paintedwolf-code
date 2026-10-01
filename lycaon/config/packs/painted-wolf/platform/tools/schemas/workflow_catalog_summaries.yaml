@@ -1,0 +1,5 @@
+description: List bundled, session-composed, and template workflow ids.
+schema:
+  type: object
+  properties: {}
+  additionalProperties: false

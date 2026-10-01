@@ -1,0 +1,7 @@
+Leg finished — review envelope and host digest; chain `task()` per policy.
+
+Host worker digest — agent=implementer status=complete
+
+A detail the envelope omitted is still on record: `recall(query="<term>")` returns what the leg observed — do not re-dispatch to see it again.
+No `workflow_advance` in build chat.
+No implementation paste in coordinator prose. · 2m ago

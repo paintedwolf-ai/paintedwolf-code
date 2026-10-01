@@ -1,0 +1,10 @@
+id: painted-wolf/platform:launcher-open
+title: "Switch project"
+icon: launcher
+scope: "global"
+keywords:
+  - "project"
+  - "open project"
+action:
+  kind: native_ui
+  handler: "launcher.open"

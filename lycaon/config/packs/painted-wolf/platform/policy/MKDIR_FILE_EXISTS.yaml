@@ -1,0 +1,35 @@
+oar: '1.0'
+id: MKDIR_FILE_EXISTS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - mkdir
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "MKDIR_FILE_EXISTS"
+effect: block
+copy:
+  cause: An existing directory is acceptable; an existing file or link is not replaced.
+  why: Directory creation must not discard existing content.
+  fix: Inspect the intended location and the completed creation receipt. Correct a mistaken path; do not delete
+    or overwrite existing content merely to make mkdir succeed.
+  instead: Resolve the target conflict before retrying
+  what: mkdir cannot create a directory at {{ paintedwolf.path }} because that path is an existing non-directory.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mkdir
+x-paintedwolf-message: mkdir:mkdir path is an existing file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: mkdir
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MKDIR_FILE_EXISTS'

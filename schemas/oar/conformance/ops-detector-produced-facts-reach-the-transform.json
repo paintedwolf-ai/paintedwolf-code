@@ -1,0 +1,93 @@
+{
+  "id": "ops-detector-produced-facts-reach-the-transform",
+  "title": "A span fact the detector produced at run time is the one the transform rewrites; content comes back changed, not merely reported changed",
+  "covers": [
+    "OAR-CONF-25",
+    "OAR-FACT-11",
+    "OAR-OPS-15"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "REDACT_PII",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "size(pii_entities) > 0",
+      "transform": {
+        "action": "redact",
+        "target": "pii_entities"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 now",
+    "detector_facts": {
+      "pii_entities": [
+        {
+          "start": 5,
+          "end": 13
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "REDACT_PII",
+    "rule": "oar.test/REDACT_PII",
+    "content": "call [REDACTED] now",
+    "applied": [
+      "oar.test/REDACT_PII:fired"
+    ]
+  }
+}

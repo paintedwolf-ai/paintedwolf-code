@@ -1,0 +1,36 @@
+oar: '1.0'
+id: CHMOD_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chmod
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
+effect: block
+copy:
+  what: The target for chmod path {{ paintedwolf.path }} does not exist.
+  cause: The requested path or its resolved link target is absent.
+  why: Permission changes require an existing target.
+  fix: Confirm the intended path with an offered discovery tool, or remove an unintended missing path from
+    the request. Do not create a file solely to make chmod succeed.
+  instead: Branch on Code; confirm path or remove from paths[]
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
+x-paintedwolf-message: chmod path does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: chmod
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHMOD_NOT_FOUND'

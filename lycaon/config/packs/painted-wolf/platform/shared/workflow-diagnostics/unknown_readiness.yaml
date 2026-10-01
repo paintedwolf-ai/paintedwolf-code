@@ -1,0 +1,5 @@
+code: unknown_readiness
+message: |
+  human_approval.readiness leaf {{leaf}} is not registered.
+replacement: |
+  Use a registered condition leaf for readiness.

@@ -1,0 +1,39 @@
+oar: '1.0'
+id: GREP_MATCH_BUDGET
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - grep
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_len
+  - paintedwolf.grep_nested_repeat
+when: paintedwolf.rejection_code == "GREP_MATCH_BUDGET"
+effect: block
+copy:
+  what: '{% if paintedwolf.grep_nested_repeat %}grep rejected nested repetition in the regex pattern.{% else
+    %}grep pattern length exceeds the {{ paintedwolf.max_len }}-byte limit.{% endif %}'
+  cause: '{% if paintedwolf.grep_nested_repeat %}The parsed regex contains nested repeat operators.{% else
+    %}Pattern length is measured as UTF-8 bytes before search execution.{% endif %}'
+  why: Pattern admission happens before file scanning; a smaller search scope or output page cannot repair
+    this rejection.
+  fix: Shorten an overlong pattern or simplify nested repetition while preserving the intended match. Changing
+    path, path_glob, or max_matches does not change the rejected pattern.
+  instead: Repair the pattern itself before retrying
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: grep pattern exceeds safe search budget
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: grep
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GREP_MATCH_BUDGET'

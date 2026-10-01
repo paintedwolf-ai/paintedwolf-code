@@ -1,0 +1,2088 @@
+rules:
+- id: lycaon.javascript.command-injection
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input reaches a shell command; use execFile with separate arguments
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: &id001
+    - all:
+      - inside: import $FACTORY from "express"; ...
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: express.app
+      where:
+      - metavariable: $FACTORY
+        module: express
+    - all:
+      - inside: import {Router as $FACTORY} from "express"; ...
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: express.app
+      where:
+      - metavariable: $FACTORY
+        module: express
+    - all:
+      - inside: import * as $MODULE from "express"; ...
+      - pattern: $MODULE.Router(...)
+      exact: true
+      label: HTTP_APP
+      model-type: express.app
+      where:
+      - metavariable: $MODULE
+        module: express
+    - all:
+      - pattern: $FACTORY = require("express")
+      exact: true
+      by-side-effect: true
+      label: HTTP_FACTORY
+      model-type: express.factory
+      where:
+      - metavariable: $FACTORY
+        module: express
+      - focus: $FACTORY
+    - all:
+      - pattern: 'const {Router: $FACTORY} = require("express");'
+      exact: true
+      by-side-effect: true
+      label: HTTP_FACTORY
+      model-type: express.factory
+      where:
+      - metavariable: $FACTORY
+        module: express
+      - focus: $FACTORY
+    - all:
+      - pattern: $FACTORY(...)
+      exact: true
+      requires: HTTP_FACTORY
+      label: HTTP_APP
+      model-type: express.app
+      requires-model-type:
+        metavariable: $FACTORY
+        type: express.factory
+    - all:
+      - pattern: $FACTORY.Router(...)
+      exact: true
+      requires: HTTP_FACTORY
+      label: HTTP_APP
+      model-type: express.app
+      requires-model-type:
+        metavariable: $FACTORY
+        type: express.factory
+        member: Router
+    - all:
+      - inside: import $FACTORY from "fastify"; ...
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $FACTORY
+        module: fastify
+    - all:
+      - inside: import {fastify as $FACTORY} from "fastify"; ...
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $FACTORY
+        module: fastify
+        symbol:
+        - fastify
+    - all:
+      - inside: import {Fastify as $FACTORY} from "fastify"; ...
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $FACTORY
+        module: fastify
+        symbol:
+        - Fastify
+    - all:
+      - pattern: $FACTORY = require("fastify")
+      exact: true
+      by-side-effect: true
+      label: FASTIFY_FACTORY
+      model-type: fastify.factory
+      where:
+      - metavariable: $FACTORY
+        module: fastify
+      - focus: $FACTORY
+    - all:
+      - pattern: require("fastify")()
+      - pattern: $FACTORY(...)
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $FACTORY
+        module: fastify
+    - pattern: $FACTORY(...)
+      exact: true
+      requires: FASTIFY_FACTORY
+      label: HTTP_APP
+      model-type: fastify.app
+      requires-model-type:
+        metavariable: $FACTORY
+        type: fastify.factory
+    - all:
+      - pattern: $APP.register($PLUGIN, ...)
+      requires-model-type:
+        metavariable: $APP
+        type: fastify.app
+        member: register
+      exact: true
+      to-parameter:
+        index: 0
+        path: []
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - focus: $PLUGIN
+    - all:
+      - pattern: $WRAP($PLUGIN, ...)
+      exact: true
+      to-parameter:
+        index: 0
+        path: []
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $WRAP
+        module: fastify-plugin
+      - focus: $PLUGIN
+    - all:
+      - pattern: 'export const $PLUGIN: $TYPE = async ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginAsync
+      - focus: $APP
+    - all:
+      - inside: 'const $PLUGIN: $TYPE = async ($APP, ...) => { ... }; ... export default $PLUGIN;'
+      - pattern: 'const $PLUGIN: $TYPE = async ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginAsync
+      - focus: $APP
+    - all:
+      - pattern: 'export const $PLUGIN: $TYPE = ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginAsync
+      - focus: $APP
+    - all:
+      - inside: 'const $PLUGIN: $TYPE = ($APP, ...) => { ... }; ... export default $PLUGIN;'
+      - pattern: 'const $PLUGIN: $TYPE = ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginAsync
+      - focus: $APP
+    - all:
+      - pattern: 'export const $PLUGIN: $TYPE = async ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginCallback
+      - focus: $APP
+    - all:
+      - inside: 'const $PLUGIN: $TYPE = async ($APP, ...) => { ... }; ... export default $PLUGIN;'
+      - pattern: 'const $PLUGIN: $TYPE = async ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginCallback
+      - focus: $APP
+    - all:
+      - pattern: 'export const $PLUGIN: $TYPE = ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginCallback
+      - focus: $APP
+    - all:
+      - inside: 'const $PLUGIN: $TYPE = ($APP, ...) => { ... }; ... export default $PLUGIN;'
+      - pattern: 'const $PLUGIN: $TYPE = ($APP, ...) => { ... };'
+      exact: true
+      label: HTTP_APP
+      model-type: fastify.app
+      where:
+      - metavariable: $TYPE
+        module: fastify
+        symbol:
+        - FastifyPluginCallback
+      - focus: $APP
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, ...) => { ... };'
+      exact: true
+      label: NEXT_REQUEST
+      model-type: next.request
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        module: next/server
+        symbol:
+        - NextRequest
+      - focus: $REQ
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, ...) => { ... };'
+      exact: true
+      label: NEXT_REQUEST
+      model-type: next.request
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        kind: unbound
+      - metavariable: $TYPE
+        regex: ^Request$
+      - focus: $REQ
+    - pattern: $REQ.url
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: url
+    - pattern: $REQ.nextUrl
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: nextUrl
+    - pattern: $REQ.headers
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: headers
+    - pattern: $REQ.cookies
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: cookies
+    - pattern: await $REQ.json()
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: json
+    - pattern: await $REQ.text()
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: text
+    - pattern: await $REQ.formData()
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: formData
+    - pattern: await $REQ.arrayBuffer()
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.request
+        member: arrayBuffer
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, $CTX, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, $CTX, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, $CTX, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, $CTX, ...) => { ... };'
+      exact: true
+      label: NEXT_CONTEXT
+      model-type: next.context
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        module: next/server
+        symbol:
+        - NextRequest
+      - focus: $CTX
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, $CTX, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, $CTX, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, $CTX, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, $CTX, ...) => { ... };'
+      exact: true
+      label: NEXT_CONTEXT
+      model-type: next.context
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        kind: unbound
+      - metavariable: $TYPE
+        regex: ^Request$
+      - focus: $CTX
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, {params: $PARAMS}, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, {params: $PARAMS}, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, {params: $PARAMS}, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, {params: $PARAMS}, ...) => { ... };'
+      exact: true
+      label: INPUT
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        module: next/server
+        symbol:
+        - NextRequest
+      - focus: $PARAMS
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, {params: $PARAMS}, ...) { ... }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, {params: $PARAMS}, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, {params: $PARAMS}, ...) => { ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, {params: $PARAMS}, ...) => { ... };'
+      exact: true
+      label: INPUT
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        kind: unbound
+      - metavariable: $TYPE
+        regex: ^Request$
+      - focus: $PARAMS
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) { ...
+            }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) => {
+            ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) => { ... };'
+      exact: true
+      label: INPUT
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        module: next/server
+        symbol:
+        - NextRequest
+      - focus: $PARAMS
+    - all:
+      - any:
+        - pattern: 'export async function $METHOD($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) { ...
+            }'
+        - pattern: 'export function $METHOD($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) { ... }'
+        - pattern: 'export const $METHOD = async ($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) => {
+            ... };'
+        - pattern: 'export const $METHOD = ($REQ: $TYPE, {params: $PARAMS}: $CONTEXT, ...) => { ... };'
+      exact: true
+      label: INPUT
+      where:
+      - metavariable: $METHOD
+        regex: ^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$
+      - metavariable: $TYPE
+        kind: unbound
+      - metavariable: $TYPE
+        regex: ^Request$
+      - focus: $PARAMS
+    - pattern: $CTX.params
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $CTX
+        type: next.context
+        member: params
+    - all:
+      - any:
+        - pattern: 'export default function $HANDLER($REQ: $TYPE, $RES) { ... }'
+        - pattern: 'export default async function $HANDLER($REQ: $TYPE, $RES) { ... }'
+      exact: true
+      label: NEXT_PAGES_REQUEST
+      model-type: next.pages.request
+      where:
+      - metavariable: $TYPE
+        module: next
+        symbol:
+        - NextApiRequest
+      - focus: $REQ
+    - pattern: $REQ.query
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.pages.request
+        member: query
+    - pattern: $REQ.body
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.pages.request
+        member: body
+    - pattern: $REQ.headers
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.pages.request
+        member: headers
+    - pattern: $REQ.cookies
+      exact: true
+      label: INPUT
+      requires-model-type:
+        metavariable: $REQ
+        type: next.pages.request
+        member: cookies
+    - all:
+      - pattern: $LOCATION.search
+      exact: true
+      label: BROWSER_INPUT
+      where:
+      - metavariable: $LOCATION
+        regex: ^location$
+      - metavariable: $LOCATION
+        kind: unbound
+    - all:
+      - pattern: $LOCATION.hash
+      exact: true
+      label: BROWSER_INPUT
+      where:
+      - metavariable: $LOCATION
+        regex: ^location$
+      - metavariable: $LOCATION
+        kind: unbound
+    propagators: &id002
+    - pattern: $APP.set($NAME, $VALUE)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: set
+      preserves-model-type: true
+    - pattern: $APP.enable($NAME)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: enable
+      preserves-model-type: true
+    - pattern: $APP.disable($NAME)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: disable
+      preserves-model-type: true
+    - pattern: $APP.enabled($NAME)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: enabled
+      preserves-model-type: true
+    - pattern: $APP.disabled($NAME)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: disabled
+      preserves-model-type: true
+    - pattern: $APP.get($NAME)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: get
+      preserves-model-type: true
+    - pattern: $APP.engine($EXTENSION, $RENDERER)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: express.app
+      from-model-member: engine
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - query
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - query
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - query
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - body
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - body
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - body
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - params
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - params
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - params
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - query
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - query
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - query
+        arities:
+        - 4
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - body
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - body
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - body
+        arities:
+        - 4
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - params
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - params
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - params
+        arities:
+        - 4
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - headers
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - headers
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - headers
+        arities:
+        - 0
+        - 1
+        - 2
+        - 3
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - headers
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      all:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER, ...)
+      from-model-member: $METHOD
+      preserves-model-type: true
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - headers
+        arities:
+        - 4
+        array-elements: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: express.app
+      pattern: $APP.use($FIRST, ..., $HANDLER, ...)
+      from-model-member: use
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 1
+        path:
+        - headers
+        arities:
+        - 4
+        array-elements: true
+        array-head-callable: true
+        preserves-array: true
+      requires: HTTP_APP
+      label: INPUT
+      pattern: $APP.use($HANDLER, ...)
+      from-model-type: express.app
+      from-model-member: use
+      preserves-model-type: true
+    - all:
+      - pattern: $FACTORY.Router(...)
+      from: $FACTORY
+      to: $FACTORY
+      by-side-effect: false
+      from-model-type: express.factory
+      from-model-member: Router
+      preserves-model-type: true
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - query
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: $METHOD
+      preserves-model-type: true
+      all:
+      - pattern: $APP.$METHOD($URL, ..., $HANDLER)
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - query
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: route
+      preserves-model-type: true
+      all:
+      - pattern: '$APP.route({..., handler: $HANDLER, ...})'
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - body
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: $METHOD
+      preserves-model-type: true
+      all:
+      - pattern: $APP.$METHOD($URL, ..., $HANDLER)
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - body
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: route
+      preserves-model-type: true
+      all:
+      - pattern: '$APP.route({..., handler: $HANDLER, ...})'
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - params
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: $METHOD
+      preserves-model-type: true
+      all:
+      - pattern: $APP.$METHOD($URL, ..., $HANDLER)
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - params
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: route
+      preserves-model-type: true
+      all:
+      - pattern: '$APP.route({..., handler: $HANDLER, ...})'
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - headers
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: $METHOD
+      preserves-model-type: true
+      all:
+      - pattern: $APP.$METHOD($URL, ..., $HANDLER)
+      where:
+      - metavariable: $METHOD
+        regex: ^(get|post|put|patch|delete|head|options|all)$
+    - from: $APP
+      to: $HANDLER
+      to-parameter:
+        index: 0
+        path:
+        - headers
+        arities:
+        - 0
+        - 1
+        - 2
+      requires: HTTP_APP
+      label: INPUT
+      from-model-type: fastify.app
+      from-model-member: route
+      preserves-model-type: true
+      all:
+      - pattern: '$APP.route({..., handler: $HANDLER, ...})'
+    - pattern: $APP.register(...)
+      from: $APP
+      to: $APP
+      by-side-effect: false
+      from-model-type: fastify.app
+      from-model-member: register
+      preserves-model-type: true
+    - pattern: $REQ.json()
+      from: $REQ
+      to: $REQ
+      by-side-effect: false
+      from-model-type: next.request
+      from-model-member: json
+      preserves-model-type: true
+    - pattern: $REQ.text()
+      from: $REQ
+      to: $REQ
+      by-side-effect: false
+      from-model-type: next.request
+      from-model-member: text
+      preserves-model-type: true
+    - pattern: $REQ.formData()
+      from: $REQ
+      to: $REQ
+      by-side-effect: false
+      from-model-type: next.request
+      from-model-member: formData
+      preserves-model-type: true
+    - pattern: $REQ.arrayBuffer()
+      from: $REQ
+      to: $REQ
+      by-side-effect: false
+      from-model-type: next.request
+      from-model-member: arrayBuffer
+      preserves-model-type: true
+    sinks:
+    - all:
+      - pattern: child_process.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: child_process.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { exec as $CALL } from "node:child_process"; ...
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { exec: $CALL } = require("node:child_process"); ...'
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "node:child_process"; ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "node:child_process"; ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("node:child_process"); ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { exec } from "node:child_process"; ...
+      - pattern: exec($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function exec(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., exec, ...) { ... }
+      - not:
+          inside: const exec = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { execSync as $CALL } from "node:child_process"; ...
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { execSync: $CALL } = require("node:child_process"); ...'
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "node:child_process"; ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "node:child_process"; ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("node:child_process"); ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { execSync } from "node:child_process"; ...
+      - pattern: execSync($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function execSync(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., execSync, ...) { ... }
+      - not:
+          inside: const execSync = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { exec as $CALL } from "child_process"; ...
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { exec: $CALL } = require("child_process"); ...'
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "child_process"; ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "child_process"; ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("child_process"); ...
+      - pattern: $MODULE.exec($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { exec } from "child_process"; ...
+      - pattern: exec($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function exec(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., exec, ...) { ... }
+      - not:
+          inside: const exec = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { execSync as $CALL } from "child_process"; ...
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { execSync: $CALL } = require("child_process"); ...'
+      - pattern: $CALL($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "child_process"; ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "child_process"; ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("child_process"); ...
+      - pattern: $MODULE.execSync($CMD, ...)
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { execSync } from "child_process"; ...
+      - pattern: execSync($CMD, ...)
+      - not:
+          inside: function $OUTER(...) { ... function execSync(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., execSync, ...) { ... }
+      - not:
+          inside: const execSync = ...; ...
+      where:
+      - focus: $CMD
+      requires: INPUT or BROWSER_INPUT
+- id: lycaon.javascript.sql-injection
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input reaches SQL text; use parameter binding
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - all:
+      - pattern: $DB.query($SQL, ...)
+      where:
+      - focus: $SQL
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: $DB.execute($SQL, ...)
+      where:
+      - focus: $SQL
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: $DB.$queryRawUnsafe($SQL, ...)
+      where:
+      - focus: $SQL
+      requires: INPUT or BROWSER_INPUT
+    sanitizers:
+    - pattern: Number(...)
+      exact: true
+    - pattern: parseInt(...)
+      exact: true
+    - pattern: parseFloat(...)
+      exact: true
+- id: lycaon.javascript.path-traversal
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input reaches a filesystem path; enforce a trusted root
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - all:
+      - pattern: fs.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: fs.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: $RES.sendFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile as $CALL } from "node:fs"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFile: $CALL } = require("node:fs"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "node:fs"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "node:fs"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("node:fs"); ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile } from "node:fs"; ...
+      - pattern: readFile($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFile(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFile, ...) { ... }
+      - not:
+          inside: const readFile = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFileSync as $CALL } from "node:fs"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFileSync: $CALL } = require("node:fs"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "node:fs"; ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "node:fs"; ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("node:fs"); ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFileSync } from "node:fs"; ...
+      - pattern: readFileSync($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFileSync(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFileSync, ...) { ... }
+      - not:
+          inside: const readFileSync = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile as $CALL } from "fs"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFile: $CALL } = require("fs"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "fs"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "fs"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("fs"); ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile } from "fs"; ...
+      - pattern: readFile($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFile(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFile, ...) { ... }
+      - not:
+          inside: const readFile = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFileSync as $CALL } from "fs"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFileSync: $CALL } = require("fs"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "fs"; ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "fs"; ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("fs"); ...
+      - pattern: $MODULE.readFileSync($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFileSync } from "fs"; ...
+      - pattern: readFileSync($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFileSync(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFileSync, ...) { ... }
+      - not:
+          inside: const readFileSync = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile as $CALL } from "node:fs/promises"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFile: $CALL } = require("node:fs/promises"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "node:fs/promises"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "node:fs/promises"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("node:fs/promises"); ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile } from "node:fs/promises"; ...
+      - pattern: readFile($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFile(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFile, ...) { ... }
+      - not:
+          inside: const readFile = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile as $CALL } from "fs/promises"; ...
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: 'const { readFile: $CALL } = require("fs/promises"); ...'
+      - pattern: $CALL($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function $CALL(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., $CALL, ...) { ... }
+      - not:
+          inside: const $CALL = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import * as $MODULE from "fs/promises"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import $MODULE from "fs/promises"; ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: const $MODULE = require("fs/promises"); ...
+      - pattern: $MODULE.readFile($PATH, ...)
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - inside: import { readFile } from "fs/promises"; ...
+      - pattern: readFile($PATH, ...)
+      - not:
+          inside: function $OUTER(...) { ... function readFile(...) { ... } ... }
+      - not:
+          inside: function $OUTER(..., readFile, ...) { ... }
+      - not:
+          inside: const readFile = ...; ...
+      where:
+      - focus: $PATH
+      requires: INPUT or BROWSER_INPUT
+- id: lycaon.javascript.ssrf
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input selects a server-side HTTP destination
+  metadata:
+    category: security
+    cwe: CWE-918
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    sinks:
+    - all:
+      - pattern: fetch($URL, ...)
+      - not:
+          pattern: fetch(`$PREFIX${...}...`, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          pattern: fetch("$PREFIX" + $REST, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: fetch($URL, ...)
+          - inside: const $URL = `$PREFIX${...}...`; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: fetch($URL, ...)
+          - inside: const $URL = "$PREFIX" + $REST; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      where:
+      - focus: $URL
+      requires: INPUT
+    - all:
+      - pattern: axios.get($URL, ...)
+      - not:
+          pattern: axios.get(`$PREFIX${...}...`, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          pattern: axios.get("$PREFIX" + $REST, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: axios.get($URL, ...)
+          - inside: const $URL = `$PREFIX${...}...`; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: axios.get($URL, ...)
+          - inside: const $URL = "$PREFIX" + $REST; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      where:
+      - focus: $URL
+      requires: INPUT
+    - all:
+      - pattern: axios.post($URL, ...)
+      - not:
+          pattern: axios.post(`$PREFIX${...}...`, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          pattern: axios.post("$PREFIX" + $REST, ...)
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: axios.post($URL, ...)
+          - inside: const $URL = `$PREFIX${...}...`; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      - not:
+          all:
+          - pattern: axios.post($URL, ...)
+          - inside: const $URL = "$PREFIX" + $REST; ...
+          where:
+          - metavariable: $PREFIX
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/
+      where:
+      - focus: $URL
+      requires: INPUT
+    propagators: *id002
+- id: lycaon.javascript.code-injection
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input reaches dynamic JavaScript evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - all:
+      - pattern: eval($CODE)
+      where:
+      - focus: $CODE
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: new Function(..., $CODE)
+      where:
+      - focus: $CODE
+      requires: INPUT or BROWSER_INPUT
+- id: lycaon.javascript.dom-xss
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Untrusted input reaches an HTML sink; render text or sanitize HTML
+  metadata:
+    category: security
+    cwe: CWE-79
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - all:
+      - pattern: $NODE.innerHTML = $HTML
+      where:
+      - focus: $HTML
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: $NODE.outerHTML = $HTML
+      where:
+      - focus: $HTML
+      requires: INPUT or BROWSER_INPUT
+    - all:
+      - pattern: document.write($HTML)
+      where:
+      - focus: $HTML
+      requires: INPUT or BROWSER_INPUT
+    sanitizers:
+    - pattern: DOMPurify.sanitize(...)
+      exact: true
+- id: lycaon.javascript.open-redirect
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - all:
+      - pattern: $RES.redirect($URL)
+      where:
+      - focus: $URL
+      requires: INPUT or BROWSER_INPUT
+- id: lycaon.javascript.tls-verification-disabled
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: TLS certificate verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - javascript
+  pattern-either:
+  - pattern: 'new https.Agent({..., rejectUnauthorized: false, ...})'
+  - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+- id: lycaon.javascript.jwt-verification-disabled
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: JWT verification accepts the unsigned none algorithm
+  metadata:
+    category: security
+    cwe: CWE-347
+    confidence: HIGH
+    technology:
+    - javascript
+  pattern: 'jwt.verify(..., {..., algorithms: [..., "none", ...], ...})'
+- id: lycaon.javascript.mongodb-query-object
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: An entire request body is used as a MongoDB query and can supply query operators
+  metadata:
+    category: security
+    cwe: CWE-943
+    confidence: HIGH
+    technology:
+    - javascript
+  mode: taint
+  taint:
+    sources: *id001
+    propagators: *id002
+    sinks:
+    - pattern: $COLLECTION.find($REQ.body)
+      requires: INPUT
+    - pattern: $COLLECTION.findOne($REQ.body)
+      requires: INPUT
+    - pattern: $COLLECTION.deleteMany($REQ.body)
+      requires: INPUT

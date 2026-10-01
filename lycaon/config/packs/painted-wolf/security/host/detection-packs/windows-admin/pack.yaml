@@ -1,0 +1,5 @@
+id: windows-admin
+label: Windows administration
+description: >-
+  Windows operations that disable a security control, format or wipe a disk,
+  or clear the event log that would otherwise show what happened.

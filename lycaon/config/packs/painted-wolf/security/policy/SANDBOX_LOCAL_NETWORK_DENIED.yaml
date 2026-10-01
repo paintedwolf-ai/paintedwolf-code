@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SANDBOX_LOCAL_NETWORK_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.user_guidance
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_LOCAL_NETWORK_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} was not granted the requested local listener and client authority.'
+  cause: Local-network authority is not on this invocation.
+  why: Retrying local_listen or loopback_connect loops on the same refusal.
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue without
+    those local effects and report unmet verification. A static preview cannot stand in for required server/client
+    behavior; wait for new user direction before re-requesting.'
+  instead: Do not retry local_listen or loopback_connect; continue without that server and client
+x-paintedwolf-category: user-decision
+x-paintedwolf-emit: guard:sandbox_local_network
+x-paintedwolf-message: local network authority declined
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SANDBOX_LOCAL_NETWORK_DENIED'

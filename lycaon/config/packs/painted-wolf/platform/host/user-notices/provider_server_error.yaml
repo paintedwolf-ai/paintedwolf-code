@@ -1,0 +1,45 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - status
+    - attempts
+title: The model provider had a server error
+message: >-
+  {% if provider_id -%}
+  {{ provider_id }} returned a server-side error{% if status %} (HTTP {{ status }}){% endif %}.
+  {%- else -%}
+  The model provider returned a server-side error{% if status %} (HTTP {{ status }}){% endif %}.
+  {%- endif %}
+  Painted Wolf reached the provider, but its service could not complete the request. This points to a problem
+  on the provider's side, rather than with your prompt or local setup.
+  {% if attempts and attempts > 1 %}Painted Wolf tried {{ attempts }} times before stopping.{% endif %}
+suggested_action: >-
+  Try sending it again. If it keeps happening, switch to a different model in Settings → AI providers.
+  Technical details are available in Diagnostics.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_provider
+    vars:
+      provider_id: together-ai-1
+      model: zai-org/GLM-5.3-Flash
+      status: 500
+      attempts: 4
+    expect_contains:
+      - together-ai-1
+      - HTTP 500
+      - provider's side
+      - rather than with your prompt or local setup
+      - tried 4 times
+      - Diagnostics
+  - id: generic
+    vars: {}
+    expect_contains:
+      - server-side error
+      - provider's side

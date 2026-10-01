@@ -1,0 +1,19 @@
+tags: [process]
+description: >-
+  Read command job output since cursor and current host-observed network facts.
+  Inspect the handle of the process making a failed connection before attributing
+  an application error to the sandbox. `network` records observed destinations
+  and allow/deny decisions; `boundary_refusal` reports host attribution.
+  Allowed access does not imply a successful upstream response.
+schema:
+  type: object
+  properties:
+    handle:
+      description: "Live or recent command handle returned by command/verify."
+      type: string
+    cursor:
+      type: integer
+      minimum: 0
+      description: "Output offset: 0 initially, then exact next_cursor from the prior result."
+  required: [handle, cursor]
+  additionalProperties: false

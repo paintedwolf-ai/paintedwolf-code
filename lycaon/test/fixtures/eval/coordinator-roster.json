@@ -1,0 +1,47 @@
+{
+  "repetitions": 5,
+  "seed": 20260906,
+  "episode_timeout": "0s",
+  "worker": {
+    "provider": "together-ai-1",
+    "model": "zai-org/GLM-5.3-Flash"
+  },
+  "models": [
+    {
+      "id": "glm-flash",
+      "label": "GLM-5.3 Flash",
+      "provider": "together-ai-1",
+      "model": "zai-org/GLM-5.3-Flash"
+    },
+    {
+      "id": "kimi-code",
+      "label": "Kimi K2.7 Code",
+      "provider": "fireworks-1",
+      "model": "accounts/fireworks/models/kimi-k2p7-code"
+    },
+    {
+      "id": "qwen-3-8-flash",
+      "label": "Qwen3.8 Flash",
+      "provider": "together-ai-1",
+      "model": "Qwen/Qwen3.8-Flash"
+    },
+    {
+      "id": "gemini-3-8-flash",
+      "label": "Gemini 3.8 Flash",
+      "provider": "google-gemini-1",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "id": "qwen-3-5-9b",
+      "label": "Qwen3.5 9B",
+      "provider": "together-ai-1",
+      "model": "Qwen/Qwen3.5-9B"
+    },
+    {
+      "id": "gemma-4-31b",
+      "label": "Gemma 4 31B IT",
+      "provider": "together-ai-1",
+      "model": "google/gemma-4-31B-it"
+    }
+  ]
+}

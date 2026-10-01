@@ -1,0 +1,31 @@
+oar: '1.0'
+id: WORKER_CANCEL_TERMINAL
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+  - paintedwolf.status
+when: paintedwolf.rejection_code == "WORKER_CANCEL_TERMINAL"
+effect: block
+copy:
+  what: worker_cancel only applies to pending, running, or held jobs
+  cause: The job already finished or was canceled
+  why: The job already finished or was canceled
+  fix: Read the completion or cancellation envelope on the transcript instead of calling worker_cancel again
+  instead: Use the existing envelope on the transcript — do not cancel terminal jobs
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} is already {{ paintedwolf.status }} and cannot be
+  canceled
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-done
+    status: complete
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_CANCEL_TERMINAL'

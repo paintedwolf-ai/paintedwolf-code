@@ -1,0 +1,70 @@
+{
+  "id": "eval-suppressor-ordering-disturbs-base-order-least",
+  "title": "Only the constrained pair moves; every other rule keeps its kind-and-identifier place",
+  "covers": [
+    "OAR-EVAL-18"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "AAA_FIRST",
+      "effect": "allow"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "BBB_TARGET",
+      "effect": "block"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "CCC_SUPPRESSOR",
+      "effect": "warn",
+      "overrides": [
+        "BBB_TARGET"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "CCC_SUPPRESSOR",
+    "applied": [
+      "oar.test/AAA_FIRST:fired",
+      "oar.test/CCC_SUPPRESSOR:fired",
+      "oar.test/BBB_TARGET:suppressed"
+    ]
+  }
+}

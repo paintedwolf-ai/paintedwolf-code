@@ -1,0 +1,305 @@
+.focused-session-list {
+  /* Chat rows determine the list height. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.focused-session-list__heading {
+  /* The heading aligns with inset navigation rows. */
+  margin: 12px 0 6px 8px;
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+/* A heading that carries a control keeps the plain heading's box. */
+.focused-session-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 17px;
+  margin: 12px 0 6px 8px;
+}
+.focused-session-list__header > .focused-session-list__heading {
+  margin: 0;
+}
+/* Quiet until hovered, like the context zone's "more" row. */
+.focused-session-list__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  margin: -1px 0;
+  padding: 0 4px 0 6px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.focused-session-list__sort:hover,
+.focused-session-list__sort[aria-expanded="true"] {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.focused-session-list__sort:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-plane));
+}
+/* Selection markers travel within their navigation list. */
+.den-settings-sidebar-list,
+.focused-session-list__list,
+.project-context-zone__list {
+  position: relative;
+}
+.den-nav-marker {
+  position: absolute;
+  top: 0;
+  /* The marker straddles the selection pill edge. */
+  left: -5px;
+  width: var(--den-nav-dot-size, 11px);
+  height: var(--den-nav-dot-size, 11px);
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+  box-shadow: 0 0 0 3px var(--den-plane);
+  /* The marker paints above positioned row buttons. */
+  z-index: 1;
+  pointer-events: none;
+}
+/* Row padding reserves the marker. */
+.den-settings-sidebar-list .den-shell-nav-sub-link,
+.focused-session-list__list .focused-session-list__row,
+.project-context-zone__list .project-context-zone__entry {
+  padding-left: 13px;
+}
+.focused-session-list__branch {
+  margin: 0;
+  /* Inset for the marker overhang. */
+  padding: 0 0 0 8px;
+}
+.focused-session-list__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.focused-session-list__empty {
+  margin: 0;
+  padding: 2px 4px;
+  min-height: 1.7143rem;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.focused-session-list__row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.focused-session-list__rename {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--den-line);
+  border-radius: 4px;
+  background: var(--den-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.focused-session-list__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-label);
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+/* Attention dots appear only where they cannot resemble selection markers. */
+.focused-session-list__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--den-attention-tone);
+}
+.focused-session-list__dot[data-attention-class="needs_you"] {
+  --den-attention-tone: var(--den-accent-text);
+  animation: den-attention-pulse 2.4s ease-in-out infinite;
+}
+.focused-session-list__dot[data-attention-class="error"] {
+  --den-attention-tone: var(--den-danger);
+}
+.focused-session-list__dot[data-attention-class="running"] {
+  --den-attention-tone: var(--den-status-running);
+}
+.focused-session-list__dot[data-attention-class="finished"] {
+  --den-attention-tone: var(--den-status-positive);
+}
+/* Sidebar status word — takes the timestamp's place, same footprint. */
+.focused-session-list__status {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--text-den-micro);
+  font-weight: 500;
+  color: var(--den-attention-tone, var(--den-text-muted));
+}
+.focused-session-list__status[data-attention-class="needs_you"] {
+  --den-attention-tone: var(--den-accent-text);
+}
+.focused-session-list__status[data-attention-class="error"] {
+  --den-attention-tone: var(--den-danger);
+}
+.focused-session-list__status[data-attention-class="running"] {
+  --den-attention-tone: var(--den-status-running);
+}
+.focused-session-list__status[data-attention-class="finished"] {
+  --den-attention-tone: var(--den-status-positive);
+}
+.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+  .focused-session-list__status {
+  display: none;
+}
+/* Relative timestamp hugs the right edge; hover actions replace it. */
+.focused-session-list__time {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+  .focused-session-list__time {
+  display: none;
+}
+/* "All chats" footer entry — same pill language, quieter weight. */
+.focused-session-list__all {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin-top: 2px;
+  padding-left: 13px;
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+}
+.focused-session-list__all-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.focused-session-list__all-count {
+  flex-shrink: 0;
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+/* Inactive chats show only their notice count. */
+.focused-session-list__notices {
+  flex-shrink: 0;
+  min-width: 1.0714rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Reveals the rename action without shifting the row highlight. */
+.focused-session-list .den-list-row--nav {
+  position: relative;
+  display: grid;
+  /* Matching pixel units let the action track animate. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 0px);
+  align-items: center;
+  column-gap: 0;
+  transition: grid-template-columns var(--den-duration) var(--den-ease);
+}
+.focused-session-list .den-list-row--nav:is(:hover, :focus-within) {
+  /* Reserves Pin and Rename and their trailing inset. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 52px);
+}
+.focused-session-list .den-row-action[aria-pressed="true"] {
+  color: var(--den-accent-text);
+}
+/* Dragging within Pinned: the others step aside, the dragged row lifts. */
+.focused-session-list__list--dragging > .den-list-row--nav {
+  transition: transform var(--den-duration) var(--den-ease);
+}
+.focused-session-list__list--dragging > .den-list-row--nav.is-dragging {
+  z-index: 2;
+  transition: none;
+}
+.focused-session-list__list--dragging > .den-list-row--nav.is-dragging > .focused-session-list__row {
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-lg);
+  cursor: grabbing;
+}
+.focused-session-list__list--dragging > .den-nav-marker {
+  visibility: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .focused-session-list__list--dragging > .den-list-row--nav {
+    transition: none;
+  }
+}
+.focused-session-list .den-list-row--nav > .focused-session-list__row {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+}
+/* The row stays highlighted while its action is hovered. */
+.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+  > .focused-session-list__row:not(.den-shell-nav-sub-link-active) {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.focused-session-list .den-list-row--nav > .den-list-row__actions {
+  grid-column: 3;
+  grid-row: 1;
+  justify-content: flex-end;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+}
+.focused-session-list__window {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+/* The action shares the row’s hover fill. */
+.focused-session-list .den-row-action,
+.focused-session-list .den-row-action:hover,
+.focused-session-list .den-row-action:focus-visible {
+  background: transparent;
+}
+.focused-session-list__row--active,
+.focused-session-list__row.den-shell-nav-sub-link-active {
+  font-weight: 500;
+}
+
+

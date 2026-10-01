@@ -1,0 +1,9 @@
+'on': inject.tool_procedures
+effect: inform
+render: tool-procedures
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - each provider request after tool availability and narrowing are resolved

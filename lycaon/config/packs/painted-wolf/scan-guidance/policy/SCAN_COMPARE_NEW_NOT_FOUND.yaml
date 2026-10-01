@@ -1,0 +1,34 @@
+oar: '1.0'
+id: SCAN_COMPARE_NEW_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_compare
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_NEW_NOT_FOUND"
+effect: block
+copy:
+  what: scan_compare could not resolve the requested new scan in this project.
+  cause: The requested record was not found; this does not mean it is merely still running.
+  why: Compare diffs persisted ingest findings — the new row must exist and be complete.
+  fix: Check the assigned new scan ID and its project. Preserve a bound comparison ID and report the missing
+    record; only an unbound comparison may choose another intended recorded scan.
+  instead: Resolve the intended new scan without inventing a running status
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: New scan id not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: scan_compare
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_COMPARE_NEW_NOT_FOUND'

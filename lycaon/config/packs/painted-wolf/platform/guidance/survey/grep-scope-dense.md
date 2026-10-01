@@ -1,0 +1,1 @@
+Root scope is too dense for an unscoped grep{% if file_count %} (file_count={{ file_count }}){% endif %} — set path to a subdirectory or a narrowing path_glob before searching. Directory map above lists top-level candidates.

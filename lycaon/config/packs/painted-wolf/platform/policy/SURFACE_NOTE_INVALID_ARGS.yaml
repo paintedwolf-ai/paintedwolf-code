@@ -1,0 +1,37 @@
+oar: '1.0'
+id: SURFACE_NOTE_INVALID_ARGS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - surface_note
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_field
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SURFACE_NOTE_INVALID_ARGS"
+effect: block
+copy:
+  what: 'surface_note field {{ paintedwolf.rejection_field }} is invalid: {{ paintedwolf.rejection_reason }}.'
+  cause: The summary, citation list, URL list, or artifact list failed its own structured validation.
+  why: surface_note requires a bounded summary and well-formed optional citation channels.
+  fix: Correct the reported field using the current schema bounds. Preserve the summary’s intended claim and required
+    citations or artifacts; do not drop evidence to clear validation.
+  instead: Branch on Code SURFACE_NOTE_INVALID_ARGS; fix summary or citation args
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:surface_note
+x-paintedwolf-message: The note summary is missing or invalid.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: surface_note
+    field: summary
+    reason: summary exceeds the configured limit
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURFACE_NOTE_INVALID_ARGS'
+  - summary exceeds the configured limit

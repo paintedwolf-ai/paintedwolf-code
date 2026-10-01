@@ -1,0 +1,65 @@
+partition: "development"
+projects:
+  - name: "helper-javascript-unused-closure"
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "The unexported closure is never invoked. Its request-to-shell body is unreachable. Request input comes from a real Express route registration inside the closure; registration occurs only if that closure runs."
+    families:
+      - "lycaon.javascript.command-injection"
+    files:
+      app.js: |+
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        const plugin = () => { app.get('/report', (req, res) => { exec(req.query.command); res.send('done'); }); };
+    findings: []
+  - name: "helper-javascript-replaced-before-export"
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "The vulnerable closure is replaced before any invocation or export. Only the constant replacement escapes. Request input comes from a real Express route registration inside the closure; registration occurs only if that closure runs."
+    families:
+      - "lycaon.javascript.command-injection"
+    files:
+      app.js: |+
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        let plugin = () => { app.get('/report', (req, res) => { exec(req.query.command); res.send('done'); }); };
+        plugin = () => { app.get('/report', (req, res) => { res.send('done'); }); };
+        export { plugin };
+    findings: []
+  - name: "helper-javascript-replaced-live-export"
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "The named export is a live binding and is replaced before module initialization finishes. The original closure is never invoked or retained. Request input comes from a real Express route registration inside the closure; registration occurs only if that closure runs."
+    families:
+      - "lycaon.javascript.command-injection"
+    files:
+      app.js: |+
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        export let plugin = () => { app.get('/report', (req, res) => { exec(req.query.command); res.send('done'); }); };
+        plugin = () => { app.get('/report', (req, res) => { res.send('done'); }); };
+    findings: []
+  - name: "helper-javascript-called-closure-control"
+    language: "javascript"
+    framework: "express"
+    review_status: "complete"
+    adjudication: "The closure is actually invoked by the registered route, so its request-to-shell sink is reachable. Request input comes from a real Express route registration inside the closure; registration occurs only if that closure runs."
+    families:
+      - "lycaon.javascript.command-injection"
+    files:
+      app.js: |+
+        import express from 'express';
+        import { exec } from 'node:child_process';
+        const app = express();
+        const plugin = () => { app.get('/report', (req, res) => { exec(req.query.command); res.send('done'); }); };
+        plugin();
+    findings:
+      - file: "app.js"
+        rule: "lycaon.javascript.command-injection"
+        line: 4

@@ -1,0 +1,1 @@
+Compose succeeded — paraphrase `coordinator_brief` from host context, then start the workflow run.

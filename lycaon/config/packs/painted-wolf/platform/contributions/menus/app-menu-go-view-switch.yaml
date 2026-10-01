@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-view-switch
+slot: "app_menu.go"
+command: painted-wolf/platform:view-switch
+group: "4"
+order: 17
+label: "Switch view…"

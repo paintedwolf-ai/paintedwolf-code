@@ -1,0 +1,17 @@
+# Reviewed suppressions for govulncheck (Go vulnerability database IDs).
+# govulncheck has no native ignore API; scripts/govulncheck-gate.py enforces this file.
+allow:
+  GO-2026-4887:
+    reason: >
+      Transitive github.com/docker/docker via osv-scalibr container image extraction.
+      Affects Docker daemon AuthZ plugins with oversized request bodies; the sidecar does not
+      run a Docker daemon or expose AuthZ plugin endpoints. Docker Engine is fixed in
+      29.3.1; the Go advisory lists no fixed release for the legacy docker/docker module.
+    reviewed: "2026-09-11"
+  GO-2026-4883:
+    reason: >
+      Same transitive docker/docker dependency path. Affects Docker daemon privilege
+      validation during Docker plugin installation. The embedded SCA path neither runs
+      a Docker daemon nor handles Docker plugin installation. Docker Engine is fixed in 29.3.1; the Go
+      advisory lists no fixed release for the legacy docker/docker module.
+    reviewed: "2026-09-11"

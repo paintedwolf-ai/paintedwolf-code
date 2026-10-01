@@ -1,0 +1,49 @@
+{
+  "id": "expr-parse-tree-of-256-nodes-accepted",
+  "title": "An engine accepts a condition whose parse tree holds 256 nodes, the published floor",
+  "covers": [
+    "OAR-EXPR-17",
+    "OAR-EXPR-20"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "LARGE",
+      "effect": "warn",
+      "when": "!(fire_count == 999) || fire_count == 1 || fire_count == 2 || fire_count == 3 || fire_count == 4 || fire_count == 5 || fire_count == 6 || fire_count == 7 || fire_count == 8 || fire_count == 9 || fire_count == 10 || fire_count == 11 || fire_count == 12 || fire_count == 13 || fire_count == 14 || fire_count == 15 || fire_count == 16 || fire_count == 17 || fire_count == 18 || fire_count == 19 || fire_count == 20 || fire_count == 21 || fire_count == 22 || fire_count == 23 || fire_count == 24 || fire_count == 25 || fire_count == 26 || fire_count == 27 || fire_count == 28 || fire_count == 29 || fire_count == 30 || fire_count == 31 || fire_count == 32 || fire_count == 33 || fire_count == 34 || fire_count == 35 || fire_count == 36 || fire_count == 37 || fire_count == 38 || fire_count == 39 || fire_count == 40 || fire_count == 41 || fire_count == 42 || fire_count == 43 || fire_count == 44 || fire_count == 45 || fire_count == 46 || fire_count == 47 || fire_count == 48 || fire_count == 49 || fire_count == 50 || fire_count == 51 || fire_count == 52 || fire_count == 53 || fire_count == 54 || fire_count == 55 || fire_count == 56 || fire_count == 57 || fire_count == 58 || fire_count == 59 || fire_count == 60 || fire_count == 61 || fire_count == 62 || fire_count == 63"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "LARGE"
+  }
+}

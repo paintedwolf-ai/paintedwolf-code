@@ -1,0 +1,72 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "net/textproto",
+      "symbols": [
+       "Reader.ReadResponse"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "stdlib"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.24.8"
+      },
+      {
+       "introduced": "1.25.0"
+      },
+      {
+       "fixed": "1.25.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-61724",
+  "CVE-2025-61724"
+ ],
+ "credits": [
+  {
+   "name": "Jakub Ciolek"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4015"
+ },
+ "details": "The Reader.ReadResponse function constructs a response string through repeated string concatenation of lines. When the number of lines in a response is large, this can cause excessive CPU consumption.",
+ "id": "GO-2025-4015",
+ "modified": "2025-10-29T21:51:07Z",
+ "published": "2025-10-29T21:51:07Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/709859"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/75716"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/4Emdl2iQ_bI"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Excessive CPU consumption in Reader.ReadResponse in net/textproto"
+}

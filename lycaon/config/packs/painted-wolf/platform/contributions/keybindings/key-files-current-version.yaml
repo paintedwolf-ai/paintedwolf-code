@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-current-version
+command: painted-wolf/platform:files-current-version
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+H"
+  windows:
+    - "Mod+Alt+Shift+H"
+  linux:
+    - "Mod+Alt+Shift+H"

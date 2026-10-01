@@ -1,0 +1,4 @@
+# Enable-only project overlay fixture.
+scanners:
+  - id: lycaon-sca
+    enabled: false

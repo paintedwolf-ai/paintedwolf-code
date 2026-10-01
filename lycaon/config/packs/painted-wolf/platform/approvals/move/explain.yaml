@@ -1,0 +1,19 @@
+# move — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    move:
+        tool: move
+        tier_hint: recoverable
+        what_changes: Move or rename paths in the project.
+        who_affected: The affected files and directories in this project.
+        if_wrong: Usually reversible via git when paths are tracked.
+        allow_line: moving files in this project
+        scenarios:
+            - id: default
+              vars:
+                path: src/old.ts
+                project: my-app
+              expect_contains:
+                - Move
+                - project

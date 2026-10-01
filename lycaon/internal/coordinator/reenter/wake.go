@@ -1,0 +1,39 @@
+package reenter
+
+import (
+	"context"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+)
+
+// CoordinatorNudger schedules coordinator loop wakes after manifest same-phase re-enter.
+type CoordinatorNudger interface {
+	NudgeCoordinatorLoop(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope)
+}
+
+// NudgeOnManifestReenter schedules a leg-finished loop wake for same-phase manifest re-enter
+// when on_reenter declares reenter_leg without worker-task-finished inject_kick.
+// worker-task-finished inject is kick-only (PhaseReenterHook); SessionOutcomeBridge schedules
+// the coordinator wake via ShouldNudgeCoordinatorLoopAfterWorkerTask.
+func NudgeOnManifestReenter(
+	ctx context.Context,
+	n CoordinatorNudger,
+	sessionID string,
+	manifest workflowdef.Manifest,
+	previousPhase, newPhase string,
+) {
+	if n == nil {
+		return
+	}
+	legID, ok := workflow.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID)
+	if !ok {
+		return
+	}
+	def, hasDef := manifest.PhaseByID(newPhase)
+	if hasDef && anchor.SameInform(def.OnReenter.InjectKick, anchor.WorkerTaskFinished) {
+		return
+	}
+	n.NudgeCoordinatorLoop(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
+}

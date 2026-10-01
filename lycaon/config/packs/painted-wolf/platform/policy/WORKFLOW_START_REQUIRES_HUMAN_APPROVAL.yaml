@@ -1,0 +1,28 @@
+oar: '1.0'
+id: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - state_start
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL"
+effect: block
+copy:
+  what: Catalog workflow start requires an explicit human action.
+  cause: state_start recorded a workflow proposal; it cannot authorize the run.
+  why: A workflow run begins only when the user starts it themselves. Nothing you call can stand in for that action.
+  fix: Wait for the user to start the proposed workflow.
+  instead: Propose the workflow, then wait for an explicit Start action.
+x-paintedwolf-category: policy
+x-paintedwolf-severity: error
+x-paintedwolf-message: Start this workflow from an explicit human action
+x-paintedwolf-scenarios:
+  - id: default
+    vars: { tool: state_start, workflow_id: plan }
+    expect_contains: ['Rejected:', 'Code: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL', 'Wait for the user']
+x-paintedwolf-emit: guard:workflow

@@ -1,0 +1,19 @@
+# git_restore — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    git_restore:
+        tool: git_restore
+        tier_hint: recoverable
+        what_changes: Restore working-tree files from git history.
+        who_affected: Uncommitted or tracked files in this project.
+        if_wrong: Local changes can be lost — recoverable from reflog in many cases.
+        allow_line: restoring files from git
+        scenarios:
+            - id: default
+              vars:
+                path: src/app.ts
+                project: my-app
+              expect_contains:
+                - Restore
+                - git history

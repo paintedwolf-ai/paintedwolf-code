@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Backup is not available
+message: >-
+  The backup system could not read the app's data folder, so no
+  archive was produced.
+suggested_action: Try again; if it keeps failing, check disk space and folder approvals.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - could not read

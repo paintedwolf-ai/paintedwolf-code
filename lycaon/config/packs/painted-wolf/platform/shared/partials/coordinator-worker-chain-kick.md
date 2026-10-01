@@ -1,0 +1,3 @@
+{% if pending_overlay_jobs %}- **This wake:** pending overlays ({% for id in pending_overlay_jobs %}`{{ id }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) — walk `promote_sequence`: inspect each envelope; incomplete delivery or useful missing proof → resume the same child; review current evidence and validation limits before `promote_overlay`; wrong or unwanted work only → `reject_overlay`.
+{% endif %}{% if partial_worker_jobs and not pending_overlay_jobs %}- **This wake:** partial {% for id in partial_worker_jobs %}`{{ id }}`{% if not forloop.Last %}, {% endif %}{% endfor %} → re-dispatch or resume via `task(child_session_id=…)`.
+{% endif %}

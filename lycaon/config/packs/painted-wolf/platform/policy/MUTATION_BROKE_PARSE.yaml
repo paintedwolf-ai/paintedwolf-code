@@ -1,0 +1,54 @@
+oar: '1.0'
+id: MUTATION_BROKE_PARSE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - edit
+    - replace_lines
+    - code_rewrite
+    - write
+requires:
+  profiles:
+    - filesystem
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.parse_errors
+    - paintedwolf.python_indent_lines
+    - paintedwolf.syntax_diagnostics_truncated
+    - paintedwolf.parse_error
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
+effect: block
+copy:
+  what: '{{ tool }} on {{ paintedwolf.path }} was not applied because the parser reports a syntax error in the proposed file ({{ paintedwolf.parse_error }}).'
+  cause: >-
+    {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}.
+    {% if paintedwolf.syntax_diagnostics_truncated %}Additional syntax faults were omitted.{% endif %}
+    {% else %}The completed parser found a syntax regression.{% endif %}
+    {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
+  why: A successful-looking broken mutation makes later locations and verification evidence unreliable. The host keeps the previous bytes, or leaves a rejected new path absent.
+  fix: >-
+    Read the reported lines and surrounding code. Use one exact `edit`, a complete
+    `write`, or one atomic `replace_lines.operations` batch; `shift_indent` can
+    add or remove an exact whitespace prefix across a range without re-emitting
+    its body. Python rejects also include indentation columns around the changed
+    seam. If the proposed syntax is intentional, intermediate, or the parser
+    diagnostic is inaccurate, supply `syntax_override_reason` on the mutation call
+    to proceed.
+  instead: Branch on Code; re-read the seam and apply one atomic repair
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:edit
+x-paintedwolf-message: mutation would break parse; not applied
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      parse_error: 'line 55: raise ValueError'
+      path: ntp_check.py
+      profile: implement
+      tool: replace_lines
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: MUTATION_BROKE_PARSE'
+      - atomic

@@ -1,0 +1,33 @@
+id: default-pipeline
+pattern: pipeline
+iteration_cap: 8
+pipeline:
+  stages:
+    - name: research
+      label: Research
+      profile: repo-researcher
+      output_format: markdown
+    - name: plan
+      label: Plan
+      profile: coordinator
+      input_from: [research]
+      output_format: markdown
+    - name: implement
+      label: Implementation
+      profile: implementer
+      input_from: [plan]
+      output_format: code
+    - name: review
+      label: Review
+      profile: code-reviewer
+      input_from: [implement]
+    - name: test
+      label: Tests
+      profile: implementer
+      input_from: [implement]
+      output_format: code
+    - name: closeout
+      label: Closeout
+      profile: coordinator
+      input_from: [review, test]
+      output_format: markdown

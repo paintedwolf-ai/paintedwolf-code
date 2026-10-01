@@ -1,0 +1,41 @@
+fixtures:
+- rule: org-delete
+  positive:
+  - sf org delete scratch --target-org my-scratch-org --no-prompt
+  - sf org delete sandbox --target-org my-sandbox --no-prompt
+  - sfdx force:org:delete -u my-scratch-org
+  - sudo sf org delete scratch --target-org my-scratch-org --no-prompt
+  negative:
+  - sf org list
+  - sf org display --target-org my-scratch-org
+  - sf org delete scratch --help
+  - sf org create scratch -f project-scratch-def.json
+  - sfdx force:org:list
+- rule: destructive-deploy
+  positive:
+  - sf project deploy start --manifest package.xml --pre-destructive-changes destructive/destructiveChanges.xml -o prod
+  - sf project deploy start --manifest package.xml --post-destructive-changes destructive/destructiveChangesPost.xml -o prod
+  - sf project deploy start --manifest package.xml --purge-on-delete -o prod
+  - sfdx project deploy start --manifest package.xml --pre-destructive-changes destructive/destructiveChanges.xml -o prod
+  negative:
+  - sf project deploy start --manifest package.xml -o prod
+  - sf project deploy start --manifest package.xml --pre-destructive-changes destructive/destructiveChanges.xml --dry-run -o prod
+  - sf project deploy preview --manifest package.xml
+  - sf project deploy start --manifest package.xml --purge-on-delete --check-only -o prod
+- rule: bulk-data-delete
+  positive:
+  - sf data delete bulk --file data/ids-to-delete.csv --sobject Lead --wait 10
+  - sfdx data delete bulk --file data/ids.csv --sobject Contact --wait 10
+  - sudo sf data delete bulk --file data/ids-to-delete.csv --sobject Lead
+  negative:
+  - sf data query --query 'SELECT Id FROM Lead'
+  - sf data delete bulk --help
+  - sf data upsert bulk --file data/ids.csv --sobject Lead
+- rule: bulk-data-hard-delete
+  positive:
+  - sf data delete bulk --file data/ids-to-delete.csv --sobject Lead --hard-delete
+  - sfdx data delete bulk --file data/ids.csv --sobject Contact --hard-delete --wait 10
+  - sudo sf data delete bulk --file data/ids-to-delete.csv --sobject Lead --hard-delete
+  negative:
+  - sf data delete bulk --file data/ids-to-delete.csv --sobject Lead --hard-delete --help
+  - sf data upsert bulk --file data/ids.csv --sobject Lead --hard-delete

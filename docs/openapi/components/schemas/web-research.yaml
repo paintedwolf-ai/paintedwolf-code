@@ -1,0 +1,270 @@
+components:
+  schemas:
+    # Enum values are generated from lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml
+    # (+ built-in "direct"). Do not hand-edit the generated fragment.
+    WebSearchProvider:
+      $ref: web-search-provider.generated.yaml#/components/schemas/WebSearchProvider
+    WebResearchProviderKind:
+      type: string
+      enum:
+        - keyed
+        - keyed_extra
+        - keyless_endpoint
+        - keyless
+    WebResearchProviderRole:
+      type: string
+      enum:
+        - results
+        - seeds
+    WebResearchDirectCardContent:
+      x-go-generate: true
+      type: object
+      required:
+        - provider_id
+        - kind
+        - label
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+          enum:
+            - direct
+        kind:
+          type: string
+          enum:
+            - direct
+        label:
+          type: string
+    WebResearchDirectStatus:
+      x-go-generate: true
+      type: object
+      required:
+        - configured
+        - card
+      additionalProperties: false
+      properties:
+        configured:
+          type: boolean
+        card:
+          $ref: web-research.yaml#/components/schemas/WebResearchDirectCardContent
+    WebResearchProviderMeta:
+      x-go-generate: true
+      type: object
+      required:
+        - id
+        - kind
+        - label
+        - roles
+        - configured
+        - credential_present
+      additionalProperties: false
+      properties:
+        id:
+          $ref: web-research.yaml#/components/schemas/WebSearchProvider
+        kind:
+          $ref: web-research.yaml#/components/schemas/WebResearchProviderKind
+        label:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: web-research.yaml#/components/schemas/WebResearchProviderRole
+        default_enabled:
+          type: boolean
+        configured:
+          type: boolean
+        credential_present:
+          type: boolean
+        credential_source:
+          type: string
+          enum: [none, stored, environment]
+        credential_slot:
+          type: string
+        allow_private_endpoint:
+          type: boolean
+          description: Catalog flag — when true, endpoint may use http and private/LAN addresses (still blocking loopback and link-local metadata).
+        config:
+          type: object
+          additionalProperties:
+            type: string
+    WebResearchProvidersResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - direct
+        - providers
+      additionalProperties: false
+      properties:
+        direct:
+          $ref: web-research.yaml#/components/schemas/WebResearchDirectStatus
+        providers:
+          type: array
+          items:
+            $ref: web-research.yaml#/components/schemas/WebResearchProviderMeta
+    WebResearchSettings:
+      x-go-generate: true
+      type: object
+      required:
+        - warming
+        - guess_domains
+        - search_enabled
+        - enabled_providers
+      additionalProperties: false
+      properties:
+        warming:
+          type: boolean
+          description: Background index warming from explicitly shared URLs and explicit web activity.
+        guess_domains:
+          type: boolean
+          description: When results are thin, a model may scout hosts to fill the index.
+        search_enabled:
+          type: boolean
+        enabled_providers:
+          type: array
+          description: Complete enabled provider set. An empty array enables no search provider.
+          items:
+            type: string
+    UpdateWebResearchSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        warming:
+          x-go-pointer: true
+          type: boolean
+        guess_domains:
+          x-go-pointer: true
+          type: boolean
+        search_enabled:
+          x-go-pointer: true
+          type: boolean
+        enabled_providers:
+          type: array
+          description: Complete replacement provider set when supplied. An empty array disables every search provider.
+          items:
+            type: string
+    UpdateWebResearchProviderRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        config:
+          type: object
+          additionalProperties:
+            type: string
+    WebResearchWarmActivity:
+      x-go-generate: true
+      type: object
+      required:
+        - at
+        - trigger
+      additionalProperties: false
+      properties:
+        at:
+          type: string
+        trigger:
+          type: string
+        tier:
+          type: string
+        topic:
+          type: string
+        hosts:
+          type: array
+          items:
+            type: string
+        pages:
+          type: integer
+        duration_ms:
+          type: integer
+          format: int64
+        skip_reason:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+    WebResearchIndexHealth:
+      x-go-generate: true
+      type: object
+      required:
+        - writes_applied
+        - writes_dropped
+        - writes_failed
+        - queue_high_water
+        - last_evict_ms
+        - last_evict_rows
+        - last_evict_bytes
+        - last_search_ms
+        - max_search_ms
+      additionalProperties: false
+      properties:
+        writes_applied:
+          type: integer
+          format: int64
+        writes_dropped:
+          type: integer
+          format: int64
+        writes_failed:
+          type: integer
+          format: int64
+        queue_high_water:
+          type: integer
+          format: int64
+        last_evict_ms:
+          type: integer
+          format: int64
+        last_evict_rows:
+          type: integer
+          format: int64
+        last_evict_bytes:
+          type: integer
+          format: int64
+        last_search_ms:
+          type: integer
+          format: int64
+        max_search_ms:
+          type: integer
+          format: int64
+    WebResearchIndexStatus:
+      x-go-generate: true
+      type: object
+      required:
+        - available
+        - docs
+        - hosts
+        - bytes
+        - verified
+        - warmed
+        - warm_hits
+        - warming
+        - health
+        - activity
+      additionalProperties: false
+      properties:
+        available:
+          type: boolean
+        docs:
+          type: integer
+          format: int64
+        hosts:
+          type: integer
+          format: int64
+        bytes:
+          type: integer
+          format: int64
+        verified:
+          type: integer
+          format: int64
+        warmed:
+          type: integer
+          format: int64
+        warm_hits:
+          type: integer
+          format: int64
+        warming:
+          type: boolean
+        health:
+          $ref: web-research.yaml#/components/schemas/WebResearchIndexHealth
+        activity:
+          type: array
+          items:
+            $ref: web-research.yaml#/components/schemas/WebResearchWarmActivity

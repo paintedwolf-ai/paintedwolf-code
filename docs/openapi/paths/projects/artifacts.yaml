@@ -1,0 +1,76 @@
+paths:
+  /v1/projects/{id}/artifacts:
+    get:
+      tags:
+      - projects
+      operationId: listProjectArtifacts
+      summary: List durable visual artifact metadata for a project
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+      - name: cursor
+        in: query
+        description: Opaque cursor returned as next_cursor by the previous page.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Artifact metadata for the project (no bytes)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/artifacts/{artifact_id}:
+    delete:
+      tags:
+      - projects
+      operationId: deleteProjectArtifact
+      x-person-action: record
+      summary: Delete one durable visual artifact
+      description: >-
+        Tombstones the artifact and drops its stored bytes when nothing else
+        needs them. The record itself survives: the id may already be spliced
+        into a model-visible tool result, which cannot be rewritten, so it keeps
+        resolving — as a deleted artifact. The response reports what referred to
+        it at the moment of deletion.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Artifact tombstoned
+        '404':
+          description: No such artifact in this project
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest

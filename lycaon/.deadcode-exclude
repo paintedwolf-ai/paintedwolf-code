@@ -1,0 +1,8 @@
+# Regexes matched against each deadcode diagnostic line (grep -E), for
+# interface/sealed-type false positives only.
+
+# Sealed boolexpr AST node markers (called via Node interface).
+internal/boolexpr/ast\.go:.*: unreachable func: (Ident|Not|And|Or)\.node
+
+# Sealed search DSL AST node markers (called via Node interface).
+internal/search/ast\.go:.*: unreachable func: (AndExpr|OrExpr|NotExpr|FilterExpr|TextExpr)\.node

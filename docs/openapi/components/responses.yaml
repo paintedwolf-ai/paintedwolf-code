@@ -1,0 +1,110 @@
+components:
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    Unauthorized:
+      description: Missing or invalid sidecar bearer token
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    BadRequest:
+      description: The request is malformed or names invalid values; `code` says which.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    Forbidden:
+      description: Policy or confinement refuses the operation; `code` says which.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    NotFound:
+      description: A resource the request addresses does not exist; `code` names the resource.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    Conflict:
+      description: The request conflicts with current host state; `code` says which.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    ContentTooLarge:
+      description: The request body or a named input exceeds its bound.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    UnprocessableContent:
+      description: The request is well formed but its content cannot be processed; `code` says why.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    InternalError:
+      description: The host failed unexpectedly; the failure is logged.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    BadGateway:
+      description: An upstream provider or process answered with a failure; `code` says which.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    ServiceUnavailable:
+      description: A subsystem the operation needs is not available yet; `code` names it.
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    MethodNotAllowed:
+      description: Route exists but does not support the request method
+      headers:
+        Allow:
+          description: Supported methods, sorted and de-duplicated.
+          schema: {type: string}
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    UnsupportedMediaType:
+      description: Request body Content-Type is absent, malformed, or unsupported
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    TooManyRequests:
+      description: Request rate limit exceeded
+      headers:
+        Retry-After:
+          description: Whole seconds until the same request may be retried.
+          required: true
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema:
+            $ref: schemas/common.yaml#/components/schemas/Error
+    WorkflowValidationFailed:
+      description: >-
+        Workflow manifest failed validation (`workflow_validation_failed`);
+        `details.errors` lists each diagnostic.
+      content:
+        application/json:
+          schema:
+            allOf:
+            - $ref: schemas/common.yaml#/components/schemas/Error
+            - type: object
+              required:
+              - details
+              properties:
+                details:
+                  $ref: schemas/workflow.yaml#/components/schemas/ComposeValidationDetails

@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Image is too large to display
+message: >-
+  This image is over the 8 MiB ceiling for in-app display, so it was not
+  loaded. The file on disk is untouched.
+suggested_action: Reveal it in your file manager to open it in an external viewer.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - 8 MiB
+      - not

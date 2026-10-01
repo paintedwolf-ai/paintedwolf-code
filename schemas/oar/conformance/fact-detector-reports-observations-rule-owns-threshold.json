@@ -1,0 +1,105 @@
+{
+  "id": "fact-detector-reports-observations-rule-owns-threshold",
+  "title": "The detector reports spans and scores; the rule sets the threshold, and two rules may disagree",
+  "covers": [
+    "OAR-FACT-5",
+    "OAR-FACT-7",
+    "OAR-FACT-8",
+    "OAR-OPS-11",
+    "OAR-CONF-25"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.input",
+      "id": "STRICT",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "prompt_injection_score > 0.3"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.input",
+      "id": "LENIENT",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "prompt_injection_score > 0.9"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.input",
+    "facts": {
+      "prompt_injection_score": 0.5
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "STRICT",
+    "applied": [
+      "oar.test/LENIENT:passed",
+      "oar.test/STRICT:fired"
+    ]
+  }
+}

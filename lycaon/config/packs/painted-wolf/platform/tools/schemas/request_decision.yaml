@@ -1,0 +1,35 @@
+description: Escalate an ambiguity you can't resolve in scope — question + 2+ options, the accepted call suspends your run. The coordinator answers and you resume with the same workspace. Do not also call complete_leg.
+schema:
+  type: object
+  properties:
+    question:
+      type: string
+      description: The decision you're blocked on (cite the real constraint).
+    options:
+      type: array
+      items:
+        type: string
+      description: 2+ concrete, mutually-exclusive options.
+    blocker_class:
+      type: string
+      enum: [decision, checkpoint, sandbox]
+      description: >-
+        Machine class of the blocker — decision (coordinator may answer),
+        checkpoint (user must approve child HITL), sandbox (confinement
+        write-boundary or true host-env block after write-root declaration — not
+        missing paths, typos, or bad cwd; those are decision or fix-and-retry).
+    artifact_id:
+      type: string
+      format: uuid
+      description: Optional image/screenshot id from this session for the coordinator to judge.
+    artifact_ids:
+      type: array
+      uniqueItems: true
+      minItems: 2
+      maxItems: 4
+      items:
+        type: string
+        format: uuid
+      description: Optional 2–4 image ids when asking which variant to prefer (A/B…).
+  required: [question, options]
+  additionalProperties: false

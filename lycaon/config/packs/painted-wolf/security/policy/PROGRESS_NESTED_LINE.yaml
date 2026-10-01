@@ -1,0 +1,34 @@
+oar: '1.0'
+id: PROGRESS_NESTED_LINE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - update_progress
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.line
+when: paintedwolf.rejection_code == "PROGRESS_NESTED_LINE"
+effect: block
+copy:
+  what: Checklist line "{{ paintedwolf.line }}" is indented — only top-level `- [ ]`/`- [x]`/`- [~]`/`- [>]`
+    rows are allowed.
+  cause: A checklist row has leading indentation; descriptive text is not itself a nested checklist row.
+  why: Nested rows inflate the plan and do not map cleanly to the progress checklist
+  fix: Move required checklist results to top-level rows without leading spaces. Keep supporting detail as
+    descriptive text or in the corresponding label.
+  instead: Branch on Code; flatten to top-level lines and retry update_progress
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress checklist has a nested checklist line
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    line: '- [ ] nested sub-step'
+    tool: update_progress
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROGRESS_NESTED_LINE'

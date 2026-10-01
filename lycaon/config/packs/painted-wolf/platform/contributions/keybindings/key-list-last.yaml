@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-list-last
+command: painted-wolf/platform:list-last
+scope: "overlay"
+bindings:
+  macos:
+    - "End"
+  windows:
+    - "End"
+  linux:
+    - "End"

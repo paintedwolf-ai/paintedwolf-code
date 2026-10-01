@@ -1,0 +1,10 @@
+id: tavily-api-key
+title: Tavily API key
+regex: '\b(tvly-[A-Za-z0-9_-]{20,})\b'
+keywords:
+  - tvly-
+severity: critical
+secret_group: 1
+entropy: 3
+allowlist_stopwords:
+  - your_api_key

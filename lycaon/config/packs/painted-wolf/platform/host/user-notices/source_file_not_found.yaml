@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "File not found"
+message: "That file is no longer tracked in this project."
+suggested_action: "Refresh the Files tree."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer tracked"

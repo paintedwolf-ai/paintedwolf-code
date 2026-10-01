@@ -1,0 +1,75 @@
+name: nightly
+
+on:
+  schedule:
+    # 05:00 UTC — before the Den desktop nightly (macOS runner contention).
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which legs to run
+        type: choice
+        default: all
+        options: [all, behavior, race, coverage, performance, fuzz]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verification:
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: nightly
+      suite: ${{ github.event_name == 'schedule' && 'all' || inputs.suite }}
+
+  # Prior release binary opens the corpus, then HEAD migrates the same store.
+  upgrade-path:
+    runs-on: macos-14
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+          cache-dependency-path: lycaon/go.sum
+
+      - name: Set up maintained OpenGrep
+        uses: ./.github/actions/setup-opengrep
+
+      - uses: ./.github/actions/setup-bialy
+
+      - name: Build HEAD sidecar
+        run: ./task build:lycaon-dev
+
+      - name: Prior-release upgrade rehearsal
+        timeout-minutes: 90
+        env:
+          # Download the prior release from the public stable pointer.
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: ./task upgrade:rehearse
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: nightly-upgrade-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  nightly:
+    if: always()
+    needs: [verification, upgrade-path]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require all selected nightly verification
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate

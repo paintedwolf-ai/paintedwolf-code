@@ -1,0 +1,3 @@
+raise "Forbid command" if:
+    (call: ToolCall)
+    call.name == "command"

@@ -1,0 +1,50 @@
+oar: '1.0'
+id: FINDING_UNGROUNDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - record_finding
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.offenders_sample
+  - paintedwolf.observed_handles_sample
+  - paintedwolf.reference_required
+  - paintedwolf.grounding_escalated
+when: paintedwolf.rejection_code == "FINDING_UNGROUNDED"
+effect: block
+copy:
+  what: '{% if paintedwolf.reference_required %}record_finding requires a reference for this note.{% else
+    %}{% if paintedwolf.grounding_escalated %}Finding submission is paused after repeated grounding failures.{%
+    else %}The record_finding reference did not match observed evidence{% if paintedwolf.offenders_sample
+    %}: {{ paintedwolf.offenders_sample }}{% endif %}.{% endif %}{% endif %}'
+  cause: '{% if paintedwolf.reference_required %}No ref was supplied.{% else %}{% if paintedwolf.grounding_escalated
+    %}The host’s grounding circuit breaker is active.{% else %}Typed path/line, handle, or URL citations
+    must resolve against this session’s evidence ledger.{% endif %}{% endif %}'
+  why: Peer findings need a reference that the next worker can inspect; a typed citation must describe
+    evidence actually observed.
+  fix: '{% if paintedwolf.grounding_escalated %}Resolve the outstanding grounding failure before retrying;
+    changing the reference alone may not clear the host state.{% else %}Supply the note’s actual path,
+    page, or observed evidence handle in ref. For a typed citation, use the matching read/grep result
+    or observed URL; acquire missing evidence through an available tool before citing it.{% if paintedwolf.observed_handles_sample
+    %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %}{% endif %}'
+  instead: Preserve the finding’s intent and correct its evidence reference; do not invent a handle or
+    re-record an already accepted note.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:record_finding
+x-paintedwolf-scenarios:
+- id: ungrounded_handle
+  vars:
+    offenders_sample: grep#99
+  expect_contains:
+  - 'Code: FINDING_UNGROUNDED'
+  - record_finding
+- id: missing_reference
+  vars:
+    reason: reference_required
+  expect_contains:
+  - record_finding requires
+  - ref

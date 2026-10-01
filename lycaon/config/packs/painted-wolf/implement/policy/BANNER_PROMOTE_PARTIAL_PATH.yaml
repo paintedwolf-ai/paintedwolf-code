@@ -1,0 +1,27 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} has clean and conflict paths — once its evidence obligations
+  pass, promote clean paths without rejecting the whole overlay
+what: Preview shows both clean_paths and conflict paths — for an otherwise complete, evidence-satisfied overlay,
+  partial promote lands clean work and keeps the overlay pending on conflicts only
+cause: Multi-path workers often touch isolated files plus one shared conflict file
+why: reject_overlay discards clean paths already implemented in the overlay branch
+fix: After worker completion and passing current-revision evidence, `preview_overlay(job_id="{{ paintedwolf.overlay_id
+  }}")`, then `promote_overlay(job_id="{{ paintedwolf.overlay_id }}")` without resolutions lands clean paths
+  while retaining unresolved paths. Resolve each remaining path from its current preview; read the fuller assessment
+  only when spill_path is provided.
+instead: clean_paths plus conflict paths on an eligible overlay → partial promote. leg_status partial or open
+  test/risk → preserve and resume the overlay, never reject or land it before the obligation passes
+scenarios:
+- id: preview_mixed
+  vars:
+    clean_paths:
+    - internal/util.go
+    conflict_paths:
+    - internal/router.go
+    overlay_id: job-mix
+  expect_contains:
+  - BANNER_PROMOTE_PARTIAL_PATH
+  - preview_overlay
+id: BANNER_PROMOTE_PARTIAL_PATH

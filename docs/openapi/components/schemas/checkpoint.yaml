@@ -1,0 +1,648 @@
+components:
+  schemas:
+    CheckpointKind:
+      type: string
+      enum:
+      - tool_approval
+      - content_apply
+    ContentApplyDecision:
+      type: string
+      enum:
+      - approve
+      - reject
+      - approve_partial
+      description: >
+        approve applies the complete host-authored proposal; approve_partial
+        selects host-authored hunk ids for host composition; reject applies
+        nothing. Clients never submit replacement bytes.
+    CheckpointStatus:
+      type: string
+      enum:
+      - pending
+      - approved
+      - rejected
+      - expired
+      - canceled
+    ApprovalDecisionAction:
+      type: string
+      enum:
+      - approve
+      - reject
+    ContentApplyHunk:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - path
+      - before
+      - after
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        path:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+    ContentApplyPayload:
+      x-go-generate: true
+      type: object
+      required:
+      - tool
+      - path
+      - after
+      - hunks
+      additionalProperties: false
+      properties:
+        tool:
+          type: string
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        path:
+          type: string
+        before:
+          x-go-pointer: true
+          type: string
+        after:
+          type: string
+        hunks:
+          type: array
+          minItems: 1
+          description: >
+            Immutable host-authored selectable edits. Hunk ids are the only
+            client-selectable input to partial composition.
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ContentApplyHunk
+    ApprovalPlanStage:
+      type: string
+      enum: [pre_spawn, pre_dial, pre_send]
+    ApprovalSubjectKind:
+      type: string
+      enum: [action, action_set, socket_set, direct_ip, process_control, host_execution, local_listen, loopback_connect, destination_set, write_root_set, read_path_set, secret, package_set]
+    ApprovalOptionKind:
+      type: string
+      enum: [current_action, lease, redacted, quiet, tracked]
+    ApprovalOptionRung:
+      type: string
+      description: >-
+        Ladder position and ordering key. Distinct from scope (authority
+        boundary): the day rung may carry chat or project scope.
+      enum: [tracked, redacted, unchanged, once, day, chat, project, device]
+    ApprovalOptionDecision:
+      type: string
+      enum: [approve, redact, track]
+    ApprovalTarget:
+      x-go-generate: true
+      type: object
+      required: [kind, label]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    ApprovalSubject:
+      x-go-generate: true
+      type: object
+      required: [kind, title, targets]
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSubjectKind
+        title:
+          type: string
+        summary:
+          type: string
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalTarget
+    ApprovalSecretOriginKind:
+      type: string
+      enum: [file, field]
+    ApprovalSecretDestinationKind:
+      type: string
+      enum: [model_provider, service, process, file]
+      description: >
+        Who receives the value. `model_provider` is the configured AI provider
+        and the model reads the send; `service` is an external destination the
+        host addresses by URL; `process` is a local process whose onward
+        destinations this app does not observe; `file` is a local file on disk.
+    ApprovalSecretRecipient:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [label, surface, kind]
+      description: Reviewed handoff identity. It does not assert onward delivery or authentication.
+      properties:
+        label: {type: string}
+        surface: {type: string}
+        kind:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSecretDestinationKind
+    ApprovalSecretLocation:
+      type: object
+      required: [origin, destination, origin_kind, destination_kind]
+      additionalProperties: false
+      description: >
+        Secret identity line under the subject. Present on every secret card:
+        a person cannot judge a send without knowing where it goes.
+      properties:
+        secret_names:
+          type: array
+          items: {type: string}
+        recipients:
+          type: array
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalSecretRecipient
+        origin:
+          type: string
+          description: >
+            Origin face (for example `.env.local:7` or `in query`).
+        destination:
+          type: string
+          description: Destination face (provider, host, or seam).
+        origin_kind:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSecretOriginKind
+        destination_kind:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSecretDestinationKind
+        path:
+          type: string
+          description: Project-relative file path when origin_kind is file.
+        line:
+          type: integer
+          minimum: 1
+          description: 1-based line when origin_kind is file and a line is known.
+        reveal_tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >
+            Transcript tool-call id for Show in chat. Empty when no row
+            exists (a held model turn has no send tool).
+    ApprovalFileChange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, operation, before, after, before_bytes, after_bytes]
+      properties:
+        target:
+          type: string
+          description: File surface being changed; index identifies a Git staging change.
+          enum: [file, index]
+        path: {type: string}
+        root_id:
+          type: string
+          format: uuid
+        from_path: {type: string}
+        operation: {type: string}
+        before:
+          type: string
+          description: >
+            Screened presentation text of the file before the change. Paths
+            and text pass the host's capture screen; the hashes and sizes
+            identify the exact bytes the reviewed action binds.
+        after:
+          type: string
+          description: Screened presentation text of the file after the change.
+        before_sha256: {type: string}
+        after_sha256: {type: string}
+        before_bytes: {type: integer, format: int64, minimum: 0}
+        after_bytes: {type: integer, format: int64, minimum: 0}
+        preview_note:
+          type: string
+          description: Explains binary, oversized, or metadata-only previews.
+    ApprovalPlanPresentation:
+      x-go-generate: true
+      type: object
+      required: [action, impact]
+      additionalProperties: false
+      properties:
+        ignore_candidate_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Ephemeral review handle for one unprotected value. Does not authorize release or contain secret bytes.
+        file_changes:
+          type: array
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalFileChange
+        action: {type: string}
+        tool: {type: string}
+        command:
+          type: string
+          description: >
+            Argv attributed to this card. When the subject is that same command
+            (ordinary action approvals), it is the reviewed subject. When the
+            subject is a write root, destination, socket, or secret, it is the
+            causing command Den shows under the grant subject. Empty when no
+            argv is known. Secret command cards carry a host-redacted argv
+            here so From can name the send without leaking the match.
+        location:
+          x-go-pointer: true
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSecretLocation
+        impact: {type: string}
+        who: {type: string}
+        if_wrong: {type: string}
+        allow_line: {type: string}
+        lead:
+          type: string
+          description: >-
+            The one distinguishing fact the card leads with — first contact
+            with this host, what the chat has already read — lifted by the host
+            from the primary gate's citations. Absent when the gate cited no
+            such fact.
+        gate:
+          description: >-
+            The primary reason this card exists. Other gates that fired on the
+            same action are listed in the plan reasons.
+          $ref: './approval-gate.generated.yaml#/components/schemas/ApprovalGate'
+        cited:
+          x-go-type: "[]PresentedFact"
+          description: >-
+            The facts that made the gates fire, grouped in gate-priority order.
+            A card with a gate and no citations is invalid — the decision has to
+            be able to show its work.
+          type: array
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalCitedFact
+        option_note:
+          description: >-
+            Why the redacted send on this card is unavailable. The face stays
+            Send redacted and is not selectable; clients render this as host
+            copy beside the impact line and never infer unavailability
+            themselves.
+          type: string
+        grant_delta: {type: string}
+        consequence_band:
+          $ref: './consequence-band.generated.yaml#/components/schemas/ConsequenceBand'
+        consequence_code:
+          $ref: './consequence-code.generated.yaml#/components/schemas/ConsequenceCode'
+        detection:
+          x-go-pointer: true
+          $ref: settings/detections.yaml#/components/schemas/DetectionMatch
+        approval_rules:
+          type: array
+          description: Extension approval-rule identities that governed this action.
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalRuleCitation
+    ApprovalRuleCitation:
+      x-go-generate: true
+      type: object
+      required: [category, pattern, effect]
+      additionalProperties: false
+      properties:
+        category: {type: string}
+        pattern: {type: string}
+        effect: {type: string}
+        command: {type: string}
+        unit_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        pack_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        scope:
+          type: string
+          enum: [device, project]
+    ApprovalCitedFact:
+      type: object
+      required: [key, value, source]
+      additionalProperties: false
+      properties:
+        gate:
+          description: The approval gate this fact supports.
+          $ref: './approval-gate.generated.yaml#/components/schemas/ApprovalGate'
+        key:
+          description: What was observed, as a stable machine key (for example file.path).
+          type: string
+        value:
+          description: The observed value, rendered for a person.
+          type: string
+        source:
+          description: >-
+            Which producer observed it — containment, the ask-trigger path
+            catalog, a detection pack, the destination or payload lens. It names
+            the instrument, so a person can weigh how the host knows.
+          type: string
+    ApprovalOption:
+      x-go-generate: true
+      type: object
+      required: [id, kind, rung, title, coverage, expires_when, reask_when, decision_action]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        kind:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalOptionKind
+        rung:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalOptionRung
+        scope:
+          $ref: settings/approvals.yaml#/components/schemas/ApprovalGrantScope
+        group:
+          type: string
+          description: >-
+            Optional ladder heading when a card carries a second subject
+            (absorbed predicate or host resources). Absent means the primary ladder.
+        title: {type: string}
+        coverage: {type: string}
+        expires_when: {type: string}
+        reask_when: {type: string}
+        decision_action:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalOptionDecision
+        disabled:
+          type: boolean
+          description: >-
+            When true, the option stays in its ladder slot but is not
+            selectable. A slot that vanished would move every rung below it,
+            so an unreachable rung is disabled in place and carries a note.
+        note:
+          type: string
+          description: >-
+            Host copy saying why a disabled option cannot be picked here.
+            Present exactly when disabled is true.
+    ApprovalPlan:
+      x-go-generate: true
+      type: object
+      required: [id, action_digest, stage, subject, presentation, reasons, options, recommended_option_id]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        action_digest: {type: string}
+        stage:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalPlanStage
+        subject:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalSubject
+        presentation:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalPlanPresentation
+        reasons:
+          description: >-
+            Every gate that fired, in citation-priority order. The first is the
+            primary reason and is repeated in presentation.gate.
+          type: array
+          items:
+            $ref: './approval-gate.generated.yaml#/components/schemas/ApprovalGate'
+        options:
+          type: array
+          minItems: 1
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalOption
+        elevated_effects:
+          description: >-
+            Host-classified elevated access that a selectable saved option on
+            this card can install. Empty when no choice would make the composer
+            unlock indicator appear. Allow once is excluded.
+          type: array
+          items:
+            $ref: session/elevated-access.yaml#/components/schemas/ElevatedAccessEffect
+        recommended_option_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >-
+            Id of the face option. Exactly one; computed by the host from the
+            subject kind and rung set. Clients must not invent a fallback.
+            A disabled face stays in that slot; Enter does not select another
+            send.
+    ApprovalRepeat:
+      x-go-generate: true
+      type: object
+      required: [reason_key, count]
+      additionalProperties: false
+      properties:
+        reason_key:
+          type: string
+        count:
+          type: integer
+          minimum: 1
+          description: Distinct subjects asked about under this reason.
+        asks:
+          type: integer
+          minimum: 1
+          description: >-
+            Cards this reason has raised since the last user turn, this one
+            included. Presentation only; nothing counts it to decide.
+        subjects:
+          type: array
+          items:
+            type: string
+        subjects_truncated:
+          type: boolean
+        suppressed_count:
+          type: integer
+          minimum: 1
+    ToolApprovalPayload:
+      x-go-generate: true
+      type: object
+      required: [plan]
+      additionalProperties: false
+      properties:
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        plan:
+          $ref: checkpoint.yaml#/components/schemas/ApprovalPlan
+        ai_rationale: { x-go-name: "AIRationale", type: string}
+        ai_rationale_pending: { x-go-name: "AIRationalePending", type: boolean}
+        joined_count:
+          type: integer
+          minimum: 1
+        joined_tool_call_ids:
+          x-go-name: "JoinedToolCallIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.:-]+$'
+        consequence_band:
+          description: >-
+            Live presentation override for an open card. Raised when joiners
+            escalate via MaxConsequence; mint-time plan.presentation is unchanged.
+          $ref: './consequence-band.generated.yaml#/components/schemas/ConsequenceBand'
+        consequence_code:
+          description: >-
+            Host-authored consequence line id paired with consequence_band when
+            the live band is high_risk. Prefer over plan.presentation when set.
+          $ref: './consequence-code.generated.yaml#/components/schemas/ConsequenceCode'
+        repeat:
+          x-go-pointer: true
+          $ref: checkpoint.yaml#/components/schemas/ApprovalRepeat
+    CheckpointEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - session_id
+      - kind
+      - status
+      - issued_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: checkpoint.yaml#/components/schemas/CheckpointKind
+        status:
+          $ref: checkpoint.yaml#/components/schemas/CheckpointStatus
+        issued_at:
+          type: string
+          format: date-time
+        tool_approval:
+          x-go-pointer: true
+          $ref: checkpoint.yaml#/components/schemas/ToolApprovalPayload
+        content_apply:
+          x-go-pointer: true
+          $ref: checkpoint.yaml#/components/schemas/ContentApplyPayload
+    CheckpointResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - session_id
+      - kind
+      - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: checkpoint.yaml#/components/schemas/CheckpointKind
+        status:
+          $ref: checkpoint.yaml#/components/schemas/CheckpointStatus
+        result:
+          type: object
+          additionalProperties: true
+        resolved_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+    ToolApprovalResolveBody:
+      oneOf:
+      - $ref: checkpoint.yaml#/components/schemas/ToolApprovalApproveBody
+      - $ref: checkpoint.yaml#/components/schemas/ToolApprovalRejectBody
+      discriminator:
+        propertyName: action
+        mapping:
+          approve: checkpoint.yaml#/components/schemas/ToolApprovalApproveBody
+          reject: checkpoint.yaml#/components/schemas/ToolApprovalRejectBody
+    ToolApprovalApproveBody:
+      type: object
+      required:
+      - kind
+      - action
+      - option_id
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: tool_approval
+        action:
+          allOf:
+          - $ref: checkpoint.yaml#/components/schemas/ApprovalDecisionAction
+          - const: approve
+          description: >
+            Redaction is a host-authored option decision, never a client-authored
+            alternate path.
+        option_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >
+            Selects one exact opaque option from tool_approval.plan; authority is
+            installed atomically before resolution.
+    ToolApprovalRejectBody:
+      type: object
+      required:
+      - kind
+      - action
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: tool_approval
+        action:
+          allOf:
+          - $ref: checkpoint.yaml#/components/schemas/ApprovalDecisionAction
+          - const: reject
+          description: Denies the plan.
+        guidance:
+          type: string
+          description: >
+            Explicit human direction from the composer describing what the agent
+            should do instead. This does not authorize an alternative action; it
+            is returned to the agent with the denial.
+        secrets:
+          type: array
+          maxItems: 32
+          description: Managed secrets explicitly attached to rejecting guidance.
+          items:
+            $ref: session/prompts.yaml#/components/schemas/PromptSecretReferencePart
+
+    ContentApplyResolveBody:
+      type: object
+      required:
+      - kind
+      - decision
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: content_apply
+        decision:
+          $ref: checkpoint.yaml#/components/schemas/ContentApplyDecision
+        approved_hunks:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: >
+            Host-authored ids from content_apply.hunks. Required only with
+            approve_partial; the host composes final bytes from the stored plan.
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.:-]+$'
+        guidance:
+          type: string
+          description: >
+            Explicit human direction from the composer describing what the agent
+            should do instead. Only valid with decision reject. This does not
+            authorize an alternative edit; it is returned to the agent with the
+            denial.
+        secrets:
+          type: array
+          maxItems: 32
+          description: Managed secrets explicitly attached to rejecting guidance.
+          items:
+            $ref: session/prompts.yaml#/components/schemas/PromptSecretReferencePart
+    ResolveCheckpointRequest:
+      oneOf:
+      - $ref: checkpoint.yaml#/components/schemas/ToolApprovalResolveBody
+      - $ref: checkpoint.yaml#/components/schemas/ContentApplyResolveBody
+      discriminator:
+        propertyName: kind
+        mapping:
+          tool_approval: checkpoint.yaml#/components/schemas/ToolApprovalResolveBody
+          content_apply: checkpoint.yaml#/components/schemas/ContentApplyResolveBody
+    CheckpointListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - checkpoints
+      additionalProperties: false
+      properties:
+        checkpoints:
+          type: array
+          items:
+            $ref: checkpoint.yaml#/components/schemas/CheckpointEvent

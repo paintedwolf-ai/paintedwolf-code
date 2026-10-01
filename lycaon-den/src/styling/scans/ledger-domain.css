@@ -1,0 +1,125 @@
+/* --- Project finding ledger --- */
+
+/* Filled dots mark present findings; hollow dots mark absence. */
+.den-ledger-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--den-text-muted);
+  white-space: nowrap;
+}
+
+.den-ledger-state__dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-border);
+}
+
+.den-ledger-state--open {
+  color: var(--den-text);
+}
+
+.den-ledger-state--open .den-ledger-state__dot {
+  background: var(--den-accent-signal);
+}
+
+/* Reopened findings take the accent. */
+.den-ledger-state--reopened {
+  color: var(--den-accent-text);
+}
+
+.den-ledger-state--reopened .den-ledger-state__dot {
+  background: var(--den-accent-signal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-signal) 28%, transparent);
+}
+
+.den-ledger-state--fixed {
+  color: var(--den-status-positive-text);
+}
+
+.den-ledger-state--fixed .den-ledger-state__dot {
+  background: var(--den-status-positive);
+}
+
+/* Dashed ring: never read. Solid ring: observation expired. */
+.den-ledger-state--unverified .den-ledger-state__dot {
+  background: transparent;
+  border: 1px solid var(--den-border);
+}
+
+.den-ledger-state--not-observed .den-ledger-state__dot {
+  background: transparent;
+  border: 1px dashed var(--den-border);
+}
+
+/* An ignored row reads as a decision, not as a severity. */
+.den-ledger-state--ignored {
+  color: var(--den-text-muted);
+}
+
+.den-ledger-state--ignored .den-ledger-state__dot {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--den-border) 70%, transparent);
+}
+
+.den-ledger-ignore-mark {
+  font-size: var(--text-den-micro);
+  color: var(--den-warning-text);
+}
+
+/* A row nothing currently reports recedes without leaving the list. */
+.den-ledger-row--absent .den-scans-row__msg {
+  color: var(--den-text-muted);
+}
+
+.den-ledger-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: var(--spacing-den-6);
+  border-top: 1px solid var(--den-line);
+}
+
+.den-ledger-block__title {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-ledger-absence {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-1);
+  font-size: var(--text-den-hint);
+  line-height: 1.5;
+  color: var(--den-text-muted);
+}
+
+.den-ledger-note {
+  margin: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  line-height: 1.5;
+}
+
+.den-ledger-note--error {
+  color: var(--den-danger-text);
+}
+
+/* The coverage strip's own caveat line, above the scanner rows. */
+.den-scans-coverage__note {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-warning-text);
+}
+

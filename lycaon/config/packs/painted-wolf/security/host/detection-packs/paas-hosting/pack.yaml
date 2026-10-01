@@ -1,0 +1,7 @@
+id: paas-hosting
+label: Hosting platforms
+description: >-
+  Hosting platform operations that destroy an app or its database, change
+  deployment secrets, or take a running service offline.
+equivalents:
+  fly: [flyctl]

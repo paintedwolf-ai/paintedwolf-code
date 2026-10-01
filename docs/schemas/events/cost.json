@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/cost.json",
+  "$ref": "../../openapi/components/schemas/cost.yaml#/components/schemas/CostEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CostEvent"
+}

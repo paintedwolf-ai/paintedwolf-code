@@ -1,0 +1,1 @@
+Result too large to inline ({{ count }} values, ~{{ bytes }} bytes) — showing JSON shape (keys, types, array lengths). Narrow the query to a sub-path (e.g. .data.users) or add limit= for literal value pages.

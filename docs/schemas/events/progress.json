@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/progress.json",
+  "$ref": "../../openapi/components/schemas/progress.yaml#/components/schemas/ProgressEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgressEvent"
+}

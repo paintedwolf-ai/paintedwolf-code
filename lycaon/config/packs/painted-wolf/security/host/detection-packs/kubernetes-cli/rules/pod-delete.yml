@@ -1,0 +1,32 @@
+title: Delete or restart a running pod
+id: b3eed232-9455-41e4-b49e-83cfb36df48f
+description: Deletes a pod or restarts a rollout, interrupting what is running.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  verbs_pod_disrupt:
+    CommandLine|contains:
+      - ' delete pod'
+      - ' delete po '
+      - ' rollout restart'
+      - ' rollout undo'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h|who-can)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_pod_disrupt and not filter_rehearsal and not filter_local

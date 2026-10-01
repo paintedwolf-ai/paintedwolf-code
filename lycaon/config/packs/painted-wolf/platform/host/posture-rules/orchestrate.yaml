@@ -1,0 +1,32 @@
+# Orchestrate posture — multi-worker topology sessions.
+
+rules:
+  - id: orchestrate_posture_no_plan_writer
+    when:
+      posture_is: orchestrate
+      tool_is_task: true
+      agent_is_plan_writer: true
+    then:
+      deny:
+        code: ORCHESTRATE_POSTURE_NO_PLAN_WRITER
+        message: orchestrate sessions use implementer/researcher agents, not plan-writer
+
+  - id: orchestrate_posture_disallowed_agent
+    when:
+      posture_is: orchestrate
+      tool_is_task: true
+      disallowed_agent: true
+    then:
+      deny:
+        code: DISALLOWED_AGENT
+        message: agent_type is not in the workflow allowed_agents allowlist
+
+  - id: orchestrate_delegation_before_ready
+    when:
+      posture_is: orchestrate
+      tool_is_delegation: true
+      handoff_not_ready: true
+    then:
+      deny:
+        code: WORKFLOW_DELEGATION_NOT_READY
+        message: complete topology stages before delegation tools

@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_turtle
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "turtle",
+		Extensions:     []string{".ttl"},
+		Language:       TurtleLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "(string) @string\n\n(lang_tag) @type\n\n[\n  \"_:\"\n  \"<\"\n  \">\"\n  (namespace)\n] @module\n\n[\n  (iri_reference)\n  (prefixed_name)\n] @variable\n\n(blank_node_label) @variable\n\n\"a\" @variable.builtin\n\n(integer) @number\n\n[\n  (decimal)\n  (double)\n] @number.float\n\n(boolean_literal) @boolean\n\n[\n  \"BASE\"\n  \"PREFIX\"\n  \"@prefix\"\n  \"@base\"\n] @keyword\n\n[\n  \".\"\n  \",\"\n  \";\"\n] @punctuation.delimiter\n\n[\n  \"(\"\n  \")\"\n  \"[\"\n  \"]\"\n  (anon)\n] @punctuation.bracket\n\n(comment) @comment @spell\n\n(echar) @string.escape\n\n(rdf_literal\n  \"^^\" @type\n  datatype: (_\n    [\n      \"<\"\n      \">\"\n      (namespace)\n    ] @type) @type)\n",
+	})
+}

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:layout-toggle-context
+title: "Toggle context"
+scope: "global"
+keywords:
+  - "hide context"
+  - "show context"
+  - "split"
+when:
+  fact: "split_live"
+action:
+  kind: native_ui
+  handler: "layout.toggleContext"

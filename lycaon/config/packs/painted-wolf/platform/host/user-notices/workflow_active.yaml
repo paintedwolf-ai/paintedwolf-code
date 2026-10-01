@@ -1,0 +1,10 @@
+surfaces:
+  - host_error
+  - http
+notification: { tier: non_catastrophic, scope: session }
+title: Workflow already running
+message: A workflow is already active on this session.
+suggested_action: Exit the current workflow with /exit before starting another.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'

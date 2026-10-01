@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-add-cursor-below
+title: "Add cursor below"
+scope: "files"
+keywords:
+  - "multi cursor"
+  - "multiple cursors"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.addCursorBelow"

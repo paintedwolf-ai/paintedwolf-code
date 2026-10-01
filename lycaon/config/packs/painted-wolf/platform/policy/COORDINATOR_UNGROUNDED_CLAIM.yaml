@@ -1,0 +1,32 @@
+oar: '1.0'
+id: COORDINATOR_UNGROUNDED_CLAIM
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts: [paintedwolf.grounding_verdict, paintedwolf.grounding_reason, paintedwolf.leg_id]
+when: paintedwolf.grounding_verdict == "COORDINATOR_UNGROUNDED_CLAIM"
+effect: block
+on_fire:
+- increment_breaker
+copy:
+  what: 'Completed leg {{ paintedwolf.leg_id }} lacks required completion evidence.'
+  cause: '{{ paintedwolf.grounding_reason }}'
+  why: A leg's completed status must agree with its durable job, delivered summary, and completion criteria.
+  fix: Inspect the named leg's current job and summary delivery. Await running work or recover its missing completion record; dispatch only work that remains undone, preserving any existing overlay.
+  instead: Resolve the reported evidence gap before claiming the delegation is complete
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grounding
+x-paintedwolf-message: Coordinator claimed work completed without a recorded worker job
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    grounding_reason: Completion evidence is missing.
+    leg_id: leg-1
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Completion evidence is missing.'
+  - 'leg-1'
+  - 'Rejected:'
+  - 'Code: COORDINATOR_UNGROUNDED_CLAIM'

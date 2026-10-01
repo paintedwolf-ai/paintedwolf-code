@@ -1,0 +1,11 @@
+# Inform Binding. Board orientation inject render stem.
+'on': board.changed
+selector:
+  surface: coordinator
+effect: inform
+render: board-orientation
+tier: builtin
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator pre-history board prepend

@@ -1,0 +1,181 @@
+.den-critical-stop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+}
+/* Auto margins center the card without taking drag-region pointer events. */
+.den-window-host__surface > .den-critical-stop {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.den-critical-stop__title {
+  font-size: var(--text-den-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  margin: 0 0 4px;
+}
+.den-critical-stop__message {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+  text-align: center;
+}
+.den-critical-stop__detail {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--text-den-body);
+  color: var(--den-danger-text);
+  text-align: center;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--den-danger) 8%, transparent);
+  border-radius: var(--den-radius);
+}
+.den-critical-stop__vault-form {
+  display: grid;
+  gap: 12px;
+  width: min(360px, 100%);
+}
+/* Facts stay selectable for reporting. */
+.den-critical-stop__facts {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+  text-align: center;
+  user-select: text;
+}
+/* Diagnostics stay selectable for reporting. */
+.den-critical-stop__diagnostic {
+  margin: 0;
+  max-width: 420px;
+  max-height: 120px;
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+}
+.den-critical-stop__diagnostic-content {
+  margin: 0;
+  padding: 6px 8px;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-micro);
+  line-height: 1.5;
+  color: var(--den-text-muted);
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.den-critical-stop__status {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  text-align: center;
+}
+
+
+.den-engine-startup {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  padding: 32px;
+  text-align: center;
+}
+.den-engine-startup[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.den-engine-startup__pulse {
+  width: 56px;
+  height: 4px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--den-accent) 18%, transparent);
+}
+.den-engine-startup__pulse::after {
+  content: "";
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--den-accent);
+  transform: translateZ(0);
+  will-change: transform;
+  animation: den-engine-startup-pulse 1.4s var(--den-ease) infinite alternate;
+}
+.den-engine-startup[data-status="stalled"] .den-engine-startup__pulse::after {
+  width: 100%;
+  animation: none;
+  background: var(--den-danger);
+}
+@keyframes den-engine-startup-pulse {
+  from { transform: translateX(-10%); }
+  to { transform: translateX(135%); }
+}
+.den-engine-startup__title {
+  margin: 0 0 4px;
+  font-size: var(--text-den-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.den-engine-startup__message,
+.den-engine-startup__phase,
+.den-engine-startup__elapsed,
+.den-engine-startup__status {
+  margin: 0;
+}
+.den-engine-startup__message {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+}
+.den-engine-startup__phase {
+  font-size: var(--text-den-body);
+  font-weight: 600;
+}
+.den-engine-startup__elapsed,
+.den-engine-startup__status {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  font-variant-numeric: tabular-nums;
+}
+.den-engine-startup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+@media (prefers-reduced-motion: reduce) {
+  .den-engine-startup__pulse::after {
+    width: 100%;
+    animation: none;
+  }
+}
+
+
+.transcript-pane__subhead {
+  margin: 0 0 8px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+

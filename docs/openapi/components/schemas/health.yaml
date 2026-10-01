@@ -1,0 +1,69 @@
+components:
+  schemas:
+    HealthResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - status
+      - version
+      - store_revision
+      - schema_version
+      - recovery_snapshot_available
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - recovery
+          description: >-
+            ok when the store is open and the server is serving;
+            recovery when this build must not open the store and only
+            restore routes are available.
+        version:
+          type: string
+          description: Host/desktop semver (sidecar binary).
+        store_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic sidecar boot counter; Den reconciles cache when this changes.
+        schema_version:
+          type: integer
+          minimum: 0
+          description: >-
+            SQLite baseline marker used by this binary.
+        min_den_version:
+          type: string
+          description: Optional semver the sidecar expects from Den; omit or empty skips skew UX.
+        previous_app_version:
+          type: string
+          description: App version that last opened this store before the current boot. Omitted when unchanged
+            (ordinary boot).
+        store_schema_version:
+          type: integer
+          minimum: 0
+          description: >-
+            PRAGMA user_version read from the live store when status is
+            recovery. Omitted on ordinary health.
+        recovery_reason:
+          type: string
+          enum:
+          - integrity_failed
+          - schema_mismatch
+          description: Closed reason the store cannot be served. Present when status is recovery.
+        recovery_detail:
+          type: string
+          description: Human-readable sentence matching the recovery reason. Present when status is recovery.
+        recovery_snapshot_available:
+          type: boolean
+          description: >-
+            Whether a local recovery snapshot has valid metadata and a
+            supported schema upgrade route. Restore verifies all payload
+            hashes before use. Always false on ordinary health.
+        recovery_snapshot_at:
+          type: string
+          format: date-time
+          description: >-
+            RFC 3339 UTC creation time of the recovery snapshot when available.
+            Omitted when recovery_snapshot_available is false.

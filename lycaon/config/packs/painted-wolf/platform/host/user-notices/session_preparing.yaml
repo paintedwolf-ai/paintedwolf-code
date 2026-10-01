@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: {tier: non_catastrophic, scope: session}
+title: Chat is preparing
+message: The chat workspace is still preparing.
+suggested_action: Wait a moment, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [still preparing, try again]

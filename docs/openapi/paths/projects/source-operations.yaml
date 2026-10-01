@@ -1,0 +1,130 @@
+paths:
+  /v1/projects/{id}/source/operations/{operation_id}:
+    get:
+      tags: [projects]
+      operationId: getSourceOperation
+      summary: Read file operation progress and completion
+      description: Available only to the initiating person who can still invoke the original operation. Receipts survive restart. An interrupted operation is retried only by an explicit retry request after root authority is revalidated.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Current operation state
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/source/operations:
+    get:
+      tags: [projects]
+      operationId: listSourceOperations
+      summary: List active and recent file operations
+      description: Returns operations owned by the initiating person, with active operations first and recent terminal results next.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: cursor
+        in: query
+        required: false
+        schema: {type: string}
+        description: Keyset pagination cursor from previous next_cursor
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        '200':
+          description: Active and recent operations
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationList
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/source/operations/{operation_id}/cancel:
+    post:
+      tags: [projects]
+      operationId: cancelSourceOperation
+      x-person-action: record
+      summary: Cancel a file operation
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: operation_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '204':
+          description: Cancellation requested before filesystem publication
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+  /v1/projects/{id}/source/operations/{operation_id}/retry:
+    post:
+      tags: [projects]
+      operationId: retrySourceOperation
+      x-person-action: record
+      summary: Retry a file operation
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: operation_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '202':
+          description: Durable retry accepted
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests

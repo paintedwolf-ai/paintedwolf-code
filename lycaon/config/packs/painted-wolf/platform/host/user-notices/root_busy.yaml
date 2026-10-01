@@ -1,0 +1,16 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - documents
+    - overlays
+    - sessions
+    - workers
+title: Folder is in use
+message: Active work is still using this folder.
+suggested_action: Wait for the active work to finish or stop it before removing the folder.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Active work is still using this folder.

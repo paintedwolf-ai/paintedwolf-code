@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Message not found
+message: >-
+  That message is not in this chat any more.
+suggested_action: >-
+  Reload the chat — it may have been rewound or compacted away.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not in this chat
+      - rewound

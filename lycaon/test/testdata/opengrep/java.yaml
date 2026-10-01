@@ -1,0 +1,703 @@
+language: java
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: sql-injection-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { stmt.executeQuery("SELECT * FROM users WHERE name = " + req.getParameter("input")); } }
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { stmt.executeQuery("SELECT 1"); } }
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: command-injection-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { Runtime.getRuntime().exec(req.getParameter("input")); } }
+  want:
+  - lycaon.java.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { Runtime.getRuntime().exec("echo ready"); } }
+  want: []
+  covers:
+  - lycaon.java.command-injection
+- name: path-traversal-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { new FileInputStream(req.getParameter("input")); } }
+  want:
+  - lycaon.java.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { new FileInputStream("config.json"); } }
+  want: []
+  covers:
+  - lycaon.java.path-traversal
+- name: open-redirect-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { res.sendRedirect(req.getParameter("input")); } }
+  want:
+  - lycaon.java.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { res.sendRedirect("/home"); } }
+  want: []
+  covers:
+  - lycaon.java.open-redirect
+- name: weak-digest-context-only
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { MessageDigest.getInstance("MD5"); } }
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { MessageDigest.getInstance("SHA-256"); } }
+  want: []
+  covers: []
+- name: weak-cipher-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { Cipher.getInstance("DES"); } }
+  want:
+  - lycaon.java.weak-cipher
+  covers: []
+- name: weak-cipher-safe
+  file: sample.java
+  source: |
+    class Audit { void handle(HttpServletRequest req) throws Exception { Cipher.getInstance("AES/GCM/NoPadding"); } }
+  want: []
+  covers:
+  - lycaon.java.weak-cipher
+- name: ecb-encryption-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { Cipher.getInstance("AES/ECB/PKCS5Padding"); } }
+  want:
+  - lycaon.java.ecb-encryption
+  covers: []
+- name: ecb-encryption-safe
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { Cipher.getInstance("AES/GCM/NoPadding"); } }
+  want: []
+  covers:
+  - lycaon.java.ecb-encryption
+- name: rsa-without-padding-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { Cipher.getInstance("RSA/ECB/NoPadding"); } }
+  want:
+  - lycaon.java.rsa-without-padding
+  covers: []
+- name: rsa-without-padding-safe
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding"); } }
+  want: []
+  covers:
+  - lycaon.java.rsa-without-padding
+- name: xml-external-entities-enabled-context-only
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { factory.setFeature("http://xml.org/sax/features/external-general-entities",true); } }
+  want: []
+  covers: []
+- name: xml-external-entities-enabled-safe
+  file: sample.java
+  source: |
+    class Audit { void run() throws Exception { factory.setFeature("http://xml.org/sax/features/external-general-entities",false); } }
+  want: []
+  covers: []
+- name: trust-manager-empty-check-vulnerable
+  file: sample.java
+  source: |
+    class AcceptAll implements X509TrustManager { public void checkServerTrusted(X509Certificate[] chain, String authType) { } }
+  want:
+  - lycaon.java.trust-manager-empty-check
+  covers: []
+- name: trust-manager-empty-check-safe
+  file: sample.java
+  source: |
+    class Verify implements X509TrustManager { public void checkServerTrusted(X509Certificate[] chain,String authType) { delegate.checkServerTrusted(chain,authType); } }
+  want: []
+  covers:
+  - lycaon.java.trust-manager-empty-check
+- name: hostname-verifier-accept-all-vulnerable
+  file: sample.java
+  source: |
+    class Audit { void run() { connection.setHostnameVerifier((host,session) -> true); } }
+  want:
+  - lycaon.java.hostname-verifier-accept-all
+  covers: []
+- name: hostname-verifier-accept-all-safe
+  file: sample.java
+  source: |
+    class Audit { void run() { connection.setHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier()); } }
+  want: []
+  covers:
+  - lycaon.java.hostname-verifier-accept-all
+- name: xml-decoder-context-only
+  file: sample.java
+  source: |
+    import java.beans.XMLDecoder; class Audit { void run(InputStream source) { new XMLDecoder(source); } }
+  want: []
+  covers: []
+- name: xml-decoder-safe
+  file: sample.java
+  source: |
+    class Audit { void run(InputStream source) { JsonParser.parse(source); } }
+  want: []
+  covers: []
+- name: ldap-injection-vulnerable
+  file: sample.java
+  source: |
+    import javax.naming.directory.DirContext; class Audit { void run(HttpServletRequest req,DirContext ctx) { ctx.search("dc=example", "(cn="+req.getParameter("name")+")",controls); } }
+  want:
+  - lycaon.java.ldap-injection
+  covers: []
+- name: ldap-injection-safe
+  file: sample.java
+  source: |
+    import javax.naming.directory.DirContext; class Audit { void run(HttpServletRequest req,DirContext ctx) { ctx.search("dc=example", "(cn={0})",new Object[]{req.getParameter("name")},controls); } }
+  want: []
+  covers:
+  - lycaon.java.ldap-injection
+- name: precision-exec-argument-array
+  file: sample.java
+  source: class Test { void f(javax.servlet.http.HttpServletRequest req) throws Exception { Runtime.getRuntime().exec(new
+    String[] {"printf", "%s", req.getParameter("text")}); } }
+  want: []
+  covers:
+  - lycaon.java.command-injection
+- name: spring-requestparam-sql-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    class Search { @GetMapping("/s") String find(@RequestParam String name) throws
+    Exception { return stmt.executeQuery("SELECT * FROM u WHERE n = ''" + name + "''").toString();
+    } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-pathvariable-jdbctemplate-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Lookup { private JdbcTemplate tpl; @GetMapping("/u/{id}") void byId(@PathVariable
+    String id) { tpl.queryForList("SELECT * FROM u WHERE id = ''" + id + "''"); }
+    }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-requestbody-entitymanager-unsupported
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.PostMapping;
+
+    import org.springframework.web.bind.annotation.RequestBody;
+
+    import jakarta.persistence.EntityManager;
+
+    class Query { private EntityManager em; @PostMapping("/q") void run(@RequestBody
+    Filter f) { em.createQuery("FROM User WHERE name = ''" + f.getName() + "''");
+    } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-namedparam-template-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+
+    class Named { private NamedParameterJdbcTemplate tpl; @GetMapping("/n") void run(@RequestParam
+    String v) { tpl.queryForList("SELECT * FROM u WHERE n = ''" + v + "''", params);
+    } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-jdbcoperations-interface-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcOperations;
+
+    class Ops { private JdbcOperations tpl; @GetMapping("/o") void run(@RequestParam
+    String v) { tpl.update("DELETE FROM u WHERE n = ''" + v + "''"); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-modelattribute-method-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.ModelAttribute;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    class Populate { @ModelAttribute("owner") Owner findOwner(@PathVariable String
+    ownerId) throws Exception { return stmt.executeQuery("SELECT * FROM owners WHERE
+    id = ''" + ownerId + "''").toString(); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-validated-body-still-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.PostMapping;
+
+    import org.springframework.web.bind.annotation.RequestBody;
+
+    import jakarta.validation.Valid;
+
+    class Validated { @PostMapping("/v") void save(@Valid @RequestBody Pet pet) throws
+    Exception { stmt.executeUpdate("INSERT INTO pets VALUES (''" + pet.getName() +
+    "'')"); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-template-alias-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Aliased { private JdbcTemplate tpl; @GetMapping("/a") void run(@RequestParam
+    String v) { JdbcTemplate alias = tpl; alias.queryForList("SELECT * FROM u WHERE
+    n = ''" + v + "''"); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-requestheader-command-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestHeader;
+
+    class Exec { @GetMapping("/e") void run(@RequestHeader String agent) throws Exception
+    { Runtime.getRuntime().exec(agent); } }
+
+    '
+  want:
+  - lycaon.java.command-injection
+  covers: []
+- name: spring-requestpart-command-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.PostMapping;
+
+    import org.springframework.web.bind.annotation.RequestPart;
+
+    class Part { @PostMapping("/p") void run(@RequestPart String script) throws Exception
+    { new ProcessBuilder("sh","-c",script); } }
+
+    '
+  want:
+  - lycaon.java.command-injection
+  covers: []
+- name: spring-matrixvariable-command-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.MatrixVariable;
+
+    class Matrix { @GetMapping("/m") void run(@MatrixVariable String prog) throws
+    Exception { Runtime.getRuntime().exec(new String[] {prog, "-l"}); } }
+
+    '
+  want:
+  - lycaon.java.command-injection
+  covers: []
+- name: spring-cookievalue-path-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.CookieValue;
+
+    class Cookie { @GetMapping("/c") void run(@CookieValue String theme) throws Exception
+    { new FileInputStream(theme); } }
+
+    '
+  want:
+  - lycaon.java.path-traversal
+  covers: []
+- name: spring-pathvariable-path-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    class Files2 { @GetMapping("/f/{n}") void run(@PathVariable String n) throws Exception
+    { Files.readString(Paths.get(n)); } }
+
+    '
+  want:
+  - lycaon.java.path-traversal
+  covers: []
+- name: spring-bound-parameter-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Bound { private JdbcTemplate tpl; @GetMapping("/b") void run(@RequestParam
+    String v) { tpl.queryForList("SELECT * FROM u WHERE n = ?", v); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-prepared-statement-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    class Prepared { @GetMapping("/p") void run(@RequestParam String v) throws Exception
+    { PreparedStatement ps = conn.prepareStatement("SELECT * FROM u WHERE n = ?");
+    ps.setString(1, v); ps.executeQuery(); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-entitymanager-setparameter-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import jakarta.persistence.EntityManager;
+
+    class Bind { private EntityManager em; @GetMapping("/b") void run(@RequestParam
+    String v) { em.createQuery("FROM User WHERE name = :n").setParameter("n", v);
+    } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-constant-query-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Constant { private JdbcTemplate tpl; @GetMapping("/c") void run(@RequestParam
+    String v) { tpl.queryForList("SELECT * FROM u"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-reassigned-before-sink-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Reassigned { private JdbcTemplate tpl; @GetMapping("/r") void run(@RequestParam
+    String v) { v = "fixed"; tpl.queryForList("SELECT * FROM u WHERE n = ''" + v +
+    "''"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-unused-value-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Unused { private JdbcTemplate tpl; @GetMapping("/u") void run(@RequestParam
+    String v) { String ignored = "SELECT * FROM u WHERE n = ''" + v + "''"; tpl.queryForList("SELECT
+    * FROM u"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-numeric-pathvariable-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Numeric { private JdbcTemplate tpl; @GetMapping("/n/{id}") void run(@PathVariable
+    int id) { tpl.queryForList("SELECT * FROM u WHERE id = " + id); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-unrelated-annotation-package-safe
+  file: sample.java
+  source: 'import demo.internal.GetMapping;
+
+    import demo.internal.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Unrelated { private JdbcTemplate tpl; @GetMapping("/x") void run(@RequestParam
+    String v) { tpl.queryForList("SELECT * FROM u WHERE n = ''" + v + "''"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-locally-declared-annotation-safe
+  file: sample.java
+  source: 'import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Local { @interface RequestParam { String value() default ""; } private JdbcTemplate
+    tpl; void run(@RequestParam String v) { tpl.queryForList("SELECT * FROM u WHERE
+    n = ''" + v + "''"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-unrelated-template-class-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import demo.internal.JdbcTemplate;
+
+    class Foreign { private JdbcTemplate tpl; @GetMapping("/f") void run(@RequestParam
+    String v) { tpl.queryForList("SELECT * FROM u WHERE n = ''" + v + "''"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-unannotated-helper-safe
+  file: sample.java
+  source: 'import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Helper { private JdbcTemplate tpl; String build(String name) { tpl.queryForList("SELECT
+    * FROM u WHERE n = ''" + name + "''"); return name; } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-fixed-program-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    class FixedProgram { @GetMapping("/g") void run(@RequestParam String v) throws
+    Exception { Runtime.getRuntime().exec(new String[] {"ls", v}); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.command-injection
+- name: spring-fixed-destination-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    class FixedPath { @GetMapping("/d") void run(@RequestParam String v) throws Exception
+    { new FileInputStream("/etc/app.conf"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.path-traversal
+- name: spring-queryforobject-class-literal-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Idiomatic { private JdbcTemplate tpl; @GetMapping("/i") String run(@RequestParam
+    String v) { return tpl.queryForObject("SELECT n FROM u WHERE n = ''" + v + "''",
+    String.class); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: unsupported_ast_to_il
+    line: 4
+    column: 167
+  - kind: file_partial_semantics
+    construct: unsupported_ast_to_il:ClassLiteral
+    line: 4
+    column: 174
+- name: spring-lambda-capture-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Capture { private JdbcTemplate tpl; @GetMapping("/c") void run(@RequestParam
+    String v) { Runnable r = () -> tpl.execute("DROP TABLE " + v); r.run(); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-shadowed-inner-name-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.RequestParam;
+
+    import org.springframework.jdbc.core.JdbcTemplate;
+
+    class Shadowed { private JdbcTemplate tpl; @GetMapping("/s") void run(@RequestParam
+    String v) { class Inner { void go(String v) { tpl.execute("DROP TABLE " + v);
+    } } new Inner().go("fixed"); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.sql-injection
+- name: spring-record-body-accessor-vulnerable
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.PostMapping;
+
+    import org.springframework.web.bind.annotation.RequestBody;
+
+    class Rec { record Filter(String name) {} @PostMapping("/r") void run(@RequestBody
+    Filter f) throws Exception { stmt.executeQuery("SELECT * FROM u WHERE n = ''"
+    + f.name() + "''"); } }
+
+    '
+  want:
+  - lycaon.java.sql-injection
+  covers: []
+- name: spring-numeric-pathvariable-path-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    class NumericPath { @GetMapping("/d/{id}") void run(@PathVariable int id) throws
+    Exception { new FileInputStream(store.lookup(id)); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.path-traversal
+- name: spring-numeric-pathvariable-command-safe
+  file: sample.java
+  source: 'import org.springframework.web.bind.annotation.GetMapping;
+
+    import org.springframework.web.bind.annotation.PathVariable;
+
+    class NumericCmd { @GetMapping("/x/{id}") void run(@PathVariable long id) throws
+    Exception { Runtime.getRuntime().exec("report " + id); } }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.command-injection
+- name: spring-modelattribute-disabled-safe
+  file: Controller.java
+  source: 'import org.springframework.web.bind.annotation.*;
+
+    class Controller {
+
+    @GetMapping("/run") void run(@ModelAttribute(binding=false) String command) throws
+    Exception { Runtime.getRuntime().exec(command); }
+
+    }
+
+    '
+  want: []
+  covers:
+  - lycaon.java.command-injection
+- name: spring-modelattribute-enabled-vulnerable
+  file: Controller.java
+  source: 'import org.springframework.web.bind.annotation.*;
+
+    class Controller {
+
+    @GetMapping("/run") void run(@ModelAttribute(binding=true) String command) throws
+    Exception { Runtime.getRuntime().exec(command); }
+
+    }
+
+    '
+  want:
+  - lycaon.java.command-injection
+  covers: []
+- name: spring-modelattribute-disabled-neighbor-vulnerable
+  file: Controller.java
+  source: 'import org.springframework.web.bind.annotation.*;
+
+    class Controller {
+
+    @GetMapping("/run") void run(@ModelAttribute(binding=false) String server, @ModelAttribute
+    String command) throws Exception { Runtime.getRuntime().exec(command); }
+
+    }
+
+    '
+  want:
+  - lycaon.java.command-injection
+  covers: []

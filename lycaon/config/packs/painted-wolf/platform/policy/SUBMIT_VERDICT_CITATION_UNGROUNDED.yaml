@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_CITATION_UNGROUNDED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.review_expected_call
+    - paintedwolf.review_observed_handles
+    - paintedwolf.review_ungrounded_sample
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_CITATION_UNGROUNDED"
+effect: block
+copy:
+  what: "Some submitted citations do not resolve to the active review evidence union."
+  cause: "Unresolved sample: {{ paintedwolf.review_ungrounded_sample }}."
+  why: "A terminal verdict must resolve to observed coordinator and reviewer evidence for this review."
+  fix: "Correct the unresolved references using existing reviewer envelopes and the observed sample {{ paintedwolf.review_observed_handles }}. Preserve valid citations. Current call shape: {{ paintedwolf.review_expected_call }}."
+  instead: "Report an evidence gap if no observed citation supports the claim; never invent a handle or rerun a completed review just to change a citation."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: One or more verdict citations were not observed in the session evidence ledger.
+x-paintedwolf-scenarios:
+  - id: bad_handle
+    vars: { ungrounded_count: 1, review_ungrounded_sample: ['reviewer:read#99'] }
+    expect_contains: ['Code: SUBMIT_VERDICT_CITATION_UNGROUNDED', 'read#99']
+x-paintedwolf-emit: guard:workflow

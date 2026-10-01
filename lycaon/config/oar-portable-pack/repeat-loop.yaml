@@ -1,0 +1,47 @@
+# Escalation over time: notice a repeat, warn about it, then refuse.
+#
+# `on_fire` applies only when a rule fires, so a rule cannot gate on its own
+# counter ([OAR-FIRE-11]). One rule counts unconditionally; the other two read it.
+# `counter_scope` keys the counter by the tool-call fingerprint, so it counts
+# repeats of this same call ([OAR-FIRE-10]).
+oar: "1.0"
+id: REPEAT_CALL_TALLY
+namespace: example.hygiene
+kind: schema
+anchor: tool.pre_invoke
+requires:
+  profiles: [tool]
+counter_scope: tool_args_fingerprint
+effect: allow                   # contributes no decision; it is here to count
+on_fire: [increment_counter]
+status: stable
+copy:
+  what: Records that this exact call was made, so the rules below can see a repeat.
+---
+oar: "1.0"
+id: REPEAT_LOOP_WARN
+namespace: example.hygiene
+kind: invariant
+anchor: tool.pre_invoke
+requires:
+  profiles: [tool]
+when: 'fire_count_of("REPEAT_CALL_TALLY") >= 2 && fire_count_of("REPEAT_CALL_TALLY") < 5'
+effect: warn
+status: stable
+copy:
+  what: The same call has been retried several times without a change of approach.
+---
+oar: "1.0"
+id: REPEAT_LOOP_BLOCK
+namespace: example.hygiene
+kind: invariant
+anchor: tool.pre_invoke
+requires:
+  profiles: [tool]
+when: 'fire_count_of("REPEAT_CALL_TALLY") >= 5'
+effect: block
+on_fire: [publish_event]
+status: stable
+copy:
+  what: The same call has been retried too many times.
+  fix: Inspect the environment or change the command rather than replaying it.

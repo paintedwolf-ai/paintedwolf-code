@@ -1,0 +1,37 @@
+{
+  "release": "R17",
+  "components": {
+    "core": {
+      "revision": "k1",
+      "dependencies": {},
+      "approval": "check-1"
+    },
+    "api": {
+      "revision": "a7",
+      "dependencies": {
+        "core": "k1"
+      },
+      "approval": "check-1"
+    },
+    "cli": {
+      "revision": "c2",
+      "dependencies": {
+        "core": "k1"
+      },
+      "approval": "check-1"
+    },
+    "web": {
+      "revision": "w3",
+      "dependencies": {
+        "api": "a7",
+        "cli": "c2"
+      },
+      "approval": "check-0"
+    },
+    "jobs": {
+      "revision": "j1",
+      "dependencies": {},
+      "approval": "check-1"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Editor connection expired
+message: This editor connection no longer belongs to the open document.
+suggested_action: Reopen the file to reconnect. Keep a copy of any unsaved text before closing it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Editor connection expired

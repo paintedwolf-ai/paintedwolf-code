@@ -1,0 +1,42 @@
+oar: '1.0'
+id: TOOL_OWNER_FAILED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.extraction_started
+  - paintedwolf.dest
+  - paintedwolf.extracted_entries
+  - paintedwolf.extracted_bytes
+  - paintedwolf.extracted_paths_sample
+  - paintedwolf.extracted_paths_omitted
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "TOOL_OWNER_FAILED"
+effect: block
+copy:
+  what: The subsystem owner could not settle the action.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: Completion requires an outcome established by the subsystem owner.
+  fix: 'Inspect the reported failure and any completed effects before retrying. A timeout alone does not identify a failed prerequisite.{% if paintedwolf.extraction_started %} Extraction
+    stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes
+    }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample
+    }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional
+    completed paths are retained in the structured result.{% endif %} The destination and parent directories may
+    also have been created; completed changes remain in place. Inspect them before retrying so you do not overwrite
+    work.{% endif %}'
+  instead: Branch on Code; a missing field is TOOL_ARGS_INVALID, not this code
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_owner
+x-paintedwolf-message: Subsystem owner failed to settle the action
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: implement
+    reason: subsystem owner unavailable
+    tool: write
+  expect_contains:
+  - 'Code: TOOL_OWNER_FAILED'
+  - owner

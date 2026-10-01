@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-all-chats
+slot: "app_menu.go"
+command: painted-wolf/platform:go-all-chats
+group: "1"
+order: 4
+label: "All chats"

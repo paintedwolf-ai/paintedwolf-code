@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_IMPLEMENT_FORBIDDEN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_IMPLEMENT_FORBIDDEN"
+effect: block
+copy:
+  cause: Implementer Task forbidden before planning handoff
+  why: Complete plan critics and handoff before implementer Task
+  fix: Complete plan critics and handoff before implementer Task
+  instead: Stay in spec posture phases until the plan is approved and handed off
+  what: Implementer Task forbidden before planning handoff
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Implementer Task forbidden before planning handoff
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: task
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_IMPLEMENT_FORBIDDEN'
+x-paintedwolf-audience:
+- coordinator

@@ -1,0 +1,170 @@
+{
+  "session_decision_fields": [
+    "ui.pending_workflow_start"
+  ],
+  "workflow_run_decision_fields": [
+    "ui.human_approval_awaiting",
+    "ui.plan_revision_at",
+    "status",
+    "current_phase"
+  ],
+  "tool_decision_fields": [
+    "tool_result.outcome",
+    "tool_result.code",
+    "tool_result.ui_visibility",
+    "tool_result.dispatch",
+    "tool_result.process"
+  ],
+  "worker_decision_fields": [
+    "id",
+    "child_session_id",
+    "status",
+    "agent_type"
+  ],
+  "openapi_schemas": {
+    "SessionUiState": [
+      "pending_workflow_start"
+    ],
+    "WorkflowRunUi": [
+      "human_approval_awaiting",
+      "plan_revision_at",
+      "choice_transitions"
+    ],
+    "ToolResult": [
+      "content",
+      "outcome",
+      "codes",
+      "ui_visibility",
+      "dispatch",
+      "process"
+    ],
+    "MessageContentPart": [
+      "reference_kind",
+      "hit_kind",
+      "source_ref",
+      "start_line",
+      "end_line"
+    ],
+    "WorkerTask": [
+      "id",
+      "child_session_id",
+      "status",
+      "agent_type"
+    ]
+  },
+  "spawn_policy": {
+    "forbidden_branch_substrings": [
+      "allowed_agents",
+      "DISALLOWED_AGENT",
+      "DefaultImplementSpawnAgents"
+    ]
+  },
+  "sse_authority_hydration": {
+    "workflows": [
+      "refreshWorkflowState"
+    ],
+    "workers": [
+      "scheduleWorkers"
+    ],
+    "board": [
+      "scheduleBoard"
+    ]
+  },
+  "sse_patch_only_topics": [
+    "message",
+    "worker",
+    "checkpoint",
+    "llm",
+    "scan",
+    "delegation",
+    "board"
+  ],
+  "forbidden_den_patterns": [
+    {
+      "id": "deleted_heuristic_modules",
+      "pattern": "plan-handoff-ready|plan-approval-detect|plan-approval-phrases|workflow-start-proposal\\.ts|STREAM_SETTLED_MS",
+      "paths": "lycaon-den/src",
+      "exclude": "den-host-authority.test.ts|decision-journey-wiring.test.ts"
+    },
+    {
+      "id": "workflow_start_hint_code",
+      "pattern": "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL",
+      "paths": "lycaon-den/src",
+      "exclude": "den-host-authority.test.ts|decision-journey-wiring.test.ts"
+    },
+    {
+      "id": "hint_code_switch",
+      "pattern": "switch\\s*\\([^)]*\\.code",
+      "paths": "lycaon-den/src/components|lycaon-den/src/chat|lycaon-den/src/notices|lycaon-den/src/workflow|lycaon-den/src/session|lycaon-den/src/shell|lycaon-den/src/blueprint|lycaon-den/src/store|lycaon-den/src/find|lycaon-den/src/list",
+      "exclude": "\\.test\\."
+    },
+    {
+      "id": "case_hint_code",
+      "pattern": "case\\s+\"[A-Z][A-Z0-9_]{6,}\"",
+      "paths": "lycaon-den/src/components|lycaon-den/src/chat|lycaon-den/src/notices|lycaon-den/src/workflow|lycaon-den/src/session|lycaon-den/src/shell|lycaon-den/src/blueprint|lycaon-den/src/store|lycaon-den/src/find|lycaon-den/src/list",
+      "exclude": "\\.test\\."
+    },
+    {
+      "id": "transcript_content_decision",
+      "pattern": "message\\.content\\.includes\\(|msg\\.content\\.includes\\(",
+      "paths": "lycaon-den/src/components|lycaon-den/src/chat|lycaon-den/src/notices|lycaon-den/src/workflow|lycaon-den/src/session|lycaon-den/src/shell|lycaon-den/src/blueprint|lycaon-den/src/store|lycaon-den/src/find|lycaon-den/src/list",
+      "exclude": "transcript-items\\.ts|markdown-output|\\.test\\."
+    },
+    {
+      "id": "spawn_allowlist_branch",
+      "pattern": "allowed_agents",
+      "paths": "lycaon-den/src/components|lycaon-den/src/chat|lycaon-den/src/workflow",
+      "exclude": "types\\.ts|\\.test\\.|den-host-authority"
+    },
+    {
+      "id": "envelope_bind_in_decision_surfaces",
+      "pattern": "parseWorkerCompletionEnvelope|worker-completion-envelope",
+      "paths": "lycaon-den/src",
+      "exclude": "den-host-authority.test.ts|decision-journey-wiring.test.ts|markdown-output\\.ts"
+    },
+    {
+      "id": "host_content_prefix_filter",
+      "pattern": "isHostInjectedUserMessage|\\[host:",
+      "paths": "lycaon-den/src/chat/transcript/projection/transcript-items.ts",
+      "exclude": "\\.test\\."
+    },
+    {
+      "id": "loose_worker_dispatch_identity",
+      "pattern": "tool_result\\??\\.(worker_id|child_session_id)|dispatch\\??\\.state",
+      "paths": "lycaon-den/src",
+      "exclude": "types\\.ts|\\.test\\."
+    }
+  ],
+  "decision_surface_files": [
+    "lycaon-den/src/components/chatview/ChatView.tsx",
+    "lycaon-den/src/components/blueprint/chat-blueprint-state.ts",
+    "lycaon-den/src/components/chatview/chat-workflow-state.ts",
+    "lycaon-den/src/chat/tool/tool-part-model.ts",
+    "lycaon-den/src/chat/worker/workers-model.ts",
+    "lycaon-den/src/chat/task/task-card-model.ts"
+  ],
+  "display_only_files": [
+    "lycaon-den/src/chat/markdown/markdown-output.ts"
+  ],
+  "transport_allowlist": [
+    "lycaon-den/src/api/http.ts",
+    "lycaon-den/src/platform/connection/backend.ts"
+  ],
+  "platform_tauri_modules": [
+    "lycaon-den/src/platform/desktop/accessibility-text-size.ts",
+    "lycaon-den/src/platform/persistence/app-state.ts",
+    "lycaon-den/src/platform/connection/backend.ts",
+    "lycaon-den/src/platform/files/detect-editors.ts",
+    "lycaon-den/src/platform/desktop/external-link.ts",
+    "lycaon-den/src/platform/navigation/external-source.ts",
+    "lycaon-den/src/platform/files/file-drop.ts",
+    "lycaon-den/src/platform/files/folder.ts",
+    "lycaon-den/src/platform/desktop/open-browser.ts",
+    "lycaon-den/src/platform/files/path-kind.ts",
+    "lycaon-den/src/platform/files/read-path-bytes.ts",
+    "lycaon-den/src/platform/files/reveal-in-file-manager.ts",
+    "lycaon-den/src/platform/files/save-file.ts",
+    "lycaon-den/src/platform/windows/window-backdrop.ts",
+    "lycaon-den/src/platform/windows/window-chrome.ts"
+  ]
+}

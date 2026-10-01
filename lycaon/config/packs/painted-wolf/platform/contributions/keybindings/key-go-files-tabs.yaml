@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-files-tabs
+command: painted-wolf/platform:go-files-tabs
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader J"
+  windows:
+    - "Leader J"
+  linux:
+    - "Leader J"

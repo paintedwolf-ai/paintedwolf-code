@@ -1,0 +1,53 @@
+title: Reached a reverse tunnel provider
+id: 064ea3ff-bdbd-4650-88ce-1c42cde595c7
+description: >-
+  Connected to a service that publishes a public URL pointing back at this
+  machine. Every other rule in this pack describes something leaving; a tunnel
+  runs the other way, and once it is up anything the machine can reach is
+  reachable through it. A hostname cannot tell an agent bringing a tunnel up
+  from a browser opening someone else's tunnel URL, so this stays coarse.
+references:
+  - https://ngrok.com/docs/universal-gateway/domains/
+  - https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/
+  - https://localhost.run/docs/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # Tunnel domains exclude their control-plane hosts.
+  selection_host:
+    DestinationHostname:
+      - ngrok.io
+      - ngrok.app
+      - ngrok.dev
+      - ngrok-free.app
+      - ngrok-free.dev
+      - trycloudflare.com
+      - loca.lt
+      - localtunnel.me
+      - serveo.net
+      - localhost.run
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .ngrok.io
+      - .ngrok.app
+      - .ngrok.dev
+      - .ngrok-free.app
+      - .ngrok-free.dev
+      - .trycloudflare.com
+      # The dedicated edge suffix covers named tunnels.
+      - .argotunnel.com
+      - .loca.lt
+      - .localtunnel.me
+      - .serveo.net
+      - .localhost.run
+      - .lhr.life
+      - .lhr.rocks
+  condition: selection_host or selection_suffix

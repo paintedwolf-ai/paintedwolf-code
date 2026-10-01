@@ -1,0 +1,18 @@
+tags: [browser, visual, inspection]
+description: Universal {state, snapshot, log, artifact} for a held page (does not close it).
+schema:
+  type: object
+  properties:
+    id:
+      type: string
+      description: Page id from page_open.
+    selector:
+      type: string
+      description: Optional scroll-into-view selector.
+    caption:
+      type: string
+      description: >-
+        Short label for this capture. Without one its card shows only the tool
+        name.
+  required: [id]
+  additionalProperties: false

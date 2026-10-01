@@ -1,0 +1,22 @@
+oar: '1.0'
+id: PROCESS_REQUEST_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "PROCESS_REQUEST_INVALID"
+effect: block
+copy:
+  what: The process request is invalid.
+  cause: The host could not complete the structured process operation.
+  why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
+  fix: Use the declared schema and a supported signal.
+  instead: Branch on Code; Use the declared schema and a supported signal.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:host_process
+x-paintedwolf-message: The process request is invalid.
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains: ['Rejected:', 'Code: PROCESS_REQUEST_INVALID']

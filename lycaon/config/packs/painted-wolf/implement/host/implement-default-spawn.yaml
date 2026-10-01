@@ -1,0 +1,22 @@
+# Host `task()` roster for implement-default sessions (no custom workflow allowlist).
+# The implement workflow's agents must include every allowed_agents entry.
+# parallel_task caps on implement phases must match max_*_task_workers below.
+
+allowed_agents:
+  - implementer
+  - repo-researcher
+  - path-explorer
+  - web-researcher
+  - code-reviewer
+  - security-reviewer
+
+# Which kind of turn each gated coordinator surface dispatches. A surface admits
+# the agents that declare its lane in their own `dispatch_lanes`. A surface with
+# no row here gates on nothing and admits every declared worker.
+surface_lanes:
+  implement_routing: read
+  implement_dispatch: write
+
+max_in_flight_task_workers: 32
+max_read_task_workers: 32
+max_write_task_workers: 32

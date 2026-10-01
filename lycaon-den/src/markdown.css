@@ -1,0 +1,149 @@
+/* Markdown prose — assistant / agent output */
+.markdown-body {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  max-width: 100%;
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+
+.markdown-body p { margin: 0 0 var(--transcript-paragraph-gap); }
+.markdown-body p:last-child { margin-bottom: 0; }
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: var(--transcript-heading-before) 0 var(--transcript-heading-after);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: var(--transcript-heading-line-height);
+}
+.markdown-body h1 { font-size: var(--text-den-display); }
+.markdown-body h2 { font-size: var(--text-den-title); }
+.markdown-body h3 { font-size: var(--text-den-body); }
+.markdown-body h4 { font-size: var(--text-den-body); }
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 var(--transcript-paragraph-gap);
+  padding-left: var(--transcript-list-indent);
+}
+.markdown-body li { margin: var(--transcript-list-item-gap) 0; }
+.markdown-body li > p { margin: var(--transcript-list-item-gap) 0; }
+
+.markdown-body blockquote {
+  margin: 0 0 var(--transcript-paragraph-gap);
+  padding-left: var(--transcript-quote-indent);
+  border-left: 3px solid var(--den-line);
+  color: var(--den-text-muted);
+}
+
+.markdown-body a {
+  color: var(--den-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  user-select: text;
+  -webkit-user-drag: none;
+}
+.markdown-body a:hover { opacity: 0.85; }
+
+.markdown-body .den-source-path-link {
+  user-select: text;
+}
+
+.markdown-body--untrusted .den-md-remote-img {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0.35em 0;
+  padding: 0.45em 0.75em;
+  border: 1px dashed var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+}
+.markdown-body--untrusted .den-md-remote-img:hover {
+  color: var(--den-text);
+  border-color: var(--den-accent-text);
+}
+.markdown-body--untrusted .den-md-href-host {
+  display: inline;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  word-break: break-all;
+}
+.markdown-body code {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: var(--text-den-compact);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--den-tint-2);
+}
+
+/* The fence frame; its code scrolls sideways inside it (see `wrapInScrollportFrame`). */
+.markdown-body .markdown-code-scroll {
+  margin: 0 0 var(--transcript-code-gap);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  max-width: 100%;
+}
+
+.markdown-body pre {
+  margin: 0;
+  padding: var(--transcript-code-padding-y) var(--transcript-code-padding-x);
+  user-select: text;
+}
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  font-size: var(--text-den-label);
+  line-height: var(--transcript-code-line-height);
+  user-select: text;
+}
+
+/* Wide tables scroll within prose instead of widening the conversation. */
+.markdown-body .markdown-table-scroll {
+  max-width: 100%;
+  margin: 0 0 var(--transcript-table-gap);
+}
+
+.markdown-body .markdown-table-scroll table {
+  margin-bottom: 0;
+}
+
+.markdown-body table {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 var(--transcript-table-gap);
+  border-collapse: collapse;
+  font-size: var(--text-den-body);
+  table-layout: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: var(--transcript-cell-padding-y) var(--transcript-cell-padding-x);
+  border: 1px solid var(--den-line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.markdown-body th {
+  font-weight: 600;
+  background: var(--den-tint-1);
+}
+
+.markdown-body hr {
+  margin: var(--transcript-rule-gap) 0;
+  border: none;
+  border-top: 1px solid var(--den-line);
+}

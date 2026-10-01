@@ -1,0 +1,38 @@
+oar: '1.0'
+id: GIT_ENGINE_UNAVAILABLE
+kind: invariant
+anchor: tool.rejected
+selector:
+  tool:
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_ref
+    - git_branches
+    - git_restore
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+    - git_commit
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "GIT_ENGINE_UNAVAILABLE"
+effect: block
+copy:
+  what: The bundled Git engine is unavailable.
+  cause: The host could not locate or validate the engine required for this operation.
+  why: Repository operations require the bundled engine and its host-controlled execution boundary.
+  fix: Report the dependency to the user so they can repair or reinstall the application. Preserve the repository and any prior changes; repeating the same tool call cannot repair the engine.
+  instead: Stop the dependent operation and report the unavailable engine without substituting another executable
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git
+x-paintedwolf-message: The bundled Git engine is unavailable
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {tool: git_status, profile: coordinator}
+    expect_contains: ['Rejected:', 'Code: GIT_ENGINE_UNAVAILABLE']

@@ -1,0 +1,5 @@
+code: extends_not_allowed
+message: |
+  extends parent {{extends}} is not in the compose policy allowlist.
+replacement: |
+  Extend an allowed parent (see compose-policy.yaml).

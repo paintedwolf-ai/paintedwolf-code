@@ -1,0 +1,60 @@
+oar: '1.0'
+id: OVERLAY_PROMOTE_SYNTAX_UNHEALTHY
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.parse_syntax_error
+  - paintedwolf.parse_timed_out
+  - paintedwolf.parse_canceled
+  - paintedwolf.parse_error
+  - paintedwolf.parse_errors
+  - paintedwolf.parse_phase
+  - paintedwolf.parse_failure
+  - paintedwolf.parse_config
+  - paintedwolf.parse_reason
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
+effect: block
+copy:
+  what: 'The worker overlay was not promoted because validation of {{ paintedwolf.path }} did not succeed.'
+  cause: >-
+    {% if paintedwolf.parse_syntax_error %}The parser reports a syntax error in the merged source: {{ paintedwolf.parse_error }}. {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}.{% endif %}
+    {% else %}Host parser failure for the {{ paintedwolf.parse_phase }} snapshot: {{ paintedwolf.parse_failure }}.{% endif %}
+  why: >-
+    Promotion validates the bytes that would be integrated. The existing project and worker overlay are preserved.
+    A host parser failure does not establish that the source needs repair.
+  fix: >-
+    {% if paintedwolf.parse_syntax_error %}Resume the same worker and repair the reported syntax errors in its preserved overlay, then retry promotion.
+    {% else %}{% if paintedwolf.parse_timed_out %}Report the host timeout with the path and diagnostics. The host owner can raise validation_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry promotion of the preserved overlay after that correction.
+    {% else %}{% if paintedwolf.parse_canceled %}Resume promotion under an active request after cancellation or the enclosing deadline is resolved.
+    {% else %}Report the parser failure and preserve the overlay. Retry promotion after the host parser or its configuration is corrected.{% endif %}{% endif %}{% endif %}
+  instead: Preserve accepted work and resolve the reported validation failure before promotion
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:overlay_promote_syntax
+x-paintedwolf-message: overlay source syntax is unhealthy
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: pipeline.py
+    parse_syntax_error: true
+    parse_reason: syntax_error
+    parse_error: line 783
+    profile: implement
+    tool: promote_overlay
+  expect_contains:
+  - 'Code: OVERLAY_PROMOTE_SYNTAX_UNHEALTHY'
+  - merged source
+- id: timeout
+  vars:
+    tool: promote_overlay
+    path: Sources/Game/Level.swift
+    parse_timed_out: true
+    parse_reason: timeout
+    parse_phase: merged
+    parse_failure: swift parsing stopped after 30000 ms
+    parse_config: config/packs/painted-wolf/platform/host/source-parsing.yaml
+  expect_contains: ['Code: OVERLAY_PROMOTE_SYNTAX_UNHEALTHY', 'host timeout', 'preserved overlay']

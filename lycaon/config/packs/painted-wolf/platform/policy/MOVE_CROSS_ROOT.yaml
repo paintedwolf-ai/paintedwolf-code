@@ -1,0 +1,36 @@
+oar: '1.0'
+id: MOVE_CROSS_ROOT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - move
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "MOVE_CROSS_ROOT"
+effect: block
+copy:
+  cause: Source and destination name different attached roots.
+  why: Native move preserves one root identity and never renames across roots.
+  fix: If the intended transfer is authorized at both roots, use a separate copy, verify the destination content,
+    and delete the source only when that deletion is authorized. This is a non-atomic transfer; preserve both
+    paths and completed receipts until verification succeeds.
+  instead: Preserve transfer intent and verify before any authorized source deletion
+  what: Cross-root rename is not supported
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
+x-paintedwolf-message: move:cross-root rename is not supported
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: source and destination use different roots
+    path: src/main.go
+    profile: implement
+    tool: move
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MOVE_CROSS_ROOT'

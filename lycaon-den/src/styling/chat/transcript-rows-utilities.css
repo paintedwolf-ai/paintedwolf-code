@@ -1,0 +1,106 @@
+.den-chat-stream-inner {
+  position: relative;
+  /* Row measurement controls scroll anchoring. */
+  overflow-anchor: none;
+}
+
+.den-transcript-span-rows {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Each seam belongs inside the following row's measured box. */
+.den-seam {
+  box-sizing: border-box;
+}
+
+.den-seam[data-seam="row"] {
+  padding-top: var(--transcript-row-gap);
+}
+
+.den-seam[data-seam="section"] {
+  padding-top: var(--transcript-section-gap);
+}
+
+.den-seam[data-seam="turn"] {
+  padding-top: var(--transcript-turn-gap);
+}
+
+.den-chat-stream-inner .transcript-viewport-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--transcript-part-gap);
+  width: 100%;
+  min-width: 0;
+}
+
+.den-transcript-virtual-runway {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.den-notice--error {
+  border-color: color-mix(in srgb, var(--den-danger) 22%, var(--den-border));
+}
+
+.den-notice--error .den-notice-kind {
+  color: var(--den-danger-text);
+}
+
+.den-notice--warning {
+  border-color: color-mix(in srgb, var(--den-status-running) 22%, var(--den-border));
+}
+
+.den-notice--warning .den-notice-kind {
+  color: var(--den-status-running);
+}
+
+.den-notice--info {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 22%, var(--den-border));
+}
+
+.den-notice--info .den-notice-kind {
+  color: var(--den-accent-signal);
+}
+
+.den-notice-toggle,
+.den-notice-dismiss {
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+/* The disclosure word becomes a chevron; the label stays for assistive tech. */
+@container den-notice-rail (max-width: 24rem) {
+  .den-notice-toggle {
+    min-width: 1.8571rem;
+    padding: 0;
+  }
+
+  .den-notice-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .den-notice-toggle-glyph {
+    display: inline-flex;
+  }
+
+  .den-notice-toggle[aria-expanded="true"] .den-notice-toggle-glyph {
+    transform: rotate(90deg);
+  }
+}
+

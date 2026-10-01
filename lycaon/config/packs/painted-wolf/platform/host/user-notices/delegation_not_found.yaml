@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Delegated task not found
+message: >-
+  That delegated task is not being tracked any more.
+suggested_action: >-
+  Check the worker list for its result.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not being tracked
+      - worker list

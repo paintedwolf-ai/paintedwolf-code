@@ -1,0 +1,28 @@
+oar: '1.0'
+id: GIT_OPERATION_FAILED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool: [git_checkout, git_merge, git_stash]
+requires:
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.git_after_observed
+    - paintedwolf.git_merge_active
+    - paintedwolf.git_conflict_paths
+  profiles: [tool]
+when: paintedwolf.rejection_code == "GIT_OPERATION_FAILED"
+effect: block
+copy:
+  what: The Git operation did not finish cleanly.
+  cause: 'Git reported a failure or unresolved conflicts.{% if paintedwolf.git_after_observed %} The result retains the inspected repository state after the operation.{% else %} The host could not inspect the final repository state; its outcome remains uncertain.{% endif %}'
+  why: A process can change files, branches, or the index before failing. Its exit status alone does not describe what remains.
+  fix: 'Inspect the retained result and git_status before taking another action.{% if paintedwolf.git_conflict_paths %} Reported conflicts: {{ paintedwolf.git_conflict_paths }}.{% endif %}{% if paintedwolf.git_merge_active %} The inspected state has an active merge; resolve its conflicts before continuing with git_merge.{% endif %} Retain saved stashes until restoration is verified. Do not replay an operation merely because it returned an error.'
+  instead: Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_operation_failed
+x-paintedwolf-message: Git operation failed or has conflicts
+x-paintedwolf-scenarios:
+  - id: conflict
+    vars: {tool: git_merge, profile: coordinator, detail: conflicts}
+    expect_contains: ['Code: GIT_OPERATION_FAILED', git_status]

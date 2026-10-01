@@ -1,0 +1,39 @@
+# Coordinator-wide invoke rules (no plan-domain predicates).
+# Attach from workflow manifest rules: alongside posture packs.
+
+rules:
+  - id: coordinator_workflow_advance_requires_run
+    when:
+      workflow_not_runnable: true
+      tool_is_workflow_advance: true
+    then:
+      deny:
+        code: WORKFLOW_ADVANCE_INACTIVE
+        message: start or resume a workflow run before calling workflow_advance
+
+  - id: coordinator_workflow_transition_requires_run
+    when:
+      workflow_not_runnable: true
+      tool_is_workflow_transition: true
+    then:
+      deny:
+        code: WORKFLOW_TRANSITION_INACTIVE
+        message: start or resume a workflow run before calling workflow_transition
+
+  - id: coordinator_disallowed_agent
+    when:
+      tool_is_task: true
+      disallowed_agent: true
+    then:
+      deny:
+        code: DISALLOWED_AGENT
+        message: agent_type is not in the workflow allowed_agents allowlist
+
+  - id: coordinator_delegation_before_ready
+    when:
+      tool_is_delegation: true
+      handoff_not_ready: true
+    then:
+      deny:
+        code: WORKFLOW_DELEGATION_NOT_READY
+        message: satisfy implement_workflow_ready before delegation tools

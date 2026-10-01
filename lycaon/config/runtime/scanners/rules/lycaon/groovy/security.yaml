@@ -1,0 +1,49 @@
+rules:
+- id: lycaon.groovy.evaluate-input
+  languages:
+  - groovy
+  severity: ERROR
+  message: Request parameters are evaluated as Groovy code
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - groovy
+  pattern-either:
+  - pattern: evaluate(params.$KEY)
+  - pattern: evaluate("${params.$KEY}")
+  paths: &id001
+    include:
+    - '*.groovy'
+    - '*.gvy'
+    - '*.gradle'
+    - Jenkinsfile
+    - '**/Jenkinsfile'
+- id: lycaon.groovy.jenkins-shell-interpolation
+  languages:
+  - groovy
+  severity: ERROR
+  message: Jenkins parameters are interpolated into a shell script
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - groovy
+  paths: *id001
+  pattern: sh "...${params.$KEY}..."
+- id: lycaon.groovy.shell-interpolation
+  languages:
+  - groovy
+  severity: ERROR
+  message: Request parameters are embedded in an explicit shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - groovy
+  pattern-either:
+  - pattern: '["sh", "-c", "...${params.$KEY}..."].execute()'
+  paths: *id001

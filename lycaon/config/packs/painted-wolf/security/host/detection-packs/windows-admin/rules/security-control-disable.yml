@@ -1,0 +1,41 @@
+title: Disable a Windows security control
+id: 5149962f-18f4-447a-b617-01b23a2d3fce
+description: Turns off Defender real-time protection, the firewall, or BitLocker.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_defender:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    # PowerShell cmdlet and parameter names are case-insensitive at the shell,
+    # unlike a CLI flag, so this needs the flag every other engine op lacks.
+    CommandLine|re: '(?i)Set-MpPreference\s+-DisableRealtimeMonitoring\s+\$?true|Uninstall-WindowsFeature\s+Windows-Defender'
+  selection_firewall_off:
+    Image:
+      - netsh
+      - netsh.exe
+    CommandLine|contains: ' advfirewall set allprofiles state off'
+  selection_bitlocker_off:
+    Image:
+      - manage-bde
+      - manage-bde.exe
+    CommandLine|contains: ' -off'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(-whatif|/[?])(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_defender or selection_firewall_off or selection_bitlocker_off) and not filter_rehearsal and not filter_local

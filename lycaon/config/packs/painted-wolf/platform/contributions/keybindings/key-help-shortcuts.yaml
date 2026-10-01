@@ -1,0 +1,13 @@
+id: painted-wolf/platform:key-help-shortcuts
+command: painted-wolf/platform:help-shortcuts
+scope: "global"
+bindings:
+  macos:
+    - "?"
+    - "Mod+/"
+  windows:
+    - "?"
+    - "Mod+/"
+  linux:
+    - "?"
+    - "Mod+/"

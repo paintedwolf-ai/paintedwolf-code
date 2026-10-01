@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-summarize
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-summarize
+group: "1"
+order: 9
+label: "Give me the gist"

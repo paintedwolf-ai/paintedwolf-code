@@ -1,0 +1,57 @@
+oar: '1.0'
+id: DOOM_LOOP_FRUITLESS_SEARCH
+kind: invariant
+anchor: tool.post_invoke
+requires:
+  profiles: [tool]
+  facts:
+  - paintedwolf.pattern
+  - paintedwolf.worker_leg
+  - paintedwolf.fruitless_search_run
+when: paintedwolf.fruitless_search_run >= 3
+effect: warn
+copy:
+  cause: The same search question came up empty across reworded scopes
+  why: Varying path or path_glob explores where a name might be; it cannot help when the name itself is wrong.
+    The identical-args counter cannot see this, because every rewording lands in a different bucket. Three
+    empties for one question is usually the answer arriving, not the search failing.
+  fix: 'Read the empty result''s `note` first: it says whether nothing was searched (fix the scope and search
+    once more), whether the pattern''s regex operators were taken literally (escape them and search once more),
+    or whether the text is genuinely absent in a scope that was fully read. In the third case the search has
+    succeeded — the name does not exist. Record the absence as the finding it is and move on: {% if paintedwolf.worker_leg
+    %}note it in your report and continue the leg, or finish with `leg_status: partial` if it was the leg''s
+    last open question.{% else %}state it in your next action and continue.{% endif %} Ask a different question
+    only when you have a reason to believe a different name exists.'
+  instead: 'Record the absence as the finding it is and move on: {% if paintedwolf.worker_leg %}note it in
+    your report and continue the leg, or finish with `leg_status: partial` if it was the leg''s last open question.{%
+    else %}state it in your next action and continue.{% endif %} Ask a different question only when you have
+    a reason to believe a different name exists.'
+  what: '{{ paintedwolf.fruitless_search_run }} consecutive {{ tool }} searches for `{{ paintedwolf.pattern
+    }}` returned nothing — if the scope was searched and the pattern was literal, that is the answer: the name
+    is not there'
+x-paintedwolf-category: expected_behavior
+x-paintedwolf-emit: guard:doom_loop
+x-paintedwolf-message: '{{ paintedwolf.fruitless_search_run }} consecutive {{ tool }} searches for `{{ paintedwolf.pattern
+  }}` returned nothing — if the scope was searched and the pattern was literal, that is the answer: the name
+  is not there'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    fruitless_search_run: 3
+    pattern: mcpProjectDir
+    profile: coordinator
+    tool: grep
+  expect_contains:
+  - 'Code: DOOM_LOOP_FRUITLESS_SEARCH'
+  - Record the absence
+- id: worker_leg
+  vars:
+    fruitless_search_run: 3
+    pattern: RecordHostVisit
+    profile: explore_readonly
+    tool: grep
+    worker_leg: true
+  expect_contains:
+  - 'Code: DOOM_LOOP_FRUITLESS_SEARCH'
+  - Record the absence
+  - 'leg_status: partial'

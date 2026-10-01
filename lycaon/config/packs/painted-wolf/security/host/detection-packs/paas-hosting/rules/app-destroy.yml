@@ -1,0 +1,71 @@
+title: Destroy a hosted app or its database
+id: 62f27bd8-7d48-44ab-977b-7183ef464e78
+description: Destroys a deployed application or an attached managed database.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # Without its confirm flag each platform's destroy waits on an interactive
+  # prompt, so each selection requires the flag.
+  selection_heroku_verb:
+    Image: heroku
+    CommandLine|contains:
+      - ' apps:destroy'
+      - ' pg:reset'
+      - ' addons:destroy'
+  selection_heroku_confirm:
+    Image: heroku
+    CommandLine|contains: '--confirm'
+  selection_fly:
+    Image:
+      - fly
+      - flyctl
+    CommandLine|contains: ' apps destroy'
+  selection_fly_confirm:
+    Image:
+      - fly
+      - flyctl
+    CommandLine|re: '(?i)\s(--yes|--auto-confirm|-y)\b'
+  selection_vercel:
+    Image: vercel
+    CommandLine|re: '(?i)\s(remove|rm)\s'
+  selection_vercel_confirm:
+    Image: vercel
+    CommandLine|re: '(?i)\s(--yes|-y)\b'
+  selection_netlify:
+    Image: netlify
+    CommandLine|contains|all:
+      - ' sites:delete'
+      - '--force'
+  # `railway rm` is a documented alias of `railway delete`.
+  selection_railway:
+    Image: railway
+    CommandLine|re: '(?i)\s(delete|rm)\b'
+  # A bare delete verb would also match `railway variable delete KEY`, which is
+  # deploy-secret-set's territory, not a project delete. The command has four
+  # names — variable, variables, vars, var — so the guard needs all of them.
+  selection_railway_not_variable:
+    CommandLine|re: '(?i)\s(variables?|vars?)\s'
+  selection_railway_confirm:
+    Image: railway
+    CommandLine|re: '(?i)\s(--yes|-y)\b'
+  selection_render:
+    Image: render
+    CommandLine|contains|all:
+      - ' services delete'
+      - '--confirm'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: ((selection_heroku_verb and selection_heroku_confirm) or (selection_fly and selection_fly_confirm) or (selection_vercel and selection_vercel_confirm) or selection_netlify or (selection_railway and selection_railway_confirm and not selection_railway_not_variable) or selection_render) and not filter_rehearsal and not filter_local

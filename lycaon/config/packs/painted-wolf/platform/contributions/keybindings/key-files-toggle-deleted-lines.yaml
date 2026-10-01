@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-toggle-deleted-lines
+command: painted-wolf/platform:files-toggle-deleted-lines
+scope: files
+bindings:
+  macos:
+    - "Alt+Shift+D"
+  windows:
+    - "Alt+Shift+D"
+  linux:
+    - "Alt+Shift+D"

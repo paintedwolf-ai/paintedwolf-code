@@ -1,0 +1,36 @@
+title: Deploy an Azure Resource Manager template
+id: d1169d7f-69d3-4fb4-9c7e-9783596fdee3
+description: >-
+  Applies a template that can create, reconfigure, or remove any resource in the
+  target scope. What it changes is in the template, not the command line.
+references:
+  - https://learn.microsoft.com/en-us/cli/azure/reference-index
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image: az
+  verbs_deployment_apply:
+    CommandLine|contains:
+      - ' deployment group create'
+      - ' deployment sub create'
+      - ' deployment mg create'
+      - ' deployment tenant create'
+  filter_preview:
+    CommandLine|contains: ' what-if'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and verbs_deployment_apply
+    and not filter_preview and not filter_rehearsal and not filter_local

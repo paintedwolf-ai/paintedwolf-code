@@ -1,0 +1,27 @@
+tags: [process]
+description: >-
+  Inspect host processes after approval. Returns names, executable paths, UID,
+  parent PID, and opaque instance references; no argv or environment. Use pid
+  for a known target. Use next_after_pid for another page of the changing
+  snapshot. Unavailable metadata does not mean exited. Use command_output
+  and command_stop for jobs you launched with command.
+schema:
+  type: object
+  properties:
+    pid:
+      type: integer
+      minimum: 1
+      maximum: 1073741824
+      description: Inspect this exact PID; omission lists visible host processes.
+    after_pid:
+      type: integer
+      minimum: 0
+      maximum: 1073741824
+      description: Resume after this PID from next_after_pid; zero starts a fresh view.
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 500
+      default: 100
+      description: Maximum entries to return in one page of results.
+  additionalProperties: false

@@ -1,0 +1,39 @@
+oar: '1.0'
+id: COORDINATOR_TASK_ENVELOPE_ECHO
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.batch_closed
+    - paintedwolf.batch_phase
+    - paintedwolf.closeout_surface
+    - paintedwolf.has_completion_report
+    - paintedwolf.is_host_cycle_turn
+    - paintedwolf.last_assistant
+    - paintedwolf.pending_overlay_promote
+    - paintedwolf.progress_has_open_steps
+    - paintedwolf.surface_may_finish
+    - paintedwolf.task_envelope_echo
+    - paintedwolf.turn_tools
+    - paintedwolf.workers_idle
+when: '!paintedwolf.batch_closed && paintedwolf.last_assistant != "" && paintedwolf.task_envelope_echo && !(paintedwolf.is_host_cycle_turn && size(paintedwolf.turn_tools) == 0 && ((paintedwolf.workers_idle && paintedwolf.progress_has_open_steps) || !(paintedwolf.workers_idle && !paintedwolf.pending_overlay_promote && paintedwolf.surface_may_finish))) && !(paintedwolf.workers_idle && !paintedwolf.has_completion_report && ((paintedwolf.batch_phase == "synthesize") || (paintedwolf.closeout_surface && paintedwolf.surface_may_finish)))'
+effect: block
+copy:
+  what: Assistant prose repeated the structured <task …> completion block
+  cause: Loop-wake turns must synthesize for the user — not paste worker XML/HTML envelopes
+  why: Envelopes are host context; user-facing chat stays brief synthesis
+  fix: 'Write a user-facing synthesis using the existing worker evidence and the current report format. Preserve valid citation metadata; omit the host task envelope itself. Do not dispatch or wait merely to repair report formatting.'
+  instead: Synthesize worker output — never echo <task job_id=…> blocks to the user
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Coordinator echoed a worker task envelope instead of synthesizing
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_TASK_ENVELOPE_ECHO'

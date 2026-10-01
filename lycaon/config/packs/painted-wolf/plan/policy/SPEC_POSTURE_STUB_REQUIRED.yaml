@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SPEC_POSTURE_STUB_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_STUB_REQUIRED"
+effect: block
+copy:
+  cause: Phase 1 plan stub required before Task(plan-writer)
+  why: 'Use native write on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
+    ## Assumptions, ## Approach'
+  fix: 'Use native write on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
+    ## Assumptions, ## Approach'
+  instead: Write blueprint stub with write before Task researchers
+  what: Phase 1 plan stub required before Task(plan-writer)
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Phase 1 plan stub required before Task(plan-writer)
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: task
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_STUB_REQUIRED'
+x-paintedwolf-audience:
+- coordinator

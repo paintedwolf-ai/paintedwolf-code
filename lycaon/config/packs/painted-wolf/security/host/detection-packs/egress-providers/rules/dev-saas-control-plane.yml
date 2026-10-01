@@ -1,0 +1,108 @@
+title: Reached a developer SaaS API
+id: 2b96abb0-5105-4ee5-9b06-946046480311
+description: >-
+  Connected to a common developer SaaS API — observability, on-call, feature
+  flags, project tracking, design, or browser/device clouds. A hostname cannot
+  tell a read from a destructive or outbound-customer action. Excludes general
+  web/CDN apexes.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      # Observability / on-call
+      - api.datadoghq.com
+      - api.datadoghq.eu
+      - http-intake.logs.datadoghq.com
+      - api.sentry.io
+      - sentry.io
+      - api.honeycomb.io
+      - api.newrelic.com
+      - otlp.nr-data.net
+      - api.grafana.com
+      - api.pagerduty.com
+      - events.pagerduty.com
+      - api.opsgenie.com
+      - api.launchdarkly.com
+      - app.launchdarkly.com
+      - api.split.io
+      - api.flagsmith.com
+      - api.posthog.com
+      - us.i.posthog.com
+      - api.mixpanel.com
+      # Project / design
+      - api.linear.app
+      - api.notion.com
+      - api.atlassian.com
+      - api.figma.com
+      - api.asana.com
+      - api.height.app
+      - api.clickup.com
+      - api.shortcut.com
+      - api.monday.com
+      - api.airtable.com
+      # Browser / device clouds & tunnels
+      - api.browserstack.com
+      - api.saucelabs.com
+      - api.lambdatest.com
+      - api.cypress.io
+      - api.ngrok.com
+      - tunnel.us.ngrok.com
+      - connect.ngrok-agent.com
+      - api.huggingface.co
+      - huggingface.co
+      - api.replicate.com
+      - api.fal.ai
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .datadoghq.com
+      - .datadoghq.eu
+      - .sentry.io
+      - .honeycomb.io
+      - .newrelic.com
+      - .nr-data.net
+      - .grafana.com
+      - .grafana.net
+      - .pagerduty.com
+      - .opsgenie.com
+      - .launchdarkly.com
+      - .split.io
+      - .flagsmith.com
+      - .posthog.com
+      - .mixpanel.com
+      - .linear.app
+      - .notion.com
+      - .notion.so
+      - .atlassian.com
+      - .atlassian.net
+      - .figma.com
+      - .asana.com
+      - .height.app
+      - .clickup.com
+      - .shortcut.com
+      - .monday.com
+      - .airtable.com
+      - .browserstack.com
+      - .saucelabs.com
+      - .lambdatest.com
+      - .cypress.io
+      # Control-plane suffixes exclude published tunnel domains.
+      - .ngrok.com
+      - .ngrok-agent.com
+      - .huggingface.co
+      - .replicate.com
+      - .fal.ai
+      - .amplitude.com
+      - .fullstory.com
+      - .heap.io
+  condition: selection_host or selection_suffix

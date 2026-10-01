@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-mode-actions
+title: "Search mode: actions"
+palette: false
+scope: "overlay"
+action:
+  kind: native_ui
+  handler: "search.mode.actions"

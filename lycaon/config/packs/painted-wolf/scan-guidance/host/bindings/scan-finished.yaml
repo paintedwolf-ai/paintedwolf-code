@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': scan.finished
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-scan-finished
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - "wait() scan_done condition — host security scan reached terminal status"
+  required:
+  - scan_done
+  - scan_query
+  - scan_compare
+  forbidden:
+  - workflow_advance

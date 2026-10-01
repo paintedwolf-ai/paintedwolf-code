@@ -1,0 +1,66 @@
+id: choice-transitions-fixture
+version: 1.0.0
+trigger: /choice-transitions-fixture
+request:
+  question: What should this fixture run over?
+initial_posture: build
+blueprint:
+  id: decision
+  file: choice-transitions.md
+# Multi-arm choice fixture.
+phases:
+  - id: decide
+    activity_label: Choosing the next step
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    human_approval:
+      blueprint: choice-transitions.md
+    next: done
+    on_enter:
+      prompt_coordinator: true
+    transitions:
+      - id: deepen
+        to: research_more
+        actors: [human, coordinator]
+        label: Deepen research
+      - id: critique
+        to: review
+        actors: [human, coordinator]
+        label: Run critique
+      - id: side_quest
+        to: side
+        actors: [human]
+        label: Side quest
+  - id: research_more
+    activity_label: Researching further
+    complete_when: gates_satisfied
+    gates: [research_satisfied]
+    next: decide
+  - id: review
+    activity_label: Reviewing the result
+    depth_param: review_depth
+    review_loop:
+      evidence_key: fixture_review
+      iteration_cap: 2
+      verdict_schema:
+        verdict: APPROVED|NEEDS_REVISION
+        bullets: string
+    complete_when: gates_satisfied
+    gates: [evidence_passed:fixture_review]
+    next: decide
+  - id: side
+    activity_label: Handling the side quest
+    # Transition-only target.
+    complete_when: gates_satisfied
+    gates: [plan_stub_valid]
+    next: decide
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+parameters:
+  review_depth:
+    type: depth
+    default: none
+controls:
+  phase_advance: host

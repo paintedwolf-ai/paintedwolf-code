@@ -1,0 +1,47 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - output_limit_reached
+    - recovery_attempted
+title: >-
+  {% if output_limit_reached %}Model reached its output limit{% else %}Model returned no response{% endif %}
+message: >-
+  {% if output_limit_reached -%}
+  The model used its output budget without producing an answer or tool call.
+  {% if recovery_attempted %}An automatic attempt with lower reasoning also could not finish this step.{% endif %}
+  Completed work is preserved. This response limit is separate from the Cost stage.
+  {%- elif model -%}
+  {{ model }} finished without a usable response.
+  {%- else -%}
+  The model finished without a usable response.
+  {%- endif %}
+suggested_action: >-
+  {% if output_limit_reached -%}
+  Choose another model in Settings → AI providers to continue.
+  {%- else -%}
+  Try sending again, or switch to a different model in Settings → AI providers.
+  {%- endif %}
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: output_limit
+    vars:
+      output_limit_reached: true
+    expect_contains:
+      - used its output budget
+  - id: with_model
+    vars:
+      model: llama-3.1-8b
+    expect_contains:
+      - llama-3.1-8b
+      - finished without
+  - id: generic
+    vars: {}
+    expect_contains:
+      - finished without a usable response

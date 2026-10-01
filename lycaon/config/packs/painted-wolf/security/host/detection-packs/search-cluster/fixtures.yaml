@@ -1,0 +1,84 @@
+fixtures:
+- rule: index-delete
+  positive:
+  - curl -X DELETE http://localhost:9200/orders
+  - curl --request DELETE https://search.internal:9250/logs-2026-08
+  - curl -X DELETE https://es.internal:9200/customer_data
+  - curl -XDELETE http://localhost:9200/orders
+  - curl -X DELETE https://my-deploy.es.us-central1.gcp.elastic-cloud.com/orders
+  - curl -X DELETE https://search-logs-abc123.us-east-1.es.amazonaws.com/orders
+  - curl -X DELETE https://abc123.us-east-1.aoss.amazonaws.com/orders
+  - curl -X DELETE https://2882c82e54d4361.us-west-5.aws.found.io/orders
+  negative:
+  - curl http://localhost:9200/orders
+  - curl -X GET http://localhost:9200/orders/_search
+  - curl -X DELETE http://localhost:9200/orders --help
+  - curl -X DELETE https://api.example.test/orders
+  - curl -X DELETE https://api.example.test:8080/orders
+  - wget --method=DELETE http://localhost:9200/orders
+- rule: cluster-wipe
+  positive:
+  - curl -X DELETE http://localhost:9200/_all
+  - curl -X DELETE 'http://localhost:9200/*'
+  - curl -X DELETE https://search.internal:9250/_all
+  - curl --request DELETE "http://localhost:9200/*"
+  - curl -X DELETE https://my-deploy.es.us-central1.gcp.elastic-cloud.com/_all
+  - curl -X DELETE 'https://search-logs-abc123.us-east-1.es.amazonaws.com/*'
+  negative:
+  - curl http://localhost:9200/_cluster/health
+  - curl -X GET http://localhost:9200/_all
+  - curl -X DELETE http://localhost:9200/_all --help
+  - curl -X DELETE https://api.example.test:8080/_all
+  - wget --method=DELETE http://localhost:9200/_all
+- rule: deployment-destroy
+  positive:
+  - ecctl deployment shutdown 3652e42537d747498ce7c7f5c3f10ab7
+  - ecctl deployment delete 3652e42537d747498ce7c7f5c3f10ab7
+  - ecctl deployment resource delete 3652e42537d747498ce7c7f5c3f10ab7 --kind elasticsearch
+  - ecctl deployment resource shutdown 3652e42537d747498ce7c7f5c3f10ab7 --kind elasticsearch
+  - sudo ecctl deployment delete 3652e42537d747498ce7c7f5c3f10ab7
+  negative:
+  - ecctl deployment list
+  - ecctl deployment show 3652e42537d747498ce7c7f5c3f10ab7
+  - ecctl deployment shutdown 3652e42537d747498ce7c7f5c3f10ab7 --help
+  - ecctl deployment shutdown 3652e42537d747498ce7c7f5c3f10ab7 -h
+  - ecctl deployment resource list 3652e42537d747498ce7c7f5c3f10ab7 --kind elasticsearch
+- rule: algolia-index-delete
+  positive:
+  - algolia indices delete products -y
+  - algolia indices delete products --confirm
+  - algolia indices delete products -Y
+  - sudo algolia indices delete products -y
+  negative:
+  - algolia indices list
+  - algolia indices delete products
+  - algolia indices delete products -y --help
+  - algolia indices delete products --confirmation
+- rule: algolia-objects-delete
+  positive:
+  - algolia objects delete products --filters 'category:discontinued' -y
+  - algolia objects delete products --object-ids obj1,obj2 --confirm
+  - sudo algolia objects delete products --object-ids obj1,obj2 --confirm
+  negative:
+  - algolia objects browse products
+  - algolia objects delete products --object-ids obj1,obj2
+  - algolia objects delete products --object-ids obj1,obj2 --confirm --help
+- rule: meilisearch-index-delete
+  positive:
+  - curl -X DELETE http://localhost:7700/indexes/books
+  - curl --request DELETE https://search.internal:7700/indexes/products
+  - curl -XDELETE http://localhost:7700/indexes/books
+  - sudo curl -X DELETE http://localhost:7700/indexes/books
+  - curl -X DELETE https://ms-abc123-4567.sfo.meilisearch.io/indexes/books
+  negative:
+  - curl http://localhost:7700/indexes/books
+  - curl -X DELETE http://localhost:77001/indexes/books
+  - curl -X GET http://localhost:7700/indexes/books
+  - curl -X DELETE http://localhost:7700/indexes/books/documents/42
+  - curl -X DELETE http://localhost:7700/indexes/books/documents
+  - curl -X DELETE http://localhost:7700/indexes/books/settings
+  - curl -X DELETE http://localhost:7700/keys/abc123
+  - curl -X DELETE https://ms-abc123-4567.sfo.meilisearch.io/indexes/books/documents
+  - curl -X DELETE http://localhost:7700/indexes/books --help
+  - curl -X DELETE https://api.example.test/indexes/books
+  - wget --method=DELETE http://localhost:7700/indexes/books

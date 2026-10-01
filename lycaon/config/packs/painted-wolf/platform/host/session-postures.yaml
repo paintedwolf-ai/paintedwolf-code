@@ -1,0 +1,26 @@
+# Coordinator approval buckets — distinct from workflow ids and phase ids.
+# A posture names a stage and the invoke rules that apply to it. The tool surface
+# comes from the workflow manifest or the agent; a posture does not select one.
+# See docs/naming.md
+
+postures:
+  spec:
+    description: Coordinator specifies (plans/docs); no delegation dispatch
+    rules:
+      - config/packs/painted-wolf/platform/host/posture-rules/spec.yaml
+    label: Specify
+
+  build:
+    description: Implementation + delegation closeout
+    rules:
+      - config/packs/painted-wolf/platform/host/posture-rules/build.yaml
+
+  orchestrate:
+    description: Multi-worker topology sessions
+    rules:
+      - config/packs/painted-wolf/platform/host/posture-rules/orchestrate.yaml
+
+  vet:
+    description: Readonly coordinator; security proof required at closeout
+    rules:
+      - config/packs/painted-wolf/platform/host/posture-rules/vet.yaml

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-start-completion
+command: painted-wolf/platform:editor-start-completion
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+/"
+  windows:
+    - "Alt+/"
+  linux:
+    - "Alt+/"

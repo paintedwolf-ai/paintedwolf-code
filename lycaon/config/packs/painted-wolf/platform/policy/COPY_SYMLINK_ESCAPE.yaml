@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COPY_SYMLINK_ESCAPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - copy
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path_escape
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "COPY_SYMLINK_ESCAPE"
+effect: block
+copy:
+  cause: The resolved target does not have the required path authority.
+  why: A link cannot grant access to its destination.
+  fix: Use an intended in-scope source only; do not replace or retarget the link to evade the boundary. Preserve
+    any earlier completed copies.
+  instead: Respect resolved-source authority
+  what: The copy source link {{ paintedwolf.path }} resolves outside the permitted scope.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
+x-paintedwolf-message: copy:copy symlink target escapes scope
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: copy
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COPY_SYMLINK_ESCAPE'

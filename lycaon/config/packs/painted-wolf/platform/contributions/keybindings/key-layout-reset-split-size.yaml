@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-reset-split-size
+command: painted-wolf/platform:layout-reset-split-size
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+0"
+  windows:
+    - "Mod+Shift+0"
+  linux:
+    - "Mod+Shift+0"

@@ -1,0 +1,274 @@
+paths:
+  /v1/providers:
+    get:
+      tags:
+      - providers
+      operationId: listProviders
+      summary: List live model-provider instances
+      description: >
+        Returns AI providers from providers.local.yaml (plus credential status from
+        the encrypted credential vault). Ship providers.yaml kinds are Add-picker templates via
+        GET /v1/provider-kinds — not listed here until the user adds an instance.
+        Host platform filtering may omit unsupported instances.
+      responses:
+        '200':
+          description: Providers
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+    post:
+      tags:
+      - providers
+      operationId: createProvider
+      x-person-action: record
+      summary: Add a provider instance under a chosen id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/providers.yaml#/components/schemas/CreateProviderRequest
+      responses:
+        '201':
+          description: Created provider
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/provider-kinds:
+    get:
+      tags:
+      - providers
+      operationId: listProviderKinds
+      summary: List ship-catalog provider kinds for the Add AI provider picker
+      responses:
+        '200':
+          description: Provider kind templates
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderKindListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+  /v1/providers/{provider_id}:
+    patch:
+      tags:
+      - providers
+      operationId: updateProvider
+      x-person-action: record
+      summary: Update a provider instance
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/providers.yaml#/components/schemas/UpdateProviderRequest
+      responses:
+        '200':
+          description: Updated provider
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - providers
+      operationId: deleteProvider
+      x-person-action: record
+      summary: Delete a provider instance
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '204':
+          description: Provider deleted
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/providers/{provider_id}/credential:
+    put:
+      tags:
+      - providers
+      operationId: replaceProviderCredential
+      x-person-action: record
+      summary: Store provider API key (write-only)
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/providers.yaml#/components/schemas/SetProviderCredentialRequest
+      responses:
+        '200':
+          description: Credential stored
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - providers
+      operationId: deleteProviderCredential
+      x-person-action: record
+      summary: Remove stored provider API key
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '204':
+          description: Credential removed
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/providers/{provider_id}/test:
+    post:
+      tags:
+      - providers
+      operationId: testProvider
+      x-person-action: none
+      summary: Test provider credentials via live model discovery and refresh the model list
+      description: >
+        Probes the provider the same way Refresh does — live model listing with
+        stored credentials — and returns the probe result.
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderProbeResult
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/providers/{provider_id}/refresh:
+    post:
+      tags:
+      - providers
+      operationId: refreshProviderModels
+      x-person-action: none
+      summary: Drop cached model discovery and return the freshly discovered provider
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '200':
+          description: Provider with freshly discovered models
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/providers.yaml#/components/schemas/ProviderMeta
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable

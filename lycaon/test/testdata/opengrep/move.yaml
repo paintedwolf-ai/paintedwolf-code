@@ -1,0 +1,26 @@
+language: move
+comment:
+- //
+limits: Aptos global storage and randomness patterns. Sui object authorization is a distinct model and is not claimed
+  by these rules.
+cases:
+- name: ordinary-source
+  file: sample.move
+  source: |
+    module 0x1::example { public fun identity(x: u64): u64 { x } }
+  want: []
+  covers: []
+- name: unrestricted-resource-withdrawal-vulnerable
+  file: sample.move
+  source: |
+    module 0x1::audit { struct Vault has key { value: u64 } public fun withdraw(owner: address): Vault { move_from<Vault>(owner) } }
+  want:
+  - lycaon.move.unrestricted-resource-withdrawal
+  covers: []
+- name: unrestricted-resource-withdrawal-safe
+  file: sample.move
+  source: |
+    module 0x1::audit { struct Vault has key { value: u64 } public fun withdraw(owner: &signer): Vault { move_from<Vault>(signer::address_of(owner)) } }
+  want: []
+  covers:
+  - lycaon.move.unrestricted-resource-withdrawal

@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/rekor"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.5.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-24117",
+  "GHSA-4c4x-jm2x-pf9j"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4355"
+ },
+ "details": "Rekor affected by Server-Side Request Forgery (SSRF) via provided public key URL in github.com/sigstore/rekor",
+ "id": "GO-2026-4355",
+ "modified": "2026-02-02T21:05:55Z",
+ "published": "2026-02-02T21:05:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/rekor/security/advisories/GHSA-4c4x-jm2x-pf9j"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24117"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/rekor/commit/60ef2bceba192c5bf9327d003bceea8bf1f8275f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/sigstore/rekor/releases/tag/v1.5.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Rekor affected by Server-Side Request Forgery (SSRF) via provided public key URL in github.com/sigstore/rekor"
+}

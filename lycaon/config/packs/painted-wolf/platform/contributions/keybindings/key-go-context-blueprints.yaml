@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-blueprints
+command: painted-wolf/platform:go-context-blueprints
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader L"
+  windows:
+    - "Leader L"
+  linux:
+    - "Leader L"

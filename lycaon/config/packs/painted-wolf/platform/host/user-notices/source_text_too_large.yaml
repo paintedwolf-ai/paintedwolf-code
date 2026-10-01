@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "File is too large to compare"
+message: "This file is larger than a comparison can show."
+suggested_action: "Open the file directly, or compare a smaller file."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "larger than a comparison"

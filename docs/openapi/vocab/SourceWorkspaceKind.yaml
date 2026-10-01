@@ -1,0 +1,6 @@
+# SourceWorkspaceKind — filesystem location for a source event.
+name: SourceWorkspaceKind
+go_const_prefix: SourceWorkspaceKind
+values:
+  - id: project
+  - id: worker

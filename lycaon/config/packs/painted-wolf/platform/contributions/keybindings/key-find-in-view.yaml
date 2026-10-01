@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-in-view
+command: painted-wolf/platform:find-in-view
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+F"
+  windows:
+    - "Mod+F"
+  linux:
+    - "Mod+F"

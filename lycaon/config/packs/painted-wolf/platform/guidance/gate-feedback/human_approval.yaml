@@ -1,0 +1,15 @@
+id: human_approval
+kind: human-affirmation
+purpose: |
+  The bound document must be approved by the user before the host advances.
+missing_signals:
+  - id: not_approved
+    when: "true"
+    detail: "Human approval has not been recorded."
+    fix: "End the turn. The host parks until the user approves; there is nothing for you to call."
+satisfy_auto:
+  - "End the turn. Do not ask for approval in chat — chat prose is not approval and cannot record it."
+  - "The host parks until the user approves. Treat any message they send meanwhile as revision feedback on the bound document."
+satisfy:
+  - "End the turn. Do not ask for approval in chat — chat prose is not approval and cannot record it."
+  - "The host parks until the user approves. Treat any message they send meanwhile as revision feedback on the bound document."

@@ -1,0 +1,132 @@
+{
+  "$comment": "Lycaon's own host schema. It is NOT part of the Open Agent Rules standard: the standard's vendored schemas live in schemas/oar/ and are never edited here. This one describes this engine's anchor catalog and binding grammar, which the format does not specify.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.dev/schemas/host/anchor-binding.schema.json",
+  "title": "AnchorBinding",
+  "description": "Shared Anchor Binding grammar. Bus effect classes: inform | block | transform. OAR Decision refinements warn|nudge|allow remain valid block-class values so oar.schema.json can $ref without forking. Do not mint a parallel stage enum — lifecycle is on: <catalog anchor id> only. Base grammar: it declares no additionalProperties, so it stays permissive standalone while a consumer composing it with allOf can close the world; the consumer closes the world (oar.schema.json sets unevaluatedProperties:false plus an ^x- allowance, [OAR-DOC-20]).",
+  "type": "object",
+  "required": [
+    "on",
+    "selector",
+    "effect"
+  ],
+  "properties": {
+    "on": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "description": "Catalog Anchor id (schemas/anchors.schema.json; platform/host/anchors/catalog.yaml)."
+    },
+    "selector": {
+      "$ref": "selector.schema.json"
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "inform",
+        "block",
+        "warn",
+        "nudge",
+        "allow",
+        "transform"
+      ],
+      "description": "Binding effect. Bus classes: inform (prompt render) | block (OAR Decision, including warn|nudge|allow refinements) | transform (content mutate). Shared vocabulary freezes inform|block|transform as the Emit bus classes."
+    },
+    "when": {
+      "type": "string",
+      "description": "Condition over the closed typed fact set. Required for block/transform; inform bindings use it when authored."
+    },
+    "render": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Template id — required when effect is inform (kicks/*.md or inject/*.md stem)."
+    },
+    "dedup": {
+      "description": "Per-Binding override of Anchor default dedup. Subsumes SignalEvent policy.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "omit_hint_codes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]*$"
+              },
+              "uniqueItems": true
+            },
+            "omit_inform_when": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "board_reinjected",
+                  "loop_wake",
+                  "same_turn_authoritative"
+                ]
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "builtin",
+        "workflow"
+      ],
+      "default": "builtin",
+      "description": "Authorship tier. builtin = host catalog Bindings; workflow = authored inside workflow.yaml / manifest injects:. Workflow-scoped Bindings SHOULD set selector.phase and/or selector.workflow."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "effect": {
+            "const": "inform"
+          }
+        },
+        "required": [
+          "effect"
+        ]
+      },
+      "then": {
+        "required": [
+          "render"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "workflow"
+          }
+        },
+        "required": [
+          "tier"
+        ]
+      },
+      "then": {
+        "description": "Workflow-scoped Binding: authored under workflow.yaml injects:; selector.phase and/or selector.workflow scope the Binding to a phase/topology."
+      }
+    }
+  ],
+  "patternProperties": {
+    "^x-": {
+      "description": "Implementation extension. Ignored by other implementations ([OAR-DOC-20])."
+    }
+  }
+}

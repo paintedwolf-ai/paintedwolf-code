@@ -1,0 +1,7 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.task.started
+selector:
+  surface: worker
+effect: inform
+render: worker-task-started
+tier: builtin

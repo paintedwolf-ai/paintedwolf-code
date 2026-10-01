@@ -1,0 +1,37 @@
+oar: '1.0'
+id: JQ_EDIT_ENCODE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+    - paintedwolf.format
+    - paintedwolf.detail
+when: paintedwolf.rejection_code == "JQ_EDIT_ENCODE"
+effect: block
+copy:
+  what: 'The result cannot be written as {{ paintedwolf.format }} for {{ paintedwolf.path }}: {{ paintedwolf.detail }}.'
+  cause: The program produced a value the document's format has no representation for, such as null in TOML or a top-level value that is not a table.
+  why: The result is written in the source's own format; a value it cannot hold is refused rather than altered.
+  fix: Adjust the program so the result fits the format, for example `del(.key)` instead of setting null in TOML.
+  instead: Branch on Code; keep the result representable in the document's format
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq_edit
+x-paintedwolf-message: jq_edit result cannot be encoded in the document format
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: TOML has no null value
+      format: toml
+      path: Cargo.toml
+      profile: implement
+      tool: jq_edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_EDIT_ENCODE'

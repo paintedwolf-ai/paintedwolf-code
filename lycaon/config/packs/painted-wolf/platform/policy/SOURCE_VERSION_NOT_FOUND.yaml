@@ -1,0 +1,34 @@
+oar: '1.0'
+id: SOURCE_VERSION_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - source_history
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+when: paintedwolf.rejection_code == "SOURCE_VERSION_NOT_FOUND"
+effect: block
+copy:
+  what: Source version not found — {{ paintedwolf.detail }}.
+  cause: The requested version id does not exist in this project's source ledger.
+  why: Version lookups are scoped to the current project and validated against recorded history.
+  fix: Check effects for valid version IDs recorded for this file.
+  instead: Branch on Code; verify version_id from effects
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
+x-paintedwolf-message: source version was not found
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: version v_missing was not found
+      profile: implement
+      tool: source_history
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_NOT_FOUND'

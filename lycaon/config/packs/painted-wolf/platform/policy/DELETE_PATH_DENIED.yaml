@@ -1,0 +1,36 @@
+oar: '1.0'
+id: DELETE_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - delete
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "DELETE_PATH_DENIED"
+effect: block
+copy:
+  what: Deletion is denied for {{ paintedwolf.path }}.
+  cause: This path crosses a host write-protection boundary.
+  why: Deletion cannot override protected-path authority.
+  fix: Leave this target unchanged. Do not switch tools or widen a write glob to bypass the hard floor. Preserve
+    earlier completed deletions and continue only with independently permitted work.
+  instead: Respect the protected target; do not retry around the boundary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
+x-paintedwolf-message: delete path matches a hard deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: delete
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELETE_PATH_DENIED'

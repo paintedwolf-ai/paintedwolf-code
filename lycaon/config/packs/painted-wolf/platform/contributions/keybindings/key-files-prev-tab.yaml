@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-prev-tab
+command: painted-wolf/platform:files-prev-tab
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+["
+  windows:
+    - "Mod+Shift+["
+  linux:
+    - "Mod+Shift+["

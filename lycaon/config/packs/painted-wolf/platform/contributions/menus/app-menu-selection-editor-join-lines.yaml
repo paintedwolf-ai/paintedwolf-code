@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-join-lines
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-join-lines
+group: "2"
+order: 9

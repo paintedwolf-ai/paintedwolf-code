@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-verb-summarize
+title: "Give me the gist"
+scope: "files"
+keywords:
+  - "summarize"
+  - "gist"
+  - "tldr"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-summarize

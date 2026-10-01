@@ -1,0 +1,13 @@
+id: painted-wolf/platform:layout-swap-columns
+title: "Swap chat and context"
+scope: "global"
+keywords:
+  - "swap"
+  - "chat side"
+  - "split"
+  - "layout"
+when:
+  fact: "split_live"
+action:
+  kind: native_ui
+  handler: "layout.swapColumns"

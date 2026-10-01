@@ -1,0 +1,33 @@
+oar: '1.0'
+id: DECISION_NOT_FOUND
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "DECISION_NOT_FOUND"
+effect: block
+copy:
+  what: Worker {{ paintedwolf.job_id }} has no pending decision to answer.
+  cause: The job id names no worker, or its worker has not asked a decision question.
+  why: An answer resumes the worker that asked, so it needs the job id from a needs_decision envelope.
+  fix: Call `answer_decision` with the job_id from the needs_decision envelope. Use `pack_board` to find
+    workers that are waiting on a decision.
+  instead: Do not guess job ids or answer before the worker asks.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker {{ paintedwolf.job_id }} has no pending decision to answer.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: worker-1
+  expect_contains:
+  - 'Code: DECISION_NOT_FOUND'
+  - worker-1
+  - pack_board
+selector:
+  tool:
+  - answer_decision

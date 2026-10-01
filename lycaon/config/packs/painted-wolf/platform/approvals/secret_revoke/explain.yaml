@@ -1,0 +1,18 @@
+# secret_revoke — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    secret_revoke:
+        tool: secret_revoke
+        tier_hint: irreversible
+        what_changes: Permanently revokes one managed secret reference. Its protected bytes remain only for provider screening until project deletion.
+        who_affected: Tasks and services that still depend on this reference will no longer authenticate with it.
+        if_wrong: The reference cannot be re-enabled; generate and install a replacement before rotating a live dependency.
+        allow_line: revoking managed secret `{{ reference }}`
+        scenarios:
+            - id: default
+              vars:
+                reference: managed secret reference
+              expect_contains:
+                - Permanently revokes
+                - cannot be re-enabled

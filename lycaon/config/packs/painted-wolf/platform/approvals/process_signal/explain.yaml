@@ -1,0 +1,18 @@
+# process_signal — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    process_signal:
+        tool: process_signal
+        tier_hint: recoverable
+        what_changes: Signal the selected host process instances.
+        who_affected: The selected processes and any work they have not finished.
+        if_wrong: Signals can interrupt work or lose unsaved data. The host rechecks each process instance before signaling.
+        allow_line: signaling the selected processes
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - process instances
+                - unsaved data

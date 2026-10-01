@@ -1,0 +1,27 @@
+# Exclude specialized interfaces that cannot perform general project work.
+# Size, age and context capacity are not evidence of incompatibility.
+rules:
+  - id: moderation
+    providers: [openai, anthropic, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai]
+    models: ["*llama-guard*", "*safeguard*", "*moderation*"]
+    roles: [coordinator, agent_pool, lite]
+    reason: This model classifies safety content rather than performing project work.
+    evidence: Provider model catalog identifies a moderation model.
+  - id: retrieval
+    providers: [openai, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai]
+    models: ["*embedding*", "*embed-*", "*rerank*"]
+    roles: [coordinator, agent_pool, lite]
+    reason: This model produces embeddings or relevance rankings rather than assistant responses.
+    evidence: Provider model catalog identifies an embedding or reranking interface.
+  - id: openai-media
+    providers: [openai, azure]
+    models: ["gpt-image*", "chatgpt-image*", "gpt-realtime*", "gpt-*-realtime*", "gpt-*-tts*", "gpt-*-transcribe*", "whisper*"]
+    roles: [coordinator, agent_pool, lite]
+    reason: This model requires a media interface that project conversations do not use.
+    evidence: Provider model catalog declares an image, realtime, speech or transcription interface.
+  - id: gemini-media
+    providers: [gemini, vertex-express, vertex]
+    models: ["gemini-*-live*", "gemini-*-native-audio*", "gemini-*-tts*", "gemini-*-image*"]
+    roles: [coordinator, agent_pool, lite]
+    reason: This model requires a media interface that project conversations do not use.
+    evidence: Provider model catalog declares a live, speech or image generation interface.

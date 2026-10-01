@@ -1,0 +1,119 @@
+{
+  "id": "ops-transforms-accumulate-in-evaluation-order",
+  "title": "Two transforms at one occurrence both apply, in evaluation order, neither discarding the other",
+  "covers": [
+    "OAR-OPS-15",
+    "OAR-OPS-16",
+    "OAR-EVAL-5",
+    "OAR-EVAL-8"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "REDACT_SECRETS",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "size(secret_matches) > 0",
+      "transform": {
+        "action": "redact",
+        "target": "secret_matches",
+        "replacement": "[secret redacted]"
+      }
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "ANNOTATE_ALL",
+      "effect": "transform",
+      "transform": {
+        "action": "annotate",
+        "target": "content",
+        "replacement": "reviewed"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "facts": {
+      "secret_matches": [
+        {
+          "start": 4,
+          "end": 12
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "ANNOTATE_ALL",
+    "rule": "oar.test/ANNOTATE_ALL",
+    "transforms": [
+      {
+        "action": "annotate",
+        "target": "content",
+        "replacement": "reviewed"
+      },
+      {
+        "action": "redact",
+        "target": "secret_matches",
+        "replacement": "[secret redacted]"
+      }
+    ],
+    "applied": [
+      "oar.test/ANNOTATE_ALL:fired",
+      "oar.test/REDACT_SECRETS:fired"
+    ]
+  }
+}

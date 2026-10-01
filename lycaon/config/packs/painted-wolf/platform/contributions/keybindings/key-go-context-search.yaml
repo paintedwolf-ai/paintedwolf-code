@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-search
+command: painted-wolf/platform:go-context-search
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader K"
+  windows:
+    - "Leader K"
+  linux:
+    - "Leader K"

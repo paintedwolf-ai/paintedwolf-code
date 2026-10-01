@@ -1,0 +1,324 @@
+.queue-popover {
+  position: absolute;
+  right: 0.75rem;
+  bottom: calc(100% + 0.4rem);
+  z-index: var(--den-z-content);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  max-width: min(26rem, 85%);
+  font-size: var(--text-den-compact);
+}
+
+.queue-card {
+  width: 24rem;
+  max-width: 100%;
+  border: 1px solid var(--den-border);
+  border-radius: 10px;
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-md);
+  overflow: hidden;
+}
+
+.queue-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-border) 60%, transparent);
+}
+
+.queue-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+.queue-card__status {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-card__head-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.queue-card__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.queue-card__icon-btn--active {
+  color: var(--den-accent-text);
+  background: color-mix(in srgb, var(--den-accent-signal) 12%, transparent);
+}
+
+.queue-card__send {
+  font-size: var(--text-den-micro);
+  font-weight: 500;
+  padding: 0.22rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--den-border);
+  background: var(--den-surface);
+  color: var(--den-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.queue-card__send:hover {
+  background: var(--den-tint-1);
+  border-color: color-mix(in srgb, var(--den-text-muted) 40%, var(--den-border));
+}
+
+/* Cancel shares the send slot. */
+.queue-card__send--cancel {
+  color: var(--den-text-muted);
+}
+
+.queue-card__send:disabled,
+.queue-card__icon-btn:disabled,
+.queue-row__grip:disabled,
+.queue-row__text:disabled,
+.queue-row__action:disabled,
+.queue-connector__toggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.queue-card__scroll {
+  max-height: 17rem;
+}
+
+.queue-card__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.3rem 0.35rem;
+  border-radius: 6px;
+}
+
+.queue-row:hover {
+  background: var(--den-tint-1);
+}
+
+/* The rail joins messages that send as one turn. */
+.queue-row[data-group]::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--den-accent-signal) 55%, transparent);
+}
+
+.queue-row[data-group="start"]::before {
+  bottom: -4px;
+}
+
+.queue-row[data-group="mid"]::before {
+  top: -4px;
+  bottom: -4px;
+}
+
+.queue-row[data-group="end"]::before {
+  top: -4px;
+}
+
+.queue-row--dragging {
+  opacity: 0.45;
+}
+
+.queue-row--drop-before {
+  box-shadow: 0 -2px 0 0 var(--den-accent-signal);
+}
+
+.queue-row--drop-after {
+  box-shadow: 0 2px 0 0 var(--den-accent-signal);
+}
+
+.queue-row__grip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.queue-row:hover .queue-row__grip,
+.queue-row__grip:focus-visible {
+  color: var(--den-text-muted);
+}
+
+.queue-row__grip:active {
+  cursor: grabbing;
+}
+
+.queue-row__text {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0.15rem 0.2rem;
+  text-align: left;
+  font: inherit;
+  color: var(--den-text);
+  cursor: text;
+  overflow: hidden;
+}
+
+.queue-row__label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.queue-row__edit {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  font: inherit;
+  color: var(--den-text);
+  background: var(--den-control-bg);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-border));
+  border-radius: 6px;
+  padding: 0.25rem 0.35rem;
+  outline: none;
+}
+
+.queue-row__actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  opacity: 0;
+}
+
+.queue-row:hover .queue-row__actions,
+.queue-row__actions:focus-within {
+  opacity: 1;
+}
+
+.queue-row__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.queue-row__action--danger:hover {
+  color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 9%, transparent);
+}
+
+.queue-connector {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 0 0 1.6rem;
+}
+
+.queue-connector__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  background: transparent;
+  color: transparent;
+  font-size: var(--text-den-micro);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.queue-card__scroll:hover .queue-connector__toggle,
+.queue-connector__toggle:focus-visible {
+  color: var(--den-text-muted);
+}
+
+.queue-connector__toggle:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+
+.queue-connector--linked .queue-connector__toggle {
+  color: var(--den-accent-text);
+}
+
+.queue-connector__label {
+  line-height: 1;
+}
+
+.queue-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--den-radius-pill);
+  border: 1px solid var(--den-border);
+  background: var(--den-surface-elevated);
+  color: var(--den-text-muted);
+  cursor: pointer;
+  font-size: var(--text-den-micro);
+  box-shadow: var(--den-shadow-sm);
+}
+
+.queue-pill:hover {
+  color: var(--den-text);
+  border-color: color-mix(in srgb, var(--den-text-muted) 40%, var(--den-border));
+}
+
+.queue-pill__count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text);
+}
+
+.queue-pill__label {
+  letter-spacing: 0.01em;
+}
+
+.queue-pill__paused {
+  display: inline-flex;
+  align-items: center;
+  color: var(--den-accent-text);
+}
+
+

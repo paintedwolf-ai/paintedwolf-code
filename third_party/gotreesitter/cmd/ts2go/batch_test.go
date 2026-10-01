@@ -1,0 +1,188 @@
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestParseManifestWithExtensions(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "manifest.txt")
+	content := `
+# name repo subdir extensions
+python https://github.com/tree-sitter/tree-sitter-python src .py,.pyi
+go https://github.com/tree-sitter/tree-sitter-go src .go
+`
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ParseManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(entries))
+	}
+	if len(entries[0].Extensions) != 2 {
+		t.Fatalf("python extensions = %d, want 2", len(entries[0].Extensions))
+	}
+	if entries[0].Extensions[0] != ".py" || entries[0].Extensions[1] != ".pyi" {
+		t.Fatalf("python extensions = %#v", entries[0].Extensions)
+	}
+}
+
+func TestParseManifestWithCommit(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "manifest.txt")
+	content := `
+# name repo commit subdir extensions
+html https://github.com/tree-sitter/tree-sitter-html 73a3947324f6efddf9e17c0ea58d454843590cc0 src .html,.htm
+`
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ParseManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(entries))
+	}
+	if entries[0].Commit != "73a3947324f6efddf9e17c0ea58d454843590cc0" {
+		t.Fatalf("commit = %q", entries[0].Commit)
+	}
+	if entries[0].Subdir != "src" {
+		t.Fatalf("subdir = %q", entries[0].Subdir)
+	}
+	if len(entries[0].Extensions) != 2 {
+		t.Fatalf("extensions = %d, want 2", len(entries[0].Extensions))
+	}
+}
+
+func TestSafeFileBase(t *testing.T) {
+	if got := safeFileBase("tree-sitter-c-sharp"); got != "tree_sitter_c_sharp" {
+		t.Fatalf("safeFileBase got %q", got)
+	}
+}
+
+func TestGrammargenOwnedBlobSkipMessageUsesSafeEmitCommand(t *testing.T) {
+	for _, name := range []string{"go", "yaml"} {
+		t.Run(name, func(t *testing.T) {
+			message := grammargenOwnedBlobSkipMessage(name)
+			want := "go run ./cmd/grammargen emit " + name + " -bin grammars/grammar_blobs/" + name + ".bin"
+			if !strings.Contains(message, want) {
+				t.Fatalf("skip message = %q, want command %q", message, want)
+			}
+			if strings.Contains(message, "-lr-split") {
+				t.Fatalf("skip message contains unsafe %s -lr-split guidance: %q", name, message)
+			}
+		})
+	}
+}
+
+func TestUpstreamGrammarPatchPath(t *testing.T) {
+	dir := t.TempDir()
+	if got := upstreamGrammarPatchPath("yaml", dir); got != filepath.Join(dir, "patches", "tree-sitter-yaml-multiline-quoted-scalars.patch") {
+		t.Fatalf("yaml patch path = %q", got)
+	}
+	if got := upstreamGrammarPatchPath("go", dir); got != "" {
+		t.Fatalf("go patch path = %q, want empty", got)
+	}
+}
+
+func TestLanguageFuncNameSanitize(t *testing.T) {
+	if got := languageFuncName("c-sharp"); got != "CSharpLanguage" {
+		t.Fatalf("languageFuncName = %q, want %q", got, "CSharpLanguage")
+	}
+}
+
+func TestFindParserC(t *testing.T) {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(srcDir, "parser.c")
+	if err := os.WriteFile(p, []byte("/* parser */"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := findParserC(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != p {
+		t.Fatalf("findParserC = %q, want %q", got, p)
+	}
+}
+
+func TestRunBatchManifestLocalRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "queries"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "src", "parser.c"), []byte(miniParserC), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "queries", "highlights.scm"), []byte("(number) @number\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, strings.TrimSpace(string(out)))
+		}
+	}
+	run(repo, "init")
+	run(repo, "config", "user.email", "test@example.com")
+	run(repo, "config", "user.name", "test")
+	run(repo, "add", ".")
+	run(repo, "commit", "-m", "init")
+
+	manifest := filepath.Join(root, "manifest.txt")
+	line := "testlang " + repo + " src .tl\n"
+	if err := os.WriteFile(manifest, []byte(line), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	outDir := filepath.Join(root, "out")
+	if err := RunBatchManifest(manifest, outDir, "grammars", true); err != nil {
+		t.Fatal(err)
+	}
+
+	loaderFile := filepath.Join(outDir, "embedded_grammars_gen.go")
+	if _, err := os.Stat(loaderFile); err != nil {
+		t.Fatalf("missing generated embedded grammar loader file: %v", err)
+	}
+	loaderSrc, err := os.ReadFile(loaderFile)
+	if err != nil {
+		t.Fatalf("read generated loader: %v", err)
+	}
+	if !strings.Contains(string(loaderSrc), "func TestlangLanguage() *gotreesitter.Language") {
+		t.Fatal("generated loader missing TestlangLanguage wrapper")
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "grammar_blobs", "testlang.bin")); err != nil {
+		t.Fatalf("missing generated grammar blob file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "testlang_register.go")); err != nil {
+		t.Fatalf("missing generated register file: %v", err)
+	}
+}

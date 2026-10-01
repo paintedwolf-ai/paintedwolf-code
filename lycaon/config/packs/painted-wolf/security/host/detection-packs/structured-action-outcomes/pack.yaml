@@ -1,0 +1,7 @@
+id: structured-action-outcomes
+label: Structured action outcomes
+description: >-
+  Consequence-oriented detections for registry-identified MCP tools and exact
+  native action facts, including financial movement, communication, secrets,
+  identity and privilege, destructive and recovery impact, public exposure,
+  deployment and software distribution, and costly resource provisioning.

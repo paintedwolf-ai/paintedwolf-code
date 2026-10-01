@@ -1,0 +1,49 @@
+{
+  "id": "conf-core-anchor-fact-reports-the-core-spelling",
+  "title": "The core fact anchor reports the core identifier however the host spells the moment locally",
+  "covers": [
+    "OAR-CONF-29",
+    "OAR-PROF-1",
+    "OAR-FACT-15"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.output",
+      "id": "READS_ANCHOR",
+      "effect": "warn",
+      "when": "anchor == \"model.output\""
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "gateway.after_model",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "gateway.after_model"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "READS_ANCHOR"
+  }
+}

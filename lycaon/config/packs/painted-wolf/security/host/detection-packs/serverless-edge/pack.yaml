@@ -1,0 +1,5 @@
+id: serverless-edge
+label: Serverless and edge
+description: >-
+  Serverless and edge platform operations that remove a deployed stack, change a
+  binding or secret, or publish a new version to live traffic.

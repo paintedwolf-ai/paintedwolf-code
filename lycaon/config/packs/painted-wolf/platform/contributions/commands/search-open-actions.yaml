@@ -1,0 +1,7 @@
+id: painted-wolf/platform:search-open-actions
+title: "Search actions"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "search.openActions"

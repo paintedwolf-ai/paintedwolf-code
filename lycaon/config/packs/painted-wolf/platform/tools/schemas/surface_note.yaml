@@ -1,0 +1,46 @@
+description: >-
+  Post a concise, grounded mid-turn note for the user, then keep working — this
+  does not end the turn. Use it for meaningful progress or expectation changes.
+  Say what happened and what comes next. Cite at least one cited_evidence or cited_urls entry. Carries
+  artifact_ids, which is how a still reaches the user mid-run. For a question
+  use ask_user; the final answer is the no-tool closeout.
+schema:
+  type: object
+  properties:
+    summary:
+      type: string
+      minLength: 1
+      maxLength: 600
+      description: >-
+        One short paragraph the user should see now, displayed verbatim.
+        Grounding comes from the citation fields below.
+    cited_evidence:
+      type: array
+      maxItems: 32
+      items:
+        type: string
+        minLength: 1
+      description: >-
+        A handle copied verbatim from a [kind#ordinal] tag you have seen
+        (read#3, command#11), or path:line with a single line number
+        (src/a.go:42) — one line, not a range, not a bare path.
+    cited_urls:
+      type: array
+      maxItems: 16
+      description: >-
+        Absolute http(s) URLs observed in this session.
+      items:
+        type: string
+        minLength: 1
+    artifact_ids:
+      type: array
+      maxItems: 4
+      items:
+        type: string
+        minLength: 1
+      description: >-
+        Producer artifact_id values to show on this note — the mid-run present
+        path, since a capture otherwise stays folded in the tool row that took
+        it. Each id names a still this turn produced.
+  required: [summary]
+  additionalProperties: false

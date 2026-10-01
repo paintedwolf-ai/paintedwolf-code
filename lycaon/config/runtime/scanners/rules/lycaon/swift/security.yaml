@@ -1,0 +1,519 @@
+rules:
+- id: lycaon.swift.secure-coding-disabled
+  languages:
+  - swift
+  severity: ERROR
+  message: An unarchiver explicitly disables secure coding
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: 'func $HANDLER(..., $DECODER: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: Foundation
+        symbol:
+        - NSKeyedUnarchiver
+        imports: &nskeyedunarchiver_imports
+          exports:
+          - module: FoundationNetworking
+            symbol: NSKeyedUnarchiver
+            absent: true
+          - module: Vapor
+            symbol: NSKeyedUnarchiver
+            origin:
+              module: Foundation
+              symbol:
+              - NSKeyedUnarchiver
+          - module: SQLKit
+            symbol: NSKeyedUnarchiver
+            absent: true
+    - focus-metavariable: $DECODER
+    exact: true
+    model-type: Foundation.NSKeyedUnarchiver
+  - patterns:
+    - pattern: $TYPE(...)
+    - metavariable-name:
+        metavariable: $TYPE
+        module: Foundation
+        symbol:
+        - NSKeyedUnarchiver
+        imports: *nskeyedunarchiver_imports
+    exact: true
+    model-type: Foundation.NSKeyedUnarchiver
+  pattern-sinks:
+  - patterns:
+    - pattern: $DECODER.requiresSecureCoding = false
+    - focus-metavariable: $DECODER
+    requires-model-type:
+      metavariable: $DECODER
+      type: Foundation.NSKeyedUnarchiver
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: HIGH
+    technology:
+    - swift
+    references:
+    - https://developer.apple.com/documentation/foundation/nskeyedunarchiver/requiressecurecoding
+    - https://github.com/vapor/vapor/blob/4.115.1/Sources/Vapor/Exports.swift
+    - https://github.com/vapor/sql-kit/blob/3.33.2/Sources/SQLKit/Exports.swift
+    notes: >-
+      Foundation NSKeyedUnarchiver construction and explicitly typed parameters establish the receiver. Unrelated
+      properties with the same spelling are not secure-coding findings.
+    model-baseline: >-
+      Vapor 4.115.1 and SQLKit 3.33.2; Apple Swift 6.2.4 / macOS SDK 26.2; FoundationNetworking sources from
+      Swift 6.1. Vapor export facts review AsyncKit 1.15.0, ConsoleKit 4.14.0, RoutingKit 4.9.0, WebSocketKit
+      2.13.0, MultipartKit 4.2.1, Logging 1.0.0, and Crypto 1.0.0. Package versions are not resolved dynamically.
+- id: lycaon.swift.vapor-command-injection
+  languages:
+  - swift
+  severity: ERROR
+  message: Vapor request input reaches an explicit shell command
+  mode: taint
+  pattern-sources:
+  - &vapor_request_parameter
+    patterns:
+    - pattern: 'func $HANDLER(..., $REQ: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: Vapor
+        symbol:
+        - Request
+        imports:
+          exports:
+          - module: Foundation
+            symbol: Request
+            absent: true
+          - module: FoundationNetworking
+            symbol: Request
+            absent: true
+          - module: SQLKit
+            symbol: Request
+            absent: true
+    - focus-metavariable: $REQ
+    exact: true
+    model-type: Vapor.Request
+    label: HTTP_REQUEST
+  - &vapor_request_value
+    patterns:
+    - pattern-either:
+      - pattern: '$REQ.query.get(String.self, at: ...)'
+      - pattern: '$REQ.content.get(String.self, at: ...)'
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: Vapor.Request
+  - &vapor_query_container
+    pattern: $REQ.query
+    exact: true
+    label: HTTP_QUERY
+    model-type: Vapor.URLQueryContainer
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: Vapor.Request
+  - &vapor_query_value
+    pattern: '$CONTAINER.get(String.self, at: ...)'
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_QUERY
+    requires-model-type:
+      metavariable: $CONTAINER
+      type: Vapor.URLQueryContainer
+  - &vapor_content_container
+    pattern: $REQ.content
+    exact: true
+    label: HTTP_CONTENT
+    model-type: Vapor.ContentContainer
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: Vapor.Request
+  - &vapor_content_value
+    pattern: '$CONTAINER.get(String.self, at: ...)'
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_CONTENT
+    requires-model-type:
+      metavariable: $CONTAINER
+      type: Vapor.ContentContainer
+  - &vapor_application_parameter
+    patterns:
+    - pattern: 'func $FUNCTION(..., $APP: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: Vapor
+        symbol:
+        - Application
+        imports: &application_imports
+          exports:
+          - module: Foundation
+            symbol: Application
+            absent: true
+          - module: FoundationNetworking
+            symbol: Application
+            absent: true
+          - module: SQLKit
+            symbol: Application
+            absent: true
+    - focus-metavariable: $APP
+    exact: true
+    model-type: Vapor.Application
+  - &vapor_application_constructor
+    patterns:
+    - pattern-either:
+      - pattern: $TYPE(...)
+      - pattern: $TYPE.make(...)
+    - metavariable-name:
+        metavariable: $TYPE
+        module: Vapor
+        symbol:
+        - Application
+        imports: *application_imports
+    exact: true
+    model-type: Vapor.Application
+  - &vapor_request_callback
+    patterns:
+    - pattern-either:
+      - pattern: $APP.get(..., $HANDLER)
+      - pattern: $APP.post(..., $HANDLER)
+      - pattern: $APP.put(..., $HANDLER)
+      - pattern: $APP.patch(..., $HANDLER)
+      - pattern: $APP.delete(..., $HANDLER)
+      - pattern: $APP.head(..., $HANDLER)
+      - pattern: $APP.on(..., $HANDLER)
+    - focus-metavariable: $HANDLER
+    exact: true
+    to-parameter:
+      index: 0
+      arities:
+      - 1
+    label: HTTP_REQUEST
+    model-type: Vapor.Request
+    requires-model-type:
+      metavariable: $APP
+      type: Vapor.Application
+  pattern-sinks:
+  - patterns:
+    - pattern: '$PROCESS.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", $X])'
+    - metavariable-name:
+        metavariable: $PROCESS
+        module: Foundation
+        symbol:
+        - Process
+        imports: &process_imports
+          exports:
+          - module: FoundationNetworking
+            symbol: Process
+            absent: true
+          - module: Vapor
+            symbol: Process
+            origin:
+              module: Foundation
+              symbol:
+              - Process
+          - module: SQLKit
+            symbol: Process
+            absent: true
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+  - patterns:
+    - pattern: '$PROCESS.run($URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", $X], ...)'
+    - metavariable-name:
+        metavariable: $PROCESS
+        module: Foundation
+        symbol:
+        - Process
+        imports: *process_imports
+    - metavariable-name:
+        metavariable: $URL
+        module: Foundation
+        symbol:
+        - URL
+        imports:
+          exports:
+          - module: FoundationNetworking
+            symbol: URL
+            absent: true
+          - module: Vapor
+            symbol: URL
+            origin:
+              module: Foundation
+              symbol:
+              - URL
+          - module: SQLKit
+            symbol: URL
+            absent: true
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - swift
+    references:
+    - https://docs.vapor.codes/advanced/request/
+    - https://developer.apple.com/documentation/foundation/process/run(_:arguments:terminationhandler:)
+    - https://github.com/vapor/vapor/blob/4.115.1/Sources/Vapor/Exports.swift
+    - https://github.com/vapor/sql-kit/blob/3.33.2/Sources/SQLKit/Exports.swift
+    notes: >-
+      Vapor 4 Request query/content String values flow to verified Foundation Process launch calls using /bin/sh
+      -c. Plain subprocess arguments are not shell code. Instance Process configuration and cross-file wrappers
+      require additional models.
+    model-baseline: >-
+      Vapor 4.115.1 and SQLKit 3.33.2; Apple Swift 6.2.4 / macOS SDK 26.2; FoundationNetworking sources from
+      Swift 6.1. Vapor export facts review AsyncKit 1.15.0, ConsoleKit 4.14.0, RoutingKit 4.9.0, WebSocketKit
+      2.13.0, MultipartKit 4.2.1, Logging 1.0.0, and Crypto 1.0.0. Package versions are not resolved dynamically.
+  options:
+    taint_assume_safe_indexes: true
+- id: lycaon.swift.vapor-path-traversal
+  languages:
+  - swift
+  severity: ERROR
+  message: Vapor request input selects a server file path
+  mode: taint
+  pattern-sources:
+  - *vapor_request_parameter
+  - *vapor_request_value
+  - *vapor_query_container
+  - *vapor_query_value
+  - *vapor_content_container
+  - *vapor_content_value
+  - *vapor_application_parameter
+  - *vapor_application_constructor
+  - *vapor_request_callback
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: '$REQ.fileio.streamFile(at: $X, ...)'
+      - pattern: '$REQ.fileio.asyncStreamFile(at: $X, ...)'
+      - pattern: '$REQ.fileio.collectFile(at: $X, ...)'
+      - pattern: '$REQ.fileio.readFile(at: $X, ...)'
+      - pattern: '$REQ.fileio.writeFile(..., at: $X)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $REQ
+      type: Vapor.Request
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - swift
+    references:
+    - https://api.vapor.codes/vapor/fileio/
+    - https://github.com/vapor/vapor/blob/4.115.1/Sources/Vapor/Exports.swift
+    - https://github.com/vapor/sql-kit/blob/3.33.2/Sources/SQLKit/Exports.swift
+    notes: >-
+      Vapor 4 Request fileio reads and writes use the modeled path argument. Write contents do not select the
+      path; joining an untrusted suffix to a directory is not containment validation.
+    model-baseline: >-
+      Vapor 4.115.1 and SQLKit 3.33.2; Apple Swift 6.2.4 / macOS SDK 26.2; FoundationNetworking sources from
+      Swift 6.1. Vapor export facts review AsyncKit 1.15.0, ConsoleKit 4.14.0, RoutingKit 4.9.0, WebSocketKit
+      2.13.0, MultipartKit 4.2.1, Logging 1.0.0, and Crypto 1.0.0. Package versions are not resolved dynamically.
+  options:
+    taint_assume_safe_indexes: true
+- id: lycaon.swift.vapor-sql-injection
+  languages:
+  - swift
+  severity: ERROR
+  message: Vapor request input reaches executed raw SQL text
+  mode: taint
+  pattern-sources:
+  - *vapor_request_parameter
+  - *vapor_request_value
+  - *vapor_query_container
+  - *vapor_query_value
+  - *vapor_content_container
+  - *vapor_content_value
+  - patterns:
+    - pattern: 'func $HANDLER(..., $DB: $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: SQLKit
+        symbol:
+        - SQLDatabase
+        imports: &sqldatabase_imports
+          exports:
+          - module: Foundation
+            symbol: SQLDatabase
+            absent: true
+          - module: FoundationNetworking
+            symbol: SQLDatabase
+            absent: true
+          - module: Vapor
+            symbol: SQLDatabase
+            absent: true
+    - focus-metavariable: $DB
+    exact: true
+    model-type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: 'func $HANDLER(..., $DB: any $TYPE, ...) { ... }'
+    - metavariable-name:
+        metavariable: $TYPE
+        module: SQLKit
+        symbol:
+        - SQLDatabase
+        imports: *sqldatabase_imports
+    - focus-metavariable: $DB
+    exact: true
+    model-type: SQLKit.SQLDatabase
+  - *vapor_application_parameter
+  - *vapor_application_constructor
+  - *vapor_request_callback
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.raw($QUERY($X)).run(...)
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: &sqlquerystring_imports
+          exports:
+          - module: Foundation
+            symbol: SQLQueryString
+            absent: true
+          - module: FoundationNetworking
+            symbol: SQLQueryString
+            absent: true
+          - module: Vapor
+            symbol: SQLQueryString
+            absent: true
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(unsafeRaw: $X)...").run(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(raw: $X)...").run(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: $DB.raw($QUERY($X)).all(...)
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: *sqlquerystring_imports
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(unsafeRaw: $X)...").all(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(raw: $X)...").all(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: $DB.raw($QUERY($X)).first(...)
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: *sqlquerystring_imports
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(unsafeRaw: $X)...").first(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw("...\(raw: $X)...").first(...)'
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw($QUERY(stringLiteral: $X)).run(...)'
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: *sqlquerystring_imports
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw($QUERY(stringLiteral: $X)).all(...)'
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: *sqlquerystring_imports
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  - patterns:
+    - pattern: '$DB.raw($QUERY(stringLiteral: $X)).first(...)'
+    - metavariable-name:
+        metavariable: $QUERY
+        module: SQLKit
+        symbol:
+        - SQLQueryString
+        imports: *sqlquerystring_imports
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: SQLKit.SQLDatabase
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - swift
+    references:
+    - https://raw.githubusercontent.com/vapor/sql-kit/3.33.2/Sources/SQLKit/Expressions/Basics/SQLQueryString.swift
+    - https://github.com/vapor/vapor/blob/4.115.1/Sources/Vapor/Exports.swift
+    - https://github.com/vapor/sql-kit/blob/3.33.2/Sources/SQLKit/Exports.swift
+    notes: >-
+      SQLKit 3.33.2: SQLQueryString String constructors and raw/unsafeRaw interpolation are dangerous only
+      when the typed SQLDatabase builder is executed. bind, literal, and ident interpolation are distinct safe
+      operations. Stored builders, arbitrary SQLExpression implementations, and cross-file database factories
+      require additional models.
+    model-baseline: >-
+      Vapor 4.115.1 and SQLKit 3.33.2; Apple Swift 6.2.4 / macOS SDK 26.2; FoundationNetworking sources from
+      Swift 6.1. Vapor export facts review AsyncKit 1.15.0, ConsoleKit 4.14.0, RoutingKit 4.9.0, WebSocketKit
+      2.13.0, MultipartKit 4.2.1, Logging 1.0.0, and Crypto 1.0.0. Package versions are not resolved dynamically.
+  options:
+    taint_assume_safe_indexes: true

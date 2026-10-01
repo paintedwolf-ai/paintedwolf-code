@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-search-open
+slot: "app_menu.go"
+command: painted-wolf/platform:search-open
+group: "0"
+order: 1
+label: "Crossbar…"

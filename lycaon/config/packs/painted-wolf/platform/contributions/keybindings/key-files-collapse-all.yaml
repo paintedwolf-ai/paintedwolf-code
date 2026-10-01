@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-collapse-all
+command: painted-wolf/platform:files-collapse-all
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+C"
+  windows:
+    - "Mod+Shift+C"
+  linux:
+    - "Mod+Shift+C"

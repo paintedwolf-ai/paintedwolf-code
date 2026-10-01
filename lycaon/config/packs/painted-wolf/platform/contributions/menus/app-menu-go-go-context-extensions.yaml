@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-context-extensions
+slot: "app_menu.go"
+command: painted-wolf/platform:go-context-extensions
+group: "2"
+order: 11
+label: "Extensions"

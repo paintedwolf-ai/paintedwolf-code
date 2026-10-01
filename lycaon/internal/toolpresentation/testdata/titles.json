@@ -1,0 +1,305 @@
+[
+  {
+    "tool": "handoff_init",
+    "args": { "agent": "worker-opaque", "session_id": "session-opaque" },
+    "title": "Worker coordination"
+  },
+  {
+    "tool": "command_output",
+    "args": {
+      "handle": "7441efdd-29d7-4cd9-899e-3c542d62d8ba",
+      "cursor": 0
+    },
+    "title": "Output from a command"
+  },
+  {
+    "tool": "command_stop",
+    "args": {
+      "handle": "id"
+    },
+    "title": "Command process"
+  },
+  {
+    "tool": "terminal_send",
+    "args": {
+      "id": "pty",
+      "input": "secret input"
+    },
+    "title": "Terminal session"
+  },
+  {
+    "tool": "held_result",
+    "args": {
+      "handle": "held-2"
+    },
+    "title": "Held tool call"
+  },
+  {
+    "tool": "preview_overlay",
+    "args": {
+      "overlay_id": "job",
+      "path": "src/app.ts"
+    },
+    "title": "src/app.ts"
+  },
+  {
+    "tool": "worker_cancel",
+    "args": {
+      "job_id": "job",
+      "reason": "Superseded"
+    },
+    "title": "Superseded"
+  },
+  {
+    "tool": "answer_decision",
+    "args": {
+      "job_id": "job",
+      "option": "Use local data"
+    },
+    "title": "Use local data"
+  },
+  {
+    "tool": "scan_summary",
+    "args": {
+      "scan_ids": [
+        "one",
+        "two"
+      ]
+    },
+    "title": "Scan results"
+  },
+  {
+    "tool": "scan_compare",
+    "args": {
+      "old_scan_id": "old",
+      "new_scan_id": "new"
+    },
+    "title": "Baseline → current scan"
+  },
+  {
+    "tool": "command",
+    "args": {
+      "pipeline": [
+        "git log --oneline",
+        "head -20",
+        "wc -l"
+      ]
+    },
+    "title": "git log --oneline | head -20 +1 stage"
+  },
+  {
+    "tool": "diff",
+    "args": {
+      "path_a": "old.go",
+      "path_b": "new.go"
+    },
+    "title": "old.go → new.go"
+  },
+  {
+    "tool": "git_compare",
+    "args": {
+      "base_ref": "main",
+      "head_ref": "feature"
+    },
+    "title": "main → feature"
+  },
+  {
+    "tool": "delete",
+    "args": {
+      "paths": [
+        "one.ts",
+        "two.ts",
+        "three.ts"
+      ]
+    },
+    "title": "one.ts +2 more"
+  },
+  {
+    "tool": "move",
+    "args": {
+      "moves": [
+        {
+          "from": "a",
+          "to": "b"
+        },
+        {
+          "from": "c",
+          "to": "d"
+        }
+      ]
+    },
+    "title": "a → b +1 more"
+  },
+  {
+    "tool": "workflow_compose",
+    "args": {
+      "manifest_yaml": "id: opaque\nname: Review"
+    },
+    "title": "Workflow definition"
+  },
+  {
+    "tool": "page_act",
+    "args": {
+      "id": "page",
+      "actions": [
+        {
+          "type": "wait_for",
+          "text": "Ready"
+        },
+        {
+          "type": "click",
+          "role": "button",
+          "text": "Save"
+        }
+      ],
+      "record": {}
+    },
+    "title": "click Save · recorded"
+  },
+  {
+    "tool": "page_act",
+    "args": {
+      "actions": [
+        {
+          "type": "drag",
+          "testid": "card",
+          "to": {
+            "selector": "#zone"
+          }
+        }
+      ]
+    },
+    "title": "drag card → #zone"
+  },
+  {
+    "tool": "mcp__external",
+    "args": {
+      "id": "opaque",
+      "token": "never a title"
+    },
+    "title": ""
+  },
+  {
+    "tool": "mcp__external",
+    "args": {
+      "description": "Find matching records",
+      "id": "opaque"
+    },
+    "title": "Find matching records"
+  },
+  {
+    "tool": "read",
+    "args": {
+      "path": "src/main.go"
+    },
+    "title": "src/main.go"
+  },
+  {
+    "tool": "recall",
+    "args": {
+      "query": "auth",
+      "widen": "project"
+    },
+    "title": "all chats in this project · auth"
+  },
+  {
+    "tool": "task",
+    "args": {
+      "agent_type": "implementer",
+      "brief": {
+        "goal": "Fix login"
+      }
+    },
+    "title": "implementer · Fix login"
+  },
+  {
+    "tool": "view_image",
+    "args": {
+      "handle": "opaque"
+    },
+    "title": "Image artifact"
+  },
+  {
+    "tool": "render_view",
+    "args": {
+      "handle": "opaque",
+      "caption": "Login mockup"
+    },
+    "title": "Login mockup"
+  },
+  {
+    "tool": "terminal_close",
+    "args": {
+      "id": "opaque"
+    },
+    "title": "Terminal session"
+  },
+  {
+    "tool": "held_stop",
+    "args": {
+      "handle": "held-1"
+    },
+    "title": "Held tool call"
+  },
+  {
+    "tool": "delegate_status",
+    "args": {
+      "delegation_id": "opaque"
+    },
+    "title": "Delegated task"
+  },
+  {
+    "tool": "extend_worker_budget",
+    "args": {
+      "job_id": "opaque",
+      "max_tool_loops": 80
+    },
+    "title": "Worker task"
+  },
+  {
+    "tool": "delete",
+    "args": {
+      "paths": [
+        "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂",
+        "next"
+      ]
+    },
+    "title": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂… +1 more"
+  },
+  {
+    "tool": "git_compare",
+    "args": {
+      "base_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "head_ref": "feature"
+    },
+    "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… → feature"
+  },
+  {
+    "tool": "request_tools",
+    "args": {
+      "need": "discovery:opaque-continuation"
+    },
+    "title": "Available catalog"
+  },
+  {
+    "tool": "request_tools",
+    "args": {
+      "need": "inspect source"
+    },
+    "title": "inspect source"
+  },
+  {
+    "tool": "skills_read",
+    "args": {
+      "need": "discovery:opaque-continuation"
+    },
+    "title": "Available catalog"
+  },
+  {
+    "tool": "skills_read",
+    "args": {
+      "need": "inspect source"
+    },
+    "title": "inspect source"
+  }
+]

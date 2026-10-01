@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-convert-indentation-to-spaces
+title: "Convert indentation to spaces"
+scope: "files"
+keywords:
+  - "tabs to spaces"
+  - "indent spaces"
+  - "convert indent"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.convertIndentationToSpaces"

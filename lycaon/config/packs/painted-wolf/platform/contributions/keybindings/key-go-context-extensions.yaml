@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-extensions
+command: painted-wolf/platform:go-context-extensions
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader E"
+  windows:
+    - "Leader E"
+  linux:
+    - "Leader E"

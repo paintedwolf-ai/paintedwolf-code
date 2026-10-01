@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT
+kind: policy
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.cap
+    - paintedwolf.source_revision
+    - paintedwolf.verify_required
+    - paintedwolf.verifier_pass
+when: paintedwolf.verify_required && !paintedwolf.verifier_pass
+effect: block
+copy:
+  what: An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}.
+  cause: No current passing check satisfies this workflow gate.
+  why: A required test gate and permission to report a blocker are separate facts.
+  fix: >-
+    Run the required check when useful recovery is possible. Both verify and command
+    produce evidence; a different command cannot substitute for a selected verify.test check.
+    Inspect the actual terminal outcome, not declared_command_match or a running handle.
+  instead: >-
+    If no justified recovery remains, report the limitation now with verification.method
+    blocked and a reason in the trailing closeout JSON. This ends the turn without
+    passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a
+    recovery ceiling, not a quota. Do not repeat unchanged failures.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_evidence
+x-paintedwolf-message: Required workflow validation is unresolved
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {source_revision: revision-3, cap: 3}
+    expect_contains: ['Code: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT', revision-3, verify.test, blocked]

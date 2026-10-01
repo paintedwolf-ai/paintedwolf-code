@@ -1,0 +1,274 @@
+/* Find highlights and editor command surfaces. */
+
+.den-find-bar-host {
+  position: fixed;
+  top: calc(var(--den-titlebar-inset) + var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+  left: var(--den-nav-slot-width, 0);
+  right: 0;
+  z-index: 40;
+  container: den-editor-command-bar-host / inline-size;
+  pointer-events: none;
+}
+
+.den-find-bar-host .den-find-bar {
+  pointer-events: auto;
+}
+
+/* Files mounts commands inside the editor pane. */
+.den-editor-command-bar-host--files {
+  position: absolute;
+  top: calc(var(--den-files-pane-chrome-h) + 8px);
+  right: 12px;
+  left: auto;
+  z-index: 40;
+  width: min(64rem, calc(100% - 24px));
+  container: den-editor-command-bar-host / inline-size;
+  pointer-events: none;
+}
+
+.den-editor-command-bar-host--files .den-editor-command-bar {
+  width: 100%;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  box-shadow: var(--den-shadow-lg);
+  pointer-events: auto;
+}
+
+.den-editor-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 2.75rem;
+  padding: 7px 8px;
+  background: var(--den-background);
+  color: var(--den-text);
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-hint);
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-editor-command-bar__label {
+  flex: 0 0 auto;
+  padding-inline: 2px;
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/*
+ * Find lays out in lanes that wrap: the query lane keeps the field, the count,
+ * and navigation together on one row; options drop beneath it before anything
+ * clips; replace always takes its own row. Every mount declares the same
+ * container, so the label tiers below answer the bar's own width.
+ */
+.den-editor-command-bar--find {
+  position: relative;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  /* Reserved for the corner close button. */
+  padding-right: calc(1.75rem + 14px);
+}
+
+.den-find-bar__lane {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.den-find-bar__lane--query {
+  flex: 1 1 20rem;
+}
+
+.den-find-bar__lane--options {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.den-find-bar__lane--replace {
+  flex: 1 0 100%;
+}
+
+.den-editor-command-bar--find .den-editor-command-bar__label {
+  /* Aligns the replace field under the find field. */
+  min-width: 4rem;
+}
+
+/* The corner button stays put however many rows the bar takes. */
+.den-editor-command-bar--find .den-find-bar__close {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  /* Field height, so the corner centres on the query row. */
+  min-height: max(24px, calc(var(--text-den-input) * 2 + 2px));
+}
+
+.den-find-bar__replace-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--den-text-muted);
+}
+
+.den-find-bar__replace-toggle svg {
+  transition: transform var(--den-duration) var(--den-ease);
+  transform: rotate(-90deg);
+}
+
+.den-find-bar__replace-toggle[aria-expanded="true"] svg {
+  transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-find-bar__replace-toggle svg {
+    transition: none;
+  }
+}
+
+.den-editor-command-bar--goto .den-editor-command-bar__input {
+  width: auto;
+  min-width: 6rem;
+  font-family: var(--den-font-mono);
+}
+
+.den-editor-command-bar__primary {
+  padding-inline: 0.7rem;
+  border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
+  background: var(--den-tint-1);
+  font-weight: 600;
+}
+
+.den-editor-command-bar__close {
+  border-color: transparent;
+  background: transparent;
+  color: var(--den-text-muted);
+}
+
+.den-editor-command-bar__error {
+  grid-column: 2 / -1;
+  color: var(--den-danger-text);
+  font-size: var(--text-den-caption);
+}
+
+.den-find-bar__compact-label {
+  display: none;
+}
+
+/* Below the width the wrapped options row needs, labels go to their marks. */
+@container den-editor-command-bar-host (max-width: 520px) {
+  .den-find-bar__full-label {
+    display: none;
+  }
+
+  .den-find-bar__compact-label {
+    display: inline;
+  }
+}
+
+/* The field names go last: both fields still carry a placeholder. */
+@container den-editor-command-bar-host (max-width: 420px) {
+  .den-editor-command-bar--find .den-editor-command-bar__label {
+    position: absolute;
+    width: 1px;
+    min-width: 0;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.den-find-bar__toggle {
+  position: relative;
+  display: flex;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 0.35rem;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.den-find-bar__toggle:has(input:checked) {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 50%, var(--den-line));
+  background: var(--den-tint-2);
+  color: var(--den-accent-text);
+}
+
+.den-find-bar__toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.den-find-bar__toggle:focus-within {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+
+.den-find-bar__toggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.den-editor-command-bar__button {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.den-editor-command-bar__button:hover:not(:disabled) {
+  background: var(--den-tint-1);
+}
+
+.den-editor-command-bar__button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.den-editor-command-bar__button:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+
+.den-findable-root {
+  position: relative;
+}
+
+.den-find-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.den-find-mark {
+  background: color-mix(in srgb, var(--den-accent) 35%, transparent);
+  border-radius: 1px;
+  box-sizing: border-box;
+}
+
+.den-find-mark--active {
+  background: color-mix(in srgb, var(--den-accent) 55%, transparent);
+  outline: 2px solid var(--den-accent);
+  outline-offset: 1px;
+}

@@ -1,0 +1,426 @@
+entries:
+- native: read
+  replaces:
+  - habit: cat / head / sed -n
+    examples:
+    - sed -n '1,200p' docs/den.md
+    - head -n 40 README.md
+    - cat main.go
+  args_hint: Pass path with 1-based offset + limit, or ranges[] for up to 8 spans in one call; mode outline
+    for a symbol index instead of lines.
+  redirect_code: USE_READ_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+  - worker_readonly
+  - plan_review_readonly
+  - plan_write_only
+  read_habit:
+  - program: cat
+    grammar: whole_file
+  - program: head
+    grammar: leading_lines
+  - program: sed
+    grammar: quiet_line_span
+- native: find
+  replaces:
+  - habit: find(1) recursive walk
+    examples:
+    - find . -name '*.go'
+  - habit: tree(1)
+    examples:
+    - tree -L 2 src
+  command_grammar:
+  - program: find
+    grammar: find
+  - program: tree
+    grammar: tree
+  redirect_code: USE_FIND_NOT_COMMAND
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+- native: grep
+  replaces:
+  - habit: rg / grep -r
+    examples:
+    - rg Pattern
+    - grep -r foo .
+  args_hint: Pattern is always RE2 regex — ripgrep-style search works as-is; escape what you mean literally.
+  command_grammar:
+  - program: rg
+    grammar: grep
+  - program: grep
+    grammar: grep
+  redirect_code: USE_GREP_REGEX
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+- native: list_dir
+  replaces:
+  - habit: ls -la
+    examples:
+    - ls -la pkg/
+  command_grammar:
+  - program: ls
+    grammar: list_dir
+  redirect_code: USE_LIST_DIR_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+- native: jq
+  replaces:
+  - habit: jq
+    examples:
+    - jq '.data.users' config.json
+    - jq keys package.json
+  - habit: yq
+    examples:
+    - yq '.phases[0].tools' workflow.yaml
+    - yq '.package.name' Cargo.toml
+  args_hint: Pass the jq program as query and the file as path — JSON, YAML, and TOML are supported via format
+    (default auto).
+  command_grammar:
+  - program: jq
+    grammar: jq_json
+  - program: yq
+    grammar: jq_yaml
+  redirect_code: USE_JQ_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+  - worker_readonly
+  - plan_review_readonly
+  - plan_write_only
+- native: stat
+  replaces:
+  - habit: stat(1)
+    examples:
+    - stat file.go
+  command_grammar:
+  - program: stat
+    grammar: stat
+  redirect_code: USE_STAT_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+- native: wc
+  replaces:
+  - habit: wc -l
+    examples:
+    - wc -l file.go
+  command_grammar:
+  - program: wc
+    grammar: wc
+  redirect_code: USE_WC_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+- native: git_status
+  replaces:
+  - habit: git status
+    examples:
+    - git status
+    - git status --porcelain=v1 --untracked-files=all
+    - git status -s -- src
+  args_hint: 'Pages of 80 files: follow next_offset with offset until it is absent; paths[] narrows to repo-relative
+    prefixes (a file, or a directory subtree). Untracked files are listed one per file.'
+  command_grammar:
+  - program: git
+    grammar: git
+  redirect_code: USE_GIT_STATUS_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+- native: git_diff
+  replaces:
+  - habit: git diff
+    examples:
+    - git diff --cached -- src/main.go
+    - git diff --stat
+    - git diff main -- src
+    - git diff src/main.go docs
+  args_hint: 'Pages of 80 files and 5 KiB of hunks: follow next_offset with offset until it is absent; stat:true
+    surveys counts only; paths[] narrows; base_ref compares against a commit or branch; untracked:true adds
+    new files as additions.'
+  redirect_code: USE_GIT_DIFF_NATIVE
+  profiles:
+  - explore_readonly
+  - coordinator
+- native: git_log
+  replaces:
+  - habit: git log
+    examples:
+    - git log -n 20
+    - git log --oneline -6 benchmark-page
+    - git log main..feature -- src/main.go
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - worker_readonly
+  - plan_review_readonly
+- native: git_show
+  replaces:
+  - habit: git show
+    examples:
+    - git show HEAD
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - worker_readonly
+  - plan_review_readonly
+- native: git_blame
+  replaces:
+  - habit: git blame
+    examples:
+    - git blame main.go
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - worker_readonly
+  - plan_review_readonly
+- native: git_ref
+  replaces:
+  - habit: git rev-parse
+    examples:
+    - git rev-parse HEAD
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - worker_readonly
+  - plan_review_readonly
+- native: git_branches
+  replaces:
+  - habit: git branch
+    examples:
+    - git branch
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - worker_readonly
+  - plan_review_readonly
+- native: git_restore
+  replaces:
+  - habit: git restore
+    examples:
+    - git restore -- main.go
+    - git restore --staged --worktree --source=HEAD -- main.go
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+- native: git_commit
+  replaces:
+  - habit: git add paths && git commit -m
+    examples:
+    - git add main.go && git commit -m 'Update main'
+  - habit: git commit --amend -m message -- paths
+    examples:
+    - git commit --amend -m 'Complete change' -- main.go new_test.go
+    - git add -- new_test.go && git commit --amend -m 'Complete change' -- main.go new_test.go
+  args_hint: Use explicit paths and message; amend:true replaces HEAD with those paths, including new files,
+    and leaves unrelated staged changes alone.
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+- native: chmod
+  replaces:
+  - habit: chmod(1)
+    examples:
+    - chmod +x scripts/run.sh
+  command_grammar:
+  - program: chmod
+    grammar: chmod
+  redirect_code: USE_CHMOD_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: delete
+  replaces:
+  - habit: rm(1)
+    examples:
+    - rm stale.go
+  command_grammar:
+  - program: rm
+    grammar: delete
+  redirect_code: USE_DELETE_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: copy
+  replaces:
+  - habit: cp(1)
+    examples:
+    - cp fixtures/a.json internal/testdata/a.json
+  command_grammar:
+  - program: cp
+    grammar: copy
+  redirect_code: USE_COPY_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: move
+  replaces:
+  - habit: mv(1)
+    examples:
+    - mv internal/old/foo.go internal/new/foo.go
+  command_grammar:
+  - program: mv
+    grammar: move
+  redirect_code: USE_MOVE_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: mkdir
+  replaces:
+  - habit: mkdir(1)
+    examples:
+    - mkdir -p internal/newpkg/sub
+  command_grammar:
+  - program: mkdir
+    grammar: mkdir
+  redirect_code: USE_MKDIR_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: chown
+  replaces:
+  - habit: chown(1)
+    examples:
+    - chown 1000:1000 scripts/run.sh
+  command_grammar:
+  - program: chown
+    grammar: chown
+  redirect_code: USE_CHOWN_NATIVE
+  profiles:
+  - coordinator
+  - implement
+- native: diff
+  replaces:
+  - habit: diff(1)
+    examples:
+    - diff before.go after.go
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+  - worker_readonly
+  - plan_review_readonly
+  command_grammar:
+  - program: diff
+    grammar: diff
+- native: extract_archive
+  replaces:
+  - habit: unzip
+    examples:
+    - unzip archive.zip -d extracted
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+  - implement
+  command_grammar:
+  - program: unzip
+    grammar: extract_zip
+- native: http_request
+  replaces:
+  - habit: ad hoc HTTP API request
+    examples:
+    - 'curl -X POST -H ''Content-Type: application/json'' -d ''{"ok":true}'' https://api.example.test/v1'
+  replacement_example: http_request {"url":"https://api.example.test/v1","method":"POST","headers":[{"name":"Content-Type","value":"application/json"}],"body_text":"{\"ok\":true}"}
+  args_hint: 'Use http_request for API endpoints and webhooks. For reading web pages or documentation, use fetch_url instead. Use ordered headers and exactly one of body_text, body_json, body_path, or form. Set response_path
+    to land a large body in the project, or response_body: discard for status only. Loopback needs capability_request.loopback_connect.'
+  redirect_code: USE_HTTP_REQUEST_NATIVE
+  profiles:
+  - coordinator
+  - implement
+  command_grammar:
+  - program: curl
+    grammar: curl
+- native: wait
+  replaces:
+  - habit: sleep
+    examples:
+    - sleep 10
+  args_hint: Use timeout_ms; add typed conditions when a host-observed event can resume sooner.
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - explore_readonly
+  - coordinator
+  - implement
+  - worker_readonly
+  - plan_review_readonly
+  - plan_write_only
+  - web_research
+  command_grammar:
+  - program: sleep
+    grammar: sleep
+- native: edit
+  replaces:
+  - habit: sed -i / perl -pi in-place edit
+    examples:
+    - sed -i 's/old/new/g' main.go
+  args_hint: Anchor on required exact old_string; replace_all changes all exact matches only when that is intended.
+    Use code_rewrite for supported structural patterns.
+  profiles:
+  - implement
+  - plan_write_only
+- native: code_rewrite
+  replaces:
+  - habit: ast-grep / comby / gofmt -r structural rewrite
+    examples:
+    - ast-grep -p 'fmt.Println($A)' -r 'log.Info($A)'
+  args_hint: pattern + rewrite with $VAR / $$$VAR placeholders; paths[] + recursive for codemods; dry_run returns
+    a unified diff.
+  profiles:
+  - implement
+- native: git_checkout
+  replaces:
+  - habit: git checkout
+    examples:
+    - git checkout main
+    - git switch -c feature main
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+- native: git_merge
+  replaces:
+  - habit: git merge
+    examples:
+    - git merge --ff-only feature
+    - git merge main
+    - git merge --abort
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+- native: git_stash
+  replaces:
+  - habit: git stash
+    examples:
+    - git stash push -m 'Save work' -- src/main.go
+    - git stash apply stash@{0}
+    - git stash drop stash@{0}
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+- native: git_stash_list
+  replaces:
+  - habit: git stash list
+    examples:
+    - git stash list
+  redirect_code: USE_NATIVE_TOOL
+  profiles:
+  - coordinator
+  - explore_readonly
+  - worker_readonly
+  - plan_review_readonly

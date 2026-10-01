@@ -1,0 +1,472 @@
+.progress-strip {
+  align-self: stretch;
+  font-size: var(--text-den-compact);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-surface-elevated);
+  overflow: hidden;
+}
+
+.progress-strip--snapshot {
+  background: var(--den-surface);
+  border-color: color-mix(in srgb, var(--den-border) 70%, transparent);
+  color: var(--den-text-muted);
+}
+
+/* Chat snapshots match activity-card width; split views shrink-wrap them. */
+.den-chat-transcript-visual .progress-strip--snapshot {
+  align-self: flex-start;
+  width: var(--den-transcript-card-width);
+  max-width: 100%;
+}
+
+.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+  .den-split-col--chat
+  .den-chat-transcript-visual
+  .progress-strip--snapshot {
+  width: fit-content;
+}
+
+.progress-strip--snapshot .progress-strip__title {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-overline);
+  font-weight: 500;
+  letter-spacing: normal;
+}
+.progress-strip--snapshot .progress-strip__body {
+  border-top-color: color-mix(in srgb, var(--den-border) 70%, transparent);
+}
+
+.progress-strip--snapshot .progress-strip__columns {
+  max-height: none;
+}
+
+.progress-strip__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.progress-strip__toggle {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+.progress-strip__caret {
+  transform: rotate(90deg);
+}
+.progress-strip--collapsed .progress-strip__caret {
+  transform: rotate(0deg);
+}
+
+.progress-strip__title {
+  font-weight: 600;
+}
+
+/* The live count inherits the collapse button shape. */
+.progress-strip__count {
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-strip__elapsed {
+  flex-shrink: 0;
+  margin-right: auto;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.progress-strip__header .context-ring {
+  margin-left: auto;
+}
+
+.context-ring__svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.context-ring--compact {
+  gap: 0.2rem;
+  font-size: var(--text-den-micro);
+}
+
+.context-ring--compact .context-ring__svg {
+  width: 13px;
+  height: 13px;
+}
+
+.context-ring__track {
+  fill: none;
+  stroke: var(--den-border);
+  stroke-width: 2.5;
+}
+
+.context-ring__fill {
+  fill: none;
+  stroke: var(--den-accent-signal);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dasharray var(--den-duration) var(--den-ease);
+}
+
+.context-ring[data-tier="warn"] .context-ring__fill,
+.context-ring[data-tier="critical"] .context-ring__fill {
+  stroke: var(--den-status-running);
+}
+
+.context-ring[data-tier="warn"] .context-ring__pct {
+  color: var(--den-status-running);
+}
+
+.context-ring[data-tier="critical"] .context-ring__fill {
+  stroke: var(--den-danger);
+}
+
+.context-ring[data-tier="critical"] .context-ring__pct {
+  color: var(--den-danger-text);
+}
+
+.progress-strip__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem 0.75rem 0.4rem;
+  border-top: 1px solid var(--den-border);
+}
+
+.progress-strip__body--pull {
+  animation: progress-strip-pull var(--den-duration) var(--den-ease);
+}
+
+@keyframes progress-strip-pull {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.progress-strip__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.progress-strip__list-scroll {
+  max-height: 5rem;
+}
+
+.progress-strip__columns {
+  max-height: 5rem;
+}
+
+.progress-strip__columns-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.progress-strip__column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 0;
+  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tabs__panel:where([data-panel-band~="min-640"]) .progress-strip__columns {
+  max-height: 6.5rem;
+}
+
+.tabs__panel:where([data-panel-band~="min-640"]) .progress-strip__columns-content {
+  flex-direction: row;
+  gap: 1.5rem;
+}
+
+.progress-strip__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  transition: opacity 0.24s var(--den-ease),
+    transform 0.24s var(--den-ease);
+}
+/* Completed plan rows fade before removal. */
+.progress-strip__item--leaving {
+  opacity: 0;
+  transform: translateX(-8px);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-strip__item {
+    transition: none;
+  }
+}
+
+.progress-strip__glyph {
+  flex-shrink: 0;
+  line-height: 1.35;
+}
+
+.progress-strip__item--done .progress-strip__glyph {
+  color: var(--den-status-positive-text);
+}
+
+.progress-strip__item--na .progress-strip__glyph {
+  color: var(--den-text-muted);
+}
+
+.progress-strip__item--na .progress-strip__label {
+  color: var(--den-text-muted);
+  text-decoration: line-through;
+}
+
+.progress-strip__label {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.progress-strip__label .markdown-body {
+  display: inline;
+}
+.progress-strip__label .markdown-body > :first-child {
+  margin-top: 0;
+}
+.progress-strip__label .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.progress-strip__label .markdown-body p {
+  margin: 0;
+  display: inline;
+}
+.progress-strip__label .markdown-body code {
+  font-size: var(--text-den-compact);
+}
+
+
+/* Fixed columns keep arriving values from shifting neighboring chips. */
+.den-status-chips {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(6ch, max-content);
+  align-items: center;
+  gap: 1px 3px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.den-status-chip[data-cell="trust"] {
+  grid-area: 1 / 1;
+}
+.den-status-chip[data-cell="posture"] {
+  grid-area: 1 / 2;
+  /* Right-aligned so posture sits over the cost figure below it. */
+  justify-content: flex-end;
+}
+.den-status-chip[data-cell="model"] {
+  grid-area: 2 / 1;
+}
+.den-status-chip[data-cell="cost"] {
+  grid-area: 2 / 2;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.den-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--den-status-chip-row-h);
+  /* Padding keeps both status labels within the 208px rail. */
+  padding: 0.375em 0.4em;
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease);
+}
+
+.den-status-chip:hover,
+.den-status-chip[aria-expanded="true"] {
+  color: var(--den-text);
+  background: var(--den-tint-1);
+}
+
+/* Off uses warning color without posture semantics. */
+.den-status-chip[data-posture="off"] {
+  color: var(--den-warning);
+}
+
+/* The dot carries trust color. */
+.den-status-chip__dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-border);
+}
+.den-status-chip[data-state="seen"] .den-status-chip__dot {
+  background: var(--den-status-positive);
+}
+.den-status-chip[data-state="empty"] .den-status-chip__dot,
+.den-status-chip[data-state="loading"] .den-status-chip__dot,
+.den-status-chip[data-state="unavailable"] .den-status-chip__dot {
+  background: transparent;
+  border: 1px solid var(--den-border);
+}
+/* Unseen status uses the attention color. */
+.den-status-chip[data-state="unseen"] .den-status-chip__dot {
+  background: var(--den-accent-signal);
+}
+
+/* Near-limit spend uses warning color, not failure color. */
+.den-status-chip--warn {
+  color: var(--den-warning);
+}
+
+/* A lower-bound estimate: hollow warning dot beside the amount. */
+.den-status-chip[data-coverage="lower_bound"] .den-status-chip__dot {
+  background: transparent;
+  border: 1px solid var(--den-warning);
+}
+
+.den-status-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-status-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: min(24rem, 90vw);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-md);
+  font-size: var(--text-den-compact);
+}
+
+/* Step facts use a fixed-width grid. */
+.den-status-popover.den-step-tooltip {
+  display: grid;
+  gap: 4px;
+  width: 260px;
+  padding: 9px 10px 10px;
+}
+
+/* The trust summary stays within the viewport. */
+.den-status-popover--trust {
+  box-sizing: border-box;
+  width: min(22rem, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+}
+@media (max-height: 500px) {
+  .den-status-popover--trust .trust-popover__list { display: none; }
+}
+@media (max-height: 320px) {
+  .den-status-popover--trust .den-status-popover__hint { display: none; }
+}
+
+/* The cost summary supplies its own padding. */
+.den-status-popover--cost .den-cost-summary {
+  padding: 0;
+}
+
+.den-status-popover__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.den-status-popover__grid dt {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-status-popover__grid dd {
+  margin: 1px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.den-status-popover__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.den-status-popover__hint {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-status-popover__note {
+  font-weight: 400;
+  color: var(--den-text-muted);
+}
+
+.den-status-popover__manage {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--den-accent-signal);
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+}
+
+.den-status-popover__manage:hover {
+  text-decoration: underline;
+}
+
+

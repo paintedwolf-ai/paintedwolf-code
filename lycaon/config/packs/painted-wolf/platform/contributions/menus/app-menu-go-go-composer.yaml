@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-composer
+slot: "app_menu.go"
+command: painted-wolf/platform:go-composer
+group: "3"
+order: 14
+label: "Composer"

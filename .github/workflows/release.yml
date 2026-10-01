@@ -1,0 +1,627 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-static-update
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      cask_token: ${{ steps.release.outputs.cask_token }}
+      matrix: ${{ steps.release.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag and source
+        if: ${{ github.ref_type == 'tag' }}
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          bash scripts/release-source-validate.sh \
+            "${RELEASE_TAG}" "${GITHUB_SHA}" refs/remotes/origin/main
+
+      - name: Classify release
+        id: release
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          metadata="$(python3 scripts/release-metadata.py)"
+          version="$(jq -r .product_version <<<"${metadata}")"
+          channel="$(jq -r .channel <<<"${metadata}")"
+          token="$(jq -r .homebrew_token <<<"${metadata}")"
+          prerelease="$(jq -r .github_prerelease <<<"${metadata}")"
+          publish="$(python3 scripts/release_control.py classify)"
+          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
+          echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
+
+  preflight:
+    needs: classify
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-verification
+      - uses: ./.github/actions/setup-bialy
+      - name: Validate release inputs
+        timeout-minutes: 30
+        env:
+          PUBLISH: ${{ needs.classify.outputs.publish }}
+        run: |
+          if [[ "${PUBLISH}" == true ]]; then
+            ./task release:preflight -- --require-corpus
+          else
+            ./task release:preflight
+          fi
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: release-preflight-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  verification:
+    needs: preflight
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: release
+
+  desktop:
+    needs: preflight
+    uses: ./.github/workflows/desktop-verification.yml
+
+  upgrade:
+    needs: [classify, preflight]
+    runs-on: macos-14
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-verification
+      - uses: ./.github/actions/setup-bialy
+      - name: Build candidate sidecar
+        timeout-minutes: 30
+        run: ./task build:lycaon-dev
+      - name: Rehearse the prior-release upgrade
+        timeout-minutes: 90
+        env:
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          RELEASE_CHANNEL: ${{ needs.classify.outputs.channel }}
+        run: ./task upgrade:rehearse
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: release-upgrade-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  ship-gates:
+    if: always()
+    needs: [classify, preflight, verification, desktop, upgrade]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require every release gate
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate
+
+  build-release:
+    needs: [classify, ship-gates]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    environment: release-signing
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+          cache-dependency-path: |
+            lycaon/go.sum
+            scripts/commentlint/go.sum
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      - name: Verify native release runner
+        env:
+          EXPECTED_GOOS: ${{ matrix.goos }}
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          [[ "$(go env GOOS)" == "${EXPECTED_GOOS}" ]]
+          [[ "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
+          case "${EXPECTED_GOOS}/${EXPECTED_GOARCH}" in
+            darwin/arm64) [[ "$(rustc --print host-tuple)" == aarch64-apple-darwin ]] ;;
+            linux/amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
+            linux/arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
+            windows/amd64) [[ "$(rustc --print host-tuple)" == x86_64-pc-windows-msvc ]] ;;
+            *) echo "error: unsupported release runner ${EXPECTED_GOOS}/${EXPECTED_GOARCH}" >&2; exit 1 ;;
+          esac
+
+      - name: Install Linux bundle dependencies
+        if: ${{ matrix.goos == 'linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf xdg-utils libfuse2
+
+      - name: Import signing certificate and notary key
+        if: ${{ matrix.goos == 'darwin' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ENGINE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_ENGINE_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          : "${APPLE_CERTIFICATE:?missing APPLE_CERTIFICATE}"
+          : "${APPLE_CERTIFICATE_PASSWORD:?missing APPLE_CERTIFICATE_PASSWORD}"
+          : "${APPLE_API_KEY_P8:?missing APPLE_API_KEY_P8}"
+          : "${APPLE_ENGINE_PROVISIONING_PROFILE_BASE64:?missing APPLE_ENGINE_PROVISIONING_PROFILE_BASE64}"
+          : "${APPLE_SIGNING_IDENTITY:?missing APPLE_SIGNING_IDENTITY}"
+          KEYCHAIN="${RUNNER_TEMP}/app-signing.keychain-db"
+          KEYCHAIN_PW="$(openssl rand -base64 24)"
+          echo "${APPLE_CERTIFICATE}" | openssl base64 -d -A -out "${RUNNER_TEMP}/cert.p12"
+          security create-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
+          security import "${RUNNER_TEMP}/cert.p12" -P "${APPLE_CERTIFICATE_PASSWORD}" \
+            -A -t cert -f pkcs12 -k "${KEYCHAIN}"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${KEYCHAIN_PW}" "${KEYCHAIN}" >/dev/null
+          security list-keychain -d user -s "${KEYCHAIN}" login.keychain-db
+          rm -f "${RUNNER_TEMP}/cert.p12"
+          echo "${APPLE_API_KEY_P8}" | openssl base64 -d -A -out "${RUNNER_TEMP}/AuthKey.p8"
+          echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/AuthKey.p8" >> "${GITHUB_ENV}"
+          echo "${APPLE_ENGINE_PROVISIONING_PROFILE_BASE64}" | openssl base64 -d -A -out "${RUNNER_TEMP}/engine.provisionprofile"
+          echo "APPLE_ENGINE_PROVISIONING_PROFILE=${RUNNER_TEMP}/engine.provisionprofile" >> "${GITHUB_ENV}"
+
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+
+      - name: Validate platform release inputs
+        run: ./task release:preflight
+
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+
+      - name: Install Windows Artifact Signing client
+        if: ${{ matrix.goos == 'windows' }}
+        run: cargo install artifact-signing-cli --locked --version 0.11.0
+
+      - name: Build, sign, and notarize
+        env:
+          GOOS: ${{ matrix.goos }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.goos == 'darwin' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_ISSUER: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_KEY_ID || '' }}
+          AZURE_CLIENT_ID: ${{ matrix.goos == 'windows' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ matrix.goos == 'windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_TENANT_ID: ${{ matrix.goos == 'windows' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_ENDPOINT || '' }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_ACCOUNT || '' }}
+          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_PROFILE || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${TAURI_SIGNING_PRIVATE_KEY:?missing TAURI_SIGNING_PRIVATE_KEY}"
+          if [[ "${GOOS}" == darwin ]]; then
+            : "${APPLE_SIGNING_IDENTITY:?missing APPLE_SIGNING_IDENTITY}"
+            : "${APPLE_API_ISSUER:?missing APPLE_API_ISSUER}"
+            : "${APPLE_API_KEY:?missing APPLE_API_KEY_ID}"
+          fi
+          if [[ "${GOOS}" == windows ]]; then
+            : "${AZURE_CLIENT_ID:?missing AZURE_CLIENT_ID}"
+            : "${AZURE_CLIENT_SECRET:?missing AZURE_CLIENT_SECRET}"
+            : "${AZURE_TENANT_ID:?missing AZURE_TENANT_ID}"
+            : "${AZURE_ARTIFACT_SIGNING_ENDPOINT:?missing AZURE_ARTIFACT_SIGNING_ENDPOINT}"
+            : "${AZURE_ARTIFACT_SIGNING_ACCOUNT:?missing AZURE_ARTIFACT_SIGNING_ACCOUNT}"
+            : "${AZURE_ARTIFACT_SIGNING_PROFILE:?missing AZURE_ARTIFACT_SIGNING_PROFILE}"
+          fi
+          ./task den:bundle
+
+      - name: Verify and stage platform artifacts
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          PLATFORM: ${{ matrix.updater_key }}
+          GOOS: ${{ matrix.goos }}
+          ARCH: ${{ matrix.artifact_arch }}
+          PACKAGE_EXTENSION: ${{ matrix.package_extension }}
+          UPDATER_EXTENSION: ${{ matrix.updater_extension }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          [[ "${DOWNLOAD_BASE_URL}" == https://downloads.paintedwolf.dev ]]
+          bash scripts/release-stage-platform-artifacts.sh \
+            --platform "${PLATFORM}" --goos "${GOOS}" --arch "${ARCH}" \
+            --version "${VERSION}" --package-extension "${PACKAGE_EXTENSION}" \
+            --updater-extension "${UPDATER_EXTENSION}" --output "${RUNNER_TEMP}/release"
+
+      - name: Upload signed platform result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: platform-release-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Clean up signing keychain
+        if: ${{ always() && matrix.goos == 'darwin' }}
+        run: |
+          security delete-keychain "${RUNNER_TEMP}/app-signing.keychain-db" 2>/dev/null || true
+          rm -f "${RUNNER_TEMP}/AuthKey.p8"
+
+  aggregate-release:
+    needs: [classify, build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download every signed platform result
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: platform-release-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Assemble complete updater manifest and cask
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          CASK_TOKEN: ${{ needs.classify.outputs.cask_token }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          NOTES="${RUNNER_TEMP}/release-notes.md"
+          awk -v heading="## [${VERSION}]" \
+            'index($0, heading) == 1 {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md > "${NOTES}"
+          mkdir -p aggregate
+          python3 scripts/release-assemble-updater-manifest.py \
+            --catalog packaging/release-platforms.json \
+            --fragments release-artifacts --version "${VERSION}" --notes "${NOTES}" \
+            --pub-date "$(git show -s --format=%cI HEAD)" \
+            --base-url "${DOWNLOAD_BASE_URL}" --output aggregate/latest.json
+          python3 scripts/release-collect-public-artifacts.py \
+            --catalog packaging/release-platforms.json --input release-artifacts \
+            --version "${VERSION}" --output public-artifacts
+          DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL}" \
+            bash scripts/release-validate-updater-manifest.sh \
+              --file aggregate/latest.json --version "${VERSION}"
+          bash scripts/release-validate-bridge.sh aggregate/latest.json
+          sha="$(cat release-artifacts/painted-wolf-code_v${VERSION}_darwin-aarch64.dmg.sha256)"
+          render_cask() {
+            local token="$1" channel="$2"
+            sed -e "s|@@TOKEN@@|${token}|g" \
+              -e "s|@@VERSION@@|${VERSION}|g" -e "s|@@SHA_ARM@@|${sha}|g" \
+              -e "s|@@BASE_URL@@|${DOWNLOAD_BASE_URL}|g" \
+              -e "s|@@CHANNEL@@|${channel}|g" \
+              packaging/homebrew/painted-wolf-code.rb.tmpl > "aggregate/${token}.rb"
+            grep -Fq "release_channel\\\":\\\"${channel}" "aggregate/${token}.rb"
+          }
+          render_cask "${CASK_TOKEN}" "${CHANNEL}"
+          if [[ "${CHANNEL}" == stable ]]; then
+            render_cask painted-wolf-code@preview preview
+          fi
+
+      - name: Upload aggregate release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-metadata
+          path: aggregate/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload public release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-public-artifacts
+          path: public-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-immutable:
+    needs: [classify, build-release, aggregate-release]
+    if: ${{ needs.classify.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-metadata
+          path: release-metadata
+
+      - name: Validate channel monotonicity
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          SIGNING_GENERATION="$(jq -r .signing_generation packaging/update-keys.json)"
+          python3 scripts/release_distribution.py advance --file release-metadata/latest.json \
+            --key "updates/${CHANNEL}/key-${SIGNING_GENERATION}/latest.json"
+
+      - name: Publish immutable release objects
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CASK_TOKEN: ${{ needs.classify.outputs.cask_token }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          put() {
+            bash scripts/release-r2-immutable-put.sh --key "$1" --file "$2" \
+              --content-type "${3:-application/octet-stream}"
+          }
+          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+            put "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
+          done
+          put "updates/releases/${VERSION}.json" release-metadata/latest.json application/json
+          for cask in release-metadata/*.rb; do
+            put "release-metadata/${VERSION}/$(basename "${cask}")" "${cask}" text/plain
+          done
+          while IFS= read -r -d '' corpus; do
+            rel="${corpus#lycaon/testdata/upgrade-corpus/${VERSION}/}"
+            put "upgrade-corpus/${VERSION}/${rel}" "${corpus}"
+          done < <(find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f -print0)
+          if [[ -f .release/recovery.json ]]; then
+            put "release-metadata/${VERSION}/recovery.json" .release/recovery.json
+          fi
+
+      - name: Verify immutable objects through the public domain
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          : "${DOWNLOAD_BASE_URL:?missing DOWNLOAD_BASE_URL}"
+          verify_public() {
+            local key="$1" file="$2" downloaded="${RUNNER_TEMP}/public-$(basename "$1")"
+            for attempt in $(seq 1 24); do
+              if curl --fail --silent --show-error --location --connect-timeout 10 --max-time 300 \
+                -H 'Cache-Control: no-cache' \
+                "${DOWNLOAD_BASE_URL}/${key}?release_verify=${GITHUB_RUN_ID}-${attempt}" \
+                --output "${downloaded}" && cmp -s "${file}" "${downloaded}"; then
+                return 0
+              fi
+              sleep 5
+            done
+            echo "error: public object did not converge: ${key}" >&2
+            return 1
+          }
+          for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+            verify_public "releases/v${VERSION}/$(basename "${artifact}")" "${artifact}"
+          done
+          verify_public "updates/releases/${VERSION}.json" release-metadata/latest.json
+          for cask in release-metadata/*.rb; do
+            verify_public "release-metadata/${VERSION}/$(basename "${cask}")" "${cask}"
+          done
+          while IFS= read -r -d '' corpus; do
+            rel="${corpus#lycaon/testdata/upgrade-corpus/${VERSION}/}"
+            verify_public "upgrade-corpus/${VERSION}/${rel}" "${corpus}"
+          done < <(find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f -print0)
+
+  update-cask:
+    needs: [classify, publish-immutable]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ vars.HOMEBREW_TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-metadata
+          path: release-metadata
+
+      - name: Publish channel cask
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          CASK_TOKEN: ${{ needs.classify.outputs.cask_token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"
+          cd tap
+          git config user.name painted-wolf-release
+          git config user.email release-bot@users.noreply.github.com
+          git add -- Casks/painted-wolf-code*.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "${CASK_TOKEN} ${VERSION}"
+          git push
+
+  notify-website:
+    needs: [classify, publish-immutable, update-cask]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-metadata
+          path: release-metadata
+      - name: Dispatch channel release to paintedwolf-www
+        env:
+          GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum release-metadata/latest.json | cut -d ' ' -f1)"
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches \
+            -f event_type=lycaon-release \
+            -F "client_payload[version]=${VERSION}" \
+            -F "client_payload[tag]=v${VERSION}" \
+            -F "client_payload[channel]=${CHANNEL}" \
+            -F "client_payload[manifest_sha256]=${digest}"
+          python3 scripts/release_distribution.py website --channel "${CHANNEL}" \
+            --version "${VERSION}" --manifest-sha256 "${digest}" --verify-promotion \
+            --generation "$(jq -r .signing_generation packaging/update-keys.json)"
+
+  activate-updater:
+    needs: [classify, publish-immutable, update-cask, notify-website]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-metadata
+          path: release-metadata
+
+      - name: Activate release channel last
+        env:
+          CHANNEL: ${{ needs.classify.outputs.channel }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          SIGNING_GENERATION="$(jq -r .signing_generation packaging/update-keys.json)"
+          bash scripts/release-r2-publish-pointer.sh \
+            --file release-metadata/latest.json --channel "${CHANNEL}" --generation "${SIGNING_GENERATION}"
+          if [[ "${CHANNEL}" == stable ]]; then
+            bash scripts/release-r2-publish-pointer.sh \
+              --file release-metadata/latest.json --channel preview --generation "${SIGNING_GENERATION}" --advance-if-newer
+          fi
+
+  publish-github-release:
+    needs: [classify, publish-immutable, activate-updater]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-public-artifacts
+          path: release-artifacts
+
+      - name: Publish trailing GitHub mirror
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.classify.outputs.version }}
+          PRERELEASE: ${{ needs.classify.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          NOTES="${RUNNER_TEMP}/release-notes.md"
+          awk -v heading="## [${VERSION}]" \
+            'index($0, heading) == 1 {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md > "${NOTES}"
+          expected_latest=true
+          if [[ "${PRERELEASE}" == true ]]; then expected_latest=false; fi
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            existing="${RUNNER_TEMP}/existing-release"
+            mkdir -p "${existing}"
+            gh release download "v${VERSION}" --dir "${existing}"
+            find release-artifacts -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort > "${RUNNER_TEMP}/expected-assets"
+            find "${existing}" -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort > "${RUNNER_TEMP}/actual-assets"
+            cmp -s "${RUNNER_TEMP}/expected-assets" "${RUNNER_TEMP}/actual-assets" || {
+              echo "error: existing GitHub mirror asset set differs from the public catalog" >&2
+              diff -u "${RUNNER_TEMP}/expected-assets" "${RUNNER_TEMP}/actual-assets" >&2 || true
+              exit 1
+            }
+            for artifact in release-artifacts/painted-wolf-code_v${VERSION}_*; do
+              name="$(basename "${artifact}")"
+              [[ -f "${existing}/${name}" ]] && cmp -s "${artifact}" "${existing}/${name}" || {
+                echo "error: existing GitHub mirror differs at ${name}" >&2
+                exit 1
+              }
+            done
+            actual="$(gh release list --limit 100 --json tagName,isPrerelease,isLatest \
+              | jq -c --arg tag "v${VERSION}" '.[] | select(.tagName == $tag)')"
+            [[ -n "${actual}" ]]
+            [[ "$(jq -r .isPrerelease <<<"${actual}")" == "${PRERELEASE}" ]]
+            [[ "$(jq -r .isLatest <<<"${actual}")" == "${expected_latest}" ]]
+          else
+            flags=(--verify-tag)
+            if [[ "${PRERELEASE}" == true ]]; then
+              flags+=(--prerelease --latest=false)
+            else
+              flags+=(--latest)
+            fi
+            gh release create "v${VERSION}" release-artifacts/painted-wolf-code_v${VERSION}_* \
+              "${flags[@]}" --title "Painted Wolf Code v${VERSION}" --notes-file "${NOTES}"
+          fi

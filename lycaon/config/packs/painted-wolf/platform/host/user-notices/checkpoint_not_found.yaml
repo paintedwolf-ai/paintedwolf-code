@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Approval is no longer waiting
+message: >-
+  This approval is not pending any more — it was already answered, or the turn that raised it ended.
+suggested_action: >-
+  Nothing to answer. Check the chat for how the run continued.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not pending
+      - already answered

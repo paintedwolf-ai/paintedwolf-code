@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-inline-edit
+command: painted-wolf/platform:editor-inline-edit
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+I"
+  windows:
+    - "Mod+I"
+  linux:
+    - "Mod+I"

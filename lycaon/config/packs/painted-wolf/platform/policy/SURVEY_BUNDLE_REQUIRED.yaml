@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SURVEY_BUNDLE_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - survey_repo
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SURVEY_BUNDLE_REQUIRED"
+effect: block
+copy:
+  what: survey_repo was called without a bundle argument.
+  cause: bundle is required — pick a catalog bundle id from the tool schema.
+  why: Composite survey runs a fixed probe bundle; the host cannot infer which catalog pattern to execute.
+  fix: Select the intended bundle ID from the current survey_repo schema/catalog. The host cannot infer a bundle
+    from an unstructured task description.
+  instead: Branch on Code; retry with a valid bundle id from your Tools section
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:survey
+x-paintedwolf-message: survey_repo requires a catalog bundle id
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: explore_readonly
+    tool: survey_repo
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURVEY_BUNDLE_REQUIRED'

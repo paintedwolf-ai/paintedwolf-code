@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-new
+command: painted-wolf/platform:session-new
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+N"
+  windows:
+    - "Mod+N"
+  linux:
+    - "Mod+N"

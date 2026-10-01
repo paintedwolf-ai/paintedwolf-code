@@ -1,0 +1,24 @@
+# Accepted SPDX licenses for crates in the release graph.
+# Fail-closed: cargo-about --fail rejects any crate whose license is not listed.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "OpenSSL",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSL-1.0",
+    "0BSD",
+    "Unlicense",
+    "NCSA",
+    "CDLA-Permissive-2.0",
+]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+private = { ignore = true }

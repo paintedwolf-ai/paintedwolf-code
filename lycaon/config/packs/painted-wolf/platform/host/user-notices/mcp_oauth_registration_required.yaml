@@ -1,0 +1,18 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: This provider does not accept automatic sign-in
+message: >-
+  The authorization server does not register clients automatically, so Sign in
+  cannot finish.
+suggested_action: >-
+  Paste a static token in the Bearer field instead. Use the token the provider
+  documents — often a personal access token or API key.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Bearer
+      - token

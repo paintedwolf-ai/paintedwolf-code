@@ -1,0 +1,5 @@
+id: directory-identity
+label: Directory and identity
+description: >-
+  Enterprise directory operations that delete a user or group, or widen a
+  standing administrative role.

@@ -1,0 +1,81 @@
+components:
+  schemas:
+    SessionCompactResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - generation
+      - tokens_before
+      - tokens_after
+      - chunks_compacted
+      - session_compacted
+      - target_tokens
+      - target_met
+      - reason
+      - cache_hit
+      - measurement_method
+      - text_tokens_before
+      - text_tokens_after
+      additionalProperties: false
+      properties:
+        generation:
+          type: integer
+          minimum: 0
+        tokens_before:
+          type: integer
+          minimum: 0
+        tokens_after:
+          type: integer
+          minimum: 0
+        chunks_compacted:
+          type: integer
+          minimum: 0
+        session_compacted:
+          type: boolean
+          description: Whether a conversation summary was published.
+        target_tokens:
+          type: integer
+          description: Target in the host transcript estimate units.
+          minimum: 0
+        target_met:
+          type: boolean
+          description: Whether the resulting transcript estimate fits the target.
+        reason:
+          type: string
+          description: Compaction outcome or reason no session summary was accepted.
+        cache_hit:
+          type: boolean
+          description: An unchanged unproductive summary attempt was reused without a provider call.
+        measurement_method:
+          type: string
+          description: Ordinary text encoding or estimated; excludes provider framing and media tokens.
+        text_tokens_before:
+          type: integer
+          description: Projected text units before compaction, including trust markers and tool arguments.
+          minimum: 0
+        text_tokens_after:
+          type: integer
+          description: Projected text units after compaction, using the same measurement method.
+          minimum: 0
+    SessionContextResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - estimated_tokens
+      - budget_remaining
+      - compaction_generation
+      - oversized_chunks
+      additionalProperties: false
+      properties:
+        estimated_tokens:
+          type: integer
+          minimum: 0
+        budget_remaining:
+          type: integer
+          minimum: 0
+        compaction_generation:
+          type: integer
+          minimum: 0
+        oversized_chunks:
+          type: integer
+          minimum: 0

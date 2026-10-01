@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-toggle-regex
+command: painted-wolf/platform:search-toggle-regex
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+R"
+  windows:
+    - "Alt+R"
+  linux:
+    - "Alt+R"

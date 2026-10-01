@@ -1,0 +1,20 @@
+title: Change a host access-control configuration
+id: 56d3a129-8ea7-4863-8d56-0fff40748fc8
+status: stable
+description: Mutates an SSH, sudo, PAM, or local trust configuration through a native file action.
+references: [https://attack.mitre.org/techniques/T1098/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, chmod, chown, git_restore]
+    TargetFile|re:
+      - '^~[/][.]ssh/config$'
+      - '^/etc/ssh/(ssh_config|sshd_config|ssh_config[.]d/[^/]+[.]conf|sshd_config[.]d/[^/]+[.]conf)$'
+      - '^/etc/(sudoers|sudoers[.]d/[^/]+|pam[.]d/[^/]+)$'
+      - '^/etc/(ca-certificates[.]conf|ca-certificates/trust-source/anchors/[^/]+|pki/ca-trust/source/anchors/[^/]+)$'
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.defense-evasion]

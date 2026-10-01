@@ -1,0 +1,51 @@
+fixtures:
+- rule: pool-volume-destroy
+  positive:
+  - zpool destroy tank
+  - zfs destroy tank/data
+  - zfs destroy -r tank/data
+  - lvremove /dev/vg0/data
+  - vgremove vg0
+  - pvremove /dev/sdb1
+  - wipefs -a /dev/sdb1
+  - sudo zpool destroy tank
+  negative:
+  - zpool list
+  - zfs list
+  - zfs destroy -n tank/data
+  - zfs get all tank/data
+  - lvs
+  - lvcreate -L 10G -n data vg0
+  - wipefs /dev/sdb1
+  - wipefs -a --no-act /dev/sdb1
+  - zpool destroy tank --help
+- rule: array-stop
+  positive:
+  - mdadm --stop /dev/md0
+  - mdadm --zero-superblock /dev/sdb1
+  - mdadm --remove /dev/md0 /dev/sdb1
+  - sudo mdadm --stop /dev/md0
+  negative:
+  - mdadm --detail /dev/md0
+  - mdadm --query /dev/sdb1
+  - mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sdb1 /dev/sdc1
+  - mdadm --stop /dev/md0 --help
+- rule: btrfs-subvolume-delete
+  positive:
+  - btrfs subvolume delete /mnt/bar/foo
+  - btrfs subvolume delete --subvolid 256 /mnt/bar
+  - sudo btrfs subvolume delete /mnt/bar/foo
+  negative:
+  - btrfs subvolume list /mnt/bar
+  - btrfs subvolume show /mnt/bar/foo
+  - btrfs subvolume create /mnt/bar/foo
+  - btrfs subvolume delete --help
+- rule: btrfs-device-remove
+  positive:
+  - btrfs device remove /dev/sda /mnt
+  - sudo btrfs device remove /dev/sda /mnt
+  negative:
+  - btrfs device usage /mnt
+  - btrfs device stats /mnt
+  - btrfs device add /dev/sdb /mnt
+  - btrfs device remove --help

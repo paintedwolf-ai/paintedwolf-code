@@ -1,0 +1,10 @@
+id: plan-review-alt-addenda
+extends: worker-leg-default
+description: "Alternate plan review / debate checklist"
+triggers:
+  topology_patterns: ["debate", "pipeline", "default-pipeline", "*"]
+  phase_ids: ["plan", "review_test", "debate"]
+checklist:
+  - "Propose at least one credible alternative reading of the plan"
+  - "Compare alternatives without claiming closeout or inspector verdicts"
+  - "Debate output is advisory — gates remain host-authoritative"

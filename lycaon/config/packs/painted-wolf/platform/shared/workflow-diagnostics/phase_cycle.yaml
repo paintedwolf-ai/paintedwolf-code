@@ -1,0 +1,5 @@
+code: phase_cycle
+message: |
+  Phase graph cycles at {{phase}}.
+replacement: |
+  Break the next-link cycle.

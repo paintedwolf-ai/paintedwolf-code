@@ -1,0 +1,38 @@
+title: Widen file permissions or change ownership
+id: ce0217fe-98ac-483b-9a90-d6df86e0576a
+description: Grants group or other access to a path, or reassigns ownership across a tree.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  # Recursion alone does not widen permissions.
+  selection_chmod_widen:
+    Image: chmod
+    CommandLine|re:
+      # A numeric mode whose group or other digit carries the write bit.
+      - '\s0?[0-7]?[0-7][2367][0-7]\s'
+      - '\s0?[0-7]?[0-7][0-7][2367]\s'
+      # setuid or setgid.
+      - '\s[2467][0-7]{3}\s'
+      # A symbolic form that adds access for group, other, or all. A bare `+x`
+      # carries no target and is the ordinary way to mark a script runnable.
+      - '(?i)\s[goa]*[goa]\+[rwxst]*[rwxs]'
+  selection_chown:
+    Image:
+      - chown
+      - chgrp
+    CommandLine|re: '(?i)\s-{1,2}[a-z]*r[a-z]*\b|--recursive\b'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: (selection_chmod_widen or selection_chown) and not filter_rehearsal and not filter_local

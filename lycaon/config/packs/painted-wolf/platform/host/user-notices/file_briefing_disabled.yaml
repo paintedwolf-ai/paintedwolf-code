@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: File summaries are off
+message: File summaries are disabled on this device.
+suggested_action: Enable file summaries in Settings to request an explanation.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [File summaries are disabled]

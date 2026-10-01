@@ -1,0 +1,18 @@
+surfaces:
+  - http
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+title: Could not reach the MCP provider
+message: >-
+  The connection to the MCP provider failed, so its tools could not be listed.
+suggested_action: >-
+  Check the command or address in Settings → MCP providers and confirm the
+  provider is available, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - connection
+      - tools

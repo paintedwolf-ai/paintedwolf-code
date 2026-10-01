@@ -1,0 +1,16 @@
+# SourceEncoding — closed set of encodings the in-app editor round-trips.
+name: SourceEncoding
+go_const_prefix: SourceEncoding
+values:
+  - id: utf-8
+    go: UTF8
+  - id: utf-8-bom
+    go: UTF8BOM
+  - id: utf-16le
+    go: UTF16LE
+  - id: utf-16le-bom
+    go: UTF16LEBOM
+  - id: utf-16be
+    go: UTF16BE
+  - id: utf-16be-bom
+    go: UTF16BEBOM

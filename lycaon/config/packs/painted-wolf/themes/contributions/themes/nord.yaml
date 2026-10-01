@@ -1,0 +1,91 @@
+id: painted-wolf/themes:nord
+name: Nord
+appearance: dark
+
+# Nord's rungs sit close together; softer edges keep them the loudest line.
+bevel:
+  strength: 0.7
+
+# Nord1 lifts the chrome above the nord0 page.
+window_colors:
+  main: "#88c0d0"
+  anchors: ["#88c0d0", "#a3be8c", "#81a1c1", "#ebcb8b"]
+  hue_spread: 18
+  chroma_min: 0.04
+  chroma_max: 0.12
+
+tokens:
+  background: "#2e3440" # nord0
+  surface: "#2e3440"
+  surface-elevated: "#3b4252" # nord1
+  surface-chrome: "#3b4252" # lighter than the page, which is Nord's shape
+  # The rail is nord1, so blocks clear it rather than the page.
+  surface-offset: "#434c5e" # nord2
+  surface-raised: "#4c566a" # nord3
+  border: "#434c5e" # nord2
+  text: "#eceff4" # nord6
+  # This neutral keeps hierarchy on both page and chrome.
+  text-muted: "#a0a8b6" # nord3 → nord4, 60%
+  accent: "#88c0d0" # nord8
+  accent-warm: "#8fbcbb" # nord7
+  accent-text: "#88c0d0"
+  accent-signal: "#88c0d0"
+  danger: "#bf616a" # nord11
+  warning: "#ebcb8b" # nord13
+  status-positive: "#a3be8c" # nord14
+  status-running: "#d08770" # nord12
+  draft-accent: "#8fbcbb" # nord7
+  tint-hue: "#4c566a" # nord3
+  # One rung above surface-offset, or a chosen fill would vanish into the block
+  # it is meant to mark. Nord's neutrals stop at nord3, so the strong band is
+  # carried past it.
+  selection: "#4c566a" # nord3
+  selection-strong: "#5a657c" # nord3 → nord4, 12%
+  caret: "#d8dee9"
+  diff-add-hue: "#a3be8c"
+  diff-delete-hue: "#bf616a"
+  cost-coordinator: "#ebcb8b"
+  cost-workers: "#81a1c1"
+  cost-summarizer: "#a3be8c"
+  identity-1: "#88c0d0"
+  identity-2: "#81a1c1"
+  identity-3: "#a3be8c"
+  identity-4: "#d08770"
+  identity-5: "#b48ead"
+
+syntax:
+  keyword: "#81a1c1" # nord9
+  string: "#a3be8c"
+  number: "#b48ead" # nord15
+  constant: "#b48ead"
+  variable: "#d8dee9"
+  type: "#8fbcbb"
+  function: "#88c0d0"
+  property: "#d8dee9"
+  operator: "#81a1c1"
+  punctuation: "#eceff4"
+  tag: "#81a1c1"
+  meta: "#5e81ac" # nord10
+  invalid: "#bf616a"
+  link: "#88c0d0"
+  heading: { color: "#88c0d0", bold: true }
+  inserted: "#a3be8c"
+  deleted: "#bf616a"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#616e88", italic: true }
+  strikethrough: {}
+  comment: { color: "#616e88", italic: true }
+
+# Square geometry carries the palette without changing stroke weight.
+icons:
+  # Mitred corners and square ends apply to every glyph.
+  stroke:
+    cap: butt
+    join: miter
+  geometry:
+    find: '<rect x="2.5" y="2.5" width="8.5" height="8.5"/><path d="M11 11 14 14"/>'
+    goto-line: '<path d="M2.5 3.5h11"/><path d="M2.5 7h11"/><path d="M2.5 10.5h7"/>'
+    copy: '<rect x="5.5" y="5.5" width="8" height="8"/><path d="M10.5 3.5v-2h-9v9h2"/>'
+    check: '<path d="M2.5 8 6.5 12 13.5 4"/>'
+    more: '<rect x="1.75" y="6.75" width="2.5" height="2.5"/><rect x="6.75" y="6.75" width="2.5" height="2.5"/><rect x="11.75" y="6.75" width="2.5" height="2.5"/>'

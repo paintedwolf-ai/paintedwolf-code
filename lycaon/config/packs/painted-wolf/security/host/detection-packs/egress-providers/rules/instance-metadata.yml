@@ -1,0 +1,43 @@
+title: Reached the instance metadata service
+id: d504a534-0fc2-4ee7-81fe-77d80936c490
+description: >-
+  Reached a cloud instance, task, or pod metadata endpoint that vends role
+  credentials. Every address here is link-local or vendor-internal and answers
+  only inside that vendor's compute, so the destination alone is conclusive.
+references:
+  - https://attack.mitre.org/
+  - https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html
+  - https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html
+  - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+  - https://www.alibabacloud.com/help/en/ecs/user-guide/view-instance-metadata/
+  - https://www.tencentcloud.com/document/product/213/4934
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # Include shared and provider-specific metadata endpoints.
+  selection_metadata:
+    DestinationHostname:
+      - '169.254.169.254'
+      # Task-role credential endpoint.
+      - '169.254.170.2'
+      # Workload-identity credential endpoint.
+      - '169.254.170.23'
+      # The IPv6 forms of both, canonicalized the way the broker prints an address.
+      - 'fd00:ec2::254'
+      - 'fd00:ec2::23'
+      # Alibaba Cloud ECS: /latest/meta-data/ram/security-credentials/<role>.
+      - '100.100.100.200'
+      - 'metadata.google.internal'
+      - 'metadata.goog'
+      # Tencent Cloud CVM: /latest/meta-data/cam/security-credentials/<role>.
+      - 'metadata.tencentyun.com'
+  condition: selection_metadata

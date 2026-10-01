@@ -1,0 +1,12 @@
+# Inform Binding — Emit-only inject.
+'on': inject.worker_board
+selector:
+  surface: worker
+effect: inform
+render: board-orientation
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - assembly inject via Bus Emit-plane resolution

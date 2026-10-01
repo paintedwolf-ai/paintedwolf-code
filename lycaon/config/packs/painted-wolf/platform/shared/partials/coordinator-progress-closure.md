@@ -1,0 +1,1 @@
+Reconcile open rows with `update_progress` before the next dispatch, resume, or edit; otherwise `PROGRESS_ITEM_NOT_CLOSED` rejects it. Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`. Close only completed work.

@@ -1,0 +1,41 @@
+description: "Read a file and return its content or structure in JSON; unscoped large files return a structure digest. For literal content, set mode / offset / limit / ranges / symbol. Replaces command: cat / head / sed -n."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Project-relative or absolute path; list_dir for directories. Attached roots and default temp/cache/tool data locations are permitted; other paths need approval. Protected paths stay blocked.
+    mode:
+      type: string
+      enum: [content, outline]
+      description: content gives numbered lines; outline gives symbols[] and parses/errors[]. Unscoped files over 2000 lines return a digest; select offset/limit/ranges/symbol or mode content. Repeats may return the full file.
+    ranges:
+      type: array
+      description: Up to 8 ranges, 4000 total lines; excludes offset/limit.
+      items:
+        type: object
+        properties:
+          offset:
+            type: integer
+            description: 1-based start line
+            minimum: 1
+          limit:
+            type: integer
+            description: Max lines for this range (cap 2000 per range)
+            minimum: 1
+        required: [offset, limit]
+        additionalProperties: false
+    limit:
+      type: integer
+      description: Line limit (workers default 2000; coordinator max 2000)
+    offset:
+      type: integer
+      description: 1-based starting line for pagination
+    symbol:
+      type: string
+      description: Named definition (instead of offset/limit; writable statement span)
+    kind:
+      type: string
+      description: Disambiguates symbol matches (e.g. function, type)
+  required: [path]
+  additionalProperties: false

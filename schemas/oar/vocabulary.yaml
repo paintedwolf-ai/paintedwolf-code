@@ -1,0 +1,342 @@
+# The Open Agent Rules vocabulary — core facts, capability profiles, core anchors,
+# and the reserved detector references.
+#
+# This file is hand-authored and is the source of truth. The tables in
+# open-agent-rules.md sections 5.3, 5.4, and 8.1 are checked against it by
+# `task spec:vocab:check`; a table that drifts fails the build. Implementations
+# may consume this file directly rather than parsing the prose.
+#
+# type is one of: bool, int, double, string, list<string>, map<string,string>,
+# list<map>, map — or a function signature written (arg-type) -> return-type.
+
+oar: "1.0"
+
+core:
+  description: >-
+    Provided by every conforming engine. Deliberately minimal: only what is
+    meaningful at every anchor of every host — the moment itself, and the
+    engine's own counters.
+  facts:
+    - name: anchor
+      type: string
+      observation: >-
+        The identifier of the occurrence being evaluated: the core anchor
+        identifier when the occurrence implements one, and the host-native
+        identifier otherwise. It is a property of the occurrence, so every rule
+        evaluated at one observes the same value.
+    - name: fire_count
+      type: int
+      observation: >-
+        How many times increment_counter has been applied for this rule in this
+        session, before the current occurrence, less any reset_counter. It counts
+        declared increments, not firings: a rule that fires at every occurrence
+        and declares no on_fire has a fire_count of zero.
+    - name: breaker_count
+      type: int
+      observation: >-
+        How many times a circuit breaker has been incremented for this rule and
+        session, before the current occurrence. Maintained by increment_breaker
+        and reset_breaker.
+    - name: fire_count_of
+      type: (string) -> int
+      observation: >-
+        The fire_count of the rule the argument names, read under that rule's
+        own counter scope at this occurrence. The argument is a string literal
+        naming a loaded rule, bare or qualified.
+    - name: breaker_count_of
+      type: (string) -> int
+      observation: >-
+        The breaker_count of the rule the argument names, read under that rule's
+        own counter scope at this occurrence. The argument is a string literal
+        naming a loaded rule, bare or qualified.
+
+profiles:
+  - name: tool
+    description: A host that dispatches named tool calls with structured arguments.
+    facts:
+      - name: tool
+        type: string
+        observation: The name of the tool being invoked at this anchor occurrence.
+      - name: tool_args
+        type: map
+        observation: The arguments the tool was called with.
+      - name: tool_args_fingerprint
+        type: string
+        observation: >-
+          A stable digest of the tool name and arguments, for identifying a
+          repeat of the same call.
+      - name: arg_validation_errors
+        type: list<string>
+        observation: >-
+          Machine codes for argument checks that did not pass. Empty when the
+          arguments validated.
+      - name: arg_validation_reason
+        type: string
+        observation: >-
+          Human-facing reason the argument check failed. Empty when the
+          arguments validated.
+      - name: arg_validation_field
+        type: string
+        observation: >-
+          The argument name the failed check named. Empty when the arguments
+          validated or the check named no field.
+      - name: permission_profile
+        type: string
+        observation: The permission profile in force for this call.
+      - name: policy_denied
+        type: bool
+        observation: True when the host's own authorisation layer refused the call.
+      - name: tool_arg_string
+        type: (string) -> string
+        observation: >-
+          The named tool argument as a string; empty when absent or not a string.
+      - name: tool_arg_int
+        type: (string) -> int
+        observation: >-
+          The named tool argument as an integer; zero when absent or not an
+          integer.
+      - name: tool_arg_bool
+        type: (string) -> bool
+        observation: >-
+          The named tool argument as a boolean; false when absent or not a
+          boolean.
+
+  - name: session
+    description: A host with a durable session and an identifiable caller.
+    facts:
+      - name: session_posture
+        type: string
+        observation: The session's declared posture.
+      - name: principal
+        type: string
+        observation: The identity on whose behalf the call is made.
+      - name: principal_roles
+        type: list<string>
+        observation: Roles attributed to the principal by the host.
+
+  - name: filesystem
+    description: A host whose tools address a file system.
+    facts:
+      - name: is_directory
+        type: bool
+        observation: True when a path argument resolved to a directory.
+      - name: not_found
+        type: bool
+        observation: True when a path or artifact the call names does not exist.
+      - name: path_denied
+        type: bool
+        observation: >-
+          True when a path argument resolved to a location the host's path
+          sandbox refuses.
+      - name: path_outside_scope
+        type: (string) -> bool
+        observation: >-
+          True when the named tool's path arguments resolve outside the scope in
+          force for that tool.
+
+  - name: content-provenance
+    description: A host that preserves structured content segments and their provenance.
+    facts:
+      - name: content_roles
+        type: list<string>
+        observation: >-
+          Transport-independent roles for the content segments, in segment order:
+          system, developer, user, assistant, tool, or unknown.
+      - name: content_origins
+        type: list<string>
+        observation: >-
+          Host-attributed origins for the content segments, in segment order:
+          host, user, model, tool, peer, resource, retrieval, or unknown.
+      - name: content_authorities
+        type: list<string>
+        observation: >-
+          Instruction authority attributed by the host to each content segment,
+          in segment order: system, developer, user, delegated, none, or unknown.
+      - name: content_trust_tiers
+        type: list<string>
+        observation: >-
+          Host trust classification for each content segment, in segment order:
+          trusted, untrusted, or unknown. Trust does not itself grant instruction authority.
+      - name: content_sources
+        type: list<string>
+        observation: >-
+          Host-defined source identifier for each content segment, in segment order;
+          empty when a segment has no source identifier.
+      - name: content_segment_count
+        type: int
+        observation: >-
+          Number of structured content segments at this occurrence; equal to the
+          length of every aligned content provenance list.
+      - name: content_contains_untrusted
+        type: bool
+        observation: True when content_trust_tiers contains untrusted.
+
+  - name: content
+    description: A host that supplies content measurements.
+    facts:
+      - name: content_length
+        type: int
+        observation: Length in Unicode code points of the content at this anchor.
+
+  - name: secrets
+    description: A host that submits content to a registered secret detector.
+    facts:
+      - name: secret_matches
+        type: list<map>
+        observation: Credential or secret spans a registered detector reported. Empty when no detector ran.
+
+  - name: pii
+    description: A host that submits content to a registered personal-data detector.
+    facts:
+      - name: pii_entities
+        type: list<map>
+        observation: Personal-data spans a registered detector reported. Empty when no detector ran.
+
+  - name: prompt-injection
+    description: A host that submits content to a registered injection detector.
+    facts:
+      - name: prompt_injection_score
+        type: double
+        observation: Injection likelihood from a registered detector, between 0 and 1.
+
+  - name: jailbreak
+    description: A host that submits content to a registered jailbreak detector.
+    facts:
+      - name: jailbreak_score
+        type: double
+        observation: Jailbreak likelihood from a registered detector, between 0 and 1.
+
+  - name: moderation
+    description: >-
+      A host that submits content to a classifier scoring it against named
+      categories.
+    facts:
+      - name: moderation_categories
+        type: list<string>
+        observation: >-
+          The category names a registered classifier returned a score for. Empty
+          when no classifier ran.
+      - name: moderation_score
+        type: (string) -> double
+        observation: >-
+          The score a registered classifier reported for the named category,
+          between 0 and 1; zero when that category was not scored.
+
+  - name: mcp
+    description: A host bridging Model Context Protocol providers.
+    facts:
+      - name: mcp_provider_id
+        type: string
+        observation: >-
+          The catalogue provider id for this call, or empty when the call is not a
+          bridged tool call.
+      - name: mcp_tool_name
+        type: string
+        observation: The unqualified tool name on the bridged server.
+      - name: mcp_qualified_tool
+        type: string
+        observation: The host-side name of the bridged tool.
+      - name: mcp_provider_configured
+        type: bool
+        observation: True when the catalogue contains the provider this call is bound to.
+      - name: mcp_provider_enabled
+        type: bool
+        observation: >-
+          True when the provider this call is bound to is configured and enabled.
+      - name: mcp_call_ok
+        type: bool
+        observation: >-
+          True after a bridged call that returned without error. False before the
+          call.
+      - name: mcp_error_code
+        type: string
+        observation: >-
+          The machine error code a failed bridged call reported, never free text.
+      - name: mcp_schema_matched
+        type: bool
+        observation: >-
+          True when at least one declared result schema validated the call's
+          result.
+      - name: mcp_provider_configured_for
+        type: (string) -> bool
+        observation: True when the catalogue contains the given provider id.
+      - name: mcp_provider_enabled_for
+        type: (string) -> bool
+        observation: True when the given provider is configured and enabled.
+      - name: mcp_has_field
+        type: (string) -> bool
+        observation: True when the projected result carries the given key.
+      - name: mcp_field_bool
+        type: (string) -> bool
+        observation: >-
+          The projected boolean at the given key; false when absent or wrongly
+          typed.
+      - name: mcp_field_string
+        type: (string) -> string
+        observation: The projected string at the given key; empty when absent.
+      - name: mcp_field_int
+        type: (string) -> int
+        observation: The projected integer at the given key; zero when absent.
+
+anchors:
+  - name: tool.pre_invoke
+    moment: >-
+      Before a tool call is dispatched, with the tool name and arguments
+      observable and nothing executed yet.
+  - name: tool.handler
+    moment: >-
+      Inside the tool's own handler, after argument validation and before the
+      effect it performs.
+  - name: tool.post_invoke
+    moment: >-
+      After a tool call returns, with the result observable and before it is
+      handed back to the agent.
+  - name: agent.post_turn
+    moment: >-
+      After an agent produces a turn, with the turn's content observable — the
+      moment a claim can be checked against the evidence for it.
+  - name: agent.finalize
+    moment: After a worker or child agent completes and its summary is available.
+  - name: model.input
+    moment: >-
+      User and retrieved content assembled for the model, before the model
+      consumes it.
+  - name: model.output
+    moment: A model response, before it is shown to a person or acted on.
+  - name: model.tool_result
+    moment: >-
+      Content returned by a tool or retrieval step, before the model consumes it.
+
+# Reserved for the conformance corpus. [OAR-CONF-25] requires an engine running
+# the corpus to provide all three; none needs a model or a network.
+detectors:
+  - ref: detector://noop
+    behaviour: Reports no findings.
+  - ref: detector://error
+    behaviour: Always fails, which is how a fixture reaches the on_error path.
+  - ref: detector://fixture
+    behaviour: >-
+      Reports no findings of its own, leaving the detector facts the fixture
+      supplied in place, which is how a fixture proves the rule owns the
+      threshold.
+
+# The closed on_fire vocabulary and the core fact each action writes
+# ([OAR-FIRE-3]).
+on_fire:
+  - action: increment_counter
+    writes: fire_count
+    effect: Adds one.
+  - action: reset_counter
+    writes: fire_count
+    effect: Sets the value to zero.
+  - action: increment_breaker
+    writes: breaker_count
+    effect: Adds one.
+  - action: reset_breaker
+    writes: breaker_count
+    effect: Sets the value to zero.
+  - action: publish_event
+    writes: null
+    effect: >-
+      Emits one record to the host's event stream. Writes no fact and is not
+      observable to any condition.

@@ -1,0 +1,1374 @@
+name: ApiErrorCode
+description: Closed machine-readable error identity emitted by the private Den-sidecar API.
+go_const_prefix: ApiErrorCode
+http_status: true
+values:
+  - id: source_view_not_found
+    status: 404
+    comment: >-
+      The host does not retain this source view, presentation, or interest handle for the
+      caller (never issued, expired, released, evicted, or issued before a restart); reopen
+      it with the same intent.
+  - id: source_view_revision_changed
+    status: 409
+    comment: >-
+      Numeric source coordinates or intent refer to an outdated revision.
+  - id: source_view_capacity
+    status: 503
+    comment: >-
+      Pinned source presentations exhausted the bounded retention budget.
+  - id: source_view_frame_too_large
+    status: 413
+    comment: >-
+      One source row and its required context exceed the frame byte limit.
+  - id: source_view_preparing
+    status: 409
+    comment: >-
+      The source view is still preparing its first projection.
+  - id: trust_review_changed
+    status: 409
+    comment: >-
+      project roots or the read baseline changed while a trust review was captured
+  - id: project_inventory_unavailable
+    status: 503
+    comment: >-
+      project contribution discovery could not complete
+  - id: source_analysis_incomplete
+    status: 503
+    comment: >-
+      structural analysis exceeded its parser budget; the file remains readable
+  - id: source_analysis_unavailable
+    status: 503
+    comment: >-
+      structural analysis failed; the file remains readable
+  - id: invalid_page_cursor
+    status: 400
+    comment: >-
+      Opaque list cursor is malformed or belongs to a different query scope.
+  - id: unsupported_media_type
+    status: 415
+    comment: >-
+      request body Content-Type is absent, malformed, or unsupported by the endpoint
+  - id: method_not_allowed
+    status: 405
+    comment: >-
+      route exists but does not support the request method
+  - id: background_process_not_found
+    status: 404
+    comment: >-
+      background process handle not running for this session
+  - id: body_too_large
+    status: 413
+    comment: >-
+      request body exceeded configured limit
+  - id: prompt_text_too_large
+    status: 413
+    comment: >-
+      inline user prose exceeded the host composer limit and must be attached
+  - id: diagnostics_export_failed
+    status: 500
+    comment: >-
+      diagnostics bundle could not be assembled
+  - id: pricing_no_source
+    status: 400
+    comment: >-
+      cost tracking was turned on with no pricing source enabled
+  - id: backup_invalid
+    status: 400
+    comment: >-
+      uploaded backup archive failed structural validation
+  - id: backup_incomplete
+    status: 409
+    comment: >-
+      retained data was missing, unreadable, or changed during backup capture
+  - id: backup_incompatible
+    status: 409
+    comment: >-
+      backup archive schema does not match this build
+  - id: backup_unavailable
+    status: 503
+    comment: >-
+      backup subsystem cannot serve this request on this build
+  - id: store_incompatible
+    status: 503
+    comment: >-
+      store cannot be served by this build; recovery mode only
+  - id: export_format_invalid
+    status: 400
+    comment: >-
+      transcript export format query is not a supported value
+  - id: checkpoint_not_found
+    status: 404
+    comment: >-
+      human checkpoint id not found
+  - id: approval_grant_not_found
+    status: 404
+    comment: >-
+      approval grant or ask quiet id is not held on this device
+  - id: session_not_idle
+    status: 409
+    comment: >-
+      rewind refused while a turn or worker is still running
+  - id: rewind_anchor_not_found
+    status: 404
+    comment: >-
+      rewind anchor message id is not in the transcript
+  - id: rewind_anchor_ineligible
+    status: 422
+    comment: >-
+      rewind anchor is not a visible user ask
+  - id: rewind_blocked
+    status: 409
+    comment: >-
+      selected source changes cannot be safely reversed together
+  - id: rewind_plan_changed
+    status: 409
+    comment: >-
+      transcript, source, or document state changed after preview
+  - id: rewind_mode_unsupported
+    status: 422
+    comment: >-
+      rewind mode other than before_turn requested
+  - id: clone_failed
+    status: 502
+    comment: >-
+      git clone of a remote returned a non-zero exit (auth/url/network)
+  - id: folder_exists
+    status: 409
+    comment: >-
+      clone destination folder already exists
+  - id: folder_not_empty
+    status: 409
+    comment: >-
+      promote target folder is not empty
+  - id: project_mutation_in_progress
+    status: 409
+    comment: >-
+      another lifecycle transition is active on this project
+  - id: promotion_conflict
+    status: 409
+    comment: >-
+      save-to-folder intent conflicts with the durable transition
+  - id: promotion_not_found
+    status: 404
+    comment: >-
+      project has no active save-to-folder transition
+  - id: draft_root_immutable
+    status: 409
+    comment: >-
+      draft roots change only through save-to-folder
+  - id: project_busy
+    status: 409
+    comment: >-
+      project acquired an in-flight dependent before lifecycle commit
+  - id: checkpoint_not_pending
+    status: 409
+    comment: >-
+      checkpoint resolve targeted a non-pending record
+  - id: delegation_not_found
+    status: 404
+    comment: >-
+      delegation id not found
+  - id: delegation_leg_not_found
+    status: 404
+    comment: >-
+      delegation leg id not found
+  - id: feedback_not_pending
+    status: 409
+    comment: >-
+      feedback resolve targeted a non-pending phase
+  - id: feedback_response_required
+    status: 422
+    comment: >-
+      feedback resolve had empty response
+  - id: file_briefing_disabled
+    status: 409
+    comment: >-
+      file summaries are disabled
+  - id: file_briefing_not_found
+    status: 404
+    comment: >-
+      no briefing has been requested for the source file
+  - id: file_briefing_unavailable
+    status: 503
+    comment: >-
+      the file briefing service is stopping with the engine
+  - id: source_version_unavailable
+    status: 422
+    comment: >-
+      exact retained bytes or Git history needed for the selected source version are
+      unavailable
+  - id: choice_transition_not_found
+    status: 404
+    comment: >-
+      choice transition_id not on current phase
+  - id: choice_transition_actor_denied
+    status: 403
+    comment: >-
+      HTTP actor not listed on the choice edge
+  - id: choice_transition_not_armed
+    status: 409
+    comment: >-
+      choice transition when: readiness false
+  - id: choice_transition_pending_input
+    status: 409
+    comment: >-
+      choice transition blocked by pending user input latch
+  - id: decision_choice_invalid
+    status: 422
+    comment: >-
+      choice resolve had an invalid choice or selection count
+  - id: not_choice_phase
+    status: 409
+    comment: >-
+      choice resolve targeted a non-choice phase
+  - id: git_checkout_failed
+    status: 422
+    comment: >-
+      git checkout/branch create returned a non-zero exit
+  - id: git_commit_failed
+    status: 422
+    comment: >-
+      git commit returned a non-zero exit
+  - id: git_discard_failed
+    status: 422
+    comment: >-
+      git reset --hard / clean returned a non-zero exit
+  - id: git_init_failed
+    status: 422
+    comment: >-
+      git init returned a non-zero exit
+  - id: git_pull_failed
+    status: 422
+    comment: >-
+      git pull --ff-only returned a non-zero exit (diverged/auth/no upstream)
+  - id: git_push_failed
+    status: 422
+    comment: >-
+      git push returned a non-zero exit (auth/no upstream/rejected)
+  - id: git_no_changes
+    status: 422
+    comment: >-
+      git commit-message had no diff to summarize
+  - id: git_draft_failed
+    status: 503
+    comment: >-
+      git commit-message draftsman had no lite model or the model call failed
+  - id: git_repo_not_found
+    status: 404
+    comment: >-
+      named repo_id is not in the project's repository set
+  - id: git_stash_failed
+    status: 422
+    comment: >-
+      git stash returned a non-zero exit
+  - id: worktree_not_bound
+    status: 409
+    comment: >-
+      land/remove refused because the chat has no worktree binding
+  - id: worktree_already_bound
+    status: 409
+    comment: >-
+      bind refused because the chat already has a worktree, or delete refused while bound
+  - id: worktree_branch_exists
+    status: 409
+    comment: >-
+      bind refused because the requested branch already exists
+  - id: worktree_dirty
+    status: 409
+    comment: >-
+      land/remove refused because the worktree has uncommitted changes
+  - id: worktree_stale
+    status: 409
+    comment: >-
+      land or turn refused because the worktree directory is missing
+  - id: worktree_land_blocked
+    status: 409
+    comment: >-
+      bind/land refused for a machine-checked base-checkout or merge reason
+  - id: internal_error
+    status: 500
+    comment: >-
+      unhandled server error fallthrough
+  - id: invalid_json
+    status: 400
+    comment: >-
+      request body is not one well-formed JSON value of the expected shape
+  - id: invalid_path
+    status: 400
+    comment: >-
+      path traversal or unsafe path argument
+  - id: write_root_is_filesystem_root
+    status: 400
+    comment: >-
+      project root or write_root grant is filesystem root
+  - id: write_root_is_home
+    status: 400
+    comment: >-
+      project root or write_root grant is bare $HOME
+  - id: write_root_not_absolute
+    status: 400
+    comment: >-
+      project root or write_root grant is not an absolute path
+  - id: write_root_under_secret_store
+    status: 400
+    comment: >-
+      project root or write_root grant intersects a credential store
+  - id: blueprint_content_conflict
+    status: 409
+    comment: >-
+      blueprint bytes changed before approval committed
+  - id: idempotency_conflict
+    status: 409
+    comment: >-
+      operation id was reused with different input (every operation_id-bearing endpoint)
+  - id: invalid_arguments
+    status: 400
+    comment: >-
+      contribution command arguments failed validation
+  - id: invalid_query
+    status: 400
+    comment: >-
+      query parameter is malformed, missing, duplicated, or outside its declared bounds;
+      details.parameter names it
+  - id: command_disabled
+    status: 409
+    comment: >-
+      contribution command enablement is false
+  - id: choice_source_not_found
+    status: 404
+    comment: >-
+      command interaction has no matching dynamic choice source
+  - id: choice_source_failed
+    status: 502
+    comment: >-
+      dynamic choice provider call failed
+  - id: choice_source_invalid
+    status: 502
+    comment: >-
+      dynamic choice provider returned an invalid projection
+  - id: contribution_source_unavailable
+    status: 409
+    comment: >-
+      contribution provider requirement is not ready
+  - id: search_source_not_found
+    status: 404
+    comment: >-
+      contribution search source is absent from the captured frame
+  - id: contribution_search_failed
+    status: 502
+    comment: >-
+      contribution search provider call failed
+  - id: contribution_search_invalid
+    status: 502
+    comment: >-
+      contribution search provider returned an invalid projection
+  - id: operation_output_invalid
+    status: 502
+    comment: >-
+      typed operation output failed schema validation
+  - id: source_mutation_diverged
+    status: 409
+    comment: >-
+      source bytes diverged during operation recovery
+  - id: source_history_changed
+    status: 409
+    comment: >-
+      undo or redo targeted a lifecycle head that is no longer current
+  - id: workflow_run_not_active
+    status: 409
+    comment: >-
+      blueprint approval targeted an inactive workflow run
+  - id: cursor_generation_expired
+    status: 409
+    comment: >-
+      pagination cursor belongs to an unavailable snapshot generation
+  - id: event_replay_unavailable
+    status: 409
+    comment: >-
+      event replay cursor predates the retained event window
+  - id: invalid_request
+    status: 400
+    comment: >-
+      request body failed validation; details.field names the field when one is at fault
+      and details.reason carries the host's explanation
+  - id: provider_catalog_unavailable
+    status: 503
+    comment: >-
+      Model assignment could not be established because provider discovery failed. No
+      assignment was saved.
+  - id: invalid_workflow_transition
+    status: 409
+    comment: >-
+      workflow run state transition rejected
+  - id: invalid_workflow_target
+    status: 400
+    comment: >-
+      workflow command omitted its run id or reviewed revision
+  - id: invalid_workflow_revision
+    status: 400
+    comment: >-
+      workflow command supplied a non-positive reviewed revision
+  - id: invalid_workflow_replacement_target
+    status: 400
+    comment: >-
+      workflow replacement supplied only one half of its target token
+  - id: message_not_found
+    status: 404
+    comment: >-
+      session message id not found
+  - id: not_found
+    status: 404
+    comment: >-
+      no route matches the request path; resources use <resource>_not_found
+  - id: path_not_found
+    status: 404
+    comment: >-
+      filesystem path does not exist
+  - id: persist_not_confirmed
+    status: 403
+    comment: >-
+      workflow_persist called without confirm token
+  - id: phase_gate_unmet
+    status: 409
+    comment: >-
+      advance blocked by complete_when gate (see workflow_handlers.go inline Code)
+  - id: blueprint_not_draft
+    status: 409
+    comment: >-
+      blueprint must be draft for the requested operation
+  - id: blueprint_not_editable
+    status: 409
+    comment: >-
+      blueprint in terminal state cannot be edited
+  - id: blueprint_not_found
+    status: 404
+    comment: >-
+      blueprint id not found
+  - id: blueprint_path_taken
+    status: 409
+    comment: >-
+      a blueprint already exists at the minted path; create never replaces
+  - id: blueprint_run_active
+    status: 409
+    comment: >-
+      blueprint delete refused while a workflow run is bound to it
+  - id: detection_pack_not_removable
+    status: 409
+    comment: >-
+      DELETE refused — only an imported folder is removable here; a pack an extension
+      provides is uninstalled with it
+  - id: detection_pack_id_collision
+    status: 409
+    comment: >-
+      import pack id is already provided by a shipped pack, an extension pack, or an
+      existing device pack
+  - id: blueprint_launch_incompatible
+    status: 400
+    comment: >-
+      launch target fails materialization-kind compatibility
+  - id: blueprint_launch_unsupported
+    status: 400
+    comment: >-
+      launch target lacks blueprint: support
+  - id: human_approval_not_ready
+    status: 409
+    comment: >-
+      blueprint approve blocked — human_approval readiness gate unmet; blueprint not
+      marked approved
+  - id: project_not_found
+    status: 404
+    comment: >-
+      project id not found
+  - id: extension_suggestion_changed
+    status: 409
+    comment: >-
+      project extension proposal changed after display and before installation
+  - id: extension_suggestion_invalid
+    status: 409
+    comment: >-
+      the project's extension suggestion file does not decode or validate
+  - id: overlay_format_unsupported
+    status: 409
+    comment: >-
+      workspace .paintedwolf/overlay.yaml overlay_format newer than binary
+  - id: overlay_format_invalid
+    status: 409
+    comment: >-
+      workspace .paintedwolf/overlay.yaml has a missing or invalid overlay_format
+  - id: root_not_found
+    status: 404
+    comment: >-
+      project root not found, or the named root_id is not a project root
+  - id: root_busy
+    status: 409
+    comment: >-
+      folder has in-flight dependents; use ?force=true to cancel
+  - id: duplicate_root
+    status: 409
+    comment: >-
+      project root path already attached
+  - id: duplicate_root_label
+    status: 409
+    comment: >-
+      project root label already used (case-insensitive)
+  - id: project_removal_assessment_changed
+    status: 409
+    comment: >-
+      Project removal references changed after review; assess again.
+  - id: project_removal_operation_conflict
+    status: 409
+    comment: >-
+      A project removal operation id was reused with different input.
+  - id: extension_state_changed
+    status: 409
+    comment: >-
+      Extension mutation expected_revision is stale; reload and retry
+  - id: extension_candidate_rejected
+    status: 400
+    comment: >-
+      the resolved pack candidate failed validation; the reason names the specific pack,
+      unit, or reference at fault
+  - id: contributions_unavailable
+    status: 503
+    comment: >-
+      the contribution frame source is not available
+  - id: command_not_found
+    status: 404
+    comment: >-
+      the invoked command is not in the current contribution frame
+  - id: invocation_scope_mismatch
+    status: 400
+    comment: >-
+      the command's action kind does not invoke on this route
+  - id: contribution_frame_changed
+    status: 409
+    comment: >-
+      the invoked command changed since the caller's frame
+  - id: command_unavailable
+    status: 409
+    comment: >-
+      the command's condition or requirement does not hold
+  - id: contribution_not_authorized
+    status: 403
+    comment: >-
+      trust policy rejected the invocation
+  - id: mcp_call_failed
+    status: 502
+    comment: >-
+      the MCP tool call failed
+  - id: path_missing
+    status: 400
+    comment: >-
+      Linked development pack source folder is missing or unreadable
+  - id: trust_surface_off
+    status: 409
+    comment: >-
+      the required project trust surface is off
+  - id: artifact_empty
+    status: 400
+    comment: >-
+      live tool recording upload contained no bytes
+  - id: artifact_too_large
+    status: 413
+    comment: >-
+      live tool recording upload exceeded the video artifact limit
+  - id: artifact_foreign
+    status: 403
+    comment: >-
+      visual artifact id belongs to a different session tree
+  - id: artifact_unavailable
+    status: 410
+    comment: >-
+      visual artifact bytes are no longer retained
+  - id: artifact_deleted
+    status: 410
+    comment: >-
+      visual artifact was deleted by a human; the tombstone still resolves
+  - id: artifact_not_found
+    status: 404
+    comment: >-
+      no visual artifact by that id is known to this session tree or project
+  - id: backup_restore_pending
+    status: 409
+    comment: >-
+      backup restore is already pending
+  - id: recording_duration_invalid
+    status: 400
+    comment: >-
+      live tool recording duration_ms was not a non-negative integer
+  - id: recording_start_invalid
+    status: 400
+    comment: >-
+      live tool recording recorded_at was not RFC 3339
+  - id: user_image_not_visible
+    status: 422
+    comment: >-
+      user attached images on a non-vision coordinator model (SSE host notice)
+  - id: unsupported_attachment
+    status: 400
+    comment: >-
+      prompt attachment rejected by sniff/allowlist
+  - id: attachment_too_large
+    status: 413
+    comment: >-
+      prompt attachment exceeded count/byte/turn caps
+  - id: attachment_undecodable
+    status: 400
+    comment: >-
+      prompt attachment is an admitted video whose codec the managed browser cannot decode
+  - id: attachment_not_found
+    status: 400
+    comment: >-
+      prompt attachment blob id is not in the project's upload store
+  - id: attachment_unavailable
+    status: 503
+    comment: >-
+      prompt attachment storage is unavailable
+  - id: reference_out_of_jail
+    status: 400
+    comment: >-
+      prompt reference path/folder outside attached project roots
+  - id: attachment_scanned_no_text
+    status: 422
+    comment: >-
+      scanned document yielded no extractable text
+  - id: no_project_root
+    status: 409
+    comment: >-
+      project has no attached folder
+  - id: source_path_denied
+    status: 403
+    comment: >-
+      path is outside the project sandbox
+  - id: source_path_protected
+    status: 403
+    comment: >-
+      mutation targets protected project metadata
+  - id: source_move_incomplete
+    status: 500
+    comment: >-
+      cross-volume move retains its source pending reconciliation
+  - id: source_path_busy
+    status: 409
+    comment: >-
+      another file operation reserves this path
+  - id: source_recovery_failed
+    status: 500
+    comment: >-
+      recovery content could not be preserved or restored
+  - id: source_not_found
+    status: 404
+    comment: >-
+      file not found under project roots
+  - id: source_binary_denied
+    status: 415
+    comment: >-
+      binary content refused on PUT /source (reads return metadata)
+  - id: source_read_only
+    status: 403
+    comment: >-
+      editor document admission requires a writable source file
+  - id: source_binary
+    status: 415
+    comment: >-
+      editor document requires editable text
+  - id: unsupported_encoding
+    status: 415
+    comment: >-
+      unsupported codepage text refused on GET /source with a detected label
+  - id: source_raw_not_image
+    status: 415
+    comment: >-
+      GET /source/raw refused a non-image payload
+  - id: source_raw_too_large
+    status: 413
+    comment: >-
+      GET /source/raw refused an image over the 8 MiB cap
+  - id: source_workspace_mismatch
+    status: 409
+    comment: >-
+      source request targeted a different physical checkout
+  - id: source_write_conflict
+    status: 409
+    comment: >-
+      in-app editor save refused because the file changed on disk since it was loaded
+  - id: source_permission_change_failed
+    status: 422
+    comment: >-
+      host filesystem refused a human request to make a project file owner-writable
+  - id: editor_revision_conflict
+    status: 409
+    comment: >-
+      editor document command targeted a stale document or file revision
+  - id: editor_replica_epoch
+    status: 409
+    comment: >-
+      pending edits belong to an earlier external import and require recovery
+  - id: editor_replica_identity
+    status: 409
+    comment: >-
+      document update does not belong to the invoking registered replica
+  - id: editor_root_detached
+    status: 409
+    comment: >-
+      editor document names a root the project no longer has attached
+  - id: source_presentation_effect_changed
+    status: 409
+    comment: >-
+      file presentation targeted a different source effect
+  - id: source_already_exists
+    status: 409
+    comment: >-
+      in-app file create refused because a file or folder already occupies that path
+  - id: source_cross_root
+    status: 400
+    comment: >-
+      rename or copy refused because the path lives under a different attached root
+  - id: source_not_empty
+    status: 409
+    comment: >-
+      delete refused because the folder still has children and recursive was not set
+  - id: source_inventory_pending
+    status: 409
+    comment: >-
+      source inventory has not reached the current root generation
+  - id: source_trash_failed
+    status: 500
+    comment: >-
+      delete could not complete the operating system trash move; recovery content is
+      retained
+  - id: source_unavailable
+    status: 503
+    comment: >-
+      a source root cannot be read right now
+  - id: project_policy_denied
+    status: 403
+    comment: >-
+      project open policy denied path
+  - id: provider_not_found
+    status: 404
+    comment: >-
+      LLM provider id not registered
+  - id: provider_in_use
+    status: 409
+    comment: >-
+      provider is referenced by saved model policy
+  - id: provider_not_configured
+    status: 409
+    comment: >-
+      LLM provider has no API key or local backend
+  - id: provider_empty_completion
+    status: 502
+    comment: >-
+      LLM provider returned no text or tool calls
+  - id: provider_response_interrupted
+    status: 502
+    comment: >-
+      provider response stream ended before completion
+  - id: provider_context_too_small
+    status: 422
+    comment: >-
+      prompt exceeds the model's context window on the target host (SSE host_error)
+  - id: provider_tool_calls_unsupported
+    status: 422
+    comment: >-
+      model cannot make tool calls and a detected attempt was unrecoverable (SSE
+      host_error)
+  - id: provider_tool_calls_in_prose
+    status: 502
+    comment: >-
+      model emitted an unparseable tool call as prose (SSE host_error)
+  - id: provider_rate_limited
+    status: 503
+    comment: >-
+      SSE host_error after provider HTTP 429 retry exhaustion
+  - id: provider_overloaded
+    status: 503
+    comment: >-
+      SSE host_error after provider HTTP 503/529 capacity exhaustion
+  - id: provider_server_error
+    status: 502
+    comment: >-
+      SSE host_error after a provider-side HTTP 5xx response exhausts retries
+  - id: thinking_override_unavailable
+    status: 422
+    comment: >-
+      configured thinking override cannot be applied to the model or request
+  - id: provider_request_rejected
+    status: 502
+    comment: >-
+      provider returned a terminal HTTP request rejection (SSE host_error)
+  - id: provider_unreachable
+    status: 502
+    comment: >-
+      provider request never reached the configured endpoint (SSE host_error)
+  - id: provider_silent
+    status: 504
+    comment: >-
+      provider accepted the request but sent no headers before the deadline
+  - id: model_refused
+    status: 422
+    comment: >-
+      provider returned a structured refusal for the assigned model
+  - id: model_catalog_unreachable
+    status: 503
+    comment: >-
+      model-list refresh could not reach the configured provider
+  - id: model_catalog_refresh_failed
+    status: 502
+    comment: >-
+      model-list request was rejected or returned an invalid response
+  - id: mcp_provider_unreachable
+    status: 503
+    comment: >-
+      configured MCP provider did not answer
+  - id: mcp_sync_failed
+    status: 502
+    comment: >-
+      MCP provider answered but tools could not be listed or registered
+  - id: mcp_tool_pin_unreadable
+    status: 500
+    comment: >-
+      device tool-definition pin state could not be read; this provider's tools stayed at
+      their last published generation
+  - id: mcp_id_required
+    status: 400
+    comment: >-
+      create MCP provider omitted id
+  - id: mcp_transport_required
+    status: 400
+    comment: >-
+      create/update MCP provider omitted both url and command
+  - id: mcp_transport_conflict
+    status: 400
+    comment: >-
+      create/update MCP provider named both url and command
+  - id: mcp_provider_not_found
+    status: 404
+    comment: >-
+      MCP admin targeted a provider id that is not in the catalog
+  - id: mcp_update_empty
+    status: 400
+    comment: >-
+      update MCP provider named neither inherit nor a field
+  - id: mcp_oauth_unavailable
+    status: 503
+    comment: >-
+      MCP Authorization is not wired on this host
+  - id: mcp_oauth_failed
+    status: 502
+    comment: >-
+      MCP Authorization start, complete, or revoke failed
+  - id: mcp_oauth_not_supported
+    status: 400
+    comment: >-
+      Sign in was requested for a recipe that authenticates with a static token
+  - id: mcp_oauth_registration_required
+    status: 400
+    comment: >-
+      Authorization server does not accept dynamic client registration
+  - id: mcp_recipe_not_found
+    status: 404
+    comment: >-
+      add MCP recipe targeted an id that is not in the bundled catalog
+  - id: mcp_persist_failed
+    status: 500
+    comment: >-
+      MCP overlay file could not be written
+  - id: remote_requires_https
+    status: 400
+    comment: >-
+      non-loopback MCP URL is not https
+  - id: invalid_url
+    status: 400
+    comment: >-
+      MCP HTTP URL could not be parsed
+  - id: project_stdio_forbidden
+    status: 400
+    comment: >-
+      project MCP overlay named command/args/env
+  - id: project_headers_forbidden
+    status: 400
+    comment: >-
+      project MCP overlay named token/headers
+  - id: project_remote_forbidden
+    status: 400
+    comment: >-
+      project MCP overlay named a non-loopback URL
+  - id: project_enable_forbidden
+    status: 400
+    comment: >-
+      project MCP overlay enabled a row it could not have declared
+  - id: overlay_unknown_field
+    status: 400
+    comment: >-
+      MCP overlay YAML named a field the catalog does not accept
+  - id: unreadable_layer
+    status: 400
+    comment: >-
+      MCP overlay YAML would not parse
+  - id: rate_limited
+    status: 429
+    comment: >-
+      request rejected by rate limiter
+  - id: queue_revision_conflict
+    status: 409
+    comment: >-
+      queue command targeted a stale revision
+  - id: queue_empty
+    status: 409
+    comment: >-
+      queue command found no queued messages to act on
+  - id: queue_send_pending
+    status: 409
+    comment: >-
+      queue send refused because a reservation is already in flight
+  - id: queue_send_reserved
+    status: 409
+    comment: >-
+      queue edit refused because the head group is reserved for sending
+  - id: queue_no_send_to_cancel
+    status: 409
+    comment: >-
+      queue cancel found no reservation outstanding
+  - id: scan_not_complete
+    status: 409
+    comment: >-
+      scan still running or pending
+  - id: scan_not_found
+    status: 404
+    comment: >-
+      scan id not found
+  - id: no_scanner_available
+    status: 409
+    comment: >-
+      no selected scanner can run a full pass for the project
+  - id: invalid_entry
+    status: 400
+    comment: >-
+      scanner catalog entry failed shape validation
+  - id: community_driver_forbidden
+    status: 400
+    comment: >-
+      user/project scanner overlay used a forbidden driver class
+  - id: community_parser_forbidden
+    status: 400
+    comment: >-
+      user external scanner used a non-allowlisted output_parser
+  - id: mapper_missing
+    status: 400
+    comment: >-
+      map/json scanner missing device mapper
+  - id: project_fields_forbidden
+    status: 400
+    comment: >-
+      project scanners.yaml included non enable-only fields
+  - id: argv_project_path_forbidden
+    status: 400
+    comment: >-
+      external scanner argv referenced a project path
+  - id: argv_shell_forbidden
+    status: 400
+    comment: >-
+      external scanner argv used shell metacharacters
+  - id: duplicate_id
+    status: 409
+    comment: >-
+      an id the caller chose already names another entry of the same kind
+      (scanner catalog row, MCP provider, model provider)
+  - id: search_query_invalid
+    status: 400
+    comment: >-
+      search DSL parse/compile rejected the query
+  - id: search_pattern_invalid
+    status: 400
+    comment: >-
+      code search regex/pattern flags failed to compile
+  - id: search_export_invalid_format
+    status: 400
+    comment: >-
+      search export format must be jsonl, csv, or sarif
+  - id: search_export_sarif_scope
+    status: 400
+    comment: >-
+      SARIF export requires a scan-scoped query (kind:scan)
+  - id: security_disabled
+    status: 409
+    comment: >-
+      Security product main is off
+  - id: grounding_escalated
+    status: 409
+    comment: >-
+      coordinator grounding guard escalated the session (SSE host_error)
+  - id: session_spend_ceiling_reached
+    status: 409
+    comment: >-
+      opt-in per-session USD spend ceiling reached (SSE host_error)
+  - id: prompt_failed
+    status: 500
+    comment: >-
+      generic async prompt turn failure (SSE host_error)
+  - id: host_fault
+    status: 500
+    comment: >-
+      the host could not record a tool call's outcome and stopped the turn (SSE
+      host_error)
+  - id: worker_closeout_exhausted
+    status: 500
+    comment: >-
+      worker hit LLM turn limit after scheduled and recovery closeout (SSE worker.failure)
+  - id: worker_execute_failed
+    status: 500
+    comment: >-
+      generic worker execute failure (SSE worker.failure)
+  - id: worker_workspace_disk_full
+    status: 507
+    comment: >-
+      central worker seed or branch storage exhausted (SSE worker.failure)
+  - id: worker_owner_unsettled
+    status: 500
+    comment: >-
+      worker child ended after a subsystem owner was entered and could not commit (SSE
+      worker.failure)
+  - id: worker_workspace_unavailable
+    status: 503
+    comment: >-
+      isolated worker workspace could not be prepared (SSE worker.failure)
+  - id: session_archived
+    status: 409
+    comment: >-
+      archived chats cannot be pinned; unarchive the chat first
+  - id: session_not_found
+    status: 404
+    comment: >-
+      session id not found
+  - id: session_not_pinned
+    status: 409
+    comment: >-
+      pin_position moves only a pinned chat
+  - id: session_preparation_failed
+    status: 500
+    comment: >-
+      session workspace preparation failed
+  - id: session_preparing
+    status: 409
+    comment: >-
+      session workspace preparation is still running
+  - id: session_stopping
+    status: 409
+    comment: >-
+      session-tree stop barrier rejected new work admission
+  - id: session_workflow_not_found
+    status: 404
+    comment: >-
+      session-scoped workflow id not found
+  - id: unauthorized
+    status: 401
+    comment: >-
+      bearer token missing or invalid
+  - id: forbidden
+    status: 403
+    comment: >-
+      the authenticated person does not hold the authority the operation requires
+  - id: worker_not_found
+    status: 404
+    comment: >-
+      worker leg id not found
+  - id: worker_not_cancelable
+    status: 409
+    comment: >-
+      worker cancel targeted a terminal job
+  - id: leg_not_pending
+    status: 409
+    comment: >-
+      delegation dispatch targeted a leg that already left pending
+  - id: decision_not_pending
+    status: 409
+    comment: >-
+      no pending needs_decision for the worker job
+  - id: workflow_active
+    status: 409
+    comment: >-
+      cannot start workflow while another is active
+  - id: workflow_revision_conflict
+    status: 409
+    comment: >-
+      workflow command targeted a stale run revision
+  - id: workflow_replacement_target_required
+    status: 409
+    comment: >-
+      catalog replacement did not identify the reviewed active lineage
+  - id: workflow_start_requires_human_approval
+    status: 403
+    comment: >-
+      coordinator state_start recorded a proposal that requires a human start action
+  - id: blueprint_draft_required
+    status: 400
+    comment: >-
+      blueprint workflow start could not link a draft blueprint row
+  - id: workflow_not_found
+    status: 404
+    comment: >-
+      workflow id not registered (unknown manifest)
+  - id: workflow_not_runnable
+    status: 409
+    comment: >-
+      workflow run is paused or terminal
+  - id: workflow_run_not_found
+    status: 404
+    comment: >-
+      workflow run id not found
+  - id: report_not_found
+    status: 404
+    comment: >-
+      workflow run report PDF unavailable (not report-enabled or no grounded closeout)
+  - id: managed_secret_revoked
+    status: 409
+    comment: >-
+      managed secret is permanently revoked
+  - id: managed_secret_agent_use_expired
+    status: 409
+    comment: >-
+      managed secret reference passed its agent-use deadline
+  - id: managed_secret_reveal_unavailable
+    status: 503
+    comment: >-
+      managed secret reveal has no trusted user-presence verifier
+  - id: managed_secret_reveal_denied
+    status: 403
+    comment: >-
+      managed secret reveal proof was refused
+  - id: managed_secret_reveal_changed
+    status: 409
+    comment: >-
+      managed secret value changed after authentication began
+  - id: managed_secret_reveal_challenge_not_found
+    status: 404
+    comment: >-
+      managed secret reveal challenge was never issued, expired, or was already used
+  - id: managed_secret_value_unavailable
+    status: 409
+    comment: >-
+      managed secret metadata stands but its current value cannot be read
+  - id: auth_unavailable
+    status: 503
+    comment: >-
+      authenticated routes are unavailable because the host has no API token or caller
+      store
+  - id: recovery_snapshot_invalid
+    status: 409
+    comment: >-
+      the retained upgrade recovery snapshot failed structural validation
+  - id: source_text_too_large
+    status: 413
+    comment: >-
+      source text exceeds the supported comparison size
+  - id: source_content_too_large
+    status: 413
+    comment: >-
+      source content exceeds the editor's open and save cap
+  - id: source_version_changed
+    status: 409
+    comment: >-
+      the file or retained edit changed after it was opened; reload it
+  - id: source_path_ambiguous
+    status: 409
+    comment: >-
+      a source path matches more than one attached root
+  - id: file_operation_unavailable
+    status: 409
+    comment: >-
+      the file operation's handler is no longer available on this host
+  - id: file_operation_capacity
+    status: 429
+    comment: >-
+      the file operation queue is full; Retry-After says when to retry
+  - id: file_operation_not_cancelable
+    status: 409
+    comment: >-
+      the file operation has entered its commit phase
+  - id: ignore_file_changed
+    status: 409
+    comment: >-
+      the project ignore file changed since it was read; reload before saving
+  - id: stock_pack_immutable
+    status: 409
+    comment: >-
+      stock extension packs and meta-packs cannot be changed or removed
+  - id: message_references_changed
+    status: 409
+    comment: >-
+      a message changed before its references resolved
+  - id: chat_content_changed
+    status: 409
+    comment: >-
+      chat content changed since it was opened; reopen it
+  - id: history_preview_changed
+    status: 409
+    comment: >-
+      history storage changed after the preview was computed; preview again
+  - id: pricing_source_invalid
+    status: 502
+    comment: >-
+      a pricing source returned data that failed validation
+  - id: pricing_source_unreachable
+    status: 502
+    comment: >-
+      a pricing source could not be reached
+  - id: pricing_source_not_found
+    status: 404
+    comment: >-
+      pricing source id is not configured
+  - id: pricing_source_disabled
+    status: 409
+    comment: >-
+      pricing source or cost tracking is disabled
+  - id: sandbox_socket_path_invalid
+    status: 400
+    comment: >-
+      socket grant path is not an absolute, clean path
+  - id: sandbox_socket_path_not_found
+    status: 400
+    comment: >-
+      socket grant path does not exist
+  - id: sandbox_socket_path_not_socket
+    status: 400
+    comment: >-
+      socket grant path is not a Unix socket
+  - id: sandbox_socket_path_refused
+    status: 400
+    comment: >-
+      socket grant path could not be inspected
+  - id: sandbox_socket_path_limit
+    status: 400
+    comment: >-
+      socket grant exceeded the socket path limit
+  - id: sandbox_socket_path_changed
+    status: 400
+    comment: >-
+      socket grant path changed identity while it was resolved
+  - id: ask_user_rejected
+    status: 409
+    comment: >-
+      the ask was refused by the workflow; details.reject_code names the tool rejection
+  - id: workflow_validation_failed
+    status: 422
+    comment: >-
+      workflow manifest failed validation; details.errors lists each diagnostic
+  - id: managed_secret_not_found
+    status: 404
+    comment: >-
+      managed secret id not found
+  - id: source_history_not_found
+    status: 404
+    comment: >-
+      source history, presentation, or baseline pin not found
+  - id: source_presentation_not_found
+    status: 404
+    comment: >-
+      source presentation not found
+  - id: source_pin_not_found
+    status: 404
+    comment: >-
+      source review or baseline pin not found
+  - id: source_effect_not_found
+    status: 404
+    comment: >-
+      source effect (file edit) not found
+  - id: source_version_not_found
+    status: 404
+    comment: >-
+      source version not found
+  - id: source_commit_not_found
+    status: 404
+    comment: >-
+      commit not found in the repository serving the addressed root
+  - id: source_file_not_found
+    status: 404
+    comment: >-
+      logical source file id not found
+  - id: git_movement_not_found
+    status: 404
+    comment: >-
+      Git movement id not found
+  - id: editor_document_not_found
+    status: 404
+    comment: >-
+      editor document id not found
+  - id: file_operation_not_found
+    status: 404
+    comment: >-
+      file operation not found for this caller and project
+  - id: research_provider_not_found
+    status: 404
+    comment: >-
+      web research provider id not registered
+  - id: research_credential_not_found
+    status: 404
+    comment: >-
+      web research credential not found
+  - id: scanner_not_found
+    status: 404
+    comment: >-
+      scanner id not found in the catalog
+  - id: scanner_catalog_entry_not_found
+    status: 404
+    comment: >-
+      scanner catalog id not found
+  - id: detection_pack_not_found
+    status: 404
+    comment: >-
+      detection pack id not found
+  - id: host_resource_not_found
+    status: 404
+    comment: >-
+      host resource id not found
+  - id: ignore_entry_not_found
+    status: 404
+    comment: >-
+      ignore entry or declaration not found
+  - id: secret_review_not_found
+    status: 404
+    comment: >-
+      the secret review is no longer available
+  - id: extension_pack_not_found
+    status: 404
+    comment: >-
+      extension pack not installed
+  - id: extension_unit_not_found
+    status: 404
+    comment: >-
+      extension unit not found
+  - id: extension_meta_pack_not_found
+    status: 404
+    comment: >-
+      extension meta-pack not found
+  - id: extension_profile_not_found
+    status: 404
+    comment: >-
+      extension pack declares no profile with this name
+  - id: extension_suggestion_not_found
+    status: 404
+    comment: >-
+      project extension suggestion not found
+  - id: project_removal_not_found
+    status: 404
+    comment: >-
+      project removal operation not found
+  - id: chat_content_not_found
+    status: 404
+    comment: >-
+      chat content reference not found
+  - id: manual_llm_request_not_found
+    status: 404
+    comment: >-
+      harness manual LLM request id is not pending
+  - id: preparation_receipt_not_found
+    status: 404
+    comment: >-
+      harness preparation has not reached candidate entry
+  - id: history_protection_not_found
+    status: 404
+    comment: >-
+      history protection owner not found

@@ -1,0 +1,33 @@
+oar: '1.0'
+id: WORKFLOW_DELEGATION_NOT_READY
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "WORKFLOW_DELEGATION_NOT_READY"
+effect: block
+copy:
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: The active workflow owns its readiness requirements; a repeated dispatch does not satisfy them.
+  fix: Follow the active workflow prerequisite details and current phase exit. Complete only the unmet requirements;
+    preserve completed work and approvals. If progress depends on a person or unavailable capability, report that
+    dependency instead of repeating dispatch.
+  instead: Use the active workflow requirements before delegation
+  what: The current workflow has not admitted this delegation.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
+x-paintedwolf-message: Delegation tools are blocked until implement_workflow_ready
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: delegate_dispatch
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKFLOW_DELEGATION_NOT_READY'

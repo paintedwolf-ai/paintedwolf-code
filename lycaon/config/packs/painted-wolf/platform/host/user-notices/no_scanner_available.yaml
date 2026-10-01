@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: No scanner available
+message: No selected scanner can run a full scan for this project.
+suggested_action: Check scanner readiness in the Security stage and enable an available scanner.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [No selected scanner, scanner readiness]

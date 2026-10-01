@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Could not refresh MCP tools
+message: The provider’s tools could not be refreshed.
+suggested_action: Check the connection settings and the provider’s logs, then use Resync.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - tools
+      - Resync

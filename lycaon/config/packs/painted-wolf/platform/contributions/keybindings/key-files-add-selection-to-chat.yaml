@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-add-selection-to-chat
+command: painted-wolf/platform:files-add-selection-to-chat
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+L"
+  windows:
+    - "Mod+L"
+  linux:
+    - "Mod+L"

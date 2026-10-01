@@ -1,0 +1,5 @@
+id: terraform-cli
+label: Terraform
+description: Infrastructure-wide destroy of managed Terraform or OpenTofu state.
+equivalents:
+  terraform: [tofu, terragrunt, tf]

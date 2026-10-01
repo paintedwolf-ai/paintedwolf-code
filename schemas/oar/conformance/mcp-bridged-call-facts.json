@@ -1,0 +1,73 @@
+{
+  "id": "mcp-bridged-call-facts",
+  "title": "The mcp profile's facts and its _for accessors are distinct names and both work",
+  "covers": [
+    "OAR-FACT-16",
+    "OAR-FACT-2"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "MCP_DISABLED",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "mcp"
+        ]
+      },
+      "when": "mcp_provider_id != \"\" && mcp_provider_configured && !mcp_provider_enabled && !mcp_provider_enabled_for(\"files\")"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "mcp_provider_id": "files",
+      "mcp_provider_configured": true,
+      "mcp_provider_enabled": false,
+      "mcp_provider_enabled_for": false
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "MCP_DISABLED"
+  }
+}

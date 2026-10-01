@@ -1,0 +1,37 @@
+oar: '1.0'
+id: GREP_SCOPE_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - grep
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "GREP_SCOPE_REQUIRED"
+effect: block
+copy:
+  what: Open-root grep requires an expressed path or narrowing path_glob when the file count is unknown or
+    meets the structural threshold.
+  cause: The call left root scope open after the structural view was returned.
+  why: A scoped content walk preserves host responsiveness.
+  fix: Use a subdirectory from the returned structural view or a glob that selects a meaningful subset of the
+    original scope. An open-root glob such as *, **, **/*, or *.* does not narrow it. Preserve required coverage
+    when partitioning the search.
+  instead: Branch on Code; re-emit grep with path or a narrowing path_glob
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: Open-root grep requires path or narrowing path_glob scope
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: open root
+    file_count: 50000
+    path: .
+    profile: coordinator
+    tool: grep
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GREP_SCOPE_REQUIRED'

@@ -1,0 +1,5 @@
+id: mapbox-api-token
+upstream_id: mapbox-api-token
+title: Mapbox public access token
+severity: critical
+enabled: false

@@ -1,0 +1,3 @@
+id: mailgun-pub-key
+upstream_id: mailgun-pub-key
+enabled: false

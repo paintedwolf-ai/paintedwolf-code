@@ -1,0 +1,13 @@
+emit: banner
+category: expected_behavior
+severity: info
+message: This web_search returned cached results for a repeated query.
+what: The host reused cached hits for this query.
+cause: The query matched an eligible cached search; this does not establish whether its results are useful or current enough for the task.
+why: Repeating an unchanged query can return the same observations.
+fix: Inspect these hits. Use fetch_url for a relevant returned URL, refine the query for an identified evidence gap, or synthesize from existing results. If there are no relevant hits, do not invent a top URL to fetch.
+instead: Choose the next action from the actual result and freshness requirement instead of repeating an unchanged query without a reason.
+scenarios:
+- id: repeat_query
+  expect_contains: ['Code: WEB_SEARCH_DUPLICATE_QUERY', 'fetch_url']
+id: WEB_SEARCH_DUPLICATE_QUERY

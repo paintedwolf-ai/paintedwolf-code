@@ -1,0 +1,61 @@
+oar: '1.0'
+id: READ_FILE_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - read
+    - summarize
+    - diff
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.max_file_bytes
+    - paintedwolf.path
+    - paintedwolf.size
+    - paintedwolf.resource_limit
+    - paintedwolf.can_command
+when: paintedwolf.rejection_code == "READ_FILE_TOO_LARGE"
+effect: block
+copy:
+  what: '{{ tool }} could not load {{ paintedwolf.path }} within the {{ paintedwolf.max_file_bytes }}-byte input budget.{% if paintedwolf.size %} Measured input is at least {{ paintedwolf.size }} bytes.{% endif %}'
+  cause: The tool loads the complete file before selecting a region; compressed input must also fit the decoder memory budget.
+  why: The input budget bounds host memory. Output pagination does not change this budget.
+  fix: >-
+    {% if paintedwolf.can_command %}Use command with head, tail, sed, or grep to inspect bounded parts of the file.{% else %}Use a smaller source file, or ask its owner for a bounded excerpt.{% endif %}
+    Preserve the original file and any completed work; different offset or limit values do not change the input budget.
+  instead: >-
+    {% if paintedwolf.can_command %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
+x-paintedwolf-message: input file exceeds max_file_bytes
+x-paintedwolf-scenarios:
+  - id: with_command
+    vars:
+      detail: bad args
+      max_file_bytes: 8388608
+      path: internal/foo.go
+      profile: implement
+      can_command: true
+      size: 12000000
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: READ_FILE_TOO_LARGE'
+      - 'Use command'
+  - id: without_command
+    vars:
+      detail: bad args
+      max_file_bytes: 8388608
+      path: internal/foo.go
+      profile: implement
+      can_command: false
+      size: 12000000
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: READ_FILE_TOO_LARGE'
+      - 'Use a smaller source file'

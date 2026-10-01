@@ -1,0 +1,31 @@
+id: exploration-guidance
+tasks:
+  - id: unfamiliar-repository
+    prompt: >-
+      I am new to this repository. Give me a concise orientation: its main
+      components, how they relate, and where I should start to understand source
+      gathering, ranking, and prompt assembly. Ground your explanation in source.
+      Keep the answer under 300 words. Do not modify files, run tests, or delegate.
+  - id: named-file-explanation
+    prompt: >-
+      Explain what prompts/agent_tool_surface.go does and how its main functions
+      fit together. Cite source for the important claims. Keep the answer under
+      300 words. Do not modify files, run tests, or delegate.
+  - id: natural-package-explanation
+    prompt: >-
+      Explain how the prompts package turns available tools and skills into
+      coordinator instructions, and how worker instructions differ. Ground the
+      explanation in source with file and line citations. Keep the answer under
+      300 words. Do not change files, run tests, or delegate.
+  - id: exact-symbol-lookup
+    prompt: >-
+      In prompts/tool_profile_prompt_vars.go, show me the exact declaration of
+      PreferNativeFileToolOrder and its return expression. No broader explanation
+      is needed. Do not modify files, run tests, or delegate.
+  - id: explicit-briefing-smoke
+    prompt: >-
+      Use summarize to explain the architecture of the prompts package: how
+      tool availability and agent skills become the final coordinator instructions,
+      and where worker instructions differ. Inspect a few relevant source anchors
+      to check the briefing, then answer with file and line citations in under
+      300 words. Do not modify files, run tests, or delegate.

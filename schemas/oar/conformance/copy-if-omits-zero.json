@@ -1,0 +1,53 @@
+{
+  "id": "copy-if-omits-zero",
+  "title": "A copy if-branch is omitted when the named fact is the zero value of its type",
+  "covers": ["OAR-COPY-3", "OAR-COPY-7", "OAR-FACT-25"],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "OPTIONAL_REASON",
+      "effect": "block",
+      "requires": {
+        "profiles": ["tool"]
+      },
+      "copy": {
+        "what": "invalid{% if arg_validation_reason %} — {{ arg_validation_reason }}{% endif %}"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": ["tool"],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "block",
+    "code": "OPTIONAL_REASON",
+    "copy": {
+      "what": "invalid"
+    }
+  }
+}

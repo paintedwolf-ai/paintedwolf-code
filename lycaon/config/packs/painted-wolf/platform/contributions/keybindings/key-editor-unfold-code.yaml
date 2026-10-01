@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-unfold-code
+command: painted-wolf/platform:editor-unfold-code
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+0"
+  windows:
+    - "Mod+Alt+0"
+  linux:
+    - "Mod+Alt+0"

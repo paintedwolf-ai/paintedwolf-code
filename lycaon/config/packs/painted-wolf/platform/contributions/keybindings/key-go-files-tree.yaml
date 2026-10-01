@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-files-tree
+command: painted-wolf/platform:go-files-tree
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader R"
+  windows:
+    - "Leader R"
+  linux:
+    - "Leader R"

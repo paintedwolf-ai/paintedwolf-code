@@ -1,0 +1,11 @@
+id: evidence_passed:options_judge
+kind: evidence-gate
+purpose: |
+  Judge review_loop must compare candidates against the design-fork criterion and record structured verdict evidence.
+missing_signals:
+  - id: pending
+    when: "true"
+    detail: "Options judge evidence has not passed."
+    fix: "Complete the judge review_loop — compare candidates against the criterion and deliver the selection report."
+satisfy:
+  - "Call `submit_verdict` with the selected winner — a terminal verdict passes options_judge."

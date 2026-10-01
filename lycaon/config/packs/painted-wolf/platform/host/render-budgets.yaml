@@ -1,0 +1,13 @@
+# Render asset budgets — caps for project files served into offline render_view
+# rasterization via the hermetic asset origin. SSOT for these values; the Go
+# loader rejects missing or non-positive keys.
+
+version: 1
+
+render_assets:
+  # Per referenced file (bytes).
+  max_asset_bytes: 2097152
+  # Sum of all asset bytes served during one rasterize (bytes).
+  max_render_bytes: 8388608
+  # Cap on sample_paths entries in the result kit.assets summary.
+  max_catalog_samples: 8

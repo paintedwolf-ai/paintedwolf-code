@@ -1,0 +1,33 @@
+oar: '1.0'
+id: WORKFLOW_ADVANCE_INACTIVE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "WORKFLOW_ADVANCE_INACTIVE"
+effect: block
+copy:
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: Advancing a phase cannot create or resume a workflow implicitly.
+  fix: Inspect the current session workflow state and preserve accepted results. If the task needs a new workflow,
+    use its proposal and human approval path; do not replace a paused or completed run merely to make this call
+    available.
+  instead: Follow the current workflow state and task intent
+  what: workflow_advance has no active running workflow to advance.
+x-paintedwolf-category: expected_behavior
+x-paintedwolf-emit: rule:coordinator
+x-paintedwolf-message: workflow_advance requires an active running workflow run
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: workflow_advance
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKFLOW_ADVANCE_INACTIVE'

@@ -1,0 +1,40 @@
+title: Grant or widen access
+id: dfac7553-e9a9-42ae-a3ff-1ffc4775be11
+description: Creates a role assignment, service principal, or access policy.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: az
+  grp_identity:
+    CommandLine|contains:
+      - ' role '
+      - ' ad '
+      - ' identity '
+  verbs_iam_grant:
+    CommandLine|contains:
+      - ' assignment create'
+      - ' create-for-rbac'
+      - ' add-permissions'
+  # These name the resource and the grant in one phrase, so they carry no
+  # identity axis and still cover services the axis does not list.
+  verbs_resource_grant:
+    CommandLine|contains:
+      - ' keyvault set-policy'
+      - ' network-rule add'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and ((grp_identity and verbs_iam_grant) or verbs_resource_grant) and not filter_rehearsal and not filter_local

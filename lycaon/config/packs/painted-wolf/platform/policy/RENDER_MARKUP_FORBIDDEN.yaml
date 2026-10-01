@@ -1,0 +1,37 @@
+oar: '1.0'
+id: RENDER_MARKUP_FORBIDDEN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.forbidden
+when: paintedwolf.rejection_code == "RENDER_MARKUP_FORBIDDEN"
+effect: block
+copy:
+  what: render_view rejected markup with scripts, external fetches, or active content.
+  cause: Authored markup included disallowed tags, handlers, or remote URLs.
+  why: Mockups rasterize offline with JavaScript disabled and no network access.
+  fix: Remove scripts, handlers, and external fetches. Use the current hermetic kit and allowed project-asset
+    origin for fonts, icons, and passive content. Preserve the intended design without moving prohibited active
+    content into another field.
+  instead: Branch on Code RENDER_MARKUP_FORBIDDEN; rewrite markup with kit fonts/icons/tokens and asset-origin
+    references (no external fetches)
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Markup contains forbidden network or script constructs
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_MARKUP_FORBIDDEN'

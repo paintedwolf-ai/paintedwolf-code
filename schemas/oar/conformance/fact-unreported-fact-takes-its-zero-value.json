@@ -1,0 +1,77 @@
+{
+  "id": "fact-unreported-fact-takes-its-zero-value",
+  "title": "A declared fact the host has nothing to report for reads as the zero value of its type, never a failure",
+  "covers": [
+    "OAR-FACT-25",
+    "OAR-CONF-9"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ALL_ZEROES",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "tool",
+          "session",
+          "filesystem",
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "tool == \"\" && !policy_denied && !is_directory && size(arg_validation_errors) == 0 && size(tool_args) == 0 && content_length == 0 && prompt_injection_score == 0.0 && size(principal_roles) == 0 && size(pii_entities) == 0"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "ALL_ZEROES",
+    "applied": [
+      "oar.test/ALL_ZEROES:fired"
+    ]
+  }
+}

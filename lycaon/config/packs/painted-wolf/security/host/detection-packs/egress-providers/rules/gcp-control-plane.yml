@@ -1,0 +1,36 @@
+title: Reached a Google Cloud API
+id: 872fa6f0-6f35-4c23-b622-31ab139086d5
+description: >-
+  Connected to a Google Cloud API host. A hostname cannot tell a read from a
+  destructive call, so this is a coarse signal for scripts and SDKs that never
+  show a CLI on the command line.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - googleapis.com
+      - gcr.io
+      - pkg.dev
+      # The authorization host sits outside the API suffixes.
+      - accounts.google.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .googleapis.com
+      - .gcr.io
+      - .pkg.dev
+      - .run.app
+      - .cloudfunctions.net
+      - .appspot.com
+      - .googleusercontent.com
+  condition: selection_host or selection_suffix

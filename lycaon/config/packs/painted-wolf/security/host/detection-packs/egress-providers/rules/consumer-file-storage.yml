@@ -1,0 +1,43 @@
+title: Reached a consumer file storage service
+id: 8647cbb6-8bb8-4bc3-9a6b-73fd75b541b4
+description: >-
+  Connected to a personal cloud-drive or send-a-file service. Unlike the
+  anonymous drops these sit behind an account, but the upload side is the same
+  one-call handoff of arbitrary bytes to a destination the machine's owner does
+  not control, and a hostname cannot tell a download from an upload.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://www.dropbox.com/developers/documentation/http/overview
+  - https://developer.box.com/guides/api-calls/allowing-domain-access/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # Exact hosts avoid claiming unrelated domains.
+  selection_host:
+    DestinationHostname:
+      - dropbox.com
+      - mega.nz
+      - mega.co.nz
+      - wetransfer.com
+      - we.tl
+      - box.com
+      - drive.google.com
+      - drive.usercontent.google.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .dropbox.com
+      - .dropboxapi.com
+      - .mega.nz
+      - .mega.co.nz
+      - .wetransfer.com
+      - .box.com
+      - .boxcloud.com
+  condition: selection_host or selection_suffix

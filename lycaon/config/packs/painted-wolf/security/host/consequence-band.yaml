@@ -1,0 +1,29 @@
+# Consequence band — directories where a durable write grant confers program
+# execution or persistence.
+#
+# This file sets the band of an existing ask; ask-triggers/paths.yaml decides whether a
+# path asks at all. Nothing here allows or denies, and a path may appear in both.
+consequence_band_paths:
+  launch_and_startup:
+    - ~/Library/LaunchAgents
+    - ~/Library/LaunchDaemons
+    - /Library/LaunchAgents
+    - /Library/LaunchDaemons
+    - ~/Library/StartupItems
+  program_directories:
+    - ~/.local/bin
+    - ~/bin
+    - /usr/local/bin
+    - /opt/homebrew/bin
+  plugin_load_points:
+    - ~/Library/Services
+    - ~/Library/ScriptingAdditions
+    - ~/Library/QuickLook
+    - ~/Library/Audio/Plug-Ins
+    # A `docker-*` binary dropped here runs on every later docker invocation, the
+    # same persistence a Library plug-in folder confers.
+    - ~/.docker/cli-plugins
+    - ~/.docker/plugins
+  scheduled_execution:
+    - /usr/lib/cron/tabs
+    - /var/at/tabs

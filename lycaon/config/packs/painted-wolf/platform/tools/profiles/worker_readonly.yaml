@@ -1,0 +1,52 @@
+id: worker_readonly
+description: >
+  Read-only review surface with no leg tools. A workflow binds it by declaring
+  `coordinator_profile`.
+tools:
+  recall: sticky
+  read: sticky
+  view_image: sticky
+  view_video: sticky
+  record_finding: sticky
+  pack_board: sticky
+  grep: sticky
+  find: sticky
+  summarize: sticky
+  jq: sticky
+  list_dir: sticky
+  stat: sticky
+  wc: sticky
+  git_status: sticky
+  git_diff: sticky
+  diff: sticky
+  git_log: sticky
+  git_show: sticky
+  git_blame: sticky
+  source_history: sticky
+  git_ref: sticky
+  git_branches: sticky
+  git_compare: sticky
+  git_stash_list: sticky
+  wait: sticky
+  held_result: true
+  held_stop: true
+deny_tools:
+  - command
+  - secret_*
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - chmod
+  - delete
+  - chown
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  - delegate_*
+  - state_*
+  - handoff_*
+wait_conditions: [http_ready, port_ready]

@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Blueprint not found
+message: >-
+  No blueprint exists under that name.
+suggested_action: >-
+  Pick one from the blueprint list.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - No blueprint exists
+      - blueprint list

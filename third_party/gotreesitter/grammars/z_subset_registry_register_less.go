@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_less
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "less",
+		Extensions:     []string{".less"},
+		Language:       LessLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "(comment) @comment\n\n(tag_name) @tag\n(nesting_selector) @tag\n(universal_selector) @tag\n\n\"~\" @operator\n\">\" @operator\n\"+\" @operator\n\"-\" @operator\n\"*\" @operator\n\"/\" @operator\n\"=\" @operator\n\"^=\" @operator\n\"|=\" @operator\n\"~=\" @operator\n\"$=\" @operator\n\"*=\" @operator\n\n\"and\" @operator\n\"or\" @operator\n\"not\" @operator\n\"only\" @operator\n\n(attribute_selector (plain_value) @string)\n(pseudo_element_selector (tag_name) @attribute)\n(pseudo_class_selector (class_name) @attribute)\n\n(class_name) @property\n(id_name) @property\n(namespace_name) @property\n(property_name) @property\n(feature_name) @property\n\n(attribute_name) @attribute\n\n(function_name) @function\n\n((property_name) @variable\n (#match? @variable \"^--\"))\n((plain_value) @variable\n (#match? @variable \"^--\"))\n\n\"@media\" @keyword\n\"@import\" @keyword\n\"@charset\" @keyword\n\"@namespace\" @keyword\n\"@supports\" @keyword\n(keyword) @keyword\n(keyframes_statement (keyword) @keyword)\n(at_keyword) @keyword\n\"to\" @keyword\n\"from\" @keyword\n\"!important\" @keyword\n\n(string_value) @string\n(color_value) @string.special\n\n(integer_value) @number\n(float_value) @number\n(unit) @type\n\n[\n (color_value)]\n@character\n\n(string_value \n  (interpolated_variable) @string.escape)\n@string\n\n((property_name) @variable\n (#match? @variable \"^--\"))\n((plain_value) @variable\n (#match? @variable \"^--\"))\n\n(integer_value) @number\n(float_value) @float\n\n[\"true\"\n \"false\"] @boolean\n\n(variable_name) @variable\n(params (variable) @parameter)\n(params (keyword_param (variable) @parameter))\n\n\"#\" @punctuation.delimiter\n\",\" @punctuation.delimiter\n\":\" @punctuation.delimiter\n",
+	})
+}

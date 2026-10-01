@@ -1,0 +1,18 @@
+# git_checkout — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    git_checkout:
+        tool: git_checkout
+        tier_hint: recoverable
+        what_changes: Switch the current Git branch, creating the named branch only when requested, and apply the reviewed file and index changes.
+        who_affected: The current repository, its branches, index, and working files.
+        if_wrong: Uncommitted work or branch selection may need recovery from the recorded before state.
+        allow_line: switching the current branch
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Git
+                - repository

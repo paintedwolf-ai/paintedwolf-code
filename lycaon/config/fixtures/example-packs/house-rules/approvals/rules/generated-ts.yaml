@@ -1,0 +1,3 @@
+category: path
+pattern: "*.generated.ts"
+effect: deny

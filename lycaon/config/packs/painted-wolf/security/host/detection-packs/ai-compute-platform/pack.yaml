@@ -1,0 +1,7 @@
+id: ai-compute-platform
+label: AI compute platforms
+description: >-
+  Modal, RunPod, and Together AI CLI operations that delete a volume, secret,
+  pod, file, or dedicated endpoint, or stop a running app.
+equivalents:
+  tg: [together]

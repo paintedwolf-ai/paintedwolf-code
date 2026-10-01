@@ -1,0 +1,83 @@
+{
+  "schema": "gts-dispatcher-census-tracked/v1",
+  "limitation": "This tracked corpus is a CI ratchet. The full authenticated corpus remains an external release gate.",
+  "fixtures": [
+    {
+      "language": "c_sharp",
+      "path": "testdata/parser_result/csharp/jsontextreader_excerpt.cs",
+      "sha256": "d76fd62cfc90076c11d86cb7d7a0058df181231aa3b34f30e549f650b5294d4a",
+      "arm_id": "dispatch.c_sharp",
+      "checked": 1,
+      "run": 1,
+      "nodes_visited": 2093,
+      "nodes_rewritten": 2085,
+      "error_root": false
+    },
+    {
+      "language": "go",
+      "path": "cgo_harness/corpus_structural/go_sample.go",
+      "sha256": "262c7b8359a364b56db8549f65f4f2e01ed43de096e607dd05f50b94bd45efb0",
+      "arm_id": "dispatch.go",
+      "checked": 1,
+      "run": 1,
+      "nodes_visited": 768,
+      "nodes_rewritten": 0,
+      "error_root": false
+    },
+    {
+      "language": "javascript",
+      "path": "cgo_harness/corpus_structural/javascript_sample.js",
+      "sha256": "d84deac86ad03c7f23ef4a257aba49ca1ad40e4fd89a5a501e461b45bd099faa",
+      "arm_id": "dispatch.javascript",
+      "checked": 2,
+      "run": 2,
+      "nodes_visited": 2444,
+      "nodes_rewritten": 0,
+      "error_root": false
+    },
+    {
+      "language": "javascript",
+      "path": "testdata/compact_converged_split/javascript.js",
+      "sha256": "0bbd2cdb0a0492055e442c44b533797386ec9c8aeb7ce8a4d0f5f5a4681e3b90",
+      "arm_id": "dispatch.javascript",
+      "checked": 2,
+      "run": 2,
+      "nodes_visited": 202,
+      "nodes_rewritten": 7,
+      "error_root": false
+    },
+    {
+      "language": "python",
+      "path": "cgo_harness/corpus_structural/python_sample.py",
+      "sha256": "3de858b73ba43ad3c2d43b9cfc08426f62dd4ae7bcf1358e3989ed311b435157",
+      "arm_id": "dispatch.python",
+      "checked": 1,
+      "run": 1,
+      "nodes_visited": 1547,
+      "nodes_rewritten": 0,
+      "error_root": false
+    },
+    {
+      "language": "rust",
+      "path": "testdata/incremental_gate/rust_ast.rs",
+      "sha256": "43fc2344174da29bb3c032b260a009828e4636965c1ab8cfff62b651caf91b92",
+      "arm_id": "dispatch.rust",
+      "checked": 1,
+      "run": 1,
+      "nodes_visited": 17506,
+      "nodes_rewritten": 0,
+      "error_root": false
+    },
+    {
+      "language": "typescript",
+      "path": "cgo_harness/corpus_structural/typescript_sample.ts",
+      "sha256": "40b4a7a06fde353d8c2b726acb16f59aab44d49d1b6257c37345c2a1f56b9fb7",
+      "arm_id": "dispatch.typescript",
+      "checked": 1,
+      "run": 1,
+      "nodes_visited": 1462,
+      "nodes_rewritten": 15,
+      "error_root": false
+    }
+  ]
+}

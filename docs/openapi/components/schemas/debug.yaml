@@ -1,0 +1,38 @@
+components:
+  schemas:
+    DenPerfEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - event
+      properties:
+        observed_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: Den-side observation time (RFC 3339)
+        channel:
+          type: string
+          description: Debug channel (always "perf" today)
+        event:
+          type: string
+          minLength: 1
+          description: Event name (loop-stall, longtask, …)
+        detail:
+          type: object
+          additionalProperties: {}
+          description: Optional fields (lag_ms, recent, dur_ms, …)
+    DenPerfEventsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - events
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/DenPerfEvent'

@@ -1,0 +1,29 @@
+id: web_research
+description: External web research — search and URL fetch (no repo survey or writes)
+tools:
+  recall: sticky
+  record_finding: sticky
+  pack_board: sticky
+  request_decision: sticky
+  request_budget: sticky
+  complete_leg: sticky
+  web_search: sticky
+  fetch_url: sticky
+  scan_query: sticky
+  skills_read: sticky
+  wait: sticky
+deny_tools:
+  - write
+  - edit
+  - replace_lines
+  - jq_edit
+  - grep
+  - command
+  - secret_*
+  - git_*
+  - delegate_*
+  - state_*
+  - handoff_*
+  - scan_pack
+  - task
+wait_conditions: [http_ready, port_ready]

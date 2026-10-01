@@ -1,0 +1,45 @@
+oar: '1.0'
+id: BACKGROUND_CAP_REACHED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.background_limit
+    - paintedwolf.live_terminal_ids
+    - paintedwolf.live_command_handles
+    - paintedwolf.can_terminal_close
+    - paintedwolf.can_command_stop
+when: paintedwolf.rejection_code == "BACKGROUND_CAP_REACHED"
+effect: block
+copy:
+  what: 'This session has reached its limit of {{ paintedwolf.background_limit }} live background processes, including terminals.'
+  cause: 'At admission, terminal ids were {{ paintedwolf.live_terminal_ids }} and command handles were {{ paintedwolf.live_command_handles }}.'
+  why: The shared session limit bounds long-running processes and their retained output.
+  fix: >-
+    Wait for existing work to finish, or stop only work that is no longer needed.
+    {% if paintedwolf.live_terminal_ids %}{% if paintedwolf.can_terminal_close %}Use terminal_close for an existing terminal id.{% endif %}{% endif %}
+    {% if paintedwolf.live_command_handles %}{% if paintedwolf.can_command_stop %}Use command_stop for an existing command handle.{% endif %}{% endif %}
+    A process may have completed since this snapshot; preserve useful running work.
+  instead: Retry the requested start only after capacity is available; this refused start created no process
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_background
+x-paintedwolf-message: Background process cap reached for session
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      background_limit: 4
+      live_command_handles: [running-command]
+      can_command_stop: true
+      profile: implement
+      tool: command
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: BACKGROUND_CAP_REACHED'
+      - command_stop

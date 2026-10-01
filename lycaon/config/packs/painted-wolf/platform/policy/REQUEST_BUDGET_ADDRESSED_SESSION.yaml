@@ -1,0 +1,31 @@
+oar: '1.0'
+id: REQUEST_BUDGET_ADDRESSED_SESSION
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - request_budget
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "REQUEST_BUDGET_ADDRESSED_SESSION"
+effect: block
+copy:
+  what: There is no coordinator above this session to grant more tool rounds.
+  cause: request_budget ran in a session the user addressed directly, not in a spawned leg.
+  why: A budget request goes to the coordinator that dispatched the leg and owns its ceiling.
+  fix: Finish within the rounds this turn allows and tell the user what remains.
+  instead: Branch on Code REQUEST_BUDGET_ADDRESSED_SESSION; do not retry here
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_budget
+x-paintedwolf-message: There is no coordinator above this session to grant more tool rounds.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: explore
+      tool: request_budget
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: REQUEST_BUDGET_ADDRESSED_SESSION'
+      - no coordinator above this session

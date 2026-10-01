@@ -1,0 +1,1 @@
+**Evidence.** A **receipt** is a tool result in this chat; each successful one opens with its handle, `tool#n`. A claim is **grounded** when it points at a receipt — the handle, or the `path:line` (or URL) and excerpt it showed you. Another agent's observation is its receipt, not yours — cite the findings it reported.

@@ -1,0 +1,19 @@
+fixtures:
+- rule: domain-delete
+  positive:
+  - resend domains delete d_abc123 --yes
+  - sudo resend domains delete d_abc123 --yes
+  negative:
+  - resend domains list
+  - resend domains delete d_abc123
+  - resend domains delete d_abc123 --yes --help
+  - resend domains delete d_abc123 --help
+- rule: api-key-delete
+  positive:
+  - resend api-keys delete k_abc123 --yes
+  - sudo resend api-keys delete k_abc123 --yes
+  negative:
+  - resend api-keys list
+  - resend api-keys delete k_abc123
+  - resend api-keys delete k_abc123 --yes --help
+  - resend api-keys delete k_abc123 --help

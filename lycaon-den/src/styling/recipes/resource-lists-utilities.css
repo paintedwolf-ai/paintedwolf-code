@@ -1,0 +1,170 @@
+@utility den-settings-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--den-line-quiet);
+  background: var(--den-background);
+  color: var(--den-text);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &:hover {
+    background: var(--den-selection-hover);
+  }
+
+  &:has(.den-settings-list-row__leading) .den-settings-list-row__hit {
+    padding-left: var(--spacing-den-3);
+  }
+}
+
+@utility den-settings-list-row--selected {
+  background: var(--den-background);
+  box-shadow: inset 2px 0 0 var(--den-accent);
+
+  &:hover {
+    background: var(--den-selection-hover);
+  }
+}
+
+@utility den-settings-list-row--rejected {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--den-danger) 55%, transparent);
+}
+
+@utility den-settings-list-row--warning {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--den-warning) 55%, transparent);
+}
+
+@utility den-settings-list-row__hit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-4);
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+@utility den-settings-list-row__hit--static {
+  cursor: default;
+}
+
+@utility den-settings-list-row__leading {
+  flex-shrink: 0;
+  padding-left: 14px;
+  display: flex;
+  align-items: center;
+}
+
+@utility den-settings-list-row__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+@utility den-settings-list-row__primary {
+  font-weight: 550;
+  font-size: var(--text-den-body);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-settings-list-row__secondary {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-settings-list-row__status {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 2px;
+}
+
+@utility den-settings-list-row__trailing {
+  flex-shrink: 0;
+  padding-right: 14px;
+}
+
+/** Groups share one list surface. */
+@utility den-settings-list-group {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+
+  /* Last row of a non-final group keeps the joining hairline. */
+  &:not(:last-child) .den-settings-list-row:last-child {
+    border-bottom: 1px solid var(--den-line-quiet);
+  }
+}
+
+@utility den-settings-list-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-4);
+  padding: 8px 14px 4px;
+  background: var(--den-background);
+  border-bottom: 0;
+
+  & .den-settings-subhead {
+    margin: 0;
+    font-size: var(--text-den-caption);
+    font-weight: 600;
+    color: var(--den-text-muted);
+    letter-spacing: 0.01em;
+  }
+
+  & .den-settings-hint {
+    margin: 0;
+    font-size: var(--text-den-caption);
+  }
+}
+
+@utility den-settings-list-group__title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-4);
+  min-width: 0;
+}
+
+@utility den-settings-list-group__action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-den-3);
+  min-width: 0;
+}
+
+/** Spaced list groups; no joining hairline in the gap. */
+@utility den-settings-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-8);
+
+  & > .den-settings-list-group:not(:last-child) .den-settings-list-row:last-child {
+    border-bottom: none;
+  }
+}
+

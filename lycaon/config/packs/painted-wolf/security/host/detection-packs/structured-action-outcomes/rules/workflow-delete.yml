@@ -1,0 +1,19 @@
+title: Delete an automation workflow
+id: 93b26f63-f343-4021-96ec-8b0d210d4c67
+status: stable
+description: Deletes or removes a specifically named automation workflow, pipeline, or job.
+references: [https://attack.mitre.org/techniques/T1489/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:workflow-delete', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

@@ -1,0 +1,18 @@
+# Static true-window table for models whose ContextLength is unknown at resolve
+# time. First matching rule wins (case-insensitive substring).
+# Prefer specific ids before family catch-alls. No live HTTP on this path.
+fallback_true_window: 262144
+
+windows:
+  - match: [gpt-oss-120b, gpt-oss-20b]
+    context_window: 131072
+    text_encoding: o200k_base
+  - match: [kimi-k2p7, kimi-k2p6, kimi-k2p5, kimi-k2]
+    context_window: 262144
+  - match: [claude-opus-4, claude-sonnet-4, claude-3-7, claude-3-5, claude]
+    context_window: 200000
+  - match: [gpt-4.1, gpt-4o, o3, o4-mini]
+    context_window: 128000
+    text_encoding: o200k_base
+  - match: [gemini-2.5, gemini-2.0, gemini]
+    context_window: 1048576

@@ -1,0 +1,38 @@
+oar: '1.0'
+id: DELETE_NOT_EMPTY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - delete
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.entries
+  - paintedwolf.path
+  - paintedwolf.selector_empty
+when: paintedwolf.rejection_code == "DELETE_NOT_EMPTY"
+effect: block
+copy:
+  what: delete rejected non-empty directory {{ paintedwolf.path }} ({{ paintedwolf.entries }} entries).
+  cause: delete removes files and empty directories; this target still contains entries.
+  why: Deleting those entries is additional destructive work that the directory request alone does not authorize.
+  fix: Inspect the contents. Delete children first only if their removal is part of the intended task, then
+    remove the empty directory. Otherwise leave it and report what remains. Preserve any earlier completed
+    deletions.
+  instead: Confirm child-deletion intent before making the directory empty
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
+x-paintedwolf-message: delete rejected non-empty directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: delete
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELETE_NOT_EMPTY'

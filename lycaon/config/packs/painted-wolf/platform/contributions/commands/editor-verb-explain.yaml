@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-verb-explain
+title: "Explain in context"
+scope: "files"
+keywords:
+  - "explain"
+  - "what does this do"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-explain

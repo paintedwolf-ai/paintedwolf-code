@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Already sending
+message: A queued message is already on its way into the current turn.
+suggested_action: Wait for it to land, or cancel it and send again.
+scenarios:
+  - id: default
+    expect_contains:
+      - already on its way

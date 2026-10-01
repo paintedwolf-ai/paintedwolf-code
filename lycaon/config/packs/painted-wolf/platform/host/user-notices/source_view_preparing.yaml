@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Preparing source view
+message: The host is preparing this source presentation.
+suggested_action: Wait for preparation to finish.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Preparing source view

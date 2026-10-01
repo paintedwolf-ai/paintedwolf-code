@@ -1,0 +1,45 @@
+oar: '1.0'
+id: TERMINAL_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.id
+    - paintedwolf.terminal_not_pty
+    - paintedwolf.can_terminal_open
+    - paintedwolf.can_command_output
+when: paintedwolf.rejection_code == "TERMINAL_NOT_FOUND"
+effect: block
+copy:
+  what: >-
+    {% if paintedwolf.terminal_not_pty %}Handle {{ paintedwolf.id }} belongs to a command, not a terminal.{% else %}No terminal in this session matches id {{ paintedwolf.id }}.{% endif %}
+  cause: Terminal operations require a terminal id from the same session; closed or reaped ids are no longer available.
+  why: Driving a missing handle cannot restore the process.
+  fix: >-
+    {% if paintedwolf.terminal_not_pty %}{% if paintedwolf.can_command_output %}Use command_output with this command handle to inspect its result.{% else %}Inspect the command result using the available process controls.{% endif %}
+    {% else %}Use a terminal id returned in this session.{% if paintedwolf.can_terminal_open %} If a new process is needed, use terminal_open and keep its returned id.{% endif %}{% endif %}
+    Inspect any known prior outcome before repeating work.
+  instead: Keep command handles and terminal ids on their corresponding tools
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
+x-paintedwolf-message: terminal id is not a live pty handle in this session
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      id: missing-id
+      profile: implement
+      tool: terminal_send
+      can_terminal_open: true
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: TERMINAL_NOT_FOUND'
+      - terminal_open

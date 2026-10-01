@@ -1,0 +1,19 @@
+# mkdir — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    mkdir:
+        tool: mkdir
+        tier_hint: recoverable
+        what_changes: Create directories in the project.
+        who_affected: The project working tree.
+        if_wrong: Empty dirs are easy to remove; tracked content stays in git history.
+        allow_line: creating directories in this project
+        scenarios:
+            - id: default
+              vars:
+                path: src/new
+                project: my-app
+              expect_contains:
+                - Create directories
+                - project

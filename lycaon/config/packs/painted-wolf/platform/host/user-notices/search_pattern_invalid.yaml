@@ -1,0 +1,15 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - reason
+title: Search pattern didn't compile
+message: "This search pattern is not valid: {{ reason }}"
+suggested_action: Fix the expression, or switch the regex toggle off to search for the text literally.
+scenarios:
+  - id: default
+    vars:
+      reason: "missing closing ): `Nomos(`"
+    expect_contains:
+      - not valid
+      - missing closing

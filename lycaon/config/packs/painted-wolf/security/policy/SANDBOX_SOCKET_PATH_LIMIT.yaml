@@ -1,0 +1,31 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_LIMIT
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.count
+  - paintedwolf.limit
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_LIMIT"
+effect: block
+copy:
+  what: socket_paths supplied {{ paintedwolf.count }} entries; the request limit is {{ paintedwolf.limit }}.
+  cause: The parser bounds the supplied list before deduplication. This count is not the number of distinct
+    active grants.
+  why: Exact socket grants are bounded so profiles stay reviewable.
+  fix: Remove duplicate entries and retain only intended socket paths within the reported bound. If more services
+    are required, partition the intended actions; do not assume an unavailable grant-revocation tool.
+  instead: Bound the actual request list without dropping required service access
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: socket path count exceeds limit
+x-paintedwolf-scenarios:
+- id: default
+  vars: {count: 9, limit: 8}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_LIMIT'
+  - "9"
+  - "8"

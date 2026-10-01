@@ -1,0 +1,12 @@
+id: painted-wolf/platform:files-toggle-pin
+title: "Pin or unpin files tab"
+scope: "files"
+keywords:
+  - "pin tab"
+  - "unpin tab"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.togglePin"

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-window-close
+command: painted-wolf/platform:window-close
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+W"
+  windows:
+    - "Mod+Shift+W"
+  linux:
+    - "Mod+Shift+W"

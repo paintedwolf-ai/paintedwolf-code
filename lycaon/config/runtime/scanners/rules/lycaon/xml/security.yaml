@@ -1,0 +1,33 @@
+rules:
+- id: lycaon.xml.spring-http-deserialization
+  languages:
+  - xml
+  severity: WARNING
+  message: A Spring HTTP exporter exposes Java serialization
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: MEDIUM
+    technology:
+    - xml
+  pattern-either:
+  - pattern: <bean ... class="org.springframework.remoting.httpinvoker.HttpInvokerServiceExporter" ...>...</bean>
+  - pattern: <bean ... class="org.springframework.remoting.httpinvoker.SimpleHttpInvokerServiceExporter" ...>...</bean>
+- id: lycaon.xml.android-debuggable
+  languages:
+  - xml
+  severity: WARNING
+  message: The Android application explicitly permits debugging
+  metadata:
+    category: security
+    cwe: CWE-489
+    confidence: MEDIUM
+    technology:
+    - xml
+  pattern: <application ... android:debuggable="true" ...>...</application>
+  paths:
+    include:
+    - '**/AndroidManifest.xml'
+    exclude:
+    - '**/src/debug/**'
+    - '**/src/androidTest/**'

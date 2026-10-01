@@ -1,0 +1,153 @@
+paths:
+  /v1/delegations:
+    post:
+      tags:
+      - delegations
+      operationId: createDelegation
+      x-person-action: record
+      summary: Create a delegation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/delegation.yaml#/components/schemas/CreateDelegationRequest
+      responses:
+        '201':
+          description: Delegation created
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/delegation.yaml#/components/schemas/Delegation
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/delegations/{id}:
+    get:
+      tags:
+      - delegations
+      operationId: getDelegation
+      summary: Get delegation by ID
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/DelegationId
+      responses:
+        '200':
+          description: Delegation
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/delegation.yaml#/components/schemas/Delegation
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/delegations/{id}/legs:
+    get:
+      tags:
+      - delegations
+      operationId: listDelegationLegs
+      summary: List legs for a delegation
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/DelegationId
+      responses:
+        '200':
+          description: Legs
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/delegation.yaml#/components/schemas/DelegationLegListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/delegations/{id}/dispatch:
+    post:
+      tags:
+      - delegations
+      operationId: dispatchDelegationLeg
+      x-person-action: record
+      summary: Dispatch a delegation leg to a worker
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/DelegationId
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/delegation.yaml#/components/schemas/DispatchRequest
+      responses:
+        '200':
+          description: Dispatched leg
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/delegation.yaml#/components/schemas/Leg
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/delegations/{id}/abort:
+    post:
+      tags:
+      - delegations
+      operationId: abortDelegation
+      x-person-action: record
+      summary: Abort a delegation
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/DelegationId
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/delegation.yaml#/components/schemas/AbortDelegationRequest
+      responses:
+        '200':
+          description: Aborted delegation
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/delegation.yaml#/components/schemas/Delegation
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge

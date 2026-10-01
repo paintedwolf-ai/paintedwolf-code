@@ -1,0 +1,75 @@
+id: painted-wolf/platform:charcoal
+name: Charcoal
+appearance: dark
+
+# Warm charcoal and off-white ink keep body contrast near 13.7:1 without halation.
+window_colors:
+  main: "#d99263"
+  anchors: ["#d99263", "#7a9e6a", "#60a5fa", "#d2a8ff", "#e0a020"]
+  hue_spread: 18
+  chroma_min: 0.04
+  chroma_max: 0.12
+
+# Agent chats share one slate hue, muted almost to gray; each chat is a lightness step.
+agent_colors:
+  main: "#9ba2b1"
+  lightness_step: 0.1
+  chroma: 0.025
+
+tokens:
+  background: "#191817"
+  surface: "#191817"
+  surface-elevated: "#191817"
+  border: "#383633"
+  text: "#e4e2df"
+  text-muted: "#a3a09b"
+  accent: "#a85830"
+  accent-warm: "#a85830"
+  accent-text: "#d99263"
+  accent-signal: "#d99263"
+  on-accent: "#ffffff"
+  # The step goes up here — under the page would crush toward black.
+  surface-inset: "#201f1e"
+  selection: "#342922"
+  # The darker band keeps syntax colors readable.
+  selection-strong: "#36251c"
+  status-positive: "#7a9e6a"
+  status-running: "#c87941"
+  danger: "#e07070"
+  warning: "#e0a020"
+  draft-accent: "#7a9e6a"
+  draft-accent-text: "#989f8d"
+  # Added lines take a clear green; the sage success hue reads gray as a fill.
+  diff-add-hue: "#57ab5a"
+  tint-hue: "#5d5b57"
+  cost-coordinator: "#fbbf24"
+  cost-workers: "#60a5fa"
+  cost-summarizer: "#4ade80"
+
+# Each syntax color clears 6.5:1 so change fills have room to show, and
+# keywords stay off the removal red.
+syntax:
+  keyword: "#f692ce"
+  string: "#a5d6ff"
+  number: "#79c0ff"
+  constant: "#79c0ff"
+  variable: "#e4e2df"
+  type: "#ffa657"
+  function: "#d2a8ff"
+  property: "#79c0ff"
+  operator: "#79c0ff"
+  keyword.self: "#79c0ff"
+  string.escape: "#79c0ff"
+  variable.special: "#79c0ff"
+  tag: "#7ee787"
+  meta: "#adb4bd"
+  invalid: "#ffa198"
+  link: "#a5d6ff"
+  heading: { color: "#79c0ff", bold: true }
+  inserted: "#56d364"
+  deleted: "#ffa198"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#adb4bd", italic: true }
+  strikethrough: { }
+  comment: { color: "#adb4bd", italic: true }

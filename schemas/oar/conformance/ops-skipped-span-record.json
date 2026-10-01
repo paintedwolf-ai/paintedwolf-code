@@ -1,0 +1,98 @@
+{
+  "id": "ops-skipped-span-record",
+  "title": "ops skipped span record",
+  "covers": [
+    "OAR-OPS-23",
+    "OAR-CONF-39"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "id": "A",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "secrets"
+        ]
+      },
+      "transform": {
+        "action": "redact",
+        "target": "secret_matches"
+      }
+    },
+    {
+      "oar": "1.0",
+      "id": "B",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "transform",
+      "transform": {
+        "action": "replace",
+        "target": "content",
+        "replacement": "X"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 256,
+      "supports_transform": true
+    },
+    "anchor": "tool.pre_invoke",
+    "content": "abc",
+    "facts": {
+      "secret_matches": [
+        {
+          "start": 0,
+          "end": 1
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "content": "[REDACTED]bc",
+    "skipped_transforms": [
+      {
+        "rule": "B",
+        "start": 0,
+        "end": 3,
+        "reason": "overlap"
+      }
+    ]
+  }
+}

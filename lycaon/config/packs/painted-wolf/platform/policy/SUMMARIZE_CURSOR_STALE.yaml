@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SUMMARIZE_CURSOR_STALE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - summarize
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SUMMARIZE_CURSOR_STALE"
+effect: block
+copy:
+  what: '`summarize` received a cursor that is not valid for this scope and source generation.'
+  cause: The source changed or the cursor belongs to another path set or pattern.
+  why: A cursor advances only the exact view that issued it.
+  fix: Restart summarize without cursor on the same intended scope. Earlier pages may describe a different
+    source generation; do not combine them as though one consistent view.
+  instead: Remove cursor and retry the same scope once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:summarize
+x-paintedwolf-message: '`summarize` cursor is stale for this scope'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: summarize
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SUMMARIZE_CURSOR_STALE'

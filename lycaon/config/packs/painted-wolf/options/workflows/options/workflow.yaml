@@ -1,0 +1,78 @@
+id: options
+version: 1.0.0
+name: Decide
+description: Research the codebase, then debate the decision with a neutral skeptic
+trigger: /options
+request:
+  question: What decision are we making, and what constraints or options should weigh on it?
+initial_posture: orchestrate
+topology: decision-research-fanout
+agents:
+  - { id: coordinator, tools: all }
+  - { id: path-explorer, tools: profile }
+  - { id: skeptic, tools: profile }
+blueprint:
+  id: selection
+  file: options-selection.md
+  frontmatter:
+    - criterion
+    - winner
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+  - config/packs/painted-wolf/platform/host/posture-rules/orchestrate.yaml
+injects:
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: judge
+      workflow: options
+    effect: inform
+    render: coordinator-debate-select
+    tier: workflow
+phases:
+  - id: fan_out
+    activity_label: Phoning a friend
+    explain:
+      summary: Workers research the decision
+      body: >-
+        Before anyone weighs the options, workers read the codebase in parallel:
+        how the affected area works today, what the decision must respect, and
+        which precedents it should follow. You don't need to do anything. When
+        they finish, a skeptic helps weigh the options.
+    bind_topology_stage: fan_out
+    complete_when: topology_stage_complete
+    controls:
+      closeout: gated
+    next: judge
+  - id: judge
+    activity_label: Not that I don't trust you, but
+    blueprint_write: true
+    coordinator_surface: decision_adjudicate
+    surface_template: agents/coordinator-surface-orchestrate.md
+    review_loop:
+      evidence_key: options_judge
+      iteration_cap: 2
+      required_agents: [skeptic]
+      verdict_schema:
+        verdict: SELECTED|NEEDS_REVISION
+        winner: string
+        rationale: string
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [evidence_passed:options_judge, options_selection_valid]
+    next: select
+  - id: select
+    activity_label: Choosing the best option
+    human_approval:
+      blueprint: options-selection.md
+      readiness: options_selection_valid
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host

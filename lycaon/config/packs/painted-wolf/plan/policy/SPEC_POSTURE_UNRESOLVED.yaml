@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_UNRESOLVED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_UNRESOLVED"
+effect: block
+copy:
+  cause: Establish spec posture via /plan or write a blueprint file first
+  why: Use write on `${overlay_dir}/blueprints/<slug>.md` or run /plan
+  fix: Use write on `${overlay_dir}/blueprints/<slug>.md` or run /plan
+  instead: Establish spec posture before high-risk tools
+  what: Establish spec posture via /plan or write a blueprint file first
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Establish spec posture via /plan or write a blueprint file first
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: state_start
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_UNRESOLVED'
+x-paintedwolf-audience:
+- coordinator

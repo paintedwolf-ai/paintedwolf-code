@@ -1,0 +1,78 @@
+oar: '1.0'
+id: COMMAND_REDIRECTION_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+  - terminal_open
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.redirection_issue
+  - paintedwolf.redirection_conflict
+  - paintedwolf.redirection_pipe
+  - paintedwolf.redirection_terminal
+  - paintedwolf.operator
+when: paintedwolf.rejection_code == "COMMAND_REDIRECTION_UNSUPPORTED"
+effect: block
+copy:
+  what: '`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue
+    }}).'
+  cause: '{% if paintedwolf.redirection_terminal %}This surface runs its program in a terminal, which owns stdin,
+    stdout, and stderr.{% else %}{% if paintedwolf.redirection_conflict %}The line redirects a stream that the call
+    also names with `stdin`, `stdin_from`, `stdout_to`, or `stderr_to`.{% else %}{% if paintedwolf.redirection_pipe
+    %}A stage before `|` must send output into the pipe, and a stage after `|` reads only the pipe.{% else %}Only
+    stdin (0), stdout (1), and stderr (2) redirect, with `<`, `>`, `>>`, `&>`, and `N>&M`; one file cannot be both
+    truncated and appended in one stage.{% endif %}{% endif %}{% endif %}'
+  why: The host wires every stream itself instead of handing the line to a shell, so each redirection must name one
+    destination it can open, review, and record.
+  fix: '{% if paintedwolf.redirection_terminal %}Drop the file redirection here, or run the program through
+    `command`, which writes redirected output through the same write scope as `write`.{% else %}{% if
+    paintedwolf.redirection_conflict %}Keep either the inline redirection or the structured field, not both.{% else
+    %}{% if paintedwolf.redirection_pipe %}Move the file redirection to the last stage for output or the first stage
+    for input, or join the programs with `&&` and a file between them.{% else %}Use `>`, `>>`, `2>`, `2>>`, `&>`,
+    `2>&1`, or `<` with stdin, stdout, or stderr.{% endif %}{% endif %}{% endif %}'
+  instead: Redirect stdin, stdout, and stderr with `<`, `>`, `>>`, `2>`, `&>`, or `2>&1` on the stage that owns the stream
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: redirection cannot run as written
+x-paintedwolf-scenarios:
+- id: descriptor
+  vars:
+    tool: command
+    redirection_issue: descriptor_unsupported
+    operator: 3>
+  expect_contains:
+  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
+  - Only stdin (0), stdout (1), and stderr
+- id: pipe_stdout
+  vars:
+    tool: command
+    redirection_issue: pipe_stage_stdout
+    redirection_pipe: true
+    operator: go test ./... > out.log
+  expect_contains:
+  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
+  - Move the file redirection to the last stage
+- id: field_conflict
+  vars:
+    tool: command
+    redirection_issue: stdout_to_conflict
+    redirection_conflict: true
+    operator: go test ./... > out.log
+  expect_contains:
+  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
+  - not both
+- id: terminal
+  vars:
+    tool: terminal_open
+    redirection_issue: surface_unsupported
+    redirection_terminal: true
+    operator: '> dev.log'
+  expect_contains:
+  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
+  - owns stdin,

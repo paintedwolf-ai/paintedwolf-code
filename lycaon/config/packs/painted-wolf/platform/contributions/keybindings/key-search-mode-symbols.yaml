@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-mode-symbols
+command: painted-wolf/platform:search-mode-symbols
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+5"
+  windows:
+    - "Mod+5"
+  linux:
+    - "Mod+5"

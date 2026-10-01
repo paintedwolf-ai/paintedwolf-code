@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-chat-last-message
+command: painted-wolf/platform:chat-last-message
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader M"
+  windows:
+    - "Leader M"
+  linux:
+    - "Leader M"

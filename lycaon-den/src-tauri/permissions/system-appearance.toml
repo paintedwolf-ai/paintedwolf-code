@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-system-appearance"
+description = "Read the macOS Increase Contrast, Reduce Transparency, and accent color choices once at boot; later changes arrive on the appearance://system-changed event."
+commands.allow = ["system_appearance"]

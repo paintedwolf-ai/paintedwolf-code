@@ -1,0 +1,44 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - status
+    - attempts
+title: Model host quota exhausted
+message: >-
+  {% if provider_id -%}
+  {{ provider_id }} refused the request for exceeding a quota (HTTP {% if status %}{{ status }}{% else %}429{% endif %}).
+  {%- else -%}
+  The model host refused the request for exceeding a quota.
+  {%- endif %}
+  {% if attempts and attempts > 1 %}Painted Wolf tried {{ attempts }} times and the quota was still spent.{% endif %}
+  Hosts meter several windows — per minute, per day, per month — and this
+  response does not say which one was reached.
+suggested_action: >-
+  On a per-minute window sending again will work; on a daily or monthly
+  allowance it will not. Check this model's usage limits with the host, or
+  switch to a different model in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_provider
+    vars:
+      provider_id: fireworks
+      status: 429
+      attempts: 5
+    expect_contains:
+      - fireworks
+      - exceeding a quota
+      - tried 5 times
+  - id: generic
+    vars: {}
+    expect_contains:
+      - exceeding a quota
+
+  # Distinct from provider_overloaded (fleet 503/529) and provider_unreachable
+  # (the turn never reached the provider).

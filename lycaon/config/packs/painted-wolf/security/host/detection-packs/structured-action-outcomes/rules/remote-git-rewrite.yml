@@ -1,0 +1,19 @@
+title: Rewrite or delete a remote Git reference
+id: 73c2da10-0e32-44c6-ba14-706427a8d172
+status: stable
+description: Force-pushes or deletes a specifically named remote branch or tag.
+references: [https://attack.mitre.org/techniques/T1565/001/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:remote-git-rewrite', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

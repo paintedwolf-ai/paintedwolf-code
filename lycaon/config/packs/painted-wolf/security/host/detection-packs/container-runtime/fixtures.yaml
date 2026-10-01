@@ -1,0 +1,72 @@
+fixtures:
+- rule: volume-remove
+  positive:
+  - docker volume rm postgres-data
+  - podman volume prune
+  - nerdctl volume remove postgres-data
+  - sudo docker volume rm postgres-data
+  negative:
+  - docker volume ls
+  - docker volume inspect postgres-data
+  - docker volume rm postgres-data --help
+- rule: system-prune
+  positive:
+  - docker system prune -a --volumes
+  - docker image prune -a
+  - podman builder prune -a
+  - sudo docker system prune -a --volumes
+  negative:
+  - docker system df
+  - docker system prune --help
+  - docker image ls
+- rule: image-push
+  positive:
+  - docker push registry.example.test/api:1.4.0
+  - podman push quay.example.test/api:latest
+  - docker image push registry.example.test/api:1.4.0
+  - nerdctl manifest push registry.example.test/api:latest
+  - podman push --tls-verify=false quay.example.test/api:latest
+  - sudo docker push registry.example.test/api:1.4.0
+  # Implicit Docker Hub (no registry host segment at all) has nothing to
+  # resolve as local, so it stays remote by the hardcoded default.
+  - docker push myuser/myimage:latest
+  - docker push registry.example.test:5000/api:1.4.0
+  negative:
+  - docker pull registry.example.test/api:1.4.0
+  - docker build -t api:dev .
+  - docker push registry.example.test/api:1.4.0 --help
+  # No override needed here — the real resolver parses the ref directly.
+  - docker push localhost:5000/api:1.4.0
+  - podman push 127.0.0.1:5000/api:latest
+- rule: isolation-opt-out
+  positive:
+  - docker run --privileged -it ubuntu bash
+  - docker run -v /var/run/docker.sock:/var/run/docker.sock builder
+  - docker run --net=host -it alpine sh
+  - docker run --network=host -d myapp
+  - docker run --ipc=host -it alpine sh
+  - docker run --userns=host -it alpine sh
+  - docker run --cap-add=SYS_ADMIN -it alpine sh
+  - docker run -v /:/host -it alpine sh
+  - docker run --volume /:/host -it alpine sh
+  - docker run --pid=host -it alpine sh
+  negative:
+  - docker run -it ubuntu bash
+  - docker run -v ./src:/app node:22
+  - docker run -v /home/user/project:/app -it node:22
+  - docker run --cap-add=NET_ADMIN -it alpine sh
+  - docker run --privileged -it ubuntu bash --help
+- rule: container-remove
+  positive:
+  - docker rm -f api-container
+  - docker compose down
+  - podman kill api-container
+  - nerdctl stack rm my-stack
+  - podman rm --force api-container
+  - docker container rm -f api-container
+  - sudo docker rm -f api-container
+  negative:
+  - docker ps -a
+  - docker compose up -d
+  - docker rm api-container
+  - docker rm -f api-container --help

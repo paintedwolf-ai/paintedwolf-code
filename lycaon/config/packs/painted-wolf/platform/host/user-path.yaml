@@ -1,0 +1,29 @@
+# Resolve the account's interactive login PATH once at startup.
+# Discovery and child execution share that snapshot, including a cached fallback.
+# Terminal-specific environment additions remain outside this account-level PATH.
+# The probe runs account startup files with only the allowed environment below.
+version: 1
+
+probe:
+  # Bound startup time when account initialization hangs.
+  timeout_ms: 5000
+  max_output_bytes: 65536
+  # Bound the number of accepted PATH entries.
+  max_entries: 256
+  # Marker lines separate PATH from shell startup output.
+  marker: "__paintedwolf_path_9f3c__"
+  # Supply account, locale, and terminal inputs used by shell startup files.
+  env_allowlist: [HOME, USER, LOGNAME, SHELL, TERM, LANG, LC_ALL, TMPDIR, PATH]
+
+# Unknown shells use the fallback. Only `{marker}` is substituted before exec.
+shells:
+  - names: [zsh, bash, sh, dash, ksh, mksh, ash]
+    args: ["-lic"]
+    command: 'printf "%s\n%s\n%s\n" "{marker}" "$PATH" "{marker}"'
+  # fish keeps PATH as a list, so a quoted "$PATH" would arrive space-separated.
+  - names: [fish]
+    args: ["-l", "-i", "-c"]
+    command: 'printf "%s\n%s\n%s\n" "{marker}" (string join : $PATH) "{marker}"'
+
+# Used when the probe fails and the inherited PATH fails validation.
+fallback_path: ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]

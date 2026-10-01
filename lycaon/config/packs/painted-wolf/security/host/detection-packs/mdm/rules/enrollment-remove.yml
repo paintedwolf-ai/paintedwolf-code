@@ -1,0 +1,39 @@
+title: Remove a device from management
+id: b9b4ee81-500b-4193-8892-0a316eb3a757
+description: Unenrolls a device or deletes its management record.
+references:
+  - https://attack.mitre.org/
+  - https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.devicemanagement/invoke-mgretiredevicemanagementmanageddevice
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_jamf:
+    Image: jamf
+    CommandLine|contains:
+      - ' removeMdmProfile'
+      - ' removeFramework'
+  selection_gam:
+    Image: gam
+    CommandLine|contains: ' delete mobile'
+  selection_intune:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    # Retire only. Clear-Mg… is the wipe and belongs to device-wipe at critical.
+    CommandLine|contains: 'Invoke-MgRetireDeviceManagementManagedDevice'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(--help|-whatif)(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_jamf or selection_gam or selection_intune) and not filter_rehearsal and not filter_local

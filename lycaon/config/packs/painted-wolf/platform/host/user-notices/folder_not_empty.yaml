@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Choose an empty folder
+message: The selected folder contains files, so the draft could not be moved there.
+suggested_action: Choose an empty folder or create a new one, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - The selected folder contains files, so the draft could not be moved there.

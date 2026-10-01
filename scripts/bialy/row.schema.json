@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paintedwolf.ai/schemas/pw-decide-row/1",
+  "title": "pw-decide-row/1",
+  "description": "One turn decision as a training row, written by `lycaon-debug decide export`: the state the engine read, the candidates the turn offered, what the engine answered, and what the session then did. Producers may add `meta` and judged scores; consumers read option sets from `offered` and option texts from the corpus.",
+  "type": "object",
+  "required": [
+    "schema",
+    "receipt",
+    "session",
+    "root_session",
+    "opening_message_id",
+    "host",
+    "surface",
+    "catalog_revision",
+    "project",
+    "model",
+    "partial",
+    "lang",
+    "engine",
+    "offered",
+    "state",
+    "labels"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-decide-row/1"
+    },
+    "receipt": {
+      "type": "integer",
+      "description": "The turn-load receipt the row was read from."
+    },
+    "session": {
+      "type": "string"
+    },
+    "root_session": {
+      "type": "string",
+      "description": "The session itself, or the coordinator session a worker leg belongs to."
+    },
+    "opening_message_id": {
+      "type": "string"
+    },
+    "host": {
+      "enum": [
+        "coordinator",
+        "worker"
+      ]
+    },
+    "surface": {
+      "type": "string",
+      "description": "The coordinator surface, or the worker's tool profile."
+    },
+    "catalog_revision": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string",
+      "description": "The model that made most of the session's calls."
+    },
+    "partial": {
+      "type": "boolean",
+      "description": "The turn did not complete; only its request_tools needs are labels."
+    },
+    "lang": {
+      "enum": [
+        "en",
+        "other"
+      ]
+    },
+    "engine": {
+      "type": "object",
+      "required": [
+        "state",
+        "reason",
+        "preloaded",
+        "omitted"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "answered",
+            "abstained"
+          ],
+          "description": "An answered turn carried what the engine chose, so its tool labels are not independent of the engine."
+        },
+        "reason": {
+          "type": "string"
+        },
+        "preloaded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "omitted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "offered": {
+      "type": "object",
+      "required": [
+        "floor",
+        "loadable",
+        "guides"
+      ],
+      "properties": {
+        "floor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "loadable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": [
+        "host",
+        "user"
+      ],
+      "description": "The turnload.State the engine read, verbatim."
+    },
+    "labels": {
+      "type": "object",
+      "required": [
+        "tools",
+        "requests",
+        "requested_names",
+        "requested_groups",
+        "skills",
+        "kind",
+        "guides"
+      ],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Offered loadable tools the turn called."
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "need",
+              "exact",
+              "after"
+            ],
+            "properties": {
+              "need": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "scores": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "description": "Judged relevance of each ranked tool card to the need."
+              }
+            }
+          }
+        },
+        "requested_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requested_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "enum": [
+            "answer_only",
+            "inspect",
+            "change",
+            "run",
+            "delegate",
+            null
+          ],
+          "description": "The kind the turn's tool calls imply; null for a turn that did not complete."
+        },
+        "guides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "description": "Offered instruction units: needed, unneeded, or unknown (null)."
+        },
+        "tool_scores": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "description": "Judged relevance of each offered loadable tool card to the request."
+        },
+        "skill_scores": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "description": "Judged relevance of each skill card to the request."
+        },
+        "second_scores": {
+          "type": "object",
+          "description": "A second judge's scores on the same cards: its model, skills and tools maps, and one map per request_tools need (null where it scored none).",
+          "properties": {
+            "model": {"type": "string"},
+            "skills": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}},
+            "tools": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}},
+            "requests": {"type": "array", "items": {"type": ["object", "null"], "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}}}
+          },
+          "required": ["model"]
+        }
+      }
+    },
+    "judge": {
+      "type": "object",
+      "description": "Which model judged the row's scores, and how."
+    },
+    "meta": {
+      "type": "object",
+      "description": "Producer metadata, such as the task, repository, and prompt group; consumers may group by it but never train on it."
+    }
+  }
+}

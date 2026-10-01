@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-session-stop
+slot: "app_menu.file"
+command: painted-wolf/platform:session-stop
+group: "3"
+order: 8
+label: "Stop response"

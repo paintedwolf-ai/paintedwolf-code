@@ -1,0 +1,23 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+title: Model response interrupted
+message: >-
+  {% if provider_id %}The response from {{ provider_id }}{% else %}The model response{% endif %}
+  ended before it could be completed. Earlier work in this request may already have run.
+suggested_action: Review the current state before asking the coordinator to continue.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: default
+    vars:
+      provider_id: together-ai-1
+    expect_contains:
+      - together-ai-1
+      - Earlier work
+      - Review the current state

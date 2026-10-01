@@ -1,0 +1,294 @@
+paths:
+  /v1/local-data:
+    get:
+      tags:
+      - local-data
+      operationId: getLocalData
+      summary: List rebuildable local-data bucket presence and sizes
+      responses:
+        '200':
+          description: Bucket status catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/LocalDataStatus
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+  /v1/local-data/clear:
+    post:
+      tags:
+      - local-data
+      operationId: clearLocalData
+      x-person-action: record
+      summary: Clear one or more rebuildable local-data buckets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/local-data.yaml#/components/schemas/LocalDataClearRequest
+      responses:
+        '200':
+          description: Per-bucket clear results (may include individual failures)
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/LocalDataClearResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/history-storage:
+    get:
+      operationId: getHistoryStorage
+      tags: [local-data]
+      summary: Inspect retained history storage
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: History storage operation result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryStorageStatus
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Stored history retention policy is invalid
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: A restore is staged; restart before making another request
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage operation failed
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage is unavailable
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+    patch:
+      operationId: updateHistoryStorage
+      x-person-action: record
+      tags: [local-data]
+      summary: Apply a reviewed history retention policy
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryRetentionRequest
+      responses:
+        '200':
+          description: History storage operation result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryRetentionPolicy
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Invalid JSON or retention policy
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: The reviewed preview is missing, expired, or invalidated, or a restore is staged
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Request body exceeds the JSON size limit
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage operation failed
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage is unavailable
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+
+  /v1/history-storage/preview:
+    post:
+      operationId: previewHistoryRetention
+      x-person-action: none
+      tags: [local-data]
+      summary: Preview eligible historical bodies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryRetentionRequest
+      responses:
+        '200':
+          description: History storage operation result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryRetentionPreview
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Invalid JSON or retention policy
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History or policy changed during preview, or a restore is staged
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Request body exceeds the JSON size limit
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage operation failed
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage is unavailable
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+
+  /v1/history-storage/prune:
+    post:
+      operationId: pruneHistory
+      x-person-action: record
+      tags: [local-data]
+      summary: Prune one reviewed batch of historical bodies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryRetentionRequest
+      responses:
+        '200':
+          description: History storage operation result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryPruneResult
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Invalid JSON or retention policy
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: The reviewed preview is missing, expired, or invalidated, or a restore is staged
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Request body exceeds the JSON size limit
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage operation failed
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage is unavailable
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+
+  /v1/history-storage/protections:
+    post:
+      operationId: createHistoryProtection
+      x-person-action: record
+      tags: [local-data]
+      summary: Protect a project or session from pruning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryProtection
+      responses:
+        '201':
+          description: History protection created
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/local-data.yaml#/components/schemas/HistoryProtection
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Invalid JSON, protection scope, or owner
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: A restore is staged; restart before making another request
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: Request body exceeds the JSON size limit
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage operation failed
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+          description: History storage is unavailable
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+
+  /v1/history-storage/protections/{protection_id}:
+    delete:
+      operationId: deleteHistoryProtection
+      x-person-action: record
+      tags: [local-data]
+      summary: Remove a history protection
+      parameters:
+      - name: protection_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: History protection removed
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

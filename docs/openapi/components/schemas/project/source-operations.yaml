@@ -1,0 +1,81 @@
+components:
+  schemas:
+    SourceOperationResult:
+      description: Typed outcome of a successfully completed source operation.
+      x-go-type: any
+      oneOf:
+        - $ref: source-content.yaml#/components/schemas/ProjectSourceEntryCreatedResponse
+        - $ref: source-content.yaml#/components/schemas/ProjectSourceLifecycleResponse
+        - $ref: source-history.yaml#/components/schemas/SourceHistoryMutationResponse
+    SourceOperationStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, path, from_path, operation_id, complete, state, phase, operation, cancelable, entries_processed, bytes_processed, created_at]
+      description: Durable file operation identified by its mutation operation_id. Disconnects leave accepted work running; terminal results survive restart.
+      properties:
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        from_path: {type: string}
+        expected_entry_id:
+          type: string
+          format: uuid
+          description: Original history head for an undo or redo request; omitted for other operations.
+        operation_id: {type: string, format: uuid}
+        complete: {type: boolean}
+        state:
+          type: string
+          enum: [queued, running, completed, failed, canceled, interrupted]
+        phase:
+          type: string
+          description: Current work phase. Progress counts describe that phase and may reset on phase changes.
+        operation:
+          type: string
+          enum:
+            - createProjectSourceEntry
+            - deleteProjectSource
+            - renameProjectSource
+            - copyProjectSource
+            - undoProjectSourceHistory
+            - redoProjectSourceHistory
+        cancelable:
+          type: boolean
+          description: Cancellation is available before filesystem publication; published changes finish reconciliation and support undo through file history.
+        entries_processed: {type: integer, format: int64, minimum: 0}
+        bytes_processed: {type: integer, format: int64, minimum: 0}
+        result:
+          x-go-type: any
+          $ref: '#/components/schemas/SourceOperationResult'
+        error:
+          x-go-pointer: true
+          $ref: ../common.yaml#/components/schemas/Error
+        created_at:
+          type: string
+          format: date-time
+          description: When the request was first submitted; a retry keeps it.
+        completed_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: When the request reached its terminal state; present exactly when complete.
+    SourceOperationEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [project_id, operation]
+      description: A file operation's status after a persisted transition or progress save; the same shape the operation list returns.
+      properties:
+        project_id: {type: string, format: uuid}
+        operation: {$ref: '#/components/schemas/SourceOperationStatus'}
+    SourceOperationList:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceOperationStatus'
+        next_cursor:
+          type: string

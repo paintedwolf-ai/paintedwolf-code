@@ -1,0 +1,94 @@
+{
+  "id": "fact-detector-facts-are-assembled-lazily",
+  "title": "A detector is not run for a rule the selector did not select, so detector://error never fails",
+  "covers": [
+    "OAR-FACT-11",
+    "OAR-CONF-9"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "model.output",
+      "id": "PROBE",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak",
+          "tool"
+        ]
+      },
+      "detector": {
+        "ref": "detector://error"
+      },
+      "selector": {
+        "tool": [
+          "write"
+        ]
+      },
+      "when": "jailbreak_score > 0.1"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.output",
+      "id": "QUIET_WARN",
+      "effect": "warn"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.output",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "QUIET_WARN",
+    "applied": [
+      "oar.test/QUIET_WARN:fired"
+    ]
+  }
+}

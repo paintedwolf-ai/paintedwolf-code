@@ -1,0 +1,5 @@
+code: terminal_requires_orchestration_complete
+message: |
+  Terminal phase {{phase}} must use complete_when: orchestration_complete.
+replacement: |
+  Set complete_when: orchestration_complete on every terminal: true phase.

@@ -1,0 +1,79 @@
+{
+  "id": "eval-advisories-warns-accumulate",
+  "title": "Two warnings at one occurrence both appear, in evaluation order",
+  "covers": [
+    "OAR-EVAL-20",
+    "OAR-COPY-9",
+    "OAR-CONF-37"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "A_NOTE",
+      "effect": "warn",
+      "copy": {
+        "what": "The path is writable by the group."
+      }
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "B_NOTE",
+      "effect": "warn",
+      "copy": {
+        "what": "The command ran longer than the usual budget."
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "A_NOTE",
+    "rule": "oar.test/A_NOTE",
+    "advisories": [
+      {
+        "code": "A_NOTE",
+        "rule": "oar.test/A_NOTE",
+        "copy": {
+          "what": "The path is writable by the group."
+        }
+      },
+      {
+        "code": "B_NOTE",
+        "rule": "oar.test/B_NOTE",
+        "copy": {
+          "what": "The command ran longer than the usual budget."
+        }
+      }
+    ]
+  }
+}

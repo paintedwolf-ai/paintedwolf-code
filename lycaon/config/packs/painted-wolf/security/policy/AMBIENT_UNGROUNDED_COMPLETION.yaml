@@ -1,0 +1,50 @@
+oar: '1.0'
+id: AMBIENT_UNGROUNDED_COMPLETION
+kind: invariant
+anchor: coordinator.post_turn
+requires:
+  facts:
+  - paintedwolf.citation_unverifiable
+  - paintedwolf.grounding_escalated
+  - paintedwolf.last_audit_ungrounded
+  - paintedwolf.unobserved_cited_handles
+  - paintedwolf.unobserved_cited_urls
+  - paintedwolf.missing_summary_job_ids
+when: paintedwolf.last_audit_ungrounded && size(paintedwolf.unobserved_cited_handles) == 0 && size(paintedwolf.unobserved_cited_urls)
+  == 0 && !paintedwolf.citation_unverifiable && !paintedwolf.grounding_escalated
+effect: nudge
+on_fire:
+- increment_breaker
+copy:
+  cause: '{% if paintedwolf.missing_summary_job_ids %}The named completed jobs have no matching worker_summary
+    delivery on the parent.{% else %}The retained audit reports an evidence gap; it does not establish missing
+    worker work.{% endif %}'
+  why: Completion claims need observed evidence and any required worker summaries.
+  fix: '{% if paintedwolf.missing_summary_job_ids %}Inspect the named jobs and their delivery state. Await
+    their completion envelopes without redispatching completed work.{% else %}Check the retained audit and
+    the cited references. Correct unsupported claims or acquire the specific missing evidence through an available
+    tool.{% endif %}'
+  instead: Keep working from observed evidence; this post-turn feedback does not retract the delivered turn.
+  what: '{% if paintedwolf.missing_summary_job_ids %}Completed jobs lack a parent-session summary: {{ paintedwolf.missing_summary_job_ids
+    }}.{% else %}The last citation audit did not trace every cited reference to observed evidence.{% endif
+    %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ambient_grounding
+x-paintedwolf-message: Worker completion criteria not satisfied on parent session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - Tool feedback
+  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
+- id: missing_summary
+  vars:
+    missing_summary_job_ids:
+    - job-1
+  expect_contains:
+  - job-1
+  - without redispatching

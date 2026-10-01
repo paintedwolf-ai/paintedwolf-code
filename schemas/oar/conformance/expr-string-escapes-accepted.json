@@ -1,0 +1,69 @@
+{
+  "id": "expr-string-escapes-accepted",
+  "title": "The closed escape set is accepted, including a four-digit \\u escape",
+  "covers": [
+    "OAR-EXPR-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ESCAPED",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "when": "tool == \"a\\tb\\u0041\\\"c\\\\d\""
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "a\tbA\"c\\d"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "ESCAPED"
+  }
+}

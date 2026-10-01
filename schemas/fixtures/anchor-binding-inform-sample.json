@@ -1,0 +1,13 @@
+{
+  "on": "leg.finished",
+  "selector": {
+    "surface": "coordinator"
+  },
+  "effect": "inform",
+  "render": "coordinator-leg-finished",
+  "tier": "builtin",
+  "dedup": {
+    "key": "leg_finished",
+    "omit_inform_when": ["board_reinjected"]
+  }
+}

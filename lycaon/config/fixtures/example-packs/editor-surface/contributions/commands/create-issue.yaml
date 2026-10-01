@@ -1,0 +1,29 @@
+# Dynamic choices load only after explicit activation.
+id: example/editor-surface:create-issue
+title: Create tracker issue
+category: Example
+icon: tool
+enablement:
+  fact: mcp_requirement_ready
+  is: example/editor-surface:tracker
+interaction:
+  steps:
+    - id: repository
+      title: Repository
+      kind: choice
+      required: true
+      source:
+        kind: mcp
+        requirement: example/editor-surface:tracker
+        tool: list_repositories
+    - id: title
+      title: Issue title
+      kind: string
+      required: true
+    - id: confirm
+      title: Create this issue?
+      kind: confirmation
+      required: true
+action:
+  kind: operation
+  ref: example/editor-surface:perform-create-issue

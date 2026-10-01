@@ -1,0 +1,26 @@
+tags: [git, inspection]
+description: "Git working tree status JSON (`available`, `branch`, `head_short`, `upstream`, `ahead`/`behind`, `dirty`, staged/unstaged/untracked counts, `files` with porcelain XY status one entry per file — untracked directories are expanded; `available:false` on non-git projects). Pages of 80 files: read `files_total`, use `next_offset` to continue when more coverage is needed; exhaust pages when the task requires the complete selection. `paths` narrows the selection to repo-relative prefixes (a file, or a directory and everything under it). `summary:true` returns counts and groups without file entries (default group depth 1). `group_depth` adds `groups`: which areas changed and how much, rolled up by leading path segments, largest first — the survey to run before paging files on a large tree. Informational only — dirty is normal; does not require cleanup. Replaces command: git status."
+schema:
+  type: object
+  properties:
+    summary:
+      type: boolean
+      description: Omit the path inventory and start with a depth-one rollup unless group_depth is specified
+    paths:
+      type: array
+      items:
+        type: string
+      description: Select exact files or directory subtrees. An empty list selects the repository; selected totals exclude other paths.
+    offset:
+      type: integer
+      description: Skip this many selected files (use with files_truncated/next_offset)
+    limit:
+      type: integer
+      description: Files per page (default 80, max 80; oversized views retain recovery pointers)
+    group_depth:
+      type: integer
+      description: When set (1–16), also return groups[] — per-prefix file/staged/unstaged/untracked counts by the first N path segments, largest groups first (max 80 groups; groups_total says how many exist)
+    ignored:
+      type: boolean
+      description: Report matching ignored files for explicitly named paths (requires non-empty paths; replaces git check-ignore)
+  additionalProperties: false

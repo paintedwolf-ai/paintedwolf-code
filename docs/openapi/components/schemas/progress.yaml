@@ -1,0 +1,199 @@
+components:
+  schemas:
+    ProgressStep:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          x-go-type: "string"
+          $ref: progress-state.generated.yaml#/components/schemas/ProgressState
+        label:
+          type: string
+      required:
+        - state
+        - label
+
+    ProgressDigest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressStep'
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - steps
+        - revision
+
+    ProgressEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - revision
+
+    ProgressCompleteMeta:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressStep'
+        seq:
+          type: integer
+      required:
+        - steps
+        - seq
+
+    TurnClock:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        Active-time clock of one visible user turn in a session tree. A visible
+        turn opens when a person's prompt starts an idle root session and lasts
+        until the next such prompt; host and worker continuations accrue to it.
+        The live clock is published on the edges where it transitions: the first
+        executing prompt in, the last executing prompt out, and a new visible
+        user turn. Clients tick locally between edges as
+        active_ms + (now − running_at), so no event is needed while it merely
+        advances. Transcript pages carry the same shape for each turn they open.
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Root session the clock belongs to.
+        opening_message_id:
+          type: string
+          format: uuid
+          description: >-
+            The user message that opened the visible turn. Omitted while the
+            session tree has run without a person's prompt opening one.
+        active_ms:
+          type: integer
+          format: int64
+          description: >-
+            Banked active time for the visible user turn in milliseconds.
+            Accrues while at least one prompt in the session tree is executing,
+            including an approval wait inside that execution. Pauses between executions.
+            Resets when a new root user turn begins.
+        work_ms:
+          type: integer
+          format: int64
+          description: >-
+            The part of active_ms, banked in milliseconds, during which no
+            execution in the session tree was waiting on a person's decision,
+            such as a tool approval or an edit review.
+        running:
+          type: boolean
+          description: Whether the clock is currently advancing (a turn is in flight).
+        running_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: >-
+            RFC 3339 instant the clock resumed; present only while running.
+        settled_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: >-
+            RFC 3339 instant the clock last paused, which is when the visible
+            turn's work last finished. Omitted before the first pause; a
+            continuation that resumes the clock keeps the previous value.
+      required:
+        - session_id
+        - active_ms
+        - work_ms
+        - running
+
+    ProgressChangeKind:
+      type: string
+      enum:
+        - created
+        - updated
+        - done
+        - na
+        - reopened
+        - removed
+
+    ProgressChange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: '#/components/schemas/ProgressChangeKind'
+        label:
+          type: string
+        prev_label:
+          type: string
+          description: The step's prior label when it was re-scoped (updated rows only).
+        state:
+          x-go-type: "string"
+          $ref: progress-state.generated.yaml#/components/schemas/ProgressState
+      required:
+        - kind
+        - label
+        - state
+
+    ProgressUpdateSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Aggregate progress update; the full checklist remains in ProgressDigest.
+      properties:
+        change_count:
+          type: integer
+        total_steps:
+          type: integer
+        pending:
+          type: integer
+        done:
+          type: integer
+        na:
+          x-go-name: "NA"
+          type: integer
+      required:
+        - change_count
+        - total_steps
+        - pending
+        - done
+        - na
+
+    ProgressUpdateMeta:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Incremental progress update with a plan, delta, or aggregate summary.
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressChange'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressStep'
+        summary:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ProgressUpdateSummary'
+        initial:
+          type: boolean
+        seq:
+          type: integer
+      required:
+        - seq

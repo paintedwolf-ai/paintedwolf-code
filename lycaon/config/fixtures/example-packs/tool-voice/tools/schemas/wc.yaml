@@ -1,0 +1,23 @@
+# One file per tool schema, Entry at the document root — the filename is the id.
+#
+# This collides with the stock unit of the same id, which is the point: an
+# override is a decision, so Resolve makes you state it.
+#
+#   ./task extensions -- own tools/schemas/wc example/tool-voice --device
+#
+# A schema unit supplies LLM-facing metadata only. It does not register, gate,
+# or revoke a tool — that stays in native-tools.yaml and the tool profiles.
+description: "Count lines, words, and bytes. Call this before read on an unfamiliar file to decide whether it needs paging."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      description: Repo-relative file paths. Batch them — one call for the set beats one call each.
+      items:
+        type: string
+    mode:
+      type: string
+      enum: [lines, words, bytes, all]
+      description: Which counts to return. Default lines.
+  required: [paths]

@@ -1,0 +1,12 @@
+scope: app
+title: Cannot connect
+message: >-
+  The app cannot reach its local engine. Try again to reconnect.
+suggested_action: That did not work. Reopening the app is the next thing to try.
+scenarios:
+  - id: default
+    expect_contains:
+      - Try again
+  - id: retry-failed
+    expect_contains:
+      - Reopening the app

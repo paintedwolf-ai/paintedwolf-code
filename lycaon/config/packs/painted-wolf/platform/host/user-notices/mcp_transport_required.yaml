@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Connection details are required
+message: An MCP provider needs a URL or a command.
+suggested_action: Enter a loopback URL for HTTP, or a command for stdio.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - URL
+      - command

@@ -1,0 +1,9 @@
+id: SCAN_LIST_EMPTY
+emit: banner
+category: informational
+severity: info
+message: No scans matched this list request.
+cause: This result page contains no stored scan rows; it does not establish that the whole project has no scans or that a scan is running.
+why: An empty result is a successful query, not a tool failure.
+fix: Check this request's filters and offset before repeating it. Wait only for a scan known to be running; otherwise report that no matching stored results are available. Use IDs from returned rows for later drilldown.
+instead: Distinguish an empty page from pending work and avoid polling without an active scan

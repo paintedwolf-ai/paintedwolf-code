@@ -1,0 +1,31 @@
+# Sidecar TrueType fonts for workflow reports and terminal captures.
+# Licensed under OFL-1.1; upstream provenance and license files below.
+
+pack_version: 1
+
+fonts:
+  - family: Inter
+    upstream: https://github.com/rsms/inter
+    release: v4.1
+    source: https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+    license: OFL-1.1
+    license_file: OFL-inter.txt
+    copyright: Copyright 2020 The Inter Project Authors
+    files:
+      normal: Inter-Regular.ttf
+      bold: Inter-SemiBold.ttf
+      italic: Inter-Italic.ttf
+      bold_italic: Inter-SemiBoldItalic.ttf
+
+  - family: JetBrains Mono
+    upstream: https://github.com/JetBrains/JetBrainsMono
+    release: v2.304
+    source: https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+    license: OFL-1.1
+    license_file: OFL-jetbrainsmono.txt
+    copyright: Copyright 2020 The JetBrains Mono Project Authors
+    files:
+      normal: JetBrainsMono-Regular.ttf
+      bold: JetBrainsMono-Bold.ttf
+      italic: JetBrainsMono-Italic.ttf
+      bold_italic: JetBrainsMono-BoldItalic.ttf

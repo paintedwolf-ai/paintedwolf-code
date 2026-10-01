@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-composer-send
+command: painted-wolf/platform:composer-send
+scope: "composer"
+allow_in_input: true
+bindings:
+  macos:
+    - "Enter"
+  windows:
+    - "Enter"
+  linux:
+    - "Enter"

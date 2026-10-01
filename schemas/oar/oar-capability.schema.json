@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagentrules.org/spec/1.0/oar-capability.schema.json",
+  "title": "Open Agent Rules capability document",
+  "description": "What a host provides: which core anchors it implements, which capability profiles it claims, its host-tier facts, its activity window, and its expression limit. A rule author and a conformance runner can determine what will load before attempting it ([OAR-FACT-21], [OAR-PROF-2], [OAR-PROF-3]).",
+  "type": "object",
+  "required": [
+    "oar_capability_version",
+    "host",
+    "anchors",
+    "profiles",
+    "activity_window",
+    "detectors",
+    "expression_nodes_max",
+    "supports_transform"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "oar_capability_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "host": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+      "description": "The namespace this host owns, and the prefix of every host-tier fact it publishes ([OAR-FACT-18])."
+    },
+    "anchors": {
+      "type": "object",
+      "required": [
+        "core"
+      ],
+      "additionalProperties": false,
+      "description": "Every core anchor appears exactly once across core and unsupported ([OAR-PROF-2]).",
+      "properties": {
+        "core": {
+          "type": "object",
+          "description": "Core anchor identifier to the local anchor implementing it.",
+          "propertyNames": {
+            "enum": [
+              "tool.pre_invoke",
+              "tool.handler",
+              "tool.post_invoke",
+              "agent.post_turn",
+              "agent.finalize",
+              "model.input",
+              "model.output",
+              "model.tool_result"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+          }
+        },
+        "unsupported": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "tool.pre_invoke",
+              "tool.handler",
+              "tool.post_invoke",
+              "agent.post_turn",
+              "agent.finalize",
+              "model.input",
+              "model.output",
+              "model.tool_result"
+            ]
+          },
+          "description": "Core anchors this host does not implement. A rule targeting one is rejected at load ([OAR-PROF-4])."
+        },
+        "host": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+          },
+          "description": "The host-native anchor catalogue. A rule whose anchor is neither a core anchor nor listed here is rejected at load, naming the value ([OAR-PROF-5], [OAR-DOC-12])."
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "[OAR-PROF-2] tool.pre_invoke declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "tool.pre_invoke"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "tool.pre_invoke"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] tool.handler declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "tool.handler"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "tool.handler"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] tool.post_invoke declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "tool.post_invoke"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "tool.post_invoke"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] agent.post_turn declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "agent.post_turn"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "agent.post_turn"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] agent.finalize declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "agent.finalize"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "agent.finalize"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] model.input declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "model.input"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "model.input"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] model.output declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "model.output"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "model.output"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "$comment": "[OAR-PROF-2] model.tool_result declared exactly once.",
+          "oneOf": [
+            {
+              "required": [
+                "core"
+              ],
+              "properties": {
+                "core": {
+                  "required": [
+                    "model.tool_result"
+                  ]
+                }
+              }
+            },
+            {
+              "required": [
+                "unsupported"
+              ],
+              "properties": {
+                "unsupported": {
+                  "contains": {
+                    "const": "model.tool_result"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "profiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Capability profiles this host provides whole. A profile is provided whole or not at all ([OAR-FACT-16])."
+    },
+    "activity_window": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Steps flow matches against. Zero means the host tracks no recent activity and rejects every rule carrying flow ([OAR-PROF-3], [OAR-FACT-13])."
+    },
+    "host_facts": {
+      "type": "array",
+      "description": "Host-tier facts and observation functions in one shared namespace [OAR-FACT-27].",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\\.[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": {
+            "$ref": "#/$defs/factType"
+          },
+          "observation": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "detectors": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^detector://[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+      },
+      "description": "Detector references this host resolves ([OAR-OPS-12])."
+    },
+    "expression_nodes_max": {
+      "type": "integer",
+      "minimum": 256,
+      "default": 256,
+      "description": "The engine's parse-tree node ceiling. At least 256 ([OAR-EXPR-17])."
+    },
+    "supports_transform": {
+      "type": "boolean",
+      "default": false,
+      "description": "False means the engine rejects effect: transform at load rather than degrading it ([OAR-OPS-18])."
+    }
+  },
+  "$defs": {
+    "factType": {
+      "anyOf": [
+        {
+          "enum": [
+            "bool",
+            "int",
+            "double",
+            "string",
+            "list<string>",
+            "map<string,string>",
+            "list<map>",
+            "map"
+          ]
+        },
+        {
+          "pattern": "^\\((bool|int|double|string)\\) -> (bool|int|double|string)$",
+          "type": "string"
+        }
+      ],
+      "description": "A declared fact type ([OAR-FACT-22]) or an observation function signature ([OAR-FACT-9])."
+    }
+  }
+}

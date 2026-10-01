@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not build the diagnostics file
+message: >-
+  The diagnostics bundle could not be assembled, so nothing was saved. Your
+  settings and data are unaffected.
+suggested_action: Try again; if it keeps failing, copy the System information instead.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - could not be assembled
+      - System information

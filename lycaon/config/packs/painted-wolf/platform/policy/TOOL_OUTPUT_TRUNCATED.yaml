@@ -1,0 +1,10 @@
+id: TOOL_OUTPUT_TRUNCATED
+emit: banner
+category: informational
+severity: info
+message: Tool output was shortened for the inline budget.
+what: 'Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available for the omitted output.{% endif %}'
+cause: The tool result exceeded the inline byte budget.
+why: This notice describes output delivery; it does not undo the operation or change whether it completed.
+fix: '{% if paintedwolf.spill_readable %}Use `read(path="{{ paintedwolf.spill_path }}")` with offset/limit to page the retained output.{% else %}{% if paintedwolf.spill_path %}The retained output exceeds the {{ paintedwolf.max_file_bytes }}-byte file input budget, so read pagination cannot load it.{% endif %} Use an existing narrower result or a read-only inspection of the operation state. Repeat an operation only after establishing that replay cannot duplicate its effects; otherwise report the missing evidence.{% endif %}'
+instead: Preserve the recorded operation outcome and recover evidence without repeating a mutation

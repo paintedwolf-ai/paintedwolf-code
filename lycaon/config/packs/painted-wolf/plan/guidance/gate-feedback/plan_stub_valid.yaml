@@ -1,0 +1,20 @@
+id: plan_stub_valid
+kind: plan-content
+purpose: |
+  Bound blueprint must declare title and research_depth in YAML frontmatter and
+  contain the REQUIRED exact ## headings below (literal titles).
+  Invented headings (## Scope, ## API design, …) do not satisfy this gate.
+missing_signals:
+  - id: stub_sections_missing
+    when: "true"
+    detail: "{% if context.missing_stub_required_s %}Still missing: {{ context.missing_stub_required_s }}. Headings present: {% if context.present_h2_s %}{{ context.present_h2_s }}{% else %}(none){% endif %}. Full required set: {{ context.required_stub_labels_s }}.{% else %}Bound blueprint is empty or missing required stub sections. Required: {{ context.required_stub_labels_s }}.{% endif %}"
+    fix: "Rewrite the bound blueprint using the exact required ## titles, a declared title, and a declared research_depth in frontmatter — do not invent alternate section names or write the depth as prose."
+satisfy_auto:
+  - "REQUIRED frontmatter: title: a short name (not the host placeholder blueprint/plan)."
+  - "REQUIRED frontmatter: research_depth: none | light | thorough — one of those three words, not a sentence."
+  - "REQUIRED exact ## headings (write these titles literally): ## Goal, ## Assumptions, ## Plan implementation scope (include **Size:**), ## Plan breaking changes, ## Approach."
+  - "Fold intake answers and research facts into those sections in one `write`/`edit` of the bound `${overlay_dir}/blueprints/` file."
+satisfy:
+  - "REQUIRED frontmatter: title: a short name (not blueprint or plan)."
+  - "REQUIRED frontmatter: research_depth: none | light | thorough."
+  - "REQUIRED exact ## headings: ## Goal, ## Assumptions, ## Plan implementation scope, ## Plan breaking changes, ## Approach."

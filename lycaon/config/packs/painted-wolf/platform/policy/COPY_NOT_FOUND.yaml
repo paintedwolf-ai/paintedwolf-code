@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COPY_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - copy
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "COPY_NOT_FOUND"
+effect: block
+copy:
+  cause: The source path could not be found.
+  why: Copying requires existing input; changing the destination does not supply it.
+  fix: Confirm the intended source with an offered discovery tool, or remove an unintended pair. Do not create
+    placeholder input just to make the copy succeed.
+  instead: Resolve the intended existing source
+  what: The copy source {{ paintedwolf.path }} does not exist.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
+x-paintedwolf-message: copy:copy source does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: copy
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COPY_NOT_FOUND'

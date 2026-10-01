@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-version-next
+command: painted-wolf/platform:files-version-next
+scope: files
+bindings:
+  macos:
+    - "Alt+]"
+  windows:
+    - "Alt+]"
+  linux:
+    - "Alt+]"

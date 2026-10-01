@@ -1,0 +1,37 @@
+oar: '1.0'
+id: MCP_TRANSPORT_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  - mcp
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.provider
+  - paintedwolf.mcp_probe_in_flight
+when: paintedwolf.rejection_code == "MCP_TRANSPORT_UNAVAILABLE"
+effect: block
+copy:
+  what: MCP provider {{ paintedwolf.provider }} was not contacted.{% if paintedwolf.mcp_probe_in_flight %}
+    Its recovery probe is already in flight.{% else %} Transport failures opened its circuit breaker.{% endif
+    %}
+  cause: '{% if paintedwolf.mcp_probe_in_flight %}The breaker permits one recovery probe and holds concurrent
+    calls.{% else %}Repeated transport failures paused calls to this provider.{% endif %}'
+  why: Retrying a provider that is down burns the full per-call timeout each time and starves the turn.
+  fix: Let recovery finish before retrying; do not loop. If the outage persists, inspect the provider in Settings
+    → MCP providers. Use another tool only when it supports the same intended operation within current authority.
+  instead: Preserve the pending operation while the provider recovers
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mcp
+x-paintedwolf-message: MCP provider is unavailable and calls are being held
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    provider: fixture
+    tool: mcp_fixture_echo
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MCP_TRANSPORT_UNAVAILABLE'
+  - Settings

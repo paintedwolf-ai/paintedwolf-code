@@ -1,0 +1,113 @@
+title: Reached a CRM or customer-data API
+id: c2493a34-f0d3-4fe4-b71f-d3823e245cca
+description: >-
+  Connected to a CRM, CDP, support, or customer-engagement API where requests
+  can read or change customer records. A hostname cannot tell a read from a
+  bulk delete or campaign send.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      # CRM / CDP
+      - login.salesforce.com
+      - test.salesforce.com
+      - api.hubapi.com
+      - api.hubspot.com
+      - api.segment.io
+      - api.segment.com
+      - api.pipedrive.com
+      - api.close.com
+      - api.attio.com
+      - api.affinity.co
+      - api.copper.com
+      - www.zohoapis.com
+      - api.zoho.com
+      - api.freshsales.io
+      - api.freshdesk.com
+      - api.zendesk.com
+      - api.intercom.io
+      - api.intercom.com
+      # Engagement / marketing clouds
+      - api.klaviyo.com
+      - a.klaviyo.com
+      - rest.iad-01.braze.com
+      - api.braze.com
+      - api.customer.io
+      - track.customer.io
+      - api.mailchimp.com
+      - us1.api.mailchimp.com
+      - api.sendinblue.com
+      - api.brevo.com
+      - api.iterable.com
+      - api.marketo.com
+      - api.pardot.com
+      - api.outreach.io
+      - api.salesloft.com
+      - api.gong.io
+      - api.apollo.io
+      - api.clearbit.com
+      - api.clay.com
+      - api.drift.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .salesforce.com
+      - .force.com
+      - .salesforce-setup.com
+      - .salesforceliveagent.com
+      - .hubspot.com
+      - .hubapi.com
+      - .hs-analytics.net
+      - .hsforms.com
+      - .segment.io
+      - .segment.com
+      - .pipedrive.com
+      - .close.com
+      - .attio.com
+      - .affinity.co
+      - .copper.com
+      - .zoho.com
+      - .zohoapis.com
+      - .zohoapis.eu
+      - .zohoapis.in
+      - .freshsales.io
+      - .freshdesk.com
+      - .freshworks.com
+      - .zendesk.com
+      - .zopim.com
+      - .intercom.io
+      - .intercom.com
+      - .intercomcdn.com
+      - .klaviyo.com
+      - .braze.com
+      - .braze.eu
+      - .customer.io
+      - .mailchimp.com
+      - .list-manage.com
+      - .sendinblue.com
+      - .brevo.com
+      - .iterable.com
+      - .marketo.com
+      - .mktoresp.com
+      - .pardot.com
+      - .outreach.io
+      - .salesloft.com
+      - .gong.io
+      - .apollo.io
+      - .clearbit.com
+      - .clay.com
+      - .drift.com
+      - .crm.dynamics.com
+      - .dynamics.com
+      - .api.crm.dynamics.com
+  condition: selection_host or selection_suffix

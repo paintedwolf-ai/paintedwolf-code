@@ -1,0 +1,475 @@
+/* Live preview and recording share the live-session stack. */
+.den-transcript-media-run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: var(--transcript-visual-before) var(--transcript-visual-right) var(--transcript-visual-after) 0;
+  max-width: min(100%, 760px);
+  min-width: 0;
+}
+
+.den-transcript-media-run > *:not(.den-artifact-ref-chip) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.den-transcript-visual-filmstrip__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.den-transcript-visual-filmstrip__title {
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+.den-transcript-visual-filmstrip__count {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-transcript-visual-filmstrip__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(12rem, 0.9fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .den-transcript-visual-filmstrip__stage {
+    grid-template-columns: 1fr;
+  }
+}
+
+.den-transcript-visual-filmstrip__hero {
+  width: 100%;
+  min-height: 0;
+}
+
+.den-transcript-visual-filmstrip__reading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--den-tint-1);
+  border: 1px solid var(--den-border);
+  min-width: 0;
+}
+
+.den-transcript-visual-filmstrip__step-index {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-transcript-visual-filmstrip__handle {
+  font-size: var(--text-den-overline);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--den-text);
+  background: transparent;
+}
+
+.den-transcript-visual-filmstrip__step-label {
+  font-size: var(--text-den-input);
+  font-weight: 600;
+  color: var(--den-text);
+  line-height: 1.3;
+}
+
+.den-transcript-visual-filmstrip__step-detail {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+  word-break: break-word;
+}
+
+.den-transcript-visual-filmstrip__rail {
+  margin-top: 10px;
+}
+
+.den-transcript-visual-filmstrip__rail-content {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.den-transcript-visual-filmstrip__step {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto 48px;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  row-gap: 2px;
+  align-items: center;
+  width: 148px;
+  padding: 6px;
+  border: 1px solid var(--den-border);
+  border-radius: 8px;
+  background: var(--den-surface);
+  cursor: pointer;
+  text-align: left;
+}
+
+.den-transcript-visual-filmstrip__step--active {
+  border-color: var(--den-accent-text);
+  box-shadow: 0 0 0 1px var(--den-accent);
+}
+
+.den-transcript-visual-filmstrip__step-num {
+  grid-row: 1;
+  grid-column: 1;
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+
+.den-transcript-visual-filmstrip__step-thumb {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  width: 48px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--den-tint-1);
+}
+
+.den-transcript-visual-filmstrip__step-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.den-transcript-visual-filmstrip__step-cap {
+  grid-row: 2;
+  grid-column: 1;
+  font-size: var(--text-den-micro);
+  line-height: 1.25;
+  color: var(--den-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.den-transcript-visual-filmstrip__lightbox-detail {
+  margin: 0;
+  padding: 10px 16px 14px;
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+  border-top: 1px solid var(--den-border);
+}
+
+.den-transcript-visual-filmstrip__counter {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-inline: auto 8px;
+}
+
+.den-live-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--den-border);
+  border-radius: 10px;
+  background: var(--den-surface);
+  min-width: 0;
+}
+
+.den-live-preview--compact {
+  margin: 0 0 10px;
+  padding: 8px;
+}
+
+.den-live-preview__chrome {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.den-live-preview__badge {
+  flex: 0 0 auto;
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-live-preview--live .den-live-preview__badge {
+  color: var(--den-accent);
+}
+
+.den-live-preview--ended .den-live-preview__badge {
+  color: var(--den-text);
+}
+
+.den-live-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  align-items: baseline;
+}
+
+.den-live-preview__title {
+  font-size: var(--text-den-label);
+  color: var(--den-text);
+}
+
+.den-live-preview__url {
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.den-live-preview__stage {
+  position: relative;
+  min-height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--den-tint-1);
+  user-select: none;
+  touch-action: none;
+}
+
+.den-live-preview--compact .den-live-preview__stage {
+  min-height: 160px;
+}
+
+.den-live-preview__empty {
+  margin: 0;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+}
+
+.den-live-preview__frame-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.den-live-preview__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.den-live-preview__action-label {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--den-surface) 88%, transparent);
+  border: 1px solid var(--den-border);
+  font-size: var(--text-den-caption);
+  color: var(--den-text);
+  pointer-events: none;
+}
+
+.den-live-preview__target {
+  position: absolute;
+  border: 2px solid var(--den-accent);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--den-accent) 40%, transparent);
+  pointer-events: none;
+}
+
+.den-overlay__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* A recorded drive: the page at the scrubbed moment, then actions and page events on lanes. */
+.den-transcript-visual-timeline__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.den-transcript-visual-timeline__title {
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+.den-transcript-visual-timeline__count,
+.den-transcript-visual-timeline__clock {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-transcript-visual-timeline__status {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-transcript-visual-timeline__frame {
+  width: 100%;
+  background: var(--den-tint-1);
+}
+
+.den-transcript-visual-timeline__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.den-transcript-visual-timeline__play {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--den-border);
+  border-radius: 6px;
+  background: var(--den-surface);
+  color: var(--den-text);
+  font-size: var(--text-den-micro);
+  cursor: pointer;
+}
+
+.den-transcript-visual-timeline__track {
+  --timeline-thumb-half: 6px;
+  position: relative;
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.den-transcript-visual-timeline__scrubber {
+  appearance: none;
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.den-transcript-visual-timeline__scrubber::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--den-tint-1);
+  border: 1px solid var(--den-border);
+}
+
+.den-transcript-visual-timeline__scrubber::-webkit-slider-thumb {
+  appearance: none;
+  width: calc(2 * var(--timeline-thumb-half));
+  height: calc(2 * var(--timeline-thumb-half));
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--den-accent);
+}
+
+.den-transcript-visual-timeline__scrubber:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--den-accent-signal);
+}
+
+.den-transcript-visual-timeline__playhead {
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: var(--den-accent-text);
+  pointer-events: none;
+}
+
+.den-transcript-visual-timeline__lane {
+  position: relative;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--den-tint-1);
+}
+
+.den-transcript-visual-timeline__marker {
+  position: absolute;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  transform: translateX(-2px);
+  background: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-transcript-visual-timeline__marker--span {
+  transform: none;
+  background: var(--den-accent);
+}
+
+.den-transcript-visual-timeline__marker[data-tone="muted"] {
+  opacity: 0.55;
+}
+
+.den-transcript-visual-timeline__marker[data-tone="warning"] {
+  background: var(--den-warning);
+}
+
+.den-transcript-visual-timeline__marker[data-tone="danger"] {
+  background: var(--den-danger);
+}
+
+.den-transcript-visual-timeline__marker:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+
+.den-transcript-visual-timeline__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-transcript-visual-timeline__fact[data-tone="warning"] {
+  color: var(--den-warning-text);
+}
+
+.den-transcript-visual-timeline__fact[data-tone="danger"] {
+  color: var(--den-danger-text);
+}
+
+.den-transcript-visual-timeline__fact-seek {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

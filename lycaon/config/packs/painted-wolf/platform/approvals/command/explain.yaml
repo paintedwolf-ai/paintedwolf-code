@@ -1,0 +1,19 @@
+# command — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    command:
+        tool: command
+        tier_hint: recoverable
+        what_changes: Runs a shell command in your project.
+        who_affected: Files and services reachable with the command’s granted capabilities, including remote destinations.
+        if_wrong: Effects may persist locally or remotely; review the command and its destinations before allowing.
+        allow_line: running `{{ command }}`
+        scenarios:
+            - id: default
+              vars:
+                command: npm run build
+                project: my-app
+              expect_contains:
+                - shell command
+                - project

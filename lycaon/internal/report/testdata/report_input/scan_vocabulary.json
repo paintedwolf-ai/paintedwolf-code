@@ -1,0 +1,131 @@
+{
+  "title": "Nightly scan",
+  "headline": "Two error-level rules fire across the build scripts; nothing else in this sweep is actionable.",
+  "run_id": "e1d2c3b4-a596-4877-b1c2-d3e4f5061728",
+  "project": "acme/app",
+  "completed_at": "2026-09-01T04:15:00Z",
+  "head_sha": "77aa11bb22cc33dd44ee55ff6677889900aabbcc",
+  "synthesis": "## Nightly scan\n\nThe nightly sweep ran two external scanners whose severity vocabulary is `error` / `warning` / `note` rather than the levels the app grades with. Nothing here was adjudicated; the rows below are the scanners' own output, grouped by rule.\n",
+  "limits": [
+    "No triage ran. These rows are scanner output, not reviewed findings."
+  ],
+  "scan": {
+    "scanners": [
+      "shellcheck",
+      "markdownlint"
+    ],
+    "total": 60,
+    "stored": 21,
+    "listed": 12,
+    "by_level": {
+      "error": 2,
+      "warning": 4,
+      "note": 6
+    },
+    "ignored": 3
+  },
+  "scan_rules": [
+    {
+      "id": "shellcheck:SC2086",
+      "scanner": "shellcheck",
+      "description": "Double quote to prevent globbing and word splitting."
+    },
+    {
+      "id": "shellcheck:SC2164",
+      "scanner": "shellcheck",
+      "description": "Use cd ... || exit in case cd fails."
+    },
+    {
+      "id": "markdownlint:MD013",
+      "scanner": "markdownlint",
+      "description": "Line length exceeds the configured maximum."
+    }
+  ],
+  "scan_rows": [
+    {
+      "severity": "error",
+      "rule_id": "shellcheck:SC2086",
+      "file": "scripts/build.sh",
+      "line": 14,
+      "message": "Double quote to prevent globbing and word splitting."
+    },
+    {
+      "severity": "error",
+      "rule_id": "shellcheck:SC2086",
+      "file": "scripts/build.sh",
+      "line": 22,
+      "message": "Double quote to prevent globbing and word splitting."
+    },
+    {
+      "severity": "warning",
+      "rule_id": "shellcheck:SC2164",
+      "file": "scripts/build.sh",
+      "line": 7,
+      "message": "Use cd ... || exit in case cd fails."
+    },
+    {
+      "severity": "warning",
+      "rule_id": "shellcheck:SC2164",
+      "file": "scripts/release.sh",
+      "line": 19,
+      "message": "Use cd ... || exit in case cd fails."
+    },
+    {
+      "severity": "warning",
+      "rule_id": "shellcheck:SC2164",
+      "file": "scripts/release.sh",
+      "line": 41,
+      "message": "Use cd ... || exit in case cd fails."
+    },
+    {
+      "severity": "warning",
+      "rule_id": "shellcheck:SC2164",
+      "file": "scripts/lib/common.sh",
+      "line": 3,
+      "message": "Use cd ... || exit in case cd fails."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "README.md",
+      "line": 12,
+      "message": "Line length exceeds the configured maximum."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "README.md",
+      "line": 44,
+      "message": "Line length exceeds the configured maximum."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "docs/install.md",
+      "line": 9,
+      "message": "Line length exceeds the configured maximum."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "docs/install.md",
+      "line": 61,
+      "message": "Line length exceeds the configured maximum."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "docs/upgrade.md",
+      "line": 8,
+      "message": "Line length exceeds the configured maximum."
+    },
+    {
+      "severity": "note",
+      "rule_id": "markdownlint:MD013",
+      "file": "docs/upgrade.md",
+      "line": 30,
+      "message": "Line length exceeds the configured maximum."
+    }
+  ],
+  "summary": "The nightly sweep ran two external scanners whose severity vocabulary differs from the one the app grades with. Nothing here was triaged; the rows below are the scanners' own output, grouped by rule."
+}

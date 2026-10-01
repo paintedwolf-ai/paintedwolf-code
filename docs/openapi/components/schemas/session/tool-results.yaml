@@ -1,0 +1,576 @@
+components:
+  schemas:
+    ToolCall:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - id
+      - args
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        args:
+          type: object
+          additionalProperties: true
+        args_ref:
+          x-go-pointer: true
+          $ref: ../chat-content.yaml#/components/schemas/ChatContentReference
+        display_title:
+          type: string
+          description: Host-prepared card subtitle from the tool presentation catalog.
+        wire_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Provider's own tool-call token, retained only for AI providers that key server-side state on it. Never identity; empty when the provider emits no usable token.
+        args_truncated:
+          type: boolean
+          description: True when the provider stream ended at the completion token cap mid-arguments — args never parsed.
+        args_malformed:
+          type: boolean
+          description: True when the provider finished normally but emitted invalid JSON arguments — args never parsed and nothing reached the tool.
+        extra_content:
+          type: object
+          additionalProperties: true
+          description: Provider-specific tool-call metadata required on replay.
+    ToolResult:
+      x-go-generate: true
+      type: object
+      required:
+      - content
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        content_ref:
+          x-go-pointer: true
+          $ref: ../chat-content.yaml#/components/schemas/ChatContentReference
+        tool_args_ref:
+          x-go-pointer: true
+          $ref: ../chat-content.yaml#/components/schemas/ChatContentReference
+        display_title:
+          type: string
+        display_subject:
+          type: string
+          description: Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args.
+        invocation:
+          x-go-pointer: true
+          $ref: "#/components/schemas/InvocationReceipt"
+        tool:
+          type: string
+          description: Name of the tool that produced this result. Carried on the
+            result row so Den renders completed tool cards after the host replaces
+            the assistant tool_calls batch on a reused row.
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: ID of the tool call this result answers, anchoring search
+            reveal to the originating tool chicklet.
+        assistant_message_id:
+          type: string
+          format: uuid
+          description: Durable ID of the assistant row that issued this call.
+        tool_args:
+          type: object
+          additionalProperties: true
+          description: Immutable argument snapshot for the tool call.
+        outcome:
+          $ref: "#/components/schemas/ToolResultOutcome"
+        codes:
+          type: array
+          items:
+            type: string
+          description: >
+            Guidance codes the host raised against this result, in raise order.
+            A result carries every code raised, and the first is what card
+            selection and quiet chrome bind to. Host-stamped as data by the
+            producer that raised it; never parsed back out of `content`.
+        feedback:
+          type: array
+          description: >-
+            Structured facts for every raised guidance code, in the same order
+            as codes. Agents branch on code and details, never on rendered
+            content.
+          items:
+            $ref: "#/components/schemas/ToolFeedback"
+        ui_visibility:
+          x-go-name: "UiVisibility"
+          $ref: "#/components/schemas/ToolResultUiVisibility"
+          description: >
+            Quiet-chrome for Den verbose prefs. Host stamps from the policy
+            registry (`guard:` emit, advisory/informational/expected_behavior
+            categories, info|warning severity) or a structured reject `code` with
+            no registry row. `benign` hides unless verbose; `normal` stays
+            visible (worker_dispatch, SPEC_POSTURE, …).
+        dispatch:
+          x-go-pointer: true
+          $ref: "#/components/schemas/WorkerDispatch"
+          description: Producer-stated worker dispatch identity.
+        completion:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ToolCompletion"
+          description: Producer-stated asynchronous or lifecycle completion fact.
+        file_edit_preview:
+          x-go-pointer: true
+          $ref: ../source-reader.yaml#/components/schemas/FileEditPreview
+        promotion_previews:
+          type: array
+          items: {$ref: ../source-reader.yaml#/components/schemas/FileEditPreview}
+        file_edit:
+          x-go-pointer: true
+          $ref: "#/components/schemas/FileEditSnapshot"
+        overlay_promotion:
+          x-go-pointer: true
+          $ref: "#/components/schemas/OverlayPromotion"
+        visual:
+          x-go-pointer: true
+          $ref: artifacts.yaml#/components/schemas/VisualArtifact
+        checkpoint_decision:
+          x-go-pointer: true
+          $ref: "#/components/schemas/CheckpointDecisionMeta"
+        external_access:
+          x-go-pointer: true
+          $ref: ../external-access.yaml#/components/schemas/ExternalAccess
+          description: >
+            Bounded exceptional external-access detail for this tool result when the
+            host recorded mediated endpoints, local-socket authority, direct IP, or
+            detection citations on the action.
+        skill:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SkillActivation"
+          description: >
+            Resolved skill behind a skills_read activation. The host stamps every
+            field from the same catalog entry the activation envelope was rendered
+            from, so the skill chicklet never parses that envelope's prose.
+        process:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ToolProcessHandle"
+          description: >
+            Set when the tool returned while its process was still running;
+            absent means the call finished. Presence is what keeps a chicklet live.
+        verdict:
+          x-go-pointer: true
+          $ref: "#/components/schemas/VerdictOutcome"
+          description: >
+            Set when submit_verdict recorded a review_loop verdict. The card
+            renders these stated facts, never the result prose.
+    VerdictOutcome:
+      x-go-generate: true
+      type: object
+      required:
+      - verdict
+      additionalProperties: false
+      description: >-
+        A recorded review_loop verdict with its validated citation provenance.
+        Terminal verdicts always carry grounding.
+      properties:
+        verdict:
+          type: string
+          description: The submitted verdict enum value.
+        terminal:
+          type: boolean
+          description: True when the gate was satisfied and the host is advancing.
+        attempt:
+          type: integer
+          description: Review round counter after this submission.
+        iteration_cap:
+          type: integer
+        evidence_key:
+          type: string
+        phase:
+          type: string
+        grounding:
+          x-go-pointer: true
+          $ref: worker-reports.yaml#/components/schemas/CitationGrounding
+          description: Host citation audit of the verdict's cited evidence.
+    InvocationReceipt:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - tool
+      - tool_call_id
+      - contract_digest
+      - args_digest
+      - owner
+      - lifecycle
+      - reversibility
+      - evidence_policy
+      - recovery_policy
+      - status
+      - invoked
+      - evidence
+      - started_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tool:
+          type: string
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        contract_digest:
+          type: string
+        args_digest:
+          type: string
+        owner:
+          type: string
+        lifecycle:
+          type: string
+          enum: [read_only, db_transaction, journaled_mutation, durable_job, effect_attempt, ephemeral_control]
+        reversibility:
+          type: string
+          enum: [reversible, recoverable, irreversible]
+        evidence_policy:
+          type: string
+          enum: [result, commit, journal, job, attempt, control]
+        recovery_policy:
+          type: string
+          enum: [none, owner, journal, resume, abandon]
+        status:
+          $ref: "#/components/schemas/InvocationStatus"
+        invoked:
+          type: boolean
+        evidence:
+          $ref: "#/components/schemas/InvocationEvidence"
+        failure:
+          x-go-pointer: true
+          $ref: "#/components/schemas/InvocationFailure"
+        isolation:
+          x-go-pointer: true
+          $ref: "#/components/schemas/InvocationIsolation"
+        source_revision:
+          type: string
+          description: >-
+            Host worktree generation after this invocation settled. Verification
+            evidence applies only while this exact generation remains current.
+        source_root_digest:
+          type: string
+          description: >-
+            SHA-256 identity of the workspace root, without exposing its local path.
+        source_verdict:
+          type: string
+          enum: [passed, failed, unverifiable]
+          description: >-
+            Terminal verdict stated by a command or verify subsystem owner, bound to
+            source_revision. Absent for every other tool and for a launch that
+            had not exited. This is the fact that discharges a source
+            verification obligation; the result body never is.
+        started_at:
+          type: string
+          format: date-time
+        settled_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+    InvocationEvidence:
+      x-go-generate: true
+      type: object
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        ref:
+          type: string
+        owner_ref:
+          type: string
+    InvocationFailure:
+      x-go-generate: true
+      type: object
+      required: [code, class, retryable]
+      additionalProperties: false
+      description: Typed terminal outcome for any invocation that did not complete.
+      properties:
+        code:
+          type: string
+        class:
+          type: string
+        retryable:
+          type: boolean
+        owner_ref:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          description: Subsystem-owner facts explaining the failure.
+    InvocationIsolation:
+      x-go-generate: true
+      type: object
+      required: [code, disposition]
+      additionalProperties: false
+      description: >-
+        Typed isolation outcome from the generic invocation boundary. It does
+        not replace the selected subsystem owner and may accompany either a
+        completed attempted effect or a pre-owner rejection.
+      properties:
+        code:
+          type: string
+        disposition:
+          type: string
+          enum: [retry, human_decision, control_plane]
+    ToolFeedback:
+      x-go-generate: true
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        subject:
+          x-go-pointer: true
+          $ref: "#/components/schemas/FeedbackSubject"
+    FeedbackSubject:
+      x-go-generate: true
+      type: object
+      required: [kind, id]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    WorkerDispatch:
+      x-go-generate: true
+      type: object
+      required: [worker_id]
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        child_session_id:
+          type: string
+          format: uuid
+        agent_type:
+          type: string
+        delegation_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        leg_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    ToolCompletion:
+      x-go-generate: true
+      type: object
+      required: [operation, state]
+      additionalProperties: false
+      properties:
+        operation:
+          type: string
+        state:
+          type: string
+        resource_kind:
+          type: string
+        resource_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        result_handle:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    InvocationStatus:
+      type: string
+      enum: [running, completed, rejected, error, interrupted]
+    InvocationReceiptList:
+      x-go-generate: true
+      type: object
+      required: [invocations]
+      additionalProperties: false
+      properties:
+        invocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvocationReceipt"
+        next_cursor:
+          type: string
+    ToolProcessHandle:
+      x-go-generate: true
+      type: object
+      required:
+      - handle
+      - running
+      additionalProperties: false
+      description: >
+        A background handle the tool returned instead of an exit: a command job, or a
+        read-only call that outlived its foreground wait and keeps running. The calling
+        agent polls a command with command_output and a held call with held_result, and
+        can sleep on either with wait(conditions=[{"kind":"process_done"}]); Den binds
+        its chicklet to the session process mirror through the handle.
+      properties:
+        handle:
+          type: string
+          minLength: 1
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Live background handle, a command job or a held call, to poll, wait on, or stop.
+        running:
+          type: boolean
+          description: >
+            The host's view when the result was written. It never flips on exit;
+            the session process mirror reports that.
+    CheckpointDecisionMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - checkpoint_id
+      - kind
+      - status
+      additionalProperties: false
+      properties:
+        checkpoint_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: ../checkpoint.yaml#/components/schemas/CheckpointKind
+        status:
+          $ref: ../checkpoint.yaml#/components/schemas/CheckpointStatus
+        tool:
+          type: string
+          description: >
+            Tool name shown on the card chip — presentation.tool when the plan
+            carried one (argv tool for write-root / egress), else the proposed
+            action tool.
+        subject:
+          type: string
+          description: >
+            Human-facing grant subject of the decision — command, path, host, or
+            other single subject shown on the approval card. Persisted so the
+            durable decision chicklet stays informative after resolve.
+        causing_command:
+          type: string
+          description: >
+            Argv that raised the card when subject is not already that command
+            (write root, destination, secret, …). Empty when the subject is the
+            reviewed command itself.
+        location:
+          type: string
+          description: >
+            Secret identity line persisted from presentation.location
+            (`origin → destination`). Empty on non-secret decisions.
+        guidance:
+          type: string
+          description: >
+            Explicit human direction attached to a denial. Informational only;
+            it never grants authority for a replacement action.
+        grant_ids:
+          x-go-name: "GrantIDs"
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >
+            Every host-opaque ApprovalGrant.id installed by the selected option.
+            Composed options can install several; the decision chicklet revokes
+            them together.
+        grant_scope:
+          $ref: ../settings/approvals.yaml#/components/schemas/ApprovalGrantScope
+        grant_title:
+          type: string
+          description: Reviewed host title of the selected lease.
+
+
+    SkillActivation:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - instructions
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Skill id from SKILL.md frontmatter.
+        description:
+          type: string
+          description: Full authored description, not the bounded index projection.
+        instructions:
+          type: string
+          description: >
+            SKILL.md body the activation delivered, without the host's directory and
+            file trailer. Carried so the card renders the skill rather than
+            re-deriving it from the envelope text.
+        dir:
+          type: string
+          description: >
+            Provenance label for where the skill was read from — an absolute host
+            path for a project or installed skill, a config-relative path for one
+            that ships in the binary. It is a label, not an openable path.
+        resources:
+          type: array
+          items:
+            type: string
+          description: Bundled files listed in the activation, relative to the skill directory.
+        resources_omitted:
+          type: integer
+          minimum: 0
+          description: Regular resources beyond the listing bound.
+        project:
+          type: boolean
+          description: Skill came from the project overlay rather than a host or bundled pack.
+        pack_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        license:
+          type: string
+        compatibility:
+          type: string
+        allowed_tools:
+          type: string
+          description: >
+            Author's allowed-tools frontmatter. Shown so a skill that declares tool
+            limits reads honestly; this host never honors it as a permission.
+    FileEditSnapshot:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - after
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: Attached project root containing the file.
+        deleted:
+          type: boolean
+          description: The write removed the file; its diff has no current file target.
+        path:
+          type: string
+        before:
+          type: [string, "null"]
+        after:
+          type: string
+    OverlayPromotion:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [files]
+      description: Project file snapshots recorded by the host at the merge event.
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileEditSnapshot"
+    ToolResultOutcome:
+      type: string
+      enum:
+      - completed
+      - rejected
+      - error
+    ToolResultUiVisibility:
+      type: string
+      description: >
+        Transcript quiet-chrome for tool cards. `benign` hides unless Diagnostics
+        verbose; `normal` stays visible.
+      enum:
+      - normal
+      - benign

@@ -1,0 +1,11 @@
+description: Append advisory plan review evidence to critic.jsonl
+schema:
+  type: object
+  properties:
+    blueprint_path:
+      description: "Repo-relative blueprint path receiving the evidence line."
+      type: string
+    evidence:
+      description: "Text line to append to critic.jsonl."
+      type: string
+  required: [blueprint_path, evidence]

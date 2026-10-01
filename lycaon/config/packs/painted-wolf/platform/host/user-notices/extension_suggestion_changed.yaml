@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Suggested extensions changed
+message: >-
+  This project's extension suggestions changed after you reviewed them, so nothing was installed.
+suggested_action: >-
+  Review the updated suggestions before installing.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - changed after you reviewed
+      - Review the updated suggestions

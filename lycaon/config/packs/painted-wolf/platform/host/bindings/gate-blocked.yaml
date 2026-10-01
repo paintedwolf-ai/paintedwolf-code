@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': gate.blocked
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-gate-blocked
+tier: builtin
+invariants:
+  trigger_class: tool_rejection
+  fires_in:
+  - tool rejection with WORKFLOW_GATE_BLOCKED banner
+  required:
+  - failed_leaves
+  - delegate
+  optional_vars:
+  - gate_obligations
+  - failed_leaves

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:help-shortcuts
+title: "Show keyboard shortcuts"
+icon: shortcuts
+scope: "global"
+keywords:
+  - "keymap"
+  - "hotkeys"
+  - "help"
+action:
+  kind: native_ui
+  handler: "help.shortcuts"

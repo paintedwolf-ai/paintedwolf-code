@@ -1,0 +1,22 @@
+manifest_version: 1
+id: painted-wolf/stock
+name: Painted Wolf stock
+version: "1.0.0"
+compatibility:
+  extension_api: "^1.0.0"
+members:
+  - painted-wolf/browser
+  - painted-wolf/bugbash
+  - painted-wolf/hitl
+  - painted-wolf/implement
+  - painted-wolf/options
+  - painted-wolf/plan
+  - painted-wolf/platform
+  - painted-wolf/recon-pack
+  - painted-wolf/scan-guidance
+  - painted-wolf/security
+  - painted-wolf/security-survey
+  - painted-wolf/themes
+  - painted-wolf/web-research
+conflicts_with: []
+extends: []

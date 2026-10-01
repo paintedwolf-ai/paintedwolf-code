@@ -1,0 +1,454 @@
+components:
+  schemas:
+    ProviderMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - kind
+      - configured
+      - credential_present
+      - requires_api_key
+      - features
+      - models
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        kind:
+          type: string
+          description: Provider kind shared by related instances.
+        label:
+          type: string
+          description: Human-facing display name for the AI provider instance.
+        base_url:
+          type: string
+          description: URL, SDK region, or empty derived value according to endpoint_style.
+        endpoint_style:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ProviderEndpointStyle"
+        configured:
+          type: boolean
+          description: >
+            True when the provider can make API calls. Keyed AI providers require a
+            non-empty credential saved via PUT /v1/providers/{provider_id}/credential
+            (environment variables do not configure). Local keyless providers are
+            ready without credentials; ambient providers must resolve their declared
+            credential chain. List membership is providers.local.yaml —
+            Den does not keep a parallel hide allowlist.
+        credential_present:
+          type: boolean
+          description: True when credentials are saved for this provider instance.
+        credential_source:
+          type: string
+          enum: [none, stored, ambient]
+          description: Credential source selected for this instance; environment hints are never a source.
+        credential_verified_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: >-
+            When the provider last accepted this instance's credentials on a live
+            call. Omitted until the host has observed an accepted call since the
+            credentials last changed.
+        requires_api_key:
+          type: boolean
+          description: >
+            True when the AI provider needs a Settings-saved API key; false for
+            keyless/local providers and for instances of an
+            ambient_auth kind that selected the ambient credential chain.
+            Catalog api_key_env is a docs hint only and does not auto-configure.
+        ambient_auth:
+          type: string
+          description: >
+            Names the credential chain this kind can authenticate with instead
+            of a stored key (aws-sdk-chain, google-adc). Empty when a stored
+            key is the only way in. Setting requires_api_key false on an
+            instance of such a kind selects the ambient chain — there is no
+            separate credential-mode field.
+        secret_screen_trusted:
+          type: boolean
+          description: >
+            True while this instance is trusted with detected credentials, so
+            a request to it raises no secret card and sends the detected value
+            unchanged. Transcript redaction, managed-secret references, and
+            the credential vault are unaffected. The decision is bound to the
+            resolved destination (kind, endpoint, endpoint style, ambient
+            auth); changing any of those withdraws it. Omitted means false.
+        platforms:
+          type: array
+          description: >
+            Product host platforms this kind supports (macos, windows, linux).
+            Empty or omitted means all platforms. Ship providers.yaml is SSOT;
+            the host omits unsupported kinds/instances from list projections.
+          items:
+            type: string
+            enum:
+            - macos
+            - windows
+            - linux
+        features:
+          $ref: "#/components/schemas/ProviderFeatures"
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderModelMeta"
+        configured_models:
+          type: array
+          description: Explicit model or deployment rows stored for this provider instance before live availability is applied.
+          items:
+            $ref: "#/components/schemas/ProviderModelMeta"
+        usage_quota:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ProviderUsageQuota"
+        ready_to_assign:
+          type: boolean
+          description: >
+            True when the provider is configured and has at least one
+            ConversationEligible model with positive capability evidence for at
+            least one policy slot, after role exclusions (exists-slot).
+        catalog_authoritative:
+          type: boolean
+          description: >
+            True when this kind is mapped to models.dev and a usable modelfeed
+            document is present (catalog-first merge).
+        catalog_status:
+          type: string
+          enum:
+          - ok
+          - stale
+          - unavailable
+          description: models.dev document freshness for catalog merge.
+        discovery_status:
+          type: string
+          enum:
+          - ok
+          - empty
+          - error
+          - skipped
+          description: Live /models discovery outcome for this list projection.
+    ProviderKindTemplate:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      - label
+      - base_url
+      - requires_api_key
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        base_url:
+          type: string
+        endpoint_style:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ProviderEndpointStyle"
+        requires_api_key:
+          type: boolean
+          description: >
+            True when instances of this kind need a Settings-saved API key.
+        ambient_auth:
+          type: string
+          description: >
+            This kind's ambient credential chain when it has one
+            (aws-sdk-chain, google-adc). Present with requires_api_key true
+            means the user may choose between a stored key (default) and the
+            ambient chain; present with requires_api_key false means the kind
+            is ambient-only.
+        platforms:
+          type: array
+          description: >
+            Product host platforms this kind supports (macos, windows, linux).
+            Empty or omitted means all platforms. Ship providers.yaml is SSOT.
+          items:
+            type: string
+            enum:
+            - macos
+            - windows
+            - linux
+    ProviderEndpointStyle:
+      type: string
+      enum:
+      - url
+      - region
+      - derived
+      description: How base_url is interpreted and presented for this provider kind.
+    ProviderUsageQuota:
+      x-go-generate: true
+      type: object
+      required:
+      - unit
+      - used
+      - limit
+      additionalProperties: false
+      properties:
+        unit:
+          type: string
+          description: Provider-native usage unit (e.g. neurons for Cloudflare Workers AI).
+        used:
+          type: number
+          description: Consumption in unit for the current quota window.
+        limit:
+          type: number
+          description: Included allowance in unit for the current quota window.
+        provider_daily_allowance:
+          type: boolean
+          description: >
+            True when the provider publishes a recurring daily included allowance
+            (for example Cloudflare Workers AI daily neurons) rather than a hard
+            lifetime cap.
+        resets_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: RFC3339 timestamp when the quota window resets.
+        overage_nano_usd:
+          x-go-pointer: true
+          x-go-name: "OverageNanoUSD"
+          type: integer
+          format: int64
+          description: Estimated USD overage in nano-USD for usage above the included daily allowance when applicable.
+    ProviderFeatures:
+      x-go-generate: true
+      type: object
+      description: Transport-wide controls. Model assignment uses ProviderModelMeta.capabilities instead.
+      required:
+      - tool_calls
+      - thinking
+      - prompt_cache
+      additionalProperties: false
+      properties:
+        tool_calls:
+          type: boolean
+          description: True when the AI provider can make tool/function calls.
+        thinking:
+          type: boolean
+          description: True when the AI provider exposes a reasoning/thinking control.
+        prompt_cache:
+          type: string
+          enum:
+          - explicit_breakpoints
+          - automatic_prefix
+          - local_kv
+          - none
+          description: How the driver expresses prompt prefix caching on the wire. See docs/session.md § Prompt caching.
+    ProviderModelMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - capabilities
+      - eligibility
+      additionalProperties: false
+      properties:
+        thinking:
+          $ref: models.yaml#/components/schemas/ThinkingCapabilities
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        input_per_1k_nano_usd:
+          x-go-pointer: true
+          x-go-name: "InputPer1KNanoUSD"
+          type: integer
+          format: int64
+        output_per_1k_nano_usd:
+          x-go-pointer: true
+          x-go-name: "OutputPer1KNanoUSD"
+          type: integer
+          format: int64
+        priced_as:
+          type: string
+          description: Underlying catalog model id used to price a customer-named deployment.
+        context_length:
+          type: integer
+          description: The model's usable context window in tokens when known (pinned in config or discovered from the host); omitted when unknown.
+        capabilities:
+          $ref: "#/components/schemas/ProviderModelCapabilities"
+        eligibility:
+          $ref: models.yaml#/components/schemas/ModelRoleEligibilitySet
+    ProviderModelConfig:
+      x-go-generate: true
+      type: object
+      required: [id]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        input_per_1k_nano_usd:
+          x-go-pointer: true
+          x-go-name: "InputPer1KNanoUSD"
+          type: integer
+          format: int64
+        output_per_1k_nano_usd:
+          x-go-pointer: true
+          x-go-name: "OutputPer1KNanoUSD"
+          type: integer
+          format: int64
+        priced_as:
+          type: string
+        context_length:
+          type: integer
+        capabilities:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ProviderModelCapabilities"
+    ProviderCapabilityEvidence:
+      x-go-generate: true
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [unknown, supported, unsupported]
+        sources:
+          type: array
+          items:
+            type: string
+    ProviderModelCapabilities:
+      x-go-generate: true
+      type: object
+      required: [chat, streaming, tools, vision, reasoning, structured_output, prompt_caching]
+      additionalProperties: false
+      properties:
+        chat:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        streaming:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        tools:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        vision:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        reasoning:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        structured_output:
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+        prompt_caching:
+          description: Whether the route caches prompt prefixes on request markers; a proxy such as LiteLLM reports it per model
+          $ref: "#/components/schemas/ProviderCapabilityEvidence"
+    ProviderProbeResult:
+      x-go-generate: true
+      type: object
+      required:
+      - ok
+      additionalProperties: false
+      properties:
+        ok:
+          x-go-name: "OK"
+          type: boolean
+        code:
+          $ref: ../api-error-code.generated.yaml#/components/schemas/ApiErrorCode
+        message:
+          type: string
+        latency_ms:
+          type: integer
+          format: int64
+    SetProviderCredentialRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - api_key
+      additionalProperties: false
+      properties:
+        api_key:
+          type: string
+          minLength: 1
+          writeOnly: true
+    CreateProviderRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+          description: Instance id the caller chooses; unique among provider instances.
+        kind:
+          type: string
+          description: Provider type for this instance, immutable afterward. Defaults to the instance id.
+        base_url:
+          type: string
+          description: Omit to take the kind's catalog endpoint; empty for kinds whose endpoint is derived.
+        label:
+          type: string
+          description: Human-facing display name. Empty displays the instance id.
+        api_key_env:
+          type: string
+          description: >
+            Optional catalog hint naming a conventional environment variable
+            (docs / UI only). Keys are saved via the credential routes.
+        requires_api_key:
+          x-go-pointer: true
+          type: boolean
+          description: Whether this AI provider needs an API key. Omit to take the kind's default.
+        secret_screen_trusted:
+          x-go-pointer: true
+          type: boolean
+          description: True trusts the destination this instance resolves with detected credentials.
+        models:
+          type: array
+          description: Configured models. Omit so live discovery fills the list.
+          items:
+            $ref: "#/components/schemas/ProviderModelConfig"
+    UpdateProviderRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        base_url:
+          type: [string, "null"]
+          description: Null restores the provider kind endpoint. Empty for kinds whose endpoint is derived.
+        label:
+          type: [string, "null"]
+          description: Human-facing display name. Null restores the instance id.
+        api_key_env:
+          type: [string, "null"]
+          description: >
+            Optional catalog hint naming a conventional environment variable
+            (docs / UI only). Does not configure or authenticate the AI provider —
+            keys must be saved via the credential routes. Null restores the kind hint.
+        requires_api_key:
+          x-go-pointer: true
+          type: [boolean, "null"]
+          description: Whether this AI provider needs an API key. Null inherits the provider kind default.
+        secret_screen_trusted:
+          x-go-pointer: true
+          type: [boolean, "null"]
+          description: >
+            True trusts the destination this update resolves with detected
+            credentials; false withdraws it. Omit to keep the stored decision,
+            which the host withdraws on its own when the update changes the
+            destination. Null withdraws the stored trust decision.
+        models:
+          type: [array, "null"]
+          description: Configured model overrides. Null clears stored overrides so live discovery supplies available models.
+          items:
+            $ref: "#/components/schemas/ProviderModelConfig"
+    ProviderListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - providers
+      additionalProperties: false
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderMeta"
+    ProviderKindListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - kinds
+      additionalProperties: false
+      properties:
+        kinds:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderKindTemplate"

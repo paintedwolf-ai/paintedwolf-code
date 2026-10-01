@@ -1,0 +1,47 @@
+oar: '1.0'
+id: SANDBOX_TRY_LOOPBACK_CONNECT
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - wait
+    - capture_page
+    - measure_page
+    - page_open
+    - http_request
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.port
+when: paintedwolf.rejection_code == "SANDBOX_TRY_LOOPBACK_CONNECT"
+effect: block
+copy:
+  what: >-
+    `{{ tool }}` requires access to a local service{% if paintedwolf.port %}
+    on port {{ paintedwolf.port }}{% endif %}.
+  cause: The requested port is outside this invocation's reviewed loopback grant.
+  why: Listening on a port does not authorize a client connection to it.
+  fix: >-
+    Reissue this invocation with `capability_request.loopback_connect`{% if paintedwolf.port %},
+    declaring `{"ports": [{{ paintedwolf.port }}]}`{% endif %}.
+  instead: Declare capability_request.loopback_connect for the requested local service
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: local service connection requires reviewed authority
+x-paintedwolf-scenarios:
+  - id: page_loopback_grant_missing
+    vars:
+      tool: page_open
+      port: '8080'
+    expect_contains:
+      - 'Code: SANDBOX_TRY_LOOPBACK_CONNECT'
+      - capability_request.loopback_connect
+      - '8080'
+  - id: wait_loopback_grant_missing
+    vars:
+      tool: wait
+    expect_contains:
+      - 'Code: SANDBOX_TRY_LOOPBACK_CONNECT'
+      - capability_request.loopback_connect

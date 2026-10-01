@@ -1,0 +1,46 @@
+{
+  "had_traceable_work": true,
+  "grounding": {
+    "traced": true,
+    "observed_path_count": 1,
+    "observed_paths_sample": [
+      "src/new.go"
+    ],
+    "checks": [
+      {
+        "id": "typed_citations",
+        "label": "Typed citations",
+        "status": "passed",
+        "kind": "citation",
+        "vacuous": true,
+        "summary": "No typed citations in synthesis report"
+      },
+      {
+        "id": "prose_advisories",
+        "label": "Closeout prose",
+        "status": "advisory",
+        "kind": "citation",
+        "summary": "1 citation(s) appeared only in synthesis prose — surfaced for review; prefer typed fields",
+        "failed": [
+          "src/new.go:10"
+        ]
+      }
+    ],
+    "prose_advisory_count": 1,
+    "prose_advisories_sample": [
+      "src/new.go:10"
+    ],
+    "evidence_records": [
+      {
+        "handle": "leg-a:read#1",
+        "kind": "read",
+        "shape": "file_region",
+        "trust_tier": "structured",
+        "tool": "read",
+        "path": "src/new.go",
+        "line": 10,
+        "excerpt": "10|  package x"
+      }
+    ]
+  }
+}

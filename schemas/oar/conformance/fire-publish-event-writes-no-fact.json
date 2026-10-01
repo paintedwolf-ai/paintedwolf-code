@@ -1,0 +1,65 @@
+{
+  "id": "fire-publish-event-writes-no-fact",
+  "title": "publish_event emits a record and is not observable to any condition",
+  "covers": [
+    "OAR-FIRE-3",
+    "OAR-FIRE-7"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ANNOUNCER",
+      "effect": "warn",
+      "on_fire": [
+        "publish_event"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "on_fire": [
+      "publish_event"
+    ],
+    "events": [
+      {
+        "rule": "oar.test/ANNOUNCER",
+        "anchor": "tool.pre_invoke",
+        "effect": "warn"
+      }
+    ],
+    "counters": {
+      "oar.test/ANNOUNCER": {
+        "fire_count": 0,
+        "breaker_count": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,258 @@
+paths:
+  /v1/contributions:
+    get:
+      tags:
+      - contributions
+      operationId: getContributions
+      summary: One complete projection of the captured contribution frame
+      description: |
+        Captures the current device catalog and MCP resource generations once, then
+        projects the compiled contribution set with its frame_revision. The
+        response is a one-way projection: it has no independent persistence,
+        resolver, merge rules, cache key, or fallback source.
+
+        The frame is device-scoped. A project may suggest extensions; it never
+        contributes them. Appearance is device configuration, so the theme list
+        resolves at this scope.
+      parameters:
+      - name: If-None-Match
+        in: header
+        required: false
+        description: Quoted frame_revision held by the client.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Complete contribution frame projection
+          headers:
+            ETag:
+              description: Quoted frame_revision for conditional refreshes.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/contributions.yaml#/components/schemas/ContributionFrameResponse
+        '304':
+          description: The contribution frame matches If-None-Match.
+          headers:
+            ETag:
+              description: Quoted frame_revision.
+              schema:
+                type: string
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/commands/{command_id}/invoke:
+    post:
+      tags:
+      - contributions
+      operationId: invokeProjectCommand
+      x-person-action: record
+      summary: Invoke a project-bound contribution command
+      description: |
+        Project-bound kinds: composer_prefill, navigate, external_link. The
+        host captures the current frame, compares the caller's frame_revision
+        (an identical compiled subgraph proceeds), revalidates observables and
+        authority, and returns a closed typed ui_effect. No session is minted.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: command_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/contributions.yaml#/components/schemas/CommandInvokeRequest
+      responses:
+        '200':
+          description: Completed invocation with its UI effect
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/contributions.yaml#/components/schemas/CommandInvokeResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/sessions/{id}/commands/{command_id}/invoke:
+    post:
+      tags:
+      - contributions
+      operationId: invokeSessionCommand
+      x-person-action: record
+      summary: Invoke a session-bound contribution command
+      description: |
+        Session-bound kinds: editor_action, workflow_start, and mcp_tool.
+        The host captures the current frame, compares the
+        caller's frame_revision with subgraph equality, resolves the command
+        from the captured frame, revalidates observables and authority, and
+        executes against that same frame.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: command_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/contributions.yaml#/components/schemas/CommandInvokeRequest
+      responses:
+        '200':
+          description: Completed synchronous invocation
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/contributions.yaml#/components/schemas/CommandInvokeResponse
+        '202':
+          description: Accepted asynchronous invocation
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/contributions.yaml#/components/schemas/CommandInvokeResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/commands/{command_id}/choices/{step_id}:
+    post:
+      tags: [contributions]
+      operationId: resolveContributionChoices
+      x-person-action: none
+      summary: Load one explicitly activated dynamic interaction choice source
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: command_id, in: path, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$'}}
+      - {name: step_id, in: path, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9_.-]+$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../components/schemas/contributions.yaml#/components/schemas/ContributionChoiceRequest}
+      responses:
+        '200':
+          description: Bounded provider-attributed choices
+          content:
+            application/json:
+              schema: {$ref: ../components/schemas/contributions.yaml#/components/schemas/ContributionChoiceResponse}
+        default: {$ref: ../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/projects/{id}/contribution-search/{source_id}:
+    post:
+      tags: [contributions]
+      operationId: searchContributionSource
+      x-person-action: none
+      summary: Search one explicitly selected extension source
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: source_id, in: path, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)+:[a-z0-9]+(-[a-z0-9]+)*$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../components/schemas/contributions.yaml#/components/schemas/ContributionSearchRequest}
+      responses:
+        '200':
+          description: Ephemeral provider-attributed results
+          content:
+            application/json:
+              schema: {$ref: ../components/schemas/contributions.yaml#/components/schemas/ContributionSearchResponse}
+        default: {$ref: ../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable

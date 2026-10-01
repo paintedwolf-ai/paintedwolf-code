@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-find-next
+slot: "app_menu.edit"
+command: painted-wolf/platform:find-next
+group: "0"
+order: 2
+label: "Find next"

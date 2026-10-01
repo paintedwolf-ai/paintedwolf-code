@@ -1,0 +1,30 @@
+title: Delete a resource group and everything in it
+id: 07d6353c-9e46-4c99-9c59-3b519af7ab20
+description: Deletes a resource group and all resources it contains.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: az
+  selection_group:
+    CommandLine|contains: ' group delete'
+  # `az ad group delete` removes a directory group, not a resource group —
+  # a different resource class entirely, covered by directory-identity.
+  filter_directory_group:
+    CommandLine|contains: ' ad group '
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_group and not filter_directory_group and not filter_rehearsal and not filter_local

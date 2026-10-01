@@ -1,0 +1,1078 @@
+{
+  "version": 3,
+  "generated_at": "2026-07-16T23:30:24Z",
+  "commit_sha": "38bd8dabac1b",
+  "corpus_root": "durable pinned-grammar corpus (grammar_parity.lock)",
+  "profile": "aggressive",
+  "max_cases": 30,
+  "max_sample_bytes": 524288,
+  "grammar_count": 177,
+  "total_eligible": 4167,
+  "total_no_error": 3415,
+  "total_sexpr_parity": 3131,
+  "total_deep_parity": 3128,
+  "metrics": {
+    "ada": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "agda": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 27,
+      "deep_parity": 27
+    },
+    "angular": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "arduino": {
+      "eligible": 4,
+      "no_error": 4,
+      "sexpr_parity": 4,
+      "deep_parity": 4
+    },
+    "asm": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "astro": {
+      "eligible": 19,
+      "no_error": 19,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "authzed": {
+      "eligible": 10,
+      "no_error": 10,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "awk": {
+      "eligible": 30,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "bash": {
+      "eligible": 30,
+      "no_error": 10,
+      "sexpr_parity": 7,
+      "deep_parity": 7
+    },
+    "bass": {
+      "eligible": 11,
+      "no_error": 11,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "beancount": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "bibtex": {
+      "eligible": 1,
+      "no_error": 1,
+      "sexpr_parity": 1,
+      "deep_parity": 1
+    },
+    "bicep": {
+      "eligible": 26,
+      "no_error": 14,
+      "sexpr_parity": 14,
+      "deep_parity": 14
+    },
+    "bitbake": {
+      "eligible": 30,
+      "no_error": 2,
+      "sexpr_parity": 2,
+      "deep_parity": 2
+    },
+    "blade": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 4,
+      "deep_parity": 4
+    },
+    "brightscript": {
+      "eligible": 30,
+      "no_error": 3,
+      "sexpr_parity": 3,
+      "deep_parity": 3
+    },
+    "c_lang": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "c_sharp": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 25,
+      "deep_parity": 25
+    },
+    "caddy": {
+      "eligible": 26,
+      "no_error": 26,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "cairo": {
+      "eligible": 22,
+      "no_error": 22,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "capnp": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "chatito": {
+      "eligible": 9,
+      "no_error": 9,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "circom": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "clojure": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "cmake": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "cobol": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "comment": {
+      "eligible": 3,
+      "no_error": 2,
+      "sexpr_parity": 2,
+      "deep_parity": 2
+    },
+    "cooklang": {
+      "eligible": 10,
+      "no_error": 5,
+      "sexpr_parity": 5,
+      "deep_parity": 5
+    },
+    "cpon": {
+      "eligible": 11,
+      "no_error": 11,
+      "sexpr_parity": 11,
+      "deep_parity": 11
+    },
+    "cpp": {
+      "eligible": 30,
+      "no_error": 23,
+      "sexpr_parity": 20,
+      "deep_parity": 20
+    },
+    "crystal": {
+      "eligible": 30,
+      "no_error": 12,
+      "sexpr_parity": 11,
+      "deep_parity": 11
+    },
+    "css": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "csv": {
+      "eligible": 7,
+      "no_error": 7,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "cuda": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "cue": {
+      "eligible": 30,
+      "no_error": 21,
+      "sexpr_parity": 20,
+      "deep_parity": 20
+    },
+    "cylc": {
+      "eligible": 30,
+      "no_error": 14,
+      "sexpr_parity": 12,
+      "deep_parity": 12
+    },
+    "d": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 27,
+      "deep_parity": 27
+    },
+    "dart": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 23,
+      "deep_parity": 23
+    },
+    "desktop": {
+      "eligible": 8,
+      "no_error": 8,
+      "sexpr_parity": 8,
+      "deep_parity": 8
+    },
+    "devicetree": {
+      "eligible": 30,
+      "no_error": 25,
+      "sexpr_parity": 25,
+      "deep_parity": 25
+    },
+    "dhall": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 26,
+      "deep_parity": 26
+    },
+    "diff": {
+      "eligible": 14,
+      "no_error": 14,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "disassembly": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "djot": {
+      "eligible": 30,
+      "no_error": 19,
+      "sexpr_parity": 16,
+      "deep_parity": 16
+    },
+    "dockerfile": {
+      "eligible": 30,
+      "no_error": 19,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "dot": {
+      "eligible": 11,
+      "no_error": 11,
+      "sexpr_parity": 11,
+      "deep_parity": 11
+    },
+    "doxygen": {
+      "eligible": 28,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "dtd": {
+      "eligible": 7,
+      "no_error": 7,
+      "sexpr_parity": 7,
+      "deep_parity": 7
+    },
+    "earthfile": {
+      "eligible": 30,
+      "no_error": 22,
+      "sexpr_parity": 18,
+      "deep_parity": 18
+    },
+    "editorconfig": {
+      "eligible": 22,
+      "no_error": 22,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "eds": {
+      "eligible": 2,
+      "no_error": 2,
+      "sexpr_parity": 2,
+      "deep_parity": 2
+    },
+    "eex": {
+      "eligible": 15,
+      "no_error": 15,
+      "sexpr_parity": 12,
+      "deep_parity": 12
+    },
+    "elisp": {
+      "eligible": 19,
+      "no_error": 18,
+      "sexpr_parity": 18,
+      "deep_parity": 18
+    },
+    "elixir": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "elm": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "elsa": {
+      "eligible": 8,
+      "no_error": 8,
+      "sexpr_parity": 8,
+      "deep_parity": 8
+    },
+    "embedded_template": {
+      "eligible": 7,
+      "no_error": 7,
+      "sexpr_parity": 7,
+      "deep_parity": 7
+    },
+    "enforce": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "erlang": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "facility": {
+      "eligible": 6,
+      "no_error": 6,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "faust": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 25,
+      "deep_parity": 25
+    },
+    "fennel": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "fidl": {
+      "eligible": 25,
+      "no_error": 25,
+      "sexpr_parity": 25,
+      "deep_parity": 25
+    },
+    "firrtl": {
+      "eligible": 9,
+      "no_error": 9,
+      "sexpr_parity": 9,
+      "deep_parity": 9
+    },
+    "fish": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 24,
+      "deep_parity": 24
+    },
+    "foam": {
+      "eligible": 25,
+      "no_error": 23,
+      "sexpr_parity": 20,
+      "deep_parity": 20
+    },
+    "forth": {
+      "eligible": 29,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "fortran": {
+      "eligible": 30,
+      "no_error": 2,
+      "sexpr_parity": 2,
+      "deep_parity": 2
+    },
+    "fsharp": {
+      "eligible": 30,
+      "no_error": 25,
+      "sexpr_parity": 18,
+      "deep_parity": 18
+    },
+    "gdscript": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "git_config": {
+      "eligible": 13,
+      "no_error": 13,
+      "sexpr_parity": 13,
+      "deep_parity": 13
+    },
+    "git_rebase": {
+      "eligible": 11,
+      "no_error": 10,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "gitattributes": {
+      "eligible": 11,
+      "no_error": 6,
+      "sexpr_parity": 3,
+      "deep_parity": 3
+    },
+    "gitcommit": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 27,
+      "deep_parity": 26
+    },
+    "gitignore": {
+      "eligible": 14,
+      "no_error": 14,
+      "sexpr_parity": 14,
+      "deep_parity": 14
+    },
+    "gleam": {
+      "eligible": 30,
+      "no_error": 16,
+      "sexpr_parity": 15,
+      "deep_parity": 15
+    },
+    "glsl": {
+      "eligible": 13,
+      "no_error": 13,
+      "sexpr_parity": 13,
+      "deep_parity": 13
+    },
+    "go_lang": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "godot_resource": {
+      "eligible": 21,
+      "no_error": 21,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "gomod": {
+      "eligible": 20,
+      "no_error": 20,
+      "sexpr_parity": 20,
+      "deep_parity": 20
+    },
+    "graphql": {
+      "eligible": 5,
+      "no_error": 5,
+      "sexpr_parity": 5,
+      "deep_parity": 5
+    },
+    "haskell": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 24,
+      "deep_parity": 24
+    },
+    "hcl": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "heex": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "hlsl": {
+      "eligible": 13,
+      "no_error": 13,
+      "sexpr_parity": 13,
+      "deep_parity": 13
+    },
+    "html": {
+      "eligible": 25,
+      "no_error": 25,
+      "sexpr_parity": 24,
+      "deep_parity": 24
+    },
+    "http": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "hurl": {
+      "eligible": 19,
+      "no_error": 11,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "hyprlang": {
+      "eligible": 4,
+      "no_error": 1,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "ini": {
+      "eligible": 10,
+      "no_error": 6,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "janet": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "java": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "javascript": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "jinja2": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "jq": {
+      "eligible": 10,
+      "no_error": 10,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "jsdoc": {
+      "eligible": 7,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "json": {
+      "eligible": 6,
+      "no_error": 6,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "json5": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "jsonnet": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "julia": {
+      "eligible": 30,
+      "no_error": 22,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "just": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 26,
+      "deep_parity": 26
+    },
+    "kotlin": {
+      "eligible": 30,
+      "no_error": 19,
+      "sexpr_parity": 18,
+      "deep_parity": 18
+    },
+    "less": {
+      "eligible": 30,
+      "no_error": 19,
+      "sexpr_parity": 17,
+      "deep_parity": 17
+    },
+    "liquid": {
+      "eligible": 30,
+      "no_error": 17,
+      "sexpr_parity": 17,
+      "deep_parity": 17
+    },
+    "llvm": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "lua": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "luau": {
+      "eligible": 2,
+      "no_error": 2,
+      "sexpr_parity": 2,
+      "deep_parity": 2
+    },
+    "make": {
+      "eligible": 30,
+      "no_error": 24,
+      "sexpr_parity": 24,
+      "deep_parity": 24
+    },
+    "markdown": {
+      "eligible": 30,
+      "no_error": 18,
+      "sexpr_parity": 9,
+      "deep_parity": 9
+    },
+    "mermaid": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 27,
+      "deep_parity": 26
+    },
+    "mojo": {
+      "eligible": 30,
+      "no_error": 18,
+      "sexpr_parity": 15,
+      "deep_parity": 15
+    },
+    "move": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 25,
+      "deep_parity": 25
+    },
+    "nginx": {
+      "eligible": 30,
+      "no_error": 21,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "nickel": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 23,
+      "deep_parity": 23
+    },
+    "nim": {
+      "eligible": 30,
+      "no_error": 23,
+      "sexpr_parity": 9,
+      "deep_parity": 9
+    },
+    "nix": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "norg": {
+      "eligible": 30,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "objc": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "odin": {
+      "eligible": 2,
+      "no_error": 2,
+      "sexpr_parity": 1,
+      "deep_parity": 1
+    },
+    "pascal": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "pem": {
+      "eligible": 5,
+      "no_error": 5,
+      "sexpr_parity": 5,
+      "deep_parity": 5
+    },
+    "perl": {
+      "eligible": 30,
+      "no_error": 3,
+      "sexpr_parity": 3,
+      "deep_parity": 3
+    },
+    "php": {
+      "eligible": 30,
+      "no_error": 8,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "pkl": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "powershell": {
+      "eligible": 30,
+      "no_error": 24,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "prisma": {
+      "eligible": 23,
+      "no_error": 23,
+      "sexpr_parity": 23,
+      "deep_parity": 23
+    },
+    "prolog": {
+      "eligible": 14,
+      "no_error": 10,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "promql": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "properties": {
+      "eligible": 5,
+      "no_error": 5,
+      "sexpr_parity": 5,
+      "deep_parity": 4
+    },
+    "proto": {
+      "eligible": 14,
+      "no_error": 13,
+      "sexpr_parity": 13,
+      "deep_parity": 13
+    },
+    "pug": {
+      "eligible": 30,
+      "no_error": 14,
+      "sexpr_parity": 11,
+      "deep_parity": 11
+    },
+    "puppet": {
+      "eligible": 1,
+      "no_error": 1,
+      "sexpr_parity": 1,
+      "deep_parity": 1
+    },
+    "purescript": {
+      "eligible": 30,
+      "no_error": 15,
+      "sexpr_parity": 8,
+      "deep_parity": 8
+    },
+    "python": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "ql": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "r": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 27,
+      "deep_parity": 27
+    },
+    "racket": {
+      "eligible": 20,
+      "no_error": 20,
+      "sexpr_parity": 20,
+      "deep_parity": 20
+    },
+    "regex": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "rego": {
+      "eligible": 30,
+      "no_error": 25,
+      "sexpr_parity": 22,
+      "deep_parity": 22
+    },
+    "requirements": {
+      "eligible": 10,
+      "no_error": 6,
+      "sexpr_parity": 6,
+      "deep_parity": 6
+    },
+    "robot": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "ron": {
+      "eligible": 16,
+      "no_error": 16,
+      "sexpr_parity": 16,
+      "deep_parity": 16
+    },
+    "rst": {
+      "eligible": 26,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "ruby": {
+      "eligible": 30,
+      "no_error": 17,
+      "sexpr_parity": 16,
+      "deep_parity": 16
+    },
+    "rust": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "scala": {
+      "eligible": 30,
+      "no_error": 15,
+      "sexpr_parity": 8,
+      "deep_parity": 8
+    },
+    "scheme": {
+      "eligible": 28,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "scss": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "smithy": {
+      "eligible": 8,
+      "no_error": 7,
+      "sexpr_parity": 5,
+      "deep_parity": 5
+    },
+    "solidity": {
+      "eligible": 30,
+      "no_error": 28,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "sparql": {
+      "eligible": 30,
+      "no_error": 19,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "sql": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "ssh_config": {
+      "eligible": 10,
+      "no_error": 7,
+      "sexpr_parity": 7,
+      "deep_parity": 7
+    },
+    "starlark": {
+      "eligible": 30,
+      "no_error": 27,
+      "sexpr_parity": 24,
+      "deep_parity": 24
+    },
+    "svelte": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "swift": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "tablegen": {
+      "eligible": 29,
+      "no_error": 27,
+      "sexpr_parity": 26,
+      "deep_parity": 26
+    },
+    "tcl": {
+      "eligible": 22,
+      "no_error": 15,
+      "sexpr_parity": 15,
+      "deep_parity": 15
+    },
+    "teal": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "templ": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "thrift": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "tmux": {
+      "eligible": 30,
+      "no_error": 1,
+      "sexpr_parity": 1,
+      "deep_parity": 1
+    },
+    "todotxt": {
+      "eligible": 19,
+      "no_error": 19,
+      "sexpr_parity": 19,
+      "deep_parity": 19
+    },
+    "toml": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "tsx": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 30,
+      "deep_parity": 30
+    },
+    "turtle": {
+      "eligible": 24,
+      "no_error": 23,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "twig": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "typescript": {
+      "eligible": 30,
+      "no_error": 29,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "typst": {
+      "eligible": 30,
+      "no_error": 11,
+      "sexpr_parity": 7,
+      "deep_parity": 7
+    },
+    "uxntal": {
+      "eligible": 29,
+      "no_error": 29,
+      "sexpr_parity": 28,
+      "deep_parity": 28
+    },
+    "verilog": {
+      "eligible": 30,
+      "no_error": 26,
+      "sexpr_parity": 21,
+      "deep_parity": 21
+    },
+    "vhdl": {
+      "eligible": 28,
+      "no_error": 23,
+      "sexpr_parity": 11,
+      "deep_parity": 11
+    },
+    "vimdoc": {
+      "eligible": 3,
+      "no_error": 0,
+      "sexpr_parity": 0,
+      "deep_parity": 0
+    },
+    "vue": {
+      "eligible": 9,
+      "no_error": 9,
+      "sexpr_parity": 9,
+      "deep_parity": 9
+    },
+    "xml": {
+      "eligible": 11,
+      "no_error": 10,
+      "sexpr_parity": 10,
+      "deep_parity": 10
+    },
+    "yaml": {
+      "eligible": 30,
+      "no_error": 30,
+      "sexpr_parity": 29,
+      "deep_parity": 29
+    },
+    "yuck": {
+      "eligible": 3,
+      "no_error": 3,
+      "sexpr_parity": 3,
+      "deep_parity": 3
+    }
+  }
+}

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-composer-recall-next
+command: painted-wolf/platform:composer-recall-next
+scope: "composer"
+allow_in_input: true
+bindings:
+  macos:
+    - "ArrowDown"
+  windows:
+    - "ArrowDown"
+  linux:
+    - "ArrowDown"

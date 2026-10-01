@@ -1,0 +1,19 @@
+paths:
+  /health:
+    get:
+      tags:
+      - health
+      operationId: getHealth
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/health.yaml#/components/schemas/HealthResponse
+        '405':
+          $ref: ../components/responses.yaml#/components/responses/MethodNotAllowed
+        '500':
+          $ref: ../components/responses.yaml#/components/responses/InternalError

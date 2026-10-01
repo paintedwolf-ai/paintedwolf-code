@@ -1,0 +1,19 @@
+title: Delete a stateful data resource
+id: ffacdee9-05d9-4910-8de5-01291007b082
+status: stable
+description: Deletes a named database, bucket, cluster, index, namespace, dataset, volume, endpoint, or messaging resource.
+references: [https://attack.mitre.org/tactics/TA0040/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:stateful-resource-delete', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

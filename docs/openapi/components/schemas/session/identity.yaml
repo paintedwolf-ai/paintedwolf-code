@@ -1,0 +1,396 @@
+components:
+  schemas:
+    CreateSessionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - posture
+      additionalProperties: false
+      dependentRequired:
+        provider_id:
+        - model
+        model:
+        - provider_id
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        workspace_root_id:
+          type: string
+          format: uuid
+          description: Active root for this session; defaults to primary when omitted
+        posture:
+          $ref: "#/components/schemas/SessionPosture"
+        provider_id:
+          type: string
+          pattern: '^[a-z0-9_-]{1,64}$'
+          description: Optional coordinator provider override for this session
+        model:
+          type: string
+          minLength: 1
+          description: Optional coordinator model override for this session
+    UpdateSessionRequest:
+      x-go-generate: true
+      type: object
+      minProperties: 1
+      maxProperties: 1
+      additionalProperties: false
+      description: >
+        One session lifecycle command. Exactly one of title, archived, pinned,
+        or pin_position is required; compound commands are rejected without
+        changing the session.
+      properties:
+        title:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: User-set display title; empty after trim is rejected
+        archived:
+          x-go-pointer: true
+          type: boolean
+          description: >
+            true moves the session out of the working set (sidebar, attention,
+            default list); false restores it. History and search are untouched.
+        pinned:
+          x-go-pointer: true
+          type: boolean
+          description: >
+            true adds the session to the end of its project's pinned chats;
+            false unpins it. Archived and worker child sessions cannot be pinned.
+        pin_position:
+          x-go-pointer: true
+          type: integer
+          minimum: 1
+          description: >
+            Moves a pinned session to this 1-based position in its project's
+            pinned order; a position past the end moves it last. The project's
+            pinned chats are renumbered 1…n.
+    Session:
+      x-go-generate: true
+      x-go-field-order: ["id", "title", "project_id", "owner_person_id", "workspace_root_id", "workspace_path", "posture", "agent_type", "provider_id", "model", "status", "parent_session_id", "max_tool_loops", "compaction_generation", "untrusted_content", "current_turn", "prompt_pending", "ui", "archived_at", "pin_rank", "seen_at", "created_at", "activity_at", "updated_at"]
+      type: object
+      required:
+      - id
+      - project_id
+      - owner_person_id
+      - posture
+      - status
+      - created_at
+      - activity_at
+      - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        owner_person_id:
+          type: string
+          format: uuid
+          description: >-
+            Person who started the session. Child sessions share their parent's
+            owner. Read-only; ignored on input.
+        workspace_root_id:
+          type: string
+          format: uuid
+          description: Active root for this session; omitted when no roots
+        workspace_path:
+          type: string
+          description: Computed on read from workspace_root_id or primary root; omitted when project has no roots
+        posture:
+          $ref: "#/components/schemas/SessionPosture"
+        provider_id:
+          type: string
+          pattern: '^[a-z0-9_-]{1,64}$'
+        model:
+          type: string
+        agent_type:
+          type: string
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        title:
+          type: string
+          description: Display title (auto until the user renames); omitted until set
+        created_at:
+          type: string
+          format: date-time
+        activity_at:
+          type: string
+          format: date-time
+          description: >-
+            When the transcript last gained a visible message, or the creation
+            time before that. Viewing, pinning, renaming, and other record
+            changes leave it alone. Read-only; ignored on input.
+        updated_at:
+          type: string
+          format: date-time
+          description: Last change to the session record, including lifecycle and read state
+        parent_session_id:
+          type: string
+          format: uuid
+        max_tool_loops:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: >-
+            Effective worker tool-loop cap. Omitted task budgets default to 12
+            for read scope and 20 for write scope; maximum 120. The final
+            iteration is prose-only.
+        compaction_generation:
+          type: integer
+          minimum: 0
+        untrusted_content:
+          type: boolean
+          description: >
+            Server-derived: true once this session has ingested untrusted external
+            content (web tools, MCP, or web-researcher worker summary). Read-only;
+            ignored on input.
+        current_turn:
+          type: integer
+          minimum: 0
+          description: >
+            Server-derived 1-based ordinal of the session's newest user turn, and
+            the same number the source ledger stamps on writes made during it.
+            A client addressing a turn (source `baseline=turn:{session_id},{n}`)
+            cites this value rather than counting transcript messages itself;
+            `baseline=turn:{session_id}` lets the host resolve it.
+            0 means no user turn has started. Read-only; ignored on input.
+        prompt_pending:
+          type: boolean
+          description: >-
+            Server-derived: true while the host holds an admitted human prompt
+            it will run without further human action and whose turn has not
+            begun. That covers a prompt between admission and its turn, a
+            command that ends without a turn while it runs, and next-turn draft
+            items the host will drain, unless the draft is held for editing and
+            the item is not reserved by Send. The gap between one turn's idle
+            boundary and the next turn's busy is therefore never a session at
+            rest. Omitted when false. Read-only; ignored on input.
+        ui:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SessionUiState"
+        archived_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Set while the session is archived (out of the working set); omitted when active
+        pin_rank:
+          x-go-pointer: true
+          type: integer
+          minimum: 1
+          description: >-
+            Order among the project's pinned chats, lowest first; omitted when
+            unpinned. Archiving the session or moving it to another project
+            unpins it. Read-only; ignored on input.
+        seen_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: >-
+            When the person last had this session readable on screen. A turn
+            that completes after this stamp is a result they have not seen,
+            which is what puts the session in the attention view's `finished`
+            class. Omitted until the session has been read. Written by
+            POST /v1/sessions/{id}/seen; ignored on other input.
+    SessionBootstrap:
+      x-go-generate: true
+      type: object
+      required: [event_cursor, session, transcript, progress, turn_clock, findings, queue, coordinator, workers, checkpoints, background_outputs, previews]
+      additionalProperties: false
+      properties:
+        event_cursor:
+          type: string
+          description: Replay boundary captured before the snapshot was read
+        session: {$ref: '#/components/schemas/Session'}
+        activities:
+          type: array
+          description: Current host work leases for this session. Omitted when no leases remain.
+          items: {$ref: ../events.yaml#/components/schemas/ActivityEvent}
+        transcript: {$ref: 'messages.yaml#/components/schemas/SessionTranscriptPage'}
+        progress: {$ref: ../progress.yaml#/components/schemas/ProgressDigest}
+        turn_clock: {$ref: ../progress.yaml#/components/schemas/TurnClock}
+        findings: {$ref: ../findings.yaml#/components/schemas/FindingsDigest}
+        queue: {$ref: ../queue.yaml#/components/schemas/QueueDraft}
+        coordinator: {$ref: ../workflow.yaml#/components/schemas/CoordinatorRunContext}
+        workers:
+          type: array
+          items: {$ref: ../worker.yaml#/components/schemas/WorkerTask}
+        checkpoints:
+          type: array
+          items: {$ref: ../checkpoint.yaml#/components/schemas/CheckpointEvent}
+        background_outputs:
+          type: array
+          items: {$ref: ../events.yaml#/components/schemas/BackgroundProcessOutput}
+        previews:
+          type: array
+          items: {$ref: ../events.yaml#/components/schemas/PreviewAttachment}
+    SessionListSort:
+      type: string
+      description: >
+        activity orders by activity_at, created by created_at, title by
+        case-folded title, and pin by pin_rank (pinned=true only).
+      enum:
+      - activity
+      - created
+      - title
+      - pin
+    SessionListOrder:
+      type: string
+      enum:
+      - asc
+      - desc
+    SessionSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - project_id
+      - owner_person_id
+      - posture
+      - status
+      - message_count
+      - created_at
+      - activity_at
+      additionalProperties: false
+      description: Metadata-only chat list row; worker child sessions are never listed
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        owner_person_id:
+          type: string
+          format: uuid
+          description: Person who started the session.
+        title:
+          type: string
+        posture:
+          $ref: "#/components/schemas/SessionPosture"
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        archived_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        pin_rank:
+          x-go-pointer: true
+          type: integer
+          minimum: 1
+          description: Order among the project's pinned chats, lowest first; omitted when unpinned
+        message_count:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        activity_at:
+          type: string
+          format: date-time
+          description: When the transcript last gained a visible message, or the creation time before that
+    SessionListPage:
+      x-go-generate: true
+      type: object
+      required:
+      - sessions
+      - total
+      additionalProperties: false
+      description: One seek page of a project's chats plus the total under the same filter
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSummary"
+        total:
+          type: integer
+          minimum: 0
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page; omitted on the last page
+    PendingWorkflowStart:
+      x-go-generate: true
+      x-go-field-order: ["workflow_id", "workflow_version", "preset_id", "label"]
+      type: object
+      required:
+      - workflow_id
+      - workflow_version
+      additionalProperties: false
+      properties:
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        label:
+          type: string
+        preset_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+    SessionUiState:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        pending_workflow_start:
+          x-go-type: "*PendingWorkflowStart"
+          oneOf:
+          - $ref: "#/components/schemas/PendingWorkflowStart"
+          - type: "null"
+        protection:
+          x-go-pointer: true
+          $ref: "#/components/schemas/SessionProtectionState"
+    SessionProtectionState:
+      x-go-generate: true
+      x-go-field-order: ["control_plane_reads_allowed", "additional_write_roots", "mediation_unavailable", "sandbox_bypass", "background_direct", "background_execution"]
+      type: object
+      additionalProperties: false
+      description: >
+        Persistent app/session protection chrome. Mediation unavailable and full
+        sandbox bypass are distinct — never one ambiguous uncontained banner.
+      properties:
+        mediation_unavailable:
+          type: boolean
+          description: >
+            Network mediation cannot start. Outbound connections are blocked;
+            commands that do not use the network are unaffected.
+        sandbox_bypass:
+          type: boolean
+          description: >
+            Sandbox protections are turned off. Commands may access the machine
+            and network without mediation.
+        control_plane_reads_allowed:
+          type: boolean
+          description: >
+            A startup override removes the app configuration read floor.
+            Protected key material remains subject to its independent rules.
+        additional_write_roots:
+          type: array
+          description: >
+            Resolved folders added to default write access by a startup override.
+            Protected paths within these folders remain restricted.
+          items:
+            type: string
+        background_direct:
+          type: array
+          description: Active or reconstructed background direct-IP processes.
+          items:
+            $ref: background.yaml#/components/schemas/SessionBackgroundDirectJob
+        background_execution:
+          type: array
+          description: Processes with approved process control or host execution that have not been observed exiting.
+          items:
+            $ref: background.yaml#/components/schemas/SessionBackgroundExecutionJob
+    SessionPosture:
+      type: string
+      enum:
+      - spec
+      - build
+      - orchestrate
+      - vet
+    SessionStatus:
+      $ref: ../session-status.generated.yaml#/components/schemas/SessionStatus

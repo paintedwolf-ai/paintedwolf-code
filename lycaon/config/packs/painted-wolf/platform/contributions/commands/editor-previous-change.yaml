@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-previous-change
+title: "Go to previous change"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.previousChange"

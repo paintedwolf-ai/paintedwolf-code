@@ -1,0 +1,21 @@
+components:
+  schemas:
+    AgentPool:
+      type: object
+      required:
+      - selection
+      - models
+      additionalProperties: false
+      properties:
+        selection:
+          $ref: orchestration.yaml#/components/schemas/PoolSelection
+        models:
+          type: array
+          items:
+            $ref: settings/models.yaml#/components/schemas/ModelRef
+    PoolSelection:
+      type: string
+      enum:
+      - round_robin
+      - random
+      - first

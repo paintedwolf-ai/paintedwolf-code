@@ -1,0 +1,67 @@
+paths:
+  /v1/sessions/{id}/compact:
+    post:
+      tags:
+      - sessions
+      operationId: compactSession
+      x-person-action: record
+      summary: Force context compaction for a session
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Compaction result
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/context.yaml#/components/schemas/SessionCompactResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/context:
+    get:
+      tags:
+      - sessions
+      operationId: getSessionContext
+      summary: Debug session context token budget and compaction stats
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Session context stats
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/context.yaml#/components/schemas/SessionContextResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/coordinator-context:
+    get:
+      tags:
+      - sessions
+      operationId: getCoordinatorContext
+      summary: Host-built coordinator workflow run context (same block as Prompt prepend)
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Coordinator run context
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/workflow.yaml#/components/schemas/CoordinatorRunContext
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

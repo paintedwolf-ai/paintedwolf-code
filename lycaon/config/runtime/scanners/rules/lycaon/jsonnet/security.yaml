@@ -1,0 +1,14 @@
+rules:
+- id: lycaon.jsonnet.privileged-container
+  languages:
+  - jsonnet
+  severity: ERROR
+  message: A generated Kubernetes container explicitly enables privileged mode
+  metadata:
+    category: security
+    cwe: CWE-250
+    confidence: HIGH
+    technology:
+    - jsonnet
+  pattern: '{kind: "Pod", spec: {containers: [..., {securityContext: {privileged: true, ...}, ...}, ...], ...},
+    ...}'

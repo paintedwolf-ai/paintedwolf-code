@@ -1,0 +1,9 @@
+# inspect_file is read-only and has no write pin.
+id: example/editor-surface:summarize
+title: Summarize selection
+target:
+  kind: selection
+  required: true
+execution:
+  preset: inspect_file
+  prompt_ref: guidance/example-summarize-selection

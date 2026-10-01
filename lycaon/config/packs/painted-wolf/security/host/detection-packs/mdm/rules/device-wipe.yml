@@ -1,0 +1,43 @@
+title: Remotely wipe a managed device
+id: e7bda4af-62b0-4770-9da1-3d7207c4f2ea
+description: Erases a managed device's data over the air, which cannot be recalled once it lands.
+references:
+  - https://attack.mitre.org/
+  - https://github.com/GAM-team/GAM/wiki/Mobile-Devices
+  - https://developers.google.com/admin-sdk/directory/reference/rest/v1/mobiledevices/action
+  - https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.devicemanagement/clear-mgdevicemanagementmanageddevice
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # Padding distinguishes device wipe from account wipe.
+  selection_gam:
+    Image: gam
+    CommandLine|contains:
+      - ' action wipe '
+      - ' action admin_remote_wipe'
+      - ' action admin_account_wipe'
+      - ' action accountwipe'
+      - ' action wipeaccount'
+  # Clear-Mg… is the wipe (POST /deviceManagement/managedDevices/{id}/wipe);
+  # the Invoke-MgRetire… sibling only retires and lives in enrollment-remove.
+  selection_intune:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    CommandLine|contains: 'Clear-MgDeviceManagementManagedDevice'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(--help|-whatif)(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_gam or selection_intune) and not filter_rehearsal and not filter_local

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-copy-line-down
+command: painted-wolf/platform:editor-copy-line-down
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+Shift+ArrowDown"
+  windows:
+    - "Alt+Shift+ArrowDown"
+  linux:
+    - "Alt+Shift+ArrowDown"

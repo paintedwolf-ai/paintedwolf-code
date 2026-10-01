@@ -1,0 +1,15 @@
+rules:
+- id: lycaon.move.unrestricted-resource-withdrawal
+  languages:
+  - move_on_aptos
+  severity: ERROR
+  message: A public function releases a resource at a caller-selected address without authorization
+  metadata:
+    category: security
+    cwe: CWE-862
+    confidence: HIGH
+    technology:
+    - move
+    references:
+    - https://move-language.github.io/move/signer.html
+  pattern: 'public fun $FN($ADDRESS: address): $RESOURCE { move_from<$RESOURCE>($ADDRESS) }'

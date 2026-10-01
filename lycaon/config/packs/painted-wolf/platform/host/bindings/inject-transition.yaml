@@ -1,0 +1,12 @@
+# Inform Binding — Emit-only inject.
+'on': inject.transition
+selector:
+  surface: coordinator
+effect: inform
+render: transition
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - assembly inject via Bus Emit-plane resolution

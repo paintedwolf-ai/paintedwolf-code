@@ -1,0 +1,38 @@
+oar: '1.0'
+id: USE_HTTP_REQUEST_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.habit_redirect_match
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "USE_HTTP_REQUEST_NATIVE"
+effect: block
+copy:
+  what: The host can express these HTTP operations as structured `http_request` calls.
+  cause: The host parsed the supported request shape and preserved representable command options. It refuses
+    translation when capabilities, deadlines, or working-directory semantics cannot be carried. The native
+    tool retains its own limits and output shape.
+  why: '`http_request` preserves request semantics while keeping destination approval, secret screening, redirects,
+    and response facts structured.'
+  fix: Retry every `http_request` entry in `replacement_calls` exactly, in order.
+  instead: Use the supplied `http_request` call for API, webhook, or development-service actions
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use the supplied http_request call
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: exact HTTP replacement
+    profile: implement
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_HTTP_REQUEST_NATIVE'
+  - http_request

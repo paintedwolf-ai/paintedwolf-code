@@ -1,0 +1,15 @@
+language: proto
+comment:
+- //
+limits: Authorization and transport security belong to service implementations and deployment; schema compatibility
+  is not a security finding.
+cases:
+- name: ordinary-source
+  file: sample.proto
+  source: |
+    syntax = "proto3";
+    message Example { string value = 1; }
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.proto

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Question not accepted"
+message: "The workflow did not accept this question."
+suggested_action: "Check the question's options and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "did not accept"

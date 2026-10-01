@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: MCP tool call failed
+message: The MCP provider did not complete the tool call.
+suggested_action: Check the provider's status in Settings → MCP providers, then retry.

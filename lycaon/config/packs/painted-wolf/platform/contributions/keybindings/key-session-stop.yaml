@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-stop
+command: painted-wolf/platform:session-stop
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+."
+  windows:
+    - "Mod+."
+  linux:
+    - "Mod+."

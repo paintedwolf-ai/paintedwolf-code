@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-fold-all
+command: painted-wolf/platform:editor-fold-all
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+["
+  windows:
+    - "Mod+Alt+["
+  linux:
+    - "Mod+Alt+["

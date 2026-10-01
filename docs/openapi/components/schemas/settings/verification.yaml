@@ -1,0 +1,94 @@
+components:
+  schemas:
+    LandedChangeScope:
+      type: string
+      description: >
+        Landed-change scan width. path_scoped scans the changed paths; full_root
+        scans the project root.
+      enum:
+      - path_scoped
+      - full_root
+    SourceVerify:
+      type: string
+      description: >
+        How much of the tree a scan's source publication re-reads. stat reuses a
+        file's prior hash whenever its size, mode, and modification time all
+        still match, which keeps publishing proportional to what changed.
+        content re-reads every file, closing the one case stat cannot see — a
+        file rewritten to the same size and mode inside a single modification
+        timestamp — at the cost of reading the whole tree on every scan.
+      enum:
+      - stat
+      - content
+    GroundingEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - session_id
+      - code
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        leg_id:
+          type: string
+          format: uuid
+        delegation_id:
+          type: string
+          format: uuid
+        escalated:
+          type: boolean
+    VerifySettingsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - test
+      - verify_path
+      - backend_configured
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: preferences.yaml#/components/schemas/SettingsScope
+        test:
+          type: string
+        verify_path:
+          type: string
+        detected_command:
+          type: string
+        detected_source:
+          type: string
+        backend_configured:
+          type: boolean
+        suggestion_state:
+          $ref: "#/components/schemas/VerifySuggestionState"
+        dismissed:
+          type: boolean
+    VerifySuggestionState:
+      type: string
+      description: Derived per-project state of the "set a test command" suggestion.
+      enum:
+      - accepted
+      - suggest
+      - waiting
+      - dismissed
+      - unknown
+    UpdateVerifySettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        test:
+          type: string
+    DismissVerifySettingsRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - dismissed
+      additionalProperties: false
+      properties:
+        dismissed:
+          type: boolean

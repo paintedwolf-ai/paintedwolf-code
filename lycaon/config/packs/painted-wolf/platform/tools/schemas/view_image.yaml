@@ -1,0 +1,30 @@
+tags: [visual, inspection]
+description: "Inspect an image file (.svg, .png, .jpg, .jpeg, .webp, .gif) or a session visual and perceive its rendered pixels and extracted text. Returns format metadata and extracted text, and emits a visual capture for multimodal models."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Repo-relative or absolute file path to the image.
+    handle:
+      type: string
+      description: "A render_view handle name, a visual artifact id from a tool result's artifact_id, or an evidence handle, to inspect without reading from disk."
+    scale:
+      type: number
+      minimum: 0.1
+      maximum: 4.0
+      description: "Optional raster scale factor for SVG rendering (default 1.0; 2.0 = 2x resolution)."
+    viewport:
+      type: object
+      description: "Optional raster canvas dimensions for SVG rendering."
+      properties:
+        width:
+          type: integer
+          minimum: 1
+          description: "Canvas width in CSS pixels."
+        height:
+          type: integer
+          minimum: 1
+          description: "Canvas height in CSS pixels."
+      additionalProperties: false
+  additionalProperties: false

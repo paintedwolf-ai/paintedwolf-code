@@ -1,0 +1,18 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - provider_id
+title: This project cannot add a remote MCP provider
+message: >-
+  A project overlay may only declare a loopback HTTP provider. Remote
+  addresses are a device setting.
+suggested_action: >-
+  Add the remote provider under Settings → MCP providers, or use
+  http://127.0.0.1:… for a provider on this computer.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - loopback
+      - device

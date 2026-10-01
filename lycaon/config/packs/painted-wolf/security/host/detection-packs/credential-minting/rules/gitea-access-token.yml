@@ -1,0 +1,23 @@
+title: Mint a Gitea access token
+id: 9edebeba-c067-4dad-8f5b-9a0b1c2d3e49
+description: Generates a Gitea access token; the value is printed to stdout and never shown again.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: gitea
+    CommandLine|contains:
+      - ' admin user generate-access-token'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

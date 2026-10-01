@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-files-jump-forward
+slot: "app_menu.go"
+command: painted-wolf/platform:files-jump-forward
+group: "6"
+order: 22
+label: "Forward"

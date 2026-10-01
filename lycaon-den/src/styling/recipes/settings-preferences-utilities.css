@@ -1,0 +1,383 @@
+@utility den-settings-scope-badge {
+  padding: 2px 8px;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+}
+
+/** Shared device / project lede with cross-surface jump. */
+@utility den-settings-scope-lede {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-den-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: var(--den-prose-measure);
+}
+
+@utility den-settings-scope-lede__jump {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@utility den-settings-scope-lede__hint {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.35;
+}
+
+@utility den-settings-scope-lede__link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  line-height: 1.45;
+  cursor: pointer;
+  text-align: left;
+  vertical-align: baseline;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    color: var(--den-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+@utility den-settings-scope-lede__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  /* The lede reads as a hint whether the caller wraps its copy or not. */
+  max-width: 42rem;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+
+  & > :first-child {
+    margin-top: 0;
+  }
+
+  & > :last-child {
+    margin-bottom: 0;
+  }
+
+  & .den-settings-hint {
+    margin: 0;
+    max-width: 42rem;
+  }
+}
+
+/** Top-of-panel main override for project Configuration mirrors. */
+@utility den-project-override-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-den-6);
+  padding: 14px 16px;
+  margin: 0 0 var(--spacing-den-8);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+
+  &[data-enabled="true"] {
+    border-color: var(--den-accent);
+    background: var(--den-background);
+    box-shadow: inset 2px 0 0 var(--den-accent);
+  }
+}
+
+@utility den-project-override-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+@utility den-project-override-title {
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-project-override-summary {
+  margin: 4px 0 0;
+  font-size: var(--text-den-hint);
+  font-weight: 550;
+  color: var(--den-text);
+}
+
+@utility den-project-override-toggle {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+@utility den-settings-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Keep title clear of the absolute stage × (BrowseChrome-aligned). */
+  padding-right: 36px;
+}
+
+@utility den-settings-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--den-accent-text);
+}
+
+@utility den-settings-pool-list {
+  & li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+@utility den-settings-worker-pool-selection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+  padding-top: var(--spacing-den-6);
+  border-top: 1px solid var(--den-line);
+}
+
+@utility den-settings-slot-single {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+}
+
+@utility den-settings-slot-label {
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-settings-pref-group {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 var(--spacing-den-8);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  overflow: hidden;
+  background: var(--den-background);
+}
+
+@utility den-settings-pref-group-title {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  color: var(--den-text-muted);
+  border-bottom: 1px solid var(--den-line);
+}
+
+@utility den-settings-pref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-settings-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@utility den-settings-stepper__value {
+  min-width: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-den-body);
+}
+
+@utility den-settings-segmented {
+  flex-shrink: 0;
+}
+
+@utility den-settings-pref-note {
+  /* Group notes share the row label inset. */
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--den-line-quiet);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+@utility den-settings-select {
+  /* Content-sized controls leave room for the row label. */
+  flex: 0 0 auto;
+  min-width: 12rem;
+  max-width: 18rem;
+  align-self: center;
+  font-size: var(--text-den-label);
+}
+
+@utility den-settings-pref-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-den-6);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--den-line-quiet);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  & .den-choice-label {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  & .den-select {
+    flex-shrink: 0;
+  }
+}
+
+@utility den-settings-pref-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+@utility den-settings-pref-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+@utility den-settings-pref-label {
+  font-size: var(--text-den-body);
+  font-weight: 550;
+  color: var(--den-text);
+}
+
+@utility den-managed-secret-reference {
+  display: block;
+  max-width: 100%;
+  padding: var(--spacing-den-3) var(--spacing-den-4);
+  border: 1px solid var(--den-line-quiet);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface-inset);
+  overflow-wrap: anywhere;
+  user-select: text;
+  font-family: var(--font-den-mono);
+  font-size: var(--text-den-hint);
+  color: var(--den-text);
+}
+
+@utility den-settings-pref-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--den-text-muted);
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  white-space: nowrap;
+}
+
+@utility den-cost-source-card {
+  align-items: flex-start;
+}
+
+@utility den-cost-source-card--idle {
+  opacity: 0.55;
+}
+
+@utility den-cost-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-2);
+  justify-content: flex-end;
+}
+
+@utility den-cost-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+  padding: var(--spacing-den-3) var(--spacing-den-4);
+  min-width: 0;
+}
+
+@utility den-cost-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-den-3);
+  margin: 0;
+
+  & dt {
+    font-size: var(--text-den-hint);
+    color: var(--den-text-muted);
+  }
+
+  & dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+    font-size: var(--text-den-body);
+  }
+
+  /* The in/out token line under each figure — quieter than the amount. */
+  & dd small {
+    display: block;
+    font-weight: 500;
+    font-size: var(--text-den-caption);
+    color: var(--den-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/** Right-side control stack inside a pref row (select, button). */
+@utility den-settings-pref-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-den-3);
+  flex-shrink: 0;
+  max-width: min(240px, 42%);
+
+  & .den-select {
+    width: 100%;
+    min-width: 140px;
+  }
+}
+

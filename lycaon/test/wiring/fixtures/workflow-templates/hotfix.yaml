@@ -1,0 +1,22 @@
+id: hotfix-template
+description: Minimal intake to build hotfix extending plan
+parameters:
+  workflow_id:
+    type: string
+    required: true
+manifest:
+  id: "${params.workflow_id}"
+  version: "1.0.0"
+  extends: plan@1.0.0
+  initial_posture: spec
+  phases:
+    - id: research
+      activity_label: Understanding the request
+      next: build
+    - id: build
+      activity_label: Building the change
+      on_enter:
+        set_posture: build
+      complete_when: gates_satisfied
+      gates:
+        - delegation_closeout_complete

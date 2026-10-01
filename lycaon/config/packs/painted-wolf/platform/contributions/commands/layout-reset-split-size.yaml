@@ -1,0 +1,13 @@
+id: painted-wolf/platform:layout-reset-split-size
+title: "Reset split size"
+scope: "global"
+keywords:
+  - "size"
+  - "split"
+  - "reset"
+  - "layout"
+when:
+  fact: "project_open"
+action:
+  kind: native_ui
+  handler: "layout.resetSplitSize"

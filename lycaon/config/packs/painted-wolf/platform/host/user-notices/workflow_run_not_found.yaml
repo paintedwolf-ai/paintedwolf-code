@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Workflow run not found
+message: >-
+  That run is not available any more.
+suggested_action: >-
+  Start the workflow again, or pick a run from the list.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not available
+      - Start the workflow again

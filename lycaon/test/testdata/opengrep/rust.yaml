@@ -1,0 +1,950 @@
+language: rust
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: shell-injection-context-only
+  file: sample.rs
+  source: "fn f() { std::process::Command::new(\"sh\").arg(\"-c\").arg(std::env::var(\"COMMAND\").unwrap());
+    }\n"
+  want: []
+  covers: []
+- name: shell-injection-safe
+  file: sample.rs
+  source: "fn f() { std::process::Command::new(\"printf\").arg(\"%s\").arg(std::env::var(\"TEXT\").unwrap());
+    }\n"
+  want: []
+  covers: []
+- name: sql-injection-safe
+  file: sample.rs
+  source: "fn f() { sqlx::query(\"SELECT * FROM users WHERE name = ?\").bind(std::env::var(\"NAME\").unwrap());
+    }\n"
+  want: []
+  covers: []
+- name: tls-verification-disabled-vulnerable
+  file: sample.rs
+  source: "use reqwest::ClientBuilder;\nfn f(client: ClientBuilder) { client.danger_accept_invalid_certs(true);
+    }\n"
+  want:
+  - lycaon.rust.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.rs
+  source: "use reqwest::ClientBuilder;\nfn f(client: ClientBuilder) { client.danger_accept_invalid_certs(false);
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: zeroed-reference-vulnerable
+  file: sample.rs
+  source: "fn f() { unsafe { let value: &u8 = std::mem::zeroed(); } }\n"
+  want:
+  - lycaon.rust.zeroed-reference
+  covers: []
+- name: zeroed-reference-safe
+  file: sample.rs
+  source: "fn f() { let value: &u8 = &0; }\n"
+  want: []
+  covers:
+  - lycaon.rust.zeroed-reference
+- name: world-writable-mode-context-only
+  file: sample.rs
+  source: "fn f() { let p = std::fs::Permissions::from_mode(0o777); }\n"
+  want: []
+  covers: []
+- name: world-writable-mode-safe
+  file: sample.rs
+  source: "fn f() { let p = std::fs::Permissions::from_mode(0o600); }\n"
+  want: []
+  covers: []
+- name: safe-process-and-tempdir
+  file: sample.rs
+  source: "use tempfile::tempdir;\nfn f(user: &str) { let _dir=tempdir(); std::process::Command::new(\"printf\"\
+    ).arg(\"%s\").arg(format!(\"hello {}\",user)); }\n"
+  want: []
+  covers: []
+- name: ordinary-unsafe
+  file: sample.rs
+  source: "fn f(p: *const u8) { unsafe { let _value = *p; } }\n"
+  want: []
+  covers: []
+- name: cargo-run
+  file: sample.rs
+  source: "fn f() { std::process::Command::new(\"cargo\").arg(\"run\"); }\n"
+  want: []
+  covers: []
+- name: sql-injection-context-only
+  file: sample.rs
+  source: "fn run() { sqlx::query(std::env::var(\"QUERY\").unwrap()); }\n"
+  want: []
+  covers: []
+- name: formatted-sql-context-only
+  file: sample.rs
+  source: "fn run() { sqlx::query(&format!(\"SELECT * FROM users WHERE name = {}\",std::env::var(\"NAME\").unwrap()));
+    }\n"
+  want: []
+  covers: []
+- name: formatted-sql-safe
+  file: sample.rs
+  source: "fn run() { sqlx::query(\"SELECT * FROM users WHERE name = ?\").bind(name); }\n"
+  want: []
+  covers: []
+- name: precision-compiler-option
+  file: sample.rs
+  source: "fn f(){ std::process::Command::new(\"cc\").arg(\"-c\").arg(std::env::var(\"SOURCE\").unwrap());
+    }\n"
+  want: []
+  covers: []
+- name: precision-trusted-formatted-query
+  file: sample.rs
+  source: "fn f(){ let limit = 10; sqlx::query(&format!(\"SELECT * FROM items LIMIT {}\",limit)); }\n"
+  want: []
+  covers: []
+- name: precision-permission-value
+  file: sample.rs
+  source: "fn f(){ let mode = std::fs::Permissions::from_mode(0o777); }\n"
+  want: []
+  covers: []
+- name: actix-command-injection-flow
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nasync fn handler(req: HttpRequest) {\n let command = req.query_string();\n\
+    \ std::process::Command::new(\"sh\").arg(\"-c\").arg(command).output();\n}\n"
+  want:
+  - lycaon.rust.actix-command-injection
+  covers: &id001
+  - lycaon.rust.actix-command-injection
+- name: actix-command-injection-constant
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nasync fn handler(req: HttpRequest) {\n let command = req.query_string();\n\
+    \ std::process::Command::new(\"sh\").arg(\"-c\").arg(\"date\").output();\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-injection-safe-api
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nasync fn handler(req: HttpRequest) {\n let command = req.query_string();\n\
+    \ std::process::Command::new(\"printf\").arg(\"%s\").arg(command).output();\n}\n"
+  want: []
+  covers: *id001
+- name: actix-command-injection-unrelated-receiver
+  file: app.rs
+  source: "struct HttpRequest;\nimpl HttpRequest { fn query_string(&self) -> &str { \"date\" } }\nasync fn
+    handler(req: HttpRequest) {\n let command = req.query_string();\n std::process::Command::new(\"sh\").arg(\"\
+    -c\").arg(command).output();\n}\n"
+  want: []
+  covers: *id001
+- name: actix-request-alias
+  file: app.rs
+  source: |
+    use actix_web::HttpRequest;
+    fn handler(request: HttpRequest) {
+        let incoming = request;
+        let command = incoming.query_string();
+        std::process::Command::new("sh").arg("-c").arg(command);
+    }
+  want:
+  - lycaon.rust.actix-command-injection
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-local-request-overwrite
+  file: app.rs
+  source: |
+    use actix_web::HttpRequest;
+    fn handler(request: HttpRequest) {
+        let request = HttpRequest::default();
+        let incoming = request;
+        let command = incoming.query_string();
+        std::process::Command::new("sh").arg("-c").arg(command);
+    }
+  want: []
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-unrelated-request-field
+  file: app.rs
+  source: |
+    use actix_web::HttpRequest;
+    fn handler(request: HttpRequest) {
+        let incoming = request;
+        let command = format!("{:?}", incoming.version());
+        std::process::Command::new("sh").arg("-c").arg(command);
+    }
+  want: []
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-sql-injection-flow
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\",
+    value)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-safe-api
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nquery(\"SELECT * FROM users WHERE name = $1\").bind(value).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-alias
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nlet alias = value;\nquery(&format!(\"SELECT * FROM users WHERE
+    name = '{}'\", alias)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-overwrite
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nlet value = \"fixed\";\nquery(&format!(\"SELECT * FROM users
+    WHERE name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-comment
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\n// query(&format!(\"SELECT * FROM users WHERE name = '{}'\"\
+    , value)).fetch_all(&pool).await;\nquery(\"SELECT * FROM users WHERE name = $1\").bind(value).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-unrelated-source
+  file: app.rs
+  source: "use sqlx::query;\nasync fn handler(value: String) {\nquery(&format!(\"SELECT * FROM users WHERE
+    name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: axum-sql-injection-flow
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nquery(&format!(\"\
+    SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-safe-api
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nquery(\"\
+    SELECT * FROM users WHERE name = $1\").bind(value).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-alias
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nlet alias
+    = value;\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", alias)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-overwrite
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nlet value
+    = \"fixed\";\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-comment
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\n// query(&format!(\"\
+    SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\nquery(\"SELECT * FROM users WHERE
+    name = $1\").bind(value).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-unrelated-source
+  file: app.rs
+  source: "use sqlx::query;\nasync fn handler(value: String) {\nquery(&format!(\"SELECT * FROM users WHERE
+    name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-numeric-path
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<u64>) {\nquery(&format!(\"\
+    SELECT * FROM users WHERE id = {}\", value)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: actix-sql-injection-unexecuted
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\",
+    value));\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-macro-binding
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nsqlx::query!(\"SELECT * FROM users WHERE name = $1\", value).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: axum-sql-injection-unexecuted
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nquery(&format!(\"\
+    SELECT * FROM users WHERE name = '{}'\", value));\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-macro-binding
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nsqlx::query!(\"\
+    SELECT * FROM users WHERE name = $1\", value).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: actix-sql-injection-renamed-api
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query as request_query;\nasync fn handler(req: HttpRequest)
+    {\n let value = req.match_info().get(\"value\").unwrap();\nrequest_query(&format!(\"SELECT * FROM users
+    WHERE name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-injection-local-api
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nfn query(value: &str) -> SafeQuery { SafeQuery }\nasync fn handler(req:
+    HttpRequest) {\n let value = req.match_info().get(\"value\").unwrap();\nquery(&format!(\"SELECT * FROM
+    users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: axum-sql-injection-renamed-api
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query as request_query;\nasync fn handler(Path(value): Path<String>)
+    {\nrequest_query(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-injection-local-api
+  file: app.rs
+  source: "use axum::extract::Path;\nfn query(value: &str) -> SafeQuery { SafeQuery }\nasync fn handler(Path(value):
+    Path<String>) {\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: tls-unrelated-receiver
+  file: app.rs
+  source: "fn f(client: CustomClient) { client.danger_accept_invalid_certs(true); }\n"
+  want: []
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-unknown-receiver
+  file: app.rs
+  source: "fn f() { client.danger_accept_invalid_certs(true); }\n"
+  want: []
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-local-builder
+  file: app.rs
+  source: "struct ClientBuilder; fn f(client: ClientBuilder) { client.danger_accept_invalid_certs(true); }\n"
+  want: []
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-alias
+  file: app.rs
+  source: "use reqwest::ClientBuilder as Builder; fn f(client: Builder) { let alias = client; alias.danger_accept_invalid_certs(true);
+    }\n"
+  want:
+  - lycaon.rust.tls-verification-disabled
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-overwritten
+  file: app.rs
+  source: "use reqwest::ClientBuilder; fn f(client: ClientBuilder) { let client = unrelated(); client.danger_accept_invalid_certs(true);
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-blocking
+  file: app.rs
+  source: "use reqwest::blocking::ClientBuilder; fn f(client: ClientBuilder) { client.danger_accept_invalid_hostnames(true);
+    }\n"
+  want:
+  - lycaon.rust.tls-verification-disabled
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-current-method
+  file: app.rs
+  source: "use reqwest::ClientBuilder; fn f(client: ClientBuilder) { client.tls_danger_accept_invalid_certs(true);
+    }\n"
+  want:
+  - lycaon.rust.tls-verification-disabled
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-current-hostnames
+  file: app.rs
+  source: "use reqwest::ClientBuilder; fn f(client: ClientBuilder) { client.tls_danger_accept_invalid_hostnames(true);
+    }\n"
+  want:
+  - lycaon.rust.tls-verification-disabled
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: actix-sql-option-alias
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet param =
+    req.match_info().get(\"name\"); let value = param.unwrap();\nquery(&format!(\"SELECT * FROM users WHERE
+    name = '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-option-present-bool
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    req.match_info().get(\"name\").is_some();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-option-missing-bool
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    req.match_info().get(\"name\").is_none();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-option-default
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    req.match_info().get(\"name\").unwrap_or(\"guest\");\nquery(&format!(\"SELECT * FROM users WHERE name =
+    '{}'\", value)).fetch_all(&pool).await;\n}\n"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-option-constant
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    Some(\"guest\").unwrap();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-proven-string-length
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    req.query_string();\nlet numeric = value.len();\nquery(&format!(\"SELECT * FROM users LIMIT {}\", numeric)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-proven-string-empty
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\nlet value =
+    req.query_string();\nlet numeric = value.is_empty();\nquery(&format!(\"SELECT * FROM users LIMIT {}\",
+    numeric)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: axum-sql-proven-string-length
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nlet numeric
+    = value.len();\nquery(&format!(\"SELECT * FROM users LIMIT {}\", numeric)).fetch_all(&pool).await;\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-proven-string-empty
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nlet numeric
+    = value.is_empty();\nquery(&format!(\"SELECT * FROM users LIMIT {}\", numeric)).fetch_all(&pool).await;\n\
+    }\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: actix-sql-unawaited-future
+  file: app.rs
+  source: "use actix_web::HttpRequest;\nuse sqlx::query;\nasync fn handler(req: HttpRequest) {\n let value
+    = req.match_info().get(\"value\").unwrap();\nquery(&format!(\"SELECT * FROM users WHERE name = '{}'\",
+    value)).fetch_all(&pool);\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: axum-sql-unawaited-future
+  file: app.rs
+  source: "use axum::extract::Path;\nuse sqlx::query;\nasync fn handler(Path(value): Path<String>) {\nquery(&format!(\"\
+    SELECT * FROM users WHERE name = '{}'\", value)).fetch_all(&pool);\n}\n"
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: actix-sql-numeric-parse
+  file: sample.rs
+  source: 'use actix_web::HttpRequest; use sqlx::query; async fn handler(req: HttpRequest) { let value = req.query_string();
+    let amount = value.parse::<u64>().unwrap(); query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await;
+    }'
+  want: []
+  covers:
+  - lycaon.rust.actix-sql-injection
+- name: actix-sql-numeric-shadow
+  file: sample.rs
+  source: 'type u64 = String; use actix_web::HttpRequest; use sqlx::query; async fn handler(req: HttpRequest)
+    { let value = req.query_string(); let amount = value.parse::<u64>().unwrap(); query(&format!("SELECT *
+    FROM users LIMIT {}", amount)).fetch_all(&pool).await; }'
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers: []
+- name: axum-sql-borrowed-numeric
+  file: sample.rs
+  source: 'use axum::extract::Path; use sqlx::query; async fn handler(Path(value): Path<String>) { let amount
+    = value.as_str().parse::<u64>().unwrap(); query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await;
+    }'
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-owned-numeric-unproven
+  file: sample.rs
+  source: 'use axum::extract::Path; use sqlx::query; async fn handler(Path(value): Path<String>) { let amount
+    = value.parse::<u64>().unwrap(); query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await;
+    }'
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: axum-sql-owned-trait-parse
+  file: sample.rs
+  source: 'trait CustomParse { fn parse<T>(&self) -> Result<String, ()>; } impl CustomParse for String { fn
+    parse<T>(&self) -> Result<String, ()> { Ok(self.clone()) } } use axum::extract::Path; use sqlx::query;
+    async fn handler(Path(value): Path<String>) { let amount = value.parse::<u64>().unwrap(); query(&format!("SELECT
+    * FROM users LIMIT {}", amount)).fetch_all(&pool).await; }'
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: axum-sql-custom-string-len
+  file: sample.rs
+  source: 'struct String; impl String { fn len(&self) -> std::string::String { todo!() } } use axum::extract::Path;
+    use sqlx::query; async fn handler(Path(value): Path<String>) { let amount = value.len(); query(&format!("SELECT
+    * FROM users LIMIT {}", amount)).fetch_all(&pool).await; }'
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: axum-sql-numeric-alias
+  file: sample.rs
+  source: 'type Count = u64; use axum::extract::Path; use sqlx::query; async fn handler(Path(value): Path<Count>)
+    { let amount = value; query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await; }'
+  want: []
+  covers:
+  - lycaon.rust.axum-sql-injection
+- name: axum-sql-custom-string-alias
+  file: sample.rs
+  source: 'type String = UserText; use axum::extract::Path; use sqlx::query; async fn handler(Path(value):
+    Path<String>) { let amount = value.len(); query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await;
+    }'
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: actix-sqlx09-asserted-unsafe
+  file: sample.rs
+  source: "use sqlx::AssertSqlSafe; use actix_web::HttpRequest; use sqlx::query; async fn handler(req: HttpRequest)
+    { let value = req.query_string(); let sql = format!(\"SELECT * FROM users WHERE name = '{}'\", value);
+    query(AssertSqlSafe(sql)).fetch_all(&pool).await; }"
+  want:
+  - lycaon.rust.actix-sql-injection
+  covers: []
+- name: axum-sql-numeric-and-string
+  file: sample.rs
+  source: "use axum::extract::Path; use sqlx::query; async fn handler(Path(count): Path<u64>, Path(value):
+    Path<String>) { let sql = format!(\"SELECT * FROM users WHERE name = '{}' LIMIT {}\", value, count); query(&sql).fetch_all(&pool).await;
+    }"
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: axum-sql-number-name-shadows-string
+  file: sample.rs
+  source: 'type u64 = String; use axum::extract::Path; use sqlx::query; async fn handler(Path(value): Path<u64>)
+    { let amount = value; query(&format!("SELECT * FROM users LIMIT {}", amount)).fetch_all(&pool).await; }'
+  want:
+  - lycaon.rust.axum-sql-injection
+  covers: []
+- name: tls-client-factory
+  source: use reqwest::Client; fn h() { Client::builder().danger_accept_invalid_certs(true).build(); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-builder-factory
+  source: use reqwest::ClientBuilder; fn h() {
+    ClientBuilder::new().danger_accept_invalid_hostnames(true).build(); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-factory-alias
+  source: use reqwest::Client as Http; fn h() { let b = Http::builder(); let alias = b;
+    alias.tls_danger_accept_invalid_certs(true).build(); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-blocking-factory
+  source: use reqwest::blocking::Client; fn h() {
+    Client::builder().tls_danger_accept_invalid_hostnames(true).build(); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-client-custom
+  source: struct Client; fn h() { Client::builder().danger_accept_invalid_certs(true).build(); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-client-imported-local
+  source: mod reqwest { pub struct Client; } use reqwest::Client; fn h() {
+    Client::builder().danger_accept_invalid_certs(true).build(); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-client-forward-local
+  source: use reqwest::Client; fn h() { Client::builder().danger_accept_invalid_certs(true).build(); }
+    mod reqwest { pub struct Client; }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-client-safe
+  source: use reqwest::Client; fn h() { Client::builder().danger_accept_invalid_certs(false).build(); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-builder-fluent
+  source: use reqwest::Client; fn h() {
+    Client::builder().https_only(true).danger_accept_invalid_certs(true).build(); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-custom-transform
+  source: use reqwest::Client; fn h() {
+    Client::builder().custom().danger_accept_invalid_certs(true).build(); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+  diagnostics:
+  - kind: file_partial_semantics
+    construct: model_type_unresolved
+    line: 1
+    column: 31
+- name: tls-factory-root-import
+  source: use reqwest as http; fn h(){ http::Client::builder().danger_accept_invalid_certs(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-blocking-root-import
+  source: use reqwest as http; fn h(){
+    http::blocking::Client::builder().danger_accept_invalid_hostnames(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-fluent-alias
+  source: use reqwest::Client; fn h(){ let b=Client::builder().user_agent("agent").https_only(true);
+    b.tls_danger_accept_invalid_certs(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-blocking-fluent
+  source: use reqwest::blocking::Client; fn h(){
+    Client::builder().https_only(true).danger_accept_invalid_certs(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-custom-fluent
+  source: struct Client; fn h(){ Client::builder().https_only(true).danger_accept_invalid_certs(true); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-client-local-shadow
+  source: use reqwest::Client; fn h<Client>() { Client::builder().danger_accept_invalid_certs(true); }
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-sibling-module-local
+  source: mod reqwest {} mod external { use reqwest::Client; fn h(){
+    Client::builder().danger_accept_invalid_certs(true); } }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-fluent-parameter
+  source: use reqwest::ClientBuilder; fn h(b:ClientBuilder){ let b=b.https_only(true);
+    b.danger_accept_invalid_certs(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-fluent-separated
+  source: use reqwest::Client; fn h(){let b=Client::builder(); let b=b.https_only(true);
+    b.danger_accept_invalid_certs(true); }
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-borrowed-parameter
+  source: use reqwest::ClientBuilder; trait FakeTls { fn danger_accept_invalid_certs(self,
+    yes:bool)->String; } impl FakeTls for &ClientBuilder { fn danger_accept_invalid_certs(self,
+    yes:bool)->String { String::new() } } fn h(b:&ClientBuilder){b.danger_accept_invalid_certs(true);}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-borrowed-alias
+  source: use reqwest::ClientBuilder; trait FakeTls { fn danger_accept_invalid_certs(self,
+    yes:bool)->String; } impl FakeTls for &ClientBuilder { fn danger_accept_invalid_certs(self,
+    yes:bool)->String { String::new() } } fn h(b:ClientBuilder){let borrowed=&b;
+    borrowed.danger_accept_invalid_certs(true);}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: tls-owned-after-borrow
+  source: use reqwest::ClientBuilder; fn h(b:ClientBuilder){let borrowed=&b; inspect(borrowed);
+    b.danger_accept_invalid_certs(true);}
+  want:
+  - lycaon.rust.tls-verification-disabled
+  file: sample.rs
+  covers: []
+- name: tls-mutable-borrow
+  source: use reqwest::ClientBuilder; trait FakeTls { fn danger_accept_invalid_certs(self,
+    yes:bool)->String; } impl FakeTls for &mut ClientBuilder { fn danger_accept_invalid_certs(self,
+    yes:bool)->String { String::new() } } fn h(mut b:ClientBuilder){let borrowed=&mut b;
+    borrowed.danger_accept_invalid_certs(true);}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.tls-verification-disabled
+- name: actix-command-direct
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("-c").arg(req.query_string()).output();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-import
+  source: use actix_web::HttpRequest; use std::process::Command; fn
+    h(req:HttpRequest){Command::new("bash").args(["-c",req.query_string()]).status();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-import-alias
+  source: use actix_web::HttpRequest; use std::process::Command as Cmd; fn
+    h(req:HttpRequest){Cmd::new("/bin/sh").args(&["-c",req.query_string()]).spawn();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-type-alias
+  source: use actix_web::HttpRequest; type Cmd=std::process::Command; fn
+    h(req:HttpRequest){Cmd::new("zsh").arg("-c").arg(req.query_string()).output();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-route
+  source: use actix_web::HttpRequest; fn h(req:HttpRequest){let
+    value=req.match_info().get("command").unwrap();std::process::Command::new("sh").arg("-c").arg(value).status();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-ordinary-argument
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("printf").arg("%s").arg(req.query_string()).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-positional
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("-c").arg("echo
+    $1").arg("_").arg(req.query_string()).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-script-file
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("script.sh").arg(req.query_string()).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-custom-constructor
+  source: use actix_web::HttpRequest; mod std{pub mod process{pub struct Command;}} fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("-c").arg(req.query_string());}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-custom-request
+  source: struct HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("-c").arg(req.query_string());}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-native-number
+  source: use actix_web::HttpRequest; fn h(req:HttpRequest){let
+    number=req.query_string().parse::<u64>().unwrap();std::process::Command::new("sh").arg("-c").arg(number.to_string());}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: axum-command-direct
+  source: use axum::extract::Path; fn
+    h(Path(value):Path<String>){std::process::Command::new("sh").arg("-c").arg(value).output();}
+  want:
+  - lycaon.rust.axum-command-injection
+  file: sample.rs
+  covers: []
+- name: axum-command-borrowed-array
+  source: use axum::extract::Path; use std::process::Command; fn
+    h(Path(value):Path<String>){Command::new("sh").args(&["-c",&value]).output();}
+  want:
+  - lycaon.rust.axum-command-injection
+  file: sample.rs
+  covers: []
+- name: axum-command-ordinary-argument
+  source: use axum::extract::Path; fn
+    h(Path(value):Path<String>){std::process::Command::new("printf").arg("%s").arg(value).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.axum-command-injection
+- name: axum-command-number
+  source: use axum::extract::Path; fn
+    h(Path(value):Path<u64>){std::process::Command::new("sh").arg("-c").arg(value.to_string()).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.axum-command-injection
+- name: axum-command-sanitized-number
+  source: use axum::extract::Path; fn h(Path(value):Path<String>){let
+    number=value.as_str().parse::<u64>().unwrap();std::process::Command::new("sh").arg("-c").arg(number.to_string()).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.axum-command-injection
+- name: axum-command-custom-extractor
+  source: struct Path<T>(T); fn
+    h(Path(value):Path<String>){std::process::Command::new("sh").arg("-c").arg(value).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.axum-command-injection
+- name: actix-command-array-positional
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").args(["-c","echo
+    $1","_",req.query_string()]).output();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-array-script
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").args(["-c",req.query_string(),"_"]).output();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: actix-command-forward-local
+  source: use actix_web::HttpRequest; fn
+    h(req:HttpRequest){std::process::Command::new("sh").arg("-c").arg(req.query_string());} mod std {}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-generic-shadow
+  source: use actix_web::HttpRequest; use std::process::Command; fn
+    h<Command>(req:HttpRequest){Command::new("sh").arg("-c").arg(req.query_string());}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.actix-command-injection
+- name: actix-command-constant-program
+  source: use actix_web::HttpRequest; fn h(req:HttpRequest){let
+    shell="sh";std::process::Command::new(shell).arg("-c").arg(req.query_string()).output();}
+  want:
+  - lycaon.rust.actix-command-injection
+  file: sample.rs
+  covers: []
+- name: axum-command-alias
+  source: use axum::extract::Path; use std::process::Command as Cmd; fn h(Path(value):Path<String>){let
+    text=value;Cmd::new("sh").arg("-c").arg(text).output();}
+  want:
+  - lycaon.rust.axum-command-injection
+  file: sample.rs
+  covers: []
+- name: axum-command-native-shadow
+  source: use axum::extract::Path; type u64=String; fn
+    h(Path(value):Path<u64>){std::process::Command::new("sh").arg("-c").arg(value).output();}
+  want:
+  - lycaon.rust.axum-command-injection
+  file: sample.rs
+  covers: []
+- name: zeroed-import-alias
+  source: use std::mem::zeroed as empty; fn h(){unsafe{let value:&u8=empty();}}
+  want:
+  - lycaon.rust.zeroed-reference
+  file: sample.rs
+  covers: []
+- name: zeroed-mutable-reference
+  source: fn h(){unsafe{let value:&mut u8=std::mem::zeroed();}}
+  want:
+  - lycaon.rust.zeroed-reference
+  file: sample.rs
+  covers: []
+- name: zeroed-unsafe-expression
+  source: fn h(){let value:&u8=unsafe{std::mem::zeroed()};}
+  want:
+  - lycaon.rust.zeroed-reference
+  file: sample.rs
+  covers: []
+- name: zeroed-local-module
+  source: mod std{pub mod mem{pub fn zeroed()-> &'static u8 {&0}}} fn h(){let
+    value:&u8=std::mem::zeroed();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.zeroed-reference
+- name: zeroed-foreign-import
+  source: use custom::zeroed; fn h(){let value:&u8=zeroed();}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.zeroed-reference
+- name: zeroed-raw-pointer
+  source: fn h(){unsafe{let value:*const u8=std::mem::zeroed();}}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.zeroed-reference
+- name: zeroed-option-reference
+  source: fn h(){unsafe{let value:Option<&u8>=std::mem::zeroed();}}
+  want: []
+  file: sample.rs
+  covers:
+  - lycaon.rust.zeroed-reference

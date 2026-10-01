@@ -1,0 +1,22 @@
+rules:
+- id: lycaon.jsp.request-expression-xss
+  languages:
+  - generic
+  severity: ERROR
+  message: A request parameter is written directly into JSP output
+  metadata:
+    category: security
+    cwe: CWE-79
+    confidence: HIGH
+    technology:
+    - jsp
+    parser_mode: generic
+  paths:
+    include:
+    - '*.jsp'
+    - '*.jspx'
+    - '*.jspf'
+  patterns:
+  - pattern-either:
+    - pattern: < %= request . getParameter ( ... ) % >
+  - pattern-not-inside: < % -- ... -- % >

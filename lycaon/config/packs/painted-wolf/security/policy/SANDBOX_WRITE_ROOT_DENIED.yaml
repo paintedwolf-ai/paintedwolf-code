@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SANDBOX_WRITE_ROOT_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.user_guidance
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_WRITE_ROOT_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} was not granted write access to {{ paintedwolf.path }}.'
+  cause: Write authority is not on this invocation.
+  why: Retrying the same write_root request loops on the same refusal.
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue only
+    with writes that are both intended and already permitted. Moving output to scratch is suitable only if that
+    still satisfies the task. If the denied destination is required, report the blocker and wait for new user direction.'
+  instead: Preserve the intended destination and the denied write boundary
+x-paintedwolf-category: user-decision
+x-paintedwolf-emit: guard:sandbox_write_root
+x-paintedwolf-message: this command cannot write outside the sandbox write roots
+x-paintedwolf-scenarios:
+- id: command_write_root_denied
+  vars:
+    tool: command
+    path: /fixture/protected-output
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SANDBOX_WRITE_ROOT_DENIED'
+  - /fixture/protected-output

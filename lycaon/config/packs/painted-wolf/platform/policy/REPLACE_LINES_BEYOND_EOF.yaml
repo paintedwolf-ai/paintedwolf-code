@@ -1,0 +1,43 @@
+oar: '1.0'
+id: REPLACE_LINES_BEYOND_EOF
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - replace_lines
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.end_line
+  - paintedwolf.path
+  - paintedwolf.start_line
+  - paintedwolf.total_lines
+  - paintedwolf.beyond_eof
+when: paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
+effect: block
+copy:
+  what: replace_lines on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
+    }} exceeds file length ({{ paintedwolf.total_lines }} lines).
+  cause: Line numbers must fall within the file; use wc or read total_lines before replacing.
+  why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
+  fix: Read {{ paintedwolf.path }} from a valid current offset (offset 1 also handles an empty file) and use
+    its numbered content to select the intended replacement. Do not retry a read at the rejected out-of-range
+    start or use zero as a line number.
+  instead: Branch on Code; lower the line range or re-read total_lines
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:replace_lines
+x-paintedwolf-message: replace_lines range past end of file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    end_line: 200
+    path: internal/foo.go
+    profile: implement
+    start_line: 150
+    tool: replace_lines
+    total_lines: 120
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: REPLACE_LINES_BEYOND_EOF'

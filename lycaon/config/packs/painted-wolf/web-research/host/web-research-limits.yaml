@@ -1,0 +1,11 @@
+# Soft outbound caps for fetch_url. They do not apply to web_search crawl, whose
+# politeness lives in internal/webresearch/direct_polite.go.
+version: 1
+fetch_url:
+  # Rolling window of fetch_url network fetches per session (cache hits do not count).
+  session_max_fetches: 128
+  session_window: 30m
+  # Concurrent in-flight network fetches to one host (hostname, lowercased).
+  host_max_in_flight: 4
+  # Minimum spacing between starts to one host. 0 = no pacing (usability charter).
+  host_min_interval: 0s

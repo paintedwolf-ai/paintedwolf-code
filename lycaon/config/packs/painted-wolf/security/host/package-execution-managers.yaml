@@ -1,0 +1,565 @@
+version: 1
+
+# Identifies package-manager actions that execute remote code.
+wrappers:
+  - executable: env
+    mode: command_after_options_and_assignments
+    value_flags: [-u, --unset, -C, --chdir]
+  - executable: command
+    mode: command_after_options
+  - executable: sh
+    mode: shell_command
+    command_flags: [-c]
+  - executable: bash
+    mode: shell_command
+    command_flags: [-c, -lc]
+  - executable: zsh
+    mode: shell_command
+    command_flags: [-c, -lc]
+  - executable: dash
+    mode: shell_command
+    command_flags: [-c]
+  - executable: python
+    mode: module_command
+    command_flags: [-m]
+  - executable: python3
+    mode: module_command
+    command_flags: [-m]
+  - executable: py
+    mode: module_command
+    command_flags: [-m]
+  - executable: pwsh
+    mode: shell_command
+    command_flags: [-Command, -c]
+  - executable: powershell
+    mode: shell_command
+    command_flags: [-Command, -c]
+
+# `registry` names an entry in package-registries.yaml. download_hosts are
+# general-purpose sites a manager also fetches from; only a recognized package
+# action's boundary allows them.
+managers:
+  - id: npm
+    system: NPM
+    registry: npm
+    commands:
+      - executable: npx
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package, -p]
+        registry_flags: [--registry]
+        value_flags: [--cache, --call, -c, --userconfig]
+      - executable: npm
+        verbs: [exec]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package, -p]
+        registry_flags: [--registry]
+        value_flags: [--cache, --call, -c, --userconfig, --workspace, -w]
+      - executable: npm
+        verbs: [install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cache, --userconfig, --workspace, -w]
+      - executable: npm
+        verbs: [i]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cache, --userconfig, --workspace, -w]
+      - executable: npm
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cache, --userconfig, --workspace, -w]
+
+  - id: pnpm
+    system: NPM
+    registry: npm
+    commands:
+      - executable: pnpx
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package]
+        registry_flags: [--registry]
+        value_flags: [--cache-dir, --store-dir, --config]
+      - executable: pnpm
+        verbs: [dlx]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package]
+        registry_flags: [--registry]
+        value_flags: [--cache-dir, --store-dir, --config]
+      - executable: pnpm
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--filter, --workspace-root, --config-dir]
+      - executable: pnpm
+        verbs: [install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--filter, --workspace-root, --config-dir]
+
+  - id: yarn
+    system: NPM
+    registry: npm
+    commands:
+      - executable: yarn
+        verbs: [dlx]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package]
+        registry_flags: [--registry]
+        value_flags: [--cwd]
+      - executable: yarn
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cwd, --mode]
+
+  - id: bun
+    system: NPM
+    registry: npm
+    commands:
+      - executable: bunx
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package, -p]
+        registry_flags: [--registry]
+      - executable: bun
+        verbs: [x]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--package, -p]
+        registry_flags: [--registry]
+      - executable: bun
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cwd]
+      - executable: bun
+        verbs: [install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--registry]
+        value_flags: [--cwd]
+
+  - id: pip
+    system: PYPI
+    registry: pypi
+    commands:
+      - executable: pip
+        verbs: [install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--index-url, -i, --extra-index-url]
+        value_flags:
+          - -r
+          - --requirement
+          - -c
+          - --constraint
+          - --build-constraint
+          - --requirements-from-script
+          - -e
+          - --editable
+          - --find-links
+          - -f
+          - --trusted-host
+          - -t
+          - --target
+          - --prefix
+          - --root
+          - --src
+          - --python-version
+          - --platform
+          - --implementation
+          - --abi
+          - -C
+          - --config-settings
+          - --upgrade-strategy
+          - --progress-bar
+          - --root-user-action
+          - --report
+          - --group
+          - --all-releases
+          - --only-final
+          - --no-binary
+          - --only-binary
+          - --uploaded-prior-to
+          - --python
+          - --log
+          - --keyring-provider
+          - --proxy
+          - --retries
+          - --timeout
+          - --exists-action
+          - --cert
+          - --client-cert
+          - --cache-dir
+          - --use-feature
+          - --use-deprecated
+          - --resume-retries
+      - executable: pip3
+        verbs: [install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--index-url, -i, --extra-index-url]
+        value_flags:
+          - -r
+          - --requirement
+          - -c
+          - --constraint
+          - --build-constraint
+          - --requirements-from-script
+          - -e
+          - --editable
+          - --find-links
+          - -f
+          - --trusted-host
+          - -t
+          - --target
+          - --prefix
+          - --root
+          - --src
+          - --python-version
+          - --platform
+          - --implementation
+          - --abi
+          - -C
+          - --config-settings
+          - --upgrade-strategy
+          - --progress-bar
+          - --root-user-action
+          - --report
+          - --group
+          - --all-releases
+          - --only-final
+          - --no-binary
+          - --only-binary
+          - --uploaded-prior-to
+          - --python
+          - --log
+          - --keyring-provider
+          - --proxy
+          - --retries
+          - --timeout
+          - --exists-action
+          - --cert
+          - --client-cert
+          - --cache-dir
+          - --use-feature
+          - --use-deprecated
+          - --resume-retries
+
+  - id: pipx
+    system: PYPI
+    registry: pypi
+    commands:
+      - executable: pipx
+        verbs: [run]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--spec]
+        registry_flags: [--index-url, -i]
+        value_flags: [--pip-args, --python]
+
+  - id: uv
+    system: PYPI
+    registry: pypi
+    commands:
+      - executable: uvx
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--from]
+        registry_flags: [--index, --default-index]
+        value_flags: [--python]
+      - executable: uv
+        verbs: [tool, run]
+        operation: remote_execute
+        package_mode: flag_or_first_positional
+        package_flags: [--from]
+        registry_flags: [--index, --default-index]
+        value_flags: [--python]
+      - executable: uv
+        verbs: [run]
+        operation: remote_execute
+        package_mode: flag_only
+        package_flags: [--with, --with-requirements]
+        registry_flags: [--index, --default-index]
+        value_flags: [--python, --project, --script]
+      - executable: uv
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--index, --default-index]
+        value_flags: [--python, --project, --script, --group]
+      - executable: uv
+        verbs: [pip, install]
+        operation: dependency_install
+        package_mode: all_positionals
+        registry_flags: [--index-url, --extra-index-url, --default-index, --index]
+        value_flags: [-r, --requirement, -c, --constraint, -e, --editable, --find-links, --target, --prefix, --python, --python-version, --platform]
+
+  - id: poetry
+    system: PYPI
+    registry: pypi
+    commands:
+      - executable: poetry
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--group, -G, --source, --python, --platform]
+
+  - id: pdm
+    system: PYPI
+    registry: pypi
+    commands:
+      - executable: pdm
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--group, -G, --python]
+
+  - id: cargo
+    system: CARGO
+    registry: crates
+    commands:
+      - executable: cargo
+        verbs: [install]
+        operation: source_build_install
+        package_mode: all_positionals
+        version_flags: [--version]
+        registry_flags: [--index]
+        value_flags: [--version, --registry, --root, --target, --features]
+      - executable: cargo
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--features, -F, --package, -p, --rename, --registry, --path, --git, --branch, --tag, --rev, --manifest-path, --target]
+
+  - id: go
+    system: GO
+    registry: go
+    commands:
+      - executable: go
+        verbs: [install]
+        operation: tool_install
+        package_mode: all_positionals
+        value_flags: [-modfile, -overlay, -pgo]
+      - executable: go
+        verbs: [run]
+        operation: remote_execute
+        package_mode: versioned_positionals
+        value_flags: [-modfile, -overlay, -pgo, -exec]
+      - executable: go
+        verbs: [get]
+        operation: dependency_install
+        package_mode: module_paths
+        value_flags: [-modfile, -overlay, -pgo]
+
+  - id: dotnet
+    system: NUGET
+    registry: nuget
+    commands:
+      - executable: dotnet
+        verbs: [tool, install]
+        operation: tool_install
+        package_mode: first_positional
+        version_flags: [--version]
+        registry_flags: [--add-source]
+        value_flags: [--version, --configfile, --tool-path, --framework]
+      - executable: dotnet
+        verbs: [add, package]
+        operation: dependency_install
+        package_mode: first_positional
+        version_flags: [--version, -v]
+        registry_flags: [--source, -s]
+        value_flags: [--version, -v, --framework, -f, --package-directory]
+      - executable: dotnet
+        verbs: [new, install]
+        operation: tool_install
+        package_mode: first_positional
+        registry_flags: [--add-source, --nuget-source]
+
+  - id: gem
+    system: RUBYGEMS
+    registry: rubygems
+    commands:
+      - executable: gem
+        verbs: [exec]
+        operation: remote_execute
+        package_mode: first_positional
+        version_flags: [--version, -v]
+        registry_flags: [--source]
+        value_flags: [--version, -v, --platform]
+      - executable: gem
+        verbs: [install]
+        operation: native_extension_install
+        package_mode: all_positionals
+        version_flags: [--version, -v]
+        registry_flags: [--source]
+        value_flags: [--version, -v, --install-dir, --bindir, --platform]
+      - executable: bundle
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        version_flags: [--version, -v]
+        registry_flags: [--source]
+        value_flags: [--version, -v, --group, --source]
+
+  - id: maven
+    system: MAVEN
+    registry: maven-central
+    commands:
+      - executable: mvn
+        operation: plugin_execute
+        package_mode: maven_plugin_coordinates
+        value_flags: [-f, --file, -s, --settings, -P, --activate-profiles]
+      - executable: mvnw
+        operation: plugin_execute
+        package_mode: maven_plugin_coordinates
+        value_flags: [-f, --file, -s, --settings, -P, --activate-profiles]
+
+  - id: composer
+    registry: packagist
+    download_hosts: [github.com, api.github.com]
+    commands:
+      - executable: composer
+        verbs: [create-project]
+        operation: remote_execute
+        package_mode: first_positional
+        value_flags: [--repository, --working-dir, -d]
+      - executable: composer
+        verbs: [require]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--repository, --working-dir, -d]
+      - executable: composer
+        verbs: [global, require]
+        operation: tool_install
+        package_mode: all_positionals
+        value_flags: [--repository]
+
+  - id: coursier
+    registry: maven-central
+    commands:
+      - executable: cs
+        verbs: [launch]
+        operation: remote_execute
+        package_mode: first_positional
+        registry_flags: [--repository, -r]
+        value_flags: [--main-class, -M, --scala-version, --jvm]
+      - executable: cs
+        verbs: [install]
+        operation: tool_install
+        package_mode: all_positionals
+        registry_flags: [--repository, -r]
+        value_flags: [--install-dir, --scala-version, --jvm]
+
+  - id: pub
+    registry: pub
+    commands:
+      - executable: dart
+        verbs: [pub, add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--directory, -C, --path, --git-url, --git-ref, --git-path, --hosted-url]
+      - executable: dart
+        verbs: [pub, global, activate]
+        operation: tool_install
+        package_mode: first_positional
+        registry_flags: [--hosted-url, -u]
+        value_flags: [--source, -s, --git-path, --git-ref]
+      - executable: flutter
+        verbs: [pub, add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--directory, -C, --path, --git-url, --git-ref, --git-path, --hosted-url]
+
+  - id: hex
+    registry: hex
+    commands:
+      - executable: mix
+        verbs: [archive.install, hex]
+        operation: tool_install
+        package_mode: first_positional
+        value_flags: [--organization, --repo]
+      - executable: mix
+        verbs: [escript.install, hex]
+        operation: tool_install
+        package_mode: first_positional
+        value_flags: [--organization, --repo]
+
+  - id: cpan
+    registry: cpan
+    commands:
+      - executable: cpanm
+        operation: native_extension_install
+        package_mode: all_positionals
+        registry_flags: [--mirror]
+        value_flags: [-l, --local-lib, -L, --local-lib-contained]
+      - executable: cpan
+        operation: native_extension_install
+        package_mode: all_positionals
+        value_flags: [-j]
+
+  - id: luarocks
+    registry: luarocks
+    commands:
+      - executable: luarocks
+        verbs: [install]
+        operation: native_extension_install
+        package_mode: first_positional
+        registry_flags: [--server, --only-server]
+        value_flags: [--tree, --lua-version]
+
+  - id: opam
+    registry: opam
+    commands:
+      - executable: opam
+        verbs: [install]
+        operation: source_build_install
+        package_mode: all_positionals
+        value_flags: [--switch, --root, --repos]
+
+  - id: conan
+    registry: conan
+    commands:
+      - executable: conan
+        verbs: [install]
+        operation: source_build_install
+        package_mode: flag_only
+        package_flags: [--requires, --tool-requires]
+        value_flags: [--remote, -r, --profile, -pr, --settings, -s, --options, -o, --build, --output-folder, -of]
+
+  - id: scarb
+    registry: scarbs
+    commands:
+      - executable: scarb
+        verbs: [add]
+        operation: dependency_install
+        package_mode: all_positionals
+        value_flags: [--package, -p, --path, --git, --branch, --tag, --rev, --manifest-path]
+
+  - id: powershell-gallery
+    registry: powershell-gallery
+    commands:
+      - executable: Install-Module
+        operation: tool_install
+        package_mode: flag_or_first_positional
+        package_flags: [-Name]
+        version_flags: [-RequiredVersion]
+        value_flags: [-RequiredVersion, -MinimumVersion, -MaximumVersion, -Scope, -Repository]
+      - executable: Install-PSResource
+        operation: tool_install
+        package_mode: flag_or_first_positional
+        package_flags: [-Name]
+        version_flags: [-Version]
+        value_flags: [-Version, -Scope, -Repository]

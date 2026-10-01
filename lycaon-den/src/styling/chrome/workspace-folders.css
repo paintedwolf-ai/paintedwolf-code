@@ -1,0 +1,112 @@
+.workspace-folders-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--den-overlay-scrim);
+  z-index: 40;
+}
+
+/* The attribute outranks the scrollport frame's base position. */
+.workspace-folders-panel[data-den-scrollport] {
+  position: fixed;
+  right: 1rem;
+  bottom: 5.5rem;
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(24rem, 60vh);
+  z-index: 41;
+  background: var(--den-surface-elevated);
+  border: 1px solid var(--den-border);
+  border-radius: 0.75rem;
+  box-shadow: var(--den-shadow-lg);
+}
+.workspace-folders-panel__content {
+  padding: 0.75rem;
+}
+
+.workspace-folders-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.workspace-folders-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.workspace-folders-panel__row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--den-border);
+  border-radius: 0.5rem;
+}
+
+.workspace-folders-panel__path {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.workspace-folders-panel__label {
+  margin: 0;
+  padding: 0.1rem 0.2rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: text;
+  max-width: 100%;
+}
+
+.workspace-folders-panel__label:hover:not(:disabled),
+.workspace-folders-panel__label:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--den-text-muted) 14%, transparent);
+  outline: none;
+}
+
+.workspace-folders-panel__label:disabled {
+  cursor: default;
+}
+
+.workspace-folders-panel__rename-input {
+  width: min(16rem, 100%);
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--den-line);
+  border-radius: 4px;
+  background: var(--den-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+.workspace-folders-panel__full,
+.workspace-folders-panel__confirm-text {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  word-break: break-all;
+}
+
+.workspace-folders-panel__badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+}
+
+.workspace-folders-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.workspace-folders-panel__footer {
+  margin-top: 0.75rem;
+}
+

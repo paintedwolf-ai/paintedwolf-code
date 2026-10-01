@@ -1,0 +1,10 @@
+id: review-addenda
+extends: worker-leg-default
+description: "Review checklist"
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "*"]
+  phase_ids: ["review_test", "review"]
+checklist:
+  - "Read changed files from brief"
+  - "Cite issues with paths"
+  - "Advisory — gates decide merge readiness"

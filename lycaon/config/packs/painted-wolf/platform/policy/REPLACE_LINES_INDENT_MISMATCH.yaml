@@ -1,0 +1,24 @@
+oar: '1.0'
+id: REPLACE_LINES_INDENT_MISMATCH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [replace_lines]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.line, paintedwolf.path, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "REPLACE_LINES_INDENT_MISMATCH"
+effect: block
+copy:
+  what: 'replace_lines did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix.'
+  cause: '`shift_indent` is atomic and refuses partial dedents when any nonblank line differs.'
+  why: 'Exact-prefix removal prevents mixed indentation from being silently normalized into a different block structure.'
+  fix: 'Read the range, choose its actual shared whitespace prefix, and retry the same atomic operation.'
+  instead: 'Branch on Code; read the range and use its exact shared prefix'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:replace_lines
+x-paintedwolf-message: dedent prefix does not match every selected line
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {line: 12, path: pipeline.py, profile: implement, tool: replace_lines}
+    expect_contains: ['Code: REPLACE_LINES_INDENT_MISMATCH', atomic]

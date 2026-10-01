@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-toggle-split
+command: painted-wolf/platform:layout-toggle-split
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+\\"
+  windows:
+    - "Mod+Shift+\\"
+  linux:
+    - "Mod+Shift+\\"

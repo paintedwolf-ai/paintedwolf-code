@@ -1,0 +1,12 @@
+id: painted-wolf/platform:go-files
+title: "Focus files editor"
+scope: "global"
+keywords:
+  - "editor"
+  - "focus files"
+when:
+  fact: "view_mounted"
+  is: "files"
+action:
+  kind: native_ui
+  handler: "go.files"

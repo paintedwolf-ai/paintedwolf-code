@@ -1,0 +1,38 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - tool
+    - call_ran
+title: Painted Wolf Code hit an internal error
+message: >-
+  Painted Wolf Code couldn't record the result of
+  {% if tool %}a {{ tool }} call{% else %}a tool call{% endif %}
+  and stopped this prompt.{% if call_ran %} The call had already run, so its changes may be in place.{% endif %}
+  The model and your AI provider didn't cause this.
+suggested_action: >-
+  Keep going to let the agent continue past that call, or rewind. Sending the same
+  prompt again will likely stop the same way. Details for a bug report are in
+  Settings → Advanced → Diagnostics.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: call_ran
+    vars:
+      tool: write
+      call_ran: true
+    expect_contains:
+      - couldn't record the result of a write call
+      - may be in place
+      - didn't cause this
+  - id: call_not_run
+    vars:
+      tool: read
+    expect_contains:
+      - read call
+  - id: generic
+    vars: {}
+    expect_contains:
+      - a tool call

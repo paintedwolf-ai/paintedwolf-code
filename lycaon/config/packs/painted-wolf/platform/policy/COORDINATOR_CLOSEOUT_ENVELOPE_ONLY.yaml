@@ -1,0 +1,39 @@
+oar: '1.0'
+id: COORDINATOR_CLOSEOUT_ENVELOPE_ONLY
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.batch_closed
+    - paintedwolf.batch_phase
+    - paintedwolf.closeout_surface
+    - paintedwolf.has_completion_report
+    - paintedwolf.is_host_cycle_turn
+    - paintedwolf.last_assistant
+    - paintedwolf.pending_overlay_promote
+    - paintedwolf.progress_has_open_steps
+    - paintedwolf.surface_may_finish
+    - paintedwolf.turn_tools
+    - paintedwolf.workers_idle
+# closeout_surface gates the whole rule: has_completion_report is parsed from the
+# prepared closeout body, and the host only prepares one on a surface whose
+# declared exit is `report`. Elsewhere the fact is false by construction, so the
+# rule would demand a report that can never be built.
+when: '!paintedwolf.batch_closed && paintedwolf.workers_idle && paintedwolf.last_assistant != "" && !paintedwolf.has_completion_report && paintedwolf.closeout_surface && ((paintedwolf.batch_phase == "synthesize") || paintedwolf.surface_may_finish) && !(paintedwolf.is_host_cycle_turn && size(paintedwolf.turn_tools) == 0 && ((paintedwolf.workers_idle && paintedwolf.progress_has_open_steps) || !(paintedwolf.workers_idle && !paintedwolf.pending_overlay_promote && paintedwolf.surface_may_finish)))'
+effect: block
+copy:
+  what: Final report requires a Markdown answer with an optional trailing metadata block
+  cause: The closeout has no Markdown answer, only JSON or a fence without the answer above it
+  why: The host builds the user-facing report from the Markdown answer and reads the fence as its fields
+  fix: 'Write the answer as Markdown first, then one json fence of its fields: cited_evidence, cited_urls, artifact_ids, verification, and every field a Report document section asks for. Omit the fence only when there are no fields to state'
+  instead: Keep the answer outside the trailing metadata fence; do not rerun checks or reread evidence to repair formatting
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Final report requires a Markdown answer
+x-paintedwolf-scenarios:
+  - id: default
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_CLOSEOUT_ENVELOPE_ONLY'
+      - Markdown
+      - cited_evidence

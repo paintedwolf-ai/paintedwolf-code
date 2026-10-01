@@ -1,0 +1,7 @@
+id: painted-wolf/platform:window-close
+title: "Close window"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "window.close"

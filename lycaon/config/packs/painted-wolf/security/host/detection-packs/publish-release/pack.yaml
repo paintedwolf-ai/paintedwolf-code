@@ -1,0 +1,8 @@
+id: publish-release
+label: Publish and release
+description: >-
+  Publishing and release operations that expose packages or rewrite shared
+  remote history.
+equivalents:
+  npm: [pnpm, yarn, bun]
+  gh: [glab, tea]

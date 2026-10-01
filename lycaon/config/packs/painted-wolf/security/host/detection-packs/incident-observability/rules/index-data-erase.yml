@@ -1,0 +1,35 @@
+title: Erase indexed log data
+id: 3d58877e-5763-450f-ab76-700bca4d86fa
+description: Deletes an entire index or every event stored in it.
+references:
+  - https://attack.mitre.org/
+  - https://help.splunk.com/en/splunk-enterprise/administer/manage-indexers-and-indexer-clusters/9.4/manage-indexes/remove-indexes-and-indexed-data
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # `clean` prompts and erases nothing until answered, and the indexer has to be
+  # stopped first, so the erase only happens unattended with -f. The flag is
+  # `-f` alone — Splunk documents no `--force` long form here.
+  selection_clean:
+    Image: splunk
+    CommandLine|contains: ' clean eventdata'
+    Argv: '-f'
+  # `remove index` deletes the index directories and its indexes.conf stanza
+  # with no prompt and no stopped indexer, so there is no gate to require.
+  selection_remove:
+    Image: splunk
+    CommandLine|contains: ' remove index'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: (selection_clean or selection_remove) and not filter_rehearsal and not filter_local

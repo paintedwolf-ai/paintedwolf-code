@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-new-folder
+command: painted-wolf/platform:files-new-folder
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+N"
+  windows:
+    - "Mod+Shift+N"
+  linux:
+    - "Mod+Shift+N"

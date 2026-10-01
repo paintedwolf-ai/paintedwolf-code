@@ -1,0 +1,35 @@
+oar: '1.0'
+id: ASK_USER_NO_ACTIVE_RUN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_NO_ACTIVE_RUN"
+effect: block
+copy:
+  what: The host has no active workflow run in which to store this decision.
+  cause: The required run or its durable state is unavailable.
+  why: Feedback pending state lives on the run scaffold — without a run there is nowhere to latch the ask.
+  fix: Report that the decision request could not be opened. The host or user must restore the intended workflow
+    before retrying; do not start a different workflow, answer the question yourself, or infer approval.
+  instead: Branch on Code ASK_USER_NO_ACTIVE_RUN; retain the unanswered decision while the intended workflow
+    is restored
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: no active workflow run
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ASK_USER_NO_ACTIVE_RUN'

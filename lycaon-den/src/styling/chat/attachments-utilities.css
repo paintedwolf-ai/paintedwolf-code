@@ -1,0 +1,180 @@
+/* One-line pill height; the rail budget below is derived from it. */
+.den-composer-chip-rail {
+  --den-composer-chip-height: max(22px, 1.65em);
+  --den-composer-chip-gap: 4px;
+  margin: 0 0 6px;
+  /* Attachment chips scroll after three rows. */
+  max-height: calc(
+    3 * var(--den-composer-chip-height) + 2 * var(--den-composer-chip-gap)
+  );
+}
+
+.den-composer-chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--den-composer-chip-gap);
+}
+
+/* A nested Remove button makes this a card. */
+.den-composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 18em;
+  height: var(--den-composer-chip-height);
+  padding: 0 2px 0 7px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-surface-elevated);
+  font-size: var(--text-den-caption);
+  line-height: 1;
+}
+
+/* Reject chips reserve room for detail. */
+.den-composer-chip--reject {
+  max-width: 26em;
+  border-color: color-mix(in srgb, var(--den-danger) 55%, var(--den-line));
+}
+
+.den-composer-chip--reject .den-composer-chip-detail {
+  max-width: 18em;
+}
+
+.den-composer-chip-glyph {
+  flex: 0 0 auto;
+  color: var(--den-text-muted);
+  opacity: 0.8;
+}
+
+.den-composer-chip-thumb {
+  flex: 0 0 auto;
+  width: calc(var(--den-composer-chip-height) - 6px);
+  height: calc(var(--den-composer-chip-height) - 6px);
+  border-radius: 3px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Filenames shrink after secondary details. */
+.den-composer-chip-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-text);
+}
+
+/* Secondary identity clips before the filename. */
+.den-composer-chip-detail {
+  flex: 0 10 auto;
+  min-width: 0;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  opacity: 0.85;
+}
+
+.den-composer-chip-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max(20px, 1.35em);
+  min-height: max(20px, 1.35em);
+  padding: 0;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.den-composer-chip-remove:hover {
+  background: color-mix(in srgb, var(--den-text) 12%, transparent);
+  color: var(--den-text);
+}
+
+/* Shared chip styles keep attachment clipping consistent. */
+.den-user-attach-chips {
+  margin-bottom: 6px;
+}
+
+.den-user-attach-chip {
+  max-width: 18em;
+  font-size: var(--text-den-caption);
+}
+
+/* Attachment summary and actions share one line. */
+.den-composer-attach-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 0 4px;
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+}
+
+.den-composer-attach-note-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.den-composer-attach-clear {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.den-composer-attach-clear:hover {
+  color: var(--den-text);
+}
+
+.den-chat-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--den-background) 72%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--den-accent) 55%, var(--den-line));
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.den-chat-drop-overlay__affordance {
+  margin: 0;
+  padding: 12px 18px;
+  max-width: min(28rem, 90%);
+  text-align: center;
+  font-size: var(--text-den-body);
+  line-height: 1.4;
+  color: var(--den-text);
+  background: color-mix(in srgb, var(--den-surface-elevated) 88%, transparent);
+  border-radius: 8px;
+  border: 1px solid var(--den-line);
+}
+

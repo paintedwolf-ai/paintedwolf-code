@@ -1,0 +1,9 @@
+id: painted-wolf/platform:app-menu-view-files-toggle-tree
+slot: "app_menu.view"
+command: painted-wolf/platform:files-toggle-tree
+group: "2"
+order: 4
+label: "Hide file tree"
+state:
+  fact: "files_tree_collapsed"
+state_label: "Show file tree"

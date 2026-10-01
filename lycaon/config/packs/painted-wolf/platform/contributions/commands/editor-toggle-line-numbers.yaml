@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-toggle-line-numbers
+title: "Toggle line numbers"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.toggleLineNumbers"

@@ -1,0 +1,35 @@
+package sourcecatalog
+
+import (
+	"sync/atomic"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+func TestNavigationSubscribersFollowCommittedRootPublications(t *testing.T) {
+	catalog, root := indexFixture(t)
+	var matching, unrelated atomic.Int32
+	stop := catalog.SubscribeNavigation(root, func() { matching.Add(1) })
+	defer stop()
+	other := catalog.SubscribeNavigation(Root{ID: "other", Path: t.TempDir()}, func() { unrelated.Add(1) })
+	defer other()
+	writeIndexFile(t, root.Path, "file.txt", "source")
+	_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	testutil.FailErr(t, "observe subscribed root", err)
+	if matching.Load() == 0 || unrelated.Load() != 0 {
+		t.Fatalf("matching=%d unrelated=%d", matching.Load(), unrelated.Load())
+	}
+	before := matching.Load()
+	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	testutil.FailErr(t, "reuse fresh observation", err)
+	if matching.Load() != before {
+		t.Fatal("cache read emitted a false publication")
+	}
+	stop()
+	catalog.navigationChanged(root)
+	if matching.Load() != before {
+		t.Fatal("released subscriber received a publication")
+	}
+}

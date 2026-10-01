@@ -1,0 +1,17 @@
+description: Record repo-relative path reservations on the parent session plane (informational; merge resolves overlaps).
+schema:
+  type: object
+  properties:
+    session_id:
+      description: "Parent session id (defaults to caller session)."
+      type: string
+    agent:
+      description: "Worker job id or agent id (defaults to caller binding)."
+      type: string
+    paths:
+      description: "Repo-relative paths to reserve on the handoff plane."
+      type: array
+      items:
+        type: string
+  required: [paths]
+  additionalProperties: false

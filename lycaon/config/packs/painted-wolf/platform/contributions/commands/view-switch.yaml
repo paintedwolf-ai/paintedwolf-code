@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-switch
+title: "Switch view"
+scope: "global"
+keywords:
+  - "peer"
+  - "views"
+  - "focus view"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.switch"

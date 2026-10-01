@@ -1,0 +1,46 @@
+language: xml
+comment:
+- <!--
+- -->
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: spring-http-deserialization-vulnerable
+  file: sample.xml
+  source: '<beans><bean class="org.springframework.remoting.httpinvoker.HttpInvokerServiceExporter"/></beans>
+
+    '
+  want:
+  - lycaon.xml.spring-http-deserialization
+  covers: []
+- name: spring-http-deserialization-safe
+  file: sample.xml
+  source: '<beans><bean class="example.JsonService"/></beans>
+
+    '
+  want: []
+  covers:
+  - lycaon.xml.spring-http-deserialization
+- name: android-debuggable-vulnerable
+  file: src/main/AndroidManifest.xml
+  source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:debuggable="true"/></manifest>
+
+    '
+  want:
+  - lycaon.xml.android-debuggable
+  covers: []
+- name: android-debuggable-safe
+  file: src/main/AndroidManifest.xml
+  source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:debuggable="false"/></manifest>
+
+    '
+  want: []
+  covers:
+  - lycaon.xml.android-debuggable
+- name: precision-android-debug-build
+  file: src/debug/AndroidManifest.xml
+  source: '<manifest><application android:debuggable="true"></application></manifest>
+
+    '
+  want: []
+  covers:
+  - lycaon.xml.android-debuggable

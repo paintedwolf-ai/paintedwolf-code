@@ -1,0 +1,232 @@
+language: html
+comment:
+- <!--
+- -->
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: script-data-flow
+  file: sample.html
+  source: |
+    <script>const code = location.hash; eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: script-safe-data
+  file: sample.html
+  source: |
+    <script>const data = location.hash; JSON.parse(data);</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-dom-xss
+  file: sample.html
+  source: |
+    <script>const html = location.search; document.body.innerHTML = html;</script>
+  want:
+  - lycaon.javascript.dom-xss
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: script-text-content
+  file: sample.html
+  source: |
+    <script>document.body.textContent = location.search;</script>
+  want: []
+  covers:
+  - lycaon.javascript.dom-xss
+  coverage:
+  - lycaon.coverage.html
+- name: iframe-sandbox-escape-context-only
+  file: sample.html
+  source: |
+    <iframe src="/content" sandbox="allow-scripts allow-same-origin"></iframe>
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: iframe-sandbox-escape-safe
+  file: sample.html
+  source: |
+    <iframe src="/content" sandbox="allow-scripts"></iframe>
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: script-data-type
+  file: sample.html
+  source: |
+    <script type="application/json">{"example":"eval(location.hash)"}</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: precision-cross-origin-sandbox
+  file: sample.html
+  source: |
+    <iframe src="https://other.example" sandbox="allow-scripts allow-same-origin"></iframe>
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: script-type-parameters-are-inert
+  file: sample.html
+  source: |
+    <script type="text/javascript; charset=utf-8">eval(location.hash)</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-module-parameters-are-inert
+  file: sample.html
+  source: |
+    <script type="module; charset=utf-8">eval(location.hash)</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-whitespace-type-is-inert
+  file: sample.html
+  source: |
+    <script type=" ">eval(location.hash)</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-duplicate-first-type-wins
+  file: sample.html
+  source: |
+    <script type="application/json" type="module">eval(location.hash)</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-legacy-language-is-inert
+  file: sample.html
+  source: |
+    <script language="vbscript">eval(location.hash)</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-language-attribute-is-human-language
+  file: sample.html
+  source: |
+    <script lang="en">eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: script-javascript-mime-alias
+  file: sample.html
+  source: |
+    <script type="application/x-javascript">eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: inert-template-script
+  file: sample.html
+  source: |
+    <template><script>eval(location.hash)</script></template>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: inert-noscript-script
+  file: sample.html
+  source: |
+    <noscript><script>eval(location.hash)</script></noscript>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: noscript-parser-boundary
+  file: sample.html
+  source: |
+    <noscript><script>inert</noscript><script>eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: slash-does-not-close-html-script
+  file: sample.html
+  source: |
+    <script/>eval(location.hash)</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: classic-script-shared-binding
+  file: sample.html
+  source: |
+    <script>let code = location.hash;</script>
+    <div>Unrelated markup</div>
+    <script>eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: module-bindings-are-separate
+  file: sample.html
+  source: |
+    <script type="module">const code = location.hash;</script>
+    <script type="module">const code = 'fixed'; eval(code);</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: classic-binding-overwritten
+  file: sample.html
+  source: |
+    <script>let code = location.hash;</script>
+    <script>code = 'fixed'; eval(code);</script>
+  want: []
+  covers:
+  - lycaon.javascript.code-injection
+  coverage:
+  - lycaon.coverage.html
+- name: classic-order-survives-table-recovery
+  file: sample.html
+  source: |
+    <table><script>let code = location.hash;</script><div><script>eval(code);</script></div></table>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+- name: mapped-utf8-evidence
+  file: sample.html
+  source: |
+    <p>狼</p>
+    <script>const label = "狼"; const code = location.hash;</script>
+    <script>eval(code);</script>
+  want:
+  - lycaon.javascript.code-injection
+  covers: []
+  coverage:
+  - lycaon.coverage.html
+  evidence:
+  - rule: lycaon.javascript.code-injection
+    primary: {line: 3, column: 14, end_line: 3, end_column: 18}
+    source: {line: 2, column: 43, end_line: 2, end_column: 56}
+    sink: {line: 3, column: 14, end_line: 3, end_column: 18}

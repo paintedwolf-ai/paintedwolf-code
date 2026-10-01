@@ -1,0 +1,22 @@
+# Copy to ~/.config/paintedwolf/model-policy.yaml when using Fireworks.
+# See docs/dev-fireworks.md
+#
+# Requires FIREWORKS_API_KEY and unset LYCAON_LLM_MOCK for real completions.
+
+coordinator:
+  provider_id: fireworks
+  model: accounts/fireworks/models/llama-v3p1-8b-instruct
+
+lite:
+  provider_id: fireworks
+  model: accounts/fireworks/models/llama-v3p1-8b-instruct
+
+agent_pool:
+  selection: round_robin
+  models:
+    - provider_id: fireworks
+      model: accounts/fireworks/models/llama-v3p1-8b-instruct
+    - provider_id: fireworks
+      model: accounts/fireworks/models/qwen2p5-coder-32b-instruct
+    - provider_id: fireworks
+      model: accounts/fireworks/models/deepseek-v3p1

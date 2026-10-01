@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-go-to-symbol
+command: painted-wolf/platform:editor-go-to-symbol
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+O"
+  windows:
+    - "Mod+Shift+O"
+  linux:
+    - "Mod+Shift+O"

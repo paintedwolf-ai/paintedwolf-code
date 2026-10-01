@@ -1,0 +1,17 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - field
+    - kind
+    - offset
+    - reason
+title: Search query didn't parse
+message: "{{ reason }}"
+suggested_action: Adjust the query and try again.
+scenarios:
+  - id: default
+    vars:
+      reason: empty value for field kind at offset 6 (field kind)
+    expect_contains:
+      - empty value

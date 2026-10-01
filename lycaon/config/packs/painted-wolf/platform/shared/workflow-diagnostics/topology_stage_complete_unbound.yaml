@@ -1,0 +1,5 @@
+code: topology_stage_complete_unbound
+message: |
+  Phase {{phase}} uses topology_stage_complete without bind_topology_stage.
+replacement: |
+  Set bind_topology_stage to a topology stage name.

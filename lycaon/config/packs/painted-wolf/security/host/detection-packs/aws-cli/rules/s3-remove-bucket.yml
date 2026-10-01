@@ -1,0 +1,35 @@
+title: Delete an S3 bucket
+id: dc04de3b-3985-4f9f-9f91-9e11a3db1367
+description: Removes an entire S3 bucket and its contents.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  selection_rb:
+    CommandLine|contains|all:
+      - ' s3 '
+      - ' rb '
+  # --dryrun is the s3 high-level form; --dry-run the API form.
+  filter_rehearsal:
+    Argv|re: '^(--dryrun|--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image or selection_structured) and selection_rb and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

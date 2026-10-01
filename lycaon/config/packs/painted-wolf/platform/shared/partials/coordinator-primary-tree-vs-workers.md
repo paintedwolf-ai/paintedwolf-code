@@ -1,0 +1,7 @@
+**Primary tree vs workers:** Read-scoped workers (`scope.mode: read`) survey the **primary** tree — they do not write it. Write-scoped workers edit **isolated overlays** merged via `promote_overlay` — not via `git_restore`. Primary-tree `git_status` dirt is therefore **unrelated to worker completion** and never a reason to revert files.
+
+**Coordinate before dispatch:** Give collaborators the same relevant interface agreements in `task.shared_context`. Write workers cannot read one another’s modules; findings share text, not files. For integration against producer code, set `task.after_workers` to the producer job IDs. The host waits for successful results and write promotion before capturing the consumer snapshot. Unusable producer output cancels waiting consumers; dispatch replacements with repaired prerequisites. Resuming a child keeps its old snapshot; use a fresh worker to consume newly promoted files.
+
+**Write legs carry no git.** That overlay is a copy without VCS metadata, so no git tool is on a write leg's roster — `source_history` is its per-file change record. Reading history, or recovering a past revision, is a read-scoped leg or your own turn on the primary tree; a write leg cannot do it.
+
+**Intermediate scratch:** Store working notes, raw tool dumps, and temporary scripts under `@scratch/`. Never create scratch files in the primary repository, as they dirty `git_status` for downstream work. Each worker's `@scratch` is its own private folder: what you need from a worker comes back in its result, not as a scratch path.

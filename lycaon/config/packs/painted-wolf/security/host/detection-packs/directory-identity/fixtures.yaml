@@ -1,0 +1,43 @@
+fixtures:
+- rule: identity-delete
+  positive:
+  - powershell -Command "Remove-ADUser -Identity jdoe"
+  - pwsh -Command "Remove-MgUser -UserId jdoe@example.test"
+  - ldapdelete -x -D cn=admin,dc=example,dc=test "uid=jdoe,ou=people,dc=example,dc=test"
+  - gam delete user jdoe@example.test
+  - powershell.exe -Command "Remove-ADGroup -Identity 'Legacy Group' -Confirm:$false"
+  - pwsh.exe -Command "Remove-MgGroup -GroupId x"
+  - gam delete group engineering@example.test
+  - powershell -Command "remove-aduser -identity jdoe"
+  - az ad group delete --group contractors
+  - az ad user delete --id jdoe@example.test
+  - az ad sp delete --id 00000000-0000-0000-0000-000000000000
+  negative:
+  - powershell -Command "Get-ADUser -Identity jdoe"
+  - gam info user jdoe@example.test
+  - ldapsearch -x -b dc=example,dc=test "uid=jdoe"
+  - gam delete user jdoe@example.test --help
+  - powershell -Command "Remove-ADUser -Identity jdoe -WhatIf"
+  - az ad group list
+  - az ad user show --id jdoe@example.test
+  - az ad group delete --group contractors --help
+- rule: privileged-role-grant
+  positive:
+  - powershell -Command "Add-MsolRoleMember -RoleName 'Company Administrator' -RoleMemberEmailAddress jdoe@example.test"
+  - pwsh -Command "New-MgRoleManagementDirectoryRoleAssignment -PrincipalId $id -RoleDefinitionId $roleId"
+  - powershell.exe -Command "Add-MsolRoleMember -RoleName 'Company Administrator' -RoleMemberEmailAddress jdoe@example.test"
+  negative:
+  - powershell -Command "Get-MsolRole"
+  - powershell -Command "Add-ADGroupMember -Identity 'Marketing Team' -Members jdoe"
+  - pwsh -Command "New-MgRoleManagementDirectoryRoleAssignment -PrincipalId $id -RoleDefinitionId $roleId -WhatIf"
+- rule: account-disable
+  positive:
+  - powershell -Command "Disable-ADAccount -Identity jdoe"
+  - gam update user jdoe@example.test suspended on
+  - powershell.exe -Command "Disable-ADAccount -Identity jdoe"
+  - powershell -Command "disable-adaccount -identity jdoe"
+  negative:
+  - powershell -Command "Enable-ADAccount -Identity jdoe"
+  - gam update user jdoe@example.test suspended off
+  - gam update user jdoe@example.test suspended on --help
+  - powershell -Command "Disable-ADAccount -Identity jdoe -WhatIf"

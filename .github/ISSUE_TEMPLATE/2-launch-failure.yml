@@ -1,0 +1,90 @@
+name: App won't start
+description: The app fails to launch, crashes on startup, or will not install.
+labels: ["bug", "area:install"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form exists because the usual one cannot be filled: if the app will not start, you
+        cannot produce System information or a diagnostics bundle. So it asks for what you *can*
+        get without a running app. Filing one does not entitle you to a reply or a fix.
+
+        If the app **does** launch and the problem is elsewhere, use the *Bug report* form instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and this is not already reported.
+          required: true
+        - label: Nothing I am pasting below contains secrets or credentials. This issue will be public forever.
+          required: true
+
+  - type: textarea
+    id: what_happens
+    attributes:
+      label: What happens
+      description: >-
+        What you did and what the machine did. Include the exact text of any error dialog —
+        a screenshot of one is fine too.
+    validations:
+      required: true
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac. Give the full version, e.g. 15.3.1.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Apple Silicon or Intel?
+      description: >-
+        Apple menu → About This Mac. If the Chip line says Intel, that is the answer — the
+        published build ships an Apple Silicon slice only.
+      options:
+        - ""
+        - "Apple Silicon (M-series)"
+        - "Intel"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: How did you install it?
+      options:
+        - ""
+        - "Downloaded the DMG"
+        - "Homebrew cask"
+        - "Built from source"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Version you tried to install
+      description: The DMG filename, release tag, or commit you built from.
+    validations:
+      required: true
+
+  - type: textarea
+    id: crash_log
+    attributes:
+      label: Crash report
+      description: >-
+        If macOS produced a crash report, open **Console.app → Crash Reports**, find the entry,
+        and paste the first ~40 lines. Read it first — paths in a crash report can identify your
+        machine and your projects.
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

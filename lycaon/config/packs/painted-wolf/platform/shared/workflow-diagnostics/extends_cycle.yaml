@@ -1,0 +1,5 @@
+code: extends_cycle
+message: |
+  extends cycle detected.
+replacement: |
+  Remove the cycle in the extends chain.

@@ -1,0 +1,226 @@
+oar: '1.0'
+id: COMMAND_NOT_ARGV
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+  - terminal_open
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.shell_metacharacters
+  - paintedwolf.use_pipeline_array
+  - paintedwolf.use_stdin_param
+  - paintedwolf.use_background_param
+  - paintedwolf.env_assignment
+  - paintedwolf.use_substitution_result
+  - paintedwolf.scratch_var
+  - paintedwolf.sequence_unsupported
+  - paintedwolf.reissue_via_command
+  - paintedwolf.command_not_argv
+  - paintedwolf.terminal_capture
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "COMMAND_NOT_ARGV"
+effect: block
+copy:
+  what: '{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command
+    }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}'
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: '{% if paintedwolf.terminal_capture %}
+
+    `command` with `terminal_capture` captures one program in one terminal screen. Sequences and pipelines run multiple
+    programs; shell substitutions are not expanded.
+
+    {% else %}{% if paintedwolf.reissue_via_command %}
+
+    Structured composition, not a shell — and this surface holds exactly one process, so it has no parameter to
+    wire a `|` into and nowhere to run the later commands of a sequence. `$(...)`, `$VAR`, and backticks are rejected
+    because nothing expands them: their value is not knowable from the line, so the command that ran would not be
+    the command that was approved. Inside quotes all of them are literal argument text.
+
+    {% else %}
+
+    Structured composition, not a shell. `&&`, `||`, and `;` sequence whole commands and are accepted: the host
+    splits them itself and runs each side as its own process, so the line still states exactly what executes. `$(...)`,
+    `$VAR`, and backticks are rejected because nothing expands them — their value is not knowable from the line,
+    so the command that ran would not be the command that was approved. `|` pipelines and redirections (`<`, `>`,
+    `>>`, `2>`, `&>`, `2>&1`) are wired by the host; here-documents are not. Inside quotes all of them are literal
+    argument text.
+
+    {% endif %}{% endif %}'
+  fix: '{% if paintedwolf.terminal_capture %}
+
+    Keep `terminal_capture` and send one argv line. The result already includes `exit_code`; do not append `echo
+    $?`. Put environment assignments in `env`. For composed execution, omit `terminal_capture` and use the sequence
+    or `pipeline` form of `command`, then capture the final program separately.
+
+    {% else %}{% if paintedwolf.reissue_via_command %}
+
+    This surface takes one argv line and has no composition parameters — no `pipeline`, no `background`, and no
+    `&&`/`||`/`;` sequence. Send the single program you need here, or run the composed form under `command`, which
+    carries those parameters.
+
+    {% else %}{% if paintedwolf.env_assignment %}
+
+    Put each environment variable in the `env` object and start `command` with the executable.
+
+    {% else %}{% if paintedwolf.use_pipeline_array %}
+
+    Use the `pipeline` array (e.g. `pipeline: ["git log --oneline", "head -20"]`) or write `|` inside `command`
+    with one argv vector per element.
+
+    {% else %}{% if paintedwolf.use_stdin_param %}
+
+    Pass the here-document body as `stdin` (literal), or name a file with `< path` or `stdin_from`.
+
+    {% else %}{% if paintedwolf.use_background_param %}
+
+    `&` detaches a command. Pass `background: true` to run one command as a concurrent job and read its handle;
+    use `&&` if you meant "run the next one after this succeeds".
+
+    {% else %}{% if paintedwolf.use_substitution_result %}
+
+    {% if paintedwolf.scratch_var %}Write the scratch path as `@scratch/<path>`: the host resolves it in arguments (`cat @scratch/notes.txt`), `cwd`, and stream redirects. Inside a script, read `$SCRATCH_DIR` from the environment.
+    {% else %}Nothing expands `$(...)`, `$VAR`, or backticks. Run the inner command as its own call, read the value from its
+    result, then pass that value as a literal argument. For an environment variable, pass `env: {...}` on this call.{% endif %}
+
+    {% else %}{% if paintedwolf.shell_metacharacters %}
+
+    Quote arguments that need shell characters inside a single stage (e.g. `python3 -c "import x; print(x.Y)"`).
+    `&&`, `||`, `;`, and `|` are accepted unquoted across stages.
+
+    {% else %}
+
+    Retry with one argv vector per stage (e.g. `go test ./...`, `pytest .`, `cargo test`), a `&&` sequence, or a
+    `pipeline` array.
+
+    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{%
+    else %}{% if not paintedwolf.reissue_via_command %}`&&`/`||`/`;`/`|` sequence/pipe commands,
+    `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form
+    under `command`{% endif %}{% endif %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_surface
+x-paintedwolf-message: command rejected
+x-paintedwolf-scenarios:
+- id: capture_sequence
+  tool: command
+  vars:
+    command: tool --check; echo "$?"
+    reason: this surface runs one program
+    sequence_unsupported: true
+    reissue_via_command: true
+    terminal_capture: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - omit `terminal_capture`
+  - read `exit_code` from its result
+- id: capture_pipe
+  tool: command
+  vars:
+    command: tool --check | tee output.txt
+    reason: command contains unquoted shell metacharacters
+    shell_metacharacters: true
+    use_pipeline_array: true
+    terminal_capture: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - omit `terminal_capture`
+  - capture the final program separately
+- id: substitution
+  vars:
+    command: git checkout $(git rev-parse HEAD)
+    profile_id: implement
+    reason: 'command contains unquoted shell metacharacters: `$`'
+    shell_metacharacters: true
+    use_substitution_result: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - Nothing expands
+  - literal argument
+- id: scratch_variable
+  vars:
+    command: cat $SCRATCH_DIR/notes.txt
+    profile_id: implement
+    reason: 'command contains unquoted shell metacharacters: `$`'
+    shell_metacharacters: true
+    use_substitution_result: true
+    scratch_var: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - 'cat @scratch/notes.txt'
+  - SCRATCH_DIR
+- id: background_operator
+  vars:
+    command: python3 -m http.server 8000 &
+    profile_id: implement
+    reason: '`&` backgrounds a command rather than sequencing it: `&`'
+    use_background_param: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - 'background: true'
+- id: environment_assignment
+  vars:
+    command: TOKEN=value
+    profile_id: implement
+    reason: environment assignments belong in env
+    env_assignment: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - '`env` object'
+  - start `command` with the executable
+- id: shell_metacharacters
+  vars:
+    command: cat <<'EOF' > out.txt
+    profile_id: implement
+    reason: 'command contains unquoted shell metacharacters: `<`'
+    shell_metacharacters: true
+    use_stdin_param: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - stdin_from
+- id: pipeline_pipe
+  vars:
+    command: git log --oneline | head -20
+    profile_id: implement
+    reason: command contains shell metacharacters
+    shell_metacharacters: true
+    use_pipeline_array: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - pipeline
+  - git log --oneline
+- id: terminal_pipe
+  tool: terminal_open
+  vars:
+    command: npm run dev | tee dev.log
+    profile_id: implement
+    reason: 'command contains unquoted shell metacharacters: `|`'
+    shell_metacharacters: true
+    reissue_via_command: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - run the composed form under `command`
+- id: terminal_sequence
+  tool: terminal_open
+  vars:
+    command: go build ./... && ./server
+    profile_id: implement
+    reason: this surface runs one program; `&&`, `||`, and `;` run several
+    sequence_unsupported: true
+    reissue_via_command: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_NOT_ARGV'
+  - holds exactly one process

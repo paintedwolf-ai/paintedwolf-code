@@ -1,0 +1,6 @@
+# scope limits where the value may be set.
+id: example/editor-surface:offer-summarize
+type: boolean
+description: Offer the Summarize selection command in the editor.
+default: true
+scope: [device, project]

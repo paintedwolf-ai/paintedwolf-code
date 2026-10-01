@@ -1,0 +1,26 @@
+{
+  "oar": "1.0",
+  "id": "COORDINATOR_READ_OUTSIDE_SCOPE",
+  "namespace": "lycaon",
+  "kind": "policy",
+  "anchor": "tool.pre_invoke",
+  "selector": {
+    "tool": ["read", "grep", "shallow_glob"]
+  },
+  "requires": {
+    "profiles": ["filesystem", "tool"]
+  },
+  "when": "path_outside_scope(\"read\")",
+  "effect": "block",
+  "enforcement": "enforce",
+  "mandatory": false,
+  "on_error": "fail_closed",
+  "copy": {
+    "title": "Coordinator read outside scope",
+    "what": "Coordinator tried to read a path outside the active scope.",
+    "cause": "Path args resolved outside allowed roots.",
+    "fix": "Read inside the declared scope, or widen the scope deliberately.",
+    "instead": "Narrow the path, or delegate the read to a worker whose scope covers it."
+  },
+  "x-paintedwolf-emit": "guard:coordinator"
+}

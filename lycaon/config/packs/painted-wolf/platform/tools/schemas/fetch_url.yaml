@@ -1,0 +1,48 @@
+tags: [web, network, research]
+description: >-
+  Read a web page, documentation site, or other online resource. mode=text
+  (default) extracts readable page text (HTML→markdown); large bodies return a
+  head + symbol map — page with offset+limit (cached). mode=raw returns the
+  verbatim resource: textual MIME (HTML/CSS/JS/JSON/SVG/…) as text with the same
+  paging; image MIME types without dest automatically ingest into the session
+  visual store and emit visual captures with OCR text for direct perception;
+  non-image binary assets require dest and write into the project (JSON receipt
+  only — never base64 in context).
+schema:
+  type: object
+  properties:
+    url:
+      type: string
+      description: HTTP or HTTPS URL
+    mode:
+      type: string
+      enum: [text, raw]
+      description: text = research extract (default); raw = verbatim resource / asset ingest
+    dest:
+      type: string
+      description: Destination file location within workspace to save downloaded payload.
+    offset:
+      type: integer
+      minimum: 1
+      description: 1-based start line; defaults to the first line when only limit is given
+    limit:
+      type: integer
+      minimum: 1
+      description: Max lines from offset; omit both for head + map
+    parallel:
+      type: boolean
+      default: false
+      description: >-
+        Run concurrently with sibling fetch_url calls in this assistant
+        response. Set true only for already-known independent URLs without dest
+        (max 4). Destination-writing fetches always remain serial. Omit to
+        preserve serial execution.
+    unredact:
+      type: string
+      maxLength: 64
+      description: >-
+        A redaction receipt token from a prior result of this call. Citing it
+        asks the user to send the real value; the host decides. Never invent
+        one.
+  required: [url]
+  additionalProperties: false

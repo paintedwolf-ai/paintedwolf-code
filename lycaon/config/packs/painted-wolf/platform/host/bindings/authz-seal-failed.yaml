@@ -1,0 +1,11 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': authz.seal_failed
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-authz-seal-failed
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - run-start authorization context could not be recorded; the turn did not start

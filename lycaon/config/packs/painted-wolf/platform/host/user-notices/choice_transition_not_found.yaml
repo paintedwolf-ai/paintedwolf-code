@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: That choice is no longer offered
+message: >-
+  The workflow has moved past the step this option belonged to.
+suggested_action: >-
+  Read the current card and choose from what it offers now.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - moved past
+      - current card

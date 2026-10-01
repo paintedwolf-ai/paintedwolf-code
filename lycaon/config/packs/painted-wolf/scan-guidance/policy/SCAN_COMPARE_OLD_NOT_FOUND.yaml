@@ -1,0 +1,39 @@
+oar: '1.0'
+id: SCAN_COMPARE_OLD_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_compare
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.scan_baseline_missing
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_OLD_NOT_FOUND"
+effect: block
+copy:
+  what: '{% if paintedwolf.scan_baseline_missing %}No compatible previous completed baseline exists for this
+    new scan.{% else %}scan_compare could not resolve the requested baseline in this project.{% endif %}'
+  cause: '{% if paintedwolf.scan_baseline_missing %}Automatic baseline selection found no compatible recorded
+    history.{% else %}The requested baseline record was not found; this is distinct from a record that exists
+    but is incomplete.{% endif %}'
+  why: Compare diffs persisted ingest findings — the baseline row must exist and be complete.
+  fix: Preserve bound comparison IDs and report a missing baseline. For unbound work, select a recorded compatible
+    intended baseline if one exists; repeating an omitted old_scan_id cannot create missing history. A new
+    assessment now is not evidence of the pre-change state.
+  instead: Keep bound comparison ids; only unbound comparisons may choose a different baseline
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: Baseline scan id not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: scan_compare
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_COMPARE_OLD_NOT_FOUND'

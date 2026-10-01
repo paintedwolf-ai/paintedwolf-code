@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-collapse-all
+slot: "app_menu.file"
+command: painted-wolf/platform:files-collapse-all
+group: "3"
+order: 10
+label: "Collapse all folders in tree"

@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Artifact belongs to another chat
+message: >-
+  That artifact belongs to a different chat.
+suggested_action: >-
+  Open the chat that produced it, or re-run it here.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - different chat
+      - Open the chat

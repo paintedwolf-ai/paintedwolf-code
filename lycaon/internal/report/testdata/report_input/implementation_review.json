@@ -1,0 +1,61 @@
+{
+  "title": "Rate limiter rewrite",
+  "headline": "The token bucket now refills from a monotonic clock, and the distributed path is unchanged.",
+  "run_id": "0c94f7b1-6d2a-4e58-9f13-8ab5c27e6d40",
+  "project": "acme/app",
+  "started_at": "2026-08-14T08:40:02Z",
+  "completed_at": "2026-08-14T09:22:31Z",
+  "head_sha": "9f81c0aa4b2d3e5f60718293a4b5c6d7e8f90123",
+  "workforce": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5"
+  },
+  "synthesis": "## What changed\n\nThe token bucket now refills from a monotonic clock, so a wall-clock adjustment can no longer hand a caller a full bucket. The burst ceiling moved into configuration; `limiter.New` reads it once at construction rather than per request.\n\n## What is not covered\n\nThe distributed path still shares one Redis key per tenant. Nothing here changes that, and the contention it causes under fan-out is unmeasured.",
+  "limits": [
+    "The distributed path still shares one Redis key per tenant; its contention under fan-out is unmeasured."
+  ],
+  "sources": [
+    {
+      "url": "https://redis.io/docs/latest/develop/use/patterns/distributed-locks/",
+      "title": "Distributed locks with Redis",
+      "cited_by": [
+        "report"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "handle": "ev_7f21c9",
+      "kind": "read",
+      "path": "internal/limiter/bucket.go",
+      "line": 42,
+      "excerpt": "42 now := time.Now() // wall clock: a backwards step refills the bucket",
+      "trust_tier": "trusted",
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "handle": "ev_7f21ca",
+      "kind": "read",
+      "path": "internal/limiter/config.go",
+      "line": 17,
+      "excerpt": "17 BurstCeiling int `yaml:\"burst_ceiling\"`",
+      "trust_tier": "trusted",
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "handle": "ev_7f21cb",
+      "kind": "grep",
+      "path": "internal/limiter/distributed.go",
+      "excerpt": "distributed.go:88: key := fmt.Sprintf(\"ratelimit:%s\", tenantID)",
+      "trust_tier": "trusted",
+      "matches": 3,
+      "match_files": 1
+    }
+  ],
+  "evidence_total": 12,
+  "summary": "The rate limiter now refills from a monotonic clock, so a wall-clock adjustment can no longer hand a caller a full bucket. The distributed path is unchanged and its contention under fan-out remains unmeasured."
+}

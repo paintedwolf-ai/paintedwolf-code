@@ -1,0 +1,18 @@
+oar: "1.0"
+id: REDACT_PII
+namespace: example.security
+kind: detector
+anchor: model.output
+requires:
+  profiles: [pii]
+detector:
+  ref: detector://fixture
+when: 'size(pii_entities) > 0'
+effect: transform
+transform:
+  action: redact
+  target: pii_entities
+  replacement: "[redacted]"
+status: stable
+copy:
+  what: The response contained personal data.

@@ -1,0 +1,62 @@
+{
+  "id": "copy-interpolates-facts",
+  "title": "After the decision, copy bindings substitute declared facts; list<string> joins with comma-space; whitespace in tags is insignificant",
+  "covers": ["OAR-COPY-1", "OAR-COPY-4", "OAR-COPY-7", "OAR-COPY-8"],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ARGS_INVALID",
+      "effect": "block",
+      "requires": {
+        "profiles": ["tool"]
+      },
+      "when": "size(arg_validation_errors) > 0",
+      "copy": {
+        "what": "{{tool}} rejected",
+        "fix": "Use {{ arg_validation_field }}: {{ arg_validation_reason }}"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": ["tool"],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "command",
+      "arg_validation_errors": ["capability_request_invalid"],
+      "arg_validation_reason": "unsupported field",
+      "arg_validation_field": "network"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "ARGS_INVALID",
+    "copy": {
+      "what": "command rejected",
+      "fix": "Use network: unsupported field"
+    }
+  }
+}

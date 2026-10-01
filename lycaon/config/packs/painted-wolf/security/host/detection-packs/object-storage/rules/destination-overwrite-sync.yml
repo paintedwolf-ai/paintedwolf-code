@@ -1,0 +1,39 @@
+title: Overwrite a destination to match a source
+id: d21113a8-7cfb-4da0-9038-8567bb42a995
+description: Makes a destination identical to a source, deleting whatever the source does not have.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # `copy` only adds. `sync` and `move` delete at the destination or the source.
+  selection_rclone:
+    Image: rclone
+    CommandLine|re: '(?i)\s(sync|move|moveto|bisync)\s'
+  selection_mc_mirror:
+    Image: mc
+    CommandLine|contains|all:
+      - ' mirror '
+      - ' --remove'
+  selection_s5cmd_sync:
+    Image: s5cmd
+    CommandLine|contains|all:
+      - ' sync '
+      - ' --delete'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--dryrun|--help|-h)$'
+  filter_short_dry_run:
+    Image: rclone
+    Argv: '-n'
+  filter_local:
+    EffectReach: local
+  condition: (selection_rclone or selection_mc_mirror or selection_s5cmd_sync) and not filter_rehearsal and not filter_short_dry_run and not filter_local

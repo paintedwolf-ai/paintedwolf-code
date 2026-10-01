@@ -1,0 +1,5 @@
+[host:worker-iterations-low]
+
+**{{ remaining }} tool rounds remain** of this leg's **{{ max_tool_loops }}**; the final round offers only `complete_leg`.{% if request_open %} Your budget request is with the coordinator. Keep working; the host holds your final round for its answer.{% elif at_host_max %} This ceiling is the host maximum and cannot rise.{% else %} Decide now whether the goal fits in the rounds that remain. If it does not, call `request_budget` in this round with the rounds you need and the concrete work they cover: the coordinator answers between your rounds, so asking now lets the answer arrive before you run short. Keep working while it decides; if it declines or does not answer, finish with an honest partial report.{% endif %}
+
+Complete the edit already in progress and run the verification you would normally run. Keep each write small (chunk large files: `write` the shell, then `write` with `append: true` per chunk). Report unfinished scope and an honest leg status — never rush final calls or substitute stubs, placeholders, or skipped tests for finished work.

@@ -1,0 +1,79 @@
+{
+  "id": "conf-order-suppressor-precedes-only-the-rules-it-names",
+  "title": "A suppressor precedes only the rules it names; every other rule keeps its kind-then-identifier place",
+  "covers": [
+    "OAR-CONF-10",
+    "OAR-EVAL-18",
+    "OAR-EVAL-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "A_TARGET",
+      "effect": "block"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "invariant",
+      "anchor": "tool.pre_invoke",
+      "id": "B_SUPPRESSOR",
+      "effect": "warn",
+      "overrides": [
+        "A_TARGET"
+      ]
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "C_FLOW_EXCLUDED",
+      "effect": "nudge",
+      "flow": [
+        "deploy"
+      ],
+      "when": "1 / 0 == 0"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 8,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "recent_activity": [
+      "read"
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "B_SUPPRESSOR",
+    "applied": [
+      "oar.test/C_FLOW_EXCLUDED:passed",
+      "oar.test/B_SUPPRESSOR:fired",
+      "oar.test/A_TARGET:suppressed"
+    ]
+  }
+}

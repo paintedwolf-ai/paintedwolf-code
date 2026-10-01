@@ -1,0 +1,15 @@
+surfaces: [http]
+# Deleting would leave a live run pointing at a document it cannot re-read or be
+# re-authorized against.
+notification: { tier: non_catastrophic, scope: project }
+title: Blueprint is in use
+message: >-
+  A workflow run is still using this blueprint, so it cannot be deleted yet.
+  Deleting it now would leave that run pointing at a document that no
+  longer exists.
+suggested_action: Finish or stop the run that is using this blueprint, then delete it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - still using this blueprint

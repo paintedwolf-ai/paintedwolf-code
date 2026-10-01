@@ -1,0 +1,13 @@
+id: decision-research-fanout
+pattern: fan_out
+iteration_cap: 8
+task: Parallel read-only codebase research for a design decision
+criterion: Prefer the option best supported by codebase evidence with the smallest long-term surface area and integration risk
+fan_out:
+  profile: path-explorer
+  subtasks:
+    - "Map how the affected area is implemented today and where it is touched"
+    - "Identify constraints, dependencies, and integration points the decision must respect"
+    - "Gather precedents and existing patterns the options should follow or break from"
+  max_workers: 5
+  aggregation: merge

@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Message text is too large
+message: The message contains more inline text than one turn can safely admit.
+suggested_action: Attach the text as a file and send the message again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - inline text
+      - Attach

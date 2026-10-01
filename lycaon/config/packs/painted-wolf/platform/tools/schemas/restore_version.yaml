@@ -1,0 +1,17 @@
+tags: [edit, filesystem]
+description: "Restore a file to a previously retained source version as a forward mutation in the source ledger. Use source_history to inspect available versions or diffs."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      minLength: 1
+      description: Repo-relative file path to restore.
+    version_id:
+      type: string
+      description: Retained version ID to restore. If omitted, defaults to the immediate predecessor version.
+    base_version_id:
+      type: string
+      description: Optional compare-and-swap guard. If provided, the restore is refused if the current file does not match this version ID.
+  required: [path]
+  additionalProperties: false

@@ -1,0 +1,37 @@
+oar: '1.0'
+id: DELETE_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - delete
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_paths
+  - paintedwolf.requested
+  - paintedwolf.bulk_denied
+when: paintedwolf.rejection_code == "DELETE_BULK_DENIED"
+effect: block
+copy:
+  what: delete requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
+  cause: The explicit target count exceeds the per-call bound.
+  why: Deletion targets must remain bounded and reviewable.
+  fix: Keep each batch at or below {{ paintedwolf.max_paths }} and include only intended deletion targets.
+    Preserve child-before-parent ordering when the task actually requires both.
+  instead: Branch on Code; reduce paths[] length
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
+x-paintedwolf-message: delete requested too many paths in one call
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: delete
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DELETE_BULK_DENIED'

@@ -1,0 +1,170 @@
+/* Root summaries grow downward from the top. */
+@utility den-files-empty-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-block: 64px 24px;
+  overflow: hidden;
+}
+
+@utility den-files-editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  contain: layout style;
+}
+
+@utility den-files-editor__toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+@utility den-files-editor__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@utility den-files-editor__status-spacer {
+  flex: 1 1 auto;
+}
+
+@utility den-file-version {
+  flex: 0 0 auto;
+}
+
+/* Definition rows stack location and declaration. */
+.den-files-editor__definition-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+@utility den-files-editor__definition-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Hides secondary status details as the editor narrows. */
+:where(.den-files-editor[data-editor-band~="max-620"]) {
+  .den-files-editor__status {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  .den-files-editor__status-detail {
+    display: none;
+  }
+}
+
+:where(.den-files-editor[data-editor-band~="max-520"]) {
+  .den-files-editor__status {
+    gap: 6px;
+    padding-inline: 6px;
+  }
+
+  .den-document-windows__long,
+  .den-files-editor__status-language {
+    display: none;
+  }
+}
+
+:where(.den-files-editor[data-editor-band~="max-320"]) {
+  .den-files-editor__status-indent,
+  .den-files-editor__status-wrap {
+    display: none;
+  }
+}
+
+:where([data-tree-band~="max-219"]) {
+  .den-review-walk-context .den-review-detail {
+    padding-inline: 8px;
+  }
+}
+
+/* Responds to the resizable card width. */
+@container den-files-root-summary (max-width: 460px) {
+  .den-files-root-summary__header {
+    flex-wrap: wrap;
+  }
+
+  .den-files-root-summary__actions {
+    width: 100%;
+    padding-left: 44px;
+  }
+
+  .den-files-root-summary__facts,
+  .den-files-root-summary__resources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container den-files-folder-summary (max-width: 460px) {
+  .den-files-folder-summary__header {
+    flex-wrap: wrap;
+  }
+
+  .den-files-folder-summary__actions {
+    width: 100%;
+    padding-left: 40px;
+  }
+}
+
+@utility den-files-editor__host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--den-background);
+  & .cm-editor {
+    height: 100%;
+  }
+}
+
+@utility den-files-editor__preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  & .markdown-body {
+    user-select: text;
+  }
+}
+
+/* A column, so the presentation can fill a short document's viewport. */
+@utility den-files-editor__preview-content {
+  display: flex;
+  flex-direction: column;
+  padding: 20px var(--den-stage-inset-x) 48px;
+}
+
+@utility den-files-editor__preview-body {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px 16px 24px;
+  user-select: text;
+}
+
+/* The vim command line occupies the toolbar row only while it holds a panel. */
+@utility den-files-editor__command-prompt {
+  min-width: 0;
+  flex: 1;
+
+  &:empty {
+    display: none;
+  }
+
+  & input {
+    min-width: 0;
+    color: inherit;
+    font: inherit;
+  }
+}

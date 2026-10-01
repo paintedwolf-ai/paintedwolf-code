@@ -1,0 +1,36 @@
+oar: '1.0'
+id: BACKGROUND_HANDLE_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command_output
+  - command_stop
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.id_required
+when: paintedwolf.rejection_code == "BACKGROUND_HANDLE_REQUIRED"
+effect: block
+copy:
+  what: '{{ tool }} requires a handle.'
+  cause: This call did not identify a command job.
+  why: Reading output or stopping a process must target the intended execution.
+  fix: Pass the handle from the intended command’s actual spawn or yield result. If no handle was returned,
+    inspect that call’s result; do not invent a handle or start replacement work just to obtain one.
+  instead: Supply the intended returned handle, or use the completed result
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: background handle is required
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: bg-1
+    path: src/main.go
+    profile: coordinator
+    tool: command_output
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: BACKGROUND_HANDLE_REQUIRED'

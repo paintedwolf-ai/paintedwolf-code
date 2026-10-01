@@ -1,0 +1,146 @@
+rules:
+- id: lycaon.scala.sql-injection
+  languages:
+  - scala
+  severity: ERROR
+  message: Request input reaches SQL text; use bound parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - scala
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $STMT.executeQuery($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $STMT.executeUpdate($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $CONN.prepareStatement($SQL)
+    - focus-metavariable: $SQL
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.scala.command-injection
+  languages:
+  - scala
+  severity: ERROR
+  message: Request input reaches an executable command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - scala
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Runtime.getRuntime().exec($CMD)
+    - metavariable-pattern:
+        metavariable: $CMD
+        patterns:
+        - pattern-not: Array($PROGRAM, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: ProcessBuilder("sh","-c",$CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: Runtime.getRuntime().exec(Array($PROGRAM, ...))
+    - focus-metavariable: $PROGRAM
+- id: lycaon.scala.path-traversal
+  languages:
+  - scala
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - scala
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: FileInputStream($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: Files.readString(Paths.get($PATH))
+    - focus-metavariable: $PATH
+- id: lycaon.scala.open-redirect
+  languages:
+  - scala
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - scala
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $RES.sendRedirect($URL)
+    - focus-metavariable: $URL
+- id: lycaon.scala.weak-cipher
+  languages:
+  - scala
+  severity: ERROR
+  message: DES encryption is cryptographically broken
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - scala
+  pattern-either:
+  - pattern: Cipher.getInstance("DES")
+  - pattern: Cipher.getInstance("DES/ECB/PKCS5Padding")
+- id: lycaon.scala.ecb-encryption
+  languages:
+  - scala
+  severity: ERROR
+  message: ECB encryption reveals repeated plaintext blocks
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - scala
+  pattern-either:
+  - pattern: Cipher.getInstance("AES/ECB/PKCS5Padding")
+  - pattern: Cipher.getInstance("AES/ECB/NoPadding")
+- id: lycaon.scala.rsa-without-padding
+  languages:
+  - scala
+  severity: ERROR
+  message: RSA encryption explicitly omits cryptographic padding
+  metadata:
+    category: security
+    cwe: CWE-780
+    confidence: HIGH
+    technology:
+    - scala
+  pattern: Cipher.getInstance("RSA/ECB/NoPadding")

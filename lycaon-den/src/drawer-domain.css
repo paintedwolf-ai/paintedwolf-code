@@ -1,0 +1,11 @@
+/* Drawer domain retention floor. */
+
+@keyframes den-drawer-in {
+  from { transform: translateX(6%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@keyframes den-drawer-in-mirrored {
+  from { transform: translateX(-6%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

@@ -1,0 +1,12 @@
+scope: app
+title: Startup stopped
+message: >-
+  Startup was stopped before the app was ready. Nothing is running yet.
+suggested_action: Start again whenever you are ready.
+scenarios:
+  - id: default
+    expect_contains:
+      - Startup was stopped
+  - id: retry-failed
+    expect_contains:
+      - Start again

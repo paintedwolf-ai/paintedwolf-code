@@ -1,0 +1,323 @@
+@utility den-tool-part {
+  border: none;
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  box-shadow: inset 0 0 0 1px var(--den-line);
+  overflow: visible;
+  min-width: 0;
+  &[open] > summary {
+    width: 100%;
+    padding: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+  }
+  &[open] .den-tool-part-title {
+    max-width: none;
+    white-space: normal;
+  }
+  &[open] > .den-tool-part-body {
+    padding-top: 8px;
+  }
+}
+
+
+@utility den-tool-part-body {
+padding: 0 10px 10px;
+}
+
+
+@utility den-tool-part-card-badge {
+font-size: var(--text-den-overline);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+}
+
+
+@utility den-tool-part-card-badge--stale {
+color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 14%, transparent);
+}
+
+
+@utility den-tool-part-card-body {
+display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
+@utility den-tool-part-card-facts {
+display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+
+@utility den-tool-part-card-facts--wide {
+flex-direction: column;
+}
+
+
+
+@utility den-tool-part-card-log-digest {
+display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
+@utility den-tool-part-card-log-digest-cluster-body {
+display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+
+@utility den-tool-part-card-log-digest-clusters {
+margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-tool-part-card-log-digest-count {
+flex: 0 0 auto;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+}
+
+
+@utility den-tool-part-card-log-digest-facet {
+display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+
+@utility den-tool-part-card-log-digest-facet-key {
+font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-tool-part-card-log-digest-facets {
+display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-tool-part-card-log-digest-format {
+font-weight: 600;
+  color: var(--den-text);
+}
+
+
+@utility den-tool-part-card-log-digest-head {
+display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+
+@utility den-tool-part-card-log-digest-template {
+overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+@utility den-tool-part-card-note {
+margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+
+/* How the decision engine bore on this call: the card's closing line. */
+@utility den-tool-part-load {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 40%, transparent);
+  font-size: var(--text-den-caption);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+  & q {
+    font-style: italic;
+    quotes: "\201C" "\201D";
+  }
+}
+
+
+@utility den-tool-part-load-sep {
+  color: color-mix(in srgb, var(--den-text-muted) 60%, transparent);
+}
+
+
+@utility den-tool-part-card-compaction {
+display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--den-border);
+  background: color-mix(in srgb, var(--den-surface-elevated) 88%, var(--den-accent-text) 12%);
+}
+
+
+@utility den-tool-part-card-compaction-banner {
+margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-tool-part-card-compaction-spill {
+margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+@utility den-chat-content-link {
+border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-accent-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+
+@utility den-tool-part-card-section {
+display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-tool-part-card-section-label {
+margin: 0;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-tool-part-card-section-label--row {
+display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5em 0.75em;
+  letter-spacing: 0;
+}
+
+
+@utility den-tool-part-card-section-label-text {
+font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+
+
+@utility den-tool-part-card-structured {
+display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
+@utility den-tool-part-chicklet {
+display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  /* The summary's disclosure seam sits below the chicklet. */
+  min-height: calc(var(--den-transcript-card-row-h) - 1px);
+  padding: 0 var(--den-transcript-card-inset-x);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background var(--den-duration-drawer) var(--den-ease);
+}
+
+
+@utility den-tool-part-chicklet-main {
+display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+
+@utility den-tool-part-name {
+flex: 0 0 auto;
+  font-weight: 600;
+  font-size: var(--text-den-compact);
+  letter-spacing: 0.02em;
+}
+
+
+@utility den-tool-part-status-dot {
+flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--den-text-muted);
+  opacity: 0.55;
+  &[data-status="running"] {
+    background: var(--den-status-running);
+    opacity: 1;
+  }
+  &[data-status="done"] {
+    background: var(--den-status-positive);
+    opacity: 1;
+  }
+  &[data-status="error"] {
+    background: var(--den-danger);
+    opacity: 1;
+  }
+}
+
+
+@utility den-tool-part-title {
+font-size: var(--text-den-compact);
+  font-weight: 400;
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+

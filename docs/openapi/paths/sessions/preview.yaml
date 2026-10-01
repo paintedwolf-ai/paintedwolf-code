@@ -1,0 +1,67 @@
+paths:
+  /v1/sessions/{id}/previews:
+    get:
+      tags:
+      - sessions
+      operationId: listSessionPreviews
+      summary: List live preview page attachments for a session
+      description: >-
+        Read-only preview attachment snapshot for frontend reload recovery,
+        bounded to active browser pages held by this session.
+        Returned rows identify held pages only; a visible Den pane starts its
+        own watch to receive fresh image frames over SSE.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Current preview page attachments
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/PreviewListResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/previews/watch:
+    post:
+      tags:
+      - sessions
+      operationId: watchPreview
+      x-person-action: none
+      summary: Toggle live page preview watch for a session
+      description: >-
+        Command endpoint that starts or stops the host CDP screencast for a held
+        (or in-flight drive) page when Den's preview pane is visible. Read-only
+        mirror only — no input is accepted. Frames stream on SSE topic preview.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/events.yaml#/components/schemas/PreviewWatchRequest
+      responses:
+        '200':
+          description: Watch result
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/PreviewWatchResult
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

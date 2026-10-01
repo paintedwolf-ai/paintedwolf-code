@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+title: "Not a socket"
+message: "That path exists but is not a Unix socket."
+suggested_action: "Choose the socket file itself."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "not a Unix socket"

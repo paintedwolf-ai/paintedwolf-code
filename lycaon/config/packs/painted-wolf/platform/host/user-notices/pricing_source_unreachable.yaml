@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Pricing source unreachable"
+message: "The pricing source could not be reached, so prices were not updated."
+suggested_action: "Check your network connection and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "could not be reached"
+retryable: true

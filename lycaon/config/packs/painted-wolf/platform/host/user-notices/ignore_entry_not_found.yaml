@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Ignore entry not found"
+message: "That entry is no longer in this project's ignore file."
+suggested_action: "Reload the list and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer in this project's ignore file"

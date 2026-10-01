@@ -1,0 +1,801 @@
+language: hcl
+comment:
+- '#'
+limits: Explicit resource configuration with known protocol and port values. Dynamic resource values and deployment reachability require additional analysis.
+cases:
+- name: public-admin-ingress-vulnerable
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+    ingress {
+     from_port = 22
+     to_port = 22
+     protocol = "tcp"
+     ipv6_cidr_blocks = ["::/0"]
+    }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: public-admin-ingress-safe
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+    ingress {
+     from_port = 22
+     to_port = 22
+     protocol = "tcp"
+     cidr_blocks = ["10.0.0.0/8"]
+    }
+    }
+  want: []
+  covers:
+  - lycaon.terraform.public-admin-ingress
+- name: public-ingress-rule-vulnerable
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+    security_group_id = "sg-example"
+    from_port = 22
+    to_port = 22
+    ip_protocol = "tcp"
+    cidr_ipv6 = "::/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: public-ingress-rule-safe
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+    security_group_id = "sg-example"
+    from_port = 22
+    to_port = 22
+    ip_protocol = "tcp"
+    cidr_ipv6 = "fd00::/8"
+    }
+  want: []
+  covers:
+  - lycaon.terraform.public-ingress-rule
+- name: iam-admin-policy-vulnerable
+  file: sample.tf
+  source: |
+    data "aws_iam_policy_document" "p" {
+    statement {
+    effect = "Allow"
+    actions = ["*"]
+    resources = ["*"]
+    }
+    }
+  want:
+  - lycaon.terraform.iam-admin-policy
+  covers: []
+- name: iam-admin-policy-safe
+  file: sample.tf
+  source: |
+    data "aws_iam_policy_document" "p" {
+    statement {
+    effect = "Deny"
+    actions = ["*"]
+    resources = ["*"]
+    }
+    }
+  want: []
+  covers:
+  - lycaon.terraform.iam-admin-policy
+- name: rds-encryption-disabled-vulnerable
+  file: sample.tf
+  source: |
+    resource "aws_db_instance" "example" {
+    storage_encrypted = false
+    }
+  want:
+  - lycaon.terraform.rds-encryption-disabled
+  covers: []
+- name: rds-encryption-disabled-safe
+  file: sample.tf
+  source: |
+    resource "aws_db_instance" "example" {
+    storage_encrypted = true
+    }
+  want: []
+  covers:
+  - lycaon.terraform.rds-encryption-disabled
+- name: s3-public-acl-context-only
+  file: sample.tf
+  source: |
+    resource "aws_s3_bucket_acl" "example" {
+    bucket = "example"
+    acl = "public-read"
+    }
+  want: []
+  covers: []
+- name: s3-public-acl-safe
+  file: sample.tf
+  source: |
+    resource "aws_s3_bucket_acl" "example" {
+    bucket = "example"
+    acl = "private"
+    }
+  want: []
+  covers: []
+- name: gcp-public-bucket-context-only
+  file: sample.tf
+  source: |
+    resource "google_storage_bucket_iam_member" "example" {
+    bucket = "example"
+    role = "roles/storage.objectViewer"
+    member = "allUsers"
+    }
+  want: []
+  covers: []
+- name: gcp-public-bucket-safe
+  file: sample.tf
+  source: |
+    resource "google_storage_bucket_iam_member" "example" {
+    bucket = "example"
+    role = "roles/storage.objectViewer"
+    member = "serviceAccount:reader@example.iam.gserviceaccount.com"
+    }
+  want: []
+  covers: []
+- name: gcp-open-database-vulnerable
+  file: sample.tf
+  source: |
+    resource "google_sql_database_instance" "example" {
+    settings {
+    ip_configuration {
+    authorized_networks { value = "0.0.0.0/0" }
+    }
+    }
+    }
+  want:
+  - lycaon.terraform.gcp-open-database
+  covers: []
+- name: gcp-open-database-safe
+  file: sample.tf
+  source: |
+    resource "google_sql_database_instance" "example" {
+    settings {
+    ip_configuration {
+    authorized_networks { value = "10.0.0.0/8" }
+    }
+    }
+    }
+  want: []
+  covers:
+  - lycaon.terraform.gcp-open-database
+- name: azure-storage-http-vulnerable
+  file: sample.tf
+  source: |
+    resource "azurerm_storage_account" "example" {
+    https_traffic_only_enabled = false
+    }
+  want:
+  - lycaon.terraform.azure-storage-http
+  covers: []
+- name: azure-storage-http-safe
+  file: sample.tf
+  source: |
+    resource "azurerm_storage_account" "example" {
+    https_traffic_only_enabled = true
+    }
+  want: []
+  covers:
+  - lycaon.terraform.azure-storage-http
+- name: azure-public-container-context-only
+  file: sample.tf
+  source: |
+    resource "azurerm_storage_container" "example" {
+    container_access_type = "container"
+    }
+  want: []
+  covers: []
+- name: azure-public-container-safe
+  file: sample.tf
+  source: |
+    resource "azurerm_storage_container" "example" {
+    container_access_type = "private"
+    }
+  want: []
+  covers: []
+- name: azure-keyvault-purge-context-only
+  file: sample.tf
+  source: |
+    resource "azurerm_key_vault" "example" {
+    purge_protection_enabled = false
+    }
+  want: []
+  covers: []
+- name: azure-keyvault-purge-safe
+  file: sample.tf
+  source: |
+    resource "azurerm_key_vault" "example" {
+    purge_protection_enabled = true
+    }
+  want: []
+  covers: []
+- name: modern-s3-encryption
+  file: sample.tf
+  source: |
+    resource "aws_s3_bucket" "example" {
+    bucket = "example"
+    }
+    resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
+    bucket = aws_s3_bucket.example.id
+    rule {
+    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+    }
+    }
+  want: []
+  covers: []
+- name: precision-public-assets
+  file: sample.tf
+  source: |
+    resource "azurerm_storage_container" "assets" { name = "public-assets" container_access_type = "blob" }
+  want: []
+  covers: []
+- name: precision-conditioned-iam
+  file: sample.tf
+  source: |
+    data "aws_iam_policy_document" "session" { statement { effect = "Allow" actions = ["*"] resources = ["*"] condition { test = "StringEquals" variable = "aws:PrincipalOrgID" values = ["o-example"] } } }
+  want: []
+  covers: []
+- name: precision-inline-udp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "udp"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-numeric-udp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "17"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-icmp-type
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "icmp"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-icmpv6-type
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "icmpv6"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-numeric-icmp-type
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "1"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-custom-protocol
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "47"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-unknown-protocol
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = var.protocol
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-numeric-tcp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "6"
+        from_port = 22
+        to_port = 22
+        ipv6_cidr_blocks = ["::/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-number-tcp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = 6
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-tcp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "tcp"
+        from_port = 3389
+        to_port = 3389
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "udp"
+        from_port = 3389
+        to_port = 3389
+        ipv6_cidr_blocks = ["::/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-numeric-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "17"
+        from_port = 3389
+        to_port = 3389
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-number-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = 17
+        from_port = 3389
+        to_port = 3389
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-tcp-range
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "tcp"
+        from_port = 20
+        to_port = 25
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-udp-range
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "udp"
+        from_port = 3300
+        to_port = 3400
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-udp-range-excludes-rdp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "udp"
+        from_port = 20
+        to_port = 25
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-all-protocols
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "-1"
+        from_port = 0
+        to_port = 0
+        ipv6_cidr_blocks = ["::/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-number-all-protocols
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = -1
+        from_port = 0
+        to_port = 0
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+  want:
+  - lycaon.terraform.public-admin-ingress
+  covers: []
+- name: precision-inline-private-tcp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "tcp"
+        from_port = 22
+        to_port = 22
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-private-udp
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "udp"
+        from_port = 3389
+        to_port = 3389
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-inline-private-all
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+      ingress {
+        protocol = "-1"
+        from_port = 0
+        to_port = 0
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  want: []
+  covers: []
+- name: precision-standalone-udp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "udp"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-numeric-udp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "17"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-icmp-type
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "icmp"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-icmpv6-type
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "icmpv6"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-numeric-icmp-type
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "1"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-custom-protocol
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "47"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-unknown-protocol
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = var.protocol
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-numeric-tcp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "6"
+      from_port = 22
+      to_port = 22
+      cidr_ipv6 = "::/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-number-tcp-ssh
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = 6
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-tcp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "tcp"
+      from_port = 3389
+      to_port = 3389
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "udp"
+      from_port = 3389
+      to_port = 3389
+      cidr_ipv6 = "::/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-numeric-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "17"
+      from_port = 3389
+      to_port = 3389
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-number-udp-rdp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = 17
+      from_port = 3389
+      to_port = 3389
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-tcp-range
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "tcp"
+      from_port = 20
+      to_port = 25
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-udp-range
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "udp"
+      from_port = 3300
+      to_port = 3400
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-udp-range-excludes-rdp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "udp"
+      from_port = 20
+      to_port = 25
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-all-protocols
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "-1"
+      cidr_ipv6 = "::/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-number-all-protocols
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = -1
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  want:
+  - lycaon.terraform.public-ingress-rule
+  covers: []
+- name: precision-standalone-private-tcp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "tcp"
+      from_port = 22
+      to_port = 22
+      cidr_ipv4 = "10.0.0.0/8"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-private-udp
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "udp"
+      from_port = 3389
+      to_port = 3389
+      cidr_ipv4 = "10.0.0.0/8"
+    }
+  want: []
+  covers: []
+- name: precision-standalone-private-all
+  file: sample.tf
+  source: |
+    resource "aws_vpc_security_group_ingress_rule" "example" {
+      security_group_id = "sg-example"
+      ip_protocol = "-1"
+      cidr_ipv4 = "10.0.0.0/8"
+    }
+  want: []
+  covers: []
+- name: precision-inline-separate-ingress-facts
+  file: sample.tf
+  source: |
+    resource "aws_security_group" "example" {
+     ingress {
+     protocol = "tcp"
+     from_port = 22
+     to_port = 22
+     cidr_blocks = ["10.0.0.0/8"]
+     }
+     ingress {
+     protocol = "udp"
+     from_port = 22
+     to_port = 22
+     cidr_blocks = ["0.0.0.0/0"]
+     }
+    }
+  want: []
+  covers: []

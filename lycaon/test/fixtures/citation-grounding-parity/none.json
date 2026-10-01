@@ -1,0 +1,16 @@
+{
+  "had_traceable_work": false,
+  "grounding": {
+    "traced": true,
+    "checks": [
+      {
+        "id": "typed_citations",
+        "label": "Typed citations",
+        "status": "passed",
+        "kind": "citation",
+        "vacuous": true,
+        "summary": "No typed citations in synthesis report"
+      }
+    ]
+  }
+}

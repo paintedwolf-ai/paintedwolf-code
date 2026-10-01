@@ -1,0 +1,23 @@
+id: security-reviewer
+name: Security reviewer
+description: Read-only security review — scanner-finding triage and threat-model survey of assets, entry points, and trust boundaries.
+tool_profile: explore_readonly
+exec_mode: none
+skills:
+  - triage-security-findings
+  - survey-a-threat-model
+  - challenge-a-security-claim
+  - trace-a-system-invariant
+  - evolve-a-system
+capabilities:
+  - security
+  - survey
+topology_roles:
+  - worker
+  - gate
+dispatch_lanes:
+  - read
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/security-reviewer.md

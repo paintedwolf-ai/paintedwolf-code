@@ -1,0 +1,29 @@
+oar: '1.0'
+id: HOST_APPROVAL_PLAN_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "HOST_APPROVAL_PLAN_INVALID"
+effect: block
+copy:
+  what: The host could not construct a valid approval card for this action.
+  cause: An approval option was missing the authority needed to continue the held subject, or the plan failed
+    an internal invariant.
+  why: A broken card is a host defect, not a human Deny. Inferring refusal from this error and asking the user
+    to grant access in chat will not produce a card.
+  fix: Retry the same structured request after the host is repaired. Do not invent a grant from chat, and do
+    not treat this as Approval Denied.
+  instead: Branch on Code HOST_APPROVAL_PLAN_INVALID; this is not a Deny
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:approval_plan
+x-paintedwolf-message: approval plan could not be constructed
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: HOST_APPROVAL_PLAN_INVALID'
+  - approval

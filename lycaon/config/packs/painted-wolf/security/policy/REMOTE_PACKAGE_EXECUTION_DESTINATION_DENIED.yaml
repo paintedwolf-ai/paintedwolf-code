@@ -1,0 +1,63 @@
+# Recovery for downloaded code blocked outside reviewed registries.
+
+oar: '1.0'
+id: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool:
+    - command
+    - verify
+    - command_output
+    - terminal_open
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.denial_subject
+    - paintedwolf.confine_signals
+    - paintedwolf.destination
+when: >-
+  paintedwolf.confine_applied
+  && paintedwolf.denial_subject == "remote_package_destination"
+  && "remote_package_destination_denied" in paintedwolf.confine_signals
+effect: warn
+copy:
+  what: >-
+    Downloaded package code tried to connect to `{{ paintedwolf.destination }}`;
+    the remote-package execution boundary blocked that destination.
+  cause: >-
+    A package acquisition or one-shot runner starts without inherited
+    credentials or sensitive reads and can reach only its reviewed package
+    registries. That boundary cannot be widened in the same invocation.
+  why: >-
+    Adding direct IP, SOCKS, a destination approval, a local service, or a
+    protected read to this package action will be rejected. Repeating the same
+    action cannot grant the downloaded code more authority.
+  fix: >-
+    If the blocked connection was required, separate acquisition from use:
+    install or add the package in one command, then invoke the installed local
+    executable in a later command with only the capability it needs. If the
+    command otherwise succeeded and this was optional telemetry or update
+    checking, keep the result and do not widen anything.
+  instead: >-
+    Branch on Code; if the denied destination was required, install or add the
+    package first and invoke the local executable in a later command
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: downloaded package code reached beyond its reviewed registries
+x-paintedwolf-scenarios:
+  - id: required_destination
+    vars:
+      tool: command
+      destination: gitea.example.com
+    expect_contains:
+      - 'Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED'
+      - gitea.example.com
+      - install or add the package
+      - later command

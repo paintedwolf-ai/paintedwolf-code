@@ -1,0 +1,35 @@
+oar: '1.0'
+id: ASK_USER_OPTIONS_FORBIDDEN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - ask_user
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.response_type
+when: paintedwolf.rejection_code == "ASK_USER_OPTIONS_FORBIDDEN"
+effect: block
+copy:
+  what: 'ask_user response_type {{ paintedwolf.response_type }} does not accept options.'
+  cause: Caller-provided choices are incompatible with this response channel.
+  why: A text card accepts free text; a secret card writes protected input directly to managed storage.
+  fix: Remove options and preserve the intended response_type. For protected input, keep response_type secret and its lifecycle metadata; never turn the request into ordinary text or a choice list.
+  instead: Remove the incompatible choices without downgrading protected input
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: text asks must not include options
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      response_type: secret
+      detail: stub
+      path: src/main.go
+      profile: coordinator
+      tool: ask_user
+    expect_contains:
+      - 'Code: ASK_USER_OPTIONS_FORBIDDEN'
+      - options

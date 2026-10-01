@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-cursor-matching-bracket
+command: painted-wolf/platform:editor-cursor-matching-bracket
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+\\"
+  windows:
+    - "Mod+Shift+\\"
+  linux:
+    - "Mod+Shift+\\"

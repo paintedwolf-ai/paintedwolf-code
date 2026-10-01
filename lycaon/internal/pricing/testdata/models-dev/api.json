@@ -1,0 +1,19 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "models": {
+      "gpt-4.1": {
+        "id": "gpt-4.1",
+        "name": "GPT-4.1",
+        "last_updated": "2025-04-14",
+        "cost": {
+          "input": 2.0,
+          "output": 8.0,
+          "cache_read": 0.5,
+          "cache_write": 2.5
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+title: Delete Auth0 login logic
+id: 265ec15f-7f57-41dd-9dab-e6d6df058629
+description: Deletes an Action or Rule the login flow runs, which can break sign-in for every user of the tenant.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: auth0
+    CommandLine|re: '(?i)\s(actions|rules)\s+(delete|rm)\b'
+  selection_confirm:
+    CommandLine|contains: '--force'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and selection_confirm and not filter_rehearsal and not filter_local

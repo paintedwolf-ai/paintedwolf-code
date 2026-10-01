@@ -1,0 +1,51 @@
+title: Deploy or scale a hosted service
+id: 23d9f307-5ea7-4379-817f-ad0fd416cac1
+description: Ships a new deployment to production or changes how many instances run.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_heroku:
+    Image: heroku
+    CommandLine|contains:
+      - ' ps:scale'
+      - ' maintenance:on'
+      - ' rollback'
+  selection_fly:
+    Image:
+      - fly
+      - flyctl
+    CommandLine|contains:
+      - ' scale count'
+      - ' scale '
+  # vercel and netlify share the same flag for this; no --production long form
+  # exists on either.
+  selection_prod_flag:
+    Image:
+      - vercel
+      - netlify
+    CommandLine|contains: ' --prod'
+  # The trailing space keeps ' up' from matching a project named "up-something"
+  # (e.g. a `railway link` target).
+  selection_railway:
+    Image: railway
+    CommandLine|contains:
+      - ' up '
+      - ' redeploy'
+  selection_render:
+    Image: render
+    CommandLine|contains: ' deploys create'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_heroku or selection_fly or selection_prod_flag or selection_railway or selection_render) and not filter_rehearsal and not filter_local

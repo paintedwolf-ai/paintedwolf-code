@@ -1,0 +1,13 @@
+id: painted-wolf/platform:key-files-redo-lifecycle
+command: painted-wolf/platform:files-redo-lifecycle
+scope: "files"
+allow_in_input: false
+bindings:
+  macos:
+    - "Mod+Shift+Z"
+  windows:
+    - "Mod+Shift+Z"
+    - "Mod+Y"
+  linux:
+    - "Mod+Shift+Z"
+    - "Mod+Y"

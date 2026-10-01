@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><title>Reactive</title></head>
+<body>
+<label for="name">Name</label>
+<input id="name" />
+<button id="submit" disabled>Submit</button>
+<div id="out"></div>
+<script>
+const input = document.getElementById("name");
+const btn = document.getElementById("submit");
+const out = document.getElementById("out");
+function sync() {
+  btn.disabled = !(input.value && input.value.trim());
+}
+input.addEventListener("input", sync);
+btn.addEventListener("click", () => { out.textContent = "submitted:" + input.value; });
+</script>
+</body></html>

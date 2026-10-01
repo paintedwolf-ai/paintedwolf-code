@@ -1,0 +1,32 @@
+components:
+  schemas:
+    BackupCapabilities:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [format_version, schema_revision, max_archive_bytes, max_expanded_bytes]
+      properties:
+        format_version:
+          type: integer
+        schema_revision:
+          type: integer
+        max_archive_bytes:
+          type: integer
+          format: int64
+        max_expanded_bytes:
+          type: integer
+          format: int64
+    BackupRestoreResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+      - restart_required
+      - recovery_copy_path
+      properties:
+        restart_required:
+          type: boolean
+          description: True when the staged restore must be applied on the next launch
+        recovery_copy_path:
+          type: string
+          description: Absolute path of the restore transaction's recovery copy

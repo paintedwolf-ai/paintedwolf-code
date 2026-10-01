@@ -1,0 +1,31 @@
+oar: '1.0'
+id: WORKER_CANCEL_SESSION_MISMATCH
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "WORKER_CANCEL_SESSION_MISMATCH"
+effect: block
+copy:
+  what: worker_cancel may only stop jobs spawned from the active session
+  cause: The job_id belongs to another session or project
+  why: The job_id belongs to another session or project
+  fix: Cancel only jobs you spawned in this session via `task()`
+  instead: Use job_id from this session `task()` enqueue or pulse roster
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-other
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_CANCEL_SESSION_MISMATCH'
+selector:
+  tool:
+  - worker_cancel

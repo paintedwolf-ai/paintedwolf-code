@@ -1,0 +1,13 @@
+id: choice_transition_required
+kind: coordinator-choice
+purpose: |
+  This phase parks until the coordinator chooses one of its declared workflow transitions.
+missing_signals:
+  - id: transition_not_selected
+    when: "true"
+    detail: "No declared choice transition has been selected yet."
+    fix: "Call workflow_transition with one of the transition ids listed under Phase exit."
+satisfy_auto:
+  - "Choose one declared Phase exit arm and call workflow_transition with its transition_id."
+satisfy:
+  - "Choose one declared Phase exit arm and call workflow_transition with its transition_id."

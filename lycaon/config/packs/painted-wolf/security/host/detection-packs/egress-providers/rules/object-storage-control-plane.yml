@@ -1,0 +1,55 @@
+title: Reached an object-storage API
+id: 497a3e19-18e6-4e65-a671-07d5c80393b2
+description: >-
+  Connected to a specialist object-storage or S3-compatible cloud API (R2, B2,
+  Wasabi, and kin). Hyperscaler buckets ride the AWS/GCP/Azure control-plane
+  rules. A hostname cannot tell a list from a wipe.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - api.backblazeb2.com
+      - s3.us-west-000.backblazeb2.com
+      - s3.wasabisys.com
+      - s3.wasabi.com
+      - api.wasabisys.com
+      - gateway.storjshare.io
+      - link.storjshare.io
+      - api.storj.io
+      - s3.filebase.com
+      - api.filebase.io
+      - storage.bunnycdn.com
+      - api.bunny.net
+      - s3.idrivee2.com
+      - api.idrivee2.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      # Cloudflare R2 (S3-compatible) — not bare *.cloudflare.com CDN edges.
+      - .r2.cloudflarestorage.com
+      - .backblazeb2.com
+      - .backblaze.com
+      - .wasabisys.com
+      - .wasabi.com
+      - .storjshare.io
+      - .storj.io
+      - .filebase.com
+      - .filebase.io
+      - .b-cdn.net
+      - .bunnycdn.com
+      - .bunny.net
+      - .idrivee2.com
+      - .contabostorage.com
+      - .c2.liara.space
+      - .vultrobjects.com
+  condition: selection_host or selection_suffix

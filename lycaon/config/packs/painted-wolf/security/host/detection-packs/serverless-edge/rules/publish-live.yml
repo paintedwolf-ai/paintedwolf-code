@@ -1,0 +1,33 @@
+title: Publish to live traffic
+id: a5b8bb25-2cd9-4371-95a1-c0f117ff7fee
+description: Deploys a new version of a function or worker that serves live requests.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image:
+      - wrangler
+      - serverless
+      - sls
+      - sam
+      - func
+  verbs_publish_live:
+    CommandLine|contains:
+      - ' deploy'
+      - ' publish'
+      - ' rollback'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|dev|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_publish_live and not filter_rehearsal and not filter_local

@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Command not available
+message: >-
+  This command is not in the current extension catalog. It may have been
+  removed or its pack disabled.
+suggested_action: Check Settings → Extensions for the pack that provides it.

@@ -1,0 +1,5 @@
+id: cms-platform
+label: Headless CMS platforms
+description: >-
+  Sanity CLI operations that destroy a content dataset or delete documents
+  from it.

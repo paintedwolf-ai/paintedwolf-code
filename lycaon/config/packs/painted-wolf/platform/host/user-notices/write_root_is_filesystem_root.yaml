@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: That folder is the whole disk
+message: >-
+  The filesystem root cannot be a project folder. Attaching it would let
+  confined commands write anywhere on the machine.
+suggested_action: Pick a normal project directory — for example a repo under your home folder.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - filesystem root
+      - Pick a normal project directory

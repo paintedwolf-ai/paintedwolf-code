@@ -1,0 +1,18 @@
+id: TOOL_BATCH_NOT_RUN
+emit: banner
+severity: warning
+what: The `{{ tool }}` call did not run.
+cause: An earlier call ended the cycle or the host paused execution.
+why: The host records unattempted calls separately from calls that ran or failed validation.
+fix: Review the preceding results and the current worker or approval state before continuing.
+instead: When execution resumes, retry only work that remains necessary; keep accepted work and pending decisions intact.
+category: recoverable
+message: The `{{ tool }}` call did not run.
+scenarios:
+  - id: default
+    vars:
+      tool: complete_leg
+    expect_contains:
+      - 'Code: TOOL_BATCH_NOT_RUN'
+      - complete_leg
+      - did not run

@@ -1,0 +1,3 @@
+id: jwt
+upstream_id: jwt
+enabled: false

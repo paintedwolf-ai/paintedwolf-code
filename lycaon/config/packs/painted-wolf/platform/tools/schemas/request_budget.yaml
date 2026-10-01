@@ -1,0 +1,27 @@
+description: >-
+  Ask your coordinator for more tool rounds as soon as you can see this leg's
+  goal needs more than remain. Name the rounds and the concrete work they
+  cover. You keep working while the coordinator decides; its answer arrives
+  as a host notice on a later round, and the host holds your final round for
+  that answer. If it declines or does not answer, finish with an honest partial
+  report at your current ceiling. One request can be open at a time.
+schema:
+  type: object
+  additionalProperties: false
+  properties:
+    rounds:
+      type: integer
+      minimum: 1
+      maximum: 118
+      description: How many to add to the current ceiling; the host bounds the total at its maximum.
+    remaining_work:
+      type: array
+      minItems: 1
+      maxItems: 6
+      description: The specific reads, checks, or edits the extra rounds cover.
+      items:
+        type: string
+        minLength: 1
+        maxLength: 300
+  required: [rounds, remaining_work]
+tags: [workers]

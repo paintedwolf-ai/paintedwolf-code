@@ -1,0 +1,12 @@
+# Pin and digest for the bundled common-password list.
+
+vendors:
+  - id: zxcvbn-passwords
+    upstream: https://github.com/dropbox/zxcvbn
+    ref: master
+    commit: "67c4ece9efc40c9d0a1d7d995b2b22a91be500c2"
+    tree_sha256: "9170316ab3a83683359112ee3b576190d0328e2edeb83e5e47466f6c6066fbf7"
+    license: MIT
+    include:
+      - LICENSE.txt
+      - data/passwords.txt

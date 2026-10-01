@@ -1,0 +1,46 @@
+tags: [edit, refactor]
+description: "Rewrite a code shape across path or paths[]. $VAR matches one node; $$$VAR a sequence. Narrow bare `$A | $B` patterns (CODE_REWRITE_PATTERN_TOO_BROAD). Parse-breaking rewrites are refused (MUTATION_BROKE_PARSE). For search, use grep structural: true. Track changed, blocked (code/details), failed, unobserved_files and truncated separately: blocked is not no-match, and successful siblings may already be saved. Address each cause without repeating saved mutations; report uncovered scope. dry_run previews without writing. Replaces command: ast-grep / comby / gofmt -r structural rewrite."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      minLength: 1
+      description: Repo-relative file path (single-file mode)
+    paths:
+      type: array
+      description: Focus paths for the codemod; empty array walks the project when recursive
+      items:
+        type: string
+    recursive:
+      type: boolean
+      description: Walk subdirectories when using paths[]
+    pattern:
+      type: string
+      minLength: 1
+      description: Pattern to match, e.g. fmt.Println($A) or foo($$$ARGS). Not a bare `$A | $B`.
+    rewrite:
+      type: string
+      minLength: 1
+      description: Replacement template using the same placeholders, e.g. log.Info($A)
+    lang:
+      type: string
+      description: Grammar name override (e.g. go, typescript)
+    dry_run:
+      type: boolean
+      description: Preview the change as a unified diff without writing
+    syntax_override_reason:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      pattern: '\S'
+      description: Recorded reason to override final syntax validation for this call. Other mutation checks still apply.
+  required:
+  - pattern
+  - rewrite
+  anyOf:
+  - required:
+    - path
+  - required:
+    - paths
+  additionalProperties: false

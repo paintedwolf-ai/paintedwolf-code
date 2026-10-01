@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-recent
+command: painted-wolf/platform:session-recent
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+Tab"
+  windows:
+    - "Mod+Tab"
+  linux:
+    - "Mod+Tab"

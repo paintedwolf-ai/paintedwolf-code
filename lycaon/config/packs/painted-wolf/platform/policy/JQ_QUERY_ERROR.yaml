@@ -1,0 +1,34 @@
+oar: '1.0'
+id: JQ_QUERY_ERROR
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+when: paintedwolf.rejection_code == "JQ_QUERY_ERROR"
+effect: block
+copy:
+  what: 'jq program failed while running over the document: {{ paintedwolf.detail }}.'
+  cause: The program errored on the input — e.g. indexing a non-object or iterating a scalar.
+  why: Structured rejects let agents branch without parsing free-form runtime errors.
+  fix: Guard the query (try/?, has(), type checks) or adjust it to the document shape, then retry.
+  instead: Branch on Code; adjust the jq program to the document shape
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq program failed at runtime
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: Cannot index array with "name"
+      profile: explore_readonly
+      tool: jq
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_QUERY_ERROR'

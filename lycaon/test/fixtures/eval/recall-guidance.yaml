@@ -1,0 +1,20 @@
+id: recall-after-compaction
+tasks:
+  - id: historical-configuration
+    prompt: >-
+      Inspect bronze.json. Read every
+      profile row in each file and check that retry_delay_ms and max_attempts are
+      positive integers and mode is bounded. Report only whether the files pass,
+      without repeating individual values. Do not edit files, run commands, or delegate.
+    follow_ups:
+      - prompt: >-
+          Now inspect silver.json, gold.json, and platinum.json. Read every profile
+          row and check that retry_delay_ms and max_attempts are positive integers
+          and mode is bounded. Report only whether the files pass, without repeating
+          individual values. Do not edit files, run commands, or delegate.
+      - compact_before: true
+        prompt: >-
+          From the original bronze configuration you inspected earlier, what exact
+          retry_delay_ms and max_attempts did bronze-service-18 have? I need the
+          historical observation, not a fresh read of the file. Cite your evidence.
+          Do not edit files, run commands, or delegate.

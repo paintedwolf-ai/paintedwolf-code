@@ -1,0 +1,13 @@
+manifest_version: 1
+id: example/editor-surface
+name: Example — Editor Surface
+description: >-
+  Put a pack's own action in the editor: a command, where it appears, what it is
+  bound to, what it runs, the setting that gates it, the MCP tool it can reach,
+  and a theme. One file per contribution kind.
+version: 1.0.0
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

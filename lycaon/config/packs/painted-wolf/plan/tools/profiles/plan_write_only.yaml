@@ -1,0 +1,30 @@
+id: plan_write_only
+description: Plan markdown writes only under plan_write scope
+tools:
+  complete_leg: sticky
+  recall: sticky
+  read: sticky
+  record_finding: sticky
+  pack_board: sticky
+  request_decision: sticky
+  request_budget: sticky
+  write: sticky
+  edit: sticky
+  replace_lines: sticky
+  restore_version: sticky
+  grep: sticky
+  summarize: sticky
+  render_view: sticky
+  jq: sticky
+  wait: sticky
+  skills_read: sticky
+  secret_generate: sticky
+  secret_list: sticky
+  secret_revoke: sticky
+deny_tools:
+  - command
+  - delegate_*
+  - state_*
+  - handoff_*
+write_scope: plan_write
+wait_conditions: [http_ready, port_ready]

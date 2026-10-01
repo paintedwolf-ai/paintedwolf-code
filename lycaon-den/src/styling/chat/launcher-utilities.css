@@ -1,0 +1,268 @@
+.den-composer-chrome-slot {
+  display: block;
+  flex-shrink: 0;
+  min-width: 0;
+  opacity: 1;
+}
+
+.den-composer-chrome-slot__inner {
+  min-width: 0;
+}
+
+/* Collapsed chrome leaves no animated intermediate state. */
+.den-composer-chrome-slot[data-collapsed] {
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.den-session-launcher {
+  margin: 2px 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: den-session-launcher;
+}
+
+/* Composer find controls participate in the dock layout. */
+.den-find-bar-host--composer {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 0;
+  width: 100%;
+  margin: 0 0 8px;
+  container: den-editor-command-bar-host / inline-size;
+  pointer-events: auto;
+}
+
+.den-find-bar-host--composer .den-find-bar {
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+}
+
+.den-session-launcher__heading {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  padding: 0 2px;
+}
+
+/* Tiles stay on one row and collapse to icons as space narrows. */
+.den-session-launcher__grid {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.den-session-launcher__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1 1 0;
+  width: auto;
+  min-width: calc(28px + 24px);
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: den-session-launcher-tile;
+  padding: 11px 12px;
+  border: 1px solid var(--den-border);
+  border-radius: 12px;
+  background: var(--den-surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.den-session-launcher__tile:hover:not(:disabled) {
+  background: var(--den-tint-1);
+  border-color: var(--den-line);
+}
+
+.den-session-launcher__tile--armed {
+  border-color: var(--den-accent);
+  background: var(--den-tint-1);
+}
+
+.den-session-launcher__tile:disabled {
+  cursor: default;
+}
+
+.den-workflow-arm-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--den-border);
+  /* A nested button makes this a card. */
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-workflow-arm-chip__label {
+  flex: 1;
+  min-width: 0;
+  color: var(--den-text);
+}
+
+.den-workflow-arm-chip__clear {
+  flex-shrink: 0;
+  width: 1.5em;
+  height: 1.5em;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  font-size: var(--text-den-title);
+  line-height: 1;
+}
+
+.den-workflow-arm-chip__clear:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.den-session-launcher__tile--disabled {
+  opacity: 0.55;
+}
+
+.den-session-launcher__tile--more {
+  border-style: dashed;
+  background: transparent;
+}
+
+.den-session-launcher__tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.den-session-launcher__tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--den-tint-1);
+  color: var(--den-accent-text);
+}
+
+.den-session-launcher__tile--disabled .den-session-launcher__tile-icon,
+.den-session-launcher__tile--more .den-session-launcher__tile-icon {
+  color: var(--den-text-muted);
+}
+
+.den-session-launcher__tile-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  border: 1px solid var(--den-border);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.den-session-launcher__tile-title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.den-session-launcher__tile-desc {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  line-height: 1.4;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Rem breakpoints track text scaling for both launcher tiers. */
+@container den-session-launcher (max-width: 48rem) {
+  .den-session-launcher__tile-desc {
+    display: none;
+  }
+
+  .den-session-launcher__tile {
+    gap: 4px;
+    padding: 8px 10px;
+    min-width: calc(28px + 20px);
+  }
+}
+
+/* The narrow tier preserves one row by shrinking each tile to its icon. */
+@container den-session-launcher (max-width: 30rem) {
+  .den-session-launcher__heading {
+    font-size: var(--text-den-caption);
+  }
+
+  .den-session-launcher__grid {
+    gap: 6px;
+  }
+
+  .den-session-launcher__tile {
+    padding: 5px 7px;
+    border-radius: 10px;
+    min-width: calc(20px + 14px);
+  }
+
+  .den-session-launcher__tile-head {
+    gap: 5px;
+  }
+
+  .den-session-launcher__tile-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+  }
+
+  /* ThemeIcon starts at the wide-tier size. */
+  .den-session-launcher__tile-icon .den-theme-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .den-session-launcher__tile-title {
+    font-size: var(--text-den-hint);
+  }
+
+  .den-session-launcher__tile-badge {
+    font-size: var(--text-den-micro);
+    padding: 1px 4px;
+  }
+}
+
+/* Icon-only tiles keep accessible names. */
+@container den-session-launcher-tile (max-width: 6.5rem) {
+  .den-session-launcher__tile-title,
+  .den-session-launcher__tile-desc,
+  .den-session-launcher__tile-badge {
+    display: none;
+  }
+
+  .den-session-launcher__tile-head {
+    justify-content: center;
+    gap: 0;
+  }
+}
+
+

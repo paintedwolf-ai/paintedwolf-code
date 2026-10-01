@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "repetitions": 3,
+  "providers": [
+    {
+      "kind": "together",
+      "models": [
+        {"id": "Qwen/Qwen3.5-9B", "covers": ["single-system-message template", "tool call and result replay"]},
+        {"id": "zai-org/GLM-5.3-Flash", "covers": ["reasoning with tool calls", "host continuation"]}
+      ]
+    },
+    {
+      "kind": "fireworks",
+      "models": [
+        {"id": "accounts/fireworks/models/kimi-k2p7-code", "covers": ["always-on reasoning", "tool call and result replay"]}
+      ]
+    },
+    {
+      "kind": "gemini",
+      "models": [
+        {"id": "gemini-3.8-flash", "covers": ["native tool-call signatures", "host continuation"]}
+      ]
+    }
+  ]
+}

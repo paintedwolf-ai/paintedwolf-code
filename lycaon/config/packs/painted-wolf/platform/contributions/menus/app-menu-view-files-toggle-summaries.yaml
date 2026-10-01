@@ -1,0 +1,8 @@
+id: painted-wolf/platform:app-menu-view-files-toggle-summaries
+slot: "app_menu.view"
+command: painted-wolf/platform:files-toggle-summaries
+group: "2"
+order: 6
+label: "File summaries"
+state:
+  fact: "file_summaries_on"

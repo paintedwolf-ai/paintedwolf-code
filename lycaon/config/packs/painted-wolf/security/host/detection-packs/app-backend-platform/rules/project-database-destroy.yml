@@ -1,0 +1,45 @@
+title: Delete a backend project or database
+id: 3c63fcce-29cd-4eed-853e-a30f86d68a5e
+description: Deletes an entire managed project, cluster, or database.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_atlas:
+    Image: atlas
+    CommandLine|contains:
+      - ' clusters delete'
+      - ' projects delete'
+  selection_pscale:
+    Image: pscale
+    CommandLine|contains: ' database delete'
+  selection_neon:
+    Image:
+      - neon
+      - neonctl
+    CommandLine|contains:
+      - ' databases delete'
+      - ' projects delete'
+  # "databases delete-collection", "delete-document", "delete-attribute", etc.
+  # are unrelated, narrower Appwrite CLI verbs sharing the "delete" prefix; the
+  # word boundary keeps this scoped to the bare whole-database delete.
+  selection_appwrite:
+    Image: appwrite
+    CommandLine|re: '\sdatabases delete(\s|$)|\sorganization delete-project(\s|$)|\sorganization delete(\s|$)'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_atlas or selection_pscale or selection_neon or selection_appwrite) and not filter_rehearsal and not filter_local

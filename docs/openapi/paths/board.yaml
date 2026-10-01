@@ -1,0 +1,42 @@
+paths:
+  /v1/projects/{id}/board:
+    get:
+      tags:
+      - board
+      operationId: getBoard
+      summary: Get pack board snapshot for a project
+      description: Returns a slim coordination view by default. Pass detail_level=forensic only for full worker job
+        records (including workspace baselines) — host-debug payload.
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectId
+      - name: session_id
+        in: query
+        required: true
+        description: Coordinator session whose worker roster and overlay state appear on the board.
+        schema:
+          type: string
+          format: uuid
+      - name: detail_level
+        in: query
+        required: false
+        description: status | compact | full | forensic (full job records in forensic_workers — debug only)
+        schema:
+          $ref: ../components/schemas/board.yaml#/components/schemas/BoardDetailLevel
+          default: compact
+      responses:
+        '200':
+          description: Board snapshot
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/board.yaml#/components/schemas/BoardView
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict

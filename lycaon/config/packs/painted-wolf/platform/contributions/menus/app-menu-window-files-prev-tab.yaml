@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-window-files-prev-tab
+slot: "app_menu.window"
+command: painted-wolf/platform:files-prev-tab
+group: "0"
+order: 2
+label: "Previous files tab"

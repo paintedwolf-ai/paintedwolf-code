@@ -1,0 +1,22 @@
+# The host these rules assume.
+oar_capability_version: "1.0"
+host: example.gateway
+anchors:
+  core:
+    tool.pre_invoke: tool.pre_invoke
+    tool.handler: tool.handler
+    tool.post_invoke: tool.post_invoke
+    model.input: model.input
+    model.output: model.output
+    model.tool_result: model.tool_result
+  unsupported:
+    - agent.post_turn
+    - agent.finalize
+profiles: [tool, session, filesystem, secrets, pii, mcp]
+activity_window: 16
+detectors:
+  - detector://noop
+  - detector://error
+  - detector://fixture
+supports_transform: true
+expression_nodes_max: 1024

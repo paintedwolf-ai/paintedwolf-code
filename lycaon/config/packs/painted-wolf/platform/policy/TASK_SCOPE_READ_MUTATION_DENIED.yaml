@@ -1,0 +1,37 @@
+oar: '1.0'
+id: TASK_SCOPE_READ_MUTATION_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.agent_type
+  - paintedwolf.job_id
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "TASK_SCOPE_READ_MUTATION_DENIED"
+effect: block
+copy:
+  what: Read-scoped worker **{{ paintedwolf.agent_type }}** (job **{{ paintedwolf.job_id }}**) cannot call
+    file mutation tools on **{{ paintedwolf.path }}**.
+  cause: This job was dispatched with scope.mode read (or no write scope); mutations belong in a write overlay.
+  why: Product edits on read-scoped workers would mutate the primary tree and bypass merge coordination.
+  fix: Stop the mutation and return findings or the scope blocker through the offered leg completion surface.
+    The coordinator must authorize and dispatch a write-scoped job if the task requires edits.
+  instead: Preserve read scope and report the required write work
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_write
+x-paintedwolf-message: read-scoped worker cannot mutate files
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    agent_type: implementer
+    job_id: abc123
+    path: src/main.go
+    profile: implement
+    scope_mode: read
+    tool: write
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TASK_SCOPE_READ_MUTATION_DENIED'

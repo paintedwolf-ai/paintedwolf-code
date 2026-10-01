@@ -1,0 +1,52 @@
+surfaces: [preflight]
+# One code, two resolved conditions. A macOS below the floor has no in-app fix,
+# so it takes the whole window; a version we could not read is only an unproven
+# capability, and the app still works.
+notification:
+  discriminator: reason
+  resolutions:
+    - { id: below_floor, when: below_floor, tier: catastrophic, scope: app }
+    - { id: unreadable, when: unreadable, tier: non_catastrophic, scope: app }
+context_schema:
+  required:
+    - reason
+  optional:
+    - want
+    - got
+title: >-
+  {% if reason == "unreadable" -%}
+  Could not check this Mac's macOS version
+  {%- else -%}
+  This Mac is running an older macOS
+  {%- endif %}
+message: >-
+  {% if reason == "unreadable" -%}
+  The app could not read this Mac's macOS version, so it cannot confirm the
+  system meets the minimum. Most features will still work.
+  {%- else -%}
+  This app needs macOS {{ want }} or later, and this Mac is on {{ got }}.
+  Some features will not start, and the engine may fail to launch.
+  {%- endif %}
+suggested_action: >-
+  {% if reason == "unreadable" -%}
+  Check for macOS updates in System Settings → General → Software Update.
+  {%- else -%}
+  Update macOS from System Settings → General → Software Update.
+  {%- endif %}
+scenarios:
+  - id: below_floor
+    resolution: below_floor
+    vars:
+      reason: below_floor
+      want: "13.0"
+      got: "12.7"
+    expect_contains:
+      - macOS 13.0 or later
+      - Software Update
+  - id: unreadable
+    resolution: unreadable
+    vars:
+      reason: unreadable
+    expect_contains:
+      - could not read this Mac's macOS version
+      - Software Update

@@ -1,0 +1,42 @@
+oar: '1.0'
+id: COMMAND_NOT_FOUND
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.command
+    - paintedwolf.resolvable
+when: paintedwolf.rejection_code == "COMMAND_NOT_FOUND"
+effect: block
+copy:
+  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}'
+  cause: The process launcher could not resolve argv0 before starting the command.
+  why: A missing binary is not a project-code failure — retrying the same name will not help.
+  fix: '{% if paintedwolf.resolvable %}This PATH does resolve: {{ paintedwolf.resolvable }}. Retry with the one this project means, or an absolute path.{% else %}Use an argv0 that resolves on this machine (absolute path, or a name that `LookPath` finds). Discover with a resolvable probe or the project''s documented runner.{% endif %} Do not invent PATH shims inside product code.'
+  instead: Retry with a resolvable argv0 or absolute path — do not repeat the missing name
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: Executable not found on PATH
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      command: missing-tool
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COMMAND_NOT_FOUND'
+      - missing-tool
+      - PATH
+  - id: near_miss_named
+    vars:
+      command: python
+      resolvable: python3
+    expect_contains:
+      - 'Code: COMMAND_NOT_FOUND'
+      - python3

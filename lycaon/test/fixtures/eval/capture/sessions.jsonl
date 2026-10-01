@@ -1,0 +1,2 @@
+{"ts":"2026-06-28T10:00:00Z","session_id":"coord-1","agent_type":"coordinator","surface":"implement_investigate","task":"Survey this project at a high level."}
+{"ts":"2026-06-28T10:00:01Z","session_id":"work-1","parent_session_id":"coord-1","agent_type":"command-verifier","surface":"implement_worker","task":"Verify tests compile."}

@@ -1,0 +1,5 @@
+id: auth-platform
+label: Auth platforms
+description: >-
+  Auth0 and Okta operations that delete an application, a user or group, or the
+  custom login logic an app depends on.

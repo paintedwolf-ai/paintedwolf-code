@@ -1,0 +1,5 @@
+code: invoke_child_has_invoke
+message: |
+  Child workflow {{workflow_id}}@{{version}} declares invoke_workflow (nesting depth 1 only).
+replacement: |
+  Remove invoke_workflow from the child manifest.

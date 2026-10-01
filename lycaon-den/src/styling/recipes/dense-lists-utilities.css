@@ -1,0 +1,131 @@
+@utility den-dense-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 var(--spacing-den-8);
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-shell);
+  overflow: hidden;
+  background: var(--den-background);
+}
+
+@utility den-dense-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-dense-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 1px;
+  align-items: baseline;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--den-line-quiet);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+@utility den-dense-list-primary {
+  min-width: 0;
+  font-size: var(--text-den-label);
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-dense-list-secondary {
+  grid-column: 1 / -1;
+  min-width: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.3;
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-dense-list-meta {
+  flex-shrink: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.35;
+  color: var(--den-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility den-dense-list-empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+@utility den-table-pager {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px var(--den-stage-inset-x);
+  border-top: 1px solid var(--den-line);
+  background: var(--den-background);
+
+  @media (max-height: 620px) {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+
+@utility den-table-pager-compact {
+  gap: 8px 12px;
+  padding: 6px 10px;
+}
+
+@utility den-table-pager-range {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility den-table-pager-page {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility den-table-pager-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--den-text);
+}
+
+/* Reserved labels hold the row width while its text changes. */
+@utility den-stable-label {
+  display: inline-grid;
+  justify-items: start;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+
+  & > * {
+    grid-area: 1 / 1;
+  }
+
+  &[data-align="center"] {
+    justify-items: center;
+  }
+}
+
+@utility den-stable-label-sizer {
+  visibility: hidden;
+}
+

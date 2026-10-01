@@ -1,0 +1,22 @@
+id: hotfix-session
+version: 1.0.0
+extends: plan@1.0.0
+initial_posture: spec
+agents:
+  - { id: plan-writer, tools: profile }
+  - { id: implementer, tools: profile }
+phases:
+  - id: research
+    activity_label: Understanding the request
+    gates:
+      - hitl_consulted:research
+    next: build
+  - id: build
+    activity_label: Building the change
+    invoke_workflow:
+      workflow_id: implement
+      version: "1.0.0"
+      blueprint: none
+    complete_when: gates_satisfied
+    gates:
+      - child_run_complete

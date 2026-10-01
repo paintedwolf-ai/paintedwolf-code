@@ -1,0 +1,288 @@
+.den-files-tree__row--dragging {
+  opacity: 0.5;
+}
+
+.den-files-tree__row--drop-target {
+  background: var(--den-tint-2);
+  box-shadow: inset 0 0 0 1px var(--den-accent-signal);
+}
+
+.den-files-tree__row--drop-invalid {
+  background: color-mix(in srgb, var(--den-danger) 9%, transparent);
+  box-shadow: inset 0 0 0 1px var(--den-danger);
+}
+
+.den-files-tree__row--move-pending {
+  background: var(--den-tint-2);
+  box-shadow: inset 2px 0 0 var(--den-accent-signal);
+}
+
+.den-files-tree__row--move-source-pending {
+  opacity: 0.62;
+}
+
+.den-files-tree__drop-label {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--den-text-muted);
+  background: var(--den-surface);
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+}
+
+.den-files-tree__drag-ghost {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  padding: 3px 8px;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  color: var(--den-text);
+  border: 1px solid var(--den-line);
+  font-size: var(--text-den-label);
+  box-shadow: var(--den-shadow-md);
+  display: grid;
+  gap: 1px;
+  max-width: min(22rem, calc(100vw - 24px));
+}
+
+.den-files-tree__drag-ghost span {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-files-tree__drag-ghost--invalid {
+  border-color: var(--den-danger);
+}
+
+.den-files-tree__drag-ghost--invalid span {
+  color: var(--den-danger);
+}
+
+.den-files-tree__move-status {
+  position: absolute;
+  z-index: 6;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  color: var(--den-text);
+  box-shadow: var(--den-shadow-md);
+  font-size: var(--text-den-label);
+}
+
+.den-move-source-dialog__crumbs button {
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  padding: 2px 4px;
+  background: none;
+  color: var(--den-accent-signal);
+  font: inherit;
+  cursor: pointer;
+}
+
+.den-move-source-dialog__crumbs button:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+
+.den-files-history-button {
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--den-radius-sm);
+  padding: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-files-history-button:hover:not(:disabled),
+.den-files-history-button:focus-visible {
+  border-color: var(--den-line);
+  background: var(--den-surface);
+  color: var(--den-text);
+}
+
+.den-files-history-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.den-files-history-toast {
+  position: absolute;
+  z-index: 7;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  color: var(--den-text);
+  box-shadow: var(--den-shadow-md);
+  font-size: var(--text-den-label);
+}
+
+.den-files-history-toast__close {
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  padding: 1px 4px;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-subhead);
+  cursor: pointer;
+}
+
+.den-files-history-toast__close:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+}
+
+.den-files-tree__more {
+  flex: 0 0 20px;
+  height: 1.8571rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  border-radius: var(--den-radius-sm);
+  opacity: 0;
+  font-size: var(--text-den-subhead);
+  line-height: 1;
+}
+
+.den-files-tree__row:hover .den-files-tree__more,
+.den-files-tree__more:focus-visible {
+  opacity: 1;
+}
+
+.den-files-tree__more:hover {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+}
+
+.den-files-tree__more:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+.den-files-tree__row--busy {
+  opacity: 0.65;
+}
+
+/* Pinned rows define the sticky band's visible height. */
+.den-files-tree-sticky {
+  position: relative;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Later pinned rows paint beneath earlier rows. */
+.den-files-tree-sticky__slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--den-background);
+  pointer-events: auto;
+}
+
+.den-files-tree__elision {
+  color: var(--den-text-muted);
+  padding: 0 4px 0 16px;
+}
+
+.den-files-tree__elision[aria-expanded="true"] {
+  background: var(--den-tint-2);
+}
+
+.den-files-tree__elision-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+  line-height: 1;
+}
+
+.den-files-tree-virtual {
+  position: relative;
+  width: 100%;
+}
+
+.den-files-tree-virtual__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.den-files-tree-virtual__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+/* The leading row stays painted until its sticky clone mounts. */
+.den-files-tree-virtual__row--lead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--den-background);
+}
+
+/* Shape is the primary scope-change signal. */
+.den-files-scope-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 1em;
+  margin-inline-start: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--den-text-muted);
+}
+
+.den-files-scope-mark--added {
+  color: var(--den-status-positive);
+}
+
+.den-files-scope-mark--changed {
+  color: var(--den-accent-signal);
+}
+
+.den-files-scope-mark--deleted {
+  color: var(--den-danger-text);
+}
+

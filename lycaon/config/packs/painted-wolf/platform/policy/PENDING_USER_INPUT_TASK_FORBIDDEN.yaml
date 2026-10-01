@@ -1,0 +1,35 @@
+oar: '1.0'
+id: PENDING_USER_INPUT_TASK_FORBIDDEN
+kind: policy
+anchor: coordinator.pre_invoke
+selector:
+  tool:
+    - task
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.pending_user_input
+    - paintedwolf.tool_is_task
+when: paintedwolf.pending_user_input && paintedwolf.tool_is_task
+effect: block
+copy:
+  what: '`task()` cannot dispatch workers while ask_user, workflow feedback, or HITL input is still open.'
+  cause: The host has an unresolved user question, workflow feedback request, or decision.
+  why: Dispatching past an unanswered human question races the card and wastes workers on the wrong fork.
+  fix: 'Leave the existing request pending. When the host resumes with the answer or decision, apply it before dispatching any still-needed work. Do not create a duplicate question or assume that every response arrives as an ask_user result.'
+  instead: Branch on Code PENDING_USER_INPUT_TASK_FORBIDDEN; wait for the pending ask to clear
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: '`task()` is blocked while a user ask is pending'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: stub
+      path: src/main.go
+      profile: coordinator
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PENDING_USER_INPUT_TASK_FORBIDDEN'
+      - ask_user

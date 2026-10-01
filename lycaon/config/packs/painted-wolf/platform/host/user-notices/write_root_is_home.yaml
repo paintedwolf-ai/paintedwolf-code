@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Home folder is too broad
+message: >-
+  Your home directory cannot be a project folder or a durable write grant. It
+  would make the whole home tree writable to every confined command.
+suggested_action: Attach a single project directory under home instead of home itself.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - home directory
+      - single project directory

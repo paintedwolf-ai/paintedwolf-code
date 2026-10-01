@@ -1,0 +1,525 @@
+/* Live layout geometry. `inherits: false` scopes invalidation to the
+ * declaring element. `syntax: "*"` stays guaranteed-invalid when unset. */
+@property --den-nav-slot-width {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-split-chat-w {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-detail-w {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-detail-h {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-parked-width {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-parked-height {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-list-cols {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-files-tree-w {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-first-time-tip-arrow-offset {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-editor-block-left {
+  syntax: "*";
+  inherits: false;
+}
+
+@property --den-editor-block-w {
+  syntax: "*";
+  inherits: false;
+}
+
+:root {
+  --den-list-head-h: 33px;
+  --den-list-gap: 12px;
+
+  /* Collapsed transcript cards share one row height and inset. */
+  --den-transcript-card-row-h: calc(var(--text-den-label) * 1.5 + 15px);
+  --den-transcript-card-inset-x: 12px;
+
+  /* Radius ladder follows nesting depth. */
+  --den-radius-sm: 6px;
+  --den-radius: 8px;
+  --den-radius-lg: 12px;
+  --den-radius-shell: 0;
+  --den-radius-pill: 999px;
+
+  /* Icon-only targets: 24px at baseline, growing with text size. em resolves at the use site. */
+  --den-icon-target: max(1.7143rem, 1.75em);
+
+  /* Live OS text scale; 1 is the baseline. */
+  --den-text-scale: 1;
+
+  /* Washes mix with the control's current plane. */
+  --den-tint-base: color-mix(in srgb, var(--den-tint-hue) 80%, var(--den-text) 20%);
+  --den-tint-1: color-mix(in srgb, var(--den-text) 3.5%, var(--den-plane));
+  --den-tint-2: color-mix(in srgb, var(--den-text) 5.5%, var(--den-plane));
+  --den-tint-3: color-mix(in srgb, var(--den-text) 8%, var(--den-plane));
+
+  /* Structural divider at a region's edge. */
+  --den-line: color-mix(in srgb, var(--den-border) 88%, var(--den-tint-hue) 12%);
+
+  /* Quiet rule between bounded siblings. */
+  --den-line-quiet: color-mix(in srgb, var(--den-border) 55%, transparent);
+
+  /* Theme-specific peak for the in-flight hairline pulse. */
+  --den-line-pulse: color-mix(in srgb, var(--den-line) 35%, var(--den-lift));
+
+  /* Control outlines remain distinct from structural dividers. */
+  --den-control-line: var(--den-line);
+
+  --den-user-prompt-border: color-mix(in srgb, var(--den-line) 85%, transparent);
+  --den-user-prompt-fill: var(--den-tint-1);
+
+  --den-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --den-duration: 130ms;
+  --den-duration-drawer: 220ms;
+  --den-fade-up-duration: 300ms;
+  /* Transcript entry timing matches TRANSCRIPT_ENTER_FADE_MS. */
+  --den-enter-fade-duration: 560ms;
+  /* Stage enter, exit, and wash crossfade. */
+  --den-stage-fade-duration: 220ms;
+  /* Tab chrome fades slightly slower than base motion. */
+  --den-tabs-chrome-fade: 240ms;
+
+  --den-status-chip-row-h: max(24px, calc(var(--text-den-label) * 1.25 + 0.75em));
+
+  /* Disclosure triangles scale with their text. */
+  --den-disclosure-mark-height: 0.85em;
+  --den-disclosure-mark-width: 0.62em;
+
+  /* Full-bleed stage insets and prose width. */
+  --den-stage-inset-x: 36px;
+  /* Stage panels align with the navigation brand. */
+  --den-stage-inset-y: 4px;
+  --den-prose-measure: 40rem;
+
+  /* Accent wash for home and onboarding surfaces. */
+  --den-stage-wash: radial-gradient(
+    120% 80% at 50% 0%,
+    color-mix(in srgb, var(--den-accent-signal) 7%, transparent),
+    transparent 55%
+  );
+  --den-stage-wash-dither: none;
+  --den-stage-wash-mask: none;
+
+  /* Opaque chip fills cover the stage wash. */
+  --den-chip-bg: var(--den-background);
+  --den-chip-border: var(--den-line);
+  --den-chip-fg: var(--den-text-muted);
+
+  /* Shadow depth increases only for floating surfaces. */
+  --den-shadow-xs: 0 1px 1px color-mix(in srgb, var(--den-shadow) 3%, transparent);
+  --den-shadow-sm: 0 1px 2px color-mix(in srgb, var(--den-shadow) 5%, transparent);
+  --den-shadow-md:
+    0 2px 4px color-mix(in srgb, var(--den-shadow) 5%, transparent),
+    0 8px 20px color-mix(in srgb, var(--den-shadow) 9%, transparent);
+  --den-shadow-lg:
+    0 4px 8px color-mix(in srgb, var(--den-shadow) 5%, transparent),
+    0 16px 40px color-mix(in srgb, var(--den-shadow) 11%, transparent);
+  --den-shadow-xl:
+    0 6px 12px color-mix(in srgb, var(--den-shadow) 6%, transparent),
+    0 24px 56px color-mix(in srgb, var(--den-shadow) 13%, transparent);
+  --den-shadow-guidance:
+    0 20px 52px color-mix(in srgb, var(--den-shadow) 28%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--den-accent-signal) 26%, transparent);
+  --den-shadow-drag-preview:
+    0 12px 30px color-mix(in srgb, var(--den-shadow) 24%, transparent),
+    0 2px 7px color-mix(in srgb, var(--den-shadow) 16%, transparent);
+  --den-shadow-overlay: 0 18px 48px color-mix(in srgb, var(--den-shadow) 18%, transparent);
+  --den-shadow-overlay-strong: 0 18px 48px color-mix(in srgb, var(--den-shadow) 26%, transparent);
+  /* Inset edges raise controls without changing their box. */
+  --den-bevel:
+    inset 0 1px 0 var(--den-bevel-highlight),
+    inset 0 -1px 0 var(--den-bevel-shadow);
+  /* Reversed edges recess controls. */
+  --den-bevel-inset:
+    inset 0 1px 0 var(--den-bevel-shadow),
+    inset 0 -1px 0 var(--den-bevel-highlight);
+  /* Filled plates catch white light and share the block shade. */
+  --den-bevel-plate:
+    inset 0 1px 0 var(--den-bevel-plate-highlight),
+    inset 0 -1px 0 var(--den-bevel-shadow);
+  /* A plate lightens a step while pressed. */
+  --den-plate-pressed: brightness(1.08);
+  --den-drawer-shadow-x: -12px;
+  --den-shadow-drawer: var(--den-drawer-shadow-x) 0 32px color-mix(in srgb, var(--den-shadow) 6%, transparent);
+  --den-shadow-drawer-edge: -8px 0 32px color-mix(in srgb, var(--den-shadow) 8%, transparent);
+  --den-overlay-scrim: color-mix(in srgb, var(--den-shadow) 25%, transparent);
+
+  /* Opaque hover fills cover the underlying surface. */
+  --den-selection-hover: color-mix(in srgb, var(--den-text) 3.5%, var(--den-background));
+
+  /* List and detail headers share one height. */
+  --den-settings-card-chrome-height: 44px;
+
+  /* Chat headers align with transcript cards. */
+  --den-chat-gutter-x: 24px;
+  --den-chat-scrollbar-shift: 14px;
+  --den-scrollbar-size: 12px;
+  --den-chat-padding-bottom: 16px;
+  /* The resting composer height scales with text size. */
+  --den-composer-input-min-height: 4em;
+  --den-composer-pad-y: 0.375em;
+  --den-composer-border: 1px;
+  --den-composer-resting-height: calc(
+    var(--den-composer-input-min-height) + 2 * var(--den-composer-pad-y) +
+      2 * var(--den-composer-border)
+  );
+  /* Shared top gap for tab/chip chrome and matching titlebar rows. */
+  --den-tabs-top-gap: 8px;
+  /* Drag space above file tabs shares the custom titlebar. */
+  --den-files-tab-drag-band: 1.7143rem;
+  /* Header targets meet WCAG 2.5.8 and grow with text size. */
+  --den-unified-chrome-row: max(28px, 2em);
+  --den-tabs-rail-radius: 14px;
+  /* Chip-row gutter contracts at narrow widths. */
+  --den-tabs-gutter-x: 24px;
+  /* Side controls retain a gutter when the chip row goes full bleed. */
+  --den-tabs-slot-gutter-x: var(--den-tabs-gutter-x);
+  /* Gap between the chip strip and a side slot. */
+  --den-tabs-slot-gap: 0.25rem;
+  /* The inset compensates for the chevron's wider side bearing. */
+  --den-seam-toggle-optical-inset: 5.25px;
+  --den-tabs-chip-py: 0.1rem;
+  --den-tabs-chip-px: 0.35rem;
+  --den-tabs-chip-gap: 3px;
+  /* Empty panels share a minimum height to align their bottom edges. */
+  --den-tabs-panel-min-height: 5.5rem;
+
+  /* Chat chrome paints above the chat column and below the context drawer. */
+  --den-z-stage-fill: 0;
+  --den-z-content: 1;
+  --den-z-stage-header: 4;
+  /* Above the columns and the divider between them. */
+  --den-z-workspace-veil: 30;
+  --den-z-chat-chrome: 7;
+  --den-z-composer-dock: 6;
+  --den-z-context-drawer: 20;
+  /* Portaled dropdowns clear shell and editor chrome. */
+  --den-z-anchored-surface: 100;
+
+  /* Transcript fades soften beyond the solid anchor band. */
+  --chat-stream-padding-top: 24px;
+  --chat-stream-padding-x: 12px;
+  --chat-stream-edge-fade: 20px;
+  --chat-stream-edge-solid: 5px;
+  /* The lower band anchors to the composer dock. */
+  --chat-stream-edge-solid-bottom: 10px;
+  /* Tail clearance keeps the last row outside the fade. */
+  --chat-stream-tail-clearance: calc(var(--chat-stream-edge-fade) + 4px);
+  --chat-stream-fade-down: linear-gradient(
+    to bottom,
+    var(--den-background) 0,
+    var(--den-background) var(--chat-stream-edge-solid),
+    color-mix(in srgb, var(--den-background) 35%, transparent)
+      calc(var(--chat-stream-edge-fade) * 0.72),
+    transparent var(--chat-stream-edge-fade)
+  );
+  --chat-stream-fade-up: linear-gradient(
+    to top,
+    var(--den-background) 0,
+    var(--den-background) var(--chat-stream-edge-solid-bottom),
+    color-mix(in srgb, var(--den-background) 45%, transparent)
+      calc(var(--chat-stream-edge-fade) * 0.72),
+    transparent var(--chat-stream-edge-fade)
+  );
+
+  /* Translucent hover fills preserve the active selection. */
+  --den-nav-rail-gutter: 10px;
+  --den-nav-edge-pad: 6px;
+  --den-nav-selection-bg: color-mix(in srgb, var(--den-accent-signal) 11%, transparent);
+  --den-nav-hover-bg: color-mix(in srgb, var(--den-shadow) 5%, transparent);
+  --den-nav-tree-gutter: 4px;
+  --den-nav-tree-guide-width: 1px;
+  --den-nav-tree-guide-color: color-mix(in srgb, var(--den-line) 52%, transparent);
+
+  /* Sidebar type follows OS text scale. */
+  --den-nav-section-height: max(40px, 2.5em);
+  --den-nav-section-pad-left: 2px;
+  --den-nav-project-size: var(--text-den-body);
+}
+
+:root[data-den-appearance="dark"] {
+  --den-line: color-mix(in srgb, var(--den-border) 58%, transparent);
+  /* Dark dividers share one contrast level. */
+  --den-line-quiet: var(--den-line);
+  /* Dark mode uses a lower pulse amplitude. */
+  --den-line-pulse: color-mix(in srgb, var(--den-line) 95%, var(--den-lift));
+  /* Control outlines use text ink for 3:1 non-text contrast. */
+  --den-control-line: color-mix(in srgb, var(--den-text) 42%, transparent);
+  --den-nav-selection-bg: color-mix(in srgb, var(--den-accent-signal) 18%, transparent);
+  --den-nav-hover-bg: color-mix(in srgb, var(--den-text) 8%, transparent);
+
+  /* The wash peaks above the viewport; the mask bounds its dither. */
+  --den-stage-wash: radial-gradient(
+    180% 170% at 50% -70% in oklab,
+    color-mix(in oklab, var(--den-lift) 1%, transparent) 0%,
+    color-mix(in oklab, var(--den-lift) 0.4%, transparent) 42%,
+    transparent 75%
+  );
+  --den-stage-wash-dither: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --den-stage-wash-mask: radial-gradient(
+    180% 170% at 50% -70%,
+    /* The mask uses alpha, so opaque stops can share the text token. */
+    var(--den-text) 0%,
+    var(--den-text) 55%,
+    transparent 75%
+  );
+  /* Paper hover stays opaque during stage fades. */
+  --den-selection-hover: color-mix(in srgb, var(--den-text) 5%, var(--den-background));
+
+  --den-shadow-xs: 0 1px 2px color-mix(in srgb, var(--den-shadow) 28%, transparent);
+  --den-shadow-sm: 0 2px 8px color-mix(in srgb, var(--den-shadow) 42%, transparent);
+  --den-shadow-md: 0 8px 24px color-mix(in srgb, var(--den-shadow) 48%, transparent);
+  --den-shadow-lg: 0 16px 48px color-mix(in srgb, var(--den-shadow) 55%, transparent);
+  --den-shadow-xl: 0 24px 64px color-mix(in srgb, var(--den-shadow) 60%, transparent);
+  --den-shadow-guidance:
+    0 20px 52px color-mix(in srgb, var(--den-shadow) 60%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--den-accent-signal) 26%, transparent);
+  --den-shadow-drag-preview:
+    0 12px 30px color-mix(in srgb, var(--den-shadow) 55%, transparent),
+    0 2px 7px color-mix(in srgb, var(--den-shadow) 42%, transparent);
+  --den-shadow-overlay: 0 18px 48px color-mix(in srgb, var(--den-shadow) 55%, transparent);
+  --den-shadow-overlay-strong: 0 18px 48px color-mix(in srgb, var(--den-shadow) 60%, transparent);
+  --den-shadow-drawer: var(--den-drawer-shadow-x) 0 32px color-mix(in srgb, var(--den-shadow) 42%, transparent);
+  --den-shadow-drawer-edge: -8px 0 32px color-mix(in srgb, var(--den-shadow) 48%, transparent);
+  --den-overlay-scrim: color-mix(in srgb, var(--den-shadow) 55%, transparent);
+
+  --den-user-prompt-fill: var(--den-surface);
+  --den-user-prompt-border: color-mix(in srgb, var(--den-line) 72%, transparent);
+}
+
+
+* {
+  scroll-behavior: auto;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: clip;
+  overscroll-behavior: none;
+}
+
+html,
+body,
+#root {
+  /* The generated token selects an available interface font. */
+  font-family: var(--den-font-ui);
+  font-size: calc(14px * var(--den-text-scale));
+  line-height: 1.5;
+  background: var(--den-background);
+  color: var(--den-text);
+  /* Inputs and editors inherit the theme caret color. */
+  caret-color: var(--den-caret);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-ligatures: common-ligatures;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:focus {
+  outline: none;
+}
+
+.den-composer-input:focus,
+.den-composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.den-composer-send:focus-visible,
+.den-composer-stop:focus-visible {
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.den-composer-send:focus-visible {
+  outline: 2px solid var(--den-accent-text);
+}
+
+.den-composer-stop:focus-visible {
+  outline: 2px solid var(--den-status-running);
+}
+
+
+@layer base {
+  :focus-visible {
+    outline: none;
+    /* Focus rings use the contrast-adjusted accent ink. */
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+    border-radius: var(--den-radius-sm);
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    margin: 0;
+    padding: 0;
+  }
+}
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+input:not([type="checkbox"]):not([type="radio"]),
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Hide built-in search and number controls. */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  display: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--den-text);
+  box-shadow: 0 0 0 1000px var(--den-control-bg) inset;
+  caret-color: var(--den-text);
+}
+
+textarea::-webkit-resizer {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 55%,
+      var(--den-control-line) 56% 62%,
+      transparent 63% 72%,
+      var(--den-control-line) 73% 79%,
+      transparent 80%
+    );
+}
+
+summary {
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Base text-entry fill stays below overlay editor utilities. */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+      [type="file"]
+    ):not([type="button"]):not([type="submit"]):not([type="reset"]):not(
+      [type="image"]
+    ):not([type="color"]):not([type="hidden"]),
+  textarea {
+    background-color: var(--den-control-bg);
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):disabled,
+  textarea:disabled {
+    background-color: var(--den-control-bg-disabled);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+
+@keyframes den-fade-up {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes den-keyboard-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Transcript row enter stays visual and outside virtual geometry. */
+@keyframes den-enter-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes den-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes den-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  :root {
+    --den-tabs-chrome-fade: 0ms;
+  }
+}

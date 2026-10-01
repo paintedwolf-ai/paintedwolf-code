@@ -1,0 +1,17 @@
+# NoticeScope — where a non-catastrophic condition renders.
+#
+# Host-declared display and lifecycle scope for a notice. App and project notices
+# share one entry across surfaces; session notices stay local.
+name: NoticeScope
+go_const_prefix: NoticeScope
+values:
+  - id: app
+    comment: >-
+      is about the installation or machine and renders first on every surface.
+  - id: project
+    comment: >-
+      is about one project and renders after app notices with a route to that
+      project. One dismissal clears every rendering.
+  - id: session
+    comment: >-
+      is about one chat and renders only in that chat's top dock.

@@ -1,0 +1,15 @@
+# Per-turn disclosure policy for unavailable catalog entries.
+# Show names an entry in coordinator copy; hide omits it.
+
+defaults:
+  agents: show
+  tools: hide
+
+overrides:
+  agents: {}
+  tools: {}
+
+# Reasoned exemptions from the SHOW/HIDE ledger (inline reason required).
+exempt:
+  agents: {}
+  tools: {}

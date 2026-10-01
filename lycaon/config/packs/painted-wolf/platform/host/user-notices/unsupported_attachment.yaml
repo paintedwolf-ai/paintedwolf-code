@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Attachment not supported
+message: >-
+  That file type cannot be attached. Use a supported image, text, or document
+  format.
+suggested_action: Remove the file or pick a supported type.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - cannot be attached

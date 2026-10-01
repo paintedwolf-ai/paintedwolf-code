@@ -1,0 +1,144 @@
+language: perl
+comment:
+- '#'
+limits: Comment-aware generic matching. Dynamic aliases and indirect dispatch need additional analysis.
+cases:
+- name: eval-string-context-only
+  file: sample.pl
+  source: |
+    eval $code;
+  want: []
+  covers: []
+- name: eval-string-safe
+  file: sample.pl
+  source: |
+    eval { read_data(); };
+  want: []
+  covers:
+  - lycaon.perl.eval-string
+- name: shell-command-context-only
+  file: sample.pl
+  source: |
+    system($command);
+  want: []
+  covers: []
+- name: shell-command-safe
+  file: sample.pl
+  source: |
+    system("printf", "%s", $value);
+  want: []
+  covers:
+  - lycaon.perl.shell-command
+- name: two-argument-open-context-only
+  file: sample.pl
+  source: |
+    open(my $fh, $path);
+  want: []
+  covers: []
+- name: two-argument-open-safe
+  file: sample.pl
+  source: |
+    open(my $fh, '<', $path);
+  want: []
+  covers:
+  - lycaon.perl.two-argument-open
+- name: sql-interpolation-context-only
+  file: sample.pl
+  source: |
+    $dbh->prepare("SELECT * FROM users WHERE name = $user");
+  want: []
+  covers: []
+- name: sql-interpolation-safe
+  file: sample.pl
+  source: |
+    $dbh->prepare('SELECT * FROM users WHERE name = ?');
+  want: []
+  covers:
+  - lycaon.perl.sql-interpolation
+- name: storable-thaw-context-only
+  file: sample.pl
+  source: |
+    Storable::thaw($data);
+  want: []
+  covers: []
+- name: storable-thaw-safe
+  file: sample.pl
+  source: |
+    decode_json($data);
+  want: []
+  covers: []
+- name: taint-enabled
+  file: sample.pl
+  source: |
+    #!/usr/bin/perl -T
+    use CGI;
+  want: []
+  covers: []
+- name: pod-comment
+  file: sample.pl
+  source: |
+    =pod
+    eval $code;
+    =cut
+  want: []
+  covers:
+  - lycaon.perl.eval-string
+- name: precision-trusted-metaprogram
+  file: sample.pl
+  source: |
+    my $code = "sub generated { return 1; }"; eval $code;
+  want: []
+  covers: []
+- name: precision-quoted-identifier-sql
+  file: sample.pl
+  source: |
+    my $table = $dbh->quote_identifier("items"); $dbh->prepare("SELECT * FROM $table");
+  want: []
+  covers: []
+- name: precision-serialized-local-copy
+  file: sample.pl
+  source: |
+    my $data = Storable::freeze($object); my $copy = Storable::thaw($data);
+  want: []
+  covers: []
+- name: precision-cgi-eval
+  file: sample.pl
+  source: |
+    eval(CGI::param("code"));
+  want:
+  - lycaon.perl.eval-string
+  covers: []
+- name: precision-cgi-shell
+  file: sample.pl
+  source: |
+    system(CGI::param("command"));
+  want:
+  - lycaon.perl.shell-command
+  covers: []
+- name: precision-cgi-open
+  file: sample.pl
+  source: |
+    open(my $handle, CGI::param("path"));
+  want:
+  - lycaon.perl.two-argument-open
+  covers: []
+- name: precision-cgi-sql
+  file: sample.pl
+  source: |
+    $dbh->prepare(CGI::param("sql"));
+  want:
+  - lycaon.perl.sql-interpolation
+  covers: []
+- name: precision-cgi-env-eval
+  file: sample.pl
+  source: |
+    eval $ENV{QUERY_STRING};
+  want:
+  - lycaon.perl.eval-string
+  covers: []
+- name: precision-quoted-cgi-example
+  file: sample.pl
+  source: |
+    print 'eval(CGI::param("code"));';
+  want: []
+  covers: []

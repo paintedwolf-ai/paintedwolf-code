@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-copy-line-down
+title: "Copy line down"
+scope: files
+category: editing
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.copyLineDown"

@@ -1,0 +1,16 @@
+tags: [filesystem]
+description: "Remove files and empty directories within write scope; the person can undo each removal. Replaces command: rm(1)."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 20
+      description: Repo-relative paths (max 20; no recursive directory delete)
+    files_only:
+      type: boolean
+      description: Reject directories, including empty ones. Exact rm translation sets this true.
+  required: [paths]
+  additionalProperties: false

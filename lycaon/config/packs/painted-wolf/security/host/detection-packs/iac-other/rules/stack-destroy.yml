@@ -1,0 +1,37 @@
+title: Destroy an infrastructure stack
+id: eff3470c-cecd-4e95-b479-08b5f8e060de
+description: Tears down every resource a stack manages.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_pulumi:
+    Image: pulumi
+    CommandLine|contains:
+      - ' destroy'
+      - ' stack rm'
+  selection_cdk:
+    Image:
+      - cdk
+      - cdktf
+      - sst
+    CommandLine|contains:
+      - ' destroy'
+  selection_crossplane:
+    Image: crossplane
+    CommandLine|contains: ' delete'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|preview|diff)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_pulumi or selection_cdk or selection_crossplane) and not filter_rehearsal and not filter_local

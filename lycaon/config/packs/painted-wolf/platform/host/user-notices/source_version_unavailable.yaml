@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: This version can’t be restored
+message: >-
+  The exact bytes for this file version are no longer available, so the working
+  file was left unchanged.
+suggested_action: Choose another version whose content is still retained.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - exact bytes
+      - left unchanged

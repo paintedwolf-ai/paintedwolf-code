@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Request format isn't supported
+message: The request body was sent in a format this endpoint does not accept.
+suggested_action: Refresh the app and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - format
+      - does not accept

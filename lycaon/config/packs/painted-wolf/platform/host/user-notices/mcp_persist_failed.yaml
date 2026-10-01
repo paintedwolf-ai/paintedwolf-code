@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Could not save the MCP provider
+message: The overlay file could not be written.
+suggested_action: Check that the config directory is writable, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - overlay
+      - writable

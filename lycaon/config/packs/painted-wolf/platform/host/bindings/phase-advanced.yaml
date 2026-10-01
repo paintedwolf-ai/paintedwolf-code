@@ -1,0 +1,19 @@
+# Phase-advance guidance binding.
+'on': phase.advanced
+selector:
+  surface: phase
+effect: inform
+render: coordinator-phase-advanced
+tier: builtin
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - any phase advance without on_reenter.reenter_leg
+  required:
+  - Phase advanced
+  forbidden:
+  - Call `workflow_advance` when gates pass
+  optional_vars:
+  - gate_obligations
+  - current_phase
+  - workflow_id

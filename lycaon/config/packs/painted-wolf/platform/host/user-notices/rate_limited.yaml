@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Too many requests
+message: The host is temporarily limiting this activity.
+suggested_action: Wait briefly and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Too many requests
+retryable: true

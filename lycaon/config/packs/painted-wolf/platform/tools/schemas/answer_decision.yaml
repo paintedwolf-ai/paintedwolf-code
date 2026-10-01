@@ -1,0 +1,16 @@
+tags: [workers]
+description: "Answer a worker's needs_decision: pick one of its offered options; the worker resumes on its same session with your choice."
+schema:
+  type: object
+  properties:
+    job_id:
+      type: string
+      description: Worker job id from the needs_decision envelope
+    option:
+      type: string
+      description: The chosen option — its number or exact text
+    resolved_by:
+      type: string
+      enum: [coordinator, user]
+      description: coordinator (default) or user (ask_user relay)
+  required: [job_id, option]

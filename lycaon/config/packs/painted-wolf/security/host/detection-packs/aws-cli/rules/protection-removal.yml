@@ -1,0 +1,55 @@
+title: Remove a protection that prevents loss
+id: c5ea38d6-d734-44fd-82f6-299cfbbea97a
+description: >-
+  Turns off versioning, deletion protection, encryption by default, a password
+  policy, or an organization guardrail.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  verbs_protection_removal:
+    ApiAction:
+      - 'ec2:disable-ebs-encryption-by-default'
+      - 'ec2:disable-image-block-public-access'
+      - 'iam:deactivate-mfa-device'
+      - 'iam:delete-virtual-mfa-device'
+      - 'iam:delete-account-password-policy'
+      - 'organizations:detach-policy'
+      - 'organizations:disable-policy-type'
+      - 's3api:delete-bucket-encryption'
+  # Suspending versioning removes overwrite recovery.
+  selection_versioning_off:
+    ApiAction|contains: ':put-bucket-versioning'
+    CommandLine|contains: 'status=suspended'
+  # Negated arguments disable the guard.
+  selection_guard_off:
+    CommandLine|contains:
+      - ' --no-disable-api-termination'
+      - ' --no-deletion-protection'
+      - ' --no-enable-key-rotation'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and (verbs_protection_removal or selection_versioning_off or selection_guard_off)
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

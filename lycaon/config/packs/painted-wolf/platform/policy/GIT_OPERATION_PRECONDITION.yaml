@@ -1,0 +1,46 @@
+oar: '1.0'
+id: GIT_OPERATION_PRECONDITION
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.git_addressed_session_required
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "GIT_OPERATION_PRECONDITION"
+effect: block
+copy:
+  what: '{% if paintedwolf.git_addressed_session_required %}This Git operation requires the user-addressed session.{%
+    else %}The repository does not satisfy this Git operation’s preconditions.{% endif %}'
+  cause: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.path %} — {{ paintedwolf.path }}{% endif %}'
+  why: Repository state and reviewed file contents must still match before Git changes them.
+  fix: '{% if paintedwolf.git_addressed_session_required %}Return the required repository operation to the coordinator
+    with the worker’s actual results. Do not perform the operation through another tool or alter the worker’s branch
+    ownership.{% else %}Inspect the repository status and reported details, resolve the named condition within the
+    task’s authority, and make a fresh request.{% endif %}'
+  instead: Keep the current repository state until the precondition is resolved.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_operation_precondition
+x-paintedwolf-message: Git operation precondition failed
+x-paintedwolf-scenarios:
+- id: stale
+  vars:
+    tool: git_checkout
+    profile: coordinator
+    reason: repository_changed_during_review
+    path: README.md
+  expect_contains:
+  - 'Code: GIT_OPERATION_PRECONDITION'
+  - repository_changed_during_review
+  - README.md
+- id: worker
+  vars:
+    tool: git_checkout
+    git_addressed_session_required: true
+    reason: addressed_session_required
+  expect_contains:
+  - 'Code: GIT_OPERATION_PRECONDITION'
+  - user-addressed session

@@ -1,0 +1,4 @@
+{
+  "instructions": "How relevant is this candidate to the task?",
+  "levels": ["irrelevant", "low", "moderate", "high", "direct match"]
+}

@@ -1,0 +1,4 @@
+rules:
+  - id: not-lycaon.prefix
+    languages: [bash]
+    severity: ERROR

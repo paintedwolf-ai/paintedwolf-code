@@ -1,0 +1,37 @@
+oar: '1.0'
+id: TERMINAL_ID_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.id_required
+when: paintedwolf.rejection_code == "TERMINAL_ID_REQUIRED"
+effect: block
+copy:
+  what: id was missing or empty.
+  cause: Handle tools operate on an existing terminal_open id only.
+  why: Without an id the host cannot address a pty process.
+  fix: Pass id from a prior terminal_open result.
+  instead: Branch on Code TERMINAL_ID_REQUIRED; pass id from terminal_open
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
+x-paintedwolf-message: terminal id is required
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: implement
+      reason: missing_id
+      tool: terminal_send
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: TERMINAL_ID_REQUIRED'
+      - terminal_open

@@ -1,0 +1,397 @@
+.den-review-lens__empty {
+  font-size: var(--text-den-label);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+.den-review-lens__loading {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+.den-review-file {
+  border-radius: var(--den-radius-sm);
+}
+
+.den-review-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2rem;
+  box-sizing: border-box;
+  padding: 4px 6px 4px 8px;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-label);
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+
+.den-review-row:hover,
+.den-review-row:focus-visible {
+  background: var(--den-tint-1);
+  border-color: var(--den-border);
+  outline: none;
+}
+
+.den-review-row--open {
+  background: var(--den-tint-2);
+  border-color: var(--den-border);
+}
+
+.den-review-row__op {
+  flex: 0 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+/* Write pulses align with the operation column. */
+.den-review-row__pulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+  animation: den-review-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes den-review-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-review-row__pulse {
+    animation: none;
+  }
+}
+
+/* Directory names shrink before filenames. */
+.den-review-row__base {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+  color: var(--den-text);
+}
+
+.den-review-row__dir {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+
+.den-review-contributor--agent {
+  background: var(--den-accent-signal);
+}
+
+.den-review-contributor--user {
+  background: var(--den-status-positive);
+}
+
+.den-review-contributor--external {
+  background: var(--den-text-muted);
+}
+
+/* Hollow marks indicate command-observed changes. */
+.den-review-contributor--command {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--den-text-muted);
+}
+
+.den-review-lens__diffs:hover:not(:disabled),
+.den-review-lens__diffs[aria-pressed="true"] {
+  background: var(--den-tint-2);
+  color: var(--den-accent-text);
+}
+
+.den-review-lens__diffs:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 1px;
+}
+
+.den-review-lens__diffs:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.den-review-lens__storage {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+
+/* Aligns visible counts in one column. */
+.den-review-row__stat {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 2.8571rem;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-review-row__added {
+  color: var(--den-status-positive);
+}
+
+.den-review-row__removed {
+  color: var(--den-danger-text);
+}
+
+.den-review-row__verb {
+  flex: 0 0 auto;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+.den-review-detail__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+.den-review-walk-context .den-review-row:hover {
+  background: var(--den-tint-2);
+  border-color: var(--den-border);
+}
+
+.den-review-step {
+  font: inherit;
+  font-size: var(--text-den-caption);
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  padding: 2px 4px;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+
+.den-review-step:hover,
+.den-review-step:focus-visible {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+  outline: none;
+}
+
+.den-review-revert {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-review-file:hover .den-review-revert,
+.den-review-file:focus-within .den-review-revert,
+.den-review-row--open + .den-review-revert,
+.den-review-revert--ready {
+  opacity: 1;
+}
+
+.den-review-revert:hover,
+.den-review-revert:focus-visible {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+  outline: none;
+}
+
+.den-review-unseen {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-review-file:hover .den-review-unseen,
+.den-review-file:focus-within .den-review-unseen {
+  opacity: 1;
+}
+
+.den-review-unseen:hover,
+.den-review-unseen:focus-visible {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+  outline: none;
+}
+
+/* Seen rows stay readable and step back from what is new. */
+.den-review-file--seen .den-review-row {
+  color: var(--den-text-muted);
+}
+
+.den-review-file--seen .den-review-row:hover,
+.den-review-file--seen .den-review-row:focus-visible,
+.den-review-file--seen .den-review-row--open {
+  color: var(--den-text);
+}
+
+.den-review-file--seen .den-review-contributor {
+  opacity: 0.45;
+}
+
+/* A file that just left New lands in Seen with a brief wash. */
+.den-review-file--arrived .den-review-row {
+  animation: den-review-arrive 1.4s ease-out;
+}
+
+@keyframes den-review-arrive {
+  from {
+    background: color-mix(in srgb, var(--den-accent-signal) 18%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-review-file--arrived .den-review-row {
+    animation: none;
+  }
+}
+
+.den-review-lens__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--den-line);
+}
+
+.den-review-lens__group-title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+.den-review-lens__more {
+  align-self: flex-start;
+  margin: 4px 8px 0;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+}
+
+.den-review-lens__more:hover,
+.den-review-lens__more:focus-visible {
+  color: var(--den-text);
+  background: var(--den-tint-1);
+  outline: none;
+}
+
+.den-file-undo-toast {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 8px 10px;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  background: var(--den-surface);
+  font-size: var(--text-den-hint);
+}
+
+.den-file-undo-toast__label {
+  color: var(--den-text);
+}
+
+.den-files-tree__revert {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: var(--text-den-caption);
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-files-tree__revert:hover,
+.den-files-tree__revert:focus-visible {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+  outline: none;
+}
+
+/* One interactive surface for everything known about the hovered line. */
+.files-line-facts { container-type: inline-size; container-name: files-line-facts; width: 24.286rem; padding: 0; color: var(--den-text); font-family: var(--den-font-ui); }
+.files-line-facts__head { display: flex; align-items: baseline; gap: 8px; padding: 7px 11px; border-bottom: 1px solid var(--den-line); }
+.files-line-facts__title { font-size: var(--text-den-label); font-weight: 550; white-space: nowrap; }
+.files-line-facts__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--den-text-muted); font-family: var(--den-font-mono); font-size: var(--text-den-caption); }
+.files-line-facts__section { padding: 7px 7px 2px; color: var(--den-text-muted); font-size: var(--text-den-caption); }
+.files-line-facts__row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; min-height: 2.5em; padding: 5px 7px; border: 0; border-radius: var(--den-radius-sm); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.files-line-facts__row:hover, .files-line-facts__row:focus-visible { background: var(--den-tint-2); }
+.files-line-facts__row:focus-visible { outline: 1px solid var(--den-accent-signal); outline-offset: -1px; }
+.files-line-facts__who { font-size: var(--text-den-label); font-weight: 500; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.files-line-facts__fact { color: var(--den-text-muted); font-size: var(--text-den-caption); line-height: 1.35; overflow-wrap: anywhere; }
+.files-line-facts__tool { font-family: var(--den-font-mono); }
+.files-line-facts__fact--waiting { color: var(--den-warning); }
+.files-line-facts__go { display: inline-flex; align-items: center; gap: 3px; color: var(--den-text-muted); font-size: var(--text-den-caption); white-space: nowrap; }
+.files-line-facts__row:hover .files-line-facts__go, .files-line-facts__row:focus-visible .files-line-facts__go, .files-line-facts__go--waiting { color: var(--den-accent-text); }
+@container files-line-facts (max-width: 20rem) {
+  .files-line-facts__row { grid-template-columns: 8px minmax(0, 1fr); }
+  .files-line-facts__go { grid-column: 2; justify-self: start; }
+}
+.files-line-gutter__facts { position: absolute; inset: 0; width: 100%; border: 0; margin: 0; padding: 0; background-color: transparent; cursor: default; }
+.files-line-gutter__facts:focus-visible { outline: 1px solid var(--den-accent-signal); outline-offset: -1px; }
+.cm-editor:not(.cm-agent-file) .cm-scroller:not([data-den-scrolling]) .files-line-gutter__cell--facts:not(.files-line-gutter__cell--read):hover .files-line-gutter__facts,
+.files-line-gutter__facts[aria-haspopup][aria-expanded="true"]:not(:disabled) {
+  background-color: color-mix(in srgb, var(--den-text-muted) 10%, transparent);
+  box-shadow: none;
+}
+.cm-editor:not(.cm-agent-file) .cm-scroller:not([data-den-scrolling]) .files-line-gutter__cell--facts:not(.files-line-gutter__cell--read):hover,
+.files-line-gutter__cell--facts.is-open { color: var(--den-text); }
+
+/* Removed-lines preview: the folded text over the code, as the editor draws it. */

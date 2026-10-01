@@ -1,0 +1,56 @@
+components:
+  schemas:
+    Finding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+        has_body:
+          type: boolean
+        body:
+          type: string
+        agent:
+          type: string
+        summary:
+          type: string
+        ref:
+          type: string
+        recorded_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+      required:
+        - agent
+        - summary
+
+    FindingsDigest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - findings
+        - revision
+
+    FindingsEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          x-go-type: "uint64"
+          type: integer
+          format: int64
+      required:
+        - revision

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-accessibility-preferred-text-size"
+description = "Read the macOS Accessibility text-size category once at boot; later changes arrive on the accessibility://text-size-changed event."
+commands.allow = ["accessibility_preferred_text_size"]

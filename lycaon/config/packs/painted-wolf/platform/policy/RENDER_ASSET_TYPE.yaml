@@ -1,0 +1,37 @@
+oar: '1.0'
+id: RENDER_ASSET_TYPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.unsupported
+when: paintedwolf.rejection_code == "RENDER_ASSET_TYPE"
+effect: block
+copy:
+  what: render_view markup referenced a project file that is not an allowed asset type.
+  cause: Raster images are checked by content type; SVG and CSS use their file type plus sanitization. The
+    supplied asset did not satisfy an allowed branch.
+  why: The hermetic asset origin serves only image and stylesheet content — documents, scripts, fonts, and
+    other bytes stay out of the render surface.
+  fix: Use a permitted image or stylesheet that represents the intended content. Do not paste rejected scripts
+    or active content into markup to bypass asset validation.
+  instead: Branch on Code RENDER_ASSET_TYPE; reference an allowed image or css file instead, then retry render_view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Project asset is not an allowed image or css type
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: docs/readme.pdf
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_ASSET_TYPE'

@@ -1,0 +1,46 @@
+oar: '1.0'
+id: READ_PATH_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - read
+  - edit
+  - write
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - diff
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.can_list_dir
+  - paintedwolf.can_find
+when: paintedwolf.rejection_code == "READ_PATH_NOT_FOUND"
+effect: block
+copy:
+  what: '{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project
+    roots.'
+  cause: The path must name an existing file; directories and out-of-scope paths are rejected separately.
+  why: Structured rejects include optional suggestions so agents can fix typos without guessing from free-form
+    errors.
+  fix: '{% if paintedwolf.can_list_dir %}Inspect the intended parent with list_dir.{% endif %}{% if paintedwolf.can_find
+    %} Use find to resolve the intended filename.{% endif %} Correct a demonstrated path mistake within attached
+    roots, then retry {{ tool }}. Do not create an empty substitute for missing input.'
+  instead: Branch on Code; fix path or use list_dir to discover the correct name
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
+x-paintedwolf-message: read path does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: src/missing.go
+    profile: explore_readonly
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_PATH_NOT_FOUND'

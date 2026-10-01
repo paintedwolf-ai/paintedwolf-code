@@ -1,0 +1,270 @@
+components:
+  schemas:
+    CostScope:
+      type: string
+      enum:
+      - session
+      - project
+    CostEstimateCoverage:
+      type: string
+      description: >-
+        What estimated_nano_usd covers, stamped by the host from the call receipts.
+        complete: every incurred token was reported and priced, so the figure is
+        the whole estimate. lower_bound: some usage was reported without a
+        price, or a charged provider call ended without a usage report, so the
+        true estimate is at least the figure. unpriced: usage was recorded but
+        nothing could be priced, so the figure is meaningless and only tokens
+        are known. Den renders the amount and the coverage as separate facts; a
+        coverage qualifier is never prefixed onto the number.
+      enum:
+      - complete
+      - lower_bound
+      - unpriced
+    CacheSavings:
+      x-go-generate: true
+      type: object
+      required:
+      - estimated_nano_usd
+      - unpriced_tokens
+      additionalProperties: false
+      description: Same-token input-price comparison, including cache-write premiums. May be negative; excludes unpriced cache tokens and is not a prediction of future savings.
+      properties:
+        estimated_nano_usd:
+          x-go-type: "int64"
+          type: integer
+        unpriced_tokens:
+          type: integer
+          minimum: 0
+    CostBreakdown:
+      x-go-generate: true
+      type: object
+      required:
+      - estimated_nano_usd
+      - token_totals
+      additionalProperties: false
+      properties:
+        cache_savings:
+          x-go-pointer: true
+          $ref: cost.yaml#/components/schemas/CacheSavings
+
+        estimated_nano_usd:
+          x-go-type: "int64"
+          type: integer
+        token_totals:
+          $ref: cost.yaml#/components/schemas/TokenTotals
+        task_count:
+          type: integer
+          minimum: 0
+    CostEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - estimated_nano_usd
+      - token_totals
+      - coordinator
+      - workers
+      - summarizer
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: cost.yaml#/components/schemas/CostScope
+        session_id:
+          type: string
+          format: uuid
+        estimated_nano_usd:
+          x-go-type: "int64"
+          type: integer
+        token_totals:
+          $ref: cost.yaml#/components/schemas/TokenTotals
+        coordinator:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+        workers:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+        summarizer:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+          description: Summarizer utility calls (compaction, curate, commit draft, and similar).
+    CostSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - estimated_nano_usd
+      - token_totals
+      - coordinator
+      - workers
+      - summarizer
+      - estimate_coverage
+      - pricing_provenance
+      additionalProperties: false
+      properties:
+        cache_savings:
+          x-go-pointer: true
+          $ref: cost.yaml#/components/schemas/CacheSavings
+
+        scope:
+          $ref: cost.yaml#/components/schemas/CostScope
+        session_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        estimated_nano_usd:
+          x-go-type: "int64"
+          type: integer
+          description: Estimated nano USD over the priced usage. Read it with estimate_coverage, which says whether it is the whole estimate, a lower bound, or nothing.
+        token_totals:
+          $ref: cost.yaml#/components/schemas/TokenTotals
+        coordinator:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+        workers:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+        summarizer:
+          $ref: cost.yaml#/components/schemas/CostBreakdown
+          description: Summarizer utility calls (compaction, curate, commit draft, and similar).
+        estimate_coverage:
+          $ref: cost.yaml#/components/schemas/CostEstimateCoverage
+        pricing_provenance:
+          type: array
+          description: Every pricing source represented in the estimate, sorted by source id.
+          items:
+            $ref: cost.yaml#/components/schemas/CostPricingProvenance
+        unpriced_tokens:
+          type: integer
+          minimum: 0
+          description: >-
+            Prompt + completion tokens whose individual price was unavailable.
+            Known buckets from the same call remain in the USD subtotal. One of
+            the two causes of a lower_bound coverage; under unpriced coverage it
+            is every incurred token.
+        unknown_calls:
+          type: integer
+          minimum: 0
+          description: >-
+            Provider calls with missing usage that the host could not measure,
+            or with an incomplete provider usage report. Calls that never reached generation are voided and never
+            counted; calls that produced content without a usage report are
+            measured by the host instead (see host_measured_tokens). Non-zero
+            means the token counts are incomplete.
+        unknown_charged_calls:
+          type: integer
+          minimum: 0
+          description: >-
+            The unknown_calls subset on a provider that can bill for tokens.
+            The other cause of a lower_bound coverage; the remainder ran on
+            local inference, where an unreported call costs tokens off the
+            counts but no money.
+        host_measured_tokens:
+          type: integer
+          minimum: 0
+          description: >-
+            Prompt + completion tokens the host counted itself for calls that
+            ended without a provider usage report, the usual cause being a user
+            interrupt mid-stream. Included in the totals and in estimated_nano_usd,
+            and approximate: host tokenization, and no cache attribution.
+    CostPricingProvenance:
+      x-go-generate: true
+      type: object
+      required:
+      - source
+      additionalProperties: false
+      properties:
+        source:
+          type: string
+          minLength: 1
+          description: Feed id, live, local, or unknown.
+        priced_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Newest source timestamp among this source's priced events.
+    ProjectCostSession:
+      x-go-generate: true
+      type: object
+      required:
+      - session
+      - cost
+      additionalProperties: false
+      properties:
+        session:
+          $ref: session/identity.yaml#/components/schemas/SessionSummary
+        cost:
+          $ref: cost.yaml#/components/schemas/CostSummary
+    ProjectCostReport:
+      x-go-generate: true
+      type: object
+      required:
+      - summary
+      - project_utilities
+      - retired_sessions
+      - sessions
+      - total
+      - session_count
+      - archived_session_count
+      - worker_task_count
+      - max_session_nano_usd
+      - max_session_tokens
+      additionalProperties: false
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        session_count:
+          type: integer
+          minimum: 0
+        archived_session_count:
+          type: integer
+          minimum: 0
+        worker_task_count:
+          type: integer
+          minimum: 0
+        max_session_nano_usd:
+          x-go-type: "int64"
+          type: integer
+          minimum: 0
+        max_session_tokens:
+          type: integer
+          minimum: 0
+        next_cursor:
+          type: string
+        summary:
+          $ref: cost.yaml#/components/schemas/CostSummary
+        project_utilities:
+          x-go-type: "CostSummary"
+          allOf:
+          - $ref: cost.yaml#/components/schemas/CostSummary
+          description: LLM utility usage attributed to the project but not to a session.
+        retired_sessions:
+          x-go-type: "CostSummary"
+          allOf:
+          - $ref: cost.yaml#/components/schemas/CostSummary
+          description: Usage retained after its session was deleted or expired.
+        sessions:
+          type: array
+          description: One ordered page of top-level project sessions, including archived sessions. Totals and maxima cover the full project; total is the number matching the search.
+          items:
+            $ref: cost.yaml#/components/schemas/ProjectCostSession
+    TokenTotals:
+      x-go-generate: true
+      type: object
+      required:
+      - prompt
+      - completion
+      additionalProperties: false
+      properties:
+        cache_read:
+          type: integer
+          minimum: 0
+          description: Reported cache-read input tokens, included in prompt.
+        cache_write:
+          type: integer
+          minimum: 0
+          description: Reported cache-write input tokens, included in prompt.
+
+        prompt:
+          type: integer
+          minimum: 0
+        completion:
+          type: integer
+          minimum: 0

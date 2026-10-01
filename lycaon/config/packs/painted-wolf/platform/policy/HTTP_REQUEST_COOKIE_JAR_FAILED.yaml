@@ -1,0 +1,41 @@
+oar: '1.0'
+id: HTTP_REQUEST_COOKIE_JAR_FAILED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - http_request
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.cookie_jar_name
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "HTTP_REQUEST_COOKIE_JAR_FAILED"
+effect: block
+copy:
+  what: Cookie jar {{ paintedwolf.cookie_jar_name }} could not be opened; no request was sent.
+  cause: A jar is a managed secret visible to this chat; it was revoked, unreadable, or the secret store is
+    unavailable. The rejection data names the jar and the reason.
+  why: Cookie values are credentials, so the host keeps them in the protected store and never in the transcript.
+    A jar that fails to persist after a request went out is reported on the result instead, because that exchange
+    already happened.
+  fix: Preserve the intended service session. Use a new jar only when a fresh session is intended and the secret
+    store is available; omit cookie_jar only when cookies are unnecessary. If the existing session is required
+    or storage is unavailable, resolve that host state before retrying. Do not copy cookie values into arguments
+    or chat.
+  instead: Branch on Code HTTP_REQUEST_COOKIE_JAR_FAILED; use another jar name or drop the jar
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: http_request cookie jar unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    jar: registry
+    reason: secret reference is revoked
+    profile: implement
+    tool: http_request
+    cookie_jar_name: registry
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: HTTP_REQUEST_COOKIE_JAR_FAILED'

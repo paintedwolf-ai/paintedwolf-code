@@ -1,0 +1,36 @@
+# Agent-facing approval outcomes render when the tool result is emitted.
+# User notices and guard rejects use separate catalogs.
+
+approval_outcomes:
+  # Direction the person attached is not repeated here: it reaches the model as
+  # user-authority content on this same tool result, off the checkpoint decision.
+  approval_denied:
+    message: >-
+      approval denied by the user — the action did not run.
+    scenarios:
+      - id: denied
+        expect_contains:
+          - denied by the user
+          - did not run
+
+  approval_expired:
+    message: >-
+      tool approval request expired — no response within the approval window;
+      the action did not run. This is a timeout, not a denial: retry the call if
+      you still need it.
+    scenarios:
+      - id: expired
+        expect_contains:
+          - expired
+          - timeout, not a denial
+          - retry
+
+  approval_canceled:
+    message: >-
+      tool approval request canceled because the user stopped the session; the
+      action did not run. Continue only after a new user request.
+    scenarios:
+      - id: canceled_by_stop
+        expect_contains:
+          - canceled because the user stopped the session
+          - action did not run

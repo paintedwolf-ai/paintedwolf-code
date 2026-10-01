@@ -1,0 +1,91 @@
+title: Languages, runtimes, and platform floor
+
+rows:
+  - id: go-point
+    name: Go point releases
+    pins:
+      - go-directive lycaon/go.mod
+    upstream:
+      - go-release line
+    urgency: high
+    urgency_reason: |
+      The standard library (`net/http`, `crypto/tls`, `os`, `archive/*`) forms the sidecar's
+      execution boundary, and point releases carry its security fixes.
+    friction: low
+    friction_reason: |
+      Set by the `go` directive in `lycaon/go.mod`. Wrapper scripts derive `GOTOOLCHAIN` from it,
+      CI reads it as `go-version-file`, and `scripts/setup-dev.sh` checks against it.
+
+  - id: go-release
+    name: Go release
+    pins:
+      - go-directive lycaon/go.mod
+    upstream:
+      - go-release latest
+    urgency: moderate
+    urgency_reason: |
+      Go supports the two newest releases, and upstream modules raise their minimum Go version
+      over time.
+    friction: moderate
+    friction_reason: |
+      Run `./task build:cross` and `./task test:race`. Confirm the pinned `golangci-lint` and
+      `deadcode` understand the new release; `deadcode` is pinned separately from the module's
+      `golang.org/x/tools`.
+
+  - id: bun
+    name: Bun
+    pins:
+      - file .bun-version
+    upstream:
+      - github-release oven-sh/bun bun-v
+    urgency: moderate
+    urgency_reason: |
+      Runs Den installs, Vite, and Vitest.
+    friction: low
+    friction_reason: |
+      Pinned in `.bun-version`, which CI and `scripts/setup-dev.sh` read. Check
+      `bun install --frozen-lockfile` against `bun.lock`.
+
+  - id: node
+    name: Node
+    pins:
+      - file .node-version
+    upstream:
+      - node-release
+    urgency: low
+    urgency_reason: |
+      Offline tool runner for `@redocly/cli`, `scripts/codegen-den-types.sh`, and
+      `scripts/den-coverage-check.sh`.
+    friction: low
+    friction_reason: |
+      Pinned in `.node-version`, which CI and `scripts/setup-dev.sh` read.
+
+  - id: rust
+    name: Rust
+    pins:
+      - toml rust-toolchain.toml toolchain.channel
+    upstream:
+      - rust-stable
+    urgency: moderate
+    urgency_reason: |
+      Compiles the Tauri shell and the document-core WASM.
+    friction: moderate
+    friction_reason: |
+      rustup, CI, and `scripts/setup-dev.sh` read `rust-toolchain.toml`.
+      `scripts/build-document-core.sh` pins the same version for its reproducible WASM sysroot,
+      so a bump also updates it, rebuilds `core.wasm`, and refreshes `core.manifest.json`.
+
+  - id: macos-floor
+    name: macOS floor
+    pins:
+      - file lycaon/internal/platformfloor/macos_floor.txt
+    urgency: low
+    urgency_reason: |
+      A platform target, not an upstream dependency. Raise it only when a required API or a
+      dependency floor demands it.
+    friction: moderate
+    friction_reason: |
+      `macos_floor.txt` is the source of truth. `tauri.conf.json` `minimumSystemVersion` must
+      match, and a contract test enforces it. Staging scripts derive `MACOSX_DEPLOYMENT_TARGET`
+      and `LSMinimumSystemVersion` from it, and `./task bundle:verify` audits the result.
+      Raising the floor drops every user on older macOS.

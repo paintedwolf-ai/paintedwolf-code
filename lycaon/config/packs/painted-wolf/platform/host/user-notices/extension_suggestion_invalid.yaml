@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Suggested extensions cannot be read
+message: >-
+  This project's extension suggestion file is not valid, so its suggestions cannot be shown or installed.
+suggested_action: >-
+  Fix the suggestions in the project's .paintedwolf/extensions.yaml, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - suggestion file is not valid

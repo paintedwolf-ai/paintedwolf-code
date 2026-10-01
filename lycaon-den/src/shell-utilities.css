@@ -1,0 +1,574 @@
+/* Shell layout and type utilities. */
+
+@utility den-shell {
+position: relative;
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.den-shell--orientation-mirrored {
+  flex-direction: row-reverse;
+  --den-drawer-shadow-x: 12px;
+}
+
+/* Mirrored rails keep the resize handle on the content seam. */
+.den-shell--orientation-mirrored .den-shell-aside {
+  flex-direction: row-reverse;
+}
+
+
+@utility den-shell-header {
+position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 12px;
+  row-gap: var(--shell-header-row-gap);
+  /* Stage headers share one top line. */
+  min-height: calc(var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+  height: var(--shell-header-height);
+  padding: 4px var(--den-chat-gutter-x);
+  background: var(--den-background);
+  flex-shrink: 0;
+  z-index: var(--den-z-stage-header);
+}
+
+
+@utility den-shell-header-drawers {
+display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+
+@utility den-shell-header-titlebar {
+display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  order: 1;
+  position: relative;
+
+  & .den-shell-header-drawers:empty {
+    display: none;
+  }
+}
+
+@utility den-shell-header-titlebar__edge--trailing {
+  margin-left: auto;
+}
+
+
+@utility den-shell-main {
+position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  background: var(--den-background);
+}
+
+
+/* Hosts the rail scrollbar outside the scrolled content. */
+@utility den-shell-nav-frame {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* The rail viewport; the scrollbar library resets its padding, so the content carries it. */
+@utility den-shell-nav {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  /* Rail content shares the chrome plane. */
+  background: var(--den-surface-chrome);
+  --den-plane: var(--den-surface-chrome);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: none;
+}
+
+
+/* Grows to fill the rail but never shrinks below its rows, so its box is the scroll extent. */
+@utility den-shell-nav-content {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  padding: 0 var(--den-nav-rail-gutter) 0
+    calc(var(--den-nav-rail-gutter) + var(--den-nav-edge-pad));
+
+  /* A tail as tall as the dock wash holds the last row clear at the end of the scroll. */
+  &::after {
+    content: "";
+    flex: 0 0 var(--den-nav-wash-height);
+  }
+}
+
+.den-shell--orientation-mirrored .den-shell-nav-content {
+  padding-right: calc(var(--den-nav-rail-gutter) + var(--den-nav-edge-pad));
+  padding-left: var(--den-nav-rail-gutter);
+}
+
+
+@utility den-shell-nav-dock {
+  /* The rail clip and wash meet the tray card's top margin. */
+  --den-nav-tray-lead: 16px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+
+
+@utility den-shell-nav-link {
+position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--den-nav-section-height);
+  height: auto;
+  padding: 0 4px 0 var(--den-nav-section-pad-left);
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-den-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+  &:hover {
+    background: var(--den-nav-hover-bg);
+    color: var(--den-text);
+  }
+}
+
+
+.den-shell-nav-link-row .den-shell-nav-link {
+  flex: 1;
+}
+
+@utility den-shell-nav-link-row {
+display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+
+@utility den-inset-icon-btn {
+display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  /* Matches the idle tab-chip icon opacity. */
+  color: color-mix(in srgb, var(--den-text-muted) 72%, transparent);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+  &:hover:not(:disabled) {
+    background: var(--den-surface-offset);
+    --den-plane: var(--den-surface-offset);
+    box-shadow: var(--den-bevel-inset);
+    color: var(--den-text);
+  }
+  /* Icons carry the weight change as a heavier stroke. */
+  &:active:not(:disabled) {
+    background: var(--den-tint-1);
+    box-shadow: var(--den-bevel-inset);
+    color: var(--den-text);
+    font-weight: 600;
+    --den-icon-stroke-scale: 1.3;
+  }
+  &:focus-visible {
+    outline: none;
+    color: var(--den-text);
+    box-shadow:
+      var(--den-bevel-inset),
+      0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+
+/* Fit controls use double chevrons with lower idle opacity. */
+.den-auto-restore-control {
+  position: relative;
+  cursor: pointer;
+}
+
+.den-auto-restore-control:not(:hover, :active, :focus-visible) {
+  color: color-mix(in srgb, var(--den-text-muted) 58%, transparent);
+}
+
+.den-sidebar-automatic-expand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+}
+
+.den-sidebar-automatic-expand-icon > svg + svg {
+  margin-left: -9px;
+}
+
+
+@utility den-shell-nav-sub-link {
+position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: max(24px, calc(var(--text-den-hint) * 1.25 + 0.5em));
+  height: auto;
+  padding: 0.15em 0.25em;
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-den-hint);
+  font-weight: 400;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+  &:hover {
+    background: var(--den-nav-hover-bg);
+    color: var(--den-text);
+  }
+}
+
+
+@utility den-shell-nav-sub-link-active {
+border-radius: var(--den-radius-sm);
+  background: var(--den-nav-selection-bg);
+  color: var(--den-text);
+  font-weight: 500;
+
+  &:hover {
+    background: var(--den-nav-selection-bg);
+  }
+}
+
+@utility den-shell-nav-sub-link-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-shell-nav-sub-list {
+list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+
+@utility den-shell-stage {
+display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+
+@utility den-shell-window-control {
+display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max(24px, 1.75em);
+  min-height: max(24px, 1.5em);
+  width: auto;
+  height: auto;
+  padding: 0 0.25em;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+  &:hover {
+    background: var(--den-nav-hover-bg);
+    color: var(--den-text);
+  }
+}
+
+
+.den-shell-window-control-close:hover {
+  background: color-mix(in srgb, var(--den-accent) 18%, transparent);
+  color: var(--den-text);
+}
+
+@utility den-shell-window-controls {
+display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.den-shell-chrome-drag-surface[data-tauri-drag-region] ~ .den-shell-header-drawers .den-shell-window-control,
+.den-shell-header-titlebar .den-stage-back,
+.den-shell-aside-titlebar .den-inset-icon-btn,
+.den-shell-header-titlebar .den-inset-icon-btn,
+:is(.tabs__rail-leading, .tabs__rail-trailing) .den-inset-icon-btn {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Header pane controls share one size across slots. */
+.den-shell-header-chat
+  :is(.tabs__rail-leading, .tabs__rail-trailing)
+  :is(.den-shell-nav-sidebar-btn-expand, .den-pane-toggle) {
+  flex-shrink: 0;
+  width: var(--den-unified-chrome-row);
+  height: var(--den-unified-chrome-row);
+  border-radius: var(--den-radius-sm);
+}
+
+.den-shell-header-chat
+  :is(.tabs__rail-leading, .tabs__rail-trailing)
+  :is(.den-shell-nav-sidebar-btn-expand, .den-pane-toggle)
+  svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Opposing insets align the seam toggle and overflow trigger within the gutter. */
+.den-shell-header-chat .tabs__rail-leading .den-pane-toggle--hide-conversation {
+  margin-left: calc(
+    -1 * min(var(--den-seam-toggle-optical-inset), var(--den-tabs-slot-gutter-x))
+  );
+}
+
+.den-shell-header-chat
+  .tabs__rail-trailing
+  .den-pane-toggle--hide-conversation {
+  margin-right: calc(
+    -1 * min(var(--den-seam-toggle-optical-inset), var(--den-tabs-slot-gutter-x))
+  );
+}
+
+/* Title bar reopen controls fit inside the traffic-light strip. */
+.den-shell-header-titlebar__edge
+  :is(.den-shell-nav-sidebar-btn-expand, .den-pane-toggle) {
+  flex-shrink: 0;
+  width: var(--den-titlebar-edge-control);
+  height: var(--den-titlebar-edge-control);
+  border-radius: var(--den-radius-sm);
+}
+
+.den-shell-header-titlebar__edge
+  :is(.den-shell-nav-sidebar-btn-expand, .den-pane-toggle)
+  svg,
+.den-custom-chrome
+  .den-shell-aside-titlebar
+  .den-shell-nav-sidebar-btn-collapse
+  svg {
+  width: 14px;
+  height: 14px;
+}
+
+.den-shell-header-titlebar__edge .den-pane-toggle__dot {
+  top: 2px;
+  right: 2px;
+}
+
+.den-split-fit-restore[data-refused] {
+  --den-fit-refused-shift: 3px;
+  animation: den-fit-refused 140ms var(--den-ease);
+}
+
+.den-split-fit-restore[data-refused="left"] {
+  --den-fit-refused-shift: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-split-fit-restore[data-refused] {
+    animation: none;
+  }
+}
+
+/* Marks unread or waiting activity in a conversation that is not on screen. */
+.den-pane-toggle__dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-attention-tone, var(--den-accent-text));
+  box-shadow: 0 0 0 2px var(--den-background);
+  pointer-events: none;
+}
+.den-pane-toggle__dot[data-attention-class="needs_you"] {
+  --den-attention-tone: var(--den-accent-text);
+}
+.den-pane-toggle__dot[data-attention-class="finished"] {
+  --den-attention-tone: var(--den-status-positive);
+}
+
+/* The chip row positions the overlay panel inside the strip padding. */
+.den-shell-header-chat .tabs__strip {
+  padding-left: var(--tabs-strip-inset-start);
+  padding-right: var(--tabs-strip-inset-end);
+}
+
+.den-shell-header-chat .tabs__panel-shell {
+  width: auto;
+  margin-right: 0;
+  z-index: 2;
+}
+
+/* The rail cover aligns with the chip row. */
+.den-shell-header-chat .tabs__rail:not(.tabs__rail--compact)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin-right: 0;
+  height: 100%;
+  background: var(--den-background);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Interactive rail content paints above its cover. */
+.den-shell-header-chat .tabs__strip,
+.den-shell-header-chat .tabs__rail-leading,
+.den-shell-header-chat .tabs__rail-trailing {
+  position: relative;
+  z-index: 1;
+}
+
+/* The rail-level backing covers both side-control slots. */
+.den-shell-header-chat .tabs__panel-wash {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: calc(
+    var(--den-chat-gutter-x) - var(--den-chat-scrollbar-shift) +
+      var(--den-scrollbar-size)
+  );
+  height: 0;
+  background: var(--den-background);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.den-shell-header-chat .tabs__panel-clip {
+  position: relative;
+  z-index: 1;
+}
+
+/* The fade follows the backing's lower edge. */
+.den-shell-header-chat .tabs__panel-fade {
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 0;
+}
+
+.den-shell-header-chat .tabs__rail-trailing .den-shell-window-controls {
+  pointer-events: auto;
+}
+
+@utility den-stage-wash-fill {
+  background-image: var(--den-stage-wash), var(--den-stage-wash-dither);
+  background-size: auto, 160px 160px;
+  background-repeat: no-repeat, repeat;
+  mask-image: var(--den-stage-wash-mask);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+
+@utility den-resident-host {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-resident-surface {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bounds resident stage scrolling containers. */
+@utility den-resident-stage-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Same-edge restores name their panes without changing the single-control chrome. */
+.den-stage-nav-restore {
+  display: inline-flex;
+  align-items: center;
+}
+
+.den-shell-header-titlebar__edge[data-edge="right"] > .den-stage-nav-restore {
+  order: 1;
+}
+
+.den-shell-header-titlebar__edge .den-pane-toggle--labelled,
+.den-shell-header-chat
+  :is(.tabs__rail-leading, .tabs__rail-trailing)
+  .den-pane-toggle--labelled {
+  width: auto;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: var(--text-den-caption);
+}

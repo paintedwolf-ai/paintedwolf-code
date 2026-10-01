@@ -1,0 +1,23 @@
+# Classifier overrides for Go modules where go-licenses reports Unknown
+# despite a clear LICENSE at the module root. Keep this list short and
+# auditable — prefer fixing upstream or replacing the dependency.
+#
+# path_prefix matches the go-licenses CSV package column (prefix match).
+
+overrides:
+  - path_prefix: github.com/deitch/magic
+    license: Apache-2.0
+    license_text_file: texts/Apache-2.0.txt
+    note: Module-root LICENSE is Apache-2.0; classifier misses nested pkg paths.
+
+  - path_prefix: github.com/alecthomas/chroma/v2
+    license: MIT
+    license_text_files:
+      MIT: texts/chroma-MIT.txt
+      OFL-1.1: texts/chroma-OFL-1.1.txt
+    note: >-
+      The library is MIT. formatters/svg additionally embeds a Liberation Mono
+      font under OFL-1.1, and chroma/v2/formatters imports that formatter
+      unconditionally, so the font ships in pw-logs. go-licenses has no type for
+      OFL and rejects the whole library as unknown, so both texts are supplied
+      here — the OFL copy is the one carried in the font's own source file.

@@ -1,0 +1,10 @@
+id: painted-wolf/platform:settings-section-approvals
+title: "Settings: approvals"
+scope: "global"
+keywords:
+  - "approvals"
+  - "permissions"
+  - "posture"
+action:
+  kind: native_ui
+  handler: "settings.section.approvals"

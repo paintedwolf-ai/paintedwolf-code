@@ -1,0 +1,49 @@
+surfaces: [preflight]
+# One code, two resolved conditions, and both take the window: with no
+# descriptors left the engine cannot open its store, so nothing the user does
+# next can succeed. They differ only in whether reopening this app is enough.
+notification:
+  discriminator: reason
+  resolutions:
+    - { id: process, when: process, tier: catastrophic, scope: app }
+    - { id: system, when: system, tier: catastrophic, scope: app }
+context_schema:
+  required:
+    - reason
+title: >-
+  {% if reason == "system" -%}
+  This Mac has no free file handles
+  {%- else -%}
+  The engine ran out of file handles
+  {%- endif %}
+message: >-
+  {% if reason == "system" -%}
+  The whole system has reached its limit on open files, so the engine cannot
+  open its settings, its history, or the files you are working on. This is not
+  a problem with your folders or your installation.
+  {%- else -%}
+  The engine is holding every file it is allowed to open at once, so it cannot
+  read its settings, its history, or the files you are working on. This is not
+  a problem with your folders or your installation.
+  {%- endif %}
+suggested_action: >-
+  {% if reason == "system" -%}
+  Quit other apps and try again. If that does not clear it, restart the Mac.
+  {%- else -%}
+  Quit and reopen the app.
+  {%- endif %}
+scenarios:
+  - id: process
+    resolution: process
+    vars:
+      reason: process
+    expect_contains:
+      - ran out of file handles
+      - reopen the app
+  - id: system
+    resolution: system
+    vars:
+      reason: system
+    expect_contains:
+      - no free file handles
+      - restart the Mac

@@ -1,0 +1,161 @@
+/* Answer progress stays inline until expanded. */
+@utility den-draft-rail {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 4px 0;
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--den-draft-accent) 30%, var(--den-line));
+}
+
+
+@utility den-draft-rail--live {
+  border-left-color: color-mix(in srgb, var(--den-draft-accent) 55%, var(--den-line));
+}
+
+
+@utility den-draft-rail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+
+@utility den-draft-rail-label {
+  flex: 0 0 auto;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-draft-accent-text);
+}
+
+
+@utility den-draft-rail-generating {
+  flex: 0 0 auto;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+
+@utility den-draft-rail-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.2;
+  cursor: pointer;
+  &:hover {
+    color: var(--den-text);
+  }
+}
+
+
+@utility den-draft-rail-loading {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  font-style: italic;
+}
+
+
+@utility den-draft-rail-body {
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+}
+
+
+@utility den-draft-rail-body--collapsed {
+  overflow: hidden;
+}
+
+
+@utility den-draft-rail-summary {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+}
+
+
+@utility den-draft-rail-plain {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+}
+
+
+@utility den-draft-rail-live-prose {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--den-text);
+}
+
+
+@utility den-draft-rail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--den-line);
+}
+
+
+@utility den-draft-rail-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  height: 28px;
+  margin: 0 0 -1px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--den-text);
+  }
+}
+
+
+@utility den-draft-rail-tab--active {
+  color: var(--den-text);
+  font-weight: 600;
+  border-bottom-color: var(--den-accent);
+}
+
+
+@utility den-draft-rail-tab-index {
+  font-weight: 600;
+}
+
+
+@utility den-draft-rail-tab-badge {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+

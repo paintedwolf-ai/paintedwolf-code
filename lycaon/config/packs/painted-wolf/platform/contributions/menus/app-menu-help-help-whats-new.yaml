@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-help-help-whats-new
+slot: "app_menu.help"
+command: painted-wolf/platform:help-whats-new
+group: "1"
+order: 2

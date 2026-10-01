@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-window-files-toggle-pin
+slot: "app_menu.window"
+command: painted-wolf/platform:files-toggle-pin
+group: "0"
+order: 3
+label: "Pin files tab"

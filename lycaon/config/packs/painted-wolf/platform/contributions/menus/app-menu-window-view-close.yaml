@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-window-view-close
+slot: "app_menu.window"
+command: painted-wolf/platform:view-close
+group: "1"
+order: 4
+label: "Close view"

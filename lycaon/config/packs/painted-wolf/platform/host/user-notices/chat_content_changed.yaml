@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Content changed"
+message: "This content changed since it was opened."
+suggested_action: "Reopen it to read the current version."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "changed since it was opened"

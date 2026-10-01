@@ -1,0 +1,507 @@
+//! The three decision primitives and how they render into option texts.
+//!
+//! A question is one of `choice` (pick a label), `score` (rate against ordered levels) or
+//! `noul` (a calibrated boolean). Every variant is answered by scoring one `[MASK]` marker per
+//! option, so the *rendering* of the options is part of the model input and has to be stable.
+
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use crate::error::{Error, Result};
+use crate::pyjson;
+
+/// The kind of decision a question asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QType {
+    /// Pick exactly one label out of a named set.
+    Choice,
+    /// Rate the state against ordered descriptive levels.
+    Score,
+    /// A boolean question, answered as the probability that it holds.
+    Noul,
+    /// Pick any number of labels out of a named set: every option is its own yes/no, read
+    /// from the same row. Rendered and embedded as a choice, decoded per marker.
+    Multi,
+}
+
+impl QType {
+    /// Every kind the model's type embedding distinguishes, in [`index`](QType::index) order.
+    pub const ALL: [QType; 3] = [QType::Choice, QType::Score, QType::Noul];
+
+    /// Index used by the model's type embedding. Must match the training order; a multi
+    /// question shares the choice embedding, which is how its head was trained.
+    pub fn index(self) -> usize {
+        match self {
+            QType::Choice | QType::Multi => 0,
+            QType::Score => 1,
+            QType::Noul => 2,
+        }
+    }
+
+    /// The word that opens the rendered question head.
+    pub fn name(self) -> &'static str {
+        match self {
+            QType::Choice | QType::Multi => "choice",
+            QType::Score => "score",
+            QType::Noul => "noul",
+        }
+    }
+}
+
+/// One typed question.
+///
+/// `instructions` and `criteria` are kept as raw JSON because the training-side code
+/// accepts structured values there and renders them as JSON into the prompt.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Question {
+    #[serde(rename = "type")]
+    pub kind: QType,
+    pub instructions: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub criteria: Option<Value>,
+}
+
+impl Question {
+    /// Start a `choice` question; add labels with [`ChoiceBuilder::option`].
+    pub fn choice(instructions: impl Into<String>) -> ChoiceBuilder {
+        ChoiceBuilder { instructions: instructions.into(), options: Map::new(), multi: false }
+    }
+
+    /// Start a `score` question; add ordered levels with [`ScoreBuilder::level`].
+    pub fn score(instructions: impl Into<String>) -> ScoreBuilder {
+        ScoreBuilder { instructions: instructions.into(), levels: Vec::new() }
+    }
+
+    /// Start a `multi` question: any number of the labels added with
+    /// [`ChoiceBuilder::option`] may apply.
+    pub fn multi(instructions: impl Into<String>) -> ChoiceBuilder {
+        ChoiceBuilder { instructions: instructions.into(), options: Map::new(), multi: true }
+    }
+
+    /// A `noul` (boolean) question.
+    pub fn noul(instructions: impl Into<String>) -> NoulBuilder {
+        NoulBuilder { instructions: instructions.into(), when_true: None, when_false: None }
+    }
+
+    /// The instruction text as the model sees it: strings pass through, anything else is JSON
+    /// with non-ASCII escaped, as the training side renders it.
+    pub fn instructions_text(&self) -> String {
+        pyjson::render_instructions(&self.instructions).into_owned()
+    }
+
+    /// The labels an answer can carry, in marker order.
+    ///
+    /// `choice` returns its criterion keys, `score` the level indices as strings and `noul`
+    /// `["false", "true"]`.
+    pub fn labels(&self, id: &str) -> Result<Vec<String>> {
+        Ok(self.options(id)?.into_iter().map(|(label, _)| label).collect())
+    }
+
+    /// The option texts, one per `[MASK]` marker, in label order.
+    pub fn render_options(&self, id: &str) -> Result<Vec<String>> {
+        Ok(self.options(id)?.into_iter().map(|(_, text)| text).collect())
+    }
+
+    /// Every option as `(label, text)`, in marker order: the one place the criteria are parsed.
+    ///
+    /// The texts match the training side's `render_options` exactly: the strings matter,
+    /// because they are tokenised into the sequence the model scores.
+    pub(crate) fn options(&self, id: &str) -> Result<Vec<(String, String)>> {
+        match self.kind {
+            QType::Choice | QType::Multi => Ok(self
+                .choice_entries(id)?
+                .into_iter()
+                .map(|(label, v)| {
+                    let text = match v {
+                        // Only null and "" mean "no description": 0 and false are real criteria.
+                        None => label.clone(),
+                        Some(v) => format!("{label}: {}", pyjson::render(&v)),
+                    };
+                    (label, text)
+                })
+                .collect()),
+            QType::Score => Ok(self
+                .score_levels(id)?
+                .iter()
+                .enumerate()
+                .map(|(i, c)| (i.to_string(), format!("level {i}: {}", pyjson::render(c))))
+                .collect()),
+            QType::Noul => {
+                let crit = self.criteria.as_ref().and_then(Value::as_object);
+                let side = |key: &str, fallback: &str| {
+                    let text = match crit.and_then(|c| c.get(key)) {
+                        Some(v) if !is_blank(v) => format!("{key}: {}", pyjson::render(v)),
+                        _ => format!("{key}: {fallback}"),
+                    };
+                    (key.to_string(), text)
+                };
+                Ok(vec![
+                    side("false", "no, the statement does not hold"),
+                    side("true", "yes, the statement holds"),
+                ])
+            }
+        }
+    }
+
+    fn choice_entries(&self, id: &str) -> Result<Vec<(String, Option<Value>)>> {
+        let entries: Vec<_> = match self.criteria.as_ref() {
+            // A bare list of labels is shorthand for "no description for any of them". The
+            // training side turns it into a dict, so a repeated label is one option, not two.
+            Some(Value::Array(items)) => {
+                let labels: indexmap::IndexSet<String> =
+                    items.iter().map(|v| pyjson::render(v).into_owned()).collect();
+                labels.into_iter().map(|label| (label, None)).collect()
+            }
+            Some(Value::Object(map)) => map
+                .iter()
+                .map(|(k, v)| (k.clone(), if is_blank(v) { None } else { Some(v.clone()) }))
+                .collect(),
+            _ => Vec::new(),
+        };
+        if entries.is_empty() {
+            return Err(Error::question(
+                id,
+                "a choice or multi question needs `criteria`: a non-empty map of label -> description or list of labels",
+            ));
+        }
+        Ok(entries)
+    }
+
+    /// The ordered level descriptions of a `score` question.
+    pub(crate) fn score_levels(&self, id: &str) -> Result<&Vec<Value>> {
+        match self.criteria.as_ref() {
+            Some(Value::Array(items)) if !items.is_empty() => Ok(items),
+            _ => Err(Error::question(
+                id,
+                "a score question needs `criteria`: a non-empty list of ordered level descriptions",
+            )),
+        }
+    }
+}
+
+fn is_blank(v: &Value) -> bool {
+    matches!(v, Value::Null) || matches!(v, Value::String(s) if s.is_empty())
+}
+
+/// An ordered set of questions, answered together in one forward pass.
+///
+/// Order is preserved end to end: it is the order the answers come back in, and questions are
+/// batched as rows in the order they were inserted.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Questions(pub IndexMap<String, Question>);
+
+impl Questions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a question under `id`, replacing any question already there.
+    pub fn with(mut self, id: impl Into<String>, q: impl Into<Question>) -> Self {
+        self.0.insert(id.into(), q.into());
+        self
+    }
+
+    /// Add a question under `id` in place.
+    pub fn insert(&mut self, id: impl Into<String>, q: impl Into<Question>) -> &mut Self {
+        self.0.insert(id.into(), q.into());
+        self
+    }
+
+    /// Parse the JSON schema used by the Python package: `{"<id>": {"type": ..., ...}}`.
+    pub fn from_json(s: &str) -> Result<Self> {
+        serde_json::from_str(s).map_err(|e| Error::json("questions", e))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> indexmap::map::Iter<'_, String, Question> {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Questions {
+    type Item = (&'a String, &'a Question);
+    type IntoIter = indexmap::map::Iter<'a, String, Question>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl FromIterator<(String, Question)> for Questions {
+    fn from_iter<T: IntoIterator<Item = (String, Question)>>(iter: T) -> Self {
+        Questions(iter.into_iter().collect())
+    }
+}
+
+// ----------------------------------------------------------------------- builders
+
+/// Builder for a [`QType::Choice`] or [`QType::Multi`] question.
+pub struct ChoiceBuilder {
+    instructions: String,
+    options: Map<String, Value>,
+    multi: bool,
+}
+
+impl ChoiceBuilder {
+    /// Add a label with a description of when it applies.
+    pub fn option(mut self, label: impl Into<String>, description: impl Into<String>) -> Self {
+        self.options.insert(label.into(), Value::String(description.into()));
+        self
+    }
+
+    /// Add a label that speaks for itself.
+    pub fn bare_option(mut self, label: impl Into<String>) -> Self {
+        self.options.insert(label.into(), Value::Null);
+        self
+    }
+}
+
+impl From<ChoiceBuilder> for Question {
+    fn from(b: ChoiceBuilder) -> Self {
+        Question {
+            kind: if b.multi { QType::Multi } else { QType::Choice },
+            instructions: Value::String(b.instructions),
+            criteria: Some(Value::Object(b.options)),
+        }
+    }
+}
+
+/// Builder for a [`QType::Score`] question.
+pub struct ScoreBuilder {
+    instructions: String,
+    levels: Vec<Value>,
+}
+
+impl ScoreBuilder {
+    /// Append the next level. Levels are ordered from 0 upwards.
+    pub fn level(mut self, description: impl Into<String>) -> Self {
+        self.levels.push(Value::String(description.into()));
+        self
+    }
+}
+
+impl From<ScoreBuilder> for Question {
+    fn from(b: ScoreBuilder) -> Self {
+        Question {
+            kind: QType::Score,
+            instructions: Value::String(b.instructions),
+            criteria: Some(Value::Array(b.levels)),
+        }
+    }
+}
+
+/// Builder for a [`QType::Noul`] question.
+pub struct NoulBuilder {
+    instructions: String,
+    when_true: Option<String>,
+    when_false: Option<String>,
+}
+
+impl NoulBuilder {
+    /// Describe what "true" means, instead of the generic wording.
+    pub fn when_true(mut self, description: impl Into<String>) -> Self {
+        self.when_true = Some(description.into());
+        self
+    }
+
+    /// Describe what "false" means, instead of the generic wording.
+    pub fn when_false(mut self, description: impl Into<String>) -> Self {
+        self.when_false = Some(description.into());
+        self
+    }
+}
+
+impl From<NoulBuilder> for Question {
+    fn from(b: NoulBuilder) -> Self {
+        let mut crit = Map::new();
+        if let Some(f) = b.when_false {
+            crit.insert("false".into(), Value::String(f));
+        }
+        if let Some(t) = b.when_true {
+            crit.insert("true".into(), Value::String(t));
+        }
+        Question {
+            kind: QType::Noul,
+            instructions: Value::String(b.instructions),
+            criteria: if crit.is_empty() { None } else { Some(Value::Object(crit)) },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn choice_options_render_label_and_description() {
+        let q: Question = Question::choice("Which team?")
+            .option("billing", "invoices, payments")
+            .bare_option("other")
+            .into();
+        assert_eq!(
+            q.render_options("dept").unwrap(),
+            vec!["billing: invoices, payments".to_string(), "other".to_string()]
+        );
+        assert_eq!(q.labels("dept").unwrap(), vec!["billing", "other"]);
+    }
+
+    #[test]
+    fn choice_criteria_are_read_in_sorted_key_order() {
+        // The host encodes option maps with sorted keys, and the training side tokenizes them in
+        // the order it reads them, so a sorted map is the order the model sees.
+        let q: Question = serde_json::from_str(
+            r#"{"type":"choice","instructions":"x","criteria":{"z":null,"a":null,"m":null}}"#,
+        )
+        .unwrap();
+        assert_eq!(q.labels("q").unwrap(), vec!["a", "m", "z"]);
+    }
+
+    #[test]
+    fn choice_accepts_a_bare_list_of_labels() {
+        let q: Question =
+            serde_json::from_str(r#"{"type":"choice","instructions":"x","criteria":["a","b"]}"#)
+                .unwrap();
+        assert_eq!(q.render_options("q").unwrap(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn a_repeated_label_in_a_list_is_one_option() {
+        let q: Question = serde_json::from_str(
+            r#"{"type":"choice","instructions":"x","criteria":["billing","other","billing"]}"#,
+        )
+        .unwrap();
+        assert_eq!(q.labels("q").unwrap(), vec!["billing", "other"]);
+    }
+
+    #[test]
+    fn a_multi_question_renders_like_a_choice() {
+        let q: Question = Question::multi("Which tools?")
+            .option("edit", "change files")
+            .bare_option("run")
+            .into();
+        assert_eq!(q.kind, QType::Multi);
+        assert_eq!(q.kind.index(), QType::Choice.index());
+        assert_eq!(
+            q.render_options("t").unwrap(),
+            vec!["edit: change files".to_string(), "run".to_string()]
+        );
+        let json = serde_json::to_string(&q).unwrap();
+        assert!(json.contains(r#""type":"multi""#), "{json}");
+    }
+
+    #[test]
+    fn score_options_are_numbered_levels() {
+        let q: Question =
+            Question::score("How urgent?").level("not urgent").level("critical").into();
+        assert_eq!(
+            q.render_options("u").unwrap(),
+            vec!["level 0: not urgent".to_string(), "level 1: critical".to_string()]
+        );
+    }
+
+    #[test]
+    fn noul_falls_back_to_generic_wording() {
+        let q: Question = Question::noul("Does the user want a refund?").into();
+        assert_eq!(
+            q.render_options("r").unwrap(),
+            vec![
+                "false: no, the statement does not hold".to_string(),
+                "true: yes, the statement holds".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn noul_uses_its_own_wording_when_given() {
+        let q: Question =
+            Question::noul("Phishing?").when_true("a scam").when_false("legitimate").into();
+        assert_eq!(
+            q.render_options("p").unwrap(),
+            vec!["false: legitimate".to_string(), "true: a scam".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_structured_criterion_renders_as_json_not_a_debug_repr() {
+        let q = Question {
+            kind: QType::Choice,
+            instructions: json!("x"),
+            criteria: Some(json!({"billing": {"desc": "invoices", "examples": 2}})),
+        };
+        assert_eq!(
+            q.render_options("q").unwrap(),
+            vec![r#"billing: {"desc": "invoices", "examples": 2}"#.to_string()]
+        );
+    }
+
+    #[test]
+    fn a_choice_without_criteria_is_rejected() {
+        let q = Question { kind: QType::Choice, instructions: json!("x"), criteria: None };
+        assert!(q.render_options("dept").is_err());
+    }
+
+    #[test]
+    fn an_empty_choice_is_rejected_like_a_missing_one() {
+        for criteria in [json!({}), json!([])] {
+            let q = Question {
+                kind: QType::Choice,
+                instructions: json!("x"),
+                criteria: Some(criteria),
+            };
+            let err = q.labels("dept").unwrap_err();
+            assert!(matches!(err, Error::Question { ref id, .. } if id == "dept"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_score_needs_at_least_one_level() {
+        let q =
+            Question { kind: QType::Score, instructions: json!("x"), criteria: Some(json!([])) };
+        assert!(q.render_options("u").is_err());
+
+        let q: Question = Question::score("x").level("low").level("high").into();
+        assert_eq!(q.labels("u").unwrap(), vec!["0", "1"]);
+    }
+
+    #[test]
+    fn noul_labels_are_false_then_true() {
+        let q: Question = Question::noul("x").into();
+        assert_eq!(q.labels("n").unwrap(), vec!["false", "true"]);
+    }
+
+    #[test]
+    fn structured_instructions_render_as_json() {
+        let q =
+            Question { kind: QType::Noul, instructions: json!({"ask": "refund?"}), criteria: None };
+        assert_eq!(q.instructions_text(), r#"{"ask": "refund?"}"#);
+
+        // Python's plain `json.dumps` escapes non-ASCII here, unlike in the state.
+        let q = Question {
+            kind: QType::Noul,
+            instructions: json!({"ask": "remboursé?"}),
+            criteria: None,
+        };
+        assert_eq!(q.instructions_text(), r#"{"ask": "rembours\u00e9?"}"#);
+        let q = Question { kind: QType::Noul, instructions: json!("remboursé?"), criteria: None };
+        assert_eq!(q.instructions_text(), "remboursé?");
+    }
+
+    #[test]
+    fn a_question_set_keeps_json_order_and_round_trips() {
+        let src = r#"{"zeta":{"type":"noul","instructions":"z"},"alpha":{"type":"score","instructions":"a","criteria":["lo","hi"]}}"#;
+        let qs = Questions::from_json(src).unwrap();
+        assert_eq!(qs.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), ["zeta", "alpha"]);
+        assert_eq!(serde_json::to_string(&qs).unwrap(), src);
+        assert!(Questions::from_json("[]").is_err());
+    }
+}

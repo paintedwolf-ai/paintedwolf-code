@@ -1,0 +1,7 @@
+id: painted-wolf/platform:overlay-dismiss
+title: "Close overlay / panel"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "overlay.dismiss"

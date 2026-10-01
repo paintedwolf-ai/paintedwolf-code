@@ -1,0 +1,5 @@
+code: obligation_params_invalid
+message: |
+  Phase {{phase}} obligation {{kind}} has invalid params: {{detail}}.
+replacement: |
+  Fix the obligation params to match the kind's declared parameter shape.

@@ -1,0 +1,35 @@
+oar: '1.0'
+id: EXTRACT_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - extract_archive
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "EXTRACT_PATH_DENIED"
+effect: block
+copy:
+  what: Archive extraction is denied for protected path {{ paintedwolf.path }}.
+  cause: The destination or entry crosses a host write-protection boundary.
+  why: Archive content cannot grant permission to write protected paths.
+  fix: Keep the protected target unchanged. Review any retained extracted-entry receipt before continuing;
+    earlier entries may already have landed. Do not change tools or widen a write glob to bypass this floor.
+  instead: Preserve completed entries and the protected-path boundary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extract_archive
+x-paintedwolf-message: extract_archive path matches deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: .git/objects
+    profile: implement
+    tool: extract_archive
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: EXTRACT_PATH_DENIED'

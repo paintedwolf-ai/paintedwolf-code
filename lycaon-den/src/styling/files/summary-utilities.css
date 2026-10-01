@@ -1,0 +1,101 @@
+@utility den-file-summary {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 10px 10px;
+  overflow-wrap: anywhere;
+}
+
+@utility den-file-summary__markdown {
+  margin-top: 8px;
+  & .markdown-body {
+    min-width: 0;
+    color: var(--den-text-muted);
+    font-size: var(--text-den-hint);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  & .markdown-body code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  /* Summary code wraps to the column instead of scrolling. */
+  & .markdown-body pre {
+    width: auto;
+    white-space: pre-wrap;
+  }
+  & .markdown-body strong {
+    color: var(--den-text);
+  }
+  & .markdown-body ul,
+  & .markdown-body ol {
+    margin: 0;
+    padding-left: 1.15em;
+  }
+}
+
+@utility den-file-summary__sections {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0.45em;
+  margin-top: 8px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+@utility den-file-summary__section {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  & strong {
+    color: var(--den-text);
+  }
+  & code {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: var(--den-tint-2);
+    box-decoration-break: clone;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: var(--text-den-compact);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+@utility den-file-summary__symbol {
+  display: inline;
+  margin: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: inherit;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  & code {
+    color: var(--den-accent-text);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+    text-underline-offset: 2px;
+  }
+  &:hover code,
+  &:focus-visible code {
+    background: var(--den-tint-3);
+    text-decoration-color: currentColor;
+  }
+}
+

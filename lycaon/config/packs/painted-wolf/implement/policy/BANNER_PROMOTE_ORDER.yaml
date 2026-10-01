@@ -1,0 +1,14 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} promote order — {{ paintedwolf.promote_order }}
+what: Preview reports whether this overlay is order-independent, sequential, clean-if-first,
+  or clean-after siblings
+cause: Parallel same-file overlays can be clean vs current primary but order-sensitive
+  when siblings land
+why: Binary clean hid promote sequencing — simulation labels when order matters
+fix: Branch on promote_order; promote sequentially and re-preview when sequential
+  or clean_after
+instead: Follow promote_order and path_status.promote_after / blocked_by before blind
+  promote
+id: BANNER_PROMOTE_ORDER

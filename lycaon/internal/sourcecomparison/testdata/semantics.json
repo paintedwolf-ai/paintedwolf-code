@@ -1,0 +1,10 @@
+[
+  {"name":"replace middle","before":"start\nold\nend\n","after":"start\nnew\nend\n","added":1,"removed":1},
+  {"name":"append","before":"start\n","after":"start\nnew\n","added":1,"removed":0},
+  {"name":"remove middle","before":"start\nold\nend\n","after":"start\nend\n","added":0,"removed":1},
+  {"name":"unicode replacement","before":"alpha 🙂\nbeta\n","after":"alpha 🙂\ngamma\n","added":1,"removed":1},
+  {"name":"create","before":"","after":"first\nsecond\n","added":2,"removed":0},
+  {"name":"delete","before":"first\nsecond\n","after":"","added":0,"removed":2},
+  {"name":"empty","before":"","after":"","added":0,"removed":0},
+  {"name":"normalized newlines","before":"first\r\nsecond\r\n","after":"first\nsecond\n","added":0,"removed":0}
+]

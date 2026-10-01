@@ -1,0 +1,107 @@
+@utility den-files-editor__seg {
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+@utility den-files-editor__crumb-sep {
+  flex-shrink: 0;
+  user-select: none;
+}
+
+@utility den-files-editor__symbol-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@utility den-files-editor__symbol-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@utility den-files-merge {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+@utility den-files-merge__host {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@utility den-files-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+@utility den-files-info__meta {
+  margin: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  font-size: var(--text-den-hint);
+  text-align: left;
+  & dd {
+    user-select: text;
+  }
+}
+
+@utility den-files-info__meta-row {
+  display: contents;
+}
+
+@utility den-files-info__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+@utility den-files-image {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+@utility den-files-image__img {
+  display: block;
+  flex-shrink: 0;
+}
+
+@utility den-files-image__zoom {
+  flex-shrink: 0;
+  user-select: none;
+  & .den-browse-segment {
+    user-select: none;
+  }
+}
+
+/* Keeps editor surfaces at one breadcrumb height. */
+@utility den-files-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+  /* Keeps tips above the editor body. */
+  position: relative;
+  z-index: 4;
+}
+
+@utility den-files-image__status {
+  justify-content: space-between;
+}
+

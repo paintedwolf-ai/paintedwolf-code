@@ -1,0 +1,25 @@
+paths:
+  /v1/preflight:
+    get:
+      tags:
+      - health
+      operationId: getPreflight
+      summary: Environment readiness probes
+      description: >-
+        Machine-state facts about the host the app depends on but does not
+        control: macOS version, config-dir writability, free disk, the bundled
+        git engine, and the bundled scanner and browser engines.
+        Probes run in the sidecar so they resolve binaries the same way the
+        tools do. Reporting only — preflight never installs or downloads
+        anything.
+      responses:
+        '200':
+          description: Probe results in registration order
+          content:
+            application/json:
+              schema:
+                $ref: '../components/schemas/preflight.yaml#/PreflightReport'
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

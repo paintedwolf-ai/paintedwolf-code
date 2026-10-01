@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-add-cursor-above
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-add-cursor-above
+group: "1"
+order: 5

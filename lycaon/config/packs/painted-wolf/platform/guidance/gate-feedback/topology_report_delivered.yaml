@@ -1,0 +1,11 @@
+id: topology_report_delivered
+kind: workflow-report
+purpose: |
+  The phase requires its grounded coordinator report before completion.
+missing_signals:
+  - id: report_missing
+    when: "true"
+    detail: "The current phase has no delivered coordinator report."
+    fix: "Answer in Markdown ending with the report fence the Report document section shows; the answer is the delivery, not a tool call."
+satisfy:
+  - "Answer in Markdown ending with the report fence the Report document section shows; the answer is the delivery, not a tool call."

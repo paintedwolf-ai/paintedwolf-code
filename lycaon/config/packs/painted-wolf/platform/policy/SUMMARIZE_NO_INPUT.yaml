@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SUMMARIZE_NO_INPUT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - summarize
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "SUMMARIZE_NO_INPUT"
+effect: block
+copy:
+  what: '`summarize` was called with no material — path, paths, and content were all missing or empty.'
+  cause: The `summarize` tool's primary input is path, exactly like `read(path)`. A task string alone gives the host nothing to gather.
+  why: The host gathers only from structured args; text inside task is never parsed for paths.
+  fix: Retry with a path, e.g. {"path":"README.md"} — that is the whole call. Add task only to focus the brief, e.g. {"path":"lycaon/internal/session","task":"how does abort work?"}.
+  instead: Branch on Code; call `summarize` with a path (or paths/content) and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:summarize
+x-paintedwolf-message: '`summarize` needs a path (or paths/content) — like `read`'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      need_one_of: path
+      path: README.md
+      profile: coordinator
+      tool: summarize
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SUMMARIZE_NO_INPUT'

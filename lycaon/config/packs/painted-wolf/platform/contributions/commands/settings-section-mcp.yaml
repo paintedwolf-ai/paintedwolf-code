@@ -1,0 +1,10 @@
+id: painted-wolf/platform:settings-section-mcp
+title: "Settings: MCP providers"
+scope: "global"
+keywords:
+  - "mcp"
+  - "providers"
+  - "tools"
+action:
+  kind: native_ui
+  handler: "settings.section.mcp"

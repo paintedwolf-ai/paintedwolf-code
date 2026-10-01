@@ -1,0 +1,135 @@
+language: c_sharp
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+  SQL command execution is not modeled; construction and CommandText assignment alone do not establish execution.
+cases:
+- name: sql-request-construction-unused
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { new SqlCommand("SELECT * FROM users WHERE name = " + req.Query["input"],conn); } }
+  want: []
+  covers: []
+- name: sql-parameter-placeholder-construction-unused
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { new SqlCommand("SELECT * FROM users WHERE name = @name",conn); } }
+  want: []
+  covers: []
+- name: sql-request-command-unused
+  file: sample.cs
+  source: |
+    using Microsoft.Data.SqlClient;
+    class Audit { void Handle(HttpRequest req, SqlConnection conn) { var command = new SqlCommand(req.Query["input"], conn); } }
+  want: []
+  covers: []
+- name: sql-command-text-assignment-unused
+  file: sample.cs
+  source: |
+    using Microsoft.Data.SqlClient;
+    class Audit { void Handle(HttpRequest req, SqlCommand command) { command.CommandText = "SELECT * FROM users WHERE name = " + req.Query["input"]; } }
+  want: []
+  covers: []
+- name: sql-parameterized-execution-safe
+  file: sample.cs
+  source: |
+    using Microsoft.Data.SqlClient;
+    class Audit { void Handle(HttpRequest req, SqlConnection conn) { using var command = new SqlCommand("SELECT * FROM users WHERE name = @name", conn); command.Parameters.AddWithValue("@name", req.Query["input"].ToString()); command.ExecuteReader(); } }
+  want: []
+  covers: []
+- name: command-injection-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { Process.Start(req.Query["input"]); } }
+  want:
+  - lycaon.csharp.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { Process.Start("tool"); } }
+  want: []
+  covers:
+  - lycaon.csharp.command-injection
+- name: path-traversal-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { File.ReadAllText(req.Query["input"]); } }
+  want:
+  - lycaon.csharp.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { File.ReadAllText("config.json"); } }
+  want: []
+  covers:
+  - lycaon.csharp.path-traversal
+- name: open-redirect-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { Response.Redirect(req.Query["input"]); } }
+  want:
+  - lycaon.csharp.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { Response.Redirect("/home"); } }
+  want: []
+  covers:
+  - lycaon.csharp.open-redirect
+- name: weak-digest-context-only
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { MD5.Create(); } }
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.cs
+  source: |
+    class Audit { void Handle(HttpRequest req) { SHA256.Create(); } }
+  want: []
+  covers: []
+- name: binary-formatter-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Read() { var f = new BinaryFormatter(); f.Deserialize(stream); } }
+  want:
+  - lycaon.csharp.binary-formatter
+  covers: []
+- name: binary-formatter-safe
+  file: sample.cs
+  source: |
+    class Audit { void Read() { JsonSerializer.Deserialize<Data>(stream); } }
+  want: []
+  covers:
+  - lycaon.csharp.binary-formatter
+- name: certificate-callback-accept-all-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Run() { handler.ServerCertificateCustomValidationCallback=(request,cert,chain,errors)=>true; } }
+  want:
+  - lycaon.csharp.certificate-callback-accept-all
+  covers: []
+- name: certificate-callback-accept-all-safe
+  file: sample.cs
+  source: |
+    class Audit { void Run() { handler.ServerCertificateCustomValidationCallback=(request,cert,chain,errors)=>errors==SslPolicyErrors.None; } }
+  want: []
+  covers:
+  - lycaon.csharp.certificate-callback-accept-all
+- name: xml-network-entities-vulnerable
+  file: sample.cs
+  source: |
+    class Audit { void Run() { var settings=new XmlReaderSettings {DtdProcessing=DtdProcessing.Parse,XmlResolver=new XmlUrlResolver()}; } }
+  want:
+  - lycaon.csharp.xml-network-entities
+  covers: []
+- name: xml-network-entities-safe
+  file: sample.cs
+  source: |
+    class Audit { void Run() { var settings=new XmlReaderSettings {DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null}; } }
+  want: []
+  covers:
+  - lycaon.csharp.xml-network-entities

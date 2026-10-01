@@ -1,0 +1,9 @@
+tags: [git, inspection]
+description: "Compare frozen commit IDs: ahead/behind counts for head_ref relative to base_ref, plus all merge bases."
+schema:
+  type: object
+  properties:
+    base_ref: {type: string, minLength: 1, description: "Base branch, tag, or commit."}
+    head_ref: {type: string, minLength: 1, description: "Comparison tip (default HEAD)."}
+  required: [base_ref]
+  additionalProperties: false

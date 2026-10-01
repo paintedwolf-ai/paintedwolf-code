@@ -1,0 +1,16 @@
+title: Change SSH authorized keys
+id: 5ed61c8d-0ff9-4a3a-a4c4-40422e185a67
+status: stable
+description: Mutates a user's SSH authorized_keys file through a native file action.
+references: [https://attack.mitre.org/techniques/T1098/004/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, chmod, chown, git_restore]
+    TargetFile|re: '^(~[/]|/Users/[^/]+/|/home/[^/]+/|/root/)[.]ssh/authorized_keys$'
+  condition: selection
+level: critical
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.persistence]

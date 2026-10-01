@@ -1,0 +1,2202 @@
+package gotreesitter
+
+import (
+	"sync/atomic"
+	"time"
+)
+
+const (
+	// Retry no-stacks-alive full parses with a wider GLR cap. Large real-world
+	// files (for example this repo's parser.go) can legitimately need >8 stacks
+	// at peak even when parse tables report narrower local conflict widths.
+	fullParseRetryMaxGLRStacks = 48
+	// Some ambiguity clusters need more survivors per merge bucket even after
+	// the global GLR cap is widened. Only enable this on retries for parses
+	// that already proved the default merge budget was insufficient.
+	fullParseRetryMaxMergePerKey = 24
+	// Java's default full-parse merge cap stays intentionally narrow for large
+	// generated bodies, but annotation-heavy declarations can need a wider
+	// bounded accepted-error retry to preserve the expression/declaration branch
+	// that C selects.
+	javaFullParseRetryMaxGLRStacks   = 64
+	javaFullParseRetryMaxMergePerKey = 16
+	javaTightMergeCapSourceLen       = 256 * 1024
+	// goAcceptedErrorMergePerKeyRetry widens Go's merge-per-key survivor
+	// budget only on the retry rung, when a fresh full parse at the
+	// steady-state cap (3, see the "go" case in effectiveParseMergePerKeyCap)
+	// accepts with an error. See fullParseRetryMergePerKeyOverride's "go"
+	// case for the full rationale: this keeps clean files (the overwhelming
+	// majority, including this repo's own parser.go/parser_reduce.go and
+	// grammargen/lr.go, and grammargen/normalize.go) on the cheap cap=3 path
+	// with no retry at all, while files that need more survivors to keep the
+	// correct index_expression branch alive (the ASI-fix regression files)
+	// pay a second parse at this cap instead of a permanently widened budget.
+	//
+	// 16, not 8: a genuinely fresh parse (no prior failed attempt on the same
+	// Parser) reaches a clean result for every regression file at cap=8, but
+	// the SAME cap value reached via this retry rung (i.e. after a discarded
+	// cap=3 attempt on the same Parser) was insufficient for one of them —
+	// stdlib's sort/sort_slices_benchmark_test.go stayed HasError=true
+	// through an 8-cap retry and only came back clean at 16. The two paths
+	// are not computationally equivalent even though they request the same
+	// mergePerKeyCap value: something about having already run a cap=3
+	// attempt on the same Parser instance (arena/GSS pooling, or some other
+	// carried-over state — not resolveParseMaxStacks's retryPass flag, ruled
+	// out directly: it is already true on the very first cap=3 attempt too,
+	// since go's tuned initial stack budget of 32 always exceeds
+	// maxGLRStacks=8 regardless of merge-per-key) biases the GLR merge
+	// selection differently than an independent fresh parse at the same cap.
+	// This is the same class of engine nondeterminism as the cap-value
+	// non-monotonicity noted on effectiveParseMergePerKeyCap's "go" case
+	// (grammargen/normalize.go: clean at cap=3, erroring at every fixed cap
+	// from 8 through 16 when that cap is the STEADY STATE) — both point at
+	// the GLR merge-selection engine being sensitive to more than just the
+	// final cap value, which is real RCA seed material for a proper
+	// investigation, not something this rung's cap choice can fully paper
+	// over. 16 is empirically sufficient for every case found so far.
+	goAcceptedErrorMergePerKeyRetry = 16
+	// Retry node-limit full parses with a bounded larger node budget instead of
+	// globally raising the default cap for every parse.
+	fullParseRetryNodeLimitScale = 2
+	// If the first widened retry still stops on node_limit, allow one more
+	// bounded escalation. This only applies to parses that already proved the
+	// initial retry made progress but still ran out of budget.
+	fullParseRetrySecondaryNodeLimitScale = 3
+	// Keep retry widening bounded to avoid runaway memory growth on very large
+	// malformed inputs. Callers can still override via GOT_GLR_MAX_STACKS.
+	fullParseRetryMaxSourceBytes = 1 << 20 // 1 MiB
+	// fullParseRetryMaxTotalPasses hard-bounds the number of retry passes a
+	// single top-level parse operation may run, independent of any wall-clock
+	// budget (the retryDeadline in retryFullParse is a no-op when the caller
+	// never sets SetTimeoutMicros — the common case). The deepest legitimate
+	// ladder is ~5 passes per retryFullParse invocation and at most a few
+	// invocations per operation (main round + external-scanner repeat +
+	// incremental->full fallback), so 24 leaves >2x headroom while making
+	// runaway repetition (c_sharp was observed running 1076 passes on a
+	// pass-1 parse failure, 2026-07 cliff campaign) structurally impossible.
+	// Retries are best-effort improvements: when the budget is exhausted the
+	// incumbent best tree is returned, never a worse result.
+	fullParseRetryMaxTotalPasses = 24
+	// fullParseCertifiedNoStacksPressureRetryMaxGLRStacks and
+	// fullParseCertifiedNoStacksPressureRetryMaxMergePerKey are the final,
+	// single-rung retry ceiling for a fresh full parse that proves both global
+	// stack pressure and merge-survivor pressure. This does not change either
+	// steady-state default. The rung runs only after the default no-stacks
+	// result and the ordinary bounded retry both truncate with no stacks alive.
+	// Its 256 KiB source ceiling keeps the exceptional pass off large files.
+	fullParseCertifiedNoStacksPressureRetryMaxGLRStacks   = 160
+	fullParseCertifiedNoStacksPressureRetryMaxMergePerKey = 160
+	fullParseCertifiedNoStacksPressureRetryMaxSourceBytes = 256 * 1024 // 256 KiB
+)
+
+type resettableTokenSource interface {
+	Reset(source []byte)
+}
+
+type fullParseRetryRunner func(maxStacks, maxMergePerKeyOverride, maxNodes int) *Tree
+
+type incrementalAcceptedErrorRetryRunner func(maxMergePerKeyOverride int, timing *incrementalParseTiming) *Tree
+
+type fullParseRetryOrigin uint8
+
+const (
+	fullParseRetryOriginFresh fullParseRetryOrigin = iota
+	fullParseRetryOriginIncremental
+)
+
+func shouldRetryFullParse(tree *Tree, sourceLen int) bool {
+	if tree == nil {
+		return false
+	}
+	if tree.rawParseStopReason() != ParseStopNoStacksAlive {
+		return false
+	}
+	if sourceLen <= 0 {
+		return false
+	}
+	return sourceLen <= fullParseRetryMaxSourceBytes
+}
+
+func shouldRetryAcceptedErrorParse(tree *Tree, sourceLen int, initialMaxStacks int) bool {
+	if tree == nil {
+		return false
+	}
+	if sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return false
+	}
+	if !retryTreeHasError(tree) {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	if rt.StopReason != ParseStopAccepted || rt.Truncated || rt.TokenSourceEOFEarly {
+		return false
+	}
+	if certifiedAcceptedErrorRetrySkipsComplete(tree, sourceLen) {
+		return false
+	}
+	if initialMaxStacks <= 0 {
+		initialMaxStacks = maxGLRStacks
+	}
+	return rt.MaxStacksSeen >= initialMaxStacks
+}
+
+func shouldRetryStackPressureCleanFullParse(tree *Tree, sourceLen int, _ int) bool {
+	if tree == nil {
+		return false
+	}
+	if sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return false
+	}
+	root := rawRootOrNil(tree)
+	if root == nil || root.HasError() {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	if rt.TokenSourceEOFEarly {
+		return false
+	}
+	if rt.StopReason != ParseStopAccepted && rt.StopReason != ParseStopNoStacksAlive {
+		return false
+	}
+	if rt.Truncated && rt.StopReason != ParseStopAccepted {
+		return false
+	}
+	// Only ACTUAL eviction justifies a clean-tree re-parse: the global cap
+	// cull dropped live stacks, so the C-correct interpretation may have
+	// been discarded. The old second arm (MaxStacksSeen >= cap+overflow)
+	// fired on mere transient pre-merge bloom — python's clean parses hit
+	// it on essentially every real file (MaxStacksSeen >= 12 always),
+	// buying a guaranteed second full pass (universal ~2x clean-parse tax,
+	// 2026-07 cliff campaign) for a tree that was never at risk: when the
+	// cull never dropped anything, no lineage was lost and the first clean
+	// tree is already the parse's honest answer (also closer to C's
+	// single-pass semantics).
+	return rt.GlobalCullStacksIn > rt.GlobalCullStacksOut
+}
+
+func shouldRetryNodeLimitParse(tree *Tree, sourceLen int) bool {
+	if tree == nil {
+		return false
+	}
+	if sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return false
+	}
+	return tree.rawParseStopReason() == ParseStopNodeLimit
+}
+
+// shouldRetryIncrementalMemoryBudgetAsPlainFull reports whether an
+// incremental attempt that tripped the runtime memory budget
+// (ParseStopMemoryBudget) should be discarded in favor of ONE plain,
+// default-budget full parse. This is deliberately NOT folded into
+// shouldRetryIncrementalParseAsFull / the retryFullParseForOrigin widen
+// ladder: that ladder only ever runs an attempt when
+// fullParseRetryMaxStacksOverrideForOrigin or fullParseRetryNodeLimitOverride
+// compute a nonzero WIDER cap, and neither is keyed to ParseStopMemoryBudget,
+// so folding this in there is a silent no-op (confirmed empirically: it did
+// not change the outcome). Widening the GLR stack/node cap is also the wrong
+// direction here regardless: a memory-budget trip means the incremental loop
+// already explored too much (observed ~3.08M nodes allocated for a ~64K-node
+// file before the guard aborted it, on a reuse-hostile edit -- issue #454's
+// C incremental-delete defect), so asking it to explore with an even WIDER
+// cap would plausibly make memory pressure worse, not better. The correct
+// fail-closed remedy is simpler: throw away the unvalidated, budget-aborted
+// attempt and run exactly one ordinary full parse at the normal default
+// budget -- precisely the equality oracle ParseIncremental must match.
+func shouldRetryIncrementalMemoryBudgetAsPlainFull(tree *Tree, sourceLen int) bool {
+	if tree == nil {
+		return false
+	}
+	if sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return false
+	}
+	return tree.rawParseStopReason() == ParseStopMemoryBudget
+}
+
+func shouldRetryIncrementalParseAsFull(tree *Tree, sourceLen int, initialMaxStacks int) bool {
+	if tree == nil {
+		return false
+	}
+	return shouldRetryFullParse(tree, sourceLen) ||
+		shouldRetryAcceptedErrorParse(tree, sourceLen, initialMaxStacks) ||
+		shouldRetryNodeLimitParse(tree, sourceLen)
+}
+
+// incrementalAcceptedErrorBaseMergeCap returns the ordinary full-parse merge
+// cap when an incremental parse accepted a full-span ERROR tree under a wider,
+// implicit incremental policy. The mismatch matters because the wider policy
+// is not monotonic: retaining more same-key survivors can select a worse tree.
+// Explicit diagnostic policy is authoritative and is never narrowed here.
+func incrementalAcceptedErrorBaseMergeCap(p *Parser, tree *Tree, source []byte) int {
+	sourceLen := len(source)
+	if p == nil || p.language == nil || parseMaxMergePerKeyEnvConfigured() ||
+		!shouldRetryIncrementalAcceptedErrorAtBaseMergeCap(tree, sourceLen) {
+		return 0
+	}
+	incrementalCap := p.resolveParseMergePerKeyCap(source, &reuseCursor{}, 0)
+	baseCap := p.resolveParseMergePerKeyCap(source, nil, 0)
+	if baseCap <= 0 || baseCap >= incrementalCap {
+		return 0
+	}
+	return baseCap
+}
+
+func shouldRetryIncrementalAcceptedErrorAtBaseMergeCap(tree *Tree, sourceLen int) bool {
+	if tree == nil || sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	if rt.StopReason != ParseStopAccepted || rt.Truncated || rt.TokenSourceEOFEarly ||
+		!rt.IncrementalOldTreeReuseRoute || !retryTreeCoversExpectedEOF(tree) {
+		return false
+	}
+	return retryTreeHasError(tree)
+}
+
+// retryIncrementalAcceptedErrorWithBaseMergeCap performs at most one second
+// incremental pass. The runner must rebuild both the reuse cursor and token
+// source against the same edited old tree. It deliberately does not use the
+// full-parse retry ladder: reuse and old-tree semantics are the point of this
+// retry, and a fresh fallback would conceal an incremental correctness defect.
+func (p *Parser) retryIncrementalAcceptedErrorWithBaseMergeCap(source []byte, first *Tree, timing *incrementalParseTiming, run incrementalAcceptedErrorRetryRunner) *Tree {
+	baseCap := incrementalAcceptedErrorBaseMergeCap(p, first, source)
+	p.recordRecoveryRuntimeRetryTree(first, "initial")
+	p.recordRecoveryRuntimeRetryTreeDetailed(first, "initial", "initial_incremental_parse")
+	if baseCap == 0 || run == nil || p.fullParseRetryPassesTaken >= fullParseRetryMaxTotalPasses {
+		p.recordRecoveryRuntimeSelectedTree(first)
+		p.recordRecoveryRuntimeSelectedTreeDetailed(first)
+		return first
+	}
+
+	p.recordRecoveryRuntimeSelectedTree(first)
+	p.recordRecoveryRuntimeSelectedTreeDetailed(first)
+	p.fullParseRetryPassesTaken++
+	p.recordRecoveryRuntimeRetry("accepted_error_under_wide_incremental_merge")
+	workCountSetNextParseAttempt("incremental_base_merge", "accepted_error_under_wide_incremental_merge")
+	var retryTiming *incrementalParseTiming
+	if timing != nil {
+		retryTiming = &incrementalParseTiming{}
+	}
+	// A negative override is an exact cap. Positive overrides only widen the
+	// effective cap and therefore cannot lower the incremental default.
+	candidate := run(-baseCap, retryTiming)
+	p.recordRecoveryRuntimeRetryTree(candidate, "incremental_base_merge")
+	p.recordRecoveryRuntimeRetryTreeDetailed(candidate, "incremental_base_merge", "accepted_error_under_wide_incremental_merge")
+	adopted := candidate != nil && candidate != first && preferRetryTreeOverFirstPass(p, candidate, first)
+	result := first
+	if adopted {
+		result = candidate
+		p.recordRecoveryRuntimeCandidateReplacedDetailed(candidate)
+		first.Release()
+	} else if candidate != nil && candidate != first {
+		candidate.Release()
+	}
+
+	if retryTiming != nil {
+		timing.addAttempt(retryTiming)
+		timing.selectResult(result)
+		timing.acceptedErrorRetryAttempts = 1
+		timing.acceptedErrorRetryAdopted = adopted
+		timing.acceptedErrorRetryMergePerKey = baseCap
+		timing.acceptedErrorRetryCause = IncrementalRetryCauseAcceptedErrorBaseMerge
+	}
+	if result != nil {
+		result.parseRuntime.IncrementalAcceptedErrorRetryAttempts = 1
+		result.parseRuntime.IncrementalAcceptedErrorRetryAdopted = adopted
+		result.parseRuntime.IncrementalAcceptedErrorRetryMergePerKey = baseCap
+		result.parseRuntime.IncrementalAcceptedErrorRetryCause = IncrementalRetryCauseAcceptedErrorBaseMerge
+	}
+	p.finishRecoveryRuntimeRetryTelemetry(result, len(source))
+	p.clearRecoveryRuntimeRetryTreesDetailed()
+	p.clearRecoveryRuntimeRetryTrees()
+	return result
+}
+
+func treeParseClean(tree *Tree) bool {
+	if tree == nil {
+		return false
+	}
+	if retryTreeHasError(tree) {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	return rt.StopReason == ParseStopAccepted && !rt.TokenSourceEOFEarly && retryTreeCoversExpectedEOF(tree)
+}
+
+func rawRootOrNil(tree *Tree) *Node {
+	if tree == nil {
+		return nil
+	}
+	return tree.root
+}
+
+func retryTreeEndByte(tree *Tree) uint32 {
+	if tree == nil {
+		return 0
+	}
+	if root := rawRootOrNil(tree); root != nil {
+		return root.EndByte()
+	}
+	return tree.rawParseRuntime().RootEndByte
+}
+
+func retryTreeChildCount(tree *Tree) int {
+	if tree == nil {
+		return 0
+	}
+	if root := rawRootOrNil(tree); root != nil {
+		return root.ChildCount()
+	}
+	return 0
+}
+
+func retryTreeHasError(tree *Tree) bool {
+	if tree == nil {
+		return true
+	}
+	root := rawRootOrNil(tree)
+	if root == nil {
+		return true
+	}
+	if root.IsError() || root.HasError() {
+		return true
+	}
+	switch tree.resultErrorSummary {
+	case resultErrorSummaryClean:
+		return false
+	case resultErrorSummaryPresent:
+		return true
+	}
+	return retryNodeSubtreeHasError(root, 0)
+}
+
+// summarizeResultErrorsWithStop computes the retry error receipt.
+// It polls the stop source during its full-tree walk.
+func summarizeResultErrorsWithStop(root *Node, stopCheck parseStopCheck) (ParseStopReason, resultErrorSummary) {
+	if root == nil {
+		return ParseStopNone, resultErrorSummaryUnknown
+	}
+	if root.hasError() {
+		return ParseStopNone, resultErrorSummaryPresent
+	}
+	errorSummary := resultErrorSummaryClean
+	if root.IsError() {
+		errorSummary = resultErrorSummaryPresent
+	}
+	poller := parseStopPoller{check: stopCheck}
+	if reason := poller.pollNow(); parseStopReasonIsActive(reason) {
+		if errorSummary != resultErrorSummaryPresent {
+			errorSummary = resultErrorSummaryUnknown
+		}
+		return reason, errorSummary
+	}
+	var stopReason ParseStopReason
+	walkResultTreeUntil(root, func(n *Node) bool {
+		if reason := poller.poll(); parseStopReasonIsActive(reason) {
+			stopReason = reason
+			return false
+		}
+		if n.IsError() || n.hasError() {
+			errorSummary = resultErrorSummaryPresent
+		}
+		return true
+	})
+	if parseStopReasonIsActive(stopReason) {
+		if errorSummary != resultErrorSummaryPresent {
+			errorSummary = resultErrorSummaryUnknown
+		}
+		return stopReason, errorSummary
+	}
+	stopReason = poller.pollNow()
+	if parseStopReasonIsActive(stopReason) && errorSummary != resultErrorSummaryPresent {
+		errorSummary = resultErrorSummaryUnknown
+	}
+	return stopReason, errorSummary
+}
+
+func retryNodeSubtreeHasError(node *Node, depth int) bool {
+	if node == nil {
+		return false
+	}
+	if node.IsError() || node.HasError() {
+		return true
+	}
+	if depth >= maxTreeWalkDepth {
+		return false
+	}
+	for i := 0; i < resultChildCount(node); i++ {
+		if retryNodeSubtreeHasError(resultChildAt(node, i), depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+func retryTreeCoversExpectedEOF(tree *Tree) bool {
+	if tree == nil {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	if rt.ExpectedEOFByte == 0 {
+		return true
+	}
+	if rt.LastTokenWasEOF && rt.LastTokenEndByte >= rt.ExpectedEOFByte {
+		return true
+	}
+	endByte := retryTreeEndByte(tree)
+	return endByte >= rt.ExpectedEOFByte || parserTailAllowsCleanAcceptance(tree.Source(), endByte, rt.ExpectedEOFByte, tree.includedRanges, languageLineContinuationEscapeByte(tree.language))
+}
+
+func retryStopRank(rt *ParseRuntime) int {
+	switch rt.StopReason {
+	case ParseStopAccepted:
+		return 4
+	case ParseStopTokenSourceEOF:
+		return 3
+	case ParseStopNoStacksAlive:
+		return 2
+	case ParseStopNodeLimit:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func preferRetryTree(p *Parser, candidate, incumbent *Tree) bool {
+	if candidate == nil {
+		return false
+	}
+	if incumbent == nil {
+		return true
+	}
+	if treeParseClean(candidate) {
+		return !treeParseClean(incumbent)
+	}
+	if treeParseClean(incumbent) {
+		return false
+	}
+	incRT := incumbent.rawParseRuntime()
+	if incRT.StopReason == ParseStopAccepted && candidate.rawParseStoppedEarly() {
+		// A retry that stopped before acceptance is not a complete C-style
+		// selection candidate. Keep the accepted incumbent even when the
+		// provisional retry reached farther or reports a lower error cost.
+		return false
+	}
+	candEnd := retryTreeEndByte(candidate)
+	incEnd := retryTreeEndByte(incumbent)
+	if candEnd != incEnd {
+		return candEnd > incEnd
+	}
+	candRT := candidate.rawParseRuntime()
+	if candRT.Truncated != incRT.Truncated {
+		return !candRT.Truncated
+	}
+	if candRT.TokenSourceEOFEarly != incRT.TokenSourceEOFEarly {
+		return !candRT.TokenSourceEOFEarly
+	}
+	candErr := retryTreeHasError(candidate)
+	incErr := retryTreeHasError(incumbent)
+	if candErr != incErr {
+		return !candErr
+	}
+	if p != nil && p.errorCostCompetitionEnabled() {
+		// Faithful C recovery port (recovery-cost-competition.md issue 4,
+		// moved to gotreesitter-specs (external)):
+		// the retry full-parse must not replace a first-pass tree the C
+		// error-cost competition already prefers. C selects trees by
+		// ts_subtree_error_cost; with the gate on, a retry tree wins only
+		// when it is strictly cheaper. The remaining engine heuristics
+		// (notably "fewer root children") break exact cost ties only.
+		if cc, ic := p.cTreeErrorCost(candidate), p.cTreeErrorCost(incumbent); cc != ic {
+			return cc < ic
+		}
+	}
+	candRoot := rawRootOrNil(candidate)
+	incRoot := rawRootOrNil(incumbent)
+	candRootIsError := candRoot == nil || candRoot.IsError()
+	incRootIsError := incRoot == nil || incRoot.IsError()
+	if candRootIsError != incRootIsError {
+		return !candRootIsError
+	}
+	candStop := retryStopRank(candRT)
+	incStop := retryStopRank(incRT)
+	if candStop != incStop {
+		return candStop > incStop
+	}
+	candChildren := retryTreeChildCount(candidate)
+	incChildren := retryTreeChildCount(incumbent)
+	if candChildren != incChildren {
+		return candChildren < incChildren
+	}
+	return candRT.NodesAllocated < incRT.NodesAllocated
+}
+
+// preferRetryTreeOverFirstPass gates replacement of the ORIGINAL first-pass
+// tree. NodesAllocated is parse-run bookkeeping, not tree quality: two
+// byte-identical trees differ in it purely by how they were parsed
+// (incremental relex overhead vs a fresh pass). A retry must therefore be
+// strictly better on a tree-quality axis to displace the first-pass tree; on
+// a full quality tie the first pass wins, so an equal retry cannot burn the
+// incremental route's bookkeeping (ReuseUnsupportedReason) or release a good
+// tree. Retry-vs-retry replacement keeps the NodesAllocated tie-break so the
+// established ladder accounting is unchanged.
+func preferRetryTreeOverFirstPass(p *Parser, candidate, firstPass *Tree) bool {
+	if !preferRetryTree(p, candidate, firstPass) {
+		return false
+	}
+	// preferRetryTree said yes; reject the replacement if its only winning
+	// axis was the NodesAllocated bookkeeping tie-break, i.e. the reverse
+	// comparison with NodesAllocated ignored would also say yes.
+	saved := candidate.parseRuntime.NodesAllocated
+	candidate.parseRuntime.NodesAllocated = firstPass.rawParseRuntime().NodesAllocated
+	strict := preferRetryTree(p, candidate, firstPass)
+	candidate.parseRuntime.NodesAllocated = saved
+	return strict
+}
+
+func shouldTakeCleanWideRetry(incumbent, candidate *Tree, sourceLen int, initialMaxStacks int) bool {
+	if candidate == nil || retryTreeHasError(candidate) {
+		return false
+	}
+	candRT := candidate.rawParseRuntime()
+	if candRT.TokenSourceEOFEarly {
+		return false
+	}
+	if retryTreeEndByte(candidate) < retryTreeEndByte(incumbent) {
+		return false
+	}
+	switch candRT.StopReason {
+	case ParseStopAccepted:
+	case ParseStopNoStacksAlive:
+		if !retryTreeCoversExpectedEOF(candidate) {
+			return false
+		}
+	default:
+		return false
+	}
+	if !candRT.Truncated {
+		return true
+	}
+	return shouldRetryFullParse(incumbent, sourceLen) ||
+		shouldRetryStackPressureCleanFullParse(incumbent, sourceLen, initialMaxStacks)
+}
+
+func scaledNodeLimit(limit, scale int) int {
+	if limit <= 0 {
+		return 0
+	}
+	if scale <= 1 {
+		return limit
+	}
+	maxInt := int(^uint(0) >> 1)
+	if limit > maxInt/scale {
+		return maxInt
+	}
+	return limit * scale
+}
+
+func effectiveFullParseInitialMaxStacks(lang *Language, initialMaxStacks int) int {
+	if initialMaxStacks <= 0 {
+		initialMaxStacks = maxGLRStacks
+	}
+	if lang == nil {
+		return initialMaxStacks
+	}
+	switch lang.Name {
+	case "bash":
+		// bash's historical 256 floor (arrived 2026-03-07 in a C#-focused
+		// commit, no bash rationale recorded) was removed by the 2026-07
+		// cliff campaign. It papered over the real defect — the bash branch
+		// of compareStackCullKeys preferred SHALLOWER stacks, so under cull
+		// pressure the deeper accept-capable lineage was evicted at ANY cap
+		// (2..256 all ended in an EOF mass-pause + whole-file recovery wrap;
+		// only 512 survived) — while multiplying every survivor-count cost
+		// by 32x. With the cull ordering fixed, the global default parses
+		// the bash corpus clean and byte-shape-identical to the pinned C
+		// oracle (small__release.sh 46s -> well under 1s; medium__clean-old.sh
+		// 17-20s -> ~50ms), and all bash regression tests pass unwidened.
+	case "css", "scss":
+		// Large stylesheet corpora spend most of their time churning on the
+		// same RS conflicts without needing a wide steady-state stack budget.
+		// Keep the built-in default tight, but preserve explicit caller/env
+		// overrides for diagnostics and experiments.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "hcl":
+		// Large HCL configs spend disproportionate time keeping equivalent
+		// branches alive during the first pass. A tight default keeps real-world
+		// configs on the winning branch sooner without affecting parity, while
+		// still allowing explicit overrides and retry widening.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "objc":
+		// ObjC's recovery-heavy GNUstep sources can keep enough equivalent
+		// Objective-C method/preprocessor branches alive that C-recovery cost
+		// competition exhausts the per-parse memory budget before EOF. Cap 2
+		// preserves the C-recovery parity lift while keeping large witnesses
+		// bounded; explicit overrides remain available for diagnostics.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "elisp":
+		// Wide survivor budgets multiply elisp's huge quoted data lists across
+		// equivalent stacks until the per-parse arena budget kills the parse
+		// mid-file (authors.el and the leuven/manoj theme files truncate at
+		// the default cap). Cap 2 parses them all byte-identical to C.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "properties", "turtle":
+		// Both grammars churn equivalent survivor stacks catastrophically at
+		// the default cap: properties blows the 512MB arena budget on a 6.6KB
+		// catalina.properties and turtle hits the iteration limit on a
+		// 954-byte manifest.ttl. Cap 2 parses both byte-identical to C.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "git_config":
+		// Long quoted values with escape sequences (e.g. diff xfuncname
+		// regexes) churn equivalent survivor stacks until a 618-byte config
+		// hits the iteration limit mid-file and truncates (root EndByte 582 vs
+		// C 618). Cap 2 parses the curated corpus byte-identical to C; cap 3
+		// measures the same, cap 8 still truncates.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "forth":
+		// Forth's word-soup grammar multiplies equivalent survivor stacks on
+		// real gforth sources until parses truncate: at the default cap only
+		// 20/40 corpus files matched C (16 truncated, medianRatio 110x). Cap 2
+		// lifts the corpus to 34/40 (medianRatio 3.8x); caps 1 and 3 measure
+		// identically. The remaining 6 divergences are not stack-budget
+		// effects: 4 are the engine-level leading-whitespace root-span
+		// divergence (Go roots at byte 0, C roots after leading extras) and 2
+		// are child-count/truncation cases.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "crystal":
+		// Crystal's huge uniform hash literals (markd's 111KB entities.cr, 2127
+		// "k" => "v" entries) multiply equivalent survivor stacks until the
+		// merge-equivalence frontier rescan dominates: at the default cap a
+		// 20KB slice of that file takes 60s and the full file never finishes
+		// (>240s), with 95% of CPU in mergeStacksWithScratch /
+		// stackEntryNodesEquivalentFrontierWithScratch (~2x input -> ~25x
+		// time). Cap 2 parses the full file in 130ms and the first 40 corpus
+		// files all complete (max 401ms); cap 3 already truncates entities.cr.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "groovy":
+		// Groovy's pleac11_15.groovy corpus cliff retains redundant survivor
+		// stacks until the Go full-parse attempt either times out at 10s or
+		// crosses a 1536MiB RSS watchdog before the file checkpoint. Cap 2 keeps
+		// the same exact file bounded (about 1.7s in the contended Docker probe);
+		// the file remains a C-shape known gap, not a parity-clean ratchet row.
+		// Explicit overrides stay available for diagnosis.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "d":
+		// D's large dmd expressionsem.d witness can grow past the 1536MiB RSS
+		// watchdog before the first full-parse checkpoint at the global default.
+		// Starting tight keeps the Go parse bounded on that file (the grammar's
+		// conflict floor raises the effective parse cap to 3) while explicit
+		// overrides remain available for diagnosis. The exact witness is still a
+		// scoped perf-ledger row because the C oracle itself is high-RSS there.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "javascript":
+		// Large JavaScript UMD/runtime bundles need enough survivors to keep the
+		// outer call-expression branch alive through long function arguments.
+		// Cap 2 is fast on small samples but misrecovers large bundles as ERROR;
+		// cap 6 preserves the C-compatible tree without jumping to TSX's wider
+		// ambiguity profile.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 6
+		}
+	case "java":
+		// Annotated Java classes with nested declarations can accept with a
+		// root ERROR before the retry widener fires. A bounded cap of 14 keeps
+		// the class-declaration branch alive and clears the 40-file canonical
+		// corpus while preserving explicit overrides.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 14
+		}
+	case "tsx":
+		// React-heavy TSX still needs a wider steady-state budget than plain
+		// JavaScript; lower caps misparse real generic-call cases even when they
+		// finish faster.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 6
+		}
+	case "dart":
+		// Dart's generic-call/relational ambiguity needs at least six survivors
+		// on real-world extension bodies; caps of two or four drop the branch C
+		// selects. The default cap of eight preserves parity but keeps redundant
+		// GLR frontiers alive through the large-source fallback path, so start at
+		// the minimum safe width while preserving explicit diagnostic overrides.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 6
+		}
+	case "typescript":
+		// TypeScript benefits from a tighter steady-state survivor budget than
+		// JavaScript/TSX on both synthetic full parses and real-corpus files.
+		// Keeping the default at 2 avoids large first-pass ambiguity churn while
+		// still preserving retry widening for genuinely harder files.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "rust":
+		// Rust's large real-corpus impl/match sites converge more reliably with
+		// a much narrower initial survivor budget. Wider defaults preserve the
+		// wrong branch through complex arm interactions and produce stable
+		// wrong-tree failures without improving accepted parses.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "python":
+		// Python's indentation-heavy external-scanner path benefits from a much
+		// tighter steady-state survivor budget. The default cap of 8 triggers
+		// expensive full-parse retries on simple synthetic and corpus-shaped
+		// inputs, while 2 keeps the first pass on the winning branch and still
+		// preserves retry widening for genuinely ambiguous cases.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "comment":
+		// The comment grammar is intentionally broad and line/noise heavy. The
+		// default survivor budget preserves too many equivalent text/URI paths
+		// on real .txt corpus files and hits the iteration cap mid-file; cap 2
+		// keeps the parser on the C-compatible branch and avoids the blowup.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 2
+		}
+	case "php":
+		// PHP's modifier/recovery-heavy top-level sources can need more than the
+		// default stack budget to reach the C-compatible branch. Starting at 16
+		// avoids the expensive retry cycle on the high-population corpus while
+		// preserving the selected recovery tree; 32 changes the hot keywords
+		// sample's parse parity.
+		if initialMaxStacks < 16 {
+			initialMaxStacks = 16
+		}
+	case "go":
+		// Under the ts2go Go blob the initial cap was held at 2 because cap=8
+		// caused exponential blowup on large files — and the retry-with-widening
+		// cycle handled edge cases. Our grammargen-compiled Go blob (shipped as
+		// of #35) has a markedly different GLR conflict profile thanks to LR(1)
+		// state splitting, so the blowup no longer applies; cap=2 now triggers
+		// the retry cycle on most real-world Go files (parser.go, parser_reduce.go,
+		// parser_test.go / query_test.go styles). Raising the default to 32
+		// matches the pattern used for Ruby ("avoids an expensive retry-with-
+		// widening cycle on every parse, cutting memory usage roughly in half").
+		if initialMaxStacks < 32 {
+			initialMaxStacks = 32
+		}
+	case "ruby":
+		// Ruby's ambiguous syntax (optional parentheses, flexible method calls,
+		// complex string/regex literals) requires wider GLR stacks than the
+		// default cap of 8. Real-world Ruby files consistently need ~18 stacks.
+		// Setting this to 32 avoids an expensive retry-with-widening cycle on
+		// every parse, cutting memory usage roughly in half.
+		if initialMaxStacks < 32 {
+			initialMaxStacks = 32
+		}
+	case "markdown":
+		// Markdown block parsing benefits from a tight steady-state survivor
+		// budget, but link-reference-use followed by a definition needs the
+		// ninth live stack to preserve the clean paragraph + definition branch.
+		// Cap 5 keeps the cull threshold at 9, retaining that branch without
+		// returning to the broader default GLR budget.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 5
+		}
+	case "markdown_inline":
+		// Dense inline-heavy markdown (mixed **bold**/*em*/`code`/tables/
+		// footnotes) converges on the winning branch very quickly. Wider
+		// steady-state survivor budgets keep equivalent GLR branches alive
+		// through the whole parse, and the stack-merge phase dominates CPU
+		// (~70% cum in pprof). A tight initial cap of 4 forces early pruning
+		// (50x speed-up on the mdpp zero-cgo-parsing.mdpp corpus) and still lets
+		// the retry-widen cycle handle genuinely harder inputs.
+		if initialMaxStacks == maxGLRStacks {
+			initialMaxStacks = 4
+		}
+	}
+	return initialMaxStacks
+}
+
+func fullParseInitialMaxStacks(lang *Language, conflictWidth int) int {
+	initialMaxStacks := effectiveFullParseInitialMaxStacks(lang, parseMaxGLRStacksValue())
+	if conflictWidth > initialMaxStacks {
+		initialMaxStacks = conflictWidth
+	}
+	return initialMaxStacks
+}
+
+func effectiveParseMergePerKeyCap(lang *Language, mergePerKeyCap int, incremental bool, sourceLen ...int) int {
+	if lang == nil {
+		return mergePerKeyCap
+	}
+	if incremental {
+		if lang.Name == "dart" && dartIncrementalFallbackCanUseTightMergeCap(sourceLen...) &&
+			!parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 4 {
+			return 4
+		}
+		return mergePerKeyCap
+	}
+	switch lang.Name {
+	case "dart":
+		// Dart's generic/postfix ambiguity keeps redundant same-key survivors
+		// alive across full parses. Three survivors preserve the current
+		// parse/highlight parity surface while reducing merge-equivalence churn;
+		// explicit env overrides stay available for grammar diagnosis.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 3 {
+			return 3
+		}
+	case "go":
+		// Go's full-tree path is false-equivalence heavy around expression/type
+		// ambiguity. Three same-key survivors preserve the current parse,
+		// highlight, and query gates, while cap=2 prunes a required branch.
+		// With faithful cap-one condense, tied same-key readings are
+		// preserved through multi-link GSS nodes, so the steady-state
+		// full-parse cap can tighten. Explicit diagnostic overrides and
+		// incremental reparses stay wide.
+		//
+		// This steady-state cap does NOT widen for the
+		// `_automatic_semicolon` external-scanner ASI fix's fallout
+		// (grammars/go_scanner.go; the fix itself restructures the LALR
+		// table enough that Go's pre-existing, upstream-intentional
+		// dynamic-precedence tie between index_expression and
+		// generic_type(composite_literal), both PrecDynamic(1, ...), needs
+		// more merge-per-key survivors on some real files than cap=3
+		// provides). Two things were tried and reverted before landing on
+		// the retry-rung design actually used (fullParseRetryMergePerKeyOverride's
+		// "go" case, goAcceptedErrorMergePerKeyRetry): (1) a source-content
+		// gate for `identifier[identifier] (!=|==) identifier[identifier]`
+		// shapes only (shipped in d6d5e5b7) missed non-bracket-shaped
+		// triggers entirely — cursor_test.go, language_forest_optin_test.go,
+		// query_kotlin_regression_test.go (this repo) and
+		// sort_slices_benchmark_test.go (stdlib) all parsed clean pre-ASI-fix
+		// and clean under the C oracle, but flipped to ERROR under that gate.
+		// (2) An unconditional steady-state raise to cap=8 (shipped in
+		// a03cdff0) fixed those four plus a pre-existing misparse
+		// (TestParseGoRangeWithNestedFunctionLiteralBody) but cost 4-6x on
+		// large real files that never needed the wider budget (this repo's
+		// own parser.go, parser_reduce.go, grammargen/lr.go — all clean at
+		// cap=3) AND was itself non-monotonic in the cap value:
+		// grammargen/normalize.go parsed clean at cap=3 but produced a false
+		// ERROR at every fixed steady-state cap from 8 through 16 tested (a
+		// from-scratch full parse at a fixed, elevated cap can select a
+		// WORSE merge winner than one that started at cap=3 — a genuine GLR
+		// merge-selection engine finding, not specific to Go). That
+		// non-monotonicity is why this steady-state cap stays at 3 rather
+		// than being raised again: there is no single fixed value that is
+		// safe for every file.
+		//
+		// The retry rung sidesteps both problems for free: it only fires
+		// when the cap=3 parse itself reports HasError (ParseStopAccepted +
+		// retryTreeHasError), so clean files (the overwhelming majority,
+		// including all of parser.go/parser_reduce.go/grammargen/lr.go/
+		// grammargen/normalize.go) never retry and never risk the
+		// non-monotonic misselection above; only files already broken at
+		// cap=3 (the four regression files, residual_adjacent_funcs_call_then_if_ne,
+		// and TestParseGoRangeWithNestedFunctionLiteralBody) pay a second
+		// parse to get fixed. See goAcceptedErrorMergePerKeyRetry's doc
+		// comment for why that second parse uses cap=16, not cap=8: a
+		// genuinely fresh parse reaches clean at cap=8 for every one of
+		// those files, but sort_slices_benchmark_test.go specifically did
+		// not reach clean through an 8-cap *retry* (same target cap, worse
+		// result than a fresh parse at that cap) — a second, distinct
+		// instance of the same engine-level path-dependence.
+		//
+		// RCA seed for a real engine investigation (not this fix): the
+		// underlying PrecDynamic-tie merge-selection nondeterminism — both
+		// the cap-value non-monotonicity (grammargen/normalize.go) and the
+		// retry-vs-fresh-parse discrepancy at an identical cap
+		// (sort_slices_benchmark_test.go) — is real and not Go-specific; the
+		// same PrecDynamic-tie family shows up in tsx/typescript's `a<b>(c)`
+		// ambiguity (see the "typescript"/"tsx" case in
+		// fullParseRetryMergePerKeyOverride). Minimal 153-byte repro that is
+		// clean at cap=3 but errors at every fixed steady-state cap from 8
+		// through 16 (this one IS fixed by the retry rung, since the rung
+		// never fires for it — it is seed material for the underlying engine
+		// behavior, not an open regression):
+		//
+		//	package p
+		//	func f() {
+		//		for value, names := range candidatesByValue {
+		//			if anonymousSources[value] {
+		//				out[names[0]] = true
+		//			}
+		//		}
+		//	}
+		if !parseMaxMergePerKeyEnvConfigured() {
+			if glrFaithfulCapOneMerge && mergePerKeyCap > 1 {
+				return 1
+			}
+			if mergePerKeyCap > 3 {
+				return 3
+			}
+		}
+	case "c":
+		// C's declaration/expression recovery can keep many redundant
+		// same-key survivors alive on large full parses. One survivor matches
+		// the parity corpus while removing most merge-equivalence churn; keep
+		// explicit env overrides available for grammar diagnosis.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "cpp":
+		// C++ token-source recovery can retain many equivalent declaration-list
+		// survivors on accepted-error parses. One same-key survivor keeps the
+		// current C++ parse/highlight/query gates clean while removing most of
+		// the full-parse merge-equivalence churn; keep explicit env overrides
+		// available for diagnosing grammar-specific recovery cases.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "json":
+		// JSON recovery has a small conflict surface, but retaining many
+		// alternatives per merge key makes equivalence checks dominate full
+		// parses without changing the accepted tree in parity coverage.
+		if mergePerKeyCap > 1 {
+			return 1
+		}
+	case "kotlin":
+		// Kotlin's statement-recovery conflicts overflow the default per-key
+		// survivor budget frequently on fresh parses. Parity coverage remains
+		// stable with one survivor, while avoiding the redundant alternatives
+		// removes most merge-equivalence churn.
+		if mergePerKeyCap > 1 {
+			return 1
+		}
+	case "scheme":
+		// Scheme's accepted-error corpus path can retain many same-key
+		// survivors around dense datum/recovery ambiguity. One survivor keeps
+		// the bounded Scheme shape set stable while making the s/5_3.ss wall
+		// measurable; explicit env overrides remain available for diagnosis.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "php":
+		// PHP's namespace/modifier-heavy corpus keeps many equivalent recovery
+		// branches alive around statement/declaration ambiguity. One full-parse
+		// survivor preserves the current parse and highlight parity gates while
+		// removing most merge-equivalence churn; incremental reparses keep the
+		// wider default above.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "sql":
+		// SQL recovery can retain thousands of same-key statement-expression
+		// alternatives on SELECT-heavy inputs. One full-parse survivor preserves
+		// the focused parse/highlight parity gate while removing the redundant
+		// GLR churn; explicit env overrides and incremental reparses stay wide.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "r":
+		// R's call/argument grammar can keep many same-key alternatives alive
+		// even on tiny call-heavy inputs. One full-parse survivor preserves the
+		// current parse/highlight parity surface while preventing no-tree GLR
+		// churn from growing into multi-GB RSS.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "scala":
+		// Scala's expression/template grammar can retain huge same-key survivor
+		// sets before result selection on real-world files. Keep one full-parse
+		// survivor by default so the language remains bounded and measurable;
+		// explicit env overrides stay available for deeper parity diagnosis.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "powershell":
+		// PowerShell's command/pipeline grammar can keep redundant same-key
+		// recovery survivors alive across script-sized inputs. One full-parse
+		// survivor preserves the current parity surface and brings both full
+		// and no-tree parse paths back into the C-tier range.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "graphql":
+		// GraphQL schema/query sources can retain redundant same-key value and
+		// operation-definition alternatives. One full-parse survivor preserves
+		// the current parity surface while removing the merge-equivalence churn.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "haskell":
+		// Haskell's layout-heavy grammar can retain redundant same-key module
+		// and declaration alternatives long enough for large generated sources
+		// to blow past practical parse bounds. One full-parse survivor preserves
+		// the current real-corpus C parity surface while making large files
+		// measurable; incremental reparses and explicit env overrides stay wide.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "make":
+		// Makefile line-text ambiguities need both the open-repeat and
+		// close-repeat branches to preserve the C-compatible tree; one survivor
+		// misrecovers the current corpus. Two same-key survivors keep that
+		// branch pair alive while cutting most of the redundant GLR frontier.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 2 {
+			return 2
+		}
+	case "lua":
+		// Lua's string/call-heavy recovery can keep redundant alternatives
+		// alive even on small files, so the cap stays below the default. It
+		// cannot drop to 1: the table-constructor field list (field
+		// (sep field)* sep?) needs two same-key survivors at each separator
+		// or the trailing-separator branch is pruned and a clean parse
+		// degrades into recovery (`t = { a = 1, b = 2, c = 3, }` grew a
+		// zero-width MISSING field with cap=1 under the DFA lexer path).
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 2 {
+			return 2
+		}
+	case "ruby":
+		// Ruby still needs a wider stack budget for some real-world files, but
+		// same-key merge survivors are redundant on the current parity surface.
+		// One full-parse survivor removes the result-selection churn while
+		// preserving explicit env overrides for grammar diagnosis.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "rust":
+		// Rust's impl/match-heavy full parses keep redundant same-key recovery
+		// branches alive through large AST-shaped sources. One survivor cuts
+		// full-parse GLR work while the Rust recovery path now clones recovered
+		// top-level chunks directly into the result arena, avoiding the old
+		// offset-root allocation cliff. Incremental reparses and explicit env
+		// overrides keep the wider default.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "xml":
+		// XML's nested markup grammar can keep equivalent element/text branches
+		// alive on document-shaped inputs. One full-parse survivor keeps the
+		// current parse/highlight parity clean while reducing merge work.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "toml":
+		// TOML has a small conflict surface, but redundant same-key table/value
+		// survivors dominate the current real-corpus full parse. One survivor
+		// keeps parse/highlight parity clean and brings it under the C baseline.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "nix":
+		// Nix real-corpus parses are tiny in token count but spend most full-parse
+		// time comparing redundant same-key expression alternatives. One survivor
+		// preserves the current parity surface while removing the merge churn;
+		// incremental reparses and explicit env overrides keep the wider default.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "ocaml":
+		// OCaml real-corpus full parses can retain over a million same-key
+		// survivors around expression/operator ambiguity. One survivor preserves
+		// strict C parity on the current corpus and removes the merge-equivalence
+		// cliff; incremental reparses and explicit env overrides keep the wider
+		// default.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "javascript":
+		// Plain JS can develop many near-equivalent GLR survivors on large
+		// runtime bundles. Keeping more than four alternatives per merge key
+		// causes merge-equivalence checks to dominate without improving the
+		// accepted tree; retry widening should not undo this language cap.
+		if mergePerKeyCap > 4 {
+			return 4
+		}
+	case "starlark":
+		// Bazel/Starlark BUILD files and .bzl files accumulate many same-key
+		// alternatives around call-heavy top-level forms. One survivor matches
+		// the current parse/highlight/query gates and removes the merge phase
+		// as the dominant full-parse cost on Aspect-shaped workloads.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	case "elixir":
+		// Elixir's terminator/repetition conflicts can keep many same-key
+		// block/source alternatives alive. Without faithful condense, body
+		// continuation vs next stab_clause still needs two same-key survivors.
+		// With faithful cap-one condense, tied same-key readings are preserved
+		// through multi-link GSS nodes, so the steady-state cap can tighten.
+		// Keep explicit diagnostic overrides and incremental reparses wider.
+		if !parseMaxMergePerKeyEnvConfigured() {
+			if glrFaithfulCapOneMerge && mergePerKeyCap > 1 {
+				return 1
+			}
+			if mergePerKeyCap > 2 {
+				return 2
+			}
+		}
+	case "typescript", "tsx":
+		// TypeScript-family sources in repository indexing workloads are
+		// import/query heavy and frequently fork around expression/import
+		// ambiguity. The steady-state full-parse cap is two, not one: cap-one
+		// routes every merge key through the score-first single-survivor path
+		// (stackCompareMergeSmallCapOne), which keeps exactly one survivor per
+		// key ranked by cumulative dynamic-precedence score BEFORE structural
+		// equivalence. A structurally-distinct correct derivation that scores
+		// one point lower than its rival (for example the required_parameter
+		// pattern reduction in "function f(a = 1)", or the call_signature
+		// return-type reduction in "(a: A): B =>") is discarded before the
+		// return-type or arrow tokens confirm it, collapsing the declaration to
+		// ERROR. That defect is the root cause of the TypeScript
+		// default-parameter, typed-arrow, and destructured-return-type bug
+		// families that three source-text detectors previously patched per
+		// shape. cap-two routes TypeScript through the general merge path
+		// (mergeStacksWithScratch), which counts STRUCTURALLY-DISTINCT
+		// survivors: structurally-equivalent forks dedup through the
+		// stackHashForMerge prefilter plus stackEquivalentForMergeState deep
+		// walk WITHOUT consuming the second slot, so the second slot is spent
+		// only on a genuinely different derivation. Width therefore stays
+		// bounded and the union-type-list .d.ts population explosion does not
+		// return: measured dom.generated.d.ts (2.3 MB) and checker.ts (3.1 MB)
+		// parse in the same time and heap envelope at cap-two as cap-one, and
+		// #389 established cap-two as .d.ts-safe while cap-six is not.
+		if !parseMaxMergePerKeyEnvConfigured() && typescriptFullParseCanUseTightMergeCap(sourceLen...) {
+			// Variant B (test seam only): keep the tight cap-one width and fix
+			// the defect at the discard site instead of widening. See
+			// typeScriptCapOneStructurePreference.
+			if typeScriptCapOneStructurePreference.Load() {
+				if mergePerKeyCap > 1 {
+					return 1
+				}
+			} else if mergePerKeyCap > typeScriptSteadyStateMergeCap {
+				return typeScriptSteadyStateMergeCap
+			}
+		}
+	case "java":
+		// Giant generated string/switch-heavy Java sources can retain millions
+		// of redundant GLR survivors under the default per-key budget. Keep one
+		// steady-state survivor for full parses. Annotation declaration sources
+		// are widened earlier from source text because cap=1 can discard the
+		// top-level @interface declaration branch before result selection.
+		// Accepted-error retries can still widen this cap when a file proves the
+		// steady-state budget is insufficient.
+		// Preserve explicit env overrides for diagnosis and parity experiments.
+		if !parseMaxMergePerKeyEnvConfigured() && mergePerKeyCap > 1 {
+			return 1
+		}
+	}
+	return mergePerKeyCap
+}
+
+func typescriptFullParseCanUseTightMergeCap(sourceLen ...int) bool {
+	// The tight cap applies uniformly regardless of file size. This function
+	// previously disengaged the cap above 64KB ("large parser.ts-class sources
+	// need the wider default to avoid expensive recovery/result paths",
+	// 719cbe90), which created a size-threshold discontinuity: the wide
+	// six-survivor budget retains redundant unreduced-spine survivors whose
+	// conflict-reduce frontier walk re-forks their entire pending spine at
+	// every statement boundary (O(n) transient forks per token, O(n^2) node
+	// allocation over the file). Union-type-list-shaped .d.ts sources crossed
+	// from "parses in milliseconds" at 64KB-epsilon to "memory_budget with
+	// 1548 transient stacks" at 64KB+epsilon. The tight cap is what prevents
+	// those survivors from being retained in the first place. Accepted-error
+	// retries still widen through fullParseRetryMergePerKeyOverride.
+	_ = sourceLen
+	return true
+}
+
+func dartIncrementalFallbackCanUseTightMergeCap(sourceLen ...int) bool {
+	return len(sourceLen) > 0 && sourceLen[0] > dartIncrementalReuseMaxSourceBytes
+}
+
+// typeScriptSteadyStateMergeCap is the full-parse per-key survivor cap for the
+// TypeScript grammar family. It is two, not one: cap-one routes merges through
+// the score-first single-survivor path that discards a structurally-distinct
+// correct derivation before later tokens confirm it (see the "typescript",
+// "tsx" case in effectiveParseMergePerKeyCap). cap-two counts
+// structurally-distinct survivors, which subsumed the per-shape source-text
+// merge-width detectors formerly defined below (retired once the
+// subsumption held: TestTypeScriptMergeCapSubsumesDetectors, PR #416) while
+// staying .d.ts-safe.
+const typeScriptSteadyStateMergeCap = 2
+
+// typeScriptCapOneStructurePreference selects variant B for evaluation: keep
+// the TypeScript full-parse cap at one and, at the cap-one discard site
+// (stackCompareMergeSmallCapOne), prefer the structurally-richer fork before
+// score instead of after it. The detector-family correct derivation carries an
+// extra structural reduction (required_parameter, call_signature) that lowers
+// its cumulative dynamic-precedence score, so cap-one score-first discards it;
+// preferring the lower-score fork keeps it. This is a single-survivor heuristic,
+// not the faithful GLR keep-both semantics, so it is a test seam ONLY, default
+// off. It is compared head-to-head against the shipping cap-two policy; the flag
+// forces cap-one so the discard-site change is actually exercised.
+//
+// It is an atomic.Bool for the same reason: stackCompareMergeSmallCapOne (a
+// parse hot path) reads it while a test toggles it.
+var typeScriptCapOneStructurePreference atomic.Bool
+
+func fullParseUsesDeterministicExternalConflicts(lang *Language) bool {
+	return lang != nil &&
+		lang.ExternalScanner != nil &&
+		(lang.Name == "yaml" || lang.Name == "scala")
+}
+
+func shouldRepeatExternalScannerFullParse(lang *Language, tree *Tree) bool {
+	if lang == nil || lang.ExternalScanner == nil || tree == nil {
+		return false
+	}
+	if lang.ExternalScannerFullParseRetryPolicy == ExternalScannerFullParseRetrySkipRepeat {
+		return false
+	}
+	// Skip the redundant re-parse when the first attempt already produced a
+	// clean tree — retrying a clean parse wastes significant time and memory
+	// for grammars with large state tables (e.g. Ruby).
+	if treeParseClean(tree) {
+		return false
+	}
+	return true
+}
+
+func fullParseRetryMaxStacksOverride(tree *Tree, sourceLen int, initialMaxStacks int) int {
+	return fullParseRetryMaxStacksOverrideForOrigin(tree, sourceLen, initialMaxStacks, fullParseRetryOriginFresh)
+}
+
+func fullParseRetryMaxStacksOverrideForOrigin(tree *Tree, sourceLen int, initialMaxStacks int, origin fullParseRetryOrigin) int {
+	// An explicit GOT_GLR_MAX_STACKS is a true ceiling: diagnostics and
+	// experiments depend on the survivor cap actually holding, and the
+	// widening below silently defeated it (2026-07 cliff campaign finding).
+	if parseMaxGLRStacksEnvConfigured() {
+		return 0
+	}
+	if fullParseRetryUsesInitialStackCeilingForOrigin(tree, sourceLen, initialMaxStacks, origin) {
+		return 0
+	}
+	certifiedRetryMaxStacks := certifiedFreshErrorNoStacksRetryMaxStacks(tree, sourceLen, origin)
+	retryMaxStacks := certifiedRetryMaxStacks
+	if certifiedRetryMaxStacks == 0 {
+		retryMaxStacks = fullParseRetryMaxGLRStacks
+		if tree != nil && tree.language != nil && tree.language.Name == "java" {
+			retryMaxStacks = javaFullParseRetryMaxGLRStacks
+		}
+		if initialMaxStacks > retryMaxStacks {
+			retryMaxStacks = initialMaxStacks * 2
+		}
+	} else if retryMaxStacks <= initialMaxStacks {
+		return 0
+	}
+	if parseMaxGLRStacksValue() >= retryMaxStacks {
+		return 0
+	}
+	if shouldRetryFullParse(tree, sourceLen) ||
+		shouldRetryAcceptedErrorParse(tree, sourceLen, initialMaxStacks) ||
+		shouldRetryStackPressureCleanFullParse(tree, sourceLen, initialMaxStacks) {
+		return retryMaxStacks
+	}
+	return 0
+}
+
+// shouldRetryCertifiedNoStacksPressure permits one final retry only after a
+// fresh full parse proves that both the default and ordinary retry stack caps
+// exhausted live stacks. The initial tree must be clean-but-truncated: this
+// distinguishes cap pressure from an input that already contains a syntax
+// error. Explicit diagnostic caps remain authoritative.
+func shouldRetryCertifiedNoStacksPressure(tree, retryTree *Tree, sourceLen, initialMaxStacks, retryMaxStacks int, origin fullParseRetryOrigin) bool {
+	if tree == nil || retryTree == nil || origin != fullParseRetryOriginFresh ||
+		sourceLen <= 0 || sourceLen > fullParseCertifiedNoStacksPressureRetryMaxSourceBytes ||
+		parseMaxGLRStacksEnvConfigured() || parseMaxMergePerKeyEnvConfigured() ||
+		initialMaxStacks >= fullParseCertifiedNoStacksPressureRetryMaxGLRStacks ||
+		retryMaxStacks >= fullParseCertifiedNoStacksPressureRetryMaxGLRStacks {
+		return false
+	}
+	initial := tree.rawParseRuntime()
+	if initial.StopReason != ParseStopNoStacksAlive || !initial.Truncated ||
+		retryTreeHasError(tree) || initial.MaxStacksSeen < initialMaxStacks {
+		return false
+	}
+	retry := retryTree.rawParseRuntime()
+	return retry.StopReason == ParseStopNoStacksAlive && retry.Truncated &&
+		retryTreeHasError(retryTree) && retry.MaxStacksSeen >= retryMaxStacks
+}
+
+func fullParseRetryUsesInitialStackCeiling(tree *Tree, sourceLen int, initialMaxStacks int) bool {
+	return fullParseRetryUsesInitialStackCeilingForOrigin(tree, sourceLen, initialMaxStacks, fullParseRetryOriginFresh)
+}
+
+func fullParseRetryUsesInitialStackCeilingForOrigin(tree *Tree, sourceLen int, initialMaxStacks int, origin fullParseRetryOrigin) bool {
+	if tree == nil || tree.language == nil {
+		return false
+	}
+	return origin == fullParseRetryOriginFresh &&
+		certifiedAcceptedErrorRetryUsesInitialStackCeiling(tree, sourceLen, initialMaxStacks)
+}
+
+func certifiedAcceptedErrorRetryUsesInitialStackCeiling(tree *Tree, sourceLen int, initialMaxStacks int) bool {
+	if tree == nil || tree.language == nil || sourceLen <= 0 {
+		return false
+	}
+	profile := tree.language.FullParseAcceptedErrorRetryProfile
+	if profile.MinSourceBytes == 0 || profile.InitialStackCeiling == 0 ||
+		uint64(sourceLen) < uint64(profile.MinSourceBytes) ||
+		initialMaxStacks != int(profile.InitialStackCeiling) ||
+		parseMaxGLRStacksEnvConfigured() || parseMaxMergePerKeyEnvConfigured() {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	return rt.StopReason == ParseStopAccepted &&
+		!rt.Truncated &&
+		!rt.TokenSourceEOFEarly &&
+		retryTreeHasError(tree) &&
+		retryTreeCoversExpectedEOF(tree)
+}
+
+func certifiedAcceptedErrorRetrySkipsComplete(tree *Tree, sourceLen int) bool {
+	if tree == nil || tree.language == nil ||
+		!tree.language.FullParseAcceptedErrorRetryProfile.SkipCompleteAcceptedErrorRetry {
+		return false
+	}
+	return certifiedAcceptedErrorRetrySkipEligible(tree, sourceLen)
+}
+
+func certifiedAcceptedErrorRetrySkipsFresh(tree *Tree, sourceLen int, origin fullParseRetryOrigin) bool {
+	if tree == nil || tree.language == nil || origin != fullParseRetryOriginFresh ||
+		!tree.language.FullParseAcceptedErrorRetryProfile.SkipFreshCompleteAcceptedErrorRetry {
+		return false
+	}
+	return certifiedAcceptedErrorRetrySkipEligible(tree, sourceLen)
+}
+
+func certifiedAcceptedErrorRetrySkipEligible(tree *Tree, sourceLen int) bool {
+	if tree == nil || tree.language == nil || sourceLen <= 0 {
+		return false
+	}
+	profile := tree.language.FullParseAcceptedErrorRetryProfile
+	if profile.SkipCompleteMinSourceBytes > 0 &&
+		uint64(sourceLen) < uint64(profile.SkipCompleteMinSourceBytes) {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	if profile.SkipCompleteMaxEntryScratchPeak > 0 &&
+		rt.EntryScratchPeak > uint64(profile.SkipCompleteMaxEntryScratchPeak) {
+		return false
+	}
+	return rt.StopReason == ParseStopAccepted &&
+		!rt.Truncated &&
+		!rt.TokenSourceEOFEarly &&
+		retryTreeHasError(tree) &&
+		retryTreeCoversExpectedEOF(tree)
+}
+
+func certifiedGSSConvergenceAcceptedErrorMergePerKey(tree *Tree, sourceLen int) int {
+	if tree == nil || tree.language == nil || sourceLen <= 0 ||
+		!tree.language.FullParseGSSConvergenceEnabled ||
+		parseMaxGLRStacksEnvConfigured() || parseMaxMergePerKeyEnvConfigured() {
+		return 0
+	}
+	mergePerKey := int(tree.language.FullParseAcceptedErrorRetryProfile.GSSConvergenceAcceptedErrorMergePerKey)
+	if mergePerKey <= 1 {
+		return 0
+	}
+	rt := tree.rawParseRuntime()
+	if rt.StopReason != ParseStopAccepted || rt.Truncated || rt.TokenSourceEOFEarly ||
+		!retryTreeHasError(tree) || !retryTreeCoversExpectedEOF(tree) {
+		return 0
+	}
+	return mergePerKey
+}
+
+func certifiedFreshErrorNoStacksRetryPassLimit(tree *Tree, sourceLen int, origin fullParseRetryOrigin) int {
+	if tree == nil || tree.language == nil || origin != fullParseRetryOriginFresh ||
+		sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return 0
+	}
+	limit := tree.language.FullParseAcceptedErrorRetryProfile.FreshErrorNoStacksMaxPasses
+	if limit == 0 || tree.rawParseStopReason() != ParseStopNoStacksAlive || !retryTreeHasError(tree) {
+		return 0
+	}
+	return int(limit)
+}
+
+func certifiedFreshErrorNoStacksRetryMaxStacks(tree *Tree, sourceLen int, origin fullParseRetryOrigin) int {
+	if tree == nil || tree.language == nil || origin != fullParseRetryOriginFresh ||
+		sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes ||
+		tree.rawParseStopReason() != ParseStopNoStacksAlive || !retryTreeHasError(tree) {
+		return 0
+	}
+	return int(tree.language.FullParseAcceptedErrorRetryProfile.FreshErrorNoStacksRetryMaxStacks)
+}
+
+func fullParseRetryNodeLimitOverride(tree *Tree, sourceLen int) int {
+	if !shouldRetryNodeLimitParse(tree, sourceLen) {
+		return 0
+	}
+	limit := tree.rawParseRuntime().NodeLimit
+	if limit <= 0 {
+		limit = parseNodeLimit(sourceLen)
+	}
+	return scaledNodeLimit(limit, fullParseRetryNodeLimitScale)
+}
+
+func fullParseRetrySecondaryNodeLimitOverride(tree *Tree, sourceLen int) int {
+	if tree == nil || sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return 0
+	}
+	rt := tree.rawParseRuntime()
+	if rt.StopReason != ParseStopNodeLimit {
+		return 0
+	}
+	limit := rt.NodeLimit
+	if limit <= 0 {
+		return 0
+	}
+	return scaledNodeLimit(limit, fullParseRetrySecondaryNodeLimitScale)
+}
+
+func fullParseRetryMergePerKeyOverride(tree *Tree, sourceLen int, initialMaxStacks int) int {
+	if tree == nil || sourceLen <= 0 || sourceLen > fullParseRetryMaxSourceBytes {
+		return 0
+	}
+	// An explicit merge cap is authoritative for every retry rung. Returning a
+	// retry override here would silently replace the caller's diagnostic cap.
+	if parseMaxMergePerKeyEnvConfigured() {
+		return 0
+	}
+	if treeParseClean(tree) {
+		return 0
+	}
+	rt := tree.rawParseRuntime()
+	if rt.TokenSourceEOFEarly {
+		return 0
+	}
+	switch rt.StopReason {
+	case ParseStopAccepted, ParseStopNoStacksAlive, ParseStopNodeLimit:
+	default:
+		return 0
+	}
+	if mergePerKey := certifiedGSSConvergenceAcceptedErrorMergePerKey(tree, sourceLen); mergePerKey != 0 {
+		return mergePerKey
+	}
+	if certifiedAcceptedErrorRetrySkipsComplete(tree, sourceLen) {
+		return 0
+	}
+	if tree.language != nil && tree.language.Name == "java" && rt.StopReason == ParseStopAccepted && retryTreeHasError(tree) {
+		return javaFullParseRetryMaxMergePerKey
+	}
+	if tree.language != nil && tree.language.Name == "go" && rt.StopReason == ParseStopAccepted && retryTreeHasError(tree) {
+		// See goAcceptedErrorMergePerKeyRetry's doc comment and the "go" case
+		// in effectiveParseMergePerKeyCap for the full account. TL;DR: the
+		// `_automatic_semicolon` external-scanner ASI fix (grammars/go_scanner.go)
+		// restructured enough of the LALR table that Go's pre-existing,
+		// upstream-intentional dynamic-precedence tie between
+		// index_expression and generic_type(composite_literal) (both
+		// PrecDynamic(1, ...)) needs more merge-per-key survivors than the
+		// steady-state cap=3 on some real files — but ONLY those files, so
+		// this is scoped to the retry rung (fires on an accepted-but-erroring
+		// fresh parse) rather than a permanent language-wide cap raise, which
+		// cost 4-6x on large real files that never needed it (this repo's
+		// own parser.go, parser_reduce.go, grammargen/lr.go — all clean at
+		// cap=3, never retry, never pay the wider budget) and was itself
+		// non-monotonic in the cap value: grammargen/normalize.go parsed
+		// clean at cap=3 but produced a false ERROR at every cap from 8
+		// through 16 tested (a from-scratch full parse at a fixed, elevated
+		// cap can select a WORSE merge winner than one that started at
+		// cap=3), so a blanket raise cannot safely replace this rung. Scoped
+		// to lang.Name=="go" for now (this retry mechanism is not otherwise
+		// language-aware beyond a per-language switch); the same
+		// PrecDynamic-tie family shows up in tsx/typescript
+		// (`a<b>(c)`-shaped ambiguity, see the "typescript"/"tsx" case just
+		// below) and may want the same treatment later.
+		return goAcceptedErrorMergePerKeyRetry
+	}
+	if tree.language != nil && (tree.language.Name == "typescript" || tree.language.Name == "tsx") &&
+		rt.StopReason == ParseStopAccepted && retryTreeHasError(tree) && sourceLen > 64*1024 {
+		// Large TypeScript-family files keep the wider steady-state cap, but
+		// some accepted-error parses recover cleanly only when redundant
+		// same-key survivors are pruned. Use a negative override as an exact
+		// cap for this retry; positive retry overrides still only widen caps.
+		return -4
+	}
+	if initialMaxStacks <= 0 {
+		initialMaxStacks = maxGLRStacks
+	}
+	if rt.MaxStacksSeen < initialMaxStacks {
+		if fullParseNoStacksAliveCleanEOFNeedsMergeRetry(tree, rt) {
+			return fullParseRetryMaxMergePerKey
+		}
+		return 0
+	}
+	if tree.language != nil && tree.language.Name == "java" {
+		return javaFullParseRetryMaxMergePerKey
+	}
+	return fullParseRetryMaxMergePerKey
+}
+
+func fullParseNoStacksAliveCleanEOFNeedsMergeRetry(tree *Tree, rt *ParseRuntime) bool {
+	return rt.StopReason == ParseStopNoStacksAlive &&
+		!rt.TokenSourceEOFEarly &&
+		!retryTreeHasError(tree)
+}
+
+func shouldRunInitialFullParseMergeRetry(tree *Tree, sourceLen int, origin fullParseRetryOrigin) bool {
+	if tree == nil {
+		return false
+	}
+	// When the first full parse stops on node_limit, the next useful retry is
+	// almost always the wider node budget, not another full parse with the same
+	// node cap plus a larger merge bucket. Keep merge-per-key retries available
+	// after a widened node-budget pass if the parser still proves ambiguity-
+	// bound, but skip the dead intermediate pass up front.
+	rt := tree.rawParseRuntime()
+	if rt.StopReason == ParseStopNodeLimit {
+		return false
+	}
+	if certifiedAcceptedErrorRetrySkipsInitialMerge(tree, sourceLen, origin) {
+		return false
+	}
+	return true
+}
+
+func certifiedAcceptedErrorRetrySkipsInitialMerge(tree *Tree, sourceLen int, origin fullParseRetryOrigin) bool {
+	if certifiedGSSConvergenceAcceptedErrorMergePerKey(tree, sourceLen) != 0 {
+		return false
+	}
+	if tree == nil || tree.language == nil || sourceLen <= 0 || origin != fullParseRetryOriginFresh ||
+		!tree.language.FullParseAcceptedErrorRetryProfile.SkipInitialCompleteAcceptedErrorMergeRetry ||
+		parseMaxGLRStacksEnvConfigured() || parseMaxMergePerKeyEnvConfigured() {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	return rt.StopReason == ParseStopAccepted &&
+		!rt.Truncated &&
+		!rt.TokenSourceEOFEarly &&
+		retryTreeHasError(tree) &&
+		retryTreeCoversExpectedEOF(tree)
+}
+
+func certifiedAcceptedErrorRetryReusesCleanWide(p *Parser, tree *Tree, sourceLen int, origin fullParseRetryOrigin, maxNodesOverride int) bool {
+	if p == nil || tree == nil || tree.language == nil || sourceLen <= 0 || origin != fullParseRetryOriginFresh ||
+		maxNodesOverride != 0 ||
+		parseMaxGLRStacksEnvConfigured() || parseMaxMergePerKeyEnvConfigured() || parseNodeLimitScaleEnvConfigured() {
+		return false
+	}
+	profile := tree.language.FullParseAcceptedErrorRetryProfile
+	if !profile.ReuseCleanWideForWideRetry || profile.ReuseCleanWideMinSourceBytes == 0 ||
+		uint64(sourceLen) < uint64(profile.ReuseCleanWideMinSourceBytes) {
+		return false
+	}
+	rt := tree.rawParseRuntime()
+	return rt.StopReason == ParseStopAccepted &&
+		!rt.Truncated &&
+		!rt.TokenSourceEOFEarly &&
+		retryTreeHasError(tree) &&
+		retryTreeCoversExpectedEOF(tree)
+}
+
+func (p *Parser) retryFullParse(source []byte, initialMaxStacks int, tree *Tree, runRetry fullParseRetryRunner) *Tree {
+	return p.retryFullParseForOrigin(source, initialMaxStacks, tree, fullParseRetryOriginFresh, runRetry)
+}
+
+func (p *Parser) retryFullParseForOrigin(source []byte, initialMaxStacks int, tree *Tree, origin fullParseRetryOrigin, runRetry fullParseRetryRunner) *Tree {
+	p.recordRecoveryRuntimeRetryTree(tree, "initial")
+	p.recordRecoveryRuntimeRetryTreeDetailed(tree, "initial", "initial_full_parse")
+	if certifiedAcceptedErrorRetrySkipsFresh(tree, len(source), origin) {
+		p.recordRecoveryRuntimeSelectedTree(tree)
+		p.recordRecoveryRuntimeSelectedTreeDetailed(tree)
+		p.finishRecoveryRuntimeRetryTelemetry(tree, len(source))
+		p.clearRecoveryRuntimeRetryTreesDetailed()
+		p.clearRecoveryRuntimeRetryTrees()
+		return tree
+	}
+	maxStacksOverride := fullParseRetryMaxStacksOverrideForOrigin(tree, len(source), initialMaxStacks, origin)
+	maxNodesOverride := fullParseRetryNodeLimitOverride(tree, len(source))
+	retryMaxStacks := initialMaxStacks
+	if maxStacksOverride > 0 {
+		retryMaxStacks = maxStacksOverride
+	}
+
+	// retryDeadline caps the cumulative wall time spent across retry
+	// iterations. Without it, a pathological input that triggers all four
+	// retry branches (initial-merge, node-limit, secondary-node-limit, final
+	// merge-per-key) can run far longer than the caller's SetTimeoutMicros
+	// budget. The parser polls timeoutMicros inside the parse loop, but between
+	// retries the budget was not re-checked. We honor the same budget as a
+	// wall-clock deadline shared across retry attempts.
+	retryStart := time.Now()
+	retryPassLimit := fullParseRetryMaxTotalPasses
+	if certifiedLimit := certifiedFreshErrorNoStacksRetryPassLimit(tree, len(source), origin); certifiedLimit > 0 && certifiedLimit < retryPassLimit {
+		retryPassLimit = certifiedLimit
+	}
+	retryPassLimitReached := func() bool {
+		return p != nil && p.fullParseRetryPassesTaken >= retryPassLimit
+	}
+	retryDeadlineExceeded := func() bool {
+		if reason := p.parseStopReasonNow(); parseStopReasonIsTerminal(reason) {
+			return true
+		}
+		// Hard pass-count bound, independent of any wall-clock budget (which
+		// is a no-op without SetTimeoutMicros — see the KNOWN GAP below).
+		// Counted per top-level parse operation across every retryFullParse
+		// invocation; see fullParseRetryMaxTotalPasses.
+		if retryPassLimitReached() {
+			return true
+		}
+		// KNOWN GAP (tracked, not fixed here): when the caller never
+		// configures a timeout (p.timeoutMicros == 0, the default for a
+		// freshly constructed Parser and for every test/benchmark helper in
+		// this repo that just calls Parser.Parse), this whole deadline check
+		// is a no-op and the retry cascade below has no wall-clock ceiling —
+		// only the fixed per-stage caps (fullParseRetryMaxGLRStacks,
+		// fullParseRetryMaxMergePerKey, the node-limit scale factors). On
+		// most inputs that is fine because each stage still resolves
+		// quickly even at its widened cap. But grammargen/parity_test.go (a
+		// 110KB file in this repo that already carried a small, pre-existing
+		// parse error under the old Go blob) runs past 90s under the current
+		// Go blob without a caller-supplied timeout — root cause not
+		// isolated: it is not the merge-per-key/stack-cap mechanism itself
+		// (widening or narrowing both via GOT_GLR_MAX_MERGE_PER_KEY /
+		// GOT_GLR_MAX_STACKS made no difference), and ASCII-substituting the
+		// Unicode box-drawing characters near the pre-existing baseline
+		// error ruled those out too. Follow-up: either give Parser.Parse a
+		// sane default wall-clock budget, or isolate why this specific large,
+		// already-imperfect-parsing file drives the retry cascade past any
+		// of its per-stage caps without a timeout to fall back on.
+		//
+		// Related, separately discovered finding: this repo's own
+		// grammars/markdown_scanner.go was already HasError=true at the
+		// pre-ASI-fix baseline (StopReason accepted, reaches EOF) but is
+		// HasError=true differently now (StopReason no_stacks_alive,
+		// Truncated=true, stops at byte ~20860 of 37144) — not a
+		// clean-to-error flip, but a worse failure shape on an
+		// already-broken file, surfaced by the same repo-corpus walk used to
+		// validate this fix. Not root-caused in the time available; flagging
+		// alongside the parity_test.go gap above rather than leaving it
+		// silently undiscovered.
+		if p == nil || p.timeoutMicros == 0 {
+			return false
+		}
+		if reason := p.activeParseStopReason(); parseStopReasonIsActive(reason) {
+			return true
+		}
+		if p.parseBudgetDepth > 0 {
+			return false
+		}
+		return time.Since(retryStart) > time.Duration(p.timeoutMicros)*time.Microsecond
+	}
+
+	// Each runRetry() produces a fresh Tree + arena. When a candidate loses
+	// the compare, release its arena back to the pool immediately so later
+	// runRetry() calls in this same retryFullParse can reuse it; otherwise
+	// the loser's arena only returns to the pool at GC finalize time, which
+	// starves every retry in a warm loop of reusable capacity. Never release
+	// the incoming `tree` — it belongs to the caller.
+	release := func(t *Tree) {
+		if t == nil || t == tree {
+			return
+		}
+		t.Release()
+	}
+	replaceBest := func(best **Tree, candidate *Tree) {
+		// A candidate can already be the incumbent. Re-ranking and releasing it
+		// would clear the selected tree.
+		if candidate == nil || candidate == *best {
+			return
+		}
+		preferCandidate := preferRetryTree
+		if origin == fullParseRetryOriginIncremental && tree != nil && *best == tree {
+			preferCandidate = preferRetryTreeOverFirstPass
+		}
+		if preferCandidate(p, candidate, *best) {
+			if *best != candidate {
+				release(*best)
+			}
+			*best = candidate
+			p.recordRecoveryRuntimeSelectedTree(candidate)
+			p.recordRecoveryRuntimeSelectedTreeDetailed(candidate)
+			p.recordRecoveryRuntimeCandidateReplacedDetailed(candidate)
+			return
+		}
+		release(candidate)
+	}
+	var reusableCleanWideTree *Tree
+	defer func() {
+		release(reusableCleanWideTree)
+	}()
+
+	structuralResyncRetry := shouldRetryFullParse(tree, len(source))
+	// C# namespace recovery can clear this exact accepted-error shape during
+	// normal result compatibility; avoid paying the full retry ladder first.
+	if certifiedGSSConvergenceAcceptedErrorMergePerKey(tree, len(source)) == 0 &&
+		csharpAcceptedErrorTreeCanUseNamespaceRecovery(tree, source) {
+		p.recordRecoveryRuntimeSelectedTree(tree)
+		p.recordRecoveryRuntimeSelectedTreeDetailed(tree)
+		p.finishRecoveryRuntimeRetryTelemetry(tree, len(source))
+		p.clearRecoveryRuntimeRetryTreesDetailed()
+		p.clearRecoveryRuntimeRetryTrees()
+		return tree
+	}
+	runRetryAttempt := func(logicalRung, operationCause string, maxStacks int, maxMergePerKeyOverride int, maxNodes int) *Tree {
+		if p != nil {
+			p.resetCRecoveryCostCompetitionState()
+			if retryPassLimitReached() {
+				// Budget exhausted: a nil candidate is a no-op for every
+				// caller (replaceBest ignores nil), so the incumbent best
+				// tree flows through unchanged.
+				return nil
+			}
+			p.fullParseRetryPassesTaken++
+			p.recordRecoveryRuntimeRetry(operationCause)
+		}
+		var result *Tree
+		workCountSetNextParseAttempt(logicalRung, operationCause)
+		if !structuralResyncRetry || p == nil || p.forceCleanRetryPass {
+			result = runRetry(maxStacks, maxMergePerKeyOverride, maxNodes)
+		} else {
+			prev := p.retryStructuralTopLevelResync
+			p.retryStructuralTopLevelResync = true
+			defer func() {
+				p.retryStructuralTopLevelResync = prev
+			}()
+			result = runRetry(maxStacks, maxMergePerKeyOverride, maxNodes)
+		}
+		p.recordRecoveryRuntimeRetryTree(result, logicalRung)
+		p.recordRecoveryRuntimeRetryTreeDetailed(result, logicalRung, operationCause)
+		return result
+	}
+
+	bestTree := tree
+	defer func() {
+		p.finishRecoveryRuntimeRetryTelemetry(bestTree, len(source))
+		p.clearRecoveryRuntimeRetryTreesDetailed()
+		p.clearRecoveryRuntimeRetryTrees()
+	}()
+	p.recordRecoveryRuntimeSelectedTree(bestTree)
+	p.recordRecoveryRuntimeSelectedTreeDetailed(bestTree)
+	if shouldRunInitialFullParseMergeRetry(tree, len(source), origin) {
+		if initialMergePerKey := fullParseRetryMergePerKeyOverride(tree, len(source), initialMaxStacks); initialMergePerKey != 0 {
+			mergeRetryTree := runRetryAttempt(
+				"initial_merge",
+				"initial_result_requires_merge_width",
+				initialMaxStacks,
+				initialMergePerKey,
+				0,
+			)
+			replaceBest(&bestTree, mergeRetryTree)
+			if treeParseClean(bestTree) {
+				return bestTree
+			}
+		}
+	}
+	if retryDeadlineExceeded() {
+		return bestTree
+	}
+
+	nodeRetryTree := tree
+	if maxStacksOverride == 0 && maxNodesOverride == 0 {
+		return bestTree
+	}
+	// A widened-stack retry would normally also enable the retry-pass
+	// error-recovery behavior (single-stack resurrection on all-stacks-dead),
+	// because the override exceeds the small global default budget. The original
+	// failure is usually that the narrower prior budget ran every stack dead at
+	// a single ambiguity peak; the extra budget alone keeps a winning branch
+	// alive to a clean accepted forest. The retry-pass recovery, however,
+	// derails the parse into single-stack error recovery and fragments the whole
+	// tree into an ERROR root (e.g. bash for/while/case scripts that tree-sitter
+	// C parses cleanly). So first try the wider budget as a clean (non-retry)
+	// pass; if it parses cleanly we take it. Otherwise we fall through to the
+	// retry-pass-enabled retry below, preserving prior recovery behavior.
+	if maxStacksOverride > 0 && p != nil && !p.forceCleanRetryPass {
+		p.forceCleanRetryPass = true
+		cleanRetryTree := runRetryAttempt(
+			"clean_wide",
+			"stack_or_node_budget_requires_clean_wide",
+			retryMaxStacks,
+			0,
+			maxNodesOverride,
+		)
+		p.forceCleanRetryPass = false
+		// A clean (non-retry-pass) wider-budget parse legitimately ends on
+		// ParseStopNoStacksAlive after the winning branch reduces to the start
+		// symbol and the remaining survivors die at EOF, so treeParseClean
+		// (which requires ParseStopAccepted) under-reports it. Accept any
+		// error-free root here; replaceBest/preferRetryTree still pick the best
+		// tree if a later pass does better.
+		if shouldTakeCleanWideRetry(tree, cleanRetryTree, len(source), initialMaxStacks) {
+			cleanMergePerKey := fullParseRetryMergePerKeyOverride(cleanRetryTree, len(source), initialMaxStacks)
+			replaceBest(&bestTree, cleanRetryTree)
+			if retryTreeCoversExpectedEOF(bestTree) {
+				return bestTree
+			}
+			if cleanMergePerKey != 0 && !retryDeadlineExceeded() {
+				p.forceCleanRetryPass = true
+				cleanMergeTree := runRetryAttempt(
+					"clean_wide_merge",
+					"clean_wide_result_requires_merge_width",
+					retryMaxStacks,
+					cleanMergePerKey,
+					maxNodesOverride,
+				)
+				p.forceCleanRetryPass = false
+				replaceBest(&bestTree, cleanMergeTree)
+				if !retryTreeHasError(bestTree) && retryTreeCoversExpectedEOF(bestTree) {
+					return bestTree
+				}
+			}
+		} else if certifiedAcceptedErrorRetryReusesCleanWide(p, cleanRetryTree, len(source), origin, maxNodesOverride) {
+			reusableCleanWideTree = cleanRetryTree
+		} else {
+			release(cleanRetryTree)
+		}
+		if retryDeadlineExceeded() {
+			return bestTree
+		}
+	}
+	if maxStacksOverride > 0 || maxNodesOverride > 0 {
+		var retryTree *Tree
+		if reusableCleanWideTree != nil && !retryPassLimitReached() {
+			// Consume the same pass slot as the recovery-enabled widened retry.
+			// Keeping accounting identical preserves the scheduling of any later
+			// secondary-node or merge retry.
+			p.fullParseRetryPassesTaken++
+			retryTree = reusableCleanWideTree
+			reusableCleanWideTree = nil
+		} else {
+			retryTree = runRetryAttempt(
+				"recovery_wide_or_node",
+				"stack_or_node_budget_requires_recovery_wide",
+				retryMaxStacks,
+				0,
+				maxNodesOverride,
+			)
+		}
+		// nodeRetryTree is read below for stop-reason inspection, so we hold
+		// a pointer to it without handing it through replaceBest until the
+		// retry sequence is done. If it doesn't end up bestTree, we release
+		// it at function exit via the sentinel below.
+		nodeRetryTree = retryTree
+		if retryDeadlineExceeded() {
+			replaceBest(&bestTree, retryTree)
+			return bestTree
+		}
+		if extraNodeLimit := fullParseRetrySecondaryNodeLimitOverride(retryTree, len(source)); extraNodeLimit > 0 {
+			secondaryTree := runRetryAttempt(
+				"secondary_node",
+				"primary_node_retry_requires_secondary_node_budget",
+				retryMaxStacks,
+				0,
+				extraNodeLimit,
+			)
+			// Fold the primary retry into bestTree before we overwrite
+			// nodeRetryTree, so the loser's arena is returned.
+			if retryTree != nil {
+				preferCandidate := preferRetryTree
+				if origin == fullParseRetryOriginIncremental && tree != nil && bestTree == tree {
+					preferCandidate = preferRetryTreeOverFirstPass
+				}
+				if preferCandidate(p, retryTree, bestTree) {
+					if bestTree != retryTree {
+						release(bestTree)
+					}
+					bestTree = retryTree
+					p.recordRecoveryRuntimeSelectedTree(bestTree)
+					p.recordRecoveryRuntimeSelectedTreeDetailed(bestTree)
+					p.recordRecoveryRuntimeCandidateReplacedDetailed(bestTree)
+				} else if retryTree != bestTree {
+					release(retryTree)
+				}
+			}
+			nodeRetryTree = secondaryTree
+		} else {
+			// Keep the ordinary widened retry alive until the final merge
+			// decision below. It can lose the ranking to the original clean
+			// but truncated no-stacks tree, yet still be the evidence that
+			// selects a bounded merge or certified-pressure retry. Releasing it
+			// here clears its runtime data and silently suppresses those rungs.
+			preferCandidate := preferRetryTree
+			if origin == fullParseRetryOriginIncremental && tree != nil && bestTree == tree {
+				preferCandidate = preferRetryTreeOverFirstPass
+			}
+			if retryTree != nil && preferCandidate(p, retryTree, bestTree) {
+				if bestTree != retryTree {
+					release(bestTree)
+				}
+				bestTree = retryTree
+				p.recordRecoveryRuntimeSelectedTree(bestTree)
+				p.recordRecoveryRuntimeSelectedTreeDetailed(bestTree)
+				p.recordRecoveryRuntimeCandidateReplacedDetailed(bestTree)
+			}
+		}
+	}
+
+	// Keep the last widened candidate alive until its runtime can schedule the
+	// combined stack-and-merge retry below. Releasing it through replaceBest
+	// first clears the runtime receipt and silently skips that final rung.
+	if nodeRetryTree != nil && treeParseClean(nodeRetryTree) {
+		replaceBest(&bestTree, nodeRetryTree)
+		nodeRetryTree = nil
+	}
+	if treeParseClean(bestTree) {
+		if nodeRetryTree != nil && nodeRetryTree != bestTree && nodeRetryTree != tree {
+			release(nodeRetryTree)
+		}
+		return bestTree
+	}
+	maxMergePerKeyOverride := fullParseRetryMergePerKeyOverride(nodeRetryTree, len(source), initialMaxStacks)
+	replaceBest(&bestTree, nodeRetryTree)
+	nodeRetryTree = nil
+	if maxMergePerKeyOverride == 0 {
+		return bestTree
+	}
+	if retryDeadlineExceeded() {
+		return bestTree
+	}
+	mergeRetryTree := runRetryAttempt(
+		"final_merge",
+		"best_retry_result_requires_merge_width",
+		retryMaxStacks,
+		maxMergePerKeyOverride,
+		maxNodesOverride,
+	)
+	if shouldRetryCertifiedNoStacksPressure(tree, mergeRetryTree, len(source), initialMaxStacks, retryMaxStacks, origin) && !retryDeadlineExceeded() {
+		pressureRetryTree := runRetryAttempt(
+			"certified_no_stacks_pressure",
+			"default_and_bounded_stack_caps_exhausted",
+			fullParseCertifiedNoStacksPressureRetryMaxGLRStacks,
+			fullParseCertifiedNoStacksPressureRetryMaxMergePerKey,
+			0,
+		)
+		// nodeRetryTree is no longer needed; drop it before potentially
+		// replacing bestTree so we do not retain a losing retry arena.
+		if nodeRetryTree != nil && nodeRetryTree != bestTree && nodeRetryTree != tree {
+			release(nodeRetryTree)
+		}
+		replaceBest(&bestTree, mergeRetryTree)
+		replaceBest(&bestTree, pressureRetryTree)
+		return bestTree
+	}
+	// nodeRetryTree is no longer needed; drop it before potentially replacing
+	// bestTree so we don't leak it if it was also the incumbent.
+	if nodeRetryTree != nil && nodeRetryTree != bestTree && nodeRetryTree != tree {
+		release(nodeRetryTree)
+	}
+	replaceBest(&bestTree, mergeRetryTree)
+	return bestTree
+}
+
+func (p *Parser) retryFullParseWithDFA(source []byte, initialMaxStacks int, deterministicExternalConflicts bool, tree *Tree) *Tree {
+	return p.retryFullParseWithDFAForOrigin(source, initialMaxStacks, deterministicExternalConflicts, tree, fullParseRetryOriginFresh)
+}
+
+// retryFullParseWithDFAForOrigin is retryFullParseWithDFA's origin-aware
+// sibling, mirroring retryFullParseWithTokenSourceForOrigin: it lets a DFA
+// incremental caller (retryIncrementalParseAsFullWithDFA) run the same
+// full-parse retry ladder without pretending the caller is a fresh top-level
+// Parse.
+func (p *Parser) retryFullParseWithDFAForOrigin(source []byte, initialMaxStacks int, deterministicExternalConflicts bool, tree *Tree, origin fullParseRetryOrigin) *Tree {
+	result := p.retryFullParseForOrigin(source, initialMaxStacks, tree, origin, func(maxStacks int, maxMergePerKeyOverride int, maxNodes int) *Tree {
+		retryTS := p.acquireParserDFATokenSource(source)
+		defer retryTS.Close()
+		return p.parseInternal(
+			source,
+			p.wrapIncludedRanges(retryTS),
+			nil,
+			nil,
+			arenaClassFull,
+			nil,
+			maxStacks,
+			maxNodes,
+			maxMergePerKeyOverride,
+			deterministicExternalConflicts,
+		)
+	})
+	if origin == fullParseRetryOriginIncremental && result != tree && !preferRetryTreeOverFirstPass(p, result, tree) {
+		// The retry ladder finished without producing a strictly better tree
+		// on any quality axis. Keep the incremental first pass: replacing it
+		// with a quality-tied fresh tree would falsely report
+		// incremental_parse_full_retry and discard a good tree over parse-run
+		// bookkeeping (NodesAllocated).
+		result.Release()
+		return tree
+	}
+	// retryFullParse releases losing retry trees internally (#34), but when a
+	// retry winner replaces the original tree, the original's arena is orphaned.
+	// Release it here since the caller will overwrite its tree reference.
+	if result != tree {
+		tree.Release()
+	}
+	return result
+}
+
+// retryIncrementalParseAsFullWithDFA is retryIncrementalParseAsFullWithTokenSource's
+// DFA-backed sibling: the fail-closed fallback for the plain (non-token-source)
+// ParseIncremental / ParseIncrementalProfiled entry points. Before this
+// existed, only the TokenSource incremental path (parseIncrementalWithTokenSource
+// -Changed[Profiled]) had a safety net for an incremental attempt that never
+// finished a validated parse of the edited text (see
+// shouldRetryIncrementalParseAsFull); the plain DFA path
+// (parseIncrementalChanged[Profiled]) would publish whatever tree the aborted
+// attempt produced, including a near-empty ERROR tree when the attempt tripped
+// ParseStopMemoryBudget mid-parse. That is exactly the issue #454 C
+// incremental-delete defect: a single-byte delete that defeats reuse can drive
+// the incremental GLR loop through unbounded ambiguity exploration that never
+// reaches a clean accept, and the caller must not see that failure as a
+// successful, drastically-truncated tree.
+func (p *Parser) retryIncrementalParseAsFullWithDFA(source []byte, initialMaxStacks int, tree *Tree, timing *incrementalParseTiming) *Tree {
+	if tree == nil {
+		return tree
+	}
+	deterministicExternalConflicts := fullParseUsesDeterministicExternalConflicts(p.language)
+	retryStart := time.Now()
+	result := p.retryFullParseWithDFAForOrigin(source, initialMaxStacks, deterministicExternalConflicts, tree, fullParseRetryOriginIncremental)
+	if result == tree {
+		return tree
+	}
+	if timing != nil {
+		timing.totalNanos += time.Since(retryStart).Nanoseconds()
+		timing.reuseUnsupported = true
+		timing.reuseUnsupportedReason = "incremental_parse_full_retry"
+		copyParseRuntimeToTiming(timing, *result.rawParseRuntime())
+	}
+	return result
+}
+
+func (p *Parser) retryFullParseWithTokenSource(source []byte, ts TokenSource, initialMaxStacks int, deterministicExternalConflicts bool, tree *Tree) *Tree {
+	return p.retryFullParseWithTokenSourceForOrigin(source, ts, initialMaxStacks, deterministicExternalConflicts, tree, fullParseRetryOriginFresh)
+}
+
+func (p *Parser) retryFullParseWithTokenSourceForOrigin(source []byte, ts TokenSource, initialMaxStacks int, deterministicExternalConflicts bool, tree *Tree, origin fullParseRetryOrigin) *Tree {
+	resettable, ok := ts.(resettableTokenSource)
+	if !ok {
+		return tree
+	}
+	result := p.retryFullParseForOrigin(source, initialMaxStacks, tree, origin, func(maxStacks int, maxMergePerKeyOverride int, maxNodes int) *Tree {
+		resettable.Reset(source)
+		return p.parseInternal(
+			source,
+			p.wrapIncludedRanges(ts),
+			nil,
+			nil,
+			arenaClassFull,
+			nil,
+			maxStacks,
+			maxNodes,
+			maxMergePerKeyOverride,
+			deterministicExternalConflicts,
+		)
+	})
+	if origin == fullParseRetryOriginIncremental && result != tree && !preferRetryTreeOverFirstPass(p, result, tree) {
+		// The retry ladder finished without producing a strictly better tree
+		// on any quality axis. Keep the incremental first pass: replacing it
+		// with a quality-tied fresh tree would falsely report
+		// incremental_parse_full_retry and discard a good tree over parse-run
+		// bookkeeping (NodesAllocated).
+		result.Release()
+		return tree
+	}
+	// Same as retryFullParseWithDFA: release the original tree if a retry won.
+	if result != tree {
+		tree.Release()
+	}
+	return result
+}
+
+func (p *Parser) retryIncrementalParseAsFullWithTokenSource(source []byte, ts TokenSource, initialMaxStacks int, tree *Tree, timing *incrementalParseTiming) *Tree {
+	if tree == nil {
+		return tree
+	}
+	deterministicExternalConflicts := fullParseUsesDeterministicExternalConflicts(p.language)
+	retryStart := time.Now()
+	result := p.retryFullParseWithTokenSourceForOrigin(source, ts, initialMaxStacks, deterministicExternalConflicts, tree, fullParseRetryOriginIncremental)
+	if result == tree {
+		return tree
+	}
+	if timing != nil {
+		timing.totalNanos += time.Since(retryStart).Nanoseconds()
+		timing.reuseUnsupported = true
+		timing.reuseUnsupportedReason = "incremental_parse_full_retry"
+		copyParseRuntimeToTiming(timing, *result.rawParseRuntime())
+	}
+	return result
+}
+
+// retryIncrementalMemoryBudgetAsPlainFullWithDFA is the DFA-lexer fail-closed
+// fallback for shouldRetryIncrementalMemoryBudgetAsPlainFull: exactly one
+// plain, default-budget full parse, never the widen-and-retry ladder. See
+// shouldRetryIncrementalMemoryBudgetAsPlainFull for why the ladder is the
+// wrong tool here. It calls parseInternal directly (the same primitive
+// retryFullParseWithDFAForOrigin's callback uses) rather than the high-level
+// Parse entry point, so the caller's own subsequent
+// normalizeReturnedIncrementalTree pass remains this tree's only
+// normalization step -- consistent with every other retry helper in this
+// file, and avoiding a second (Parse-internal) normalization pass on top of
+// it. tree is released and replaced only when the plain full parse actually
+// completes with a root; otherwise the original (already-unsound) tree is
+// returned unchanged rather than risk losing it to a second failed attempt.
+func (p *Parser) retryIncrementalMemoryBudgetAsPlainFullWithDFA(source []byte, tree *Tree, timing *incrementalParseTiming) *Tree {
+	if tree == nil {
+		return tree
+	}
+	deterministicExternalConflicts := fullParseUsesDeterministicExternalConflicts(p.language)
+	initialMaxStacks := fullParseInitialMaxStacks(p.language, p.maxConflictWidth)
+	retryStart := time.Now()
+	retryTS := p.acquireParserDFATokenSource(source)
+	defer retryTS.Close()
+	full := p.parseInternal(source, p.wrapIncludedRanges(retryTS), nil, nil, arenaClassFull, nil, initialMaxStacks, 0, 0, deterministicExternalConflicts)
+	if full == nil || full.RootNode() == nil {
+		full.Release()
+		p.recordRecoveryRuntimeSelectedTree(tree)
+		p.recordRecoveryRuntimeSelectedTreeDetailed(tree)
+		return tree
+	}
+	tree.Release()
+	p.recordRecoveryRuntimeSelectedTree(full)
+	p.recordRecoveryRuntimeSelectedTreeDetailed(full)
+	if timing != nil {
+		timing.totalNanos += time.Since(retryStart).Nanoseconds()
+		timing.reuseUnsupported = true
+		timing.reuseUnsupportedReason = "incremental_parse_memory_budget_full_retry"
+		copyParseRuntimeToTiming(timing, *full.rawParseRuntime())
+	}
+	return full
+}
+
+// retryIncrementalMemoryBudgetAsPlainFullWithTokenSource is
+// retryIncrementalMemoryBudgetAsPlainFullWithDFA's token-source-backed
+// sibling, for languages that must reparse through a caller-supplied
+// TokenSource (for example Go/Rust/TypeScript's Go-native scanner bridges)
+// rather than the DFA lexer. It reuses the same resettableTokenSource
+// contract as retryFullParseWithTokenSourceForOrigin; a token source that
+// cannot be reset is left alone (the original tree is returned unchanged)
+// rather than risk reparsing from a stale scanner position.
+func (p *Parser) retryIncrementalMemoryBudgetAsPlainFullWithTokenSource(source []byte, ts TokenSource, tree *Tree, timing *incrementalParseTiming) *Tree {
+	if tree == nil {
+		return tree
+	}
+	resettable, ok := ts.(resettableTokenSource)
+	if !ok {
+		return tree
+	}
+	deterministicExternalConflicts := fullParseUsesDeterministicExternalConflicts(p.language)
+	initialMaxStacks := fullParseInitialMaxStacks(p.language, p.maxConflictWidth)
+	retryStart := time.Now()
+	resettable.Reset(source)
+	full := p.parseInternal(source, p.wrapIncludedRanges(ts), nil, nil, arenaClassFull, nil, initialMaxStacks, 0, 0, deterministicExternalConflicts)
+	if full == nil || full.RootNode() == nil {
+		full.Release()
+		p.recordRecoveryRuntimeSelectedTree(tree)
+		p.recordRecoveryRuntimeSelectedTreeDetailed(tree)
+		return tree
+	}
+	tree.Release()
+	p.recordRecoveryRuntimeSelectedTree(full)
+	p.recordRecoveryRuntimeSelectedTreeDetailed(full)
+	if timing != nil {
+		timing.totalNanos += time.Since(retryStart).Nanoseconds()
+		timing.reuseUnsupported = true
+		timing.reuseUnsupportedReason = "incremental_parse_memory_budget_full_retry"
+		copyParseRuntimeToTiming(timing, *full.rawParseRuntime())
+	}
+	return full
+}

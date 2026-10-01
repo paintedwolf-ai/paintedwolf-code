@@ -1,0 +1,11 @@
+id: painted-wolf/platform:view-close
+title: "Close view"
+scope: "global"
+keywords:
+  - "close peer"
+  - "close view"
+when:
+  fact: "peer_workspace"
+action:
+  kind: native_ui
+  handler: "view.close"

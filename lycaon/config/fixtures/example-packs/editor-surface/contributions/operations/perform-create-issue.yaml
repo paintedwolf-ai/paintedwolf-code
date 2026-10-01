@@ -1,0 +1,13 @@
+# Cross-pack references require a manifest dependency.
+id: example/editor-surface:perform-create-issue
+input:
+  - {id: repository, type: string, required: true}
+  - {id: title, type: string, required: true}
+  - {id: confirm, type: boolean, required: true}
+output:
+  - {id: issue-id, type: string, required: true}
+action:
+  kind: mcp_tool
+  requirement: example/editor-surface:tracker
+  tool: create_issue
+result: output

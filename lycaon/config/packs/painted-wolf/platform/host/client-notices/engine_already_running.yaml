@@ -1,0 +1,17 @@
+# Another engine holds the data lock; reopening cannot release it.
+# The engine startup diagnostic supplies store paths and command details.
+scope: app
+title: Already open
+message: >-
+  Another copy of the app is already open and using your data. Quit it, then
+  try again.
+# A failed retry keeps this notice until the other engine releases the lock.
+suggested_action: Still there. The other copy has to close before this one can open.
+scenarios:
+  - id: default
+    expect_contains:
+      - already open
+      - Quit it
+  - id: retry-failed
+    expect_contains:
+      - has to close

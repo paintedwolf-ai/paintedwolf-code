@@ -1,0 +1,31 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+title: Model can't use tools
+message: >-
+  {% if model -%}
+  {{ model }} can't make tool calls, so it can't run agent actions like reading files or editing code.
+  {%- else -%}
+  This model can't make tool calls, so it can't run agent actions like reading files or editing code.
+  {%- endif %}
+suggested_action: Switch to a tool-capable model in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_model
+    vars:
+      model: gemma-2b
+    expect_contains:
+      - gemma-2b
+      - tool calls
+  - id: generic
+    vars: {}
+    expect_contains:
+      - tool calls
+      - agent actions

@@ -1,0 +1,75 @@
+fixtures:
+- rule: index-delete
+  positive:
+  - pc index delete --index-name my-index --skip-confirmation
+  - pc index delete -i my-index --skip-confirmation
+  - pc index delete -i my-index --json
+  - pc index collection delete --name my-collection --skip-confirmation
+  - pc index backup delete --id backup-123 --json
+  - sudo pc index delete -i my-index --skip-confirmation
+  negative:
+  - pc index delete --index-name my-index
+  - pc index collection delete --name my-collection
+  - pc index collection list
+  - pc index delete -i my-index
+  - pc index list
+  - pc index describe -i my-index
+  - pc index create -i my-index --dimension 1536
+  - pc index delete -i my-index --skip-confirmation --help
+  - pc index delete --help
+- rule: vectors-delete-all
+  positive:
+  - pc index vector delete -i my-index --all-vectors --skip-confirmation
+  - pc index vector delete -i my-index --all-vectors --json
+  - pc index namespace delete --index-name my-index --name ns-1 --skip-confirmation
+  - pc index namespace delete -i my-index --name ns-1 --json
+  - sudo pc index vector delete -i my-index --all-vectors --skip-confirmation
+  negative:
+  - pc index vector delete -i my-index --all-vectors
+  - pc index namespace delete -i my-index --name ns-1
+  - pc index namespace list -i my-index
+  - pc index vector delete -i my-index --ids '["a","b"]'
+  - pc index vector delete -i my-index --filter '{"stale":true}'
+  - pc index vector upsert -i my-index --vectors data.json
+  - pc index vector query -i my-index --vector '[0.1,0.2]'
+  - pc index vector delete -i my-index --all-vectors --skip-confirmation --help
+- rule: account-scope-delete
+  positive:
+  - pc project delete --id proj-123 --skip-confirmation
+  - pc organization delete --id org-123 --skip-confirmation
+  - pc project delete --id proj-123 --json
+  - sudo pc organization delete --id org-123 --skip-confirmation
+  negative:
+  - pc project delete --id proj-123
+  - pc organization delete --id org-123
+  - pc project list
+  - pc organization describe --id org-123
+  - pc project delete --id proj-123 --skip-confirmation --help
+- rule: weaviate-collection-delete
+  positive:
+  - weaviate-cli delete collection --collection my-collection
+  - sudo weaviate-cli delete collection --collection my-collection
+  negative:
+  - weaviate-cli delete collection --collection my-collection --help
+  - weaviate-cli get collection --collection my-collection
+  - weaviate-cli create collection --collection my-collection
+  - weaviate-cli query collection --collection my-collection
+- rule: weaviate-collection-delete-all
+  positive:
+  - weaviate-cli delete collection --all
+  - sudo weaviate-cli delete collection --all
+  # weaviate-collection-delete defers to this rule whenever --all is present,
+  # even alongside a --collection flag it would otherwise match on alone.
+  - weaviate-cli delete collection --collection my-collection --all
+  - weaviate-cli delete collection --all --collection my-collection
+  negative:
+  - weaviate-cli delete collection --all --help
+  - weaviate-cli get collection --all
+- rule: weaviate-tenants-delete
+  positive:
+  - weaviate-cli delete tenants --collection my-collection --tenants 'Tenant-1,Tenant-2'
+  - sudo weaviate-cli delete tenants --collection my-collection --number_tenants 10
+  negative:
+  - weaviate-cli delete tenants --collection my-collection --tenants 'Tenant-1' --help
+  - weaviate-cli get tenants --collection my-collection
+  - weaviate-cli create tenants --collection my-collection --number_tenants 5

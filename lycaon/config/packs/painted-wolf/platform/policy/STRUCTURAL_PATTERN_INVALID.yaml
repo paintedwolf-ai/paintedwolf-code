@@ -1,0 +1,41 @@
+oar: '1.0'
+id: STRUCTURAL_PATTERN_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - grep
+  - code_rewrite
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "STRUCTURAL_PATTERN_INVALID"
+effect: block
+copy:
+  what: structural matching on {{ paintedwolf.path }} rejected the pattern — {{ paintedwolf.rejection_reason }}.
+  cause: The pattern must be one complete, well-formed node for the file's language — an expression, statement,
+    or declaration — using $VAR (one node) and $$$VAR (a node sequence) placeholders. A regex is not a structural
+    pattern.
+  why: Structural matching parses the pattern into a syntax tree; a pattern that will not parse has no tree to match
+    against, and one the grammar can only recover by discarding tokens would silently search for a different shape
+    than you wrote.
+  fix: Pass one whole construct — fmt.Println($A) for a call, or the entire declaration including its body (Go func
+    $NAME($$$ARGS) $RET { $$$BODY }, methods keeping the receiver); set lang if the file extension is detected wrongly.
+  instead: Branch on Code; fix the pattern syntax and retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:structural
+x-paintedwolf-message: structural pattern is invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: internal/foo.go
+    profile: implement
+    reason: pattern is required
+    tool: grep
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: STRUCTURAL_PATTERN_INVALID'

@@ -1,0 +1,37 @@
+oar: '1.0'
+id: CHOWN_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chown
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_paths
+when: paintedwolf.rejection_code == "CHOWN_BULK_DENIED"
+effect: block
+copy:
+  cause: The explicit path batch exceeds the per-call bound.
+  why: Ownership changes need bounded, reviewable targets.
+  fix: Split only the requested paths into batches of at most {{ paintedwolf.max_paths }}. Preserve intended
+    ownership and do not expand the assignment.
+  instead: Branch on Code CHOWN_BULK_DENIED; reduce the explicit batch
+  what: chown received {{ paintedwolf.requested }} paths; the current limit is {{ paintedwolf.max_paths }}.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
+x-paintedwolf-message: chown:chown batch exceeds max paths
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: scripts/run.sh
+    profile: implement
+    tool: chown
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHOWN_BULK_DENIED'

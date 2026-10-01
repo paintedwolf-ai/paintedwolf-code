@@ -1,0 +1,3 @@
+rules:
+  - id: lycaon.shell.test-no-lang
+    severity: ERROR

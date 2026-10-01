@@ -1,0 +1,39 @@
+oar: '1.0'
+id: SURVEY_BUNDLE_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - survey_repo
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.available
+  - paintedwolf.bundle
+  - paintedwolf.unknown_target
+when: paintedwolf.rejection_code == "SURVEY_BUNDLE_UNKNOWN"
+effect: block
+copy:
+  what: survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.
+  cause: 'The merged host/project catalog offers: {{ paintedwolf.available }}.'
+  why: Bundle ids are catalog-defined probe patterns; unknown ids cannot run.
+  fix: Retry survey_repo with a catalog bundle id from the reject list or tool schema.
+  instead: Choose an intended listed bundle, or an offered scoped search tool for an ad-hoc query
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:survey
+x-paintedwolf-message: survey_repo bundle not in catalog
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    available:
+    - layout_overview
+    - ssot_drift
+    - api_routes
+    bundle: missing_bundle
+    profile: explore_readonly
+    tool: survey_repo
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURVEY_BUNDLE_UNKNOWN'

@@ -1,0 +1,3 @@
+{
+  "browser": ["html", "htm", "xhtml", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "pdf", "txt"]
+}

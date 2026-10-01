@@ -1,0 +1,5 @@
+code: obligation_advance_not_host
+message: |
+  Phase {{phase}} declares host obligations but its advance policy is coordinator-controlled.
+replacement: |
+  Set phases[{{phase}}].advance.when_gate_met: auto (or controls.phase_advance: host) so the host can advance when the obligation settles.

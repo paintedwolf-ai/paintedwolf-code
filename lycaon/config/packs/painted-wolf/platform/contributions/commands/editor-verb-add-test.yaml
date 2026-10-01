@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-verb-add-test
+title: "Add test for selection"
+scope: "files"
+keywords:
+  - "test"
+  - "add test"
+  - "unit test"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-add-test

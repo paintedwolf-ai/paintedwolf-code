@@ -1,0 +1,730 @@
+components:
+  schemas:
+    SourceComparisonFold:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "start"
+        - "end"
+      properties:
+        start:
+          type: "integer"
+          minimum: 0
+        end:
+          type: "integer"
+          minimum: 0
+    SourceComparisonIntent:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "mode"
+      properties:
+        mode:
+          type: "string"
+          enum:
+            - "changes"
+            - "split"
+            - "full"
+            - "before"
+            - "after"
+        expanded:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SourceComparisonFold"
+          maxItems: 2048
+    EffectComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "effect_id"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "effect"
+        effect_id:
+          type: "string"
+          format: "uuid"
+    VersionComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "version_id"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "version"
+        version_id:
+          type: "string"
+          format: "uuid"
+    ScopeComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "file_id"
+        - "baseline"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "scope"
+        file_id:
+          type: "string"
+          format: "uuid"
+        baseline:
+          type: "string"
+        mark_user_edits:
+          type: "boolean"
+          x-go-pointer: true
+        presentation_after_ordinal:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+          x-go-pointer: true
+    TurnComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      description: |
+        What one turn did to one file: the state the turn found through the
+        state it left. It starts where the turn baseline's scope comparison
+        starts and ends at the turn's own last state, so a later turn's work
+        never lands in an earlier turn's range.
+      required:
+        - "kind"
+        - "file_id"
+        - "session_id"
+        - "turn"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "turn"
+        file_id:
+          type: "string"
+          format: "uuid"
+        session_id:
+          type: "string"
+          format: "uuid"
+        turn:
+          type: "integer"
+          minimum: 1
+        mark_user_edits:
+          type: "boolean"
+          x-go-pointer: true
+    ReviewedComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "file_id"
+        - "reviewed_through_ordinal"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "reviewed"
+        file_id:
+          type: "string"
+          format: "uuid"
+        reviewed_through_ordinal:
+          type: "integer"
+          minimum: 1
+          format: "int64"
+    CommitComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "root_id"
+        - "path"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "commit"
+        root_id:
+          type: "string"
+          format: "uuid"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+        expected_head:
+          type: "string"
+          x-go-pointer: true
+    BlobComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "root_id"
+        - "blob_oid"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "blob"
+        root_id:
+          type: "string"
+          format: "uuid"
+        blob_oid:
+          type: "string"
+        before_blob_oid:
+          type: "string"
+        display_path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+    GitChangeComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "change_id"
+        - "path"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "git_change"
+        change_id:
+          type: "string"
+          format: "uuid"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+        movement:
+          type: "boolean"
+          x-go-pointer: true
+        parent:
+          type: "integer"
+          minimum: 1
+          maximum: 1000
+          x-go-pointer: true
+    GitRangeComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      description: |
+        One file across two commits of a root's repository, read from the
+        object store. An added or deleted file reads its absent side as absent.
+      required:
+        - "kind"
+        - "root_id"
+        - "before_commit"
+        - "after_commit"
+        - "path"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "git_range"
+        root_id:
+          type: "string"
+          format: "uuid"
+        before_commit:
+          type: "string"
+          description: "Full commit id; empty compares with the empty tree."
+        after_commit:
+          type: "string"
+          description: "Full commit id."
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+    ChatComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "first"
+        - "last"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "chat"
+        first:
+          $ref: "../source-reader.yaml#/components/schemas/FileEditReference"
+        last:
+          $ref: "../source-reader.yaml#/components/schemas/FileEditReference"
+        expected_before_sha256:
+          type: "string"
+        expected_after_sha256:
+          type: "string"
+    TextComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "path"
+        - "before"
+        - "after"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "text"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+        before:
+          type: [string, "null"]
+          description: "Null means the file is absent; an empty string is a present empty file."
+          maxLength: 4194304
+        after:
+          type: [string, "null"]
+          description: "Null means the file is absent; an empty string is a present empty file."
+          maxLength: 4194304
+    RetainedComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "comparison"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "retained"
+        view_id:
+          type: "string"
+          format: "uuid"
+        comparison:
+          type: "string"
+          enum:
+            - "before"
+            - "current"
+        root_id:
+          type: "string"
+          format: "uuid"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+    CurrentComparisonSource:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      description: "A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit."
+      required: [kind, root_id, path]
+      properties:
+        kind:
+          type: "string"
+          enum: [current]
+        root_id:
+          type: "string"
+          format: "uuid"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+        decode_as:
+          type: "string"
+          enum: [utf-16le, utf-16be]
+    SourceComparisonSelector:
+      oneOf:
+        -
+          $ref: "#/components/schemas/CurrentComparisonSource"
+        -
+          $ref: "#/components/schemas/EffectComparisonSource"
+        -
+          $ref: "#/components/schemas/VersionComparisonSource"
+        -
+          $ref: "#/components/schemas/ScopeComparisonSource"
+        -
+          $ref: "#/components/schemas/TurnComparisonSource"
+        -
+          $ref: "#/components/schemas/ReviewedComparisonSource"
+        -
+          $ref: "#/components/schemas/CommitComparisonSource"
+        -
+          $ref: "#/components/schemas/BlobComparisonSource"
+        -
+          $ref: "#/components/schemas/GitChangeComparisonSource"
+        -
+          $ref: "#/components/schemas/GitRangeComparisonSource"
+        -
+          $ref: "#/components/schemas/ChatComparisonSource"
+        -
+          $ref: "#/components/schemas/TextComparisonSource"
+        -
+          $ref: "#/components/schemas/RetainedComparisonSource"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          current: "#/components/schemas/CurrentComparisonSource"
+          effect: "#/components/schemas/EffectComparisonSource"
+          version: "#/components/schemas/VersionComparisonSource"
+          scope: "#/components/schemas/ScopeComparisonSource"
+          turn: "#/components/schemas/TurnComparisonSource"
+          reviewed: "#/components/schemas/ReviewedComparisonSource"
+          commit: "#/components/schemas/CommitComparisonSource"
+          blob: "#/components/schemas/BlobComparisonSource"
+          git_change: "#/components/schemas/GitChangeComparisonSource"
+          git_range: "#/components/schemas/GitRangeComparisonSource"
+          chat: "#/components/schemas/ChatComparisonSource"
+          text: "#/components/schemas/TextComparisonSource"
+          retained: "#/components/schemas/RetainedComparisonSource"
+    SourceComparisonViewCreate:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - operation_id
+        - "client_id"
+        - "source"
+        - "intent"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        operation_id:
+          type: "string"
+          format: "uuid"
+        client_id:
+          type: "string"
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          minLength: 1
+          maxLength: 256
+          description: "Stable window identity shared with editor requests; grants no authority."
+        session_id:
+          type: "string"
+          format: "uuid"
+        source:
+          $ref: "#/components/schemas/SourceComparisonSelector"
+        intent:
+          $ref: "#/components/schemas/SourceComparisonIntent"
+    SourceComparisonSummary:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "before"
+        - "after"
+        - "added"
+        - "removed"
+        - "rows"
+        - "change_areas"
+        - "change_area_count"
+      properties:
+        before:
+          $ref: "../source-reader.yaml#/components/schemas/SourceReaderSide"
+        after:
+          $ref: "../source-reader.yaml#/components/schemas/SourceReaderSide"
+        added:
+          type: "integer"
+          minimum: 0
+        removed:
+          type: "integer"
+          minimum: 0
+        rows:
+          type: "integer"
+          minimum: 0
+        change_areas:
+          type: "array"
+          items:
+            $ref: "../source-reader.yaml#/components/schemas/SourceReaderChangeArea"
+          maxItems: 6
+        change_area_count:
+          type: "integer"
+          minimum: 0
+    SourceComparisonDigestRequest:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "sources"
+      description: "Comparisons to measure without opening a view. Retained, current and text sources need a view or carry their own text, so they are rejected."
+      properties:
+        session_id:
+          type: "string"
+          format: "uuid"
+        sources:
+          type: "array"
+          minItems: 1
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/SourceComparisonSelector"
+    SourceComparisonDigest:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "in_range"
+      description: "One comparison's measure. A failed source carries failure and nothing else."
+      properties:
+        in_range:
+          type: "boolean"
+          description: "False when the source holds no change for the file, which is a valid answer."
+        summary:
+          $ref: "#/components/schemas/SourceComparisonSummary"
+          x-go-pointer: true
+        changes_rows:
+          type: "integer"
+          minimum: 0
+          description: "Rows a changes presentation of this comparison holds: every changed and context row, and one per folded run of unchanged rows."
+        changes_folds:
+          type: "integer"
+          minimum: 0
+          description: "Folded runs among changes_rows."
+        failure:
+          $ref: "views.yaml#/components/schemas/SourceViewFailure"
+          x-go-pointer: true
+    SourceComparisonDigests:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "digests"
+      properties:
+        digests:
+          type: "array"
+          description: "One digest per requested source, in request order."
+          items:
+            $ref: "#/components/schemas/SourceComparisonDigest"
+    SourceComparisonDetails:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "in_range"
+        - "location_changed"
+      properties:
+        summary:
+          $ref: "#/components/schemas/SourceComparisonSummary"
+          x-go-pointer: true
+        in_range:
+          type: "boolean"
+        location_changed:
+          type: "boolean"
+        effect_id:
+          type: "string"
+          format: "uuid"
+        file_id:
+          type: "string"
+          format: "uuid"
+        op:
+          $ref: "../project/source-walk.yaml#/components/schemas/SourceChangeOp"
+        presentation_after_ordinal:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+          x-go-pointer: true
+        user_edits_unmarked:
+          type: "boolean"
+        before:
+          $ref: "../source-reader.yaml#/components/schemas/SourceReaderEndpoint"
+          x-go-pointer: true
+        after:
+          $ref: "../source-reader.yaml#/components/schemas/SourceReaderEndpoint"
+          x-go-pointer: true
+    SourceComparisonView:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "id"
+        - "intent_revision"
+        - "projection_revision"
+        - "state"
+        - "extent"
+        - "expires_at"
+        - "intent"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        id:
+          type: "string"
+          format: "uuid"
+        intent_revision:
+          type: "string"
+          format: uuid
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        state:
+          type: "string"
+          enum:
+            - "preparing"
+            - "ready"
+            - "failed"
+        extent:
+          $ref: "views.yaml#/components/schemas/SourceViewExtent"
+        expires_at:
+          type: "string"
+          format: "date-time"
+        failure:
+          $ref: "views.yaml#/components/schemas/SourceViewFailure"
+          x-go-pointer: true
+        intent:
+          $ref: "#/components/schemas/SourceComparisonIntent"
+        comparison:
+          $ref: "#/components/schemas/SourceComparisonDetails"
+          x-go-pointer: true
+    SourceComparisonViewUpdate:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - operation_id
+        - "expected_intent_revision"
+        - "intent"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        operation_id:
+          type: "string"
+          format: "uuid"
+        expected_intent_revision:
+          type: "string"
+          format: uuid
+        intent:
+          $ref: "#/components/schemas/SourceComparisonIntent"
+    SourceComparisonAnchor:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "row"
+      properties:
+        row:
+          type: "integer"
+          minimum: 0
+    SourceComparisonFrame:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "intent_revision"
+        - "projection_revision"
+        - "extent"
+        - "span"
+        - "anchor"
+        - "rows"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        view_id:
+          type: "string"
+          format: "uuid"
+        intent_revision:
+          type: "string"
+          format: uuid
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        extent:
+          $ref: "views.yaml#/components/schemas/SourceViewExtent"
+        span:
+          $ref: "views.yaml#/components/schemas/SourceViewSpan"
+        target:
+          type: "integer"
+          format: "int64"
+          minimum: 0
+          x-go-pointer: true
+          description: "Resolved anchor plus offset before subtracting before, in this snapshot. Present on anchored reads, including when leading context is clamped at the beginning."
+        anchor:
+          $ref: "#/components/schemas/SourceComparisonAnchor"
+        rows:
+          type: "array"
+          items:
+            $ref: "../source-reader.yaml#/components/schemas/SourceReaderRow"
+          maxItems: 200
+    SourceComparisonLocation:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "projection_revision"
+        - "index"
+        - "visible"
+        - "anchor"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        view_id:
+          type: "string"
+          format: "uuid"
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        index:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+        visible:
+          type: "boolean"
+        anchor:
+          $ref: "#/components/schemas/SourceComparisonAnchor"
+    SourceComparisonSearchPage:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "projection_revision"
+        - "next_cursor"
+        - "complete"
+        - "matches"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "comparison"
+        view_id:
+          type: "string"
+          format: "uuid"
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        next_cursor:
+          type: "string"
+        complete:
+          type: "boolean"
+        matches:
+          type: "array"
+          items:
+            $ref: "../source-reader.yaml#/components/schemas/SourceReaderMatch"
+          maxItems: 200

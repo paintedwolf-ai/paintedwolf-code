@@ -1,0 +1,34 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - attempts
+title: Could not reach the model host
+message: >-
+  {% if provider_id %}Could not reach {{ provider_id }}. {% endif %}The request
+  never got through — DNS, the dial, or the connection failed before it was sent.
+  {% if attempts and attempts > 1 %}Painted Wolf tried {{ attempts }} times. {% endif %}Nothing
+  reached the model, so nothing was spent.
+suggested_action: >-
+  Check your connection and send again. On hotel or café Wi-Fi, finish signing
+  in to the network first.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: default
+    vars:
+      provider_id: openai-1
+      attempts: 2
+    expect_contains:
+      - openai-1
+      - tried 2 times
+      - never got through
+      - Check your connection
+
+  # The Settings → AI providers refresh could not reach the
+  # provider. The saved list is still served, so this is a stale-list notice
+  # rather than a failure of the screen.

@@ -1,0 +1,18 @@
+# enablement keeps an unavailable command visible.
+id: example/editor-surface:read-tracker-issue
+title: Read tracker issue
+category: Example
+icon: tool
+enablement:
+  fact: mcp_requirement_ready
+  is: example/editor-surface:tracker
+input:
+  - id: issue-id
+    title: Issue ID
+    type: string
+    required: true
+action:
+  kind: mcp_tool
+  requirement: example/editor-surface:tracker
+  tool: get_issue
+result: output

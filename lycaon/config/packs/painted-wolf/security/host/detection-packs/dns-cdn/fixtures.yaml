@@ -1,0 +1,33 @@
+fixtures:
+- rule: zone-delete
+  positive:
+  - flarectl zone delete --zone=example.test
+  - aws route53 delete-hosted-zone --id Z1D633PJN98FT9
+  - aws route53 delete-hosted-zone --id Z1D633PJN98FT9 --profile prod
+  - sudo flarectl zone delete --zone=example.test
+  negative:
+  - flarectl zone list
+  - flarectl zone info --zone=example.test
+  - aws route53 list-hosted-zones
+  - aws --endpoint-url=http://localhost:4566 route53 delete-hosted-zone --id Z1
+  - awslocal route53 delete-hosted-zone --id Z1
+  - aws route53 delete-hosted-zone --id Z1D633PJN98FT9 --help
+  - flarectl zone delete --zone=example.test --help
+- rule: cdn-purge
+  positive:
+  - flarectl zone purge --zone=example.test --everything
+  - sudo flarectl zone purge --zone=example.test --everything
+  - fastly purge --all --service-id abc123 --non-interactive
+  - fastly service purge --all --service-id abc123 --auto-yes
+  - sudo fastly purge --all --non-interactive
+  negative:
+  - flarectl zone info --zone=example.test
+  - flarectl zone purge --help
+  - flarectl zone purge --zone=example.test -h
+  - flarectl zone purge --zone=example.test --files https://example.test/a.js
+  - flarectl zone purge --zone=example.test --tags css
+  - fastly purge --all --service-id abc123
+  - fastly purge -u https://example.test/page --non-interactive
+  - fastly purge -k mykey --non-interactive
+  - fastly service list
+  - fastly purge --all --non-interactive --help

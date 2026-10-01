@@ -1,0 +1,16 @@
+# ScanCategory — scanner category ids on CodeScan / settings wire.
+name: ScanCategory
+go_const_prefix: ScanCategory
+values:
+  - id: security
+  - id: sast
+    go: SAST
+  - id: sca
+    go: SCA
+  - id: container
+  - id: secret
+  - id: lint
+  - id: types
+  - id: style
+  - id: license
+  - id: custom

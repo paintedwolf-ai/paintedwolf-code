@@ -1,0 +1,41 @@
+title: Grant database privileges or create a role
+id: 1743ad1a-84e5-474b-a2c9-fc68b6cef468
+description: Grants privileges or creates a login role on a database.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - psql
+      - mysql
+      - mariadb
+      - cockroach
+      - clickhouse-client
+      - mongosh
+      - cqlsh
+      - snowsql
+      - snow
+  verbs_privilege_grant:
+    CommandLine|re:
+      - '(?i)[\s''"(]grant\s+(all|select|insert|update|delete|usage|execute)\b'
+      - '(?i)[\s''"(](create|alter)\s+(user|role)\b'
+      - '(?i)\bwith\s+superuser\b'
+      - '(?i)\.(createUser|grantRolesToUser)\s*\('
+  selection_createuser_image:
+    Image: createuser
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image and verbs_privilege_grant or selection_createuser_image) and not filter_rehearsal and not filter_local

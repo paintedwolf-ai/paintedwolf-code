@@ -1,0 +1,212 @@
+language: ruby
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: shell-injection-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     system("echo #{params[:command]}")
+    end
+  want:
+  - lycaon.ruby.shell-injection
+  covers: []
+- name: shell-injection-safe
+  file: sample.rb
+  source: |
+    def handle
+     system("printf", "%s", params[:text])
+    end
+  want: []
+  covers:
+  - lycaon.ruby.shell-injection
+- name: sql-injection-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     User.where("name = #{params[:name]}")
+    end
+  want:
+  - lycaon.ruby.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.rb
+  source: |
+    def handle
+     find_by_sql(["SELECT * FROM users WHERE name = ?", params[:name]])
+    end
+  want: []
+  covers:
+  - lycaon.ruby.sql-injection
+- name: code-injection-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     eval(params[:code])
+    end
+  want:
+  - lycaon.ruby.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.rb
+  source: |
+    def handle
+     JSON.parse(params[:data])
+    end
+  want: []
+  covers:
+  - lycaon.ruby.code-injection
+- name: unsafe-deserialization-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     Marshal.load(params[:data])
+    end
+  want:
+  - lycaon.ruby.unsafe-deserialization
+  covers: []
+- name: unsafe-deserialization-safe
+  file: sample.rb
+  source: |
+    def handle
+     YAML.safe_load(params[:data])
+    end
+  want: []
+  covers:
+  - lycaon.ruby.unsafe-deserialization
+- name: path-traversal-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     File.read(params[:path])
+    end
+  want:
+  - lycaon.ruby.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.rb
+  source: |
+    def handle
+     File.read("config.json")
+    end
+  want: []
+  covers:
+  - lycaon.ruby.path-traversal
+- name: open-redirect-vulnerable
+  file: sample.rb
+  source: |
+    def handle
+     redirect_to params[:next]
+    end
+  want:
+  - lycaon.ruby.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.rb
+  source: |
+    def handle
+     redirect_to "/home"
+    end
+  want: []
+  covers:
+  - lycaon.ruby.open-redirect
+- name: tls-verification-disabled-vulnerable
+  file: sample.rb
+  source: |
+    client.verify_mode = OpenSSL::SSL::VERIFY_NONE
+  want:
+  - lycaon.ruby.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.rb
+  source: |
+    client.verify_mode = OpenSSL::SSL::VERIFY_PEER
+  want: []
+  covers:
+  - lycaon.ruby.tls-verification-disabled
+- name: precision-bound-array-where
+  file: sample.rb
+  source: |
+    User.where(["name = ?", params[:name]])
+  want: []
+  covers: []
+- name: precision-bound-hash-where
+  file: sample.rb
+  source: |
+    User.where(name: params[:name])
+  want: []
+  covers: []
+- name: precision-quoted-shell
+  file: sample.rb
+  source: |
+    require "shellwords"
+    system("printf %s " + Shellwords.escape(params[:value]))
+  want: []
+  covers: []
+- name: precision-numeric-sql
+  file: sample.rb
+  source: |
+    User.where("id = #{params[:id].to_i}")
+  want: []
+  covers: []
+- name: precision-array-query-still-tainted
+  file: sample.rb
+  source: |
+    User.where([params[:sql], params[:value]])
+  want:
+  - lycaon.ruby.sql-injection
+  covers: []
+- name: precision-find-by-array-query-still-tainted
+  file: sample.rb
+  source: |
+    find_by_sql([params[:sql], params[:value]])
+  want:
+  - lycaon.ruby.sql-injection
+  covers: []
+- name: review-escape-undone
+  file: sample.rb
+  source: |
+    require "shellwords"
+    arg = Shellwords.escape(params[:dir]).gsub("\\", "")
+    system("ls " + arg)
+  want:
+  - lycaon.ruby.shell-injection
+  covers: []
+- name: review-escape-used-as-argument
+  file: sample.rb
+  source: |
+    require "shellwords"
+    system("ls " + Shellwords.escape(params[:dir]))
+  want: []
+  covers: []
+- name: review-escape-before-transform
+  file: sample.rb
+  source: |
+    require "shellwords"
+    system("ls " + Shellwords.escape(params[:dir].gsub("\\", "")))
+  want: []
+  covers: []
+- name: review-escape-benign-replacement
+  file: sample.rb
+  source: |
+    require "shellwords"
+    system("ls " + Shellwords.escape(params[:dir]).gsub("x", "y"))
+  want: []
+  covers: []
+- name: review-shellescape-undone
+  file: sample.rb
+  source: |
+    require "shellwords"
+    arg = Shellwords.shellescape(params[:dir]).gsub("\\", "")
+    system("ls " + arg)
+  want:
+  - lycaon.ruby.shell-injection
+  covers: []
+- name: review-shellescape-benign-replacement
+  file: sample.rb
+  source: |
+    require "shellwords"
+    system("ls " + Shellwords.shellescape(params[:dir]).gsub("x", "y"))
+  want: []
+  covers: []

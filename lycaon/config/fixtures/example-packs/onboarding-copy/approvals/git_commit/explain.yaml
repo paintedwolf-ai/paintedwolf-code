@@ -1,0 +1,18 @@
+# This unit conflicts with the stock unit until selected with `own:`:
+#   ./task extensions -- own approvals/git_commit/explain example/onboarding-copy --device
+# allow_line describes the durable grant.
+approval_explanations:
+    git_commit:
+        tool: git_commit
+        tier_hint: recoverable
+        what_changes: Write a commit into this repo's local history.
+        who_affected: Only this checkout. Nothing leaves your machine — a commit is not a push.
+        if_wrong: Undo with git reset --soft HEAD~1; the working tree is untouched.
+        allow_line: recording commits in this repository
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - commit
+                - not a push

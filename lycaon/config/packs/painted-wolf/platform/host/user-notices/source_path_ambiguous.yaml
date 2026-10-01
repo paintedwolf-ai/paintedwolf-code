@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Path matches more than one folder"
+message: "That path exists in more than one attached folder."
+suggested_action: "Choose the file from the Files tree so its folder is known."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "more than one attached folder"

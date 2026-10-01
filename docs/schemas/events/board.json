@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/board.json",
+  "$ref": "../../openapi/components/schemas/events.yaml#/components/schemas/BoardEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BoardEvent"
+}

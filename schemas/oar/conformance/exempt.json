@@ -1,0 +1,106 @@
+{
+  "_note": "[OAR-CONF-27] every MUST or MUST NOT clause of Open Agent Rules 1.0 is either cited by the covers list of a fixture in this directory, or listed here with a written justification. [OAR-CONF-28] an exemption is admissible only for a clause a fixture cannot observe: a requirement on how an engine declares its own vocabulary, on how this document is versioned, or on the absence of a behaviour. Each entry below names the check that enforces the clause instead. The gate is scripts/check-coverage.mjs, which fails the build on a gap, on a stale exemption, and on a fixture citing a clause the specification does not define.",
+  "exempt": [
+    {
+      "clause_id": "OAR-CONF-17",
+      "reason": "A requirement on the shape of a fixture, not on engine behaviour: a fixture cannot assert something about its own file name. Enforced instead by scripts/check-coverage.mjs, which fails when a fixture's id does not equal its file name stem or when it cites a clause the specification does not define, and by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts, which enforces the required members and the non-empty covers list.",
+      "check": "scripts/check-coverage.mjs, packages/oar-ref/test/corpus.test.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-18",
+      "reason": "A requirement on the shape of a fixture's input block. Enforced instead by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts: the published schema requires capability, admits exactly one of the two occurrence spellings, closes each to its own members, and validates capability against oar-capability.schema.json.",
+      "check": "packages/oar-ref/test/corpus.test.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-19",
+      "reason": "A requirement that every fixture carry input.capability. A fixture asserting it would have to be about some other fixture. Enforced instead by the unit test 'every fixture declares the host it assumes' in packages/oar-ref/test/corpus.test.ts, which walks the whole corpus, and by the runner, which reports a fixture with no capability document as a failure rather than falling back to its own host.",
+      "check": "packages/oar-ref/test/corpus.test.ts, packages/oar-ref/src/runner.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-22",
+      "reason": "A requirement on the absence of a behaviour: an engine must reject an expected key this specification does not define rather than passing it silently. A fixture carrying such a key would be a fixture the corpus must not contain, so the clause cannot be exercised from inside the corpus. Enforced instead by the unit test 'a fixture carrying an undefined expected key is rejected' in packages/oar-ref/test/runner.test.ts, which hands the runner a synthetic fixture with an undefined expected key and requires a failure naming it.",
+      "check": "packages/oar-ref/test/runner.test.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-24",
+      "reason": "A requirement on how an implementation reports its own conformance run: a skipped fixture is not a passed fixture, and skips must be reported with their reason. No fixture can observe the report that contains it. Enforced instead by the unit test 'a fixture whose capability set cannot be adopted is skipped, not passed' in packages/oar-ref/test/runner.test.ts, and by bin/oar-conformance.mjs, which prints SKIP distinctly from PASS and FAIL and reports the three counts separately.",
+      "check": "packages/oar-ref/test/runner.test.ts, packages/oar-ref/bin/oar-conformance.mjs"
+    },
+    {
+      "clause_id": "OAR-CONF-27",
+      "reason": "The coverage gate itself. A fixture cannot assert that a build gate exists. Enforced instead by scripts/check-coverage.mjs, which is this file's reader: it parses every clause identifier from the published specification, keeps those whose text carries MUST, and exits non-zero unless each is cited by a fixture's covers list or listed here. It runs in CI as the task coverage target.",
+      "check": "scripts/check-coverage.mjs"
+    },
+    {
+      "clause_id": "OAR-CONF-28",
+      "reason": "A requirement on the admissibility of the entries in this file, and on their form. Enforced instead by scripts/check-coverage.mjs, which rejects an entry naming a clause the specification does not define, an entry for a clause that carries no MUST, a duplicate entry, an entry whose justification is missing or too short to be a justification, and an entry for a clause a fixture already covers. That each justification names the check enforcing the clause instead is met by every entry here and is reviewed by a human.",
+      "check": "scripts/check-coverage.mjs"
+    },
+    {
+      "clause_id": "OAR-CONF-30",
+      "reason": "A requirement on the wording of the fixtures themselves, not on engine behaviour: a fixture cannot assert that its own expected.error is a single machine token. Enforced instead by scripts/check-coverage.mjs, which rejects any expected.error that is not a bare token matching ^[A-Za-z0-9_][A-Za-z0-9_./:<>-]*$, and by the unit test 'every expected.error is a single machine token' in packages/oar-ref/test/corpus.test.ts. Together these keep the corpus asserting that the right thing was named rather than how it was phrased.",
+      "check": "scripts/check-coverage.mjs, packages/oar-ref/test/corpus.test.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-32",
+      "reason": "A requirement on how a fixture must reach a counter value, not on engine behaviour: a fixture cannot assert that it itself arrived at a counter through declared side-effects rather than by supplying it ready-made. Enforced instead by scripts/check-coverage.mjs, which fails a fixture supplying fire_count, breaker_count, fire_count_of or breaker_count_of in facts, and one asserting a counter larger than the occurrences it lists could have written.",
+      "check": "scripts/check-coverage.mjs"
+    },
+    {
+      "clause_id": "OAR-CONF-35",
+      "reason": "A requirement on the published manifest and on the shape of a conformance claim: no fixture can observe the manifest that lists it, or the claim that skipped it. Enforced instead by scripts/check-coverage.mjs, which recomputes the baseline predicate from every fixture's own capability document and fails the build when the manifest's baseline flags disagree with it in either direction, and by the runner, which reports skips distinctly so a claim that skipped a baseline fixture is visible on its face.",
+      "check": "scripts/check-coverage.mjs, packages/oar-ref/bin/oar-conformance.mjs"
+    },
+    {
+      "clause_id": "OAR-CONF-36",
+      "reason": "A requirement on the shape of the corpus, not on engine behaviour: a fixture cannot assert that its own capability document is minimal, and a fixture asserting it about another fixture would be testing the corpus rather than an engine. The clause is also behavioural by construction \u2014 a declaration is permitted exactly when removing it would change the outcome \u2014 so the only way to evaluate it is to remove each declaration and re-run, which is a property of the corpus as a whole. Enforced instead by scripts/check-capability-minimal.mjs, which probes every fixture's capability dimension by dimension against the reference engine and fails when a declaration can be removed with the verdict unchanged.",
+      "check": "scripts/check-capability-minimal.mjs"
+    },
+    {
+      "clause_id": "OAR-EXPR-18",
+      "reason": "A requirement satisfied structurally rather than behaviourally: evaluation must terminate, and the grammar has no loop, no recursion, and no user-defined function. A fixture can only demonstrate that one particular condition terminated, which is not the claim. Enforced instead by the grammar in Appendix A.1 and by the unit test 'the parse tree admits no loop, recursion, or user-defined function' in packages/oar-ref/test/expression.test.ts, which asserts the node kinds the parser can produce are exactly those [OAR-EXPR-20] enumerates and that none of them introduces a binding form.",
+      "check": "packages/oar-ref/test/expression.test.ts"
+    },
+    {
+      "clause_id": "OAR-FIRE-9",
+      "reason": "An inability to apply a declared side-effect is a fault in the engine's own counter store or event stream. The fixture schema has no fault-injection input, so no fixture can make a conforming store refuse a write, and a fixture that could would be testing the harness rather than the format. Enforced instead by the unit test 'a side-effect that cannot be applied is routed through on_error' in packages/oar-ref/test/engine.test.ts, which arms the CounterStore failure seam and asserts the rule is traced as errored and handled per its on_error.",
+      "check": "packages/oar-ref/test/engine.test.ts"
+    },
+    {
+      "clause_id": "OAR-VER-1",
+      "reason": "A requirement on how this specification is revised: a minor revision must be additive. It constrains a future document, not any engine behaviour observable at an anchor occurrence, so no fixture can be written against it. Enforced instead by the immutability gate scripts/freeze-spec.sh, run in CI as the task spec:freeze:check job, which fails when an already-published version directory changes; a minor revision therefore has to arrive as a new directory whose additive nature is reviewed against the previous one.",
+      "check": "scripts/freeze-spec.sh"
+    },
+    {
+      "clause_id": "OAR-VER-2",
+      "reason": "A requirement on how this specification is revised: a change breaking a valid document of the current major must bump the major. It constrains the editors, not an engine. The observable half \u2014 that an engine refuses a major it does not implement \u2014 is fixtured by doc-unsupported-major-rejected. Enforced instead by the immutability gate scripts/freeze-spec.sh and by review of the change log in Appendix B.",
+      "check": "scripts/freeze-spec.sh"
+    },
+    {
+      "clause_id": "OAR-VER-3",
+      "reason": "A requirement that a published version of this specification is immutable and that a correction ships as a new version. Nothing about an anchor occurrence can observe it. Enforced instead by scripts/freeze-spec.sh, run in CI as the task spec:freeze:check job, which diffs the working tree against HEAD for every published version directory and fails on any edit in place.",
+      "check": "scripts/freeze-spec.sh"
+    },
+    {
+      "clause_id": "OAR-VER-4",
+      "reason": "Advice to a rule author targeting a mixed fleet, derived from [OAR-DOC-5]. The engine behaviour it rests on is fixtured by doc-forward-minor-rejected and doc-current-minor-loads; what remains is an authoring practice no engine can be tested for. Enforced instead by those two fixtures plus the publisher-facing note in examples/portable-pack/README.md.",
+      "check": "doc-forward-minor-rejected, doc-current-minor-loads"
+    },
+    {
+      "clause_id": "OAR-VER-5",
+      "reason": "A requirement on how the profile catalogue is revised: adding a fact to an existing profile must bump the major or introduce a new profile name. It constrains a future edit of vocabulary.yaml, not an engine. Enforced instead by the immutability gate scripts/freeze-spec.sh, and by the unit test 'the transcribed vocabulary matches the published tables' in packages/oar-ref/test/vocabulary.test.ts, which fails the build if a profile's membership drifts from the published tables in either direction.",
+      "check": "scripts/freeze-spec.sh, packages/oar-ref/test/vocabulary.test.ts"
+    },
+    {
+      "clause_id": "OAR-CONF-38",
+      "reason": "A fixture cannot inspect the implementation path used to execute it. Enforced by adapter review and integration tests showing that the production document loader and evaluator consume conformance inputs directly.",
+      "check": "packages/oar-ref/src/runner.ts and implementation adapter review"
+    },
+    {
+      "clause_id": "OAR-PROF-10",
+      "reason": "A fixture evaluates an occurrence but cannot observe transport delivery or whether withheld content reached a caller. Host integration tests must prove that pre-invoke blocks prevent dispatch, post-invoke blocks withhold complete results, and transforms replace the delivered representation.",
+      "check": "host transport integration tests and capability adapter review"
+    }
+  ],
+  "partial": []
+}

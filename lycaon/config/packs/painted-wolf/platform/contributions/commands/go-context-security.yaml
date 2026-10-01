@@ -1,0 +1,20 @@
+id: painted-wolf/platform:go-context-security
+title: "Show security scanners"
+scope: "global"
+keywords:
+  - "security"
+  - "scans"
+  - "scanners"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "security"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.security"

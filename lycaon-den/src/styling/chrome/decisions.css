@@ -1,0 +1,172 @@
+.den-decision {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.den-decision__mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+.den-decision[data-tone="approved"] .den-decision__mark {
+  background: var(--den-status-positive);
+  opacity: 0.85;
+}
+.den-decision[data-tone="rejected"] .den-decision__mark {
+  background: var(--den-danger);
+  opacity: 0.85;
+}
+.den-decision[data-tone="pending"] .den-decision__mark {
+  background: var(--den-warning);
+  opacity: 0.95;
+}
+.den-decision__label {
+  flex: none;
+}
+.den-decision__sep {
+  flex: none;
+  opacity: 0.45;
+}
+/* Clip shrinking details before they cross the separator. */
+.den-decision__detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+.den-decision__detail[data-emphasis="subject"] {
+  font-family: var(--den-font-mono);
+  font-weight: 450;
+  opacity: 0.92;
+}
+.den-decision__detail[data-emphasis="grant"] {
+  font-weight: 500;
+}
+/* Long details shrink before identifying details. */
+.den-decision__detail--truncate {
+  flex-shrink: 999;
+}
+.den-settings-pref-group-title--prominent {
+  letter-spacing: 0;
+  font-size: var(--text-den-label);
+  color: var(--den-text);
+}
+
+
+.den-dock-collapse {
+  transition:
+    padding 200ms cubic-bezier(0.33, 0, 0.2, 1),
+    gap 200ms cubic-bezier(0.33, 0, 0.2, 1);
+}
+
+/* The containing surface controls spacing; the head's font sets its first line. */
+.den-dock-collapse-head {
+  --den-dock-collapse-row: max(1lh, var(--den-icon-target));
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Lead and minimize stay on the first row while the body wraps. */
+.den-dock-collapse-anchor {
+  display: flex;
+  flex: none;
+  align-items: center;
+  block-size: var(--den-dock-collapse-row);
+}
+
+.den-dock-collapse-anchor--end {
+  margin-inline-start: auto;
+}
+
+/* Body items center their first line within one --den-dock-collapse-row. */
+.den-dock-collapse-head-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The whole strip is the restore target while minimized. */
+.den-dock-collapse-restore {
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.den-dock-collapse-peek {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-dock-collapse-min {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: none;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-dock-collapse-min:hover,
+.den-dock-collapse-restore:hover .den-dock-collapse-peek {
+  color: var(--den-text);
+}
+
+.den-dock-collapse-min:hover {
+  background: color-mix(in srgb, var(--den-accent-signal) 10%, transparent);
+}
+
+/* Mounted children retain selection and disclosure state while collapsed. */
+.den-dock-collapse-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.33, 0, 0.2, 1),
+    opacity 160ms ease,
+    visibility 0s;
+}
+
+.den-dock-collapse-body-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.den-dock-collapse[data-minimized] .den-dock-collapse-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.33, 0, 0.2, 1),
+    opacity 160ms ease,
+    visibility 0s linear 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-dock-collapse,
+  .den-dock-collapse-body,
+  .den-dock-collapse[data-minimized] .den-dock-collapse-body {
+    transition: none;
+  }
+}
+

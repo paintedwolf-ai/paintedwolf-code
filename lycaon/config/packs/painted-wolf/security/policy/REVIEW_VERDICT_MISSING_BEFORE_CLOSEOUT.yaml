@@ -1,0 +1,27 @@
+oar: '1.0'
+id: REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.review_verdict_gate_open
+    - paintedwolf.verdict_delay_count
+    - paintedwolf.workers_idle
+when: paintedwolf.workers_idle && paintedwolf.review_verdict_gate_open && paintedwolf.verdict_delay_count < 2
+effect: block
+copy:
+  what: Tried to deliver the closing synthesis while the active review_loop phase's evidence gate is still open.
+  cause: No terminal verdict has been recorded for this review phase — prose cannot record one.
+  why: A review phase only leaves through `submit_verdict`; closing out without it strands the workflow with the review still pending.
+  fix: "Use submit_verdict with the current phase schema and observed review evidence. Choose a terminal value only when the evidence supports it; preserve unresolved findings and user limits. Other gates and advancement rules still apply."
+  instead: "If the required review cannot be completed, report the specific blocker through the available decision channel rather than fabricating a terminal verdict."
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Close out blocked — this review phase has no recorded verdict yet
+x-paintedwolf-scenarios:
+  - id: verdict_missing
+    vars: {}
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT'
+      - submit_verdict

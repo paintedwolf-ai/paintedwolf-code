@@ -1,0 +1,5 @@
+id: confluent-access-token
+upstream_id: confluent-access-token
+title: Confluent API key ID
+severity: critical
+enabled: false

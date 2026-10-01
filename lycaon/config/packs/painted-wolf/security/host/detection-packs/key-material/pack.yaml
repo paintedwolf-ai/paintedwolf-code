@@ -1,0 +1,7 @@
+id: key-material
+label: Key material
+description: >-
+  Private keys and the stores that decrypt them. The write boundary reads this
+  pack as a floor rather than an overlay: a path named here is refused outright
+  and no card offers to grant it, so naming one removes an offer rather than
+  adding an ask. Use credential-stores when the right answer is a precise ask.

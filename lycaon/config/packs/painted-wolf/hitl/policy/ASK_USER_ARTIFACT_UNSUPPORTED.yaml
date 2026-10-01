@@ -1,0 +1,37 @@
+oar: '1.0'
+id: ASK_USER_ARTIFACT_UNSUPPORTED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ref
+  - paintedwolf.ask_artifact_mime
+  - paintedwolf.ask_artifact_formats
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_ARTIFACT_UNSUPPORTED"
+effect: block
+copy:
+  what: Artifact {{ paintedwolf.ref }} has unsupported preview type {{ paintedwolf.ask_artifact_mime }}.
+  cause: The artifact MIME type is not an interactive preview format.
+  why: A decision card must show the artifact it asks the user to review.
+  fix: 'Use an artifact UUID with a current interactive preview format: {{ paintedwolf.ask_artifact_formats
+    }}. Preserve the content needed for the decision; a renamed MIME type does not convert the artifact.'
+  instead: Branch on Code ASK_USER_ARTIFACT_UNSUPPORTED; pass a supported artifact UUID
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: artifact cannot render in the decision card
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Code: ASK_USER_ARTIFACT_UNSUPPORTED'
+  - artifact

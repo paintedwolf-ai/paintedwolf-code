@@ -1,0 +1,45 @@
+title: Delete stored backup snapshots
+id: 19bff6e2-0676-4b9d-bdc6-114b78ccf55a
+description: Removes snapshots or archives from a backup repository, which is the copy a restore would have come from.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # forget/prune/compact free the underlying data, not just the index entry.
+  selection_restic:
+    Image: restic
+    CommandLine|contains:
+      - ' forget'
+      - ' prune'
+  selection_borg:
+    Image: borg
+    CommandLine|contains:
+      - ' delete'
+      - ' prune'
+      - ' compact'
+  # velero prompts unless --confirm, the same gate confluent and heroku use.
+  selection_velero:
+    Image: velero
+    CommandLine|contains|all:
+      - ' delete'
+      - ' --confirm'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--dry-run(=.*)?)$'
+  filter_short_dry_run:
+    Image:
+      - restic
+      - borg
+    Argv: '-n'
+  filter_local:
+    EffectReach: local
+  condition: (selection_restic or selection_borg or selection_velero) and not filter_rehearsal and not filter_short_dry_run and not filter_local

@@ -1,0 +1,21 @@
+title: Execute a financial action
+id: 687c4f96-3405-41c9-af1a-80c3f89bc62a
+status: stable
+description: Creates a charge, refund, payout, or transfer through a structured tool.
+references:
+  - https://attack.mitre.org/techniques/T1657/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    ActionEffect: [charge, refund, payout, transfer]
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

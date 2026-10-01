@@ -1,0 +1,5 @@
+id: storage-cluster
+label: Storage volumes
+description: >-
+  LVM, ZFS, Btrfs, and software-RAID operations that destroy a pool, volume,
+  subvolume, or array along with the data on it.

@@ -1,0 +1,569 @@
+components:
+  schemas:
+    CompactedChunkMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - original_tokens
+      - compacted_tokens
+      - kind
+      - strategy
+      - compacted_at
+      additionalProperties: false
+      properties:
+        original_tokens:
+          type: integer
+          minimum: 0
+        compacted_tokens:
+          type: integer
+          minimum: 0
+        kind:
+          type: string
+          enum:
+          - user_paste
+          - tool_result
+          - assistant_output
+          - unknown
+        strategy:
+          type: string
+          enum:
+          - truncate
+          - summarize
+        compacted_at:
+          type: string
+          format: date-time
+    Message:
+      type: object
+      required:
+      - id
+      - role
+      - content
+      - origin
+      - authority
+      - trust_tier
+      - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/MessageRole"
+        content:
+          type: string
+        origin:
+          $ref: "#/components/schemas/MessageOrigin"
+        authority:
+          $ref: "#/components/schemas/ContentAuthority"
+        trust_tier:
+          $ref: "#/components/schemas/ContentTrustTier"
+        author_person_id:
+          type: string
+          format: uuid
+          description: >-
+            Person who wrote this message. Present on prompts a person sent;
+            absent on host, model, tool, and coordinator-authored rows.
+        content_parts:
+          type: array
+          description: >
+            Ordered mixed-origin text parts used for model projection. The
+            content field remains the flattened transcript/search projection.
+          items:
+            $ref: "#/components/schemas/MessageContentPart"
+        host_secret_redaction:
+          $ref: "#/components/schemas/HostSecretRedactionMeta"
+        kind:
+          $ref: "#/components/schemas/MessageKind"
+        host_signal_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Canonical catalog anchor id or structured guidance code for a host-authored row.
+        worker_id:
+          type: string
+          format: uuid
+          description: Immutable worker run associated with this child-session message; child sessions may be reused by later runs.
+        workflow_run_id:
+          type: string
+          format: uuid
+        workflow_boundary:
+          $ref: workflow-feedback.yaml#/components/schemas/WorkflowBoundaryMeta
+        progress_complete:
+          $ref: ../progress.yaml#/components/schemas/ProgressCompleteMeta
+        progress_update:
+          $ref: ../progress.yaml#/components/schemas/ProgressUpdateMeta
+        workflow_feedback:
+          $ref: workflow-feedback.yaml#/components/schemas/WorkflowFeedbackMeta
+        workflow_explain:
+          $ref: workflow-feedback.yaml#/components/schemas/WorkflowExplainMeta
+        blueprint:
+          $ref: "#/components/schemas/BlueprintMeta"
+        completion_report:
+          $ref: worker-reports.yaml#/components/schemas/CompletionReportMeta
+        index_warming:
+          $ref: workflow-feedback.yaml#/components/schemas/IndexWarmingMeta
+        tool_calls:
+          type: array
+          items:
+            $ref: tool-results.yaml#/components/schemas/ToolCall
+        tool_result:
+          $ref: tool-results.yaml#/components/schemas/ToolResult
+        worker_summary:
+          $ref: worker-reports.yaml#/components/schemas/WorkerSummaryMeta
+        grounding:
+          $ref: worker-reports.yaml#/components/schemas/CitationGrounding
+        source_context:
+          $ref: navigation.yaml#/components/schemas/SourceContext
+        navigation_refs:
+          type: array
+          maxItems: 128
+          description: >
+            Host-validated interaction targets mentioned by this message.
+            Navigation references are independent of citation grounding and
+            never support factual claims.
+          items:
+            $ref: navigation.yaml#/components/schemas/NavigationReference
+        compacted_chunk:
+          $ref: "#/components/schemas/CompactedChunkMeta"
+        compaction_checkpoint:
+          type: boolean
+        visibility:
+          $ref: "#/components/schemas/MessageVisibility"
+        prompt_cache_breakpoint:
+          $ref: "#/components/schemas/PromptCacheTier"
+        context_pinned:
+          type: boolean
+          description: Host-only prompt-assembly mark on a row the session's identity depends on (a worker leg's charter); the deterministic context fit refuses to evict it at any budget. Stamped per turn, never persisted, never accepted as input
+        seq:
+          type: integer
+          format: int64
+          description: Per-session transcript mutation clock. Stamped on append and durable UpdateMessage; live stream projections do not advance it. Clients reject stale rows by comparing seq.
+        ord:
+          type: integer
+          format: int64
+          description: Per-session immutable creation ordinal stamped once at append and never rewritten by a patch; the transcript renders in ord order. Distinct from seq (mutation clock) and created_at (display timestamp, not monotonic across batches)
+        created_at:
+          type: string
+          format: date-time
+        draft_version_count:
+          type: integer
+          minimum: 0
+          description: Sidecar superseded attempts plus the live or committed body
+        draft_status:
+          $ref: "#/components/schemas/DraftStatus"
+        status:
+          $ref: "#/components/schemas/MessageLiveStatus"
+        generating_tokens:
+          type: integer
+          description: Live completion-token estimate (visible content + hidden reasoning) for the currently streaming message. Runtime-derived and stamped at SSE time, not persisted; only meaningful while status is streaming.
+        artifact_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Coordinator present references into the session-tree visual artifact store (reference-only, never bytes)
+        evidence_handles:
+          type: array
+          items:
+            type: string
+          description: Evidence handles produced when this tool result was committed (diet-retention exempt)
+        diet_stamp:
+          type: string
+          description: Host diet strategy override stamped at commit (e.g. preserve_structure)
+        diet_stamp_source:
+          type: string
+          enum:
+          - overlay_merge
+          - worker_envelope
+          description: Disambiguates preserve_structure diet stamp producers
+    MessageOrigin:
+      type: string
+      description: Structured source of model-visible content; independent of provider role.
+      enum:
+      - host
+      - user
+      - model
+      - tool
+      - peer_agent
+      - project
+      - attachment
+      - retrieval
+      - unknown
+    ContentAuthority:
+      type: string
+      description: >
+        Instruction authority assigned by the host. Trust never grants authority.
+      enum:
+      - system
+      - developer
+      - user
+      - none
+      - unknown
+    ContentTrustTier:
+      type: string
+      description: Host trust classification for the content channel; independent of authority.
+      enum:
+      - trusted
+      - untrusted
+      - unknown
+    MessageReferenceKind:
+      type: string
+      description: >
+        What a retrieval part points at, stamped from the reference variant the
+        host ingested. Clients branch on this rather than on the hint prose the
+        fence carries for the model.
+      enum:
+      - path_file
+      - path_folder
+      - search_hit
+    MessageContentPart:
+      x-go-generate: true
+      type: object
+      required:
+      - content
+      - origin
+      - authority
+      - trust_tier
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        origin:
+          $ref: "#/components/schemas/MessageOrigin"
+        authority:
+          $ref: "#/components/schemas/ContentAuthority"
+        trust_tier:
+          $ref: "#/components/schemas/ContentTrustTier"
+        source:
+          type: string
+          description: Optional host-stamped source identity such as a tool or attachment name.
+        media_type:
+          type: string
+          description: Optional MIME type for this text projection.
+        blob_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Stable blob ID for a payload attachment, used to restage Edit/rewind.
+        path:
+          type: string
+          description: >
+            Host-stamped locator the agent can open. Payload attachments use a
+            host-data-relative path (`prompt-attachments/{blob_id}/{name}`).
+            path_file / path_folder retrieval parts use the path relative to
+            `root_id`, qualified with `@label/` when that root is not primary.
+            Absent when the part has no openable body (search_hit, user prose,
+            host notices).
+        root_id:
+          type: string
+          format: uuid
+          description: >
+            Attached root a path_file / path_folder reference resolves under.
+            Absent on payload attachments, search hits, prose, and host notices.
+        size_bytes:
+          x-go-type: "int64"
+          type: integer
+          minimum: 0
+          description: >
+            Full decoded body size for a payload attachment, before preview
+            truncation. Absent for coordinate-only references.
+        reference_kind:
+          $ref: "#/components/schemas/MessageReferenceKind"
+          description: >
+            Set on retrieval parts only. Absent for user prose, host notices, and
+            attachment payloads, whose kind comes from origin and media_type.
+        hit_kind:
+          type: string
+          description: >
+            Indexed row's hit_kind for a search_hit reference — the same value the
+            evidence index resolved, not the client's request.
+        source_ref:
+          type: string
+          description: Indexed row's source_ref for a search_hit reference.
+        source_session_id:
+          type: string
+          format: uuid
+          description: Indexed row's canonical session coordinate for a search_hit reference.
+        start_line:
+          type: integer
+          minimum: 1
+          description: >
+            Inclusive 1-based first line of a path_file reference's scope. Absent
+            when the reference named a whole file.
+        end_line:
+          type: integer
+          minimum: 1
+          description: Inclusive 1-based last line of a path_file reference's scope.
+    MessageLiveStatus:
+      type: string
+      enum:
+      - streaming
+      - complete
+      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
+    DraftStatus:
+      type: string
+      enum:
+      - live
+      - committed
+      - withdrawn
+      - rejected
+    DraftVersion:
+      x-go-generate: true
+      type: object
+      required:
+      - version_index
+      - body
+      - outcome_code
+      - created_at
+      additionalProperties: false
+      properties:
+        version_index:
+          type: integer
+          minimum: 0
+        body:
+          type: string
+        outcome_code:
+          type: string
+          description: Structured reject Code for superseded attempts; empty for committed/final snapshots
+        outcome_label:
+          type: string
+          description: Host-resolved short UI label for outcome_code (hint catalog); empty when code is empty — Den may fall back to Superseded
+        created_at:
+          type: string
+          format: date-time
+    DraftVersionsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - versions
+      additionalProperties: false
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DraftVersion"
+    SessionTranscriptPage:
+      x-go-generate: true
+      type: object
+      required:
+      - messages
+      - turn_clocks
+      - turn_loads
+      - watermark
+      additionalProperties: false
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+          description: One contiguous Ord window in ascending order (default = newest page / live tail)
+        turn_clocks:
+          type: object
+          additionalProperties:
+            $ref: ../progress.yaml#/components/schemas/TurnClock
+          description: >-
+            Durable clocks of the visible user turns opened by messages in this
+            page, keyed by opening message id. Worker transcript pages carry none.
+        turn_loads:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: ../turn-load.yaml#/components/schemas/TurnLoad
+          description: >-
+            Decision-engine receipts of the turns opened by messages in this
+            page, keyed by opening message id, each list in recorded order.
+        watermark:
+          type: integer
+          format: int64
+          description: Transcript mutation clock at read time, taken in the same transaction as the rows; Den installs the page as a baseline and keeps rows whose seq exceeds it
+        before_cursor:
+          type: string
+          description: Opaque pagination cursor to fetch the previous (older) window of messages. Omitted when no older messages exist.
+        after_cursor:
+          type: string
+          description: Opaque pagination cursor to fetch the next (newer) window of messages. Omitted when no newer messages exist.
+    MessageVisibility:
+      type: string
+      enum:
+      - transcript
+      - internal
+    PromptCacheTier:
+      type: string
+      description: >-
+        Host-only prompt-assembly mark on a stable boundary of a request, and
+        the tier it closes: the standing prefix (system prompt, tool schemas,
+        and the blocks that follow them), which changes only when the host
+        re-decides it, or stable history, which grows every call. Each
+        provider places a prompt cache breakpoint on the row's final content
+        block, with the lifetime its policy gives that tier. Stamped per turn,
+        never persisted, never accepted as input.
+      enum:
+      - standing
+      - history
+    BlueprintTranscriptStatus:
+      type: string
+      enum:
+      - proposed
+      - awaiting_approval
+      - approved
+      - revised
+      - superseded
+      - rejected
+    BlueprintCardPhase:
+      type: string
+      enum:
+      - drafting
+      - ready
+      - changed
+      - approved
+      - building
+      - rejected
+    BlueprintMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - blueprint_path
+      - revision
+      - revision_key
+      - status
+      - phase
+      - phase_label
+      - blueprint_title
+      - can_approve
+      - collapsed
+      - show_actions
+      additionalProperties: false
+      properties:
+        blueprint_path:
+          type: string
+          description: Project-relative path under the overlay blueprints/ directory
+        revision:
+          type: integer
+          minimum: 0
+        revision_key:
+          type: string
+        status:
+          $ref: "#/components/schemas/BlueprintTranscriptStatus"
+        phase:
+          description: >-
+            Card chrome state. `rejected` is the terminal record for a run that
+            ended with the blueprint still a draft — the human answered no, or the
+            run was superseded; status carries which.
+          $ref: "#/components/schemas/BlueprintCardPhase"
+        phase_label:
+          type: string
+        blueprint_title:
+          type: string
+        can_approve:
+          type: boolean
+        collapsed:
+          type: boolean
+        show_actions:
+          type: boolean
+    MessageKind:
+      type: string
+      enum:
+      - workflow_boundary
+      - progress_complete
+      - progress_update
+      - workflow_feedback
+      - workflow_explain
+      - draft
+      - index_warming
+      - superseded
+      - blueprint
+      - agent_note
+      - completion_report
+      - iteration_cap_closeout
+      - host_kick
+      - coordinator_guidance
+      - host_nudge
+      - host_loop_wake
+      - host_secret_redaction_notice
+      - user_continuation
+    RedactionKind:
+      type: string
+      description: >
+        What a replacement claims. A secret was detected and removed; a
+        managed_reference is a protected value written as its capability
+        reference, so the source still holds the value the reference names; an
+        observer_mask is a standing policy that never showed the value to
+        observers and asserts nothing about its content.
+      enum:
+      - secret
+      - managed_reference
+      - observer_mask
+    RedactionSource:
+      type: string
+      description: >
+        The evidence lens that justified one replacement. policy accompanies
+        observer_mask, where no detection took place.
+      enum:
+      - shape_rule
+      - container_harvest
+      - remembered_match
+      - policy
+    RedactedSpan:
+      x-go-generate: true
+      type: object
+      required:
+      - field
+      - start
+      - length
+      - kind
+      additionalProperties: false
+      description: >
+        One replacement in this message copy. Offsets index the redacted string,
+        and length is the marker's own width — the placeholder or the capability
+        reference — never the width of the value it replaced, so a span can be
+        marked without disclosing how long the original was.
+      properties:
+        field:
+          type: string
+          description: >
+            Dotted path of the redacted field within this message, such as
+            content, tool_result.content, or tool_calls.0.args.command.
+        start:
+          type: integer
+          minimum: 0
+          description: Rune offset of the marker within the redacted field value.
+        length:
+          type: integer
+          minimum: 1
+          description: Rune length of the marker.
+        kind:
+          $ref: "#/components/schemas/RedactionKind"
+        source:
+          $ref: "#/components/schemas/RedactionSource"
+        rule_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Catalog rule identity, when a shape rule named the value.
+        rule_title:
+          type: string
+          description: Human-readable rule name for presentation.
+    HostSecretRedactionMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - spans
+      additionalProperties: false
+      description: >
+        Host-recorded provenance for spans replaced in this message copy. Presence
+        is authoritative; literal marker text in content is not a redaction
+        signal. Every replacement in this copy is listed, so a
+        client renders from the list rather than by searching content, and the
+        list describes this copy alone rather than accumulating across
+        projections of one message.
+      properties:
+        spans:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RedactedSpan"
+    MessageRole:
+      type: string
+      enum:
+      - user
+      - assistant
+      - tool
+      - system

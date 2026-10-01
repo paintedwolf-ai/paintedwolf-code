@@ -1,0 +1,54 @@
+oar: '1.0'
+id: SANDBOX_TRY_SOCKET_PATH
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_socket_paths
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.refused_socket_paths) > 0
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused connections to the local sockets
+    {{ paintedwolf.refused_socket_paths }}.
+  cause: >-
+    A local socket is a separate capability; the boundary opens only the
+    exact sockets an invocation declares.
+  why: >-
+    The daemon behind a socket acts with its own authority, so the person
+    reviews each socket before a command reaches it.
+  fix: >-
+    {% if paintedwolf.process_running %}If the job cannot finish without the
+    connection, stop it with `command_stop`, then reissue{% else %}Reissue{% endif %}
+    the same command with `capability_request.socket_paths` naming the socket,
+    or with `capability_request.host_resources` naming the listed host
+    resource whose route is that socket.
+  instead: Declare the socket in capability_request — a retry without it is
+    refused again
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a local socket connection this invocation needed
+x-paintedwolf-scenarios:
+  - id: container_engine
+    vars:
+      tool: command
+      failed_stages: [docker build -t app .]
+      refused_socket_paths: [/Users/person/.colima/default/docker.sock]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_SOCKET_PATH'
+      - capability_request.socket_paths
+      - /Users/person/.colima/default/docker.sock

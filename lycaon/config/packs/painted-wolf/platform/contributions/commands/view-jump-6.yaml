@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-jump-6
+title: "Focus window 6"
+scope: "global"
+keywords:
+  - "peer"
+  - "window 6"
+  - "focus window"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.jump6"

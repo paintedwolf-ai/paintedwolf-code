@@ -1,0 +1,5 @@
+code: phase_surface_cannot_dispatch
+message: |
+  phase {{phase}} fans out to {{agent}}, but coordinator_surface {{surface}} dispatches the {{lane}} lane and {{agent}} declares {{declared_lanes}}.
+replacement: |
+  Add {{lane}} to {{agent}}'s dispatch_lanes, or name a coordinator_surface whose lane {{agent}} already serves.

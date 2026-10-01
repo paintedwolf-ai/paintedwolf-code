@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-toggle-tree
+command: painted-wolf/platform:files-toggle-tree
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+B"
+  windows:
+    - "Alt+1"
+  linux:
+    - "Alt+1"

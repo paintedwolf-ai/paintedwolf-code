@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Research provider not found"
+message: "There is no web research provider with that id."
+suggested_action: "Refresh the list and choose another provider."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no web research provider"

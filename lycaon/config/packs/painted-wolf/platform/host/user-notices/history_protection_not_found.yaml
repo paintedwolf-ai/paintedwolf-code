@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: History protection not found
+message: >-
+  The requested history protection rule does not exist or has already been removed.
+suggested_action: Refresh storage protections and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - does not exist

@@ -1,0 +1,6 @@
+id: curl-auth-header
+upstream_id: curl-auth-header
+enabled: false
+# A curl Authorization header is context, not a provider-specific token shape. The
+# upstream 8-character + entropy floor matches ordinary documentation
+# placeholders; provider-shaped tokens and bearer JWTs remain covered.

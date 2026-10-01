@@ -1,0 +1,33 @@
+title: Reconcile RBAC rules from a manifest
+id: 424e967c-ba48-4f72-a485-4ba42e9c04b3
+description: >-
+  Applies RBAC roles and bindings from a manifest. The subcommand itself names
+  the object kinds, so the operation is known without reading the file.
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_reconcile/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  verbs_rbac_reconcile:
+    CommandLine|contains:
+      - ' auth reconcile'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_rbac_reconcile and not filter_rehearsal and not filter_local

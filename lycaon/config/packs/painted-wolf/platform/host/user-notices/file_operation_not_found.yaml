@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - reason
+title: "File operation not found"
+message: "The status of that file operation is no longer available."
+suggested_action: "Review the file history before trying again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer available"

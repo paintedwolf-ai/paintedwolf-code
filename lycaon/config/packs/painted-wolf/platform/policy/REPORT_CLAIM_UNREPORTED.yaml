@@ -1,0 +1,34 @@
+oar: '1.0'
+id: REPORT_CLAIM_UNREPORTED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.reject_observation
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_sample
+    - paintedwolf.offenders_omitted
+when: paintedwolf.reject_observation == "report_claim_unreported"
+effect: block
+copy:
+  what: 'The closeout leaves {{ paintedwolf.offender_count }} claim(s) the review left open or overturned without a finding: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
+  cause: An open or overturned claim is a conclusion the reader has to see; the report carries it as a finding with the claim's id.
+  why: Without a finding, the report's first page can state a result the review did not reach.
+  fix: 'Add one finding per listed claim: the claim''s id as its `id`, a one-line `title` stating the conclusion the review reached, and a disposition: act, accept, or held. An overturned claim that means a flaw exists is act or accept; one that means a feared flaw does not exist is held.'
+  instead: Do not change the claims, and do not report an open claim as resolved; each title states where its claim stands.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Claims reported
+  ui_check_id: report_claims
+  in_session_retry: true
+x-paintedwolf-message: Open or overturned claims are missing from the run report
+x-paintedwolf-scenarios:
+  - id: open_claim
+    vars:
+      offender_count: 1
+      offenders_sample: sca-reachable-exposure (open)
+      offenders_omitted: 0
+    expect_contains:
+      - 'Code: REPORT_CLAIM_UNREPORTED'
+      - sca-reachable-exposure

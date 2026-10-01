@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SCAN_COMPARE_SAME_SCAN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - scan_compare
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_SAME_SCAN"
+effect: block
+copy:
+  what: scan_compare received the same id for baseline and new scan.
+  cause: A verify-fix loop needs a pre-fix baseline and a distinct post-fix scan.
+  why: Comparing a scan to itself yields empty diff buckets and hides regressions.
+  fix: Pass the pre-fix per_scan id as old_scan_id and the post-fix id as new_scan_id.
+  instead: Branch on Code; supply two different complete scan ids
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: old_scan_id and new_scan_id must differ
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: scan_compare
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SCAN_COMPARE_SAME_SCAN'

@@ -1,0 +1,10 @@
+id: explore-addenda
+extends: worker-leg-default
+description: "Path exploration checklist (implement discovery and pack/fan-out legs)"
+triggers:
+  topology_patterns: ["pack", "fan_out", "pipeline", "default-pipeline", "*"]
+  phase_ids: ["research", "implement"]
+checklist:
+  - "Stay within leg sandbox paths when requires_isolation is true"
+  - "Map paths and structure; stay read-only"
+  - "Coordinate with parallel legs via summaries only"

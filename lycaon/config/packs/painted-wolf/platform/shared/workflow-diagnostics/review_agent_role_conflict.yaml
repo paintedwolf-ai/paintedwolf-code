@@ -1,0 +1,5 @@
+code: review_agent_role_conflict
+message: |
+  review_loop on phase {{phase}} lists agent {{agent}} in both required_agents and if_spawnable.
+replacement: |
+  Keep {{agent}} on required_agents if it must always run, or if_spawnable if it runs only when the turn roster can spawn it.

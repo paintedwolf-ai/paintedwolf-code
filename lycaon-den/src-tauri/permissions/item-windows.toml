@@ -1,0 +1,34 @@
+[[permission]]
+identifier = "allow-open-item-window"
+description = "Open an additional session or editor view window."
+commands.allow = ["open_item_window"]
+
+[[permission]]
+identifier = "allow-drag-item-window"
+description = "Create, move, finish, or cancel a native file-tab drag window for the calling workspace."
+commands.allow = ["begin_file_item_window_drag", "move_item_window_drag", "finish_item_window_drag", "cancel_item_window_drag", "discard_pending_item_window_drags", "update_file_tab_drop_target", "clear_file_tab_drop_target"]
+
+[[permission]]
+identifier = "allow-list-item-window-views"
+description = "List every live peer view from the host-managed window registry."
+commands.allow = ["list_item_window_views"]
+
+[[permission]]
+identifier = "allow-workspace-view-registry"
+description = "Publish and list the mounted contexts in every live workspace view."
+commands.allow = ["set_workspace_view_contexts", "list_workspace_view_presentations"]
+
+[[permission]]
+identifier = "allow-focus-item-window"
+description = "Focus a specific live peer view selected from that registry."
+commands.allow = ["focus_item_window"]
+
+[[permission]]
+identifier = "allow-close-item-window"
+description = "Close a specific live peer view selected from that registry."
+commands.allow = ["close_item_window"]
+
+[[permission]]
+identifier = "allow-shared-composer-documents"
+description = "Resolve, edit, and synchronize pending composer state by session."
+commands.allow = ["resolve_shared_composer_document", "acquire_shared_composer_document_lease", "update_shared_composer_document_draft", "apply_shared_composer_document_mutation", "protect_shared_composer_selection", "remove_shared_composer_document_attachment", "clear_shared_composer_document"]

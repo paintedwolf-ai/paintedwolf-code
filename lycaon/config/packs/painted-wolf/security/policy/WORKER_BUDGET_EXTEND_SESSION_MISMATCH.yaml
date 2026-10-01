@@ -1,0 +1,31 @@
+oar: '1.0'
+id: WORKER_BUDGET_EXTEND_SESSION_MISMATCH
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "WORKER_BUDGET_EXTEND_SESSION_MISMATCH"
+effect: block
+copy:
+  what: extend_worker_budget may only target jobs spawned from the caller session
+  cause: job_id {{ paintedwolf.job_id }} belongs to another parent session
+  why: Worker budget extend is a coordinator→worker control plane action scoped to your session
+  fix: Use job_id from your `task()` enqueue JSON or pack_board roster
+  instead: Branch on Code; pass a job_id belonging to this session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extend_worker_budget
+x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-other
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_BUDGET_EXTEND_SESSION_MISMATCH'
+selector:
+  tool:
+  - extend_worker_budget

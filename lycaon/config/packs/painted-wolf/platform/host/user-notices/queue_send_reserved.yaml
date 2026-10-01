@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Message is being sent
+message: That message is reserved for the current turn and can no longer be changed.
+suggested_action: Cancel the send to edit it, or wait for it to land.
+scenarios:
+  - id: default
+    expect_contains:
+      - can no longer be changed

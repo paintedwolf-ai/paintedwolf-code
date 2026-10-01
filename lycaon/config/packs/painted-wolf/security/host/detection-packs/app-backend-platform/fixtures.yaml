@@ -1,0 +1,57 @@
+fixtures:
+- rule: project-database-destroy
+  positive:
+  - atlas clusters delete prod-cluster --force
+  - atlas projects delete 5f6b1c2e3a4b5c6d7e8f9012
+  - pscale database delete acme-app --force
+  - neonctl databases delete mydb --project-id crimson-voice-12345678
+  - neon projects delete crimson-voice-12345678
+  - neon databases delete mydb --project-id crimson-voice-12345678
+  - sudo atlas clusters delete prod-cluster --force
+  - appwrite databases delete --database-id abc123
+  - appwrite organization delete-project --project-id abc123
+  - appwrite organization delete
+  - sudo appwrite databases delete --database-id abc123
+  negative:
+  - atlas clusters list
+  - pscale database list
+  - neonctl databases list --project-id crimson-voice-12345678
+  - atlas clusters delete prod-cluster --help
+  - pscale database delete acme-app --force -h
+  - appwrite databases delete-collection --database-id abc123 --collection-id def456
+  - appwrite databases delete-document --database-id abc123 --collection-id def456 --document-id ghi789
+  - appwrite databases delete-attribute --database-id abc123 --collection-id def456 --key foo
+  - appwrite databases delete-index --database-id abc123 --collection-id def456 --key foo
+  - appwrite databases list
+  - appwrite organization list
+  - appwrite organization delete-key --organization-id abc123 --key-id def456
+  - appwrite databases delete --database-id abc123 --help
+  - appwrite organization delete --help
+- rule: branch-user-remove
+  positive:
+  - atlas dbusers delete admin --projectId 5f6b1c2e3a4b5c6d7e8f9012
+  - pscale branch delete acme-app dev-feature
+  - pscale password delete acme-app main abc123
+  - neonctl branches delete br-rough-sky-158193 --project-id crimson-voice-12345678
+  - neon branches delete br-rough-sky-158193 --project-id crimson-voice-12345678
+  - sudo pscale branch delete acme-app dev-feature
+  negative:
+  - atlas dbusers list --projectId 5f6b1c2e3a4b5c6d7e8f9012
+  - pscale branch list acme-app
+  - neonctl branches list --project-id crimson-voice-12345678
+  - pscale branch show acme-app dev-feature
+  - pscale branch delete acme-app dev-feature --help
+- rule: remote-data-wipe
+  positive:
+  - firebase firestore:delete --all-collections -y
+  - supabase db reset --linked
+  - supabase db reset --db-url postgres://example
+  - supabase db reset --linked --db-url postgres://example
+  - sudo firebase firestore:delete --all-collections -y
+  negative:
+  - firebase firestore:indexes
+  - supabase db reset
+  - supabase db diff --linked
+  - firebase firestore:delete --all-collections --help
+  - supabase db reset --linked --help
+  - supabase db reset --linked --dry-run

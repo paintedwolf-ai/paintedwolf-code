@@ -1,0 +1,30 @@
+surfaces:
+  - host_error
+  - http
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+title: No model configured
+message: >-
+  {% if provider_id -%}
+  Provider {{ provider_id }} is not set up yet. Assign it in Settings → AI providers before sending prompts.
+  {%- else -%}
+  This session needs a language model before it can respond to prompts.
+  {%- endif %}
+suggested_action: Open Settings → AI providers and assign a provider.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_provider
+    vars:
+      provider_id: fireworks
+    expect_contains:
+      - fireworks
+      - Settings → AI providers
+  - id: generic
+    vars: {}
+    expect_contains:
+      - language model

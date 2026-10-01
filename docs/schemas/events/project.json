@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/project.json",
+  "$ref": "../../openapi/components/schemas/project/identity.yaml#/components/schemas/ProjectEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectEvent"
+}

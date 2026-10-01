@@ -1,0 +1,36 @@
+title: Delete a Pinecone namespace or all vectors in it
+id: e22be9bd-a36e-49d9-9291-21a717b511b3
+description: Permanently deletes every vector in a namespace, or the namespace itself, while leaving the index in place.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: pc
+    CommandLine|contains: ' index vector delete'
+  selection_scope:
+    CommandLine|contains: ' --all-vectors'
+  # Deleting the namespace takes the vectors with it and needs no extra scope
+  # flag, so it stands on its own.
+  selection_namespace:
+    Image: pc
+    CommandLine|contains: ' index namespace delete'
+  selection_confirm:
+    CommandLine|contains:
+      - ' --skip-confirmation'
+      - ' --json'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: ((selection_verb and selection_scope) or selection_namespace) and selection_confirm and not filter_rehearsal and not filter_local

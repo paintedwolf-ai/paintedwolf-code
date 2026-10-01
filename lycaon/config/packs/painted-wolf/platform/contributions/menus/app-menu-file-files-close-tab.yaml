@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-close-tab
+slot: "app_menu.file"
+command: painted-wolf/platform:files-close-tab
+group: "2"
+order: 6
+label: "Close tab"

@@ -1,0 +1,16 @@
+description: Publish shared interfaces, observations, and corrections for peers. Cite an observed path or evidence handle; put exact contracts in body.
+schema:
+  type: object
+  properties:
+    summary:
+      type: string
+      maxLength: 320
+      description: What you learned; cite a path/handle (max 320 characters).
+    body:
+      type: string
+      description: Optional detail retained for pack_board lookup; maximum 8192 UTF-8 bytes. Peers receive only the summary automatically.
+    ref:
+      type: string
+      description: Path or observed evidence handle grounding this note, up to 512 UTF-8 bytes.
+  required: [summary, ref]
+  additionalProperties: false

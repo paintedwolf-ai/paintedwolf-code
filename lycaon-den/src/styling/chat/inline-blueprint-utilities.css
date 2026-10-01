@@ -1,0 +1,146 @@
+.den-blueprint-inline-card {
+  margin: 10px 0 14px;
+  padding: 10px 0 12px;
+  border: none;
+  border-top: 1px solid var(--den-line);
+  border-bottom: 1px solid var(--den-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.den-blueprint-inline-card--collapsed {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.den-blueprint-inline-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Long titles wrap without widening the transcript. */
+.den-blueprint-inline-card__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.den-blueprint-inline-card__title {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.den-blueprint-inline-card__phase {
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+  font-weight: 400;
+}
+
+.den-blueprint-inline-card--ready .den-blueprint-inline-card__phase,
+.den-blueprint-inline-card--changed .den-blueprint-inline-card__phase {
+  background: transparent;
+  color: var(--den-text-muted);
+}
+
+.den-blueprint-inline-card__toggle {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  font-size: var(--text-den-compact);
+  padding: 0;
+}
+
+.den-blueprint-inline-card__toggle:hover {
+  color: var(--den-text);
+}
+
+.den-blueprint-inline-card__body {
+  margin-top: 10px;
+  max-height: min(50vh, 420px);
+}
+
+.den-blueprint-inline-card__loading {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-blueprint-inline-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.den-blueprint-inline-card__actions > .den-blueprint-inline-card__phase {
+  margin-right: auto;
+}
+
+.den-blueprint-inline-card__warn {
+  margin: 10px 0 0;
+  color: var(--den-status-running);
+  font-size: var(--text-den-hint);
+}
+
+.den-blueprint-inline-card__revise {
+  margin-top: 12px;
+}
+
+.den-blueprint-inline-card__revise-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: 6px;
+  background: var(--den-surface);
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-hint);
+}
+
+.den-blueprint-inline-card__revise-input:focus {
+  outline: none;
+  border-color: var(--den-status-running);
+}
+
+/* The shared decision component supplies the row chrome. */
+.den-blueprint-inline-card__decision {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+}
+
+.den-blueprint-inline-card__decision .den-decision__label {
+  color: var(--den-text);
+  font-weight: 500;
+}
+
+/* Completed decisions omit the active-question divider. */
+.den-blueprint-inline-card--decided {
+  border-bottom: none;
+}
+
+/* Large-text actions wrap within the transcript. */
+.den-blueprint-inline-card__actions {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.den-blueprint-inline-card__actions > button {
+  max-width: 100%;
+}
+

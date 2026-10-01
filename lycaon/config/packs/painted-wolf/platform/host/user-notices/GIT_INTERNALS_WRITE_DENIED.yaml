@@ -1,0 +1,27 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Git internals write blocked
+message: >-
+  Writing to a repository's internal git directory is not allowed
+  ({{ path }}, {{ class }}). Use command git commands if you need to change
+  repository settings.
+suggested_action: >-
+  Ask for a command git command, or change repository settings from your own
+  terminal.
+scenarios:
+  - id: hooks
+    vars:
+      path: .git/hooks/pre-commit
+      class: hooks
+    expect_contains:
+      - internal git directory
+      - command git
+      - hooks
+  - id: config
+    vars:
+      path: .git/config
+      class: config
+    expect_contains:
+      - internal git directory
+      - command git
+      - config

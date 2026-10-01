@@ -1,0 +1,342 @@
+# Coordinator tool surfaces.
+# Each surface offers its floor on every model call. loadable names the tools
+# the turn may add: the turn decision loads the ones the request needs,
+# request_tools loads what the model describes, and loaded tools stand until
+# the prompt cache goes cold. Resource families load together. Whatever is
+# loadable but not loaded stays requestable, so loadable surfaces carry
+# request_tools on the floor.
+# Overlay inspection belongs on promotion and synthesis surfaces.
+# Workflow delegations use delegate_dispatch; ambient work uses task.
+# exit selects report, verdict, plan, or none. prose_finish lets a turn end
+# with grounded prose to the person.
+# mode_ref selects the base coordinator prompt.
+
+implement_routing:
+  activity_label: Planning next steps
+  mode_ref: implement-routing
+  card:
+    label: orchestrate
+    rule: No product writes this turn.
+  exit: none
+  prose_finish: true
+  floor: [recall, task, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, promote_overlay, pack_board, list_dir, web_search, fetch_url, wait, scan_query, scan_summary, scan_list, scan_compare, ask_user, surface_note, request_tools]
+
+implement_dispatch:
+  activity_label: Starting workers
+  mode_ref: implement-dispatch
+  card:
+    label: orchestrate
+    rule: No product writes this turn.
+  exit: none
+  floor: [recall, task, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, promote_overlay, reject_overlay, wait, ask_user, submit_verdict, surface_note]
+
+# Report assembly surface.
+implement_synthesis:
+  activity_label: Putting it together
+  mode_ref: implement-synthesis
+  card:
+    label: wrapup
+    rule: One user report from receipts in this chat.
+  exit: report
+  prose_finish: true
+  floor: [recall, read, grep, find, jq, list_dir, survey_repo, summarize, scan_pack, web_search, fetch_url, render_view, view_image, view_video, update_progress, scan_query, scan_summary, scan_list, scan_compare]
+
+orchestrate_plan:
+  activity_label: Planning worker legs
+  mode_ref: workflow-orchestrate
+  exit: plan
+  floor: [recall, read, grep, find, jq, list_dir, survey_repo, summarize, web_search, fetch_url, scan_pack, scan_query, scan_summary, scan_list, scan_compare, fanout_plan, workflow_advance, ask_user, surface_note, request_tools]
+
+# Reconcile chooses report or deeper investigation.
+recon_reconcile:
+  activity_label: Reconciling scout findings
+  mode_ref: workflow-orchestrate
+  exit: none
+  floor: [recall, read, grep, jq, list_dir, summarize, pack_board, workflow_transition, ask_user, surface_note]
+
+# Pending overlays block new dispatch.
+implement_overlay_promote:
+  activity_label: Combining results
+  mode_ref: implement-overlay-promote
+  card:
+    label: integrate
+    rule: Land or reject pending overlays before new dispatch.
+  exit: none
+  # skills_read resolves a described need and opens one procedure.
+  floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, read, grep, jq, list_dir, survey_repo, summarize, skills_read, web_search, fetch_url, http_request, process_list, process_signal, command, verify, secret_generate, secret_list, secret_revoke, wait, scan_query, scan_summary, scan_list, terminal_open, terminal_send, terminal_read, terminal_snapshot, terminal_close, ask_user, surface_note, request_tools]
+  # Visual and browser checks load when the landed change needs them.
+  loadable: [render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close]
+
+# The open-intent surface: read the project on the floor, load everything
+# else per turn.
+implement_investigate:
+  activity_label: Exploring the project
+  mode_ref: implement-investigate
+  card:
+    label: investigate
+    rule: Empty assistant text while tools run.
+  exit: report
+  prose_finish: true
+  floor:
+    - recall
+    - read
+    - grep
+    - summarize
+    - skills_read
+    - find
+    - list_dir
+    - update_progress
+    - ask_user
+    - surface_note
+    - request_tools
+  loadable:
+    # project utilities
+    - survey_repo
+    - jq
+    - stat
+    - wc
+    # edit
+    - write
+    - edit
+    - replace_lines
+    - restore_version
+    - code_rewrite
+    - jq_edit
+    - diff
+    - source_history
+    - delete
+    - copy
+    - move
+    - mkdir
+    - chmod
+    - chown
+    - extract_archive
+    # process and terminal
+    - command
+    - command_output
+    - command_stop
+    - process_list
+    - process_signal
+    - verify
+    - wait
+    - terminal_open
+    - terminal_send
+    - terminal_read
+    - terminal_snapshot
+    - terminal_close
+    # git
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_commit
+    - git_restore
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+    # visual and browser
+    - render_view
+    - view_image
+    - view_video
+    - capture_page
+    - measure_page
+    - page_open
+    - page_act
+    - page_snapshot
+    - page_close
+    # secrets and http
+    - secret_generate
+    - secret_list
+    - secret_revoke
+    - http_request
+    # web
+    - web_search
+    - fetch_url
+    # scan
+    - scan_pack
+    - scan_query
+    - scan_summary
+    - scan_list
+    - scan_compare
+    # workers
+    - task
+    - pack_board
+    - worker_cancel
+    - answer_decision
+    - extend_worker_budget
+    - decline_worker_budget
+
+# Worker-wait surface. The wait loop re-enters on every worker event, so the
+# floor stays closed: no request_tools, nothing loadable, no eager MCP.
+implement_park:
+  activity_label: Waiting for workers
+  mode_ref: implement-park
+  card:
+    label: waiting on workers
+  exit: none
+  floor: [recall, task, pack_board, wait, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, ask_user, surface_note]
+
+workflow_compose:
+  activity_label: Setting up the workflow
+  mode_ref: compose
+  card:
+    label: compose
+    rule: Author the workflow.
+  exit: plan
+  floor: [recall, workflow_compose, workflow_compose_from_template, workflow_catalog_summaries, workflow_persist, state_start, ask_user, surface_note]
+
+plan_stub:
+  activity_label: Writing the plan
+  mode_ref: plan-stub
+  exit: plan
+  floor: [recall, read, write, edit, replace_lines, restore_version, update_progress, grep, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, ask_user, surface_note]
+
+# Research tracks worker and checklist progress.
+plan_research:
+  activity_label: Researching the project
+  mode_ref: plan-research
+  exit: none
+  floor: [recall, read, write, edit, replace_lines, restore_version, update_progress, grep, list_dir, survey_repo, summarize, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, workflow_advance, ask_user, surface_note]
+
+# workflow_transition enters critique.
+plan_approve:
+  activity_label: Getting the plan ready
+  mode_ref: workflow-orchestrate
+  exit: plan
+  floor: [recall, read, write, edit, replace_lines, restore_version, update_progress, grep, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, workflow_transition, surface_note]
+
+# submit_verdict leaves review; ask_user parks it.
+plan_review:
+  activity_label: Reviewing the plan
+  mode_ref: review-adjudicate
+  exit: verdict
+  floor: [recall, read, grep, list_dir, survey_repo, summarize, skills_read, write, edit, replace_lines, restore_version, secret_generate, secret_list, secret_revoke, update_progress, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, ask_user, surface_note]
+
+# Survey dispatch surface.
+survey_execute:
+  activity_label: Dispatching survey legs
+  mode_ref: workflow-orchestrate
+  exit: none
+  floor: [recall, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, update_progress, pack_board, list_dir, wait, scan_query, scan_summary, scan_list, scan_compare, ask_user, surface_note]
+
+# Review loop surface.
+review_adjudicate:
+  activity_label: Weighing the evidence
+  mode_ref: review-adjudicate
+  exit: verdict
+  floor: [recall, read, grep, list_dir, survey_repo, summarize, scan_query, scan_summary, scan_list, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, update_progress, ask_user, surface_note]
+
+# Decision review may write its blueprint.
+decision_adjudicate:
+  activity_label: Recording the decision
+  mode_ref: review-adjudicate
+  exit: verdict
+  floor: [recall, read, write, edit, replace_lines, restore_version, secret_generate, secret_list, secret_revoke, grep, list_dir, survey_repo, summarize, skills_read, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, update_progress, ask_user, surface_note]
+
+# Waiting surface permits questions and workflow resumption.
+await_user:
+  activity_label: Waiting for your answer
+  mode_ref: await-user-input
+  card:
+    label: waiting for your answer
+  exit: none
+  floor: [recall, ask_user, wait, workflow_advance, read, grep, list_dir, surface_note]
+
+# Host-held phase surface. The host owns the phase's work and advances it; a
+# turn here answers the person, reading that work's status when asked.
+await_host:
+  activity_label: Answering while the host works
+  mode_ref: await-host
+  card:
+    label: host at work
+    rule: Answer the person; the host moves the phase on.
+  exit: none
+  floor: [recall, read, grep, find, list_dir, scan_query, scan_summary, scan_list, scan_compare, pack_board, answer_decision, ask_user, surface_note]
+
+plan_execute:
+  activity_label: Building the changes
+  mode_ref: plan-execute
+  exit: none
+  floor: [recall, read, write, edit, replace_lines, update_progress, grep, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, pack_board, task, worker_cancel, wait, extend_worker_budget, decline_worker_budget, answer_decision, delegate_dispatch, ask_user, surface_note]
+
+# Read-only coordinator surfaces. A read-only posture reaches these instead of
+# their implement_/orchestrate_ counterparts, so no mutating tool is on the turn
+# compile to load or request.
+# Contract: test/contract/workflows/readonly_surface_contract_test.go
+observe_investigate:
+  activity_label: Inspecting the project
+  mode_ref: observe-investigate
+  card:
+    label: investigate
+    rule: Read the project and report; nothing here changes it.
+  exit: report
+  prose_finish: true
+  floor:
+    - recall
+    - read
+    - grep
+    - summarize
+    - survey_repo
+    - skills_read
+    - find
+    - list_dir
+    - jq
+    - stat
+    - wc
+    - update_progress
+    - ask_user
+    - surface_note
+    - request_tools
+  loadable:
+    - git_status
+    - git_diff
+    - git_log
+    - git_show
+    - git_blame
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_stash_list
+    - diff
+    - source_history
+    - scan_pack
+    - scan_query
+    - scan_summary
+    - scan_list
+    - scan_compare
+    - web_search
+    - task
+    - pack_board
+    - wait
+    - worker_cancel
+    - answer_decision
+    - extend_worker_budget
+    - decline_worker_budget
+
+# No fetch_url: a remote body written to dest changes the project, and fetching
+# belongs to the researcher leg.
+observe_plan:
+  activity_label: Reviewing worker legs
+  mode_ref: workflow-orchestrate
+  exit: plan
+  floor: [recall, read, grep, find, jq, list_dir, survey_repo, summarize, web_search, scan_pack, scan_query, scan_summary, scan_list, scan_compare, fanout_plan, workflow_advance, ask_user, surface_note, request_tools]
+
+# No fetch_url, for the reason above.
+observe_synthesis:
+  activity_label: Reviewing findings
+  mode_ref: implement-synthesis
+  card:
+    label: wrapup
+    rule: One user report from receipts in this chat.
+  exit: report
+  prose_finish: true
+  floor: [recall, read, grep, find, jq, list_dir, survey_repo, summarize, scan_pack, web_search, view_image, view_video, update_progress, scan_query, scan_summary, scan_list, scan_compare]
+
+# Rootless turns intersect this floor with their surface.
+no_folder_allowlist:
+  floor: [recall, web_search, fetch_url, wait, update_progress, answer_decision, task, worker_cancel, extend_worker_budget, decline_worker_budget, ask_user, surface_note]

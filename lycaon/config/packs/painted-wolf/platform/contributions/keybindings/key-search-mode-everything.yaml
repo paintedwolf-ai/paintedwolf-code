@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-mode-everything
+command: painted-wolf/platform:search-mode-everything
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+1"
+  windows:
+    - "Mod+1"
+  linux:
+    - "Mod+1"

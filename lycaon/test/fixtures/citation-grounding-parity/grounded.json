@@ -1,0 +1,43 @@
+{
+  "had_traceable_work": true,
+  "grounding": {
+    "traced": true,
+    "observed_path_count": 1,
+    "observed_paths_sample": [
+      "src/a.go"
+    ],
+    "checks": [
+      {
+        "id": "cited_evidence",
+        "label": "Leg evidence citations",
+        "status": "passed",
+        "kind": "citation",
+        "summary": "1 citation(s) matched leg union ledger",
+        "matched": [
+          "src/a.go:1 (\"package a\")"
+        ]
+      }
+    ],
+    "cited_evidence": [
+      {
+        "handle": "leg-a:read#1",
+        "path": "src/a.go",
+        "line": 1,
+        "excerpt": "package a",
+        "verdict": "matched"
+      }
+    ],
+    "evidence_records": [
+      {
+        "handle": "leg-a:read#1",
+        "kind": "read",
+        "shape": "file_region",
+        "trust_tier": "structured",
+        "tool": "read",
+        "path": "src/a.go",
+        "line": 1,
+        "excerpt": "1|package a"
+      }
+    ]
+  }
+}

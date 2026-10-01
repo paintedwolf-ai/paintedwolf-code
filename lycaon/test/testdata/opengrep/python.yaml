@@ -1,0 +1,1208 @@
+language: python
+comment:
+- '#'
+limits: Selected Flask and Django request reads and typed FastAPI or Starlette request objects are modeled. FastAPI and APIRouter routes with import-proven factories also model primitive string inputs, supported Query/Path/Header/Cookie/Body/Form defaults, and Annotated forms. Python lexical imports and rebinding distinguish framework factories and converters from local names. Pydantic model attributes, Depends or Security providers, custom dependency defaults, typed request.get converters, urls.py registration, and cross-file wrappers remain unmodeled.
+cases:
+- name: command-injection-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    os.system(request.args.get("cmd"))
+
+    '
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    subprocess.run(["printf", "%s", request.args.get("text")], shell=False)
+
+    '
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: sql-injection-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    db.execute("SELECT * FROM users WHERE name = " + request.args.get("name"))
+
+    '
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    db.execute("SELECT * FROM users WHERE name = ?", [request.args.get("name")])
+
+    '
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: path-traversal-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    open(request.args.get("path"))
+
+    '
+  want:
+  - lycaon.python.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    open("assets/config.json")
+
+    '
+  want: []
+  covers:
+  - lycaon.python.path-traversal
+- name: ssrf-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    requests.get(request.args.get("url"))
+
+    '
+  want:
+  - lycaon.python.ssrf
+  covers: []
+- name: ssrf-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    requests.get("https://example.com", params={"q":request.args.get("q")})
+
+    '
+  want: []
+  covers:
+  - lycaon.python.ssrf
+- name: code-injection-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    eval(request.args.get("code"))
+
+    '
+  want:
+  - lycaon.python.code-injection
+  covers: []
+- name: code-injection-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    int(request.args.get("number"))
+
+    '
+  want: []
+  covers:
+  - lycaon.python.code-injection
+- name: unsafe-deserialization-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    pickle.loads(request.args.get("data"))
+
+    '
+  want:
+  - lycaon.python.unsafe-deserialization
+  covers: []
+- name: unsafe-deserialization-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    yaml.safe_load(request.args.get("data"))
+
+    '
+  want: []
+  covers:
+  - lycaon.python.unsafe-deserialization
+- name: template-injection-vulnerable
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    flask.render_template_string(request.args.get("template"))
+
+    '
+  want:
+  - lycaon.python.template-injection
+  covers: []
+- name: template-injection-safe
+  file: sample.py
+  source: 'from flask import request
+
+    import os, sqlite3, pickle, yaml, subprocess, requests
+
+    flask.render_template_string("Hello {{name}}", name=request.args.get("name"))
+
+    '
+  want: []
+  covers:
+  - lycaon.python.template-injection
+- name: tls-verification-disabled-vulnerable
+  file: sample.py
+  source: 'import requests
+
+    requests.get("https://example.com",verify=False)
+
+    '
+  want:
+  - lycaon.python.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.py
+  source: 'import requests
+
+    requests.get("https://example.com",verify=True)
+
+    '
+  want: []
+  covers:
+  - lycaon.python.tls-verification-disabled
+- name: yaml-unsafe-loader-context-only
+  file: sample.py
+  source: 'import yaml
+
+    yaml.load(blob,Loader=yaml.Loader)
+
+    '
+  want: []
+  covers: []
+- name: yaml-unsafe-loader-safe
+  file: sample.py
+  source: 'import yaml
+
+    yaml.safe_load(blob)
+
+    '
+  want: []
+  covers: []
+- name: debug-server-context-only
+  file: sample.py
+  source: 'app.run(debug=True)
+
+    '
+  want: []
+  covers: []
+- name: debug-server-safe
+  file: sample.py
+  source: 'app.run(debug=False)
+
+    '
+  want: []
+  covers: []
+- name: weak-digest-context-only
+  file: sample.py
+  source: 'import hashlib
+
+    hashlib.md5(data)
+
+    '
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.py
+  source: 'import hashlib
+
+    hashlib.sha256(data)
+
+    '
+  want: []
+  covers: []
+- name: archive-fully-trusted-vulnerable
+  file: sample.py
+  source: 'tar.extractall("out",filter="fully_trusted")
+
+    '
+  want:
+  - lycaon.python.archive-fully-trusted
+  covers: []
+- name: archive-fully-trusted-safe
+  file: sample.py
+  source: 'tar.extractall("out",filter="data")
+
+    '
+  want: []
+  covers:
+  - lycaon.python.archive-fully-trusted
+- name: weak-rsa-key-vulnerable
+  file: sample.py
+  source: 'from cryptography.hazmat.primitives.asymmetric import rsa
+
+    rsa.generate_private_key(public_exponent=65537,key_size=1024)
+
+    '
+  want:
+  - lycaon.python.weak-rsa-key
+  covers: []
+- name: weak-rsa-key-safe
+  file: sample.py
+  source: 'from cryptography.hazmat.primitives.asymmetric import rsa
+
+    rsa.generate_private_key(public_exponent=65537,key_size=3072)
+
+    '
+  want: []
+  covers:
+  - lycaon.python.weak-rsa-key
+- name: template-autoescape-disabled-context-only
+  file: sample.py
+  source: 'import jinja2
+
+    env=jinja2.Environment(autoescape=False)
+
+    '
+  want: []
+  covers: []
+- name: template-autoescape-disabled-safe
+  file: sample.py
+  source: 'import jinja2
+
+    env=jinja2.Environment(autoescape=jinja2.select_autoescape())
+
+    '
+  want: []
+  covers: []
+- name: xml-network-entities-vulnerable
+  file: sample.py
+  source: 'from lxml import etree
+
+    parser=etree.XMLParser(resolve_entities=True,no_network=False)
+
+    '
+  want:
+  - lycaon.python.xml-network-entities
+  covers: []
+- name: xml-network-entities-safe
+  file: sample.py
+  source: 'from lxml import etree
+
+    parser=etree.XMLParser(resolve_entities=False,no_network=True)
+
+    '
+  want: []
+  covers:
+  - lycaon.python.xml-network-entities
+- name: ssh-auto-accept-host-context-only
+  file: sample.py
+  source: 'import paramiko
+
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    '
+  want: []
+  covers: []
+- name: ssh-auto-accept-host-safe
+  file: sample.py
+  source: 'import paramiko
+
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+
+    '
+  want: []
+  covers: []
+- name: weak-cipher-vulnerable
+  file: sample.py
+  source: 'from Crypto.Cipher import DES
+
+    cipher=DES.new(key, DES.MODE_ECB)
+
+    '
+  want:
+  - lycaon.python.weak-cipher
+  covers: []
+- name: weak-cipher-safe
+  file: sample.py
+  source: 'from Crypto.Cipher import AES
+
+    cipher=AES.new(key,AES.MODE_GCM)
+
+    '
+  want: []
+  covers:
+  - lycaon.python.weak-cipher
+- name: precision-cli-file-selection
+  file: sample.py
+  source: 'path = input("File: ")
+
+    with open(path) as f: print(f.read())
+
+    '
+  want: []
+  covers: []
+- name: precision-checksum-nonsecurity
+  file: sample.py
+  source: 'import hashlib
+
+    key = hashlib.md5(data, usedforsecurity=False).hexdigest()
+
+    '
+  want: []
+  covers: []
+- name: precision-development-server
+  file: sample.py
+  source: 'from flask import Flask
+
+    app = Flask(__name__)
+
+    app.run(host="127.0.0.1",debug=True)
+
+    '
+  want: []
+  covers: []
+- name: precision-plaintext-template
+  file: sample.py
+  source: 'import jinja2
+
+    env = jinja2.Environment(autoescape=False)
+
+    text = env.from_string("Hello {{ name }}").render(name="World")
+
+    '
+  want: []
+  covers: []
+- name: precision-numeric-sql
+  file: sample.py
+  source: 'import flask
+
+    count = int(flask.request.args.get("count"))
+
+    cursor.execute(f"SELECT * FROM items LIMIT {count}")
+
+    '
+  want: []
+  covers: []
+- name: precision-escaped-shell
+  file: sample.py
+  source: 'import flask, shlex, os
+
+    value = shlex.quote(flask.request.args.get("value"))
+
+    os.system("printf %s " + value)
+
+    '
+  want: []
+  covers: []
+- name: precision-trusted-yaml
+  file: sample.py
+  source: 'import yaml
+
+    local_config = yaml.load("name: app",Loader=yaml.UnsafeLoader)
+
+    '
+  want: []
+  covers: []
+- name: precision-unsafe-yaml-flow
+  file: sample.py
+  source: 'import yaml, flask
+
+    yaml.load(flask.request.args.get("data"), Loader=yaml.UnsafeLoader)
+
+    '
+  want:
+  - lycaon.python.unsafe-deserialization
+  covers: []
+- name: precision-quote-is-not-sql-escape
+  file: sample.py
+  source: 'import flask, shlex
+
+    cursor.execute(shlex.quote(flask.request.args.get("sql")))
+
+    '
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: precision-safe-conversion
+  file: sample.py
+  source: 'import flask, requests
+
+    requests.get("https://example.com/search?q="+flask.request.args.get("q"))
+
+    '
+  want: []
+  covers: []
+
+# Synthetic development controls inspired by ordinary applications using numeric request conversion.
+- name: development-numeric-sql-native-int
+  file: sample.py
+  source: |
+    from flask import request
+    value = int(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-native-float
+  file: sample.py
+  source: |
+    from flask import request
+    value = float(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-native-imported-int
+  file: sample.py
+  source: |
+    from flask import request
+    from builtins import int
+    value = int(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-native-imported-float
+  file: sample.py
+  source: |
+    from flask import request
+    from builtins import float
+    value = float(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-native-crossnamed-int
+  file: sample.py
+  source: |
+    from flask import request
+    from builtins import float as int
+    value = int(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-native-crossnamed-float
+  file: sample.py
+  source: |
+    from flask import request
+    from builtins import int as float
+    value = float(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: development-numeric-sql-lambda-int
+  file: sample.py
+  source: |
+    from flask import request
+    int = lambda value: value
+    value = int(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: development-numeric-sql-lambda-float
+  file: sample.py
+  source: |
+    from flask import request
+    float = lambda value: value
+    value = float(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: development-numeric-sql-imported-int
+  file: sample.py
+  source: |
+    from flask import request
+    from custom import int
+    value = int(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: development-numeric-sql-imported-float
+  file: sample.py
+  source: |
+    from flask import request
+    from custom import float
+    value = float(request.args.get("page"))
+    db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: development-numeric-sql-parameter-int
+  file: sample.py
+  source: |
+    from flask import request
+    def run(int):
+        value = int(request.args.get("page"))
+        db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: development-numeric-sql-parameter-float
+  file: sample.py
+  source: |
+    from flask import request
+    def run(float):
+        value = float(request.args.get("page"))
+        db.execute("SELECT * FROM posts LIMIT " + str(value))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: django-get-index-command
+  file: sample.py
+  source: |
+    import os
+    def view(request):
+        os.system(request.GET["cmd"])
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: django-get-method-sql
+  file: sample.py
+  source: |
+    from django.db import connection
+    def view(request):
+        connection.cursor().execute("SELECT * FROM t WHERE n = " + request.GET.get("n"))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: django-post-index-path
+  file: sample.py
+  source: |
+    def view(request):
+        open(request.POST["path"])
+  want:
+  - lycaon.python.path-traversal
+  covers: []
+- name: django-annotated-request-ssrf
+  file: sample.py
+  source: |
+    import requests
+    from django.http import HttpRequest
+    def view(incoming: HttpRequest):
+        requests.get(incoming.GET.get("url"))
+  want:
+  - lycaon.python.ssrf
+  covers: []
+- name: django-aliased-request-type-ssrf
+  file: sample.py
+  source: |
+    import requests
+    from django.http import HttpRequest as Inbound
+    def view(incoming: Inbound):
+        requests.get(incoming.GET.get("url"))
+  want:
+  - lycaon.python.ssrf
+  covers: []
+- name: django-headers-command
+  file: sample.py
+  source: |
+    import os
+    def view(request):
+        os.system(request.headers.get("X-Target"))
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: django-body-deserialization
+  file: sample.py
+  source: |
+    import pickle
+    def view(request):
+        pickle.loads(request.body)
+  want:
+  - lycaon.python.unsafe-deserialization
+  covers: []
+- name: django-objects-raw-sql
+  file: sample.py
+  source: |
+    from myapp.models import Article
+    def view(request):
+        Article.objects.raw("SELECT * FROM article WHERE title = " + request.GET.get("t"))
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: django-class-based-view-command
+  file: sample.py
+  source: |
+    import os
+    from django.views import View
+    class Detail(View):
+        def get(self, request, pk):
+            os.system(request.GET.get("cmd"))
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: django-parameterized-sql
+  file: sample.py
+  source: |
+    from django.db import connection
+    def view(request):
+        connection.cursor().execute("SELECT * FROM t WHERE n = %s", [request.GET.get("n")])
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: django-int-converted-sql
+  file: sample.py
+  source: |
+    from django.db import connection
+    def view(request):
+        connection.cursor().execute("SELECT * FROM t WHERE id = " + str(int(request.GET.get("id"))))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: django-urlconf-argument-command
+  file: sample.py
+  source: |
+    import os
+    def view(request, slug):
+        os.system(slug)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: django-local-request-replacement
+  file: sample.py
+  source: |
+    import os
+    class Settings:
+        GET = {}
+    def view():
+        request = Settings()
+        os.system(request.GET["cmd"])
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: django-orm-filter-quiet
+  file: sample.py
+  source: |
+    from myapp.models import Article
+    def view(request):
+        Article.objects.filter(title=request.GET.get("t"))
+  want: []
+  covers:
+  - lycaon.python.sql-injection
+- name: django-shlex-quoted-command
+  file: sample.py
+  source: |
+    import os, shlex
+    def view(request):
+        os.system("grep " + shlex.quote(request.GET.get("q")))
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-query-parameter-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.get("/run")
+    def run(target: str):
+        os.system(target)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-query-default-sql
+  file: sample.py
+  source: |
+    from fastapi import FastAPI, Query
+    app = FastAPI()
+    @app.get("/rows")
+    def rows(name: str = Query(default=None)):
+        db.execute("SELECT * FROM t WHERE n = " + name)
+  want:
+  - lycaon.python.sql-injection
+  covers: []
+- name: fastapi-path-parameter-path
+  file: sample.py
+  source: |
+    from fastapi import FastAPI, Path
+    app = FastAPI()
+    @app.get("/files/{name}")
+    def files(name: str = Path(...)):
+        open(name)
+  want:
+  - lycaon.python.path-traversal
+  covers: []
+- name: fastapi-annotated-parameter-ssrf
+  file: sample.py
+  source: |
+    import httpx
+    from typing import Annotated
+    from fastapi import FastAPI, Query
+    app = FastAPI()
+    @app.get("/proxy")
+    def proxy(url: Annotated[str, Query()]):
+        httpx.get(url)
+  want:
+  - lycaon.python.ssrf
+  covers: []
+- name: fastapi-router-decorator-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import APIRouter
+    router = APIRouter()
+    @router.post("/run")
+    async def run(target: str):
+        os.system(target)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-request-query-params-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Request
+    app = FastAPI()
+    @app.get("/run")
+    async def run(request: Request):
+        os.system(request.query_params["target"])
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-async-json-body-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Request
+    app = FastAPI()
+    @app.post("/run")
+    async def run(request: Request):
+        payload = await request.json()
+        os.system(payload["target"])
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-file-response-path
+  file: sample.py
+  source: |
+    from fastapi import FastAPI
+    from fastapi.responses import FileResponse
+    app = FastAPI()
+    @app.get("/download")
+    def download(name: str):
+        return FileResponse(name)
+  want:
+  - lycaon.python.path-traversal
+  covers: []
+- name: fastapi-dependency-value-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Depends
+    from sqlalchemy.orm import Session
+    app = FastAPI()
+    def get_db():
+        return None
+    @app.get("/rows")
+    def rows(db: Session = Depends(get_db)):
+        os.system(db)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-int-parameter-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.get("/page")
+    def page(count: int):
+        os.system(count)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-undecorated-helper-quiet
+  file: sample.py
+  source: |
+    import os
+    def build(target: str):
+        os.system(target)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-unrelated-decorator-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.on_event("startup")
+    def warm(target: str):
+        os.system(target)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-connection-peer-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Request
+    app = FastAPI()
+    @app.get("/run")
+    async def run(request: Request):
+        os.system(request.client.host)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-fixed-authority-ssrf-quiet
+  file: sample.py
+  source: |
+    import requests
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.get("/proxy")
+    def proxy(name: str):
+        requests.get("https://api.example.com/v1/" + name)
+  want: []
+  covers:
+  - lycaon.python.ssrf
+- name: fastapi-argument-list-command-quiet
+  file: sample.py
+  source: |
+    import subprocess
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.get("/run")
+    def run(target: str):
+        subprocess.run(["printf", "%s", target], shell=False)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-local-wrapper-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app = FastAPI()
+    def spawn(value):
+        os.system(value)
+    @app.get("/run")
+    def run(target: str):
+        spawn(target)
+  want:
+  - lycaon.python.command-injection
+- name: django-querydict-bound-then-read-command
+  file: sample.py
+  source: |
+    import os
+    def view(request):
+        params = request.GET
+        os.system(params.get("cmd"))
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-query-params-bound-then-read-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Request
+    app = FastAPI()
+    @app.get("/run")
+    async def run(request: Request):
+        params = request.query_params
+        os.system(params["target"])
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-string-dependency-default-quiet
+  file: sample.py
+  source: "import os\nfrom typing import Annotated\nfrom fastapi import FastAPI, Depends,\
+    \ Security\napp = FastAPI()\ndef trusted_command():\n    return \"date\"\n@app.get(\"\
+    /run\")\ndef run(command: str = Depends(trusted_command)):\n    os.system(command)\n"
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-string-dependency-annotated-quiet
+  file: sample.py
+  source: "import os\nfrom typing import Annotated\nfrom fastapi import FastAPI, Depends,\
+    \ Security\napp = FastAPI()\ndef trusted_command():\n    return \"date\"\n@app.get(\"\
+    /run\")\ndef run(command: Annotated[str, Depends(trusted_command)]):\n    os.system(command)\n"
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-string-dependency-security-quiet
+  file: sample.py
+  source: "import os\nfrom typing import Annotated\nfrom fastapi import FastAPI, Depends,\
+    \ Security\napp = FastAPI()\ndef trusted_command():\n    return \"date\"\n@app.get(\"\
+    /run\")\ndef run(command: str = Security(trusted_command)):\n    os.system(command)\n"
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-unrelated-get-decorator-quiet
+  file: sample.py
+  source: "import os\nclass Cache:\n    def get(self, key):\n        return lambda\
+    \ handler: handler\ncache = Cache()\n@cache.get(\"run\")\ndef run(command: str):\n\
+    \    os.system(command)\n"
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-header-string-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Header
+    app=FastAPI()
+    @app.post("/run")
+    def run(command: str = Header()):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-cookie-string-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Cookie
+    app=FastAPI()
+    @app.post("/run")
+    def run(command: str = Cookie()):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-body-string-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Body
+    app=FastAPI()
+    @app.post("/run")
+    def run(command: str = Body()):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-form-string-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI, Form
+    app=FastAPI()
+    @app.post("/run")
+    def run(command: str = Form()):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-optional-string-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str | None = None):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-typing-optional-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    from typing import Optional
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: Optional[str] = None):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-literal-default-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str = "echo fixed"):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-annotated-header-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    from typing import Annotated
+    from fastapi import Header
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: Annotated[str, Header()]):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-factory-function-shadowed-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    def FastAPI(): return object()
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-factory-class-shadowed-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    class FastAPI: pass
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-factory-reassigned-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    FastAPI=custom_factory
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-factory-imported-elsewhere-quiet
+  file: sample.py
+  source: |
+    import os
+    def other():
+        from fastapi import FastAPI
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-aliased-factory-command
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI as Application
+    app=Application()
+    @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want:
+  - lycaon.python.command-injection
+  covers: []
+- name: fastapi-comment-route-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app=FastAPI()
+    # @app.get("/run")
+    def run(command: str):
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-string-replaced-quiet
+  file: sample.py
+  source: |
+    import os
+    from fastapi import FastAPI
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        command="echo fixed"
+        os.system(command)
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: fastapi-string-quoted-quiet
+  file: sample.py
+  source: |
+    import os,shlex
+    from fastapi import FastAPI
+    app=FastAPI()
+    @app.get("/run")
+    def run(command: str):
+        os.system("echo "+shlex.quote(command))
+  want: []
+  covers:
+  - lycaon.python.command-injection
+- name: flask-indexed-query-command-injection
+  file: sample.py
+  source: |
+    from flask import Flask, request
+    import subprocess
+    app = Flask(__name__)
+    @app.get('/synthetic-command')
+    def synthetic_command():
+        command = request.args['command']
+        return subprocess.check_output(command, shell=True)
+  want: [lycaon.python.command-injection]
+  covers: []
+- name: flask-indexed-form-command-injection
+  file: sample.py
+  source: |
+    import flask
+    import os
+    os.system(flask.request.form['command'])
+  want: [lycaon.python.command-injection]
+  covers: []
+- name: flask-indexed-input-safe-command-arguments
+  file: sample.py
+  source: |
+    import flask
+    import subprocess
+    subprocess.run(['printf', '%s', flask.request.args['text']], shell=False)
+    subprocess.run(['printf', '%s', flask.request.form['text']], shell=False)
+  want: []
+  covers: [lycaon.python.command-injection]
+- name: flask-indexed-form-sql-injection
+  file: sample.py
+  source: |
+    from flask import request
+    db.execute('SELECT * FROM inventory WHERE fruit = ' + request.form['fruit'])
+  want: [lycaon.python.sql-injection]
+  covers: []
+- name: flask-indexed-input-safe-sql-parameters
+  file: sample.py
+  source: |
+    from flask import request
+    db.execute('SELECT * FROM inventory WHERE fruit = ?', [request.args['fruit']])
+    db.execute('SELECT * FROM inventory WHERE fruit = ?', [request.form['fruit']])
+  want: []
+  covers: [lycaon.python.sql-injection]

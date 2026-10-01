@@ -1,0 +1,168 @@
+.den-transcript-visual {
+  contain: paint;
+}
+
+.den-chat-stream-inner .den-transcript-visual {
+  margin: var(--transcript-visual-before) var(--transcript-visual-right) var(--transcript-visual-after) 0;
+  max-width: min(100%, 520px);
+}
+
+.den-transcript-visual--prominent {
+  max-width: min(100%, var(--transcript-visual-width));
+  margin-bottom: var(--transcript-visual-after);
+}
+
+.den-transcript-visual__frame {
+  display: block;
+  width: 100%;
+  min-height: var(--transcript-visual-placeholder);
+  padding: 0;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-lg);
+  /* The placeholder preserves layout while media loads. */
+  background: var(--den-tint-1);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.den-transcript-visual--ready .den-transcript-visual__frame,
+.den-transcript-visual__frame--sized {
+  /* Loaded images and explicit sizes replace the placeholder. */
+  min-height: 0;
+}
+
+.den-transcript-visual__frame:disabled {
+  cursor: default;
+}
+
+.den-transcript-visual__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+}
+
+/* Images ready at first paint also fade in. */
+.den-transcript-visual--ready .den-transcript-visual__img {
+  animation: den-fade-up 220ms var(--den-ease) both;
+}
+
+/* Remounted artifacts retain their visible state. */
+.den-transcript-visual--instant.den-transcript-visual--ready
+  .den-transcript-visual__img {
+  animation: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-transcript-visual--ready .den-transcript-visual__img {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.den-transcript-visual__caption {
+  margin-top: 0.35rem;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-transcript-visual-lightbox__body {
+  background: var(--den-surface);
+}
+
+/* The viewport's full height, so the media fits inside it. */
+.den-transcript-visual-lightbox__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 16px;
+}
+
+.den-transcript-visual-lightbox__img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-transcript-visual-lightbox__nav {
+  flex: 0 0 2.25rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface-elevated);
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-section);
+  cursor: pointer;
+}
+
+.den-transcript-visual-lightbox__nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.den-visual-present {
+  display: flex;
+  flex-direction: column;
+  gap: var(--transcript-present-gap);
+  margin-bottom: var(--transcript-present-after);
+}
+
+.den-visual-present--strip {
+  display: grid;
+  /* A presented screenshot gets the same floor as the narrowest split chat. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--transcript-strip-column)), 1fr));
+  gap: var(--transcript-strip-gap);
+  max-width: min(100%, var(--transcript-strip-width));
+}
+
+.den-artifact-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  /* The control stays label-sized inside stretching layouts. */
+  align-self: start;
+  justify-self: start;
+  width: fit-content;
+  gap: var(--transcript-reference-gap);
+  max-width: min(100%, 22rem);
+  margin: var(--transcript-reference-margin) 0;
+  padding: var(--transcript-reference-padding-y) var(--transcript-reference-padding-x);
+  border: 1px solid var(--den-chip-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-chip-bg);
+  color: var(--den-chip-fg);
+  font: inherit;
+  font-size: var(--text-den-compact);
+  line-height: var(--transcript-reference-line-height);
+  cursor: pointer;
+  text-align: left;
+}
+
+.den-artifact-ref-chip__arrow {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.den-artifact-ref-chip__caption {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The surrounding button supplies the shape. */
+.den-artifact-ref-chip__source {
+  flex: 0 0 auto;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+

@@ -1,0 +1,124 @@
+# Mint / use / attack class fixtures for secret-mint tests.
+# mint lists literal assignments; OAR rules decide whether they warrant feedback.
+# Original first-party catalog YAML is CC-BY-4.0.
+
+mint:
+  - tool: command
+    args:
+      command: htpasswd -b user password
+    assignment: htpasswd
+  - tool: command
+    args:
+      command: useradd -p password alice
+    assignment: -p
+  - tool: command
+    args:
+      command: MYSQL_PASSWORD=password mysql
+    assignment: MYSQL_PASSWORD
+  - tool: write
+    args:
+      path: compose.yaml
+      content: |
+        services:
+          db:
+            environment:
+              MYSQL_PASSWORD: password
+    assignment: MYSQL_PASSWORD
+  - tool: write
+    args:
+      path: .env
+      content: |
+        MYSQL_PASSWORD=password
+    assignment: MYSQL_PASSWORD
+  - tool: write
+    args:
+      path: config.yaml
+      content: |
+        auth:
+          password: hunter2
+    assignment: password
+  - tool: write
+    args:
+      path: config.json
+      content: |
+        {"password": "letmein"}
+    assignment: password
+  # A slot no catalog names, holding a value no list carries.
+  - tool: command
+    args:
+      command: WEBHOOK_SECRET=super-secret node notify.js
+    assignment: WEBHOOK_SECRET
+  # Unique is not strong: three lowercase words still fire.
+  - tool: write
+    args:
+      path: compose.yaml
+      content: |
+        services:
+          db:
+            environment:
+              MYSQL_PASSWORD: unique-lab-secret
+    assignment: MYSQL_PASSWORD
+
+  # Generated material remains a literal observation.
+  - tool: write
+    args:
+      path: compose.yaml
+      content: |
+        services:
+          db:
+            environment:
+              MYSQL_PASSWORD: 7Kq2SxVn9RmZ4PwT
+  # A passphrase remains a literal observation.
+  - tool: write
+    args:
+      path: compose.yaml
+      content: |
+        services:
+          db:
+            environment:
+              MYSQL_PASSWORD: correct-horse-battery-staple
+
+use:
+  # A reference is not a value.
+  - tool: command
+    args:
+      command: WEBHOOK_SECRET=$WEBHOOK_SECRET node notify.js
+  - tool: write
+    args:
+      path: .env
+      content: |
+        # MYSQL_PASSWORD=password
+        APP_ENV=dev
+  - tool: write
+    args:
+      path: config.yaml
+      content: |
+        auth:
+          password_policy: strict
+  - tool: write
+    args:
+      path: README.md
+      content: |
+        The default password is hunter2 in the docs.
+  - tool: write
+    args:
+      path: config.json
+      content: |
+        {"password_policy": "strict", "name": "app"}
+  - tool: command
+    args:
+      command: mysql -p password
+  - tool: command
+    args:
+      command: curl -u user:password https://example.test
+  - tool: command
+    args:
+      command: docker login -p password example.test
+
+attack:
+  - tool: command
+    args:
+      command: hydra -P rockyou.txt ssh://example.test
+  - tool: command
+    args:
+      command: hashcat -a 0 hash.txt rockyou.txt

@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/cli_open.json",
+  "$ref": "../../openapi/components/schemas/events.yaml#/components/schemas/CLIOpenEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CLIOpenEvent"
+}

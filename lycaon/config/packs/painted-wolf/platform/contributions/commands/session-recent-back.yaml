@@ -1,0 +1,7 @@
+id: painted-wolf/platform:session-recent-back
+title: "Recent chats (back)"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "session.recentBack"

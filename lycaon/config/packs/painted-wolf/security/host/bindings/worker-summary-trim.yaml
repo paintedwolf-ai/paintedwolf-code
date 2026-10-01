@@ -1,0 +1,7 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.summary.trim
+selector:
+  surface: worker
+effect: inform
+render: worker-summary-trim
+tier: builtin

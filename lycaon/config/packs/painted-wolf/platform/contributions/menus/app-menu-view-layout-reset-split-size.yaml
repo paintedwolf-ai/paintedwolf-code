@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-layout-reset-split-size
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-reset-split-size
+group: "1"
+order: 4
+label: "Reset split size"

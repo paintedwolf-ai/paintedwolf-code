@@ -1,0 +1,10 @@
+id: azure-openai-api-key
+title: Azure OpenAI API key
+regex: '(?i)\bazure_openai_api_key\b[''" ]*[:=][ ''"]*([A-Za-z0-9._~+/-]{28,})'
+keywords:
+  - azure_openai_api_key
+severity: critical
+secret_group: 1
+entropy: 3.5
+allowlist_stopwords:
+  - REPLACE_WITH_YOUR_KEY_VALUE_HERE

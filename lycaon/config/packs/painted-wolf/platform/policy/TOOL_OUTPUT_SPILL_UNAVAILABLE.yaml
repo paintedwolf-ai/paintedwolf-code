@@ -1,0 +1,42 @@
+oar: '1.0'
+id: TOOL_OUTPUT_SPILL_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.execution_outcome
+    - paintedwolf.bytes
+when: paintedwolf.rejection_code == "TOOL_OUTPUT_SPILL_UNAVAILABLE"
+effect: block
+copy:
+  what: 'The host could not retain the complete {{ paintedwolf.bytes }}-byte result from {{ tool }}; partial delivery was refused.'
+  cause: 'Execution returned {{ paintedwolf.execution_outcome }} before recovery storage failed. Completed changes remain applied.'
+  why: Omitted output must remain recoverable before a smaller view can replace it.
+  fix: 'Inspect existing receipts and current state. Do not repeat a mutation to recover its output. A narrower independent read may recover needed facts; if retention still fails, report the unavailable result and storage problem. Do not invent a spill path.'
+  instead: Preserve completed effects and recover through an independent bounded observation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: complete tool output could not be retained
+x-paintedwolf-scenarios:
+  - id: completed_effect
+    vars:
+      execution_outcome: completed
+      bytes: 20000
+      profile: coordinator
+      tool: git_commit
+    expect_contains:
+      - 'Code: TOOL_OUTPUT_SPILL_UNAVAILABLE'
+      - Completed changes remain applied
+      - Do not repeat a mutation
+  - id: failed_read
+    vars:
+      execution_outcome: error
+      bytes: 20000
+      profile: implement
+      tool: read
+    expect_contains:
+      - 'Code: TOOL_OUTPUT_SPILL_UNAVAILABLE'
+      - error
+      - narrower independent read

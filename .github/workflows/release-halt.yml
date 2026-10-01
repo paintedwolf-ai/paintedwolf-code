@@ -1,0 +1,105 @@
+name: release-halt
+
+on:
+  workflow_dispatch:
+    inputs:
+      bad_version:
+        description: Version to withdraw from every feed and distribution channel (without v)
+        required: true
+        type: string
+      last_good_version:
+        description: Optional older release to restore; leave empty to stop discovery without a replacement
+        required: false
+        type: string
+      plan:
+        description: Optional reviewed JSON plan for key-rotation recovery
+        required: false
+        type: string
+      dry_run:
+        description: Validate the complete withdrawal without changing distribution
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-static-update
+  cancel-in-progress: false
+
+jobs:
+  halt:
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 75
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      WWW_DISPATCH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require the current main branch
+        env:
+          REQUESTED_REF: ${{ github.ref }}
+        run: |
+          [[ "${REQUESTED_REF}" == refs/heads/main ]] || {
+            echo "error: run release halt from main so it uses the current recovery configuration" >&2
+            exit 1
+          }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lycaon/go.mod
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+      - name: Prepare and validate every affected updater feed
+        id: feed_plan
+        env:
+          BAD_VERSION: ${{ inputs.bad_version }}
+          LAST_GOOD_VERSION: ${{ inputs.last_good_version }}
+          HALT_PLAN_JSON: ${{ inputs.plan }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${HALT_PLAN_JSON}" ]]; then
+            printf '%s' "${HALT_PLAN_JSON}" > "${RUNNER_TEMP}/requested-plan.json"
+            args=(--plan "${RUNNER_TEMP}/requested-plan.json")
+          else
+            args=(--bad "${BAD_VERSION}")
+            [[ -z "${LAST_GOOD_VERSION}" ]] || args+=(--last-good "${LAST_GOOD_VERSION}")
+          fi
+          python3 scripts/release-halt-plan.py "${args[@]}" --dry-run \
+            --write-plan "${RUNNER_TEMP}/halt-plan.json" \
+            --distribution-output "${RUNNER_TEMP}/halt-distribution.json"
+      - name: Prepare package and website withdrawal
+        id: distribution_plan
+        run: |
+          python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
+            --output "${RUNNER_TEMP}/withdrawal.json"
+      - name: Record permanent withdrawal before changing discovery
+        if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
+        run: python3 scripts/release_distribution.py withdraw --file "${RUNNER_TEMP}/halt-distribution.json"
+      - name: Halt all affected updater feeds
+        if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
+        run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json"
+      - name: Withdraw package and website discovery
+        if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
+        run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
+      - name: Retain withdrawal evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-withdrawal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/halt-plan.json
+            ${{ runner.temp }}/halt-distribution.json
+            ${{ runner.temp }}/withdrawal.json
+          retention-days: 90
+          if-no-files-found: ignore

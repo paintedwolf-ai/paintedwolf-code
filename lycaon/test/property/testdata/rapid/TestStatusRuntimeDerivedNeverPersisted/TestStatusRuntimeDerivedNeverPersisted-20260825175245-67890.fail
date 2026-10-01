@@ -1,0 +1,31 @@
+# 2026/08/25 17:52:45.899488 [TestStatusRuntimeDerivedNeverPersisted] [rapid] draw count: 1
+# 2026/08/25 17:52:45.899502 [TestStatusRuntimeDerivedNeverPersisted] [rapid] draw id: "m-0000"
+# 2026/08/25 17:52:45.899505 [TestStatusRuntimeDerivedNeverPersisted] [rapid] draw body: ""
+# 2026/08/25 17:52:45.899509 [TestStatusRuntimeDerivedNeverPersisted] [rapid] draw draft: ""
+# 2026/08/25 17:52:45.899659 [TestStatusRuntimeDerivedNeverPersisted] append: load evidence ledger: SQL logic error: no such column: body (1)
+# 
+v0.4.8#7458003409162012743
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

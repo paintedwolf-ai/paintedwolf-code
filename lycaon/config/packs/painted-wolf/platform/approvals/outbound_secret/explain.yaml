@@ -1,0 +1,54 @@
+# outbound_secret — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    outbound_secret:
+        tool: outbound_secret
+        tier_hint: recoverable
+        what_changes: '{% if destination_kind == "model_provider" %}The model at {{ destination_label }} would read this value in the request: {{ rule_title }}.{% elif destination_kind == "process" %}This value is handed to the process. It may retain or forward it; onward use is not observed: {{ rule_title }}.{% else %}This {{ surface_label }} would send the value to {{ destination_label }}: {{ rule_title }}.{% endif %}'
+        who_affected: An external destination would receive this content if you allow this request.
+        if_wrong: Denying only blocks this request; the secret stays on your machine.
+        allow_line: sending this outbound request despite the match
+        scenarios:
+            - id: default
+              vars:
+                destination_label: brave
+                rule_title: AWS access key ID
+                surface_label: web search
+              expect_contains:
+                - AWS access key ID
+                - web search
+            - id: fetch_url
+              vars:
+                destination_label: example.com
+                rule_title: AWS access key ID
+                surface_label: page fetch
+              expect_contains:
+                - page fetch
+                - example.com
+            - id: mcp
+              vars:
+                destination_label: fixture
+                rule_title: OpenAI API key
+                surface_label: MCP request
+              expect_contains:
+                - MCP request
+                - OpenAI API key
+            - id: model_provider
+              vars:
+                destination_kind: model_provider
+                destination_label: Fireworks 1
+                rule_title: CARTO API Access Token (JWT)
+                surface_label: model request
+              expect_contains:
+                - Fireworks 1
+                - would read this
+            - id: command_process
+              vars:
+                destination_kind: process
+                destination_label: this command's own process
+                rule_title: A managed secret
+                surface_label: command
+              expect_contains:
+                - command line
+                - not observed

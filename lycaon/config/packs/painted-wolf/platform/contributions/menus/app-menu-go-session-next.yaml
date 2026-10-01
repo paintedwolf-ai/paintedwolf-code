@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-session-next
+slot: "app_menu.go"
+command: painted-wolf/platform:session-next
+group: "5"
+order: 20
+label: "Next session"

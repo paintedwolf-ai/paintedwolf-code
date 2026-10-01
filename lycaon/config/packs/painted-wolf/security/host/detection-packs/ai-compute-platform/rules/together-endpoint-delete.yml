@@ -1,0 +1,27 @@
+title: Delete a Together AI dedicated endpoint
+id: 85ac8330-0f0b-4a1c-ae0e-164d1bdf4812
+description: Permanently deletes a dedicated inference endpoint and its configuration.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image:
+      - tg
+      - together
+    CommandLine|contains: ' endpoints delete'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and not filter_rehearsal and not filter_local

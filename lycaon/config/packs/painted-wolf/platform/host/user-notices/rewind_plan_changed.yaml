@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Rewind preview changed
+message: The conversation, files, or open documents changed after this preview was prepared.
+suggested_action: Refresh the preview and review the updated selection before rewinding.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - changed after this preview

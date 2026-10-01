@@ -1,0 +1,41 @@
+oar: '1.0'
+id: WORKER_RESUME_MISMATCH
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - task
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.child_session_id
+  - paintedwolf.resume_field
+  - paintedwolf.resume_recorded
+  - paintedwolf.resume_requested
+when: paintedwolf.rejection_code == "WORKER_RESUME_MISMATCH"
+effect: block
+copy:
+  what: 'The resume names {{ paintedwolf.resume_field }} `{{ paintedwolf.resume_requested }}`, but child {{
+    paintedwolf.child_session_id }} runs as `{{ paintedwolf.resume_recorded }}`.'
+  cause: A resume continues the same child, so it keeps the agent and scope mode its earlier legs used.
+  why: Changing either would run a different worker against a transcript and workspace built for the first.
+  fix: Omit {{ paintedwolf.resume_field }} to resume the child as it is, or dispatch a fresh task without child_session_id
+    for different work.
+  instead: Resume without restating {{ paintedwolf.resume_field }}, or start a new task
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Resume of child {{ paintedwolf.child_session_id }} changes its {{ paintedwolf.resume_field }}
+x-paintedwolf-scenarios:
+- id: agent
+  vars:
+    child_session_id: c112d656
+    resume_field: agent_type
+    resume_recorded: security-reviewer
+    resume_requested: implementer
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_RESUME_MISMATCH'
+  - security-reviewer
+  - child_session_id

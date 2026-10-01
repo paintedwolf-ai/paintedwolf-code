@@ -1,0 +1,17 @@
+description: "Inspect worker and project state, or read shared findings. Use detail_level for the board, finding_id for one full finding, or findings_after for an ordered summary page; choose one view."
+schema:
+  type: object
+  properties:
+    finding_id:
+      type: integer
+      minimum: 1
+      description: Read the retained body of one finding from this coordination session.
+    findings_after:
+      type: integer
+      minimum: 0
+      description: Page findings in sequence; use 0 to start and next_after to continue.
+    detail_level:
+      type: string
+      enum: [status, compact, full, forensic]
+      description: "status: summary + board only (~20 lines). compact (default): slim roster with changed_paths. full: roster + worker briefs + extra board lines. forensic: adds full job records with baselines for host debugging."
+  additionalProperties: false

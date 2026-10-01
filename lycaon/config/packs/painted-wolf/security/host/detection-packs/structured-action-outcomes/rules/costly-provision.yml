@@ -1,0 +1,22 @@
+title: Provision costly compute resources
+id: 9c3c7c9c-58aa-455e-bf52-8920800ade93
+status: stable
+description: Provisions compute, accelerators, clusters, fleets, or training jobs.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    ActionEffect: provision
+    TargetScope: resource
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

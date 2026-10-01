@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-explain
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-explain
+group: "1"
+order: 8
+label: "Explain in context"

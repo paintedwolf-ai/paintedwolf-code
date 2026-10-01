@@ -1,0 +1,19 @@
+title: Delete backup or recovery data
+id: 15255539-c9a8-4f9e-ae68-bcf76723ef49
+status: stable
+description: Deletes or purges a named backup, snapshot, restore point, or recovery vault.
+references: [https://attack.mitre.org/techniques/T1490/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:recovery-delete', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: high
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

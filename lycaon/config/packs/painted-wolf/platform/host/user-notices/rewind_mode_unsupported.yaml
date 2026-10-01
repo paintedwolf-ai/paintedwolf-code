@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Cannot rewind that way
+message: >-
+  Rewinding always returns to the state just before the message you pick.
+  No other starting point is available.
+suggested_action: Try the rewind again from the message itself.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - just before the message

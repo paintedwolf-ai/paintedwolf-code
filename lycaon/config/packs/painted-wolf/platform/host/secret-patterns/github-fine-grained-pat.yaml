@@ -1,0 +1,4 @@
+id: github-fine-grained-pat
+upstream_id: github-fine-grained-pat
+title: GitHub fine-grained token
+severity: critical

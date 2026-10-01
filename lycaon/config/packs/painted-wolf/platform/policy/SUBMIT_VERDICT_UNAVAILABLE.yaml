@@ -1,0 +1,26 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.review_reason
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_UNAVAILABLE"
+effect: block
+copy:
+  what: "The active session is not accepting a review verdict."
+  cause: "{{ paintedwolf.review_reason }}"
+  why: "submit_verdict belongs to an active workflow review_loop phase."
+  fix: "Inspect the current workflow state and use its declared exit channel. Preserve the existing run and accepted results."
+  instead: "Call submit_verdict only when the active review_loop accepts it; do not start or replace a workflow merely to submit a verdict."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: submit_verdict is unavailable outside an active review_loop phase.
+x-paintedwolf-scenarios:
+  - id: wrong_phase
+    vars: { review_reason: phase_has_no_review_loop }
+    expect_contains: ['Code: SUBMIT_VERDICT_UNAVAILABLE', 'review_loop']
+x-paintedwolf-emit: guard:workflow

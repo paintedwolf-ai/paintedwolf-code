@@ -1,0 +1,10 @@
+id: example-docs-writer
+name: Example Docs Writer
+description: Writes docs from code that already exists. No commands, no code edits.
+tool_profile: example_docs_only
+exec_mode: none
+topology_roles:
+  - worker
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/example-docs-writer.md

@@ -1,0 +1,244 @@
+tags: [process, verification]
+description: >-
+  Run a verification check and report its terminal outcome. Bare verify runs
+  the selected project command. With no selected command, supply the documented
+  check appropriate to the task. A different command or pipeline is rejected
+  when a project command is selected; use command(verification: true) for
+  targeted checks. Selecting a command does not require it after every edit.
+  outcome is passed, failed, or unverifiable. declared_command_match identifies
+  the selected command, not its success. A live handle has no verdict; wait on
+  it without starting a duplicate. Both verify and command accept the same
+  reviewed capabilities. A boundary refusal does not explain every failure in
+  a mixed run. Report blocked validation when no justified recovery remains.
+schema:
+  type: object
+  properties:
+    secret_use:
+      type: object
+      additionalProperties: false
+      required: [services]
+      description: >-
+        Request one reusable permission for the managed secrets used by this
+        process and their later use with the named HTTP services. The person
+        reviews both process access and these declared service addresses.
+        This does not claim the process or a daemon sends only to those services.
+        Put connection and socket requirements in capability_request as usual.
+      properties:
+        services:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 1024
+          description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
+    command:
+      type: string
+      description: Optional command override. When omitted, the host runs the project's test command.
+    pipeline:
+      type: array
+      description: >-
+        Multi-stage runs: one argv line per stage, Go-wired `|` (not with
+        command).
+      items:
+        type: string
+    cwd:
+      type: string
+      description: >-
+        Repo-relative working directory for this call. Use `@label` or
+        `@label/sub/path` for a non-primary project root. On a write worker,
+        resolved under the private branch (subdir allowed). Empty = branch root
+        (or active root when not on a worker). Must be a directory inside a
+        project root. Do not use `cd` compounds — pass the directory here.
+    stdin:
+      type: string
+      description: >-
+        Bytes on the process stdin — not flags or operands. Put those on
+        command.
+    stdin_from:
+      type: string
+      description: Read-scope stdin path
+    env:
+      type: object
+      default: {}
+      additionalProperties:
+        type: string
+      description: Inline env
+    stdout_to:
+      type: string
+      description: Optional write-scope path for stdout. Omit to keep stdout in the tool result tail.
+    stderr_to:
+      type: string
+      description: Optional write-scope path for stderr. Omit to keep stderr in the tool result tail.
+    append:
+      type: boolean
+      default: false
+      description: Append redirect targets
+    background:
+      type: boolean
+      default: false
+      description: Explicit concurrent job; returns its command handle immediately.
+    wait_ms:
+      type: integer
+      minimum: 1
+      maximum: 30000
+      description: Inline response window before returning a live handle (default/max 30s); not a kill. Ignored with background:true.
+    timeout_ms:
+      type: integer
+      minimum: 1000
+      maximum: 7200000
+      description: Execution deadline (default 10m). Unlike wait_ms, expiry stops the check tree.
+    allow_concurrent:
+      type: boolean
+      default: false
+      description: Admit this awaited command beside an existing one. Exact live duplicates are still rejected.
+    socks_proxy:
+      type: boolean
+      default: false
+      description: >-
+        Inject ALL_PROXY for mediated non-HTTP TCP (SOCKS5h). HTTP(S) already uses
+        HTTP_PROXY under default confinement — omit this unless the client needs
+        SOCKS. Does not widen the sandbox.
+    capability_request:
+      type: object
+      description: >-
+        Declares the resources this check needs before execution, using the
+        same fields as command. Listening and loopback connecting are separate
+        authorities. Narrow each request to the required resource; the host
+        reviews it before spawn. Omit for ordinary execution.
+      properties:
+        host_resources:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: string
+          description: Available host-resource ids; the host resolves their connection routes.
+        socket_paths:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: string
+          description: Absolute AF_UNIX socket paths (exact, not globs).
+        process_control:
+          description: >-
+            `true` requests, for this invocation,signaling outside the command sandbox.
+            Filesystem and network confinement stay applied. Actual signal
+            targets will be unobserved. Prefer process_signal for exact targets.
+          oneOf:
+            - type: boolean
+              enum: [true]
+            - type: object
+              additionalProperties: false
+        host_execution:
+          description: >-
+            `true` requests, for this invocation,execution outside the command sandbox,
+            including setuid programs and passwordless sudo. Filesystem,
+            network, and process effects will be unobserved. Use sudo -n;
+            password entry is not supported. Cannot combine with other
+            capability_request fields or socks_proxy.
+          oneOf:
+            - type: boolean
+              enum: [true]
+            - type: object
+              additionalProperties: false
+        direct_ip:
+          description: >-
+            `true` requests, for this invocation,direct outbound IP when HTTP mediation
+            or SOCKS is incompatible — UDP (NTP, QUIC), a portless bind, or a
+            client that ignores proxy variables. A destination list or
+            {"declared_destinations": ["udp://time.nist.gov:123"]} narrows
+            protocol and port. Actual destinations will be unobserved.
+          oneOf:
+            - type: boolean
+            - type: array
+              maxItems: 16
+              items:
+                type: string
+                maxLength: 256
+            - type: object
+              additionalProperties: false
+              properties:
+                declared_destinations:
+                  type: array
+                  description: >-
+                    Destinations this action will reach, as host:port with an optional
+                    tcp:// or udp:// scheme, for example udp://time.nist.gov:123.
+                    Declaring narrows the sandbox to those transports: udp://host:123
+                    permits UDP port 123 and refuses every other protocol and port.
+                    Declaring nothing leaves the action able to use any of them, so
+                    declare whenever you know them. Parsing is all-or-nothing - one entry
+                    without a port, or a scheme such as https:// that only implies one,
+                    drops the narrowing for the whole request. Narrowing bounds protocol
+                    and port only; the host cannot restrict which peer you reach.
+                  maxItems: 16
+                  items:
+                    type: string
+                    maxLength: 256
+        local_listen:
+          type: object
+          description: >-
+            Local listener authority (bind + accept) so this command can run a
+            dev server or test harness. Put it on the invocation that binds a
+            named port — a traceback is not the errno line, and a bind that
+            names no port is not a server (use direct_ip). Egress stays
+            mediated - this never widens outbound access. Declare ports to
+            narrow the profile; {} requests any local port. The sandbox cannot
+            bound the bind address, so a server told to bind 0.0.0.0 will; this
+            is "a local server", not "loopback only". Listen and
+            loopback-connect are separate fields.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact local ports to narrow the profile to.
+          additionalProperties: false
+        loopback_connect:
+          type: object
+          description: >-
+            Authority to connect to TCP or UDP services on this machine without
+            widening external egress. Put it on the invocation that connects —
+            a traceback is not the errno line. Use together with local_listen
+            when one command starts a server and then exercises it. Declare
+            ports to narrow the profile; {} requests any local port. Permission
+            to bind a server does not imply permission for its client connection.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact destination ports on this machine.
+          additionalProperties: false
+        write_root:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute path this invocation must write where the sandbox
+            refuses by default: outside its project and default cache roots, a
+            credential store, or a file agents load as instructions or settings
+            (AGENTS.md at any depth, project skills, `.paintedwolf` settings).
+            It is reviewed before spawn; command output can never grant it. A
+            refused write can fail silently, so declare it up front. A
+            recognized credential-store path grants exactly that file, not
+            temporary, lock, backup, or other sibling names.
+        read_path:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute protected path this invocation must read — key
+            material such as an SSH or signing key. It is reviewed before
+            spawn; command output can never grant it. The grant covers exactly
+            the declared file.
+      additionalProperties: false
+      minProperties: 1
+  additionalProperties: false

@@ -1,0 +1,17 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker subsystem owner failed
+message: >-
+  A subsystem owner on this worker ran and could not commit its outcome.
+  The isolated workspace was already prepared; this is not a workspace-setup
+  failure.
+suggested_action: >-
+  Retry the worker. If the same subsystem fails again, open the worker to see which
+  tool call could not settle.
+scenarios:
+  - id: generic
+    vars: {}
+    expect_contains:
+      - could not commit
+      - not a workspace-setup

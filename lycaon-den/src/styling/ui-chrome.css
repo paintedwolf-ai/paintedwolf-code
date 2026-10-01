@@ -1,0 +1,23 @@
+button,
+[role="button"],
+[data-den-chrome] {
+  user-select: none;
+}
+
+/* Text fields inside chrome remain selectable. */
+[data-den-chrome] :is(input, textarea, [contenteditable="true"]) {
+  user-select: text;
+}
+
+[data-den-prose] {
+  user-select: text;
+  cursor: auto;
+}
+
+/* Open popup triggers remain pressed, unless the control paints its own open
+   state — this rule is unlayered, so it would otherwise bury that recipe. */
+button[aria-haspopup][aria-expanded="true"]:not(:disabled):not(.den-quiet-icon-btn) {
+  background: var(--den-selection-hover);
+  box-shadow: var(--den-bevel-inset);
+  color: var(--den-text);
+}

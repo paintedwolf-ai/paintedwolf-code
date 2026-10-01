@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-next-change
+title: "Go to next change"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.nextChange"

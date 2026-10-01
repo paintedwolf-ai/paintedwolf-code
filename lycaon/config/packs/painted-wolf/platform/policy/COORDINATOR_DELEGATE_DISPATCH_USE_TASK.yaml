@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COORDINATOR_DELEGATE_DISPATCH_USE_TASK
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
+effect: block
+copy:
+  what: This session is not linked to a delegation (implement@ default chat).
+  cause: delegate_dispatch dispatches workflow delegation legs — not ambient implement-mode workers.
+  why: delegate_dispatch dispatches workflow delegation legs — not ambient implement-mode workers.
+  fix: Call `task(agent_type=implementer, …)` with the mutation-capable profile’s required scope and optional
+    focus paths, or chain verify legs via `task()`.
+  instead: Use `task()` for implement-mode worker dispatch — delegate_dispatch is for workflow delegation
+    legs only
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: delegate_dispatch requires a delegation — use `task()` in implement mode
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: session not linked to a delegation
+    path: src/main.go
+    profile: coordinator
+    tool: delegate_dispatch
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COORDINATOR_DELEGATE_DISPATCH_USE_TASK'
+  - task(
+selector:
+  tool:
+  - delegate_dispatch

@@ -1,0 +1,21 @@
+language: circom
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: signal-assertion-vulnerable
+  file: sample.circom
+  source: |
+    pragma circom 2.1.0;
+    template Check() { signal input value; assert(value == 1); }
+  want:
+  - lycaon.circom.signal-assertion
+  covers: []
+- name: signal-assertion-safe
+  file: sample.circom
+  source: |
+    pragma circom 2.1.0;
+    template Check() { signal input value; value === 1; }
+  want: []
+  covers:
+  - lycaon.circom.signal-assertion

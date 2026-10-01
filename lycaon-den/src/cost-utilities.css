@@ -1,0 +1,6 @@
+@utility den-cost-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}

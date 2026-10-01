@@ -1,0 +1,35 @@
+oar: '1.0'
+id: PAGE_ID_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - page_act
+    - page_snapshot
+    - page_close
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.id_required
+when: paintedwolf.rejection_code == "PAGE_ID_REQUIRED"
+effect: block
+copy:
+  what: id was missing or empty.
+  cause: page_act / page_snapshot / page_close address a held page by id.
+  why: Without an id the host cannot select which live page to drive.
+  fix: Pass id from a prior page_open result.
+  instead: Branch on Code PAGE_ID_REQUIRED; pass id from page_open
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_page_session
+x-paintedwolf-message: page tool requires a non-empty id from page_open
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: implement
+      tool: page_act
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PAGE_ID_REQUIRED'
+      - page_open

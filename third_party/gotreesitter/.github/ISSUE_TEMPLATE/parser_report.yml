@@ -1,0 +1,92 @@
+name: Parser correctness or performance report
+description: Report incorrect trees, incremental mismatches, crashes, or parser performance regressions.
+title: "[parser]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve gotreesitter. A small, self-contained reproduction is the fastest path to a fix.
+
+  - type: dropdown
+    id: report-type
+    attributes:
+      label: Report type
+      options:
+        - Incorrect parse or tree
+        - Incremental and fresh parse mismatch
+        - Crash, hang, or out-of-memory failure
+        - Performance regression
+        - Other parser behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: gotreesitter version or commit
+      placeholder: v0.46.0 or a commit SHA
+    validations:
+      required: true
+
+  - type: input
+    id: grammar
+    attributes:
+      label: Grammar or language
+      placeholder: Go, TypeScript, SQL, or a grammar repository and revision
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest source and edit sequence, or an exact command we can run.
+      placeholder: |
+        Source:
+        ...
+
+        Edit or command:
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe the expected tree, result, or performance range. C tree-sitter output is useful when available.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and fresh-parse comparison
+      description: Include the observed tree, error, timing, or memory result, and say whether a fresh parse behaves differently.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Provide the OS, architecture, Go version, and any relevant parser options or environment variables.
+      placeholder: Linux amd64; Go 1.25; GOMAXPROCS=1; default parser options
+    validations:
+      required: true
+
+  - type: textarea
+    id: receipts
+    attributes:
+      label: Optional diagnostics
+      description: Add work counters, max RSS, benchmark output, profiles, traces, or parity receipts when relevant.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I reduced this to a minimal reproduction or explained why I could not.
+          required: true
+        - label: I removed secrets, private source, and other sensitive data from this report.
+          required: true

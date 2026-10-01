@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-redo-lifecycle
+title: "Redo file operation"
+scope: "files"
+keywords:
+  - "redo move"
+  - "redo rename"
+  - "redo trash"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.redoLifecycle"

@@ -1,0 +1,12 @@
+tags: [git, inspection]
+description: "Resolve refs to SHAs JSON (`available`, `refs` with ref/sha/peeled). Replaces command: git rev-parse."
+schema:
+  type: object
+  properties:
+    refs:
+      type: array
+      items:
+        type: string
+      description: Ref names (HEAD, branch, tag, …)
+  required: [refs]
+  additionalProperties: false

@@ -1,0 +1,82 @@
+fixtures:
+- rule: app-destroy
+  positive:
+  - heroku apps:destroy --app my-api --confirm my-api
+  - fly apps destroy my-api --yes
+  - flyctl apps destroy my-api -y
+  - vercel remove my-project --yes
+  - vercel rm my-project -y
+  - netlify sites:delete abc123 --force
+  - railway delete --yes
+  - railway rm --project my-proj --yes
+  - render services delete my-service --confirm
+  - heroku pg:reset DATABASE_URL --confirm my-api
+  - heroku addons:destroy redis --confirm my-api
+  - sudo heroku apps:destroy --app my-api --confirm my-api
+  negative:
+  - heroku apps
+  - fly status
+  - heroku apps:info --app my-api
+  - fly apps list
+  - heroku apps:destroy --app my-api --confirm my-api --help
+  # No --confirm/--yes/--force present — these just sit on an interactive
+  # prompt rather than actually destroying anything.
+  - heroku apps:destroy --app my-api
+  - fly apps destroy my-api
+  - vercel remove my-project
+  - netlify sites:delete abc123
+  - railway delete
+  - render services delete my-service
+  - vercel ls
+  - render services list
+- rule: deploy-secret-set
+  positive:
+  - heroku config:set DATABASE_URL=postgres://example
+  - fly secrets set STRIPE_KEY=sk_live_example
+  - flyctl secrets import
+  - heroku config:unset DATABASE_URL
+  - netlify env:set API_KEY secret-value
+  - netlify env:unset API_KEY
+  - vercel env add API_KEY production
+  - vercel env rm API_KEY production
+  - railway variable set API_KEY=x
+  - railway variables set API_KEY=x
+  - railway vars set API_KEY=x
+  - railway variable delete API_KEY
+  - railway variables rm API_KEY
+  - railway var remove API_KEY
+  - railway variable --set API_KEY=x
+  - railway variables delete API_KEY --yes
+  - railway vars rm API_KEY --yes
+  - fly secrets unset OLD_KEY
+  - sudo heroku config:set DATABASE_URL=postgres://example
+  negative:
+  - heroku config
+  - fly secrets list
+  - heroku config:set DATABASE_URL=postgres://example --help
+  - vercel env ls
+  - heroku config:get DATABASE_URL
+  - railway variable list
+  - netlify env:list
+- rule: production-deploy
+  positive:
+  - vercel deploy --prod
+  - netlify deploy --prod
+  - heroku ps:scale web=0
+  - heroku maintenance:on --app my-api
+  - heroku rollback --app my-api
+  - fly scale count 3
+  - railway up
+  - railway redeploy
+  - render deploys create my-service
+  - sudo vercel deploy --prod
+  negative:
+  - vercel ls
+  - heroku ps
+  - vercel deploy --prod --help
+  - fly deploy
+  - heroku maintenance:off --app my-api
+  - railway status
+  # A project merely named "up-..." must not read as a deploy.
+  - railway link up-project
+  - render services list

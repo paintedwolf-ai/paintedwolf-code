@@ -1,0 +1,41 @@
+oar: '1.0'
+id: TASK_DECISION_PENDING
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.child_session_id
+  - paintedwolf.job_id
+when: paintedwolf.rejection_code == "TASK_DECISION_PENDING"
+effect: block
+copy:
+  what: Child session `{{ paintedwolf.child_session_id }}` still has an unanswered `needs_decision` from
+    job `{{ paintedwolf.job_id }}`.
+  cause: A raw `task(child_session_id=…)` resume ignores the pending decision stash — the worker is waiting
+    on `answer_decision`, not a new assignment.
+  why: Re-queuing the same leg without answering restarts work that already escalated a choice; the host
+    preserves the child for an answered resume.
+  fix: Call `answer_decision(job_id="{{ paintedwolf.job_id }}", option=…)`; use `ask_user` first only
+    if this decision needs the human. The host resumes the worker automatically. Do not re-`task` the
+    same child until the decision is cleared.
+  instead: Branch on Code; answer the pending decision before any child_session_id resume.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Cannot resume child_session_id {{ paintedwolf.child_session_id }} — job {{ paintedwolf.job_id
+  }} still needs answer_decision
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    child_session_id: child-1
+    job_id: job-1
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TASK_DECISION_PENDING'
+  - answer_decision
+  - job-1
+selector:
+  tool:
+  - task

@@ -1,0 +1,584 @@
+components:
+  schemas:
+    CodeScan:
+      type: object
+      required:
+      - id
+      - categories
+      - status
+      - findings_count
+      - created_at
+      - long_running
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        detail_pruned_at:
+          type: string
+          format: date-time
+          description: Historical result bodies were removed by an explicit retention policy at this time.
+        canonical_path:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanCategory
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        runtime:
+          $ref: "#/components/schemas/ScanRuntimePolicy"
+        started_at:
+          type: string
+          format: date-time
+        long_running_at:
+          type: string
+          format: date-time
+        long_running:
+          type: boolean
+          description: True after the scanner's soft runtime limit elapses; execution continues.
+        status:
+          $ref: "#/components/schemas/CodeScanStatus"
+        assessment_id:
+          type: string
+          format: uuid
+        finding_set_id:
+          type: string
+          format: uuid
+        target_kind:
+          $ref: "#/components/schemas/ScanTargetKind"
+        target_paths:
+          type: array
+          items:
+            type: string
+        deleted_paths:
+          type: array
+          items:
+            type: string
+        coverage_status:
+          $ref: "#/components/schemas/ScanCoverageStatus"
+        failure_code:
+          type: string
+        execution_fingerprint:
+          type: string
+        fingerprint_scheme:
+          type: string
+        execution_manifest:
+          $ref: "#/components/schemas/ScanExecutionManifest"
+        source_capture_quality:
+          type: string
+        source_admission_mode:
+          type: string
+          description: >-
+            How much of the tree the source generation observed. `scope` means
+            every directory the scope admitted was read; directories the
+            excludes floor, the project's declarations, or an ignore file left
+            out are policy, not cost. `scope_bounded` means a walk budget
+            stopped the observation short of the scope, so coverage is partial
+            and the generation names the unobserved folders.
+        progress:
+          $ref: "#/components/schemas/ScanProgress"
+        delta:
+          $ref: "#/components/schemas/ScanDelta"
+        findings_count:
+          type: integer
+          minimum: 0
+        guidance:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanGuidanceSummary"
+        findings:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/SecurityFinding
+        findings_stored:
+          type: integer
+          minimum: 0
+        findings_merged:
+          type: integer
+          minimum: 0
+          description: >-
+            Findings folded into another row at ingest because they share an
+            advisory. With findings_stored and the suppressed list this accounts
+            for every reported finding: count = stored + suppressed + merged.
+        findings_by_level:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        findings_by_kind:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        unmapped_count:
+          type: integer
+          minimum: 0
+        top_locations:
+          type: array
+          maxItems: 5
+          items:
+            $ref: ../board.yaml#/components/schemas/BoardScanTopLocation
+        agent_budget:
+          $ref: "#/components/schemas/ScanAgentBudget"
+        scan_scope:
+          type: string
+        supported_query_filters:
+          type: array
+          items:
+            type: string
+        ignored:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanIgnoredFinding
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanWarning"
+        warning_summary:
+          type: array
+          description: Counts of distinct diagnostics by kind; individual warnings are available in the full view.
+          items:
+            $ref: "#/components/schemas/ScanWarningSummary"
+        result:
+          type: object
+          additionalProperties: true
+        delegation_id:
+          type: string
+          format: uuid
+        workflow_run_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: >
+            Session that asked for this scan. A scan inside a workflow carries
+            both stamps; each backs the report scope that addresses it.
+        head_sha:
+          type: string
+        source_snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: >
+            Immutable content snapshot scanned by this run. HEAD is provenance only.
+            The sentinel value "warming" means the host is still publishing the
+            snapshot; the row is listable but not claimable by the runner yet.
+        replacement_scan_id:
+          type: string
+          format: uuid
+          description: Winning run when this pending scan lost an equivalent enqueue race.
+        trigger:
+          $ref: "#/components/schemas/ScanTrigger"
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    CodeScanPage:
+      x-go-generate: true
+      type: object
+      required:
+      - scans
+      additionalProperties: false
+      description: Stable newest-first keyset page of project scan history.
+      properties:
+        scans:
+          type: array
+          items:
+            $ref: "#/components/schemas/CodeScan"
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next older page, bound to the project root set.
+    CodeScanEvent:
+      x-go-generate: true
+      x-go-field-order: ["scan_id", "assessment_id", "categories", "status", "coverage_status", "failure_code", "findings_count", "error", "guidance", "runtime", "progress", "started_at", "long_running_at", "long_running"]
+      type: object
+      required:
+      - scan_id
+      - categories
+      - status
+      - findings_count
+      - long_running
+      additionalProperties: false
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        categories:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanCategory
+        status:
+          $ref: "#/components/schemas/CodeScanStatus"
+        assessment_id:
+          type: string
+          format: uuid
+        coverage_status:
+          $ref: "#/components/schemas/ScanCoverageStatus"
+        failure_code:
+          type: string
+        findings_count:
+          type: integer
+          minimum: 0
+        error:
+          type: string
+        guidance:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanGuidanceSummary"
+        runtime:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ScanRuntimePolicy"
+        progress:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ScanProgress"
+        started_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        long_running_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        long_running:
+          type: boolean
+    CodeScanStatus:
+      type: string
+      enum:
+      - pending
+      - running
+      - complete
+      - failed
+      - timed_out
+      - canceled
+      - superseded
+    ScanCoverageStatus:
+      type: string
+      description: What absence of findings proves. complete covers the whole tree; bounded covers every file the source generation admitted while a budget left directories unobserved (see source_admission_mode); partial means the engine could not read or parse part of what it was given; unavailable means the run produced no coverage.
+      enum:
+      - complete
+      - bounded
+      - partial
+      - unavailable
+    ScanTargetKind:
+      type: string
+      enum:
+      - full
+      - paths
+    ScanExecutionManifest:
+      x-go-generate: true
+      type: object
+      required:
+      - schema_version
+      - scanner_id
+      - engine
+      - driver
+      - scope_kind
+      - definition_fingerprint
+      - fingerprint_scheme
+      - runtime
+      additionalProperties: false
+      properties:
+        schema_version:
+          type: string
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        engine:
+          type: string
+        engine_version:
+          type: string
+        engine_sha256:
+          type: string
+        driver:
+          type: string
+        scope_kind:
+          type: string
+        parser_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        mapper_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        definition_fingerprint:
+          type: string
+        rules_sha256:
+          type: string
+        exclusions_sha256:
+          type: string
+        fingerprint_scheme:
+          type: string
+        runtime:
+          $ref: "#/components/schemas/ScanRuntimePolicy"
+    ScanAgentBudget:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        min_severity:
+          type: string
+        max_hints_per_injection:
+          type: integer
+          minimum: 0
+        dedupe_by:
+          type: string
+    ScanWarningKind:
+      type: string
+      description: >-
+        Analysis diagnostics.
+        target_unscanned is a coverage gap: the engine failed on a target
+        (timeout, out of memory, an internal error) so that target was never
+        analyzed, and its absence from the findings proves nothing.
+        source_moved is a coverage gap: the file changed while the engine
+        read the tree, so its findings describe neither the generation the
+        scan is bound to nor the tree as it is now.
+      enum:
+      - rule_parse_error
+      - file_partial_parse
+      - file_partial_semantics
+      - target_unscanned
+      - source_moved
+    ScanWarningSummary:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [kind, count, files, rules]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ScanWarningKind"
+        count:
+          type: integer
+          minimum: 1
+        files:
+          type: integer
+          minimum: 0
+        rules:
+          type: integer
+          minimum: 0
+    ScanWarning:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/ScanWarningKind"
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        file:
+          type: string
+        message:
+          type: string
+        construct:
+          type: string
+          description: Structured construct code from the engine or source parser; never inferred from diagnostic text.
+        start_line:
+          type: integer
+          minimum: 1
+        start_column:
+          type: integer
+          minimum: 1
+    ScanGuidanceSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - code
+      - message
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fix:
+          type: string
+        severity:
+          type: string
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        file:
+          type: string
+        line:
+          type: integer
+        count:
+          type: integer
+          minimum: 1
+    ScanTrigger:
+      type: string
+      enum:
+      - landed_change
+      - phase_enter
+      - manual
+      - scan_pack
+      - write_burst
+      - authority_refresh
+    ScannerSummary:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - driver
+      - engine
+      - scope_kind
+      - categories
+      - enabled
+      - check_ok
+      - catalog_source
+      - runtime
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        driver:
+          type: string
+          description: library | bundled | external
+        engine:
+          type: string
+        scope_kind:
+          type: string
+          enum:
+          - source_host_floor
+          - source_driver
+          - dependencies
+          - secrets
+          - container
+          - custom
+        categories:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanCategory
+        enabled:
+          type: boolean
+          description: True when this scanner currently occupies its category slot.
+        check_ok:
+          x-go-name: "CheckOK"
+          type: boolean
+        binary_found:
+          type: boolean
+        requires_binary:
+          type: string
+          description: Optional display label for the external binary
+        output_parser:
+          type: string
+        catalog_source:
+          type: string
+          enum:
+          - host
+          - user
+          - project
+        issues:
+          type: array
+          items:
+            type: string
+        command_summary:
+          type: string
+          description: Argv joined without expanding secrets; never env values
+        label:
+          type: string
+        description:
+          type: string
+        mapper_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        runtime:
+          $ref: "#/components/schemas/ScanRuntimePolicy"
+    ScanDelta:
+      x-go-generate: true
+      type: object
+      description: >-
+        Comparison of a path-scoped scan with its base generation. Complete
+        comparisons contain counts; unavailable comparisons contain a reason
+        and no counts. Unavailable history does not reduce current scan coverage.
+      required: [base_snapshot_id, status]
+      additionalProperties: false
+      properties:
+        base_snapshot_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        status:
+          type: string
+          enum: [complete, unavailable]
+        counts:
+          $ref: "#/components/schemas/ScanDeltaCounts"
+          x-go-type: "*ScanDeltaCounts"
+        unavailable_reason:
+          type: string
+          enum: [base_snapshot_missing, base_content_unavailable, base_scan_incomplete, current_scan_incomplete, comparison_failed]
+        unavailable_paths:
+          type: array
+          items:
+            type: string
+    ScanDeltaCounts:
+      x-go-generate: true
+      type: object
+      required: [introduced, fixed, persisted]
+      additionalProperties: false
+      properties:
+        introduced:
+          type: integer
+          minimum: 0
+        fixed:
+          type: integer
+          minimum: 0
+        persisted:
+          type: integer
+          minimum: 0
+    ScanProgress:
+      x-go-generate: true
+      type: object
+      description: >-
+        How far a chunked scan has come. An engine receives the generation's
+        files in bounded invocations; `completed` counts the invocations done
+        out of `chunks`, over `files` in total. Present only while a scan runs
+        in more than one invocation.
+      required: [chunks, completed, files]
+      additionalProperties: false
+      properties:
+        chunks:
+          type: integer
+          minimum: 0
+        completed:
+          type: integer
+          minimum: 0
+        files:
+          type: integer
+          minimum: 0
+    ScanRuntimePolicy:
+      x-go-generate: true
+      type: object
+      required:
+      - soft_limit_ms
+      - hard_limit_ms
+      - cpu_units
+      - parallelism
+      additionalProperties: false
+      properties:
+        soft_limit_ms:
+          type: integer
+          minimum: 1000
+          multipleOf: 1000
+          description: Runtime after which the scan is reported as long-running but continues.
+        hard_limit_ms:
+          type: integer
+          minimum: 0
+          multipleOf: 1000
+          description: Optional terminal runtime ceiling for one immutable generation. Zero allows the scan to finish without a runtime deadline; owner cancellation still applies.
+        cpu_units:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: Weighted CPU admission units reserved while the scanner runs.
+        parallelism:
+          type: integer
+          minimum: 1
+          maximum: 16
+          description: Scanner-internal worker limit.

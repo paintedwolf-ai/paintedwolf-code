@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-launcher-open
+command: painted-wolf/platform:launcher-open
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+P"
+  windows:
+    - "Mod+P"
+  linux:
+    - "Mod+P"

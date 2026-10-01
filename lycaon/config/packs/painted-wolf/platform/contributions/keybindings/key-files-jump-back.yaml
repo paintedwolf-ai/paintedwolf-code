@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-jump-back
+command: painted-wolf/platform:files-jump-back
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+-"
+  windows:
+    - "Mod+-"
+  linux:
+    - "Mod+-"

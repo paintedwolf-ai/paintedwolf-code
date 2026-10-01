@@ -1,0 +1,12 @@
+{
+  "on": "phase.entered",
+  "selector": {
+    "surface": "phase",
+    "phase": "execute",
+    "workflow": "recon-pack"
+  },
+  "effect": "inform",
+  "render": "workflow-recon-pack-execute",
+  "tier": "workflow",
+  "when": "true"
+}

@@ -1,0 +1,347 @@
+rules:
+- id: lycaon.dart.tls-verification-disabled
+  languages:
+  - dart
+  severity: ERROR
+  message: The HTTP client accepts every server certificate
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - dart
+    references:
+    - https://api.dart.dev/dart-io/HttpClient/badCertificateCallback.html
+    notes: Tracks constructed dart:io HttpClient instances through local assignments and aliases. Requires
+      visible, unambiguous constructor provenance; opaque factories and cross-file aliases are outside this
+      model.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: new $TYPE(...)
+      - pattern: $TYPE(...)
+    - metavariable-name:
+        metavariable: $TYPE
+        module: dart:io
+        symbol:
+        - HttpClient
+    exact: true
+    model-type: dart.io.HttpClient
+  pattern-sinks:
+  - patterns:
+    - pattern: $CLIENT.badCertificateCallback = (...) => true;
+    - focus-metavariable: $CLIENT
+    requires-model-type:
+      metavariable: $CLIENT
+      type: dart.io.HttpClient
+- id: lycaon.dart.server-command-injection
+  languages:
+  - dart
+  severity: ERROR
+  message: HTTP request values reach an explicit shell command
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:shelf/shelf.dart
+        symbol:
+        - Request
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: shelf.Request
+  - pattern-either:
+    - pattern: $REQ.url.queryParameters[...]
+    - pattern: $REQ.url.queryParametersAll[...]
+    - pattern: $REQ.url.path
+    - pattern: $REQ.url.pathSegments[...]
+    - pattern: $REQ.requestedUri.queryParameters[...]
+    - pattern: $REQ.requestedUri.path
+    - pattern: $REQ.headers[...]
+    - pattern: $REQ.headersAll[...]
+    - pattern: await $REQ.readAsString(...)
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: shelf.Request
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:dart_frog/dart_frog.dart
+        symbol:
+        - RequestContext
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_CONTEXT
+    model-type: dart_frog.RequestContext
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:dart_frog/dart_frog.dart
+        symbol:
+        - Request
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: dart_frog.Request
+  - pattern-either:
+    - pattern: $CTX.request
+    exact: true
+    label: HTTP_REQUEST
+    requires: HTTP_CONTEXT
+    requires-model-type:
+      metavariable: $CTX
+      type: dart_frog.RequestContext
+    model-type: dart_frog.Request
+    by-side-effect: true
+  - pattern-either:
+    - pattern: $CTX.mountedParams[...]
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_CONTEXT
+    requires-model-type:
+      metavariable: $CTX
+      type: dart_frog.RequestContext
+  - pattern-either:
+    - pattern: $REQ.url.queryParameters[...]
+    - pattern: $REQ.url.queryParametersAll[...]
+    - pattern: $REQ.url.path
+    - pattern: $REQ.url.pathSegments[...]
+    - pattern: $REQ.uri.queryParameters[...]
+    - pattern: $REQ.uri.path
+    - pattern: $REQ.headers[...]
+    - pattern: $REQ.params[...]
+    - pattern: await $REQ.body()
+    - pattern: await $REQ.json()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: dart_frog.Request
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $PROCESS.run('sh', ['-c', $X], ...)
+      - pattern: $PROCESS.start('sh', ['-c', $X], ...)
+    - metavariable-name:
+        metavariable: $PROCESS
+        module: dart:io
+        symbol:
+        - Process
+    - focus-metavariable: $X
+    requires: HTTP_VALUE
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - dart
+    - shelf
+    - dart_frog
+    references:
+    - https://pub.dev/documentation/shelf/latest/shelf/Request-class.html
+    - https://pub.dev/documentation/dart_frog/latest/dart_frog/RequestContext-class.html
+    - https://pub.dev/documentation/dart_frog/latest/dart_frog/Request-class.html
+    notes: Verified Shelf Request and Dart Frog request/context parameters supply request values to verified
+      dart:io Process.run/start calls with explicit sh -c. Imported types and process names must be visible
+      and unambiguous. Labels preserve request provenance through aliases and clear it on overwrite. Models
+      body strings, Dart Frog JSON values, headers, URL paths, query parameters and Dart Frog captured route
+      parameters. RequestContext.request is a final request identity. Request change/copyWith transformations
+      require separate field-sensitive models and currently report bounded uncertainty. Request constructors
+      with literal data and middleware context values are not external input sources. Additional API
+      validation uses dart_frog 1.2.6.
+- id: lycaon.dart.server-postgres-sql-injection
+  languages:
+  - dart
+  severity: ERROR
+  message: HTTP request values reach executed PostgreSQL query text
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:shelf/shelf.dart
+        symbol:
+        - Request
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: shelf.Request
+  - pattern-either:
+    - pattern: $REQ.url.queryParameters[...]
+    - pattern: $REQ.url.queryParametersAll[...]
+    - pattern: $REQ.url.path
+    - pattern: $REQ.url.pathSegments[...]
+    - pattern: $REQ.requestedUri.queryParameters[...]
+    - pattern: $REQ.requestedUri.path
+    - pattern: $REQ.headers[...]
+    - pattern: $REQ.headersAll[...]
+    - pattern: await $REQ.readAsString(...)
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: shelf.Request
+  - patterns:
+    - pattern-either:
+      - pattern: await $TYPE.open(...)
+      - pattern: await $TYPE.openFromUrl(...)
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:postgres/postgres.dart
+        symbol:
+        - Connection
+    exact: true
+    model-type: postgres.Connection
+    label: SQL_CONNECTION
+  - pattern: await $DB.prepare(...)
+    exact: true
+    model-type: postgres.Statement
+    label: SQL_STATEMENT
+    requires-model-type:
+      metavariable: $DB
+      type: postgres.Connection
+  - pattern: $ST.bind(...)
+    exact: true
+    model-type: postgres.ResultStream
+    label: SQL_RESULT_STREAM
+    requires-model-type:
+      metavariable: $ST
+      type: postgres.Statement
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:dart_frog/dart_frog.dart
+        symbol:
+        - RequestContext
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_CONTEXT
+    model-type: dart_frog.RequestContext
+  - patterns:
+    - pattern: $RET $HANDLER(..., $TYPE $REQ, ...) { ... }
+    - metavariable-name:
+        metavariable: $TYPE
+        module: package:dart_frog/dart_frog.dart
+        symbol:
+        - Request
+    - focus-metavariable: $REQ
+    exact: true
+    label: HTTP_REQUEST
+    model-type: dart_frog.Request
+  - pattern-either:
+    - pattern: $CTX.request
+    exact: true
+    label: HTTP_REQUEST
+    requires: HTTP_CONTEXT
+    requires-model-type:
+      metavariable: $CTX
+      type: dart_frog.RequestContext
+    model-type: dart_frog.Request
+    by-side-effect: true
+  - pattern-either:
+    - pattern: $CTX.mountedParams[...]
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_CONTEXT
+    requires-model-type:
+      metavariable: $CTX
+      type: dart_frog.RequestContext
+  - pattern-either:
+    - pattern: $REQ.url.queryParameters[...]
+    - pattern: $REQ.url.queryParametersAll[...]
+    - pattern: $REQ.url.path
+    - pattern: $REQ.url.pathSegments[...]
+    - pattern: $REQ.uri.queryParameters[...]
+    - pattern: $REQ.uri.path
+    - pattern: $REQ.headers[...]
+    - pattern: $REQ.params[...]
+    - pattern: await $REQ.body()
+    - pattern: await $REQ.json()
+    exact: true
+    label: HTTP_VALUE
+    requires: HTTP_REQUEST
+    requires-model-type:
+      metavariable: $REQ
+      type: dart_frog.Request
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.execute($QUERY, ...)
+    - focus-metavariable: $QUERY
+    requires: HTTP_VALUE
+    requires-model-type:
+      metavariable: $DB
+      type: postgres.Connection
+  - patterns:
+    - pattern: $ST.run(...)
+    - focus-metavariable: $ST
+    requires: SQL_QUERY
+    requires-model-type:
+      metavariable: $ST
+      type: postgres.Statement
+  - patterns:
+    - pattern-either:
+      - pattern: $STREAM.listen(...)
+      - pattern: $STREAM.toList()
+      - pattern: $STREAM.toSet()
+      - pattern: $STREAM.drain(...)
+      - pattern: $STREAM.first
+      - pattern: $STREAM.last
+      - pattern: $STREAM.single
+      - pattern: $STREAM.length
+      - pattern: $STREAM.isEmpty
+    - focus-metavariable: $STREAM
+    requires: SQL_QUERY
+    requires-model-type:
+      metavariable: $STREAM
+      type: postgres.ResultStream
+  pattern-propagators:
+  - patterns:
+    - pattern: $ST
+    - metavariable-pattern:
+        metavariable: $ST
+        pattern: await $DB.prepare($QUERY)
+    from: $QUERY
+    to: $ST
+    requires: HTTP_VALUE
+    label: SQL_QUERY
+    replace-labels:
+    - HTTP_VALUE
+    by-side-effect: false
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - dart
+    - shelf
+    - postgres
+    - dart_frog
+    references:
+    - https://pub.dev/documentation/shelf/latest/shelf/Request-class.html
+    - https://pub.dev/documentation/postgres/latest/postgres/Connection-class.html
+    - https://pub.dev/documentation/postgres/latest/postgres/Statement-class.html
+    - https://pub.dev/documentation/postgres/latest/postgres/ResultStream-class.html
+    - https://pub.dev/documentation/dart_frog/latest/dart_frog/RequestContext-class.html
+    - https://pub.dev/documentation/dart_frog/latest/dart_frog/Request-class.html
+    notes: Verified Shelf and Dart Frog request values reaching postgres Connection.execute, prepared
+      Statement.run, or directly consumed ResultStream values. Connection.open/openFromUrl establish receiver
+      identity. Prepared query text has a separate label from connection URLs and bound parameters. Unused
+      query objects and streams stay quiet. Validated with postgres 3.5.12 and shelf 1.4.2 on Dart 3.13.3.
+      Opaque injected connections, pools, transaction callbacks, arbitrary stream transformations and
+      cross-file identities need additional models. Models body strings, Dart Frog JSON values, headers, URL
+      paths, query parameters and Dart Frog captured route parameters. RequestContext.request is a final
+      request identity. Request change/copyWith transformations require separate field-sensitive models and
+      currently report bounded uncertainty. Request constructors with literal data and middleware context
+      values are not external input sources. Additional API validation uses dart_frog 1.2.6.

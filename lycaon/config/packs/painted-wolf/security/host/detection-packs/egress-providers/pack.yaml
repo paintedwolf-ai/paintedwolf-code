@@ -1,0 +1,10 @@
+id: egress-providers
+label: Observed connections
+description: >-
+  Observed outbound connections across the common developer internet: instance
+  metadata, payments, messaging, cloud control planes, data platforms (warehouses,
+  OLTP, search, vectors, ETL), streams and queues, specialist object storage,
+  CRM and customer-data APIs, forges, registries, publish endpoints, CI/CD,
+  secrets and auth SaaS, everyday developer SaaS APIs, reverse-tunnel providers,
+  public webhook/OOB-interaction collectors, and anonymous paste/file-drop and
+  consumer file storage services.

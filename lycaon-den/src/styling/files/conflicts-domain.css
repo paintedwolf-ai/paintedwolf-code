@@ -1,0 +1,158 @@
+.den-files-editor__conflict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: var(--text-den-hint);
+  color: var(--den-warning-text);
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+}
+
+.den-files-presence {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: var(--text-den-micro);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--den-text-muted);
+  background: color-mix(
+    in srgb,
+    var(--den-accent-signal) 14%,
+    var(--den-surface)
+  );
+  flex-shrink: 0;
+}
+
+.den-files-presence--editing {
+  color: var(--den-warning-text);
+  background: color-mix(in srgb, var(--den-warning) 16%, var(--den-surface));
+}
+
+.den-files-presence--sandbox {
+  font-style: italic;
+}
+
+.den-files-presence--waiting {
+  color: var(--den-accent-text);
+  background: color-mix(in srgb, var(--den-accent-signal) 18%, var(--den-surface));
+}
+
+/* The chat's color names which agent is involved. */
+.den-files-agent-name {
+  border-radius: 3px;
+  padding-inline: 2px;
+  margin-inline: -2px;
+  background-color: color-mix(in srgb, var(--den-agent-caret) 16%, transparent);
+}
+
+
+.den-files-tab__merge {
+  margin-left: 4px;
+  font-size: var(--text-den-micro);
+  color: var(--den-accent-text);
+}
+
+.cm-den-hunk-del {
+  background: var(--den-diff-delete-line);
+}
+
+
+.cm-den-hunk-add {
+  background: var(--den-diff-add-line);
+  transition: background-color 600ms ease;
+}
+
+/* Translucent theme fills keep the selection layer visible; the change
+   margin controls the row edge. */
+:is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b .cm-changedLine {
+  background: var(--den-diff-add-line);
+}
+
+:is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b .cm-changedText {
+  background: var(--den-diff-add-word);
+  border-radius: 2px;
+}
+
+:is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b .cm-deletedChunk {
+  background: var(--den-diff-delete-line);
+}
+
+:is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b .cm-deletedText {
+  background: var(--den-diff-delete-word);
+  border-radius: 2px;
+}
+
+/* Diff marks supply their own decoration for insertions and deletions. */
+:is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b :is(ins, del) {
+  text-decoration: none;
+}
+
+:is(.den-files-editor, .den-files-merge)
+  .cm-editor.cm-merge-b
+  .cm-chunkButtons button {
+  border-radius: var(--den-radius-sm);
+  box-shadow: var(--den-bevel-plate);
+  color: var(--den-on-accent);
+  font-size: var(--text-den-caption);
+  padding: 0 6px;
+}
+
+:is(.den-files-editor, .den-files-merge)
+  .cm-editor.cm-merge-b
+  .cm-chunkButtons button:active {
+  filter: var(--den-plate-pressed);
+}
+
+:is(.den-files-editor, .den-files-merge)
+  .cm-editor.cm-merge-b
+  .cm-chunkButtons
+  button[name="accept"] {
+  background: var(--den-status-positive);
+}
+
+:is(.den-files-editor, .den-files-merge)
+  .cm-editor.cm-merge-b
+  .cm-chunkButtons
+  button[name="reject"] {
+  background: var(--den-danger);
+}
+
+.den-files-merge__header,
+.den-files-merge__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: var(--text-den-hint);
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+}
+
+.den-files-merge__footer {
+  border-bottom: none;
+  border-top: 1px solid var(--den-line);
+}
+
+.den-files-merge__note {
+  color: var(--den-warning-text);
+  margin-left: auto;
+}
+
+.den-files-merge__hint {
+  margin-left: auto;
+  color: var(--den-text-muted);
+}
+
+.den-files-editor__notice {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+}
+

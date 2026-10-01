@@ -1,0 +1,52 @@
+{
+  "capture_id": "batch-wake-replay",
+  "parent_session_id": "8176e266-8a28-4fbc-91b8-0ad6b90e0141",
+  "description": "Trimmed transcript from session 20260616T125305Z — verifier terminal stacked with stale scheduled wake; duplicate synthesis bug (84d4c03b, 4ee72e7b).",
+  "history": [
+    {
+      "role": "user",
+      "content": "Try deliberately upgrading this repo with multiple workers in parallel — any small features you want."
+    },
+    {
+      "role": "assistant",
+      "content": "Dispatched three implementers for Timer, Notify, and Bookmark features."
+    },
+    {
+      "role": "tool",
+      "content": "<task job_id=\"timer-job\" agent_type=\"implementer\" state=\"complete\"><summary>Timer feature merged</summary></task>"
+    },
+    {
+      "role": "tool",
+      "content": "<task job_id=\"notify-job\" agent_type=\"implementer\" state=\"complete\"><summary>Notify feature merged</summary></task>"
+    },
+    {
+      "role": "tool",
+      "content": "<task job_id=\"bookmark-job\" agent_type=\"implementer\" state=\"complete\"><summary>Bookmark feature merged</summary></task>"
+    },
+    {
+      "role": "assistant",
+      "content": "All three workers have successfully merged! Let me verify the merged work by running tests."
+    },
+    {
+      "role": "tool",
+      "content": "<task job_id=\"verifier-job\" agent_type=\"command-verifier\" state=\"complete\"><report_json>{\"leg_status\":\"complete\",\"verify_result\":{\"passed\":true,\"exit_code\":0}}</report_json><summary>All targeted tests passed</summary></task>"
+    },
+    {
+      "role": "user",
+      "content": "Scheduled wake — your `wait()` **timer** trigger fired. Check the worker roster and pack board.",
+      "visibility": "internal"
+    },
+    {
+      "role": "user",
+      "content": "[host:loop-wake]",
+      "visibility": "internal"
+    }
+  ],
+  "loop_wake_state": {
+    "batch_phase": "synthesize",
+    "batch_seq": 2,
+    "workers_in_flight": 0,
+    "pending_overlay_ids": []
+  },
+  "progress_content": "## Plan\n- [x] Timer feature\n- [x] Notify feature\n- [x] Bookmark feature\n- [x] Verify"
+}

@@ -1,0 +1,5 @@
+code: missing_review_verdict_tool
+message: |
+  review_loop phase {{phase}} requires {{tool}} on surface {{surface}} — a terminal verdict is the only leave.
+replacement: |
+  Add {{tool}} to the surface tools for phase {{phase}}.

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-files-open-files-list
+slot: "app_menu.view"
+command: painted-wolf/platform:files-open-files-list
+group: "2"
+order: 5
+label: "Show open files"

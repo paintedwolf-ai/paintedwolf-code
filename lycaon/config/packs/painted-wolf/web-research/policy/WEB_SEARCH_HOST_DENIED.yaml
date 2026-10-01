@@ -1,0 +1,42 @@
+oar: '1.0'
+id: WEB_SEARCH_HOST_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - web_search
+  - fetch_url
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.host
+when: paintedwolf.rejection_code == "WEB_SEARCH_HOST_DENIED"
+effect: block
+copy:
+  what: A web tool tried to reach {{ paintedwolf.host }}, and the user declined that host for this session.
+  cause: This host is not available for web tools this session.
+  why: Retrying the same host loops on the same denial.
+  fix: Use a different public URL or provider only if it serves the intended research, is allowed, and respects
+    any direction the user attached. Do not re-request the denied host or route around the denial.
+  instead: Respect the denied host and user direction; report the dependency when no allowed source suffices
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:web_search_host
+x-paintedwolf-message: the user declined outbound access to this host
+x-paintedwolf-scenarios:
+- id: web_search_host_denied
+  vars:
+    host: api.example-search.test
+    tool: web_search
+  expect_contains:
+  - 'Code: WEB_SEARCH_HOST_DENIED'
+  - api.example-search.test
+  - different public URL
+- id: fetch_url_host_denied
+  vars:
+    host: docs.example.test
+    tool: fetch_url
+  expect_contains:
+  - 'Code: WEB_SEARCH_HOST_DENIED'
+  - docs.example.test

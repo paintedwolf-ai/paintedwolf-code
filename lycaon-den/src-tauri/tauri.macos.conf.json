@@ -1,0 +1,34 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "Painted Wolf Code",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false,
+        "decorations": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 16, "y": 16 },
+        "acceptFirstMouse": true
+      }
+    ]
+  },
+  "bundle": {
+    "externalBin": [
+      "binaries/pw-logs",
+      "binaries/bialy"
+    ],
+    "macOS": {
+      "files": {
+        "Helpers/Painted Wolf Code engine.app": "host-bundle/Painted Wolf Code engine.app"
+      }
+    }
+  }
+}

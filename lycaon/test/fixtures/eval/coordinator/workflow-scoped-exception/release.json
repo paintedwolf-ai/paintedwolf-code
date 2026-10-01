@@ -1,0 +1,18 @@
+{
+  "release": "R17",
+  "environment": "production",
+  "components": [
+    {
+      "component": "api",
+      "revision": "a8",
+      "check": "scan",
+      "result": "failed"
+    },
+    {
+      "component": "web",
+      "revision": "w4",
+      "check": "scan",
+      "result": "failed"
+    }
+  ]
+}

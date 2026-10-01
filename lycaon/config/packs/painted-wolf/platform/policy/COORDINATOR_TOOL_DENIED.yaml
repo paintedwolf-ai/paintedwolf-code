@@ -1,0 +1,28 @@
+oar: '1.0'
+id: COORDINATOR_TOOL_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "COORDINATOR_TOOL_DENIED"
+effect: block
+copy:
+  cause: The tool is unknown or denied for the active profile/surface
+  why: Each mode exposes a specific tool set; this call is outside it
+  fix: Use a tool the active mode allows (the offered tool schema lists them)
+  instead: Branch on Code; pick a tool the active mode allows
+  what: That tool is not available in the active mode
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: That tool is not available in the active mode
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COORDINATOR_TOOL_DENIED'

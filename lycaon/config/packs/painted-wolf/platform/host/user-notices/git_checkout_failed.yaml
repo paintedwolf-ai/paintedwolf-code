@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not switch branches
+message: >-
+  Git could not switch or create the branch. Check for conflicting local changes or a branch already in use by a worktree.
+suggested_action: >-
+  Commit or stash local changes before retrying. For a worktree chat, return to the project folder before switching branches.

@@ -1,0 +1,1 @@
+Strip editorial framing from plans, worker briefs, and synthesis — name neutral deliverables and observable scope, not loaded adjectives from the user's message. Brief scouts with paths/symbols to survey — not duplication hunts or refactor verdicts to confirm.

@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_heex
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "heex",
+		Extensions:     []string{".heex"},
+		Language:       HeexLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "; HEEx delimiters\n[\n  \"%>\"\n  \"--%>\"\n  \"-->\"\n  \"/>\"\n  \"<!\"\n  \"<!--\"\n  \"<\"\n  \"<%!--\"\n  \"<%\"\n  \"<%#\"\n  \"<%%=\"\n  \"<%=\"\n  \"</\"\n  \"</:\"\n  \"<:\"\n  \">\"\n  \"{\"\n  \"}\"\n] @punctuation.bracket\n\n; HEEx operators are highlighted as such\n\"=\" @operator\n\n; HEEx inherits the DOCTYPE tag from HTML\n(doctype) @constant\n\n; HEEx comments are highlighted as such\n(comment) @comment\n\n; Tree-sitter parser errors\n(ERROR) @error\n\n; HEEx tags and slots are highlighted as HTML\n[\n (tag_name) \n (slot_name) \n] @tag\n\n; HEEx attributes are highlighted as HTML attributes\n(attribute_name) @attribute\n\n; HEEx special attributes are highlighted as keywords\n(special_attribute_name) @keyword\n\n[\n  (attribute_value)\n  (quoted_attribute_value)\n] @string\n\n; HEEx components are highlighted as Elixir modules and functions\n(component_name\n  [\n    (module) @module\n    (function) @function\n    \".\" @punctuation.delimiter\n  ])\n",
+	})
+}

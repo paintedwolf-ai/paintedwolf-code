@@ -1,0 +1,32 @@
+oar: '1.0'
+id: SECURITY_DISABLED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+when: paintedwolf.rejection_code == "SECURITY_DISABLED"
+effect: block
+copy:
+  what: Security scanners are disabled for this device.
+  cause: '{{ paintedwolf.detail }}'
+  why: '{{ paintedwolf.detail }}'
+  fix: The user can enable Security scanners in Settings when scanning is intended. Report the disabled capability
+    and any unmet assessment; do not present a disabled scan as a clean result.
+  instead: Branch on Code; enable Security scanners in Settings before retrying scan tools
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:security
+x-paintedwolf-message: Security scanners is off
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: Security scanners is off — turn it on in Settings → Security scanners
+    path: src/main.go
+    profile: coordinator
+    tool: scan_pack
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SECURITY_DISABLED'

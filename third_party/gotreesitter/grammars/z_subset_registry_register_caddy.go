@@ -1,0 +1,12 @@
+//go:build grammar_subset && grammar_subset_caddy
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "caddy",
+		Language:       CaddyLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "(comment) @comment @spell\n\n[ \n  (env)\n  (argv)\n  (block_variable)\n  (placeholder)\n] @constant\n\n(value) @variable\n(directive (keyword) @attribute)\n(global_options (option (keyword) @attribute))\n\n(keyword) @keyword\n\n(boolean) @boolean\n\n(placeholder\n  [\n    \"{\"\n    \"}\"\n  ] @punctuation.special)\n\n\n[\n  (auto)\n] @variable.builtin\n\n[\n  (string_literal)\n  (quoted_string_literal)\n  (address)\n] @string\n\n[ \n  (matcher) \n  (route)\n  (snippet_name)\n] @string.special\n\n[\n  (numeric_literal)\n  (time)\n  (size)\n  (ip_literal)\n] @number\n\n[\n  \"{\"\n  \"}\"\n] @punctuation.bracket\n\n",
+	})
+}

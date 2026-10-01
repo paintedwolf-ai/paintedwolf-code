@@ -1,0 +1,503 @@
+language: kotlin
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: sql-injection-vulnerable
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { stmt.executeQuery("SELECT * FROM users WHERE name = " + req.getParameter("input")) }
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { stmt.executeQuery("SELECT 1") }
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: command-injection-vulnerable
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { Runtime.getRuntime().exec(req.getParameter("input")) }
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: command-injection-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { Runtime.getRuntime().exec("echo ready") }
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection
+- name: path-traversal-vulnerable
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { FileInputStream(req.getParameter("input")) }
+  want:
+  - lycaon.kotlin.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { FileInputStream("config.json") }
+  want: []
+  covers:
+  - lycaon.kotlin.path-traversal
+- name: open-redirect-vulnerable
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { res.sendRedirect(req.getParameter("input")) }
+  want:
+  - lycaon.kotlin.open-redirect
+  covers: []
+- name: open-redirect-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { res.sendRedirect("/home") }
+  want: []
+  covers:
+  - lycaon.kotlin.open-redirect
+- name: weak-digest-context-only
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { MessageDigest.getInstance("MD5") }
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { MessageDigest.getInstance("SHA-256") }
+  want: []
+  covers: []
+- name: weak-cipher-vulnerable
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { Cipher.getInstance("DES") }
+  want:
+  - lycaon.kotlin.weak-cipher
+  covers: []
+- name: weak-cipher-safe
+  file: sample.kt
+  source: |
+    fun handle(req: HttpServletRequest) { Cipher.getInstance("AES/GCM/NoPadding") }
+  want: []
+  covers:
+  - lycaon.kotlin.weak-cipher
+- name: ecb-encryption-vulnerable
+  file: sample.kt
+  source: |
+    fun run() { Cipher.getInstance("AES/ECB/PKCS5Padding") }
+  want:
+  - lycaon.kotlin.ecb-encryption
+  covers: []
+- name: ecb-encryption-safe
+  file: sample.kt
+  source: |
+    fun run() { Cipher.getInstance("AES/GCM/NoPadding") }
+  want: []
+  covers:
+  - lycaon.kotlin.ecb-encryption
+- name: rsa-without-padding-vulnerable
+  file: sample.kt
+  source: |
+    fun run() { Cipher.getInstance("RSA/ECB/NoPadding") }
+  want:
+  - lycaon.kotlin.rsa-without-padding
+  covers: []
+- name: rsa-without-padding-safe
+  file: sample.kt
+  source: |
+    fun run() { Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding") }
+  want: []
+  covers:
+  - lycaon.kotlin.rsa-without-padding
+- name: xml-external-entities-enabled-context-only
+  file: sample.kt
+  source: |
+    fun run() { factory.setFeature("http://xml.org/sax/features/external-general-entities",true) }
+  want: []
+  covers: []
+- name: xml-external-entities-enabled-safe
+  file: sample.kt
+  source: |
+    fun run() { factory.setFeature("http://xml.org/sax/features/external-general-entities",false) }
+  want: []
+  covers: []
+- name: precision-exec-argument-array
+  file: sample.kt
+  source: 'fun f(req: HttpServletRequest) { Runtime.getRuntime().exec(arrayOf("printf", "%s", req.getParameter("text")))
+    }'
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection
+- name: spring-requestparam-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Search { @GetMapping("/s") fun find(@RequestParam name: String) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + name + "''") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-expression-body-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Expr { @GetMapping("/e") fun find(@RequestParam name: String) = stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + name + "''") }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-string-interpolation-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.PathVariable
+
+    class Interp { @GetMapping("/i/{id}") fun byId(@PathVariable id: String) { stmt.executeUpdate("DELETE
+    FROM u WHERE id = ''$id''") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-use-site-target-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class UseSite { @GetMapping("/u") fun run(@param:RequestParam v: String) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + v + "''") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-nullable-parameter-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Nullable { @GetMapping("/n") fun run(@RequestParam v: String?) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''$v''") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-requestbody-property-sql-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.PostMapping
+
+    import org.springframework.web.bind.annotation.RequestBody
+
+    class Body { @PostMapping("/b") fun save(@RequestBody pet: Pet) { stmt.executeUpdate("INSERT
+    INTO pets VALUES (''" + pet.name + "'')") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-requestheader-command-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestHeader
+
+    class Exec { @GetMapping("/e") fun run(@RequestHeader agent: String) { Runtime.getRuntime().exec(agent)
+    } }
+
+    '
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: spring-requestpart-command-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.PostMapping
+
+    import org.springframework.web.bind.annotation.RequestPart
+
+    class Part { @PostMapping("/p") fun run(@RequestPart script: String) { ProcessBuilder("sh","-c",script)
+    } }
+
+    '
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: spring-matrixvariable-command-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.MatrixVariable
+
+    class Matrix { @GetMapping("/m") fun run(@MatrixVariable prog: String) { Runtime.getRuntime().exec(arrayOf(prog,
+    "-l")) } }
+
+    '
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: spring-cookievalue-path-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.CookieValue
+
+    class Cookie { @GetMapping("/c") fun run(@CookieValue theme: String) { FileInputStream(theme)
+    } }
+
+    '
+  want:
+  - lycaon.kotlin.path-traversal
+  covers: []
+- name: spring-modelattribute-path-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.ModelAttribute
+
+    class Model2 { @GetMapping("/f") fun run(@ModelAttribute form: Form) { Files.readString(Paths.get(form.path))
+    } }
+
+    '
+  want:
+  - lycaon.kotlin.path-traversal
+  covers: []
+- name: spring-bound-parameter-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Bound { @GetMapping("/b") fun run(@RequestParam v: String) { val ps = conn.prepareStatement("SELECT
+    * FROM u WHERE n = ?"); ps.setString(1, v); ps.executeQuery() } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-constant-query-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Constant { @GetMapping("/c") fun run(@RequestParam v: String) { stmt.executeQuery("SELECT
+    * FROM u") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-reassigned-before-sink-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Reassigned { @GetMapping("/r") fun run(@RequestParam v: String) { var w
+    = v; w = "fixed"; stmt.executeQuery("SELECT * FROM u WHERE n = ''" + w + "''")
+    } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-unused-value-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Unused { @GetMapping("/u") fun run(@RequestParam v: String) { val ignored
+    = "SELECT * FROM u WHERE n = ''$v''"; stmt.executeQuery("SELECT * FROM u") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-numeric-pathvariable-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.PathVariable
+
+    class Numeric { @GetMapping("/n/{id}") fun run(@PathVariable id: Int) { stmt.executeQuery("SELECT
+    * FROM u WHERE id = $id") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-unrelated-annotation-package-safe
+  file: sample.kt
+  source: 'import demo.internal.GetMapping
+
+    import demo.internal.RequestParam
+
+    class Unrelated { @GetMapping("/x") fun run(@RequestParam v: String) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + v + "''") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-locally-declared-annotation-safe
+  file: sample.kt
+  source: 'annotation class RequestParam(val value: String = "")
+
+    annotation class GetMapping(val value: String = "")
+
+    class LocalAnn { @GetMapping("/x") fun run(@RequestParam v: String) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + v + "''") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-unannotated-helper-safe
+  file: sample.kt
+  source: 'class Helper { fun build(name: String) { stmt.executeQuery("SELECT * FROM
+    u WHERE n = ''" + name + "''") } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.sql-injection
+- name: spring-fixed-program-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class FixedProgram { @GetMapping("/g") fun run(@RequestParam v: String) { Runtime.getRuntime().exec(arrayOf("ls",
+    v)) } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection
+- name: spring-fixed-destination-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class FixedPath { @GetMapping("/d") fun run(@RequestParam v: String) { FileInputStream("/etc/app.conf")
+    } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.path-traversal
+- name: spring-suspend-handler-vulnerable
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.RequestParam
+
+    class Susp { @GetMapping("/s") suspend fun run(@RequestParam v: String) { stmt.executeQuery("SELECT
+    * FROM u WHERE n = ''" + v + "''") } }
+
+    '
+  want:
+  - lycaon.kotlin.sql-injection
+  covers: []
+- name: spring-numeric-pathvariable-path-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.PathVariable
+
+    class NumericPath { @GetMapping("/d/{id}") fun run(@PathVariable id: Int) { FileInputStream(store.lookup(id))
+    } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.path-traversal
+- name: spring-numeric-pathvariable-command-safe
+  file: sample.kt
+  source: 'import org.springframework.web.bind.annotation.GetMapping
+
+    import org.springframework.web.bind.annotation.PathVariable
+
+    class NumericCmd { @GetMapping("/x/{id}") fun run(@PathVariable id: Long) { Runtime.getRuntime().exec("report
+    " + id) } }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection
+- name: spring-modelattribute-disabled-safe
+  file: Controller.kt
+  source: 'import org.springframework.web.bind.annotation.*
+
+    class Controller {
+
+    @GetMapping("/run") fun run(@ModelAttribute(binding=false) command: String) {
+    Runtime.getRuntime().exec(command) }
+
+    }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection
+- name: spring-modelattribute-enabled-vulnerable
+  file: Controller.kt
+  source: 'import org.springframework.web.bind.annotation.*
+
+    class Controller {
+
+    @GetMapping("/run") fun run(@ModelAttribute(binding=true) command: String) { Runtime.getRuntime().exec(command)
+    }
+
+    }
+
+    '
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: spring-modelattribute-disabled-neighbor-vulnerable
+  file: Controller.kt
+  source: 'import org.springframework.web.bind.annotation.*
+
+    class Controller {
+
+    @GetMapping("/run") fun run(@ModelAttribute(binding=false) server: String, @ModelAttribute
+    command: String) { Runtime.getRuntime().exec(command) }
+
+    }
+
+    '
+  want:
+  - lycaon.kotlin.command-injection
+  covers: []
+- name: spring-modelattribute-expression-disabled-safe
+  file: Controller.kt
+  source: 'import org.springframework.web.bind.annotation.*
+
+    class Controller {
+
+    @GetMapping("/run") fun run(@param:ModelAttribute(binding=false) command: String)
+    = Runtime.getRuntime().exec(command)
+
+    }
+
+    '
+  want: []
+  covers:
+  - lycaon.kotlin.command-injection

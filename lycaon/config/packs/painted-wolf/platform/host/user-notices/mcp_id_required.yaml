@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Provider id is required
+message: Every MCP provider needs an id so it can be listed and enabled.
+suggested_action: Enter a short id, then save.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - id
+      - save

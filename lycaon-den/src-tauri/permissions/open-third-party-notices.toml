@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-third-party-notices"
+description = "Open the bundled THIRD-PARTY-NOTICES.md with the OS default app."
+commands.allow = ["open_third_party_notices"]

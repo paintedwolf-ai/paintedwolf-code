@@ -1,0 +1,25 @@
+title: Delete Weaviate tenants
+id: b66c639d-01d4-4f5c-be38-42999c7caebd
+description: Permanently deletes one or more multi-tenancy partitions from a Weaviate collection.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: weaviate-cli
+    CommandLine|contains: ' delete tenants'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and not filter_rehearsal and not filter_local

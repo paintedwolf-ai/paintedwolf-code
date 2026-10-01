@@ -1,0 +1,107 @@
+{
+  "$comment": "Lycaon's own host schema. It is NOT part of the Open Agent Rules standard: the standard's vendored schemas live in schemas/oar/ and are never edited here. This one describes this engine's anchor catalog and binding grammar, which the format does not specify.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.dev/schemas/host/selector.schema.json",
+  "title": "AnchorBindingSelector",
+  "description": "Shared Binding selector vocabulary. Machine-state only — no NL heuristics. Empty / omitted clauses are permissive. Consumed by anchor-binding.schema.json and oar.schema.json via $ref.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "surface": {
+      "description": "Emit surface. Shared vocab uses singular; OAR rules may also set profiles[] / surfaces[].",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "coordinator",
+        "worker",
+        "phase",
+        null
+      ]
+    },
+    "phase": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Active workflow phase id, or null when unbound. Required scoping for many tier:workflow Bindings."
+    },
+    "workflow": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Workflow catalog id, or null when unbound. Workflow-scoped Binding authorship key."
+    },
+    "tool": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Singular tool at tool-lifecycle anchors. Prefer tools[] on OAR rules when matching a set."
+    },
+    "tools": {
+      "type": "array",
+      "description": "OAR multi-tool match (AND with other clauses). All listed tools are eligible; Emit supplies the concrete tool.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "profiles": {
+      "type": "array",
+      "description": "Tool profiles that must match (OAR-heavy).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "surfaces": {
+      "type": "array",
+      "description": "Session/manifest surfaces (e.g. implement_investigate). Optional OAR extension of singular surface.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "session_posture": {
+      "type": "array",
+      "description": "Optional session posture filter (e.g. spec).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "principal": {
+      "description": "Caller-identity scoping for multi-tenant adopters. Shared vocab enum or OAR string[] of api-key/team/tenant ids.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "human",
+            "coordinator",
+            "worker"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      ]
+    },
+    "ledger": {
+      "type": "object",
+      "description": "Typed ledger facts only — never natural language.",
+      "additionalProperties": true
+    }
+  }
+}

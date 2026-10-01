@@ -1,0 +1,101 @@
+components:
+  schemas:
+    SettingsPricingSource:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - enabled
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        enabled:
+          type: boolean
+          description: True for the single selected pricing source.
+    SettingsPricing:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        cost_tracking_enabled:
+          type: boolean
+        cost_tracking_since_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Present when tracking is on; stamped on off→on.
+        sources:
+          type: array
+          description: "Feed rows with at most one selected (`enabled: true`); tracking on requires exactly one."
+          items:
+            $ref: "#/components/schemas/SettingsPricingSource"
+    PricingSourceStatus:
+      type: string
+      enum:
+      - ok
+      - stale
+      - error
+      - offline
+    PricingSourceMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - label
+      - kind
+      - enabled
+      - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        label:
+          type: string
+        kind:
+          type: string
+        enabled:
+          type: boolean
+        status:
+          $ref: "#/components/schemas/PricingSourceStatus"
+        updated_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        fetched_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        model_count:
+          type: integer
+          minimum: 0
+        refreshing:
+          type: boolean
+          description: A background fetch of this source is in flight; status and freshness still describe the last settled attempt.
+    SettingsPricingResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - cost_tracking_enabled
+      - sources
+      - available_sources
+      additionalProperties: false
+      properties:
+        cost_tracking_enabled:
+          type: boolean
+        cost_tracking_since_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Present when tracking is on; stamped on off→on.
+        sources:
+          type: array
+          description: "Catalog feed rows with at most one selected (`enabled: true`); tracking on requires exactly one."
+          items:
+            $ref: "#/components/schemas/SettingsPricingSource"
+        available_sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/PricingSourceMeta"

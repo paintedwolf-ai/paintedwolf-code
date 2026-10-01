@@ -1,0 +1,39 @@
+oar: '1.0'
+id: COORDINATOR_WORKER_IN_FLIGHT
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  facts:
+    - paintedwolf.active_count
+    - paintedwolf.max_workers
+    - paintedwolf.active_worker_count
+    - paintedwolf.tool_is_task
+    - paintedwolf.worker_spawn_blocked
+    - paintedwolf.scope_mode
+    - paintedwolf.active_read_count
+    - paintedwolf.active_write_count
+    - paintedwolf.max_read_workers
+    - paintedwolf.max_write_workers
+when: paintedwolf.tool_is_task && paintedwolf.worker_spawn_blocked
+effect: block
+copy:
+  what: 'This `task()` would exceed the session worker limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write jobs are in flight.'
+  cause: The total limit or the limit for this {{ paintedwolf.scope_mode }} scope is full.
+  why: Read, write, and total concurrency have separate limits; capacity in another scope does not open this slot.
+  fix: 'Wait for at least one job to finish and its completion envelope to land, or synthesize existing envelopes before dispatching another `task()`.'
+  instead: 'Wait for a slot in the requested scope and the total worker limit, then dispatch only the remaining work'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Coordinator tried to spawn a worker while {{ paintedwolf.active_count }} job(s) are still pending or running (max {{ paintedwolf.max_workers }})
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      active_count: 32
+      detail: bad args
+      max_workers: 32
+      path: src/main.go
+      profile: coordinator
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_WORKER_IN_FLIGHT'

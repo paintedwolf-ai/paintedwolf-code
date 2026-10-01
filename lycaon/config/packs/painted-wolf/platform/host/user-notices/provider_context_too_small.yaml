@@ -1,0 +1,36 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - prompt_tokens
+    - max_context
+title: Model context too small
+message: >-
+  {% if model and max_context -%}
+  This turn's prompt is larger than {{ model }}'s {{ max_context }}-token context window on this host, so it would be truncated.
+  {%- else -%}
+  This turn's prompt is larger than the model's context window on this host, so it would be truncated.
+  {%- endif %}
+suggested_action: >-
+  Choose a model with a larger context window, or raise the host's context limit, in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_model
+    vars:
+      model: qwen3.5:27b
+      max_context: 4096
+    expect_contains:
+      - qwen3.5:27b
+      - 4096
+      - truncated
+  - id: generic
+    vars: {}
+    expect_contains:
+      - context window
+      - truncated

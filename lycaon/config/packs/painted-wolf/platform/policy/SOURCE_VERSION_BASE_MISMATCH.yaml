@@ -1,0 +1,35 @@
+oar: '1.0'
+id: SOURCE_VERSION_BASE_MISMATCH
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.detail
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "SOURCE_VERSION_BASE_MISMATCH"
+effect: block
+copy:
+  what: Base version mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
+  cause: The current file version does not match the expected base_version_id (compare-and-swap conflict).
+  why: The base_version_id guard protects against overwriting concurrent edits made by others or in another window.
+  fix: Query source_history to inspect the current head version before retrying the restore.
+  instead: Branch on Code; re-read current version from source_history
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:restore_version
+x-paintedwolf-message: current file version does not match base_version_id
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: current version v2 does not match expected v1
+      path: main.go
+      profile: implement
+      tool: restore_version
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_BASE_MISMATCH'

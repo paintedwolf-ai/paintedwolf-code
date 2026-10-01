@@ -1,0 +1,153 @@
+.cm-document-selection {
+  background: var(--den-window-selection);
+}
+.cm-document-selection-outline svg {
+  display: block;
+  overflow: visible;
+  fill: none;
+  stroke: var(--den-window-caret);
+  stroke-opacity: 0.45;
+  stroke-width: 1px;
+  stroke-linecap: square;
+}
+.cm-document-selection-layer {
+  pointer-events: none;
+}
+.cm-tooltip.cm-document-label {
+  background: var(--den-window-label);
+  color: var(--den-window-label-text);
+  border: 1px solid var(--den-window-caret);
+  border-radius: var(--den-radius-sm);
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: var(--text-den-caption);
+  pointer-events: none;
+}
+[data-den-contrast="more"] .cm-document-selection-outline svg { stroke-opacity: 0.85; }
+@media (forced-colors: active) {
+  .cm-document-caret { border-inline-start-style: dashed; }
+  .cm-document-selection-outline svg { stroke: Highlight; stroke-opacity: 1; stroke-dasharray: 3 2; }
+}
+
+/* Fades smooth bursts of agent activity. */
+.cm-agent-selection-layer,
+.cm-agent-caret-layer { pointer-events: none; }
+.cm-agent-fill { background: color-mix(in srgb, var(--den-agent-caret) 4%, transparent); }
+.cm-agent-outline svg {
+  display: block;
+  overflow: visible;
+  fill: none;
+  stroke: var(--den-agent-caret);
+  stroke-opacity: 0.5;
+  stroke-width: 1px;
+  stroke-linecap: square;
+}
+.cm-agent-outline.cm-agent-pending svg, .cm-agent-outline.cm-agent-whole-pending svg { stroke-dasharray: 3 3; }
+.cm-agent-caret {
+  border-inline-start: 2px solid var(--den-agent-caret);
+  margin-inline-start: -1px;
+  transition: left 450ms cubic-bezier(0.2, 0.7, 0.2, 1), top 450ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+/* A dashed rule marks a pending insertion. */
+.cm-agent-insertion {
+  border-top: 1px dashed color-mix(in srgb, var(--den-agent-caret) 50%, transparent);
+  transition: left 450ms cubic-bezier(0.2, 0.7, 0.2, 1), top 450ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.cm-agent-insertion::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -1px;
+  top: -40%;
+  height: 80%;
+  width: 2px;
+  background: color-mix(in srgb, var(--den-agent-caret) 75%, transparent);
+}
+.cm-agent-match {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--den-agent-caret) 8%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--den-agent-caret) 45%, transparent);
+}
+.cm-agent-match.cm-agent--stale { background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--den-agent-caret) 25%, transparent); }
+.cm-agent--entering { animation: den-agent-fade-in 700ms ease-out both; }
+.cm-agent--leaving { animation: den-agent-fade-out 1600ms cubic-bezier(0.25, 0, 0.2, 1) both; }
+/* Match fades preserve text opacity. */
+.cm-agent-match.cm-agent--entering { animation-name: den-agent-match-in; }
+.cm-agent-match.cm-agent--leaving { animation-name: den-agent-match-out; }
+@keyframes den-agent-fade-in { from { opacity: 0; } }
+@keyframes den-agent-fade-out { to { opacity: 0; } }
+@keyframes den-agent-match-in { from { background-color: transparent; box-shadow: inset 0 -1px 0 transparent; } }
+@keyframes den-agent-match-out { to { background-color: transparent; box-shadow: inset 0 -1px 0 transparent; } }
+/* The whole-file tint sits beneath the line numbers. */
+.cm-editor.cm-agent-file .cm-gutters::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--den-agent-file) 45%, transparent);
+  animation-delay: var(--den-agent-file-delay, 0ms);
+}
+.cm-editor.cm-agent-file--stale .cm-gutters::before { background: color-mix(in srgb, var(--den-agent-file) 25%, transparent); }
+.cm-editor.cm-agent-file--leaving .cm-gutters::before { animation-name: den-agent-fade-out; animation-duration: 1600ms; animation-timing-function: cubic-bezier(0.25, 0, 0.2, 1); animation-fill-mode: both; }
+.cm-agent-label--line {
+  background: color-mix(in srgb, var(--den-agent-caret) 10%, var(--den-surface-elevated));
+  color: var(--den-text);
+  border: 1px solid color-mix(in srgb, var(--den-agent-caret) 50%, transparent);
+  border-radius: var(--den-radius-sm);
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: var(--text-den-caption);
+  position: absolute;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  transition: left 450ms cubic-bezier(0.2, 0.7, 0.2, 1), top 450ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.cm-agent-label--pinned { transform: translateX(-100%); box-shadow: 0 0 0 3px var(--den-background); }
+.cm-agent-label--line > span { flex: none; }
+.cm-agent-label--line > small { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cm-agent-label small { color: var(--den-text-muted); font-size: inherit; }
+[data-den-contrast="more"] .cm-agent-outline svg { stroke-opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) {
+  .cm-agent--entering { animation: none; }
+  .cm-agent--leaving,
+  .cm-editor.cm-agent-file--leaving .cm-gutters::before { animation: none; opacity: 0; }
+  .cm-agent-match.cm-agent--leaving { opacity: 1; background: transparent; box-shadow: none; }
+  .cm-agent-caret,
+  .cm-agent-insertion,
+  .cm-agent-label--line { transition: none; }
+}
+@media (forced-colors: active) {
+  .cm-agent-caret { border-inline-start-style: dashed; }
+  .cm-agent-outline svg { stroke: Highlight; stroke-opacity: 1; }
+  .cm-agent-match { forced-color-adjust: none; box-shadow: inset 0 -1px 0 Highlight; }
+  .cm-editor.cm-agent-file .cm-gutters::before { background: transparent; box-shadow: inset -1px 0 0 Highlight; }
+}
+
+.den-document-windows__heading { padding: 4px 8px 8px; font-size: var(--text-den-caption); color: var(--den-text-muted); }
+.den-document-windows__swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--den-window-caret); }
+.den-document-windows__focus { display: flex; flex-direction: column; text-align: start; flex: 1; min-width: 0; padding: 4px; border: 0; border-radius: var(--den-radius-sm); background: transparent; color: var(--den-text); font: inherit; cursor: pointer; }
+.den-document-windows__focus:hover:not(:disabled) { background: var(--den-tint-2); }
+.den-document-windows__detail { font-size: var(--text-den-caption); color: var(--den-text-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.files-source-return { flex: none; padding: 6px 12px; border-bottom: 1px solid var(--den-line); }
+
+.den-file-operations {
+  position: absolute;
+  z-index: 7;
+  inset-inline: 8px;
+  bottom: 52px;
+  max-block-size: 14rem;
+  overflow: auto;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  color: var(--den-text);
+  box-shadow: var(--den-shadow-md);
+  font-size: var(--text-den-label);
+}
+.den-file-operations__entry + .den-file-operations__entry { border-top: 1px solid var(--den-line); }

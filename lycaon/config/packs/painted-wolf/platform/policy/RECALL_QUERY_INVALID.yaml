@@ -1,0 +1,36 @@
+oar: '1.0'
+id: RECALL_QUERY_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - recall
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.recall_allowed_fields
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RECALL_QUERY_INVALID"
+effect: block
+copy:
+  what: 'The recall query was rejected: {{ paintedwolf.rejection_reason }}.'
+  cause: A filter field, a value, or the boolean grouping is not part of the query language.
+  why: The query compiles to a bounded lookup over the recorded index; an unparsed query has no safe reading.
+  fix: Use free text plus the current filter fields {{ paintedwolf.recall_allowed_fields }} (field:value). Combine
+    with uppercase AND / OR / NOT and parentheses; lowercase and, or, not are ordinary words. Quote a phrase to
+    match it exactly or when it contains a colon. Correct the reported filter/value/grouping while retaining intended
+    scope.
+  instead: Branch on Code RECALL_QUERY_INVALID; fix the filter or drop it and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
+x-paintedwolf-message: That recall query did not parse.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: recall
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RECALL_QUERY_INVALID'

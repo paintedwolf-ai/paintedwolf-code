@@ -1,0 +1,5 @@
+code: depth_param_missing
+message: |
+  Phase {{phase}} depth_param {{param}} is not a depth-typed parameter.
+replacement: |
+  Declare parameters.{{param}} with type: depth.

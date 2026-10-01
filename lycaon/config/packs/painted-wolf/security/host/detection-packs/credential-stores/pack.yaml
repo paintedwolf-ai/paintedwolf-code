@@ -1,0 +1,7 @@
+id: credential-stores
+label: Credential stores
+description: >-
+  Files a CLI authenticates with. Naming one here does not protect it — the write
+  boundary already refuses every write outside the attached roots. What a rule here
+  changes is the offer at that refusal: the person is asked about the one file rather
+  than the directory that also holds the tool's plugins, exec blocks and init scripts.

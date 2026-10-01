@@ -1,0 +1,37 @@
+oar: '1.0'
+id: CAPTURE_VIEWPORT_BOUNDS
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.viewport_width
+  - paintedwolf.viewport_height
+  - paintedwolf.viewport_min_edge
+  - paintedwolf.viewport_max_edge
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_VIEWPORT_BOUNDS"
+effect: block
+copy:
+  what: 'Requested viewport {{ paintedwolf.viewport_width }} × {{ paintedwolf.viewport_height }} is outside
+    the supported range: each edge must be between {{ paintedwolf.viewport_min_edge }} and {{ paintedwolf.viewport_max_edge
+    }}.'
+  cause: At least one supplied edge exceeds the managed browser’s emulated viewport range.
+  why: Geometry, reflow, and visibility facts only mean something at a viewport a user could actually have.
+  fix: Pass width and height within min_edge and max_edge, or omit the viewport for the host default. To show
+    a page taller than one screen, capture the screens you need rather than widening the frame.
+  instead: Branch on Code CAPTURE_VIEWPORT_BOUNDS; request an in-range viewport, then retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: Requested viewport is outside the emulated range
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_VIEWPORT_BOUNDS'

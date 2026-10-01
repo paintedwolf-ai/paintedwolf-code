@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-open-files
+command: painted-wolf/platform:search-open-files
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+O"
+  windows:
+    - "Mod+O"
+  linux:
+    - "Mod+O"

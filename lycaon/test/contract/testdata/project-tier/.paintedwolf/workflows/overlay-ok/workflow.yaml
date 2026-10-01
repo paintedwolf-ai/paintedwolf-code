@@ -1,0 +1,7 @@
+id: overlay-ok
+version: 1.0.0
+phases:
+  - id: research
+    activity_label: Researching
+    bind_topology_stage: research
+    complete_when: topology_stage_complete

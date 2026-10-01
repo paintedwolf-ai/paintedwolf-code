@@ -1,0 +1,36 @@
+oar: '1.0'
+id: CWD_OUT_OF_SCOPE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - command
+    - verify
+    - terminal_open
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.cwd
+when: paintedwolf.rejection_code == "CWD_OUT_OF_SCOPE"
+effect: block
+copy:
+  what: '`command`/`verify`/`terminal_open` cwd {{ paintedwolf.cwd }} is outside the project read scope for this profile.'
+  cause: Working directory must resolve within attached project roots and read scope.
+  why: Per-call cwd is validated like any path op — out-of-scope paths are rejected before the command runs.
+  fix: 'Retry with a repo-relative directory inside read scope, or `@label/sub/path` for a non-primary root (list_dir from `.` to navigate).'
+  instead: Branch on Code; pick an in-scope directory
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: '`command`/`terminal_open` cwd outside project scope'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      cwd: /etc
+      profile: implement
+      tool: command
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: CWD_OUT_OF_SCOPE'
+      - read scope

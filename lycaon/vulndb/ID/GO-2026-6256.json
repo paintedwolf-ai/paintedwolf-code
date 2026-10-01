@@ -1,0 +1,95 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/moby/buildkit/solver/llbsolver/ops",
+      "symbols": [
+       "BuildOp.CacheMap",
+       "BuildOp.Exec",
+       "ExecOp.CacheMap",
+       "ExecOp.Exec",
+       "FileOpSolver.Solve",
+       "NewBuildOp",
+       "NewDiffOp",
+       "NewExecOp",
+       "NewFileOp",
+       "NewMergeOp",
+       "NewPassthroughOp",
+       "NewSourceOp",
+       "SourceOp.CacheMap",
+       "SourceOp.Exec",
+       "diffOp.CacheMap",
+       "diffOp.Exec",
+       "fileOp.CacheMap",
+       "fileOp.Exec",
+       "mergeOp.CacheMap",
+       "mergeOp.Exec",
+       "passthroughOp.CacheMap",
+       "passthroughOp.Exec",
+       "readUser",
+       "staticEmulatorMount.Mount"
+      ]
+     },
+     {
+      "path": "github.com/moby/buildkit/executor/oci",
+      "symbols": [
+       "GetUser",
+       "openUserFile"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/moby/buildkit"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.31.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-61712",
+  "GHSA-72x6-4j93-7w86"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6256"
+ },
+ "details": "BuildKit has a possible runtime DoS via unbounded group parsing in github.com/moby/buildkit",
+ "id": "GO-2026-6256",
+ "modified": "2026-08-25T15:00:08Z",
+ "published": "2026-08-25T15:00:08Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/moby/buildkit/security/advisories/GHSA-72x6-4j93-7w86"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/moby/buildkit/commit/408266e4ba254cecabedaacdad6905de4d2a75a1"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/moby/buildkit/commit/69a3924648e485acb3faad3081e03a8554431255"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/moby/buildkit/releases/tag/v0.31.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "BuildKit has a possible runtime DoS via unbounded group parsing in github.com/moby/buildkit"
+}

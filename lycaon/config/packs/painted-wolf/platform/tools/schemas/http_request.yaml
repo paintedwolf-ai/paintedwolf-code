@@ -1,0 +1,189 @@
+tags: [network, http]
+description: "Send one bounded request to an API, webhook, or service endpoint and return its status, headers, and raw body. Replaces command: ad hoc HTTP API request."
+schema:
+  type: object
+  properties:
+    url:
+      type: string
+      description: Absolute HTTP(S) URL without userinfo.
+    method:
+      type: string
+      enum: [GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS]
+      default: GET
+      description: HTTP method to send.
+    query:
+      type: array
+      maxItems: 64
+      description: Query parameters appended in order; existing URL query preserved.
+      items:
+        type: object
+        properties:
+          name: {type: string, minLength: 1, maxLength: 256, description: Parameter name.}
+          value: {type: string, maxLength: 8192, description: Parameter value, unencoded.}
+        required: [name, value]
+        additionalProperties: false
+    headers:
+      type: array
+      maxItems: 64
+      description: Ordered headers; host controls routing headers.
+      items:
+        type: object
+        properties:
+          name: {type: string, minLength: 1, maxLength: 128, description: Header name.}
+          value: {type: string, maxLength: 8192, description: Header value.}
+        required: [name, value]
+        additionalProperties: false
+    auth:
+      type: object
+      description: Host authorization; supports {{paintedwolf-secret:…}}. Excludes Authorization header.
+      properties:
+        scheme: {type: string, enum: [basic, bearer], description: basic encodes username:password; bearer sends token.}
+        username: {type: string, maxLength: 512, description: Basic username, no colon.}
+        password: {type: string, maxLength: 8192, description: Basic password.}
+        token: {type: string, maxLength: 8192, description: Bearer token.}
+      required: [scheme]
+      additionalProperties: false
+    body_text:
+      type: string
+      maxLength: 5242880
+      description: UTF-8 request body. One body source per request.
+    body_json:
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: array
+          items: {}
+      description: JSON object or array, not serialized text.
+    body_path:
+      type: string
+      description: Project-scoped file to send, up to 32 MiB.
+    body_form:
+      type: array
+      maxItems: 64
+      description: Ordered key-value fields sent as application/x-www-form-urlencoded.
+      items:
+        type: object
+        properties:
+          name: {type: string, minLength: 1, maxLength: 256, description: Field name.}
+          value: {type: string, maxLength: 5242880, description: Literal field value, unencoded.}
+        required: [name, value]
+        additionalProperties: false
+    form:
+      type: array
+      maxItems: 64
+      description: Ordered multipart/form-data parts; sends a value or project file, up to 32 MiB total.
+      items:
+        type: object
+        properties:
+          name: {type: string, minLength: 1, maxLength: 256, description: Field name.}
+          value: {type: string, maxLength: 5242880, description: Literal field value.}
+          path: {type: string, description: Project-scoped file for this part.}
+          filename: {type: string, maxLength: 256, description: Sent filename; defaults to file name.}
+          content_type: {type: string, maxLength: 128, description: Part content type; defaults to application/octet-stream.}
+        required: [name]
+        additionalProperties: false
+    cookie_jar:
+      type: string
+      minLength: 1
+      maxLength: 64
+      description: >-
+        Named jar storing cookies as a managed secret; values never appear in results. Echo with
+        {{cookie:name}} in header or body; result lists names held.
+    token_jar:
+      type: string
+      minLength: 1
+      maxLength: 64
+      description: >-
+        Named jar storing captured tokens as a managed secret, each bound to the service that
+        issued it. Echo with {{token:name}} in header or body: placed without review at the
+        issuer, reviewed as a disclosure anywhere else. Values never appear in results or disk
+        responses; the receipt lists names and issuers.
+    capture_tokens:
+      type: array
+      maxItems: 16
+      description: Extract token values from response headers or JSON body into the token jar.
+      items:
+        type: object
+        properties:
+          name: {type: string, minLength: 1, maxLength: 64, description: Token name to store.}
+          from: {type: string, minLength: 1, maxLength: 128, description: Extraction source ('json:path' or 'header:name').}
+        required: [name, from]
+        additionalProperties: false
+    host_header:
+      type: string
+      maxLength: 256
+      description: Override HTTP Host header without changing destination network dial.
+    resolve:
+      type: array
+      maxItems: 16
+      description: Custom DNS resolution mapping host to IP and optional port.
+      items:
+        type: object
+        properties:
+          host: {type: string, minLength: 1, maxLength: 256, description: Hostname to resolve.}
+          ip: {type: string, minLength: 1, maxLength: 64, description: IP address to dial.}
+          port: {type: integer, minimum: 1, maximum: 65535, description: Optional port constraint.}
+        required: [host, ip]
+        additionalProperties: false
+    timeout_ms:
+      type: integer
+      minimum: 1000
+      maximum: 300000
+      default: 30000
+      description: Deadline in milliseconds for the exchange, including redirects and body.
+    redirects:
+      type: string
+      enum: [none, safe]
+      default: none
+      description: safe follows up to 5 hops; 303/POST 301-302 become GET; drops caller headers across origins.
+    response_body:
+      type: string
+      enum: [include, discard]
+      default: include
+      description: include returns text inline to 128 KiB (spills to file if larger); discard skips body.
+    response_path:
+      type: string
+      description: Project path streaming body verbatim up to 256 MiB; returns receipt, not body.
+    capability_request:
+      type: object
+      description: Exact loopback client authority.
+      properties:
+        loopback_connect:
+          type: object
+          description: Loopback authority for exact ports.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              uniqueItems: true
+              description: Loopback TCP ports to allow.
+              items: {type: integer, minimum: 1, maximum: 65535}
+          required: [ports]
+          additionalProperties: false
+      required: [loopback_connect]
+      additionalProperties: false
+    unredact:
+      type: string
+      maxLength: 64
+      description: A redaction receipt from the same request. Never invent one.
+    unix_socket:
+      type: string
+      description: Unix domain socket to send the request through, absolute or project-relative. The socket is the destination and is approved like any local service socket; the URL supplies only the path and Host header.
+  required: [url]
+  allOf:
+    - not: {required: [body_text, body_json]}
+    - not: {required: [body_text, body_path]}
+    - not: {required: [body_text, body_form]}
+    - not: {required: [body_text, form]}
+    - not: {required: [body_json, body_path]}
+    - not: {required: [body_json, body_form]}
+    - not: {required: [body_json, form]}
+    - not: {required: [body_path, body_form]}
+    - not: {required: [body_path, form]}
+    - not: {required: [body_form, form]}
+    - not:
+        required: [response_path, response_body]
+        properties:
+          response_body: {const: discard}
+  additionalProperties: false

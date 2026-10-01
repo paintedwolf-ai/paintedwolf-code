@@ -1,0 +1,49 @@
+title: Bialy decision engine crates (`lycaon/internal/decide/native`)
+intro: |
+  The packaged local inference engine uses Candle on every platform and MLX on Apple silicon.
+  Model weights and trained heads are a separate, coordinated release described in
+  [Decision engine](../decision-engine.md). Crate updates do not update those artifacts.
+manifest:
+  kind: cargo
+  path: lycaon/internal/decide/native/Cargo.toml
+  lock: lycaon/internal/decide/native/Cargo.lock
+  dependabot_group: bialy-dependencies
+packages:
+  candle-core:
+    urgency: moderate
+    friction: high
+    notes: |
+      Update with candle-nn. Validate CPU and the shipped GPU backends with `./task decide:test`
+      and the decision-engine evaluation procedure before release.
+  candle-nn:
+    urgency: moderate
+    friction: high
+    notes: |
+      Keep aligned with candle-core; numerical changes can affect the trained heads.
+  mlx-rs:
+    urgency: moderate
+    friction: high
+    notes: |
+      Apple silicon backend. Review its compiled MLX version and bundled notices, rebuild the
+      metallib, and verify inference on Apple silicon.
+  tokenizers:
+    urgency: high
+    friction: high
+    notes: |
+      Tokenization must agree with the pinned checkpoint and trained heads. Treat 0.x minor
+      upgrades as breaking and compare token IDs and ranking results before adoption.
+  clap:
+    urgency: low
+    friction: low
+  indexmap:
+    urgency: low
+    friction: low
+  serde:
+    urgency: moderate
+    friction: low
+  serde_json:
+    urgency: high
+    friction: low
+  thiserror:
+    urgency: low
+    friction: low

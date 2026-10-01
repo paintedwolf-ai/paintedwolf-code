@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-context-security
+slot: "app_menu.go"
+command: painted-wolf/platform:go-context-security
+group: "2"
+order: 7
+label: "Security scanners"

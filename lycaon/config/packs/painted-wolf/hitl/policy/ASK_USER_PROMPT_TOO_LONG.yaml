@@ -1,0 +1,39 @@
+oar: '1.0'
+id: ASK_USER_PROMPT_TOO_LONG
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ask_prompt_runes
+  - paintedwolf.ask_prompt_limit
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_PROMPT_TOO_LONG"
+effect: block
+copy:
+  what: The trimmed question is {{ paintedwolf.ask_prompt_runes }} Unicode code points; the current limit is {{
+    paintedwolf.ask_prompt_limit }}.
+  cause: The question exceeds the decision card’s text bound.
+  why: Keep each question focused on one decision that can be answered from the visible context.
+  fix: Shorten to one decision within {{ paintedwolf.ask_prompt_limit }} Unicode code points. Keep material constraints
+    and use options or brief Markdown context where useful.
+  instead: Branch on Code ASK_USER_PROMPT_TOO_LONG; shorten the question without losing its decision context
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: prompt exceeds max length
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: ask_user
+    profile: coordinator
+    ask_prompt_runes: 901
+    ask_prompt_limit: 900
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ASK_USER_PROMPT_TOO_LONG'
+  - '901'
+  - '900'

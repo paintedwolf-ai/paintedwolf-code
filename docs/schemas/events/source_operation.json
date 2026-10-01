@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/source_operation.json",
+  "$ref": "../../openapi/components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceOperationEvent"
+}

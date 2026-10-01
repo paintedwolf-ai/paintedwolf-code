@@ -1,0 +1,15 @@
+id: plan-reviewer
+name: Plan reviewer
+description: Advisory plan markdown review (primary model)
+tool_profile: plan_review_readonly
+exec_mode: none
+capabilities:
+  - plan_review
+topology_roles:
+  - worker
+  - gate
+dispatch_lanes:
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/plan-reviewer.md

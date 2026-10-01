@@ -1,0 +1,17 @@
+id: plan-writer
+name: Plan writer
+description: Creates and updates blueprint markdown under ${overlay_dir}/blueprints only
+tool_profile: plan_write_only
+exec_mode: none
+skills:
+  - use-secrets-without-reading-them
+capabilities:
+  - plan
+  - write
+topology_roles:
+  - worker
+dispatch_lanes:
+  - plan
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/plan-writer.md

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Chat is archived
+message: Archived chats can't be pinned.
+suggested_action: Unarchive the chat from All chats, then pin it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - can't be pinned

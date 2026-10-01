@@ -1,0 +1,70 @@
+<!-- Source art for the macOS dock icon (icon.icns); README.md has the build
+     commands. Apple's grid: an 824 rounded square centred in 1024, radius
+     185.4, with the cast shadow in the margin. Keep the margin — it sizes the
+     icon against every other app in the dock. Colors are literals: this is
+     rasterized once, never themed at runtime. -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="silhouette">
+      <rect x="100" y="100" width="824" height="824" rx="185.4" ry="185.4"/>
+    </clipPath>
+
+    <filter id="cast" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+
+    <!-- Lit from above; the edges below only sharpen this ramp. -->
+    <linearGradient id="field" x1="0" y1="100" x2="0" y2="924"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#372e26"/>
+      <stop offset="0.55" stop-color="#1c1814"/>
+      <stop offset="1" stop-color="#0d0b09"/>
+    </linearGradient>
+
+    <!-- Crisp lit edge, gone within the first tenth of the tile. -->
+    <linearGradient id="highlight-falloff" x1="0" y1="100" x2="0" y2="924"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.10" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="top-edge">
+      <rect x="100" y="100" width="824" height="824"
+            fill="url(#highlight-falloff)"/>
+    </mask>
+
+    <linearGradient id="shadow-falloff" x1="0" y1="100" x2="0" y2="924"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0.88" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="bottom-edge">
+      <rect x="100" y="100" width="824" height="824"
+            fill="url(#shadow-falloff)"/>
+    </mask>
+  </defs>
+
+  <!-- Cast shadow, in the margin the grid reserves for it. -->
+  <rect x="100" y="118" width="824" height="824" rx="185.4" ry="185.4"
+        fill="#000000" opacity="0.32" filter="url(#cast)"/>
+
+  <g clip-path="url(#silhouette)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#field)"/>
+
+    <!-- Accent ramp, the logomark's own geometry fitted to the 824 square. -->
+    <g fill="#c87941">
+      <rect x="229" y="280" width="129" height="464" opacity="0.25"/>
+      <rect x="383" y="280" width="129" height="464" opacity="0.5"/>
+      <rect x="537" y="280" width="129" height="464" opacity="0.75"/>
+      <rect x="691" y="280" width="129" height="464"/>
+    </g>
+
+    <!-- Strokes centred on the silhouette; the clip keeps the inner half. -->
+    <rect x="100" y="100" width="824" height="824" rx="185.4" ry="185.4"
+          fill="none" stroke="#ffffff" stroke-opacity="0.58" stroke-width="24"
+          mask="url(#top-edge)"/>
+    <rect x="100" y="100" width="824" height="824" rx="185.4" ry="185.4"
+          fill="none" stroke="#000000" stroke-opacity="0.72" stroke-width="24"
+          mask="url(#bottom-edge)"/>
+  </g>
+</svg>

@@ -1,0 +1,52 @@
+.den-composer-send {
+  border-color: var(--den-accent);
+  background: var(--den-accent);
+  color: var(--den-on-accent);
+}
+.den-composer-send:hover:not(:disabled) {
+  border-color: var(--den-accent-hover);
+  background: var(--den-accent-hover);
+  color: var(--den-on-accent);
+}
+/* Stopping a turn is a live action, not a dangerous one: the quiet box keeps
+   the running tone the rest of the app uses for work in flight. */
+.den-composer-stop {
+  color: var(--den-status-running);
+}
+.den-composer-stop:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--den-status-running) 55%, var(--den-line));
+  background: color-mix(in srgb, var(--den-status-running) 12%, transparent);
+  color: var(--den-status-running);
+}
+.den-composer-send:disabled {
+  border-color: var(--den-border);
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+  opacity: 1;
+}
+.den-composer-send-icon {
+  display: block;
+  transition: transform var(--den-duration) var(--den-ease);
+}
+.den-composer-send:hover:not(:disabled) .den-composer-send-icon {
+  transform: translateY(-1px);
+}
+.den-composer-send--armed:not(:disabled):not(:focus-visible) {
+  border-color: var(--den-accent-signal);
+  background: var(--den-accent);
+  outline: 2px solid color-mix(in srgb, var(--den-accent-signal) 50%, transparent);
+  outline-offset: 1px;
+}
+.den-composer-send--armed:not(:disabled) .den-composer-send-icon {
+  color: var(--den-on-accent);
+  transform: translateY(-1px);
+}
+
+@keyframes den-composer-activity-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

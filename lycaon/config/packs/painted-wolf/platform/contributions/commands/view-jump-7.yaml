@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-jump-7
+title: "Focus window 7"
+scope: "global"
+keywords:
+  - "peer"
+  - "window 7"
+  - "focus window"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.jump7"

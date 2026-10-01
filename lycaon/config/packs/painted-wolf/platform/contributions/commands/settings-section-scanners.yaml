@@ -1,0 +1,10 @@
+id: painted-wolf/platform:settings-section-scanners
+title: "Settings: security scanners"
+scope: "global"
+keywords:
+  - "security"
+  - "scanners"
+  - "scans"
+action:
+  kind: native_ui
+  handler: "settings.section.scanners"

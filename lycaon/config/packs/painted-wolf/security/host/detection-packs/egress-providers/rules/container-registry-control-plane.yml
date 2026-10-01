@@ -1,0 +1,38 @@
+title: Reached a container registry
+id: 2425772a-ff92-49b2-8481-08634fcd4f69
+description: >-
+  Connected to a container image registry. A hostname cannot tell a pull from a
+  push or delete, so this is a coarse signal for scripts and SDKs.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - docker.io
+      - registry-1.docker.io
+      - auth.docker.io
+      - hub.docker.com
+      - ghcr.io
+      - quay.io
+      - public.ecr.aws
+      - gallery.ecr.aws
+      - registry.gitlab.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .docker.io
+      - .docker.com
+      - .ghcr.io
+      - .quay.io
+      - .ecr.aws
+      - .registry.gitlab.com
+  condition: selection_host or selection_suffix

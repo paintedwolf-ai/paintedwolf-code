@@ -1,0 +1,135 @@
+@utility den-settings-view {
+  flex: 1;
+  /* Width prevents nested container editors from collapsing the scroll host. */
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/** Keyed section panels remount inside this stable host child. */
+@utility den-settings-view-body {
+  width: 100%;
+  min-width: 0;
+}
+
+@utility den-settings-panel {
+  /* Full-bleed stage column — same origin as Context browse panes. */
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-9);
+  position: relative;
+
+  /* Connect / error chrome when no editor padding is present yet. */
+  & > .den-settings-warn,
+  & > .den-settings-hint {
+    margin-inline: var(--den-stage-inset-x);
+    max-width: var(--den-prose-measure);
+  }
+
+  & > .den-critical-stop {
+    margin-inline: var(--den-stage-inset-x);
+    max-width: var(--den-prose-measure);
+  }
+}
+
+@utility den-settings-stage-close {
+  position: absolute;
+  top: var(--den-stage-inset-y);
+  right: var(--den-stage-inset-x);
+  /* Resident section panels use layer 1. */
+  z-index: 2;
+  height: 2rem;
+  width: 2rem;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-heading);
+  line-height: 1;
+
+  &:focus-visible {
+    outline: 2px solid var(--den-accent-signal);
+    outline-offset: 2px;
+  }
+}
+
+@utility den-settings-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  min-width: 0;
+  margin: var(--spacing-den-1) 0 var(--spacing-den-3) var(--spacing-den-1);
+  --den-nav-dot-size: var(--text-den-caption);
+}
+
+@utility den-settings-sidebar-list {
+  padding-left: 0;
+}
+
+@utility den-settings-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+  /* Explicit width prevents inline-size containment from collapsing the editor. */
+  width: 100%;
+  min-width: 0;
+  /* Keep the final control clear of the stage edge. */
+  padding: var(--den-stage-inset-y) var(--den-stage-inset-x) var(--spacing-den-8);
+  /* Container queries follow the resizable editor width. */
+  container-type: inline-size;
+  container-name: den-settings-col;
+
+  & h2 {
+    font-size: var(--text-den-heading);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 0;
+  }
+
+  /* Gap is the spacing; margin-bottom would double it. */
+  & > .den-settings-pref-group {
+    margin-bottom: 0;
+  }
+}
+
+@utility den-settings-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+}
+
+@utility den-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+
+  /* Gap is the spacing; margin-bottom would double it. */
+  & > .den-settings-pref-group {
+    margin-bottom: 0;
+  }
+}
+
+@utility den-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-2);
+  font-size: var(--text-den-body);
+}
+
+@utility den-settings-badge {
+  display: inline-block;
+  margin: 0;
+  padding: var(--spacing-den-1) var(--spacing-den-4);
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-hint);
+  font-weight: 600;
+  color: var(--den-text-muted);
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+}
+

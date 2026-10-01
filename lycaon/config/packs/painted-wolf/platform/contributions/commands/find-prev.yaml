@@ -1,0 +1,7 @@
+id: painted-wolf/platform:find-prev
+title: "Find previous"
+palette: false
+scope: "global"
+action:
+  kind: native_ui
+  handler: "find.prev"

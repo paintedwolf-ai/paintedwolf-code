@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-indent-selection
+command: painted-wolf/platform:editor-indent-selection
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+\\"
+  windows:
+    - "Mod+Alt+\\"
+  linux:
+    - "Mod+Alt+\\"

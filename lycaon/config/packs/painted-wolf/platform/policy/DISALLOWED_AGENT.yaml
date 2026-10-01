@@ -1,0 +1,30 @@
+oar: '1.0'
+id: DISALLOWED_AGENT
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.workflow_allowed_agents]
+when: paintedwolf.rejection_code == "DISALLOWED_AGENT"
+effect: block
+copy:
+  cause: agent_type is not in the workflow allowed_agents allowlist
+  why: Pick an allowed agent id from the active workflow manifest
+  fix: '{% if paintedwolf.workflow_allowed_agents %}Choose an agent from the current dispatch roster: {{ paintedwolf.workflow_allowed_agents }}.{% else %}The current workflow does not offer the requested agent. Inspect the current roster and workflow phase before dispatching; do not substitute an unoffered worker.{% endif %}'
+  instead: Use `task(agent_type=...)` only with workflow-allowed functional agent ids
+  what: Agent_type is not in the workflow allowed_agents allowlist
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: agent_type is not in the workflow allowed_agents allowlist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: task
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DISALLOWED_AGENT'
+x-paintedwolf-audience:
+- coordinator

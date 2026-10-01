@@ -1,0 +1,42 @@
+fixtures:
+- rule: destroy
+  positive:
+  - terraform destroy -auto-approve
+  - cd infra && tofu destroy
+  - terragrunt destroy
+  - terraform apply -destroy -auto-approve
+  negative:
+  - terraform plan
+  - tofu validate
+  - terraform plan -destroy
+  - terraform plan -destroy -out=tfplan
+  - terragrunt run-all plan -destroy
+  - terraform destroy -help
+- rule: state-remove
+  positive:
+  - terraform state rm aws_db_instance.prod
+  - terraform force-unlock 1234-5678
+  - tofu state mv aws_instance.old aws_instance.new
+  - terragrunt state replace-provider registry.terraform.io/old registry.terraform.io/new
+  - terraform state push terraform.tfstate
+  - terraform workspace delete staging
+  - sudo terraform force-unlock 1234-5678
+  negative:
+  - terraform state list
+  - terraform state show aws_db_instance.prod
+  - terraform state rm aws_db_instance.prod --help
+  - terraform workspace list
+  - terraform workspace show
+- rule: apply
+  positive:
+  - terraform apply -auto-approve
+  - terraform import aws_s3_bucket.b my-bucket
+  - tofu apply -auto-approve
+  - terragrunt apply
+  - terraform taint aws_instance.web
+  - sudo terraform apply -auto-approve
+  negative:
+  - terraform validate
+  - terraform apply -help
+  - terraform plan -out=tfplan
+  - terraform show tfplan

@@ -1,0 +1,18 @@
+id: INVOCATION_SETTLEMENT_REFUSED
+emit: banner
+severity: error
+what: The host could not record the outcome of this `{{ tool }}` call.
+cause: The host's invocation ledger did not record the outcome the call reported. This is a host fault, not a problem with the call's arguments.
+why: The host delivers only outcomes it has recorded, so this call's own result is withheld.
+fix: Check the state the call would have changed before relying on it; a call that ran may have completed its effect.
+instead: Continue with the task from the observed state. Do not repeat the call only to recover its withheld result.
+category: recoverable
+message: The host could not record the outcome of this `{{ tool }}` call.
+scenarios:
+  - id: default
+    vars:
+      tool: write
+    expect_contains:
+      - 'Code: INVOCATION_SETTLEMENT_REFUSED'
+      - write
+      - host fault

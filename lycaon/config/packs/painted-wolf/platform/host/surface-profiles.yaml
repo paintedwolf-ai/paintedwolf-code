@@ -1,0 +1,28 @@
+plan:
+  investigate_eligible: false
+  phases:
+    intake:
+      surface: await_user
+      template: agents/coordinator-surface-plan.md
+      mode_refs: [await-user-input]
+    expand:
+      surface: plan_stub
+      template: agents/coordinator-surface-plan.md
+      mode_refs: [plan-stub]
+    research:
+      surface: plan_research
+      template: agents/coordinator-surface-plan.md
+      mode_refs: [plan-research]
+    review:
+      surface: plan_review
+      template: agents/coordinator-surface-plan.md
+    approve:
+      surface: plan_approve
+      template: agents/coordinator-surface-plan.md
+    execute:
+      surface: plan_execute
+      template: agents/coordinator-surface-plan.md
+      mode_refs: [plan-execute]
+implement:
+  investigate_eligible: true
+  phases: {}

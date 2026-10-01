@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-fold-code
+command: painted-wolf/platform:editor-fold-code
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+9"
+  windows:
+    - "Mod+Alt+9"
+  linux:
+    - "Mod+Alt+9"

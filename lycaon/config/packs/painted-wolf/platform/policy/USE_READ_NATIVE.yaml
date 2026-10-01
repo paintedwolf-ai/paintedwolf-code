@@ -1,0 +1,40 @@
+oar: '1.0'
+id: USE_READ_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "USE_READ_NATIVE"
+effect: block
+copy:
+  what: The parsed command can be represented by the supplied read call.
+  cause: The host validated this replacement against the tool currently offered.
+  why: Native read returns numbered lines, truncation state and symbol anchors. Follow its actual coverage
+    and paging fields; an outline is an index, not the complete file.
+  fix: Use the supplied replacement_calls entries exactly and in order; retain the intended paths, spans and
+    options.
+  instead: Use the validated read replacement
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native read instead of command cat/head/sed -n
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    command: sed -n '1,200p' docs/den.md
+    program: sed
+    path: docs/den.md
+    example: read path="docs/den.md" offset=1 limit=200
+    args_hint: Pass path with 1-based offset + limit, or ranges[] for up to 8 spans in one call; mode outline
+      for a symbol index instead of lines.
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_READ_NATIVE'

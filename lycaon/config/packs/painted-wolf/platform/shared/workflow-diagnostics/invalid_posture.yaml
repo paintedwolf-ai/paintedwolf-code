@@ -1,0 +1,5 @@
+code: invalid_posture
+message: |
+  Unknown posture {{posture}}.
+replacement: |
+  Use a valid session posture id.

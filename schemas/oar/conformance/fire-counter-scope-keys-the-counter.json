@@ -1,0 +1,126 @@
+{
+  "id": "fire-counter-scope-keys-the-counter",
+  "title": "A scoped counter counts each distinct scope value separately",
+  "covers": [
+    "OAR-FIRE-10",
+    "OAR-FIRE-5",
+    "OAR-CONF-33"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "TALLY",
+      "effect": "allow",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "counter_scope": "tool_args_fingerprint",
+      "on_fire": [
+        "increment_counter"
+      ]
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "READER",
+      "effect": "warn",
+      "when": "fire_count_of(\"TALLY\") >= 2",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "session_id": "s1",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool_args_fingerprint": "callA"
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool_args_fingerprint": "callA"
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool_args_fingerprint": "callA"
+        },
+        "expected": {
+          "decision": "warn",
+          "code": "READER"
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool_args_fingerprint": "callB"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/TALLY:fired",
+      "oar.test/READER:passed"
+    ],
+    "counters": {
+      "oar.test/TALLY#callA": {
+        "fire_count": 3
+      },
+      "oar.test/TALLY#callB": {
+        "fire_count": 1
+      }
+    }
+  }
+}

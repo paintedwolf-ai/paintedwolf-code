@@ -1,0 +1,155 @@
+name: issue-intake
+
+# Checks that a new issue carries the machine-generated facts the forms ask for, and
+# routes it by area. It labels and comments; closing belongs to issue-sweep.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || "";
+
+            // Issue forms render as "### <label>" followed by the value. Pull one section out
+            // by heading so a reordered form does not silently change what we validate.
+            const section = (heading) => {
+              const lines = body.split(/\r?\n/);
+              const start = lines.findIndex(
+                (l) => l.trim().toLowerCase() === `### ${heading}`.toLowerCase(),
+              );
+              if (start === -1) return null;
+              const rest = lines.slice(start + 1);
+              const end = rest.findIndex((l) => l.startsWith("### "));
+              return (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
+            };
+
+            const addLabels = async (labels) => {
+              if (!labels.length) return;
+              try {
+                await github.rest.issues.addLabels({
+                  ...context.repo, issue_number: issue.number, labels,
+                });
+              } catch (err) {
+                // A label that does not exist yet must not fail intake for everything else.
+                core.warning(`could not add ${labels.join(", ")}: ${err.message}`);
+              }
+            };
+
+            const comment = async (text) => {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: issue.number, body: text,
+              });
+            };
+
+            // The chooser can be bypassed by navigating straight to /issues/new, so a body-less
+            // issue is expected rather than exceptional.
+            if (body.trim().length < 30) {
+              const chooser =
+                `https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new/choose`;
+              await addLabels(["needs-info"]);
+              await comment(
+                [
+                  "Thanks for opening this. This tracker uses issue forms, and it looks like this",
+                  "one was filed without going through them.",
+                  "",
+                  `Please open a new issue from the [issue chooser](${chooser}) and pick`,
+                  "the form that fits — the fields it asks for are the ones needed to act on a report.",
+                  "This issue will be closed automatically if there is no activity; that is queue",
+                  "management, not a verdict on the problem you hit.",
+                ].join("\n"),
+              );
+              return;
+            }
+
+            const labels = [];
+            const missing = [];
+
+            // System information is machine-generated with a fixed shape.
+            const systemInfo = section("System information");
+            if (systemInfo !== null) {
+              if (!/^\s*app version:/m.test(systemInfo)) missing.push("`app version:`");
+              if (!/^\s*den version:/m.test(systemInfo)) missing.push("`den version:`");
+            }
+
+            // Report id: the saved bundle filename. Checked for shape only — the file itself
+            // must never be attached to a public issue.
+            const reportId = section("Report id");
+            if (reportId !== null && !/diagnostics-\d{8}-\d{6}/.test(reportId)) {
+              missing.push("a support-bundle filename in the **Report id** field");
+            }
+
+            // Agent-behaviour reports cannot be acted on without the model. The form requires
+            // it; this catches a bypassed chooser or a later edit that emptied the field.
+            const model = section("Model and provider");
+            if (model !== null && model.length < 2) {
+              missing.push("the **Model and provider** field");
+            }
+
+            const AREAS = {
+              "chat / agent": "area:chat",
+              "files editor": "area:editor",
+              "settings": "area:settings",
+              "scanners": "area:scanners",
+              "mcp": "area:mcp",
+              "extensions": "area:extensions",
+              "git": "area:git",
+              "install / update": "area:install",
+            };
+            const area = section("Which part of the app");
+            if (area) {
+              const hit = AREAS[area.trim().toLowerCase()];
+              if (hit) labels.push(hit);
+            }
+
+            if (missing.length) {
+              labels.push("needs-info");
+              const wantsDiagnostics = missing.some(
+                (m) => m.includes("app version") || m.includes("den version") || m.includes("support-bundle"),
+              );
+              const wantsModel = missing.some((m) => m.includes("Model and provider"));
+              const help = [];
+              if (wantsDiagnostics) {
+                help.push(
+                  "System information and the report id come straight from the app — **Settings → Advanced → Diagnostics**.",
+                  "*System information → Copy for bug report* gives the version block (no keys, nothing about your",
+                  "projects), and *Save diagnostics bundle* gives the filename to paste as the report id.",
+                  "**Keep the bundle itself** — do not attach it here; it contains your file paths and",
+                  "recent logs. If a maintainer needs it they will ask on the issue, and you can send it",
+                  "to info@paintedwolf.ai. Do not email it unasked, and do not email for help.",
+                );
+              }
+              if (wantsModel) {
+                if (help.length) help.push("");
+                help.push(
+                  "An in-bounds agent report needs the model and provider — behaviour depends on them,",
+                  "and a report without that cannot be acted on.",
+                );
+              }
+              await comment(
+                [
+                  "Thanks for the report. It is missing a couple of specifics that a maintainer",
+                  "would need in order to look at it:",
+                  "",
+                  ...missing.map((m) => `- ${m}`),
+                  "",
+                  ...help,
+                  "",
+                  "Edit the issue to add the above. If nothing arrives this will close automatically —",
+                  "reopening is one comment away. Filing does not entitle you to a reply.",
+                ].join("\n"),
+              );
+            }
+
+            await addLabels(labels);

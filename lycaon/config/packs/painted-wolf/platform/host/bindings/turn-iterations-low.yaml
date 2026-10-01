@@ -1,0 +1,11 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': turn.iterations.low
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-iterations-low
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - remaining tool-iteration budget first reaches the runway threshold

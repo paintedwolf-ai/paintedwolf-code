@@ -1,0 +1,18 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': leg.finished
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-leg-finished
+tier: builtin
+invariants:
+  trigger_class: manifest_on_reenter
+  fires_in:
+  - implement work→work re-enter (manifest on_reenter.reenter_leg)
+  - plan@ research phase (coordinator advance — workflow_advance when gates pass)
+  required:
+  - host digest
+  - task(
+  forbidden:
+  - Call `workflow_advance` when gates pass
+  - Call workflow_advance when gates pass

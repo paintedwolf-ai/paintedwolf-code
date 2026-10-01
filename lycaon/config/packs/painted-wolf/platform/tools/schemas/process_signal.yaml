@@ -1,0 +1,26 @@
+tags: [process]
+description: >-
+  Send a signal to exact host process instances after approval. Pass opaque
+  references returned by process_list in this task. PID reuse or changed
+  identity rejects; names, bare PIDs, groups, and descendants are not targets.
+  TERM requests graceful termination; KILL can discard unsaved work. Delivered
+  means the signal was accepted, not that exit was observed. Inspect the result
+  for each target. Use command_stop for command job handles.
+schema:
+  type: object
+  properties:
+    references:
+      type: array
+      minItems: 1
+      maxItems: 32
+      uniqueItems: true
+      description: Opaque process tokens obtained from process_list to be signaled.
+      items:
+        type: string
+        maxLength: 16384
+    signal:
+      type: string
+      enum: [TERM, KILL, INT, HUP, STOP, CONT, USR1, USR2]
+      description: Standard POSIX signal name to deliver to the identified targets.
+  required: [references, signal]
+  additionalProperties: false

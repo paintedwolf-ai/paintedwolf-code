@@ -1,0 +1,5 @@
+code: decision_gate_phase_mismatch
+message: |
+  Decision gate {{leaf}} does not match phase {{phase}}.
+replacement: |
+  Align decision gate and intake key.

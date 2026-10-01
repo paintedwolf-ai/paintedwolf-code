@@ -1,0 +1,5 @@
+code: extends_error
+message: |
+  extends error: {{detail}}.
+replacement: |
+  Fix the extends chain.

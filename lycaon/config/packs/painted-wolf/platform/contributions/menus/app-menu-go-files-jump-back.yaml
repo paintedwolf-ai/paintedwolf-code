@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-files-jump-back
+slot: "app_menu.go"
+command: painted-wolf/platform:files-jump-back
+group: "6"
+order: 21
+label: "Back"

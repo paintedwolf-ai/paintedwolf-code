@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SUMMARIZE_PATHS_MISSING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - summarize
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.missing_paths
+when: paintedwolf.rejection_code == "SUMMARIZE_PATHS_MISSING"
+effect: block
+copy:
+  what: 'Some requested summarize inputs do not exist: {{ paintedwolf.missing_paths }}.'
+  cause: Each path or paths entry must be an existing repo-relative file or directory.
+  why: A summary must preserve the requested input scope; silently dropping missing entries would make it incomplete.
+  fix: Verify each path with list_dir or find, then retry with corrected paths.
+  instead: Branch on Code; fix paths and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:summarize
+x-paintedwolf-message: requested summary inputs include missing paths
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: missing.go
+      profile: coordinator
+      tool: summarize
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SUMMARIZE_PATHS_MISSING'

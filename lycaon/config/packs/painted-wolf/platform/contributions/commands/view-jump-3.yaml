@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-jump-3
+title: "Focus window 3"
+scope: "global"
+keywords:
+  - "peer"
+  - "window 3"
+  - "focus window"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.jump3"

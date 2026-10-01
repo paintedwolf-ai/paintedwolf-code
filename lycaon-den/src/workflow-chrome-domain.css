@@ -1,0 +1,22 @@
+/* Workflow chrome domain retention floor. */
+
+@keyframes workers-tab-select-ack {
+  0% {
+    background: var(--den-tint-2);
+    transform: scale(0.985);
+  }
+  45% {
+    background: var(--den-tint-2);
+  }
+  100% {
+    background: transparent;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-workers-tab-row--ack .den-workers-tab-select {
+    animation: none;
+    background: var(--den-tint-1);
+  }
+}

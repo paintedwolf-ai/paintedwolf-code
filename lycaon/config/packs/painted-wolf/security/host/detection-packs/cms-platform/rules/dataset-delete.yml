@@ -1,0 +1,27 @@
+title: Destroy a Sanity content dataset
+id: e3a248e8-795f-4b5f-a7ab-7ca7c0d47775
+description: Permanently deletes an entire dataset, including every document it holds.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: sanity
+    CommandLine|contains: ' datasets delete'
+  selection_confirm:
+    CommandLine|contains: ' --force'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and selection_confirm and not filter_rehearsal and not filter_local

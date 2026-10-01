@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/tool-voice
+name: Example — Tool Voice
+version: 1.0.0
+description: Re-describe one native tool for the model. Every other tool stays stock.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

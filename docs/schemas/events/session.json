@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/session.json",
+  "$ref": "../../openapi/components/schemas/session/events.yaml#/components/schemas/SessionEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SessionEvent"
+}

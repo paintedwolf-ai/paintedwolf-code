@@ -1,0 +1,30 @@
+title: Publish a package to a registry
+id: 2589fe10-73b5-4997-b92b-73cd7a1c8c52
+description: Publishes a package to a public or private registry.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - npm
+      - pnpm
+      - yarn
+      - bun
+  selection_publish:
+    CommandLine|contains: ' publish'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_publish and not filter_rehearsal and not filter_local

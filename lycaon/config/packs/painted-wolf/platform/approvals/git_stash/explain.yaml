@@ -1,0 +1,18 @@
+# git_stash — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    git_stash:
+        tool: git_stash
+        tier_hint: recoverable
+        what_changes: Save the selected paths in a Git stash, apply a saved stash while retaining it, or drop the explicitly selected stash entry.
+        who_affected: The current repository, its branches, index, and working files.
+        if_wrong: Saved work may need reapplication; dropping an entry removes its named recovery reference.
+        allow_line: updating the selected stash
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Git
+                - repository

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-find-replace
+slot: "app_menu.edit"
+command: painted-wolf/platform:find-replace
+group: "0"
+order: 5
+label: "Replace…"

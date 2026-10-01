@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-duplicate-selection
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-duplicate-selection
+group: "2"
+order: 8

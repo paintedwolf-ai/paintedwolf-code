@@ -1,0 +1,5 @@
+code: invalid_execution_mode
+message: |
+  Invalid execution mode {{mode}}.
+replacement: |
+  Use a valid execution mode.

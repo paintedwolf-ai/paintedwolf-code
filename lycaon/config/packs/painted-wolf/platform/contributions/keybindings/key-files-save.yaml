@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-save
+command: painted-wolf/platform:files-save
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+S"
+  windows:
+    - "Mod+S"
+  linux:
+    - "Mod+S"

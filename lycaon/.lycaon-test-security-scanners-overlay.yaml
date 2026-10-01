@@ -1,0 +1,3 @@
+enabled: true
+landed_change_scope: path_scoped
+source_verify: stat

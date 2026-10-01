@@ -1,0 +1,131 @@
+paths:
+  /v1/projects/{id}/roots:
+    post:
+      tags:
+      - projects
+      operationId: attachProjectRoot
+      x-person-action: record
+      summary: Attach a folder root to a project
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/AttachProjectRootRequest
+      responses:
+        '201':
+          description: Root attached
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        '400':
+          description: >
+            Root path refused as a write jail (write_root_is_filesystem_root,
+            write_root_is_home, write_root_not_absolute, write_root_under_secret_store)
+            or otherwise invalid.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Duplicate path on this project
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/roots/{root_id}:
+    delete:
+      tags:
+      - projects
+      operationId: detachProjectRoot
+      x-person-action: record
+      summary: Detach a folder root from a project
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/RootId
+      - name: force
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: When true, cancel in-flight dependents then detach; otherwise bound work refuses the detach with
+          root_busy.
+      responses:
+        '204':
+          description: Root detached
+        '409':
+          description: Folder has in-flight dependents (root_busy)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+    patch:
+      tags:
+      - projects
+      operationId: updateProjectRoot
+      x-person-action: record
+      summary: Update a folder root (set primary or label)
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/RootId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/UpdateProjectRootRequest
+      responses:
+        '200':
+          description: Root updated
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

@@ -1,0 +1,13 @@
+coordinator:
+  provider_id: e2e-mock
+  model: mock-model
+
+lite:
+  provider_id: e2e-mock
+  model: mock-model
+
+agent_pool:
+  selection: first
+  models:
+    - provider_id: e2e-mock
+      model: mock-model

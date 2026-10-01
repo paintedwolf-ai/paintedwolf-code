@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-jump-4
+title: "Focus window 4"
+scope: "global"
+keywords:
+  - "peer"
+  - "window 4"
+  - "focus window"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.jump4"

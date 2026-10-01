@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-session-recent
+slot: "app_menu.go"
+command: painted-wolf/platform:session-recent
+group: "5"
+order: 18
+label: "Recent chats"

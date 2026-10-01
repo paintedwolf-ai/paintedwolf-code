@@ -1,0 +1,52 @@
+tags: [visual, inspection]
+description: "See moments of a screen recording or other video (.mp4, .mov, .webm), including an attached one. Returns one sheet of frames, each labeled with its timestamp, plus the video's duration and size. Without times_ms it spreads count frames across start_ms to end_ms (default: the whole video); name exact times_ms to look closer at a moment, and crop to read a region at full resolution."
+schema:
+  type: object
+  required: [path]
+  properties:
+    path:
+      type: string
+      description: Repo-relative or absolute path to the video, or the path in an attachment's fence.
+    times_ms:
+      type: array
+      maxItems: 24
+      description: "Exact moments to draw, in milliseconds from the start. Use instead of start_ms, end_ms, and count."
+      items:
+        type: number
+        minimum: 0
+    start_ms:
+      type: number
+      minimum: 0
+      description: "Start of the window to spread frames across (default 0)."
+    end_ms:
+      type: number
+      minimum: 0
+      description: "End of the window (default: the end of the video)."
+    count:
+      type: integer
+      minimum: 1
+      maximum: 24
+      description: "Frames to spread across the window (default 12). Fewer frames draw larger."
+    crop:
+      type: object
+      description: "A region of the video in its own pixels, drawn without scaling up. Read width and height from an earlier view or the attachment's fence."
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: integer
+          minimum: 0
+          description: Horizontal coordinate of the top-left crop box corner in source pixels.
+        "y":
+          type: integer
+          minimum: 0
+          description: Vertical coordinate of the top-left crop box corner in source pixels.
+        width:
+          type: integer
+          minimum: 1
+          description: Horizontal extent of the bounding box to capture in source pixels.
+        height:
+          type: integer
+          minimum: 1
+          description: Vertical extent of the bounding box to capture in source pixels.
+      additionalProperties: false
+  additionalProperties: false

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "publish",
+    "priority": 10,
+    "depends_on": [
+      "verify"
+    ]
+  },
+  {
+    "id": "build",
+    "priority": 20,
+    "depends_on": []
+  },
+  {
+    "id": "verify",
+    "priority": 10,
+    "depends_on": [
+      "build"
+    ]
+  },
+  {
+    "id": "audit",
+    "priority": 30,
+    "depends_on": []
+  }
+]

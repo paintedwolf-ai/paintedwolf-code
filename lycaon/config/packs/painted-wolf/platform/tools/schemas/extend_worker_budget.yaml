@@ -1,0 +1,15 @@
+tags: [workers]
+description: >-
+  Grant a running worker a higher tool-round ceiling, usually in answer to its
+  request_budget; the worker is told on its next round and its request closes.
+schema:
+  type: object
+  properties:
+    job_id:
+      type: string
+      description: Worker job id from task() enqueue or pack_board roster
+    max_tool_loops:
+      type: integer
+      description: New ceiling; must exceed the current effective max and stay within host bounds
+  required: [job_id, max_tool_loops]
+  additionalProperties: false

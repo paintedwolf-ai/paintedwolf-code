@@ -1,0 +1,10 @@
+emit: banner
+category: informational
+severity: info
+message: 'Spec posture progress — {{ paintedwolf.progress }}. Next: {{ paintedwolf.next_action }}'
+what: 'Spec posture progress — {{ paintedwolf.progress }}. Next: {{ paintedwolf.next_action }}'
+cause: 'Spec posture progress — {{ paintedwolf.progress }}. Next: {{ paintedwolf.next_action }}'
+why: Use the Progress line and Next action; do not invent completion
+fix: Use the Progress line and Next action; do not invent completion
+instead: Use the Progress line and Next action; do not invent completion
+id: SPEC_POSTURE_PROGRESS

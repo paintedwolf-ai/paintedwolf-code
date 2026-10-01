@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+title: "Socket changed"
+message: "The socket changed while it was being checked."
+suggested_action: "Try again once the service is running steadily."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "changed while it was being checked"

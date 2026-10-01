@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/modelcontextprotocol/go-sdk"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33252",
+  "GHSA-89xv-2j6f-qhc8"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4773"
+ },
+ "details": "Cross-Site Tool Execution for HTTP Servers without Authorizatrion in github.com/modelcontextprotocol/go-sdk",
+ "id": "GO-2026-4773",
+ "modified": "2026-03-23T18:14:51Z",
+ "published": "2026-03-23T18:14:51Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/modelcontextprotocol/go-sdk/security/advisories/GHSA-89xv-2j6f-qhc8"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/modelcontextprotocol/go-sdk/commit/a433a831d6e5d5ac3b9e625a8095aa8eaa040dfc"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cross-Site Tool Execution for HTTP Servers without Authorizatrion in github.com/modelcontextprotocol/go-sdk"
+}

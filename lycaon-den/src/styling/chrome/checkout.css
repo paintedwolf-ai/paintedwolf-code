@@ -1,0 +1,215 @@
+.git-checkout {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.git-checkout__location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.75rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+.git-checkout__repository {
+  overflow-wrap: anywhere;
+}
+.git-checkout .git-strip__branch {
+  min-width: 0;
+  max-width: 100%;
+}
+.git-checkout .git-strip__branch-name {
+  max-width: none;
+  min-width: 0;
+}
+.git-checkout__worktree,
+.git-checkout__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  overflow-wrap: anywhere;
+}
+.git-checkout__worktree p,
+.git-checkout__result p,
+.git-checkout__error p {
+  margin: 0;
+}
+.git-checkout__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.git-checkout__actions button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  text-align: start;
+}
+.git-checkout__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  border: 1px solid var(--den-control-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+}
+.git-checkout__label {
+  display: block;
+  font-weight: 600;
+  font-size: var(--text-den-compact);
+}
+.git-checkout__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--den-control-line);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  color: var(--den-text);
+  font: inherit;
+}
+.git-checkout__hint {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  line-height: 1.5;
+}
+.git-checkout__branches {
+  max-height: 12rem;
+}
+.git-checkout__branches-content {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.git-checkout__branch-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: var(--den-radius);
+  text-align: start;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--den-text);
+}
+.git-checkout__branch-option > span {
+  min-width: 0;
+}
+.git-checkout__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-top: 1px solid var(--den-line);
+  padding-top: 0.5rem;
+}
+.git-checkout__choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: var(--den-radius);
+  text-align: start;
+  color: var(--den-text);
+  font: inherit;
+}
+.git-checkout__choice span {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-checkout__choice:hover:not(:disabled),
+.git-checkout__branch-option:hover:not(:disabled) {
+  background: var(--den-tint-1);
+}
+.git-checkout button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.git-checkout__error {
+  margin: 0;
+  color: var(--den-danger-text);
+  overflow-wrap: anywhere;
+}
+.git-checkout-dialog {
+  width: min(30rem, 100%);
+}
+.git-checkout-dialog__form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.git-checkout-dialog__body {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  font-size: var(--text-den-body);
+}
+.git-checkout-dialog__body-content {
+  padding: 0.25rem 1.25rem 1rem;
+}
+.git-checkout-dialog__body-content > p:first-child {
+  margin-top: 0;
+}
+.git-checkout-dialog__facts {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 0.8rem;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+}
+.git-checkout-dialog__facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+.git-checkout-dialog__facts dt {
+  color: var(--den-text-muted);
+}
+.git-checkout-dialog__facts dd {
+  margin: 0;
+}
+.git-checkout-dialog .git-checkout__input {
+  margin-top: 0.4rem;
+}
+.git-checkout-dialog__notice {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  background: var(--den-tint-1);
+  border-radius: var(--den-radius);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-compact);
+}
+.git-checkout-dialog__notice p {
+  margin: 0;
+}
+.git-checkout-dialog__notice p + p {
+  margin-top: 0.5rem;
+}
+.git-checkout-dialog .den-dialog__footer {
+  flex-wrap: wrap;
+}
+.git-checkout-dialog .den-dialog__footer button {
+  white-space: normal;
+}
+
+.den-recovery-updates {
+  -webkit-app-region: no-drag;
+  max-inline-size: 36rem;
+  max-block-size: 45vh;
+  overflow: auto;
+  text-align: start;
+  font-size: var(--text-den-body);
+}
+
+.den-recovery-updates > summary {
+  cursor: pointer;
+}

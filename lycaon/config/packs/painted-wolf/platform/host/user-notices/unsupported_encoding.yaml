@@ -1,0 +1,17 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - detected
+title: Can't open this file safely
+message: >-
+  This file uses an unsupported or malformed text encoding, so opening it here
+  could corrupt it. Convert it to UTF-8 or UTF-16 in an external editor, then
+  reopen it.
+suggested_action: Convert it to UTF-8 or UTF-16 in an external editor, or Reveal it in the file manager.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - unsupported or malformed text encoding
+      - external editor

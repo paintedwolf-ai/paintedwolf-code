@@ -1,0 +1,27 @@
+oar: '1.0'
+id: WORKER_TYPE_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKER_TYPE_UNAVAILABLE"
+effect: block
+copy:
+  what: The requested worker type is not available on this host.
+  cause: The task target is not registered in the active worker catalog.
+  why: Dispatching an unavailable type cannot create a worker or a durable task record.
+  fix: Choose an agent type exposed on the current coordinator tool surface.
+  instead: Branch on the code and select an available worker type
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker type is unavailable
+x-paintedwolf-scenarios:
+- id: unknown_type
+  vars:
+    agent_type: missing-worker
+  expect_contains:
+  - 'Code: WORKER_TYPE_UNAVAILABLE'
+  - worker type

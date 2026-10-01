@@ -1,0 +1,12 @@
+# Inform Binding — Emit-only inject.
+'on': inject.synthesis_evidence
+selector:
+  surface: coordinator
+effect: inform
+render: synthesis-evidence
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: observed_history
+  fires_in:
+  - assembly inject via Bus Emit-plane resolution

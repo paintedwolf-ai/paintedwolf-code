@@ -1,0 +1,22 @@
+oar: '1.0'
+id: SANDBOX_EXECUTION_CAPABILITY_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "SANDBOX_EXECUTION_CAPABILITY_DENIED"
+effect: block
+copy:
+  what: The person did not approve this execution capability.
+  cause: The requested process control or host execution was denied, canceled, or expired.
+  why: Execution authority must remain bound to the exact action through the moment of spawn.
+  fix: Respect the decision. Continue with work that does not require this authority.
+  instead: Branch on Code; respect the decision. Continue with work that does not require this authority.
+x-paintedwolf-category: user-decision
+x-paintedwolf-emit: guard:execution_capability
+x-paintedwolf-message: The person did not approve this execution capability.
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains: ['Code: SANDBOX_EXECUTION_CAPABILITY_DENIED', 'did not approve this execution capability']

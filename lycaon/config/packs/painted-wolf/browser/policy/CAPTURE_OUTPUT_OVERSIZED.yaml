@@ -1,0 +1,41 @@
+oar: '1.0'
+id: CAPTURE_OUTPUT_OVERSIZED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_limit
+  - paintedwolf.bytes
+  - paintedwolf.max_bytes
+  - paintedwolf.capture_output_kind
+  - paintedwolf.capture_semantic_output
+when: paintedwolf.rejection_code == "CAPTURE_OUTPUT_OVERSIZED"
+effect: block
+copy:
+  what: '{{ tool }} produced an oversized {% if paintedwolf.capture_output_kind %}{{ paintedwolf.capture_output_kind
+    }}{% else %}browser result{% endif %}: {{ paintedwolf.bytes }} bytes, limit {{ paintedwolf.max_bytes }}.'
+  cause: The observed output exceeded its channel-specific byte bound.
+  why: Browser evidence must fit the visual or semantic transport limit.
+  fix: '{% if paintedwolf.capture_semantic_output %}Reduce the page content or requested semantic scope using
+    fields offered by the current tool; shrinking a screenshot alone does not reduce semantic output.{% else
+    %}Reduce the viewport or, for filmstrips, the captured frames using supported fields. On a held page, take
+    a fresh snapshot of its current state.{% endif %} Earlier page actions may already have completed; inspect
+    current state before replaying them.'
+  instead: Branch on Code CAPTURE_OUTPUT_OVERSIZED; reduce the measured output without repeating completed
+    actions
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: Captured screenshot exceeds the visual artifact byte cap
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_OUTPUT_OVERSIZED'

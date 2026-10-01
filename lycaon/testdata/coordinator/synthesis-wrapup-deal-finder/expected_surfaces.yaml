@@ -1,0 +1,56 @@
+# Deal finder incident replay — session 20260620T203018Z (sanitized paths).
+# Source: ~/.config/paintedwolf/debug/sessions/20260620T203018Z
+session_id: 546d0ece-14b1-4a4b-999d-7b20aa6a0188
+
+cases:
+  - name: post_verifier_fail
+    history_file: history_post_verifier_fail.json
+    progress_file: progress_post_verifier_fail.md
+    state_file: state_post_verifier_fail.json
+    user_prompt: "[host:loop-wake]"
+    want_surface: implement_investigate
+    want_batch_ready: false
+    want_open_repair: true
+    want_verify_passed: false
+    want_verify_failed: true
+
+  - name: inline_edit_no_verify
+    history_file: history_inline_edit_no_verify.json
+    progress_file: progress_all_terminal_pre_verify.md
+    state_file: state_idle.json
+    user_prompt: "[host:loop-wake]"
+    want_surface: implement_investigate
+    want_batch_ready: false
+    want_open_repair: false
+    want_verify_passed: false
+    want_verify_failed: false
+
+  - name: all_gates_pass
+    history_file: history_all_gates_pass.json
+    progress_file: progress_all_gates_pass.md
+    state_file: state_idle.json
+    user_prompt: "[host:loop-wake]"
+    want_surface: implement_synthesis
+    want_batch_ready: true
+    want_open_repair: false
+    want_verify_passed: true
+    want_verify_failed: false
+
+guard_cases:
+  - name: synthesis_rejects_edit
+    surface: implement_synthesis
+    tool: edit
+    tool_offered: false
+    want_code: COORDINATOR_SYNTHESIS_WRAPUP_ONLY
+
+  - name: synthesis_rejects_task
+    surface: implement_synthesis
+    tool: task
+    tool_offered: false
+    want_code: COORDINATOR_SYNTHESIS_WRAPUP_ONLY
+
+  - name: investigation_allows_progress
+    surface: implement_investigate
+    tool: update_progress
+    tool_offered: true
+    want_code: ''

@@ -1,0 +1,14 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+title: No text found in scanned document
+message: >-
+  The attachment looks scanned and contains little or no selectable text, so no
+  text could be extracted.
+suggested_action: Attach a text-based document, or paste the relevant text into the chat.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - scanned
+      - text

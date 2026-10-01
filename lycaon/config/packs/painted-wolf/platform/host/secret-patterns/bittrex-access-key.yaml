@@ -1,0 +1,5 @@
+id: bittrex-access-key
+upstream_id: bittrex-access-key
+title: Bittrex access key
+severity: critical
+enabled: false

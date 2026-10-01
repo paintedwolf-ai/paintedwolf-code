@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Scanner not found"
+message: "There is no scanner with that id."
+suggested_action: "Refresh the scanner list."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no scanner with that id"

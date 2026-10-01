@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-select-all
+command: painted-wolf/platform:editor-select-all
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+A"
+  windows:
+    - "Mod+Alt+A"
+  linux:
+    - "Mod+Alt+A"

@@ -1,0 +1,32 @@
+oar: '1.0'
+id: CAPTURE_PROJECT_DIR_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_PROJECT_DIR_INVALID"
+effect: block
+copy:
+  what: The host could not resolve project_dir {{ paintedwolf.path }} to an absolute directory.
+  cause: Directory normalization failed for the active workspace.
+  why: Static serve needs a concrete directory under a project root.
+  fix: Check the supplied project-relative directory and current workspace root; retry with an existing accessible
+    directory.
+  instead: Branch on Code CAPTURE_PROJECT_DIR_INVALID; fix project_dir
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page project_dir path could not be resolved
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_PROJECT_DIR_INVALID'

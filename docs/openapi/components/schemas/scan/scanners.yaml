@@ -1,0 +1,275 @@
+components:
+  schemas:
+    ScannerCatalogEntry:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - label
+      - binary
+      - categories
+      - added
+      - binary_found
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        label:
+          type: string
+        binary:
+          type: string
+          description: The CLI the user must install; the host ships no scanner binaries
+        categories:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/ScanCategory
+        hint:
+          type: string
+        install:
+          type: string
+          description: Command that installs the binary, e.g. brew install trivy
+        docs_url:
+          type: string
+        env:
+          type: array
+          items:
+            type: string
+          description: Env var names the tool needs (never values)
+        command_summary:
+          type: string
+          description: Argv joined without expanding tokens
+        added:
+          type: boolean
+          description: Already present in the user scanner catalog
+        binary_found:
+          type: boolean
+          description: PATH hit; the install check is the authoritative probe
+    ScannerCatalogResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scanners
+      additionalProperties: false
+      properties:
+        scanners:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScannerCatalogEntry"
+    ScannerCheckRow:
+      x-go-generate: true
+      type: object
+      required:
+      - scanner_id
+      - ok
+      - binary_found
+      additionalProperties: false
+      properties:
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        ok:
+          x-go-name: "OK"
+          type: boolean
+        detail:
+          type: string
+          description: Tool version line on success, or the failure reason
+        binary_found:
+          type: boolean
+          description: Separates not-installed from installed-but-broken
+    ScannerCheckResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - rows
+      additionalProperties: false
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScannerCheckRow"
+    SelectScannerSlotRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - scanner_id
+      additionalProperties: false
+      properties:
+        scanner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Empty clears the slot
+    ScannerListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scanners
+      - rejected
+      additionalProperties: false
+      properties:
+        scanners:
+          type: array
+          items:
+            $ref: execution.yaml#/components/schemas/ScannerSummary
+        rejected:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ScannerRejectedRow"
+          description: >
+            Rows of the user or project scanners.yaml the merge refused, keyed by
+            scanner id; a row that named no id is keyed by the empty string. A
+            refused row changed nothing.
+        user_scanners_path:
+          type: string
+          description: Device path hint for scanners.yaml (no secrets)
+    ScannerRejectedRow:
+      x-go-generate: true
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.-]+$'
+          description: The scanner id the row named. Absent when the row omitted one.
+        code:
+          type: string
+          description: >
+            Why the row was refused, from the closed set shared with detection
+            packs. Clients branch on this rather than on detail.
+        detail:
+          type: string
+    CreateCatalogScannerRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - source
+      - catalog_id
+      additionalProperties: false
+      properties:
+        source:
+          type: string
+          enum: [catalog]
+        catalog_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+    CreateCustomScannerRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - source
+      - id
+      - engine
+      - scope_kind
+      - command
+      - output_parser
+      - categories
+      - runtime
+      additionalProperties: false
+      properties:
+        source:
+          type: string
+          enum: [custom]
+        id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        engine:
+          type: string
+        scope_kind:
+          type: string
+          enum:
+          - source_host_floor
+          - source_driver
+          - dependencies
+          - secrets
+          - container
+          - custom
+        command:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        output_parser:
+          type: string
+        mapper_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        categories:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        label:
+          type: string
+        description:
+          type: string
+        skip_if_binary_missing:
+          x-go-pointer: true
+          type: boolean
+        runtime:
+          x-go-pointer: true
+          $ref: execution.yaml#/components/schemas/ScanRuntimePolicy
+        env:
+          type: array
+          items:
+            type: string
+          description: Env var names only (never values)
+    CreateScannerRequest:
+      oneOf:
+      - $ref: "#/components/schemas/CreateCatalogScannerRequest"
+      - $ref: "#/components/schemas/CreateCustomScannerRequest"
+    UpdateScannerRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        engine:
+          type: string
+        scope_kind:
+          type: string
+          enum:
+          - source_host_floor
+          - source_driver
+          - dependencies
+          - secrets
+          - container
+          - custom
+        command:
+          type: array
+          items:
+            type: string
+        output_parser:
+          type: string
+        mapper_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        categories:
+          type: array
+          items:
+            type: string
+        label:
+          type: string
+        description:
+          type: string
+        skip_if_binary_missing:
+          x-go-pointer: true
+          type: boolean
+        runtime:
+          x-go-pointer: true
+          $ref: execution.yaml#/components/schemas/ScanRuntimePolicy
+        env:
+          type: array
+          items:
+            type: string
+        driver:
+          type: string
+          description: When replacing a host row with a full user external, must be external
+    UpdateProjectScannerRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean

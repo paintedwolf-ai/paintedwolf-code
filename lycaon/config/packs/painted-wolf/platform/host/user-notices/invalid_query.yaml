@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - param
+    - reason
+use_defaults: true

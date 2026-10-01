@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Built-in detection pack
+message: >-
+  Built-in detection packs cannot be removed. You can disable the pack instead.
+suggested_action: Open Settings → Approvals → Detections and turn the pack off.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Built-in
+      - cannot be removed

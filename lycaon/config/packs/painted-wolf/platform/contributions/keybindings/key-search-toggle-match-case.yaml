@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-toggle-match-case
+command: painted-wolf/platform:search-toggle-match-case
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+C"
+  windows:
+    - "Alt+C"
+  linux:
+    - "Alt+C"

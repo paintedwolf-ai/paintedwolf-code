@@ -1,0 +1,9 @@
+surfaces: [host_error]
+notification: {tier: non_catastrophic, scope: session}
+title: Chat preparation failed
+message: The chat workspace could not be prepared.
+suggested_action: Start a new chat. If it fails again, open diagnostics.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [could not be prepared, new chat]

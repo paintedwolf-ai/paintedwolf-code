@@ -1,0 +1,40 @@
+oar: '1.0'
+id: VIDEO_UNDECODABLE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.mime
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_UNDECODABLE"
+effect: block
+copy:
+  what: '{{ tool }} could not draw frames from {% if paintedwolf.path %}{{ paintedwolf.path }}{% else %}the video{% endif
+    %}{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}.'
+  cause: The managed browser has no decoder for this file's codec, or the file is truncated. H.264, VP8, VP9, and AV1
+    decode; HEVC does not.
+  why: Frames come from the browser's own decoders, so a video it cannot play has no frames to show.
+  fix: Ask for the recording in MP4 (H.264) or WebM, or re-encode it with a tool in the project, then view the new
+    file.
+  instead: Branch on Code VIDEO_UNDECODABLE; view a re-encoded file
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video could not decode the video
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    mime: video/mp4
+    path: recordings/bug.mov
+    reason: media_error
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_UNDECODABLE'
+  - H.264

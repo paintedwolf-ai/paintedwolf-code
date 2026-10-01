@@ -1,0 +1,5 @@
+debug:
+  max_file_bytes: 134217728
+  max_sessions: 20
+  max_total_bytes: 2147483648
+  sweep_interval_ms: 3600000

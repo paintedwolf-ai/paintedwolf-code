@@ -1,0 +1,9 @@
+id: coordinator
+name: Coordinator
+description: Plans and routes work
+tool_profile: coordinator
+exec_mode: none
+skills: all
+topology_roles:
+  - coordinator
+system_prompt_template: agents/coordinator-core.md

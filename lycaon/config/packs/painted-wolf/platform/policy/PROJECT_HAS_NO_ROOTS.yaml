@@ -1,0 +1,28 @@
+oar: '1.0'
+id: PROJECT_HAS_NO_ROOTS
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "PROJECT_HAS_NO_ROOTS"
+effect: block
+copy:
+  what: File and shell tools need a folder on this project — none is attached yet.
+  cause: The project was created chat-first or the last folder was removed.
+  why: Tools must not invent a workspace path when no folder is bound.
+  fix: Ask the user to attach a folder (Folders button). File tools become available on the next turn after
+    attach.
+  instead: Chat, web research, and plan-read tools remain available until a folder is attached
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:no_folder
+x-paintedwolf-message: project has no folder attached
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROJECT_HAS_NO_ROOTS'

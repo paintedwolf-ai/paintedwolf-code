@@ -1,0 +1,20 @@
+# when applies to every invocation surface.
+id: example/editor-surface:summarize-selection
+title: Summarize selection
+category: Example
+icon: edit
+scope: files
+keywords: [summarize, explain, selection]
+when:
+  all:
+    - fact: editor_has_selection
+    - fact: configuration_on
+      is: example/editor-surface:offer-summarize
+input:
+  - id: instruction
+    title: Additional instruction
+    description: Optional direction for the read-only summary.
+    type: string
+action:
+  kind: editor_action
+  ref: example/editor-surface:summarize

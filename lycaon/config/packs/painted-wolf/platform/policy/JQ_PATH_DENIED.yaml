@@ -1,0 +1,35 @@
+oar: '1.0'
+id: JQ_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - jq
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "JQ_PATH_DENIED"
+effect: block
+copy:
+  what: Structured querying is denied for {{ paintedwolf.path }}.
+  cause: The resolved source is protected by the host’s path policy.
+  why: Sensitive or VCS-internal paths are blocked from structured query tools.
+  fix: Leave protected input unread. Use another source only if it is intended and permitted; another reader
+    or renamed path cannot override this boundary.
+  instead: Branch on Code; choose an allowed path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq path is denied
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: .git/config
+    profile: implement
+    tool: jq
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: JQ_PATH_DENIED'

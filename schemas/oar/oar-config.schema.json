@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagentrules.org/spec/1.0/oar-config.schema.json",
+  "title": "Open Agent Rules operator configuration",
+  "description": "How an operator runs someone else's rule pack without forking it: disable a rule, or roll one out in monitor mode. A configuration changes whether and how loudly a rule runs, never what it means ([OAR-CFG-1]-[OAR-CFG-7]).",
+  "type": "object",
+  "required": ["oar_config"],
+  "additionalProperties": false,
+  "properties": {
+    "oar_config": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "Format marker and version."
+    },
+    "disable": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/ruleRef" },
+      "description": "Rules to treat as though their enforcement were off. An engine rejects an entry naming a rule that is not loaded, or one whose mandatory is true ([OAR-CFG-2], [OAR-CFG-4], [OAR-CFG-5])."
+    },
+    "enforcement": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/ruleRef" },
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["enforce", "monitor", "off"]
+      },
+      "description": "Replaces a rule's own declared enforcement ([OAR-CFG-3])."
+    }
+  },
+  "$defs": {
+    "ruleRef": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^[A-Z][A-Z0-9_]*$" },
+        { "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*/[A-Z][A-Z0-9_]*$" }
+      ],
+      "description": "A bare id or a qualified <namespace>/<id>."
+    }
+  }
+}

@@ -1,0 +1,100 @@
+language: r
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require
+  additional analysis.
+cases:
+- name: shell-interpolation-vulnerable
+  file: sample.r
+  source: "shiny::shinyServer(function(input, output, session) {\nsystem(paste(\"\
+    echo\",input[[\"value\"]]))\n})\n"
+  want:
+  - lycaon.r.shell-interpolation
+  covers: []
+- name: shell-interpolation-safe
+  file: sample.r
+  source: "shiny::shinyServer(function(input, output, session) {\nsystem(\"echo ready\"\
+    )\n})\n"
+  want: []
+  covers:
+  - lycaon.r.shell-interpolation
+- name: sql-interpolation-vulnerable
+  file: sample.r
+  source: "shiny::shinyServer(function(input, output, session) {\nDBI::dbGetQuery(db,paste(\"\
+    SELECT * FROM users WHERE name =\",input[[\"value\"]]))\n})\n"
+  want:
+  - lycaon.r.sql-interpolation
+  covers: []
+- name: sql-interpolation-safe
+  file: sample.r
+  source: "shiny::shinyServer(function(input, output, session) {\nDBI::dbGetQuery(db,\"\
+    SELECT * FROM users WHERE name = ?\",params=list(readline(\"name\")))\n})\n"
+  want: []
+  covers:
+  - lycaon.r.sql-interpolation
+- name: tls-verification-disabled-vulnerable
+  file: sample.r
+  source: "httr::config(ssl_verifypeer = 0)\n"
+  want:
+  - lycaon.r.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.r
+  source: "httr::config(ssl_verifypeer = 1)\n"
+  want: []
+  covers:
+  - lycaon.r.tls-verification-disabled
+- name: local-rds
+  file: sample.r
+  source: "path <- \"cache.rds\"\ndata <- readRDS(path)\n"
+  want: []
+  covers: []
+- name: plumber-command-injection-flow
+  file: app.R
+  source: "plumber::pr_get(router, \"/run\", function(req, res) { command <- req$argsQuery[[\"\
+    cmd\"]]; system(command) })\n"
+  want:
+  - lycaon.r.plumber-command-injection
+  covers: &id001
+  - lycaon.r.plumber-command-injection
+- name: plumber-command-injection-constant
+  file: app.R
+  source: "plumber::pr_get(router, \"/run\", function(req, res) { command <- req$argsQuery[[\"\
+    cmd\"]]; system(\"date\") })\n"
+  want: []
+  covers:
+  - lycaon.r.plumber-command-injection
+- name: plumber-command-injection-safe-api
+  file: app.R
+  source: "plumber::pr_get(router, \"/run\", function(req, res) { command <- req$argsQuery[[\"\
+    cmd\"]]; system2(\"printf\", args = shQuote(command)) })\n"
+  want: []
+  covers: *id001
+- name: ordinary-input-list
+  file: app.R
+  source: "input <- list(value=\"date\")\nsystem(input[[\"value\"]])\nDBI::dbGetQuery(db,
+    input[[\"value\"]])\n"
+  want: []
+  covers:
+  - lycaon.r.shell-interpolation
+  - lycaon.r.sql-interpolation
+- name: ordinary-handler
+  file: app.R
+  source: "handler <- function(req, res) { system(req$argsQuery[[\"cmd\"]]) }\n"
+  want: []
+  covers:
+  - lycaon.r.plumber-command-injection
+- name: shiny-input-overwrite
+  file: app.R
+  source: "shiny::shinyServer(function(input, output) { input <- list(value=\"date\"\
+    ); system(input[[\"value\"]]) })\n"
+  want: []
+  covers:
+  - lycaon.r.shell-interpolation
+- name: shiny-input-alias
+  file: app.R
+  source: "shiny::shinyApp(ui=ui, server=function(data, output) { x <- data$value;
+    system(x) })\n"
+  want: &id002
+  - lycaon.r.shell-interpolation
+  covers: *id002

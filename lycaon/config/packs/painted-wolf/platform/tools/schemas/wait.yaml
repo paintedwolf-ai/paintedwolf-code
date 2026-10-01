@@ -1,0 +1,66 @@
+tags: [process, sync]
+description: "Park without a worker slot until a condition is satisfied or timeout expires. Use until_complete for exact process handles without periodic timer wakes; omit conditions for a timer. Replaces command: sleep."
+schema:
+  type: object
+  properties:
+    timeout_ms:
+      type: integer
+      minimum: 1000
+      maximum: 1800000
+      default: 60000
+      description: Deadline backstop in milliseconds.
+    until_complete:
+      type: boolean
+      description: Wait for selected processes to finish, become unavailable, or meet a sandbox refusal (outcome refused; the job keeps running). Requires process_done conditions with exact handles. Pass timeout_ms as a deadline backstop, or omit for no deadline. User input or cancellation can interrupt.
+    resume:
+      type: boolean
+      description: Resume without prose, retaining prior conditions and deadline mode. Explicit conditions replace prior conditions; timeout_ms or until_complete replaces the prior deadline mode.
+    reason:
+      type: string
+      maxLength: 240
+      description: Describe the awaited task dependency for the user. Omit tool availability, modes, leases, and recovery internals.
+    conditions:
+      type: array
+      maxItems: 8
+      uniqueItems: true
+      description: First satisfied condition resumes the agent. Omit for a pure timer.
+      items:
+        type: object
+        properties:
+          kind:
+            type: string
+            enum: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]
+            description: Role-allowed event or readiness probe.
+          handles:
+            type: array
+            maxItems: 8
+            uniqueItems: true
+            items: {type: string, minLength: 1}
+            description: process_done only; omit handles for all live command jobs.
+          url: {type: string, description: http_ready only; required absolute HTTP(S) health URL.}
+          method: {type: string, enum: [GET, HEAD], default: GET, description: http_ready only; probe method.}
+          status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: http_ready only; lowest satisfying status.}
+          status_max: {type: integer, minimum: 100, maximum: 599, default: 399, description: http_ready only; highest satisfying status.}
+          host: {type: string, default: localhost, description: port_ready only; loopback hostname or IP.}
+          port: {type: integer, minimum: 1, maximum: 65535, description: port_ready or optional explicit port for http_ready.}
+        required: [kind]
+        additionalProperties: false
+    capability_request:
+      type: object
+      description: Exact loopback authority for http_ready or port_ready. Never needed for public HTTP(S).
+      properties:
+        loopback_connect:
+          type: object
+          description: Request loopback connection authority for exact ports.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              uniqueItems: true
+              description: Loopback TCP ports the readiness probe may connect to.
+              items: {type: integer, minimum: 1, maximum: 65535}
+          additionalProperties: false
+      required: [loopback_connect]
+      additionalProperties: false
+  additionalProperties: false

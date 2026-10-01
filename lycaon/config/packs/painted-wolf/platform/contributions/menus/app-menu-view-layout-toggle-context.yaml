@@ -1,0 +1,9 @@
+id: painted-wolf/platform:app-menu-view-layout-toggle-context
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-toggle-context
+group: "0"
+order: 3
+label: "Hide context"
+state:
+  fact: "context_collapsed"
+state_label: "Show context"

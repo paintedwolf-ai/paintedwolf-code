@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-replace
+command: painted-wolf/platform:find-replace
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+F"
+  windows:
+    - "Mod+H"
+  linux:
+    - "Mod+H"

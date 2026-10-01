@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/envelope.json",
+  "$ref": "../../openapi/components/schemas/event-envelope.generated.yaml#/components/schemas/EventEnvelope",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EventEnvelope"
+}

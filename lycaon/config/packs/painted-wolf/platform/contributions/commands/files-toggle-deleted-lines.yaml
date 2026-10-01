@@ -1,0 +1,14 @@
+id: painted-wolf/platform:files-toggle-deleted-lines
+title: "Toggle deleted lines presentation"
+scope: files
+keywords:
+  - "deleted lines"
+  - "folded deleted lines"
+  - "inplace deleted lines"
+  - "diff presentation"
+category: view
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.toggleDeletedLines"

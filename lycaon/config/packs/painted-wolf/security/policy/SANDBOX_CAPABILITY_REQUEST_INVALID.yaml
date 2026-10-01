@@ -1,0 +1,79 @@
+oar: '1.0'
+id: SANDBOX_CAPABILITY_REQUEST_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.capability
+  - paintedwolf.capability_request_fields
+  - paintedwolf.supports_local_listen
+  - paintedwolf.supports_loopback_connect
+  - paintedwolf.rejection_reason
+  - paintedwolf.rejection_field
+when: paintedwolf.rejection_code == "SANDBOX_CAPABILITY_REQUEST_INVALID"
+effect: block
+copy:
+  what: The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason
+    }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if
+    paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}.
+  cause: The request was empty, malformed, or contained an unsupported capability field.
+  why: Capability authority is accepted only through the declared structured request shape.
+  fix: '{% if paintedwolf.capability_request_fields %}Send a non-empty capability_request using only these fields:
+    {{ paintedwolf.capability_request_fields }}. {% if paintedwolf.supports_local_listen %}A server needs the local_listen
+    object for listener authority. {% endif %}{% if paintedwolf.supports_loopback_connect %}A client of a service
+    on this machine needs the loopback_connect object for client authority. {% endif %}{% if paintedwolf.supports_local_listen
+    %}{% if paintedwolf.supports_loopback_connect %}A harness that binds and then calls itself requests both objects;
+    listen and connect ids do not belong in host_resources. {% endif %}{% endif %} {% else %}This tool accepts no
+    execution capability request. Remove capability_request; if the intended operation needs additional authority,
+    choose an available tool whose published schema declares it.{% endif %}'
+  instead: Branch on Code; correct the structured capability request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_capability
+x-paintedwolf-message: structured capability request invalid
+x-paintedwolf-scenarios:
+- id: server_and_client
+  vars:
+    capability_request_fields:
+    - local_listen
+    - loopback_connect
+    supports_local_listen: true
+    supports_loopback_connect: true
+  expect_contains:
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
+  - capability request
+  - loopback_connect
+- id: unsupported_field
+  vars:
+    reason: unsupported capability_request field
+    field: network
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
+  - capability_request
+- id: unsupported_capability
+  vars:
+    reason: capability is not declared by the tool contract
+    capability: loopback_connect
+  expect_contains:
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
+  - loopback_connect
+- id: client_only
+  vars:
+    capability_request_fields:
+    - loopback_connect
+    supports_loopback_connect: true
+    supports_local_listen: false
+  expect_contains:
+  - loopback_connect
+  - client authority
+- id: no_capabilities
+  vars:
+    capability_request_fields: []
+    supports_loopback_connect: false
+    supports_local_listen: false
+  expect_contains:
+  - accepts no execution capability request
+  - Remove capability_request

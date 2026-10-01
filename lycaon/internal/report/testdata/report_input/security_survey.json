@@ -1,0 +1,582 @@
+{
+  "title": "Security survey",
+  "headline": "The service is not safe to expose to the public internet without two fixes to its auth and query paths.",
+  "run_id": "6f2c1d84-9b30-4f51-a7e2-1c8d5b0a3e77",
+  "project": "acme/app",
+  "started_at": "2026-07-08T14:23:05Z",
+  "completed_at": "2026-07-08T15:04:05Z",
+  "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "workflow": {
+    "id": "security-survey",
+    "version": "1.0.0"
+  },
+  "workforce": {
+    "provider": "anthropic",
+    "model": "claude-opus-5",
+    "agents": [
+      {
+        "type": "security-reviewer",
+        "legs": 2
+      },
+      {
+        "type": "skeptic",
+        "legs": 1
+      },
+      {
+        "type": "web-researcher",
+        "legs": 1
+      }
+    ]
+  },
+  "synthesis": "## Security survey: acme/app\n\nA read-only survey ran in two parallel passes — application code and deployment configuration — followed by a skeptical review of what they returned. No unauthenticated remote exploitability was found, but four issues should be fixed or documented before the service is exposed to the public internet.\n\n### Verified issues\n\n| Severity | File | Line | Issue | What to do |\n|---|---|---|---|---|\n| High | `internal/auth/session.go` | 88 | **Session token compared with `==`.** `validate()` compares the presented bearer token to the stored digest with an ordinary string comparison, which returns as soon as two bytes differ. The comparison is reachable on every authenticated request. | Compare with `subtle.ConstantTimeCompare`. The digest is already fixed width, so no other change is needed. |\n| High | `internal/store/query.go` | 214 | **User input concatenated into a query.** `listByOwner` builds its `WHERE` clause with `fmt.Sprintf` from a caller-supplied sort column. The column is not validated against a set of known names. | Bind parameters, and take the sort column from a fixed allowlist rather than from the request. |\n| Medium | `internal/config/paths.go` | 136 | **Relative paths resolved without canonicalisation.** `resolve()` joins configured paths to the config directory with no `..` handling, so a config writer can address any file the process can read. | Canonicalise with `filepath.EvalSymlinks` and reject anything that escapes the base directory. |\n| Medium | `internal/api/server.go` | 130 | **Loopback auth bypass by default.** When no bearer token is configured and the listener is bound to loopback, authentication is silently omitted. This is intentional, but loopback is not a trust boundary on a shared host. | Make the bypass opt-in behind an explicit `allow_unauthenticated_loopback` flag. |\n\n### Accepted by the service owner\n\n- **Unauthenticated `/healthz` and `/metrics`** (`internal/api/server.go`:64) expose synthetic status and Prometheus counters only. This is a common pattern; operators who do not want the counters public should put them behind a proxy.\n- **Five-second config reload** (`internal/config/paths.go`:121) is deliberate, so ConfigMap updates land without a restart. It is a tuning knob, not a weakness.\n\n### Deployment hardening\n\n| Severity | File | Line | Issue | What to do |\n|---|---|---|---|---|\n| Medium | `Dockerfile` | 2, 8 | Base images are referenced by mutable tags (`golang:1.26-bookworm`, `debian:bookworm-slim`). | Pin to SHA256 digests and verify them at build time. |\n| Low | `deploy/kubernetes.yaml` | 17 | `securityContext` does not set `runAsUser` or `runAsGroup`, though the image ships `USER 65532:65532`. | Set both explicitly so a rebuilt image cannot change the runtime UID. |\n| Low | `.github/workflows/ci.yml` | 14, 18 | Actions are pinned to moving tags (`@v4`, `@v2`). | Pin to full commit SHAs and let Dependabot propose the moves. |\n\n### Recommended order\n\n```go\n// internal/auth/session.go — the whole fix\nif subtle.ConstantTimeCompare([]byte(presented), []byte(stored)) == 1 {\n    return true\n}\n```\n\nThe query builder change is larger: the sort column has to reach the builder as an enum rather than as text.\n",
+  "limits": [
+    "Static review only. Nothing was executed and no exploit was attempted.",
+    "Dependency advisories were not checked against a live database; run govulncheck before release.",
+    "The browser client is a separate repository and was not surveyed."
+  ],
+  "verdicts": [
+    {
+      "phase": "claims",
+      "label": "Naming the candidate claims",
+      "decision": "CLAIMED",
+      "recorded_at": "2026-07-08T14:51:00Z",
+      "fields": [
+        {
+          "name": "threat_model",
+          "value": "A public HTTP service. Unauthenticated clients on the open internet may reach every route; the session cookie is the only auth boundary. Assume the attacker can read the published source, so secrets in the repository or in git history are already lost. Operators are trusted; anyone able to write the deployment config is treated as an operator."
+        }
+      ],
+      "claims": [
+        {
+          "id": "app-1",
+          "statement": "The session token is compared with a non-constant-time string comparison on every authenticated request, which leaks the token a byte at a time to an attacker who can measure response latency.",
+          "cited_evidence": [
+            {
+              "path": "internal/auth/session.go",
+              "line": 88
+            }
+          ],
+          "title": "Session token compared in variable time"
+        },
+        {
+          "id": "app-2",
+          "statement": "A caller-supplied sort column reaches the query builder unvalidated, so a request can inject SQL into the WHERE clause of an otherwise parameterised statement.",
+          "cited_evidence": [
+            {
+              "path": "internal/store/query.go",
+              "line": 214
+            },
+            {
+              "path": "internal/api/handlers.go",
+              "line": 71
+            }
+          ],
+          "title": "Sort column reaches the query builder unvalidated"
+        },
+        {
+          "id": "app-3",
+          "statement": "Health and metrics routes are intentionally unauthenticated and expose only synthetic status; this is a hardening consideration rather than a vulnerability.",
+          "cited_evidence": [
+            {
+              "path": "internal/api/server.go",
+              "line": 64
+            }
+          ],
+          "title": "Health and metrics routes disclose tenant data"
+        },
+        {
+          "id": "infra-1",
+          "statement": "Mutable base image tags are a supply-chain hardening concern rather than an exploitable application defect, and the deployment already pins its own image by digest.",
+          "cited_evidence": [
+            {
+              "path": "Dockerfile",
+              "line": 2
+            }
+          ],
+          "title": "Base images referenced by mutable tags"
+        }
+      ]
+    },
+    {
+      "phase": "challenge",
+      "label": "Challenging the claims",
+      "decision": "CHALLENGED",
+      "recorded_at": "2026-07-08T14:58:30Z",
+      "claims": [
+        {
+          "id": "app-1",
+          "status": "survives",
+          "statement": "The early-return comparison is reachable on every authenticated request and the digest is fixed width, so the timing signal is not masked by length. Remote measurement over a LAN remains practical.",
+          "cited_evidence": [
+            {
+              "handle": "read#2"
+            }
+          ]
+        },
+        {
+          "id": "app-2",
+          "status": "survives",
+          "statement": "The sort column reaches the builder from the query string with no allowlist between them; the surrounding statement being parameterised does not protect the ORDER BY clause.",
+          "cited_evidence": [
+            {
+              "path": "internal/store/query.go",
+              "line": 214
+            }
+          ]
+        },
+        {
+          "id": "app-3",
+          "status": "refuted",
+          "statement": "The exposed counters carry no tenant identifiers and no request paths, so under the stated threat model this is hardening rather than disclosure.",
+          "cited_evidence": [
+            {
+              "path": "internal/api/server.go",
+              "line": 64
+            }
+          ]
+        },
+        {
+          "id": "infra-1",
+          "status": "survives",
+          "statement": "The tag is resolved at build time and the resulting digest is not recorded, so a rebuild can silently change the base image. This is weaker than the application findings but real.",
+          "cited_evidence": [
+            {
+              "path": "Dockerfile",
+              "line": 2
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scan": {
+    "scanners": [
+      "opengrep"
+    ],
+    "total": 148,
+    "stored": 40,
+    "listed": 3,
+    "by_level": {
+      "critical": 0,
+      "high": 1,
+      "medium": 2,
+      "low": 0,
+      "info": 145
+    },
+    "ignored": 2,
+    "merged": 4
+  },
+  "evidence": [
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:grep#4",
+      "kind": "grep",
+      "path": "internal/auth",
+      "excerpt": "session.go:88: if presented == stored {",
+      "trust_tier": "structured",
+      "matches": 16,
+      "match_files": 3,
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:grep#6",
+      "kind": "grep",
+      "path": "internal/store",
+      "excerpt": "query.go:214: clause := fmt.Sprintf(\"WHERE owner = ? ORDER BY %s\", sortColumn)",
+      "trust_tier": "structured",
+      "matches": 4,
+      "match_files": 1
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:read#2",
+      "kind": "read",
+      "path": "internal/auth/session.go",
+      "line": 84,
+      "line_end": 92,
+      "excerpt": "84 func (s *Store) validate(presented string) bool {\n85 \tstored := s.digestFor(presented)\n86 \tif presented == stored {\n87 \t\treturn true\n88 \t}\n89 \treturn false\n90 }",
+      "trust_tier": "structured",
+      "cited_by": [
+        "report",
+        "app-1",
+        "challenge"
+      ]
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:read#5",
+      "kind": "read",
+      "path": "internal/store/query.go",
+      "line": 210,
+      "line_end": 218,
+      "excerpt": "210 func (s *Store) listByOwner(owner, sortColumn string) ([]Row, error) {\n211 \t// sortColumn arrives from the request query string.\n214 \tclause := fmt.Sprintf(\"WHERE owner = ? ORDER BY %s\", sortColumn)",
+      "trust_tier": "structured",
+      "cited_by": [
+        "report",
+        "app-2"
+      ]
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:read#9",
+      "kind": "read",
+      "path": "Dockerfile",
+      "line": 1,
+      "line_end": 5,
+      "excerpt": "1 FROM golang:1.26-bookworm AS build\n2 WORKDIR /src\n3 COPY go.mod go.sum ./\n4 RUN go build -o /out/app ./cmd/app\n5 FROM debian:bookworm-slim",
+      "trust_tier": "structured",
+      "cited_by": [
+        "report",
+        "infra-1"
+      ]
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:list#1",
+      "kind": "list",
+      "path": "deploy",
+      "trust_tier": "structured"
+    },
+    {
+      "handle": "8c41f7ad-2b6e-4d90-9f13-05aa7c6e4b21:web#3",
+      "kind": "web",
+      "url": "https://owasp.org/www-community/attacks/SQL_Injection",
+      "excerpt": "Timing attacks against HMAC verification remain practical over a LAN when the comparison short-circuits.",
+      "trust_tier": "observed",
+      "cited_by": [
+        "report"
+      ]
+    }
+  ],
+  "evidence_total": 31,
+  "sources": [
+    {
+      "url": "https://owasp.org/www-community/attacks/SQL_Injection",
+      "title": "SQL injection",
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "url": "https://pkg.go.dev/crypto/subtle#ConstantTimeCompare",
+      "title": "subtle.ConstantTimeCompare",
+      "cited_by": [
+        "report",
+        "challenge"
+      ]
+    },
+    {
+      "url": "https://docs.docker.com/build/building/best-practices/",
+      "cited_by": [
+        "challenge"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "art_capture_login",
+      "caption": "Login form after submit",
+      "evidence_handle": "capture#1",
+      "mime": "image/png",
+      "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAMBAQAY3Y20AAAAAElFTkSuQmCC"
+    },
+    {
+      "id": "art_render_mockup",
+      "caption": "Signup — empty state",
+      "mime": "image/png",
+      "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAMBAQAY3Y20AAAAAElFTkSuQmCC"
+    },
+    {
+      "id": "art_capture_login",
+      "caption": "Login form (repeat cite)",
+      "evidence_handle": "capture#1",
+      "mime": "image/png",
+      "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAMBAQAY3Y20AAAAAElFTkSuQmCC"
+    }
+  ],
+  "scan_rules": [
+    {
+      "id": "opengrep:go.lang.security.audit.crypto.use-of-weak-comparison",
+      "scanner": "opengrep",
+      "description": "Session token compared with a variable-time equality operator."
+    },
+    {
+      "id": "opengrep:go.lang.security.audit.sqli.string-formatted-query",
+      "scanner": "opengrep",
+      "description": "Query built with fmt.Sprintf from a caller-supplied identifier."
+    },
+    {
+      "id": "opengrep:dockerfile.security.missing-user",
+      "scanner": "opengrep",
+      "description": "Final stage does not set a non-root USER."
+    }
+  ],
+  "scan_rows": [
+    {
+      "severity": "high",
+      "rule_id": "opengrep:go.lang.security.audit.crypto.use-of-weak-comparison",
+      "file": "internal/auth/session.go",
+      "line": 88,
+      "message": "session token compared with a variable-time equality operator"
+    },
+    {
+      "severity": "medium",
+      "rule_id": "opengrep:go.lang.security.audit.sqli.string-formatted-query",
+      "file": "internal/store/query.go",
+      "line": 214,
+      "message": "query built with fmt.Sprintf from a caller-supplied identifier"
+    },
+    {
+      "severity": "medium",
+      "rule_id": "opengrep:dockerfile.security.missing-user",
+      "file": "Dockerfile",
+      "line": 8,
+      "message": "final stage does not set a non-root USER"
+    }
+  ],
+  "summary": "Two defects in the service's authentication and query paths must be fixed before it is exposed to the public internet; both are reachable by any unauthenticated client. Four further issues are hardening rather than exploitable weaknesses, and two behaviours the owner has accepted are recorded as such. Nothing was executed — every conclusion rests on reading the code at this commit.",
+  "findings": [
+    {
+      "id": "app-1",
+      "title": "The session token is compared in variable time on every authenticated request",
+      "severity": "high",
+      "status": "survives",
+      "impact": "An attacker who can measure response latency recovers a valid session token a byte at a time, from anywhere the service is reachable.",
+      "action": "Compare the presented token with the stored digest using a constant-time helper. The digest is already fixed width, so nothing else changes.",
+      "where": [
+        {
+          "path": "internal/auth/session.go",
+          "line": 88
+        },
+        {
+          "handle": "read#2"
+        }
+      ],
+      "disposition": "act"
+    },
+    {
+      "id": "app-2",
+      "title": "A caller-supplied sort column reaches the query builder unvalidated",
+      "severity": "high",
+      "status": "survives",
+      "impact": "A request can inject SQL into the ORDER BY clause of an otherwise parameterised statement, reading or altering any row the service can reach.",
+      "action": "Take the sort column from a fixed allowlist rather than from the request, and bind the remaining parameters.",
+      "where": [
+        {
+          "path": "internal/store/query.go",
+          "line": 214
+        },
+        {
+          "path": "internal/api/handlers.go",
+          "line": 71
+        }
+      ],
+      "disposition": "act"
+    },
+    {
+      "id": "infra-1",
+      "title": "Base images are referenced by mutable tags",
+      "severity": "medium",
+      "status": "survives",
+      "impact": "A rebuild can silently change the base image, and the resulting digest is not recorded anywhere.",
+      "action": "Pin both stages to SHA256 digests and verify them at build time.",
+      "where": [
+        {
+          "path": "Dockerfile",
+          "line": 2
+        }
+      ],
+      "disposition": "act"
+    },
+    {
+      "id": "app-3",
+      "title": "Health and metrics routes are unauthenticated by design",
+      "status": "refuted",
+      "impact": "The exposed counters carry no tenant identifiers and no request paths, so under the stated threat model this is hardening rather than disclosure.",
+      "action": "No action needed. Operators who do not want the counters public should place them behind a proxy.",
+      "where": [
+        {
+          "path": "internal/api/server.go",
+          "line": 64
+        }
+      ],
+      "disposition": "held"
+    }
+  ],
+  "ask": {
+    "do": "Hold public exposure until the two fixes to sign-in and data queries land.",
+    "effort": "small",
+    "why": "Anyone on the internet could otherwise take over a signed-in session or read stored records."
+  },
+  "brief": {
+    "question": "How serious is it?",
+    "levels": [
+      {
+        "label": "Critical",
+        "answer": "Critical risk",
+        "means": "Act now.",
+        "tone": "critical"
+      },
+      {
+        "label": "High",
+        "answer": "High risk",
+        "means": "Fix before the next release.",
+        "tone": "high"
+      },
+      {
+        "label": "Moderate",
+        "answer": "Moderate risk",
+        "means": "A real flaw exists. Fix it on a normal schedule; it is not an emergency.",
+        "tone": "medium"
+      },
+      {
+        "label": "Low",
+        "answer": "Low risk",
+        "means": "Minor issues only. Nothing urgent.",
+        "tone": "low"
+      },
+      {
+        "label": "None",
+        "answer": "No known risk",
+        "means": "Nothing found that needs action.",
+        "tone": "good"
+      }
+    ],
+    "worst": 0,
+    "best": 0,
+    "basis": "anyone who can reach it over the network could use it",
+    "dimensions": [
+      "Reachable",
+      "Worst outcome",
+      "Attacker needs"
+    ],
+    "rated": [
+      {
+        "number": 1,
+        "title": "The session token is compared in variable time on every authenticated request",
+        "answers": [
+          "Yes",
+          "Data exposed",
+          "Anyone remote"
+        ],
+        "worst": 0,
+        "best": 0,
+        "adjudicated": true
+      },
+      {
+        "number": 2,
+        "title": "A caller-supplied sort column reaches the query builder unvalidated",
+        "answers": [
+          "Yes",
+          "Data exposed",
+          "Anyone remote"
+        ],
+        "worst": 0,
+        "best": 0,
+        "adjudicated": true
+      },
+      {
+        "number": 3,
+        "title": "Base images are referenced by mutable tags",
+        "answers": [
+          "Unknown",
+          "Code runs",
+          "Project files"
+        ],
+        "worst": 1,
+        "best": 3
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "app-1",
+      "title": "Session token compared in variable time",
+      "class": "held",
+      "status": "survives"
+    },
+    {
+      "id": "app-2",
+      "title": "Sort column reaches the query builder unvalidated",
+      "class": "held",
+      "status": "survives"
+    },
+    {
+      "id": "app-3",
+      "title": "Health and metrics routes disclose tenant data",
+      "class": "failed",
+      "status": "refuted"
+    },
+    {
+      "id": "infra-1",
+      "title": "Base images referenced by mutable tags",
+      "class": "held",
+      "status": "survives"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "inventory_unaccounted",
+      "count": 4,
+      "of": 40
+    },
+    {
+      "kind": "legs_partial",
+      "count": 1,
+      "of": 3,
+      "names": [
+        "Deployment images"
+      ]
+    },
+    {
+      "kind": "scans_standing",
+      "count": 1,
+      "of": 3,
+      "names": [
+        "sast"
+      ],
+      "detail": 12,
+      "detail_files": 3
+    }
+  ],
+  "checks": [
+    {
+      "kind": "area",
+      "subject": "Sign-in and sessions",
+      "state": "checked"
+    },
+    {
+      "kind": "area",
+      "subject": "Data queries",
+      "state": "checked"
+    },
+    {
+      "kind": "area",
+      "subject": "Deployment images",
+      "state": "partial"
+    },
+    {
+      "kind": "review",
+      "subject": "Second opinion",
+      "state": "checked",
+      "held": 3,
+      "failed": 1
+    },
+    {
+      "kind": "scans",
+      "state": "partial",
+      "ran": 3,
+      "used": 36,
+      "total": 40
+    }
+  ],
+  "inventory": {
+    "total": 40,
+    "linked": 6,
+    "set_aside": 30,
+    "unaccounted": 4,
+    "set_asides": [
+      {
+        "reason": "test fixtures",
+        "groups": 30
+      }
+    ]
+  }
+}

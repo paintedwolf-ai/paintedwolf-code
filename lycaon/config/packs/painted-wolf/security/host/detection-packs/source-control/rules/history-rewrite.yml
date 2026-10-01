@@ -1,0 +1,31 @@
+title: Rewrite repository history
+id: 63bd5321-161d-4587-b668-e7c3d9dcbda0
+description: Rewrites every commit in the repository, replacing the objects other clones share.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_git:
+    Image: git
+    CommandLine|contains:
+      - ' filter-branch'
+      - ' replace --graft'
+  selection_tools:
+    Image:
+      - git-filter-repo
+      - bfg
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_git or selection_tools) and not filter_rehearsal and not filter_local

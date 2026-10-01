@@ -1,0 +1,18 @@
+# http_request — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    http_request:
+        tool: http_request
+        tier_hint: recoverable
+        what_changes: Sends one HTTP request to the declared destination.
+        who_affected: The destination service may observe the request and apply its API semantics.
+        if_wrong: The remote service may persist data or trigger an action; review the method and destination.
+        allow_line: sending an HTTP request to `{{ url }}`
+        scenarios:
+            - id: default
+              vars:
+                url: https://api.example.test/v1/items
+              expect_contains:
+                - HTTP request
+                - destination

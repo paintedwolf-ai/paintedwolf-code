@@ -1,0 +1,93 @@
+id: painted-wolf/themes:catppuccin-frappe
+name: Catppuccin Frappé
+appearance: dark
+
+# The surfaces step in soft pastel rungs; lighter edges keep them soft.
+bevel:
+  strength: 0.8
+
+# Mantle frames the base page; surface0 lifts menus and popovers.
+window_colors:
+  main: "#ca9ee6"
+  anchors: ["#ca9ee6", "#a6d189", "#8caaee", "#e5c890"]
+  hue_spread: 28
+  chroma_min: 0.04
+  chroma_max: 0.18
+
+tokens:
+  background: "#303446" # base
+  surface: "#303446"
+  surface-elevated: "#414559" # surface0
+  surface-chrome: "#292c3c" # mantle
+  # Blocks sit one rung above the page; a lifted segment takes the next.
+  surface-offset: "#414559" # surface0
+  surface-raised: "#51576d" # surface1
+  border: "#51576d" # surface1
+  text: "#c6d0f5"
+  text-muted: "#a5adce" # subtext0
+  accent: "#ca9ee6" # mauve
+  accent-warm: "#f4b8e4" # pink
+  accent-text: "#ca9ee6"
+  accent-signal: "#ca9ee6"
+  danger: "#e78284" # red
+  warning: "#e5c890" # yellow
+  status-positive: "#a6d189" # green
+  status-running: "#ef9f76" # peach
+  draft-accent: "#81c8be" # teal
+  tint-hue: "#737994" # overlay0
+  # One rung above surface-offset, so a chosen fill stays visible on it.
+  selection: "#51576d" # surface1
+  selection-strong: "#626880" # surface2
+  caret: "#f2d5cf" # rosewater
+  diff-add-hue: "#a6d189"
+  diff-delete-hue: "#e78284"
+  cost-coordinator: "#ef9f76"
+  cost-workers: "#8caaee"
+  cost-summarizer: "#a6d189"
+  identity-1: "#ca9ee6"
+  identity-2: "#8caaee"
+  identity-3: "#a6d189"
+  identity-4: "#ef9f76"
+  identity-5: "#81c8be"
+
+syntax:
+  keyword: "#ca9ee6"
+  string: "#a6d189"
+  number: "#ef9f76"
+  constant: "#ef9f76"
+  variable: "#c6d0f5"
+  type: "#e5c890"
+  function: "#8caaee"
+  property: "#8caaee" # blue — JSON keys
+  operator: "#99d1db" # sky
+  punctuation: "#949cbb" # overlay2
+  tag: "#8caaee"
+  meta: "#e5c890" # yellow — annotations and metadata
+  invalid: "#e78284"
+  link: "#8caaee"
+  heading: { color: "#8caaee", bold: true }
+  inserted: "#a6d189"
+  deleted: "#e78284"
+  emphasis: { italic: true }
+  strong: { bold: true }
+  quote: { color: "#949cbb", italic: true }
+  strikethrough: {}
+  comment: { color: "#949cbb", italic: true }
+  string.escape: "#f4b8e4" # pink
+  string.regexp: "#f4b8e4"
+  variable.parameter: "#ea999c" # maroon
+  variable.special: "#e78284"
+  keyword.self: "#e78284"
+  function.macro: "#f2d5cf" # rosewater
+  property.attribute: "#e5c890"
+
+icons:
+  # The round join applies to every stroked glyph.
+  stroke:
+    join: round
+  geometry:
+    find: '<circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6 13.5 13.5"/>'
+    goto-line: '<path d="M6.5 3 5 13"/><path d="M11 3 9.5 13"/><path d="M3.5 6.25h9.5"/><path d="M3 9.75h9.5"/>'
+    copy: '<rect x="5.75" y="5.75" width="7.75" height="7.75" rx="2.75"/><path d="M10.25 3.6A1.6 1.6 0 0 0 8.65 2H4.6A2.6 2.6 0 0 0 2 4.6v4.05a1.6 1.6 0 0 0 1.6 1.6"/>'
+    check: '<path d="M3.5 8.6 6.4 11.5 12.5 5.2"/>'
+    more: '<circle cx="2.9" cy="8" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="13.1" cy="8" r="1.6"/>'

@@ -1,0 +1,31 @@
+oar: '1.0'
+id: CAPTURE_MODE_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.mode
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_MODE_INVALID"
+effect: block
+copy:
+  what: The requested capture mode {{ paintedwolf.mode }} is unsupported.
+  cause: capture must be omitted, screenshot, filmstrip, or timeline.
+  why: 'Each mode is a defined kind of evidence: one settled frame, a frame per settled step, or a recording of every painted frame.'
+  fix: 'Pass capture:"screenshot" (default), capture:"filmstrip" with an actions script, or capture:"timeline" to record the drive as it paints.'
+  instead: Branch on Code CAPTURE_MODE_INVALID; use screenshot, filmstrip, or timeline
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page capture mode is not screenshot, filmstrip, or timeline
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_MODE_INVALID'

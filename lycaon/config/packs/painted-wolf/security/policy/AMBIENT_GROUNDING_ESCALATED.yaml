@@ -1,0 +1,31 @@
+oar: '1.0'
+id: AMBIENT_GROUNDING_ESCALATED
+kind: invariant
+anchor: coordinator.post_turn
+requires:
+  facts:
+  - paintedwolf.claims_completion
+  - paintedwolf.grounding_escalated
+when: paintedwolf.grounding_escalated && !paintedwolf.claims_completion
+effect: nudge
+copy:
+  cause: Several turns closed with citations or worker_summary tags that did not trace
+  why: Session keeps running; ground completion claims in observed evidence
+  fix: Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing
+    references or delivery state; do not spawn redundant work to clear an advisory.
+  instead: Keep going; ground claims in observed evidence or worker_summary tags
+  what: Repeated grounding gaps flagged — advisory, not blocked
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ambient_grounding
+x-paintedwolf-message: Repeated grounding gaps flagged — advisory, not blocked
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - Tool feedback
+  - 'Code: AMBIENT_GROUNDING_ESCALATED'
+  - worker_summary

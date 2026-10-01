@@ -1,0 +1,34 @@
+rules:
+- id: lycaon.julia.tls-verification-disabled
+  languages:
+  - julia
+  severity: ERROR
+  message: HTTP certificate verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - julia
+  pattern: HTTP.request(..., require_ssl_verification=false, ...)
+- id: lycaon.julia.genie-code-injection
+  languages:
+  - julia
+  severity: ERROR
+  message: Genie request parameters reach Julia code evaluation
+  mode: taint
+  pattern-sources:
+  - pattern: Genie.Requests.params(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Core.eval($MODULE, Meta.parse($X))
+    - focus-metavariable: $X
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - julia
+    references:
+    - https://genieframework.github.io/Genie.jl/dev/tutorials/5--Handling_Query_Params.html

@@ -1,0 +1,37 @@
+title: Write a cloud CLI credential
+id: 2f8b31d5-7c64-4c19-b0a7-6d3e9a5411c2
+description: >-
+  Rewrites a cloud CLI's stored credentials. These directories also carry
+  credential_process and exec blocks, which name a program to run on every later call.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-10'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.credential-store
+level: high
+detection:
+  selection_target:
+    TargetFile|contains:
+      # Directory prefixes give the ask its reach. The named files below give a
+      # grant its precision: a refused write is usually the temporary sibling a
+      # save creates, and it resolves to the target by sharing its name.
+      - '~/.aws/'
+      - '~/.azure/'
+      - '~/.config/gcloud/'
+      - '~/.kube/'
+      - '~/.oci/'
+      - '~/.aws/credentials'
+      - '~/.aws/config'
+      - '~/.kube/config'
+      - '~/.azure/msal_token_cache.json'
+      - '~/.config/gcloud/credentials.db'
+      - '~/.config/gcloud/application_default_credentials.json'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_target and not filter_rehearsal

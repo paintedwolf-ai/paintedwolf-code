@@ -1,0 +1,83 @@
+@utility den-settings-slot-list {
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-settings-slot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-4) var(--spacing-den-6);
+  padding: var(--spacing-den-7) var(--spacing-den-8);
+  min-width: 0;
+
+  & + .den-settings-slot-row {
+    border-top: 1px solid var(--den-line-quiet);
+  }
+}
+
+@utility den-cost-sources--idle {
+  opacity: 0.55;
+}
+
+@utility den-settings-slot-row__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-1);
+  min-width: 0;
+
+  & .den-settings-hint {
+    margin: 0;
+    max-width: none;
+  }
+}
+
+@utility den-settings-slot-row__value {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+@utility den-settings-slot-row__name {
+  font-size: var(--text-den-body);
+  font-weight: 550;
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep option badges beside the name. */
+@utility den-settings-slot-option__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  width: 100%;
+  min-width: 0;
+}
+
+/* Engine and rule source as the option's subtitle. */
+@utility den-settings-slot-option__detail {
+  margin-top: 0.2143rem;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  text-wrap: pretty;
+}
+
+/* Install command as the option's subtitle when the tool is not on PATH. */
+@utility den-settings-slot-install {
+  margin-top: 0.2143rem;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+/* Narrow columns stack the value under the label rather than crushing it. */
+@container den-settings-col (max-width: 34rem) {
+  .den-settings-slot-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

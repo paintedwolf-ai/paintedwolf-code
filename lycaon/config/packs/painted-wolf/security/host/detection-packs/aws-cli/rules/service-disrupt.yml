@@ -1,0 +1,37 @@
+title: Stop or restart a running resource
+id: ad48310d-73fb-4907-b285-d3c37d5ac3ad
+description: Stops, reboots, or scales down a running AWS resource.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  verbs_service_disrupt:
+    ApiAction|contains:
+      - ':stop-'
+      - ':reboot-'
+      - ':suspend-'
+      - ':cancel-'
+      - ':update-desired-capacity'
+      - ':set-desired-capacity'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image or selection_structured) and verbs_service_disrupt and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

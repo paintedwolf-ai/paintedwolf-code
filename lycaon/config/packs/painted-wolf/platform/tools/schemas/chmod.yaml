@@ -1,0 +1,16 @@
+tags: [filesystem]
+description: "Change approval bits on repo-relative paths. Replaces command: chmod(1)."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 20
+      description: Target paths (capped by maxItems)
+    mode:
+      type: string
+      description: Symbolic (+x, u+x, -x) or octal allowlist (755, 644, …)
+  required: [paths, mode]
+  additionalProperties: false

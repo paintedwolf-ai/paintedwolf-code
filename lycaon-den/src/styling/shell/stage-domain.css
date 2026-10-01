@@ -1,0 +1,144 @@
+/* Shared shell layout and chrome. */
+
+:root {
+  --den-titlebar-inset: 0px;
+  --shell-header-height: auto;
+  --shell-header-row-gap: 8px;
+  /* Reopen controls at a stage title bar's window edges. */
+  --den-titlebar-edge-control: 24px;
+  --den-pane-control-center: max(var(--den-traffic-light-center, 0px), calc(var(--den-unified-chrome-row) / 2));
+}
+
+.den-custom-chrome {
+  --den-titlebar-inset: 28px;
+  --den-unified-chrome-row: max(28px, 2em);
+  --shell-header-row-gap: 0px;
+}
+
+.den-tauri-macos.den-custom-chrome {
+  --den-titlebar-inset: 30px;
+  --den-unified-chrome-row: max(30px, 2.14em);
+  /* Full-bleed chat header clearance for overlay traffic lights. */
+  --den-traffic-light-clearance: 78px;
+  /* Measured centerline of the window buttons placed at trafficLightPosition (16, 16). */
+  --den-traffic-light-center: 18px;
+}
+
+.den-shell-aside {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  align-self: stretch;
+  width: var(--den-nav-slot-width);
+  min-width: var(--den-nav-slot-width);
+  max-width: var(--den-nav-slot-width);
+  min-height: 0;
+  /* Rail marks share the declared chrome plane. */
+  background: var(--den-surface-chrome);
+  --den-plane: var(--den-surface-chrome);
+  overflow: hidden;
+}
+
+.den-shell-nav-collapsed .den-shell-aside {
+  pointer-events: none;
+}
+
+/* Home wash crossfades with stage content. */
+.den-shell-stage-host {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  contain: layout style;
+}
+
+.den-shell-stage-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--den-stage-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1);
+}
+
+.den-shell-stage-host--washed .den-shell-stage-wash {
+  opacity: 1;
+}
+
+.den-shell-workspace-veil {
+  position: absolute;
+  inset: 0;
+  z-index: var(--den-z-workspace-veil);
+  display: flex;
+  background: var(--den-background);
+  opacity: 1;
+  transition: opacity var(--den-stage-fade-duration)
+    cubic-bezier(0.22, 0.15, 0.25, 1);
+}
+
+.den-shell-workspace-veil--hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity var(--den-stage-fade-duration) cubic-bezier(0.22, 0.15, 0.25, 1),
+    visibility 0s linear var(--den-stage-fade-duration);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-shell-workspace-veil,
+  .den-shell-workspace-veil--hidden {
+    transition: none;
+  }
+}
+
+.den-shell-stage-host .den-shell-stage {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Context drawers cover the full chat stage. */
+.den-shell-stage--chat {
+  position: relative;
+}
+
+/* Concurrent surfaces share the column bounds. */
+.den-split-col--dual .den-shell-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.den-split-col--dual .den-shell-stage--chat {
+  z-index: 2;
+}
+
+.den-split-col--dual .den-shell-stage--chat.den-exit-fade {
+  z-index: 3;
+}
+
+.den-split-col--dual .den-shell-stage--pane {
+  z-index: 1;
+}
+
+/* Inline handoff columns share full-size bounds. */
+.den-shell-stage-host--handoff > .den-split-col {
+  position: absolute;
+  inset: 0;
+}
+
+.den-shell-stage-host--handoff > .den-split-col--stage {
+  z-index: 1;
+}
+
+.den-shell-stage-host--handoff > .den-split-col--chat {
+  z-index: 2;
+}

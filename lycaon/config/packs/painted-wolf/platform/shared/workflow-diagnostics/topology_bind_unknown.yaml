@@ -1,0 +1,5 @@
+code: topology_bind_unknown
+message: |
+  Phase {{phase}} binds topology stage {{stage}} which is not in topology {{topology}}.
+replacement: |
+  Set bind_topology_stage to a pipeline.stages[].name from the topology YAML.

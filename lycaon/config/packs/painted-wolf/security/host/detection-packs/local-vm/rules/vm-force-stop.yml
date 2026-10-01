@@ -1,0 +1,35 @@
+title: Force a virtual machine off
+id: c83bff99-5616-4ad9-867c-b9dd11141276
+description: Cuts power to a running virtual machine without letting the guest shut down.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  # virsh calls this "destroy", but it stops the domain and leaves its disks
+  # alone — the definition survives and it can be started again.
+  selection_virsh:
+    Image: virsh
+    CommandLine|contains: ' destroy'
+  selection_vbox:
+    Image:
+      - VBoxManage
+      - vboxmanage
+    CommandLine|contains|all:
+      - ' controlvm'
+      - ' poweroff'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_virsh or selection_vbox) and not filter_rehearsal and not filter_local

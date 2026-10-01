@@ -1,0 +1,35 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Browser features unavailable
+message: >-
+  Screenshots, page rendering, and design mockups are unavailable right now.
+  Other parts of the app still work.
+suggested_action: >-
+  {% if reason == "managed_cache_missing" -%}
+  Restart the app. If browser features are still unavailable, reconnect to the
+  internet and restart the app again.
+  {%- elif reason == "unusable" -%}
+  Restart the app. If browser features remain unavailable, open diagnostics and
+  save a diagnostics bundle.
+  {%- else -%}
+  Reinstall the app, then reopen it.
+  {%- endif %}
+scenarios:
+  - id: dev_managed_cache
+    vars:
+      reason: managed_cache_missing
+    expect_contains:
+      - browser
+      - Restart
+  - id: shipped_bundle
+    vars:
+      reason: bundle_missing
+    expect_contains:
+      - features
+      - Reinstall
+  - id: unusable
+    vars:
+      reason: unusable
+    expect_contains:
+      - unavailable
+      - diagnostics

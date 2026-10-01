@@ -1,0 +1,30 @@
+title: Force-delete a local branch or worktree
+id: 6e5e1e90-05f0-4a11-8da9-1e31a3cc7b65
+description: Deletes an unmerged branch or removes a worktree along with its changes.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  selection_image:
+    Image: git
+  # Regex, not contains: substring matching folds case, and `-d` on a branch is
+  # the safe merged-only delete that `-D` overrides.
+  verbs_branch_remove:
+    CommandLine|re:
+      - '\sbranch\s+(-D|--delete\s+--force|--force\s+--delete)\b'
+      - '\sworktree\s+remove\b'
+      - '\stag\s+-d\b'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_branch_remove and not filter_rehearsal and not filter_local

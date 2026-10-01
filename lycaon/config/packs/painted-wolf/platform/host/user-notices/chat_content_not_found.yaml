@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Content not found"
+message: "That content is no longer stored with this chat."
+suggested_action: "Refresh the chat."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer stored"

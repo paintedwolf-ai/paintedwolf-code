@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-add-cursor-below
+command: painted-wolf/platform:editor-add-cursor-below
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+Shift+ArrowDown"
+  windows:
+    - "Mod+Shift+ArrowDown"
+  linux:
+    - "Mod+Shift+ArrowDown"

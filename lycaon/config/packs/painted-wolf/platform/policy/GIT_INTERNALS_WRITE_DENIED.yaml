@@ -1,0 +1,58 @@
+oar: '1.0'
+id: GIT_INTERNALS_WRITE_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.class
+  - paintedwolf.path
+  - paintedwolf.extraction_started
+  - paintedwolf.dest
+  - paintedwolf.extracted_entries
+  - paintedwolf.extracted_bytes
+  - paintedwolf.extracted_paths_sample
+  - paintedwolf.extracted_paths_omitted
+when: paintedwolf.rejection_code == "GIT_INTERNALS_WRITE_DENIED"
+effect: block
+copy:
+  what: Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not
+    writable via native tools.
+  cause: Native tools do not write inside .git; Git's own operations change repository metadata, and hooks
+    or config planted there would run later under the user's own terminal git.
+  why: Keeping native writes out of .git leaves every repository change to a reviewed Git operation and
+    keeps the user's terminal git honest about what we refuse to execute ourselves.
+  fix: 'Use a command git command if repository settings must change, or ask the user to edit them in
+    their terminal.{% if paintedwolf.extraction_started %} Extraction stopped in {{ paintedwolf.dest }}
+    after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional completed paths are retained in the structured result.{% endif %} The
+    destination and parent directories may also have been created; completed changes remain in place.
+    Inspect them before retrying so you do not overwrite work.{% endif %}'
+  instead: Use command git commands for repository settings; do not retry the native write
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_internals_write
+x-paintedwolf-message: git internals write denied
+x-paintedwolf-scenarios:
+- id: hooks
+  vars:
+    detail: bad args
+    path: .git/hooks/pre-commit
+    class: hooks
+    profile: implement
+    tool: write
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_INTERNALS_WRITE_DENIED'
+  - command git
+- id: config
+  vars:
+    detail: bad args
+    path: .git/config
+    class: config
+    profile: implement
+    tool: edit
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_INTERNALS_WRITE_DENIED'
+  - command git

@@ -1,0 +1,89 @@
+@utility den-files-tree-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 4px;
+  min-height: 0;
+}
+
+/* Anchors the mode switch in the tree column. */
+@utility den-files-tree-pane-header--switch {
+  flex-shrink: 0;
+  min-height: var(--den-files-pane-chrome-h);
+  padding: 0 var(--den-files-tree-pane-inset-x, 14px);
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Stacks both scroll hosts under the shared header. */
+@utility den-files-tree-panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Long tokens wrap, so the drawer scrolls only vertically. */
+@utility den-file-summary-drawer__body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+@utility den-file-summary-drawer__content {
+  padding-bottom: 8px;
+}
+
+/* The frame controls the shared body and pinned-row inset, matching the header. */
+@utility den-files-tree-scroll-frame {
+  --den-files-tree-inset: var(--den-files-tree-pane-inset-x, 1px);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Pushed folders clip above the viewport without shifting rows. */
+@utility den-files-tree-sticky-host {
+  position: absolute;
+  top: 0;
+  left: var(--den-files-tree-inset, 1px);
+  right: var(--den-files-tree-inset, 1px);
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Each pane controls its scroll state. */
+@utility den-files-tree-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior: none;
+}
+
+@utility den-files-review-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The review pane keeps its own scroll offset when rows change above it. */
+.den-files-review-scroll > .den-scrollport__viewport {
+  overflow-anchor: none;
+}
+
+@utility den-files-tree-body__pane--hidden {
+  display: none;
+}
+
+/* The unlayered files-domain rule controls wrapping. */
+@utility den-files-pane-segment {
+  flex: 1 1 auto;
+  min-width: 0;
+  & .den-browse-segment {
+    flex: 1;
+  }
+}
+

@@ -1,0 +1,9 @@
+id: path-aliasing
+label: Path aliasing
+description: >-
+  Creating a second name for a location the ask catalogue classifies. Every
+  other path floor here compares names, and a hard link leaves nothing in the
+  name to compare: the copy sits inside an attached root, so a later read of it
+  is judged as ordinary project work. The moment the alias is made is the only
+  moment the intent is visible, which is what this pack watches. It is an
+  overlay and openly incomplete — a miss falls back to the floor.

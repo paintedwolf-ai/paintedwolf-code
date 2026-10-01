@@ -1,0 +1,465 @@
+package workflow
+
+import (
+	"context"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+func reviewLoopTestManifest() workflowdef.Manifest {
+	return workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID:      "rltest",
+		Version: "1.0.0",
+		// Host auto-advances on gate satisfaction so RecordReviewLoopVerdict's TryAutoAdvance lands.
+		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
+		PhaseDefs: []workflowdef.PhaseDef{
+			{
+				ID:           "judge",
+				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				Gates:        []string{"evidence_passed:rl_key"},
+				Next:         "done",
+				ReviewLoop: &workflowdef.ReviewLoopDef{
+					EvidenceKey:  "rl_key",
+					IterationCap: 2,
+					VerdictSchema: map[string]string{
+						"verdict": "SELECTED|NEEDS_REVISION",
+						"winner":  "string",
+					},
+				},
+			},
+			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
+		},
+	})
+}
+
+func startReviewLoopRun(ctx context.Context, t *testing.T, mgr *RunManager) *api.WorkflowRun {
+	t.Helper()
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": reviewLoopTestManifest()})
+	run, err := startRun(ctx, mgr, "sess-1", "rltest", "1.0.0")
+	testutil.FailErr(t, "startRun rltest", err)
+	if run.CurrentPhase != "judge" {
+		t.Fatalf("phase = %q want judge", run.CurrentPhase)
+	}
+	return run
+}
+
+func TestRecordReviewLoopVerdictPersistsAnchoredEvidence(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+
+	hostDir := t.TempDir()
+	mgr.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+	mgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
+
+	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID:       "rlpersist",
+		Version:  "1.0.0",
+		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
+		PhaseDefs: []workflowdef.PhaseDef{
+			{
+				ID:           "claims",
+				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				Gates:        []string{"evidence_passed:survey_claims"},
+				Next:         "done",
+				ReviewLoop: &workflowdef.ReviewLoopDef{
+					EvidenceKey:  "survey_claims",
+					IterationCap: 1,
+					VerdictSchema: map[string]string{
+						"verdict":      "CLAIMED",
+						"threat_model": "string",
+						"claims":       "string",
+					},
+				},
+			},
+			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
+		},
+	})
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlpersist@1.0.0": manifest})
+	run, err := startRun(ctx, mgr, "sess-1", "rlpersist", "1.0.0")
+	testutil.FailErr(t, "startRun", err)
+
+	cited := []api.CitationGroundingCitedEvidence{
+		{Path: "internal/auth/auth.go", Line: 88, Excerpt: "db.Query"},
+	}
+	terminal := map[string]string{
+		"verdict":      "CLAIMED",
+		"threat_model": "HTTP service; unauthenticated clients",
+		"claims":       "1. SQLi in auth.go:88",
+	}
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", terminal, cited, nil); err != nil {
+		testutil.FailErr(t, "terminal", err)
+	}
+
+	recs, err := mgr.ListReviewLoopEvidenceForType(ctx, "sess-1", run.ID, "claims", evidence.GateTypeSurveyClaims)
+	testutil.FailErr(t, "ListReviewLoopEvidenceForType", err)
+	if len(recs) != 1 {
+		t.Fatalf("records = %d want 1", len(recs))
+	}
+	if recs[0].TypedGateVerdict() != evidence.GateVerdictApproved {
+		t.Fatalf("verdict = %q want approved", recs[0].GateVerdict)
+	}
+	if got, _ := recs[0].Artifacts["claims"].(string); got != "1. SQLi in auth.go:88" {
+		t.Fatalf("claims = %q", got)
+	}
+	ok, reason := inspector.EvidenceAnchored(recs[0])
+	if !ok {
+		t.Fatalf("EvidenceAnchored = false reason=%q", reason)
+	}
+
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get", err)
+	if got.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done", got.CurrentPhase)
+	}
+}
+
+func TestRecordReviewLoopVerdictPersistsNonTerminal(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+
+	hostDir := t.TempDir()
+	mgr.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+	mgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": reviewLoopTestManifest()})
+	run := startReviewLoopRun(ctx, t, mgr)
+
+	cited := []api.CitationGroundingCitedEvidence{{Path: "a.go", Line: 1, Excerpt: "x"}}
+	needs := map[string]string{"verdict": "NEEDS_REVISION", "winner": "undecided"}
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needs, cited, nil); err != nil {
+		testutil.FailErr(t, "needs", err)
+	}
+
+	recs, err := mgr.EvidenceStore.ReadAll(ctx, hostDir, run.ID, "judge", evidence.GateType("rl_key"))
+	testutil.FailErr(t, "ReadAll", err)
+	if len(recs) != 1 {
+		t.Fatalf("records = %d want 1 (non-terminal audit)", len(recs))
+	}
+	if recs[0].TypedGateVerdict() != evidence.GateVerdictNeedsChanges {
+		t.Fatalf("verdict = %q want needs_changes", recs[0].GateVerdict)
+	}
+}
+
+func TestRecordReviewLoopVerdictSkipsUngroundedAndInvalid(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+
+	hostDir := t.TempDir()
+	mgr.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+	mgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
+	run := startReviewLoopRun(ctx, t, mgr)
+
+	// Ungrounded (nil citations) → no record even when schema-valid.
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1",
+		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil); err != nil {
+		testutil.FailErr(t, "ungrounded", err)
+	}
+	recs, err := mgr.EvidenceStore.ReadAll(ctx, hostDir, run.ID, "judge", evidence.GateType("rl_key"))
+	testutil.FailErr(t, "ReadAll after ungrounded", err)
+	if len(recs) != 0 {
+		t.Fatalf("ungrounded records = %d want 0", len(recs))
+	}
+
+	// Invalid → no record.
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1",
+		map[string]string{"verdict": "MAYBE", "winner": "B"},
+		[]api.CitationGroundingCitedEvidence{{Path: "a.go", Line: 1, Excerpt: "x"}}, nil); err != nil {
+		testutil.FailErr(t, "invalid", err)
+	}
+	recs, err = mgr.EvidenceStore.ReadAll(ctx, hostDir, run.ID, "judge", evidence.GateType("rl_key"))
+	testutil.FailErr(t, "ReadAll after invalid", err)
+	if len(recs) != 0 {
+		t.Fatalf("invalid records = %d want 0", len(recs))
+	}
+}
+
+func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+	run := startReviewLoopRun(ctx, t, mgr)
+
+	var heldCalls []bool
+	mgr.OnReviewLoopHeld = func(_ context.Context, _ string, decisionRequired bool) {
+		heldCalls = append(heldCalls, decisionRequired)
+	}
+
+	// Off-enum verdict → schema-invalid → holds, re-prompts (continue), does NOT consume the cap.
+	verdict := map[string]string{"verdict": "MAYBE", "winner": "B"}
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", verdict, nil, nil); err != nil {
+		testutil.FailErr(t, "RecordReviewLoopVerdict", err)
+	}
+
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get", err)
+	if got.CurrentPhase != "judge" {
+		t.Fatalf("phase = %q want judge (invalid verdict must hold)", got.CurrentPhase)
+	}
+	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	testutil.FailErr(t, "GetScaffoldVars", err)
+	if n := ReviewLoopAttempt(vars, "judge"); n != 0 {
+		t.Fatalf("attempt = %d want 0 (invalid verdict is not a review round)", n)
+	}
+	if len(heldCalls) != 1 || heldCalls[0] != false {
+		t.Fatalf("held calls = %v want [false] (continue, not decision-required)", heldCalls)
+	}
+}
+
+func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+	run := startReviewLoopRun(ctx, t, mgr) // rltest judge: iteration_cap 2
+
+	var heldCalls []bool
+	mgr.OnReviewLoopHeld = func(_ context.Context, _ string, decisionRequired bool) {
+		heldCalls = append(heldCalls, decisionRequired)
+	}
+	needsRevision := map[string]string{"verdict": "NEEDS_REVISION", "winner": "undecided"}
+
+	// Round 1 (attempt 1 < cap 2) → re-loop (continue), holds.
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
+		testutil.FailErr(t, "verdict 1", err)
+	}
+	// Round 2 (attempt 2 == cap 2) → coordinator must decide (decision-required), still holds.
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
+		testutil.FailErr(t, "verdict 2", err)
+	}
+	// Round 3: cap already reached — a further non-terminal verdict is rejected
+	// outright (not silently accepted and bumped past the cap), and the
+	// decision-required nudge fires again rather than going quiet.
+	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil)
+	testutil.FailErr(t, "verdict 3", err)
+	if out.Valid || !out.IterationCapExceeded || out.Attempt != 2 {
+		t.Fatalf("outcome 3 = %+v want invalid+IterationCapExceeded at attempt 2", out)
+	}
+
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get", err)
+	if got.CurrentPhase != "judge" {
+		t.Fatalf("phase = %q want judge (never advances on NEEDS_REVISION)", got.CurrentPhase)
+	}
+	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	testutil.FailErr(t, "GetScaffoldVars", err)
+	if n := ReviewLoopAttempt(vars, "judge"); n != 2 {
+		t.Fatalf("attempt = %d want 2 (rejected round must not bump past the cap)", n)
+	}
+	want := []bool{false, true, true} // continue, decision-required, decision-required again on the rejected round
+	if len(heldCalls) != len(want) {
+		t.Fatalf("held calls = %v want %v", heldCalls, want)
+	}
+	for i, w := range want {
+		if heldCalls[i] != w {
+			t.Fatalf("held calls = %v want %v", heldCalls, want)
+		}
+	}
+
+	// A terminal verdict after the cap still decides it; the coordinator makes the choice.
+	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1",
+		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil); err != nil {
+		testutil.FailErr(t, "terminal", err)
+	}
+	got, err = mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get after terminal", err)
+	if got.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done (terminal decision advances)", got.CurrentPhase)
+	}
+}
+
+func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID:       "rlagents",
+		Version:  "1.0.0",
+		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
+		PhaseDefs: []workflowdef.PhaseDef{
+			{
+				ID:           "judge",
+				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				Gates:        []string{"evidence_passed:rl_key"},
+				Next:         "done",
+				ReviewLoop: &workflowdef.ReviewLoopDef{
+					EvidenceKey:    "rl_key",
+					IterationCap:   2,
+					RequiredAgents: []string{"skeptic"},
+					VerdictSchema: map[string]string{
+						"verdict": "SELECTED|NEEDS_REVISION",
+						"winner":  "string",
+					},
+				},
+			},
+			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
+		},
+	})
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlagents@1.0.0": manifest})
+	run, err := startRun(ctx, mgr, "sess-1", "rlagents", "1.0.0")
+	testutil.FailErr(t, "startRun", err)
+
+	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1",
+		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil)
+	testutil.FailErr(t, "verdict without skeptic", err)
+	if out.Valid || out.Terminal || len(out.MissingAgents) != 1 || out.MissingAgents[0] != "skeptic" {
+		t.Fatalf("outcome = %+v want missing skeptic", out)
+	}
+	held, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get", err)
+	if held.CurrentPhase != "judge" {
+		t.Fatalf("phase = %q want judge", held.CurrentPhase)
+	}
+
+	testutil.FailErr(t, "AppendMessages", mgr.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+		Role: api.MessageRoleTool,
+		WorkerSummary: &api.WorkerSummaryMeta{
+			WorkerID:  "job-skeptic",
+			AgentType: "skeptic",
+			Status:    api.WorkerSummaryStatusComplete,
+		},
+	}))
+	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1",
+		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil)
+	testutil.FailErr(t, "verdict with skeptic", err)
+	if !out.Valid || !out.Terminal {
+		t.Fatalf("outcome = %+v want terminal", out)
+	}
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get after skeptic", err)
+	if got.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done", got.CurrentPhase)
+	}
+}
+
+func ifSpawnableReviewManifest() workflowdef.Manifest {
+	return workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID:       "rlspawn",
+		Version:  "1.0.0",
+		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
+		PhaseDefs: []workflowdef.PhaseDef{
+			{
+				ID:           "challenge",
+				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				Gates:        []string{"evidence_passed:survey_challenged"},
+				Next:         "done",
+				ReviewLoop: &workflowdef.ReviewLoopDef{
+					EvidenceKey:    "survey_challenged",
+					IterationCap:   1,
+					RequiredAgents: []string{"skeptic"},
+					IfSpawnable:    []string{"web-researcher"},
+					VerdictSchema:  map[string]string{"verdict": "CHALLENGED"},
+				},
+			},
+			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
+		},
+	})
+}
+
+func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+	mgr.ReviewSpawnFilter = func(_ context.Context, _, _ string, _ []string) []string {
+		return nil
+	}
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlspawn@1.0.0": ifSpawnableReviewManifest()})
+	run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")
+	testutil.FailErr(t, "startRun", err)
+
+	testutil.FailErr(t, "AppendMessages skeptic", mgr.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+		Role: api.MessageRoleTool,
+		WorkerSummary: &api.WorkerSummaryMeta{
+			WorkerID:  "job-skeptic",
+			AgentType: "skeptic",
+			Status:    api.WorkerSummaryStatusComplete,
+		},
+	}))
+	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
+	testutil.FailErr(t, "verdict with skeptic only", err)
+	if !out.Valid || !out.Terminal || len(out.MissingAgents) != 0 {
+		t.Fatalf("outcome = %+v want terminal without researcher", out)
+	}
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get", err)
+	if got.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done", got.CurrentPhase)
+	}
+}
+
+func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManager(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	ctx := context.Background()
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlspawn@1.0.0": ifSpawnableReviewManifest()})
+	run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")
+	testutil.FailErr(t, "startRun", err)
+
+	testutil.FailErr(t, "AppendMessages skeptic", mgr.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+		Role: api.MessageRoleTool,
+		WorkerSummary: &api.WorkerSummaryMeta{
+			WorkerID:  "job-skeptic",
+			AgentType: "skeptic",
+			Status:    api.WorkerSummaryStatusComplete,
+		},
+	}))
+	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
+	testutil.FailErr(t, "verdict without researcher", err)
+	if out.Valid || out.Terminal || len(out.MissingAgents) != 1 || out.MissingAgents[0] != "web-researcher" {
+		t.Fatalf("outcome = %+v want missing web-researcher", out)
+	}
+
+	testutil.FailErr(t, "AppendMessages researcher", mgr.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+		Role: api.MessageRoleTool,
+		WorkerSummary: &api.WorkerSummaryMeta{
+			WorkerID:  "job-research",
+			AgentType: "web-researcher",
+			Status:    api.WorkerSummaryStatusComplete,
+		},
+	}))
+	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
+	testutil.FailErr(t, "verdict with researcher", err)
+	if !out.Valid || !out.Terminal {
+		t.Fatalf("outcome = %+v want terminal", out)
+	}
+	got, err := mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "Get after researcher", err)
+	if got.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done", got.CurrentPhase)
+	}
+}
+
+func TestRecordReviewLoopVerdictRequiresCapturedOptionalRoster(t *testing.T) {
+	for _, malformed := range []any{nil, true, []any{"web-researcher", 7}} {
+		mgr, _, blueprintMgr, _ := testManager(t)
+		setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+		ctx := context.Background()
+		mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlspawn@1.0.0": ifSpawnableReviewManifest()})
+		run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")
+		testutil.FailErr(t, "start review", err)
+		_, err = mgr.StampRunVars(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+			vars["review_if_spawnable"] = map[string]any{"challenge": malformed}
+			return vars, true, nil
+		})
+		testutil.FailErr(t, "remove valid roster", err)
+		mgr.ReviewSpawnFilter = func(context.Context, string, string, []string) []string {
+			t.Fatal("verdict recomputed phase-entry roster")
+			return nil
+		}
+		out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
+		if err == nil || out.Terminal {
+			t.Fatalf("roster %v: outcome=%+v, err=%v", malformed, out, err)
+		}
+		current, err := mgr.Get(ctx, run.ID)
+		testutil.FailErr(t, "read held review", err)
+		if current.CurrentPhase != "challenge" {
+			t.Fatalf("missing roster advanced to %q", current.CurrentPhase)
+		}
+	}
+}

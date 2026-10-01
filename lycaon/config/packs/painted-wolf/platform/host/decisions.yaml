@@ -1,0 +1,184 @@
+# Local model questions and host thresholds.
+# Evaluator: lycaon/internal/coordinator/turnload
+version: 2
+
+# The state every decision reads: the request in the user's words plus host
+# facts. The engine reads a bounded window, so the text is cut at the end.
+state:
+  # A worker leg's prompt often states its goal past 900 characters.
+  user_text_chars: 1600
+  recent_tools: 12
+  # Each encoded question reserves this many tokens; the state gets the remainder.
+  head_tokens: 512
+
+# Asked once per user turn or worker brief. Independent heads read every tool
+# and every guide on its own row; joint heads read a roster and answer the
+# kind choice too.
+turn:
+  # Observed decisions take 1.3 to 4.4 s on an Apple M1 Pro.
+  deadline_ms: 10000
+  # A loadable schema joins the chat's standing set when P(true) reaches
+  # load_at, on warm and cold turns alike; the set drops tools only at a cold
+  # boundary. Without an answer the standing set stays and the model can ask
+  # through request_tools. option_words bounds each tool's option text.
+  # On validation B5 at 0.6 reaches a needed tool on 76% of the turns that
+  # need one, against 55% at 0.85, for 1.2 loads a turn of which half are
+  # unneeded. A wrong load costs one schema on the call; a missed load costs
+  # a request_tools round trip.
+  tools:
+    question: Which of these tools will completing this request call?
+    independent: true
+    option_words: 60
+    load_at: 0.6
+  # At most one skill is read before the turn: the top skill at preload_at,
+  # leading the runner-up by margin. Zero preload_at disables the read. The
+  # margin is the precision guard; a request that names its work scores its
+  # skill near 3 with the runner-up near 1.
+  skills:
+    preload_at: 2.8
+    margin: 0.3
+  # A unit leaves the prompt only when its id is in omittable, P(true) is
+  # below omit_below, and confidence reaches confidence_floor; a warm turn
+  # keeps an omission only while every turn since the last cold boundary
+  # agreed. Without an answer every unit renders. omittable is the audited
+  # list for the installed head (scripts/bialy/README.md); omit_below 0
+  # keeps every unit.
+  # Audited on the guide head's held-out repositories at 0.30, omission
+  # precision and share of turns omitted: find 94% / 14%, summarize 95% /
+  # 44%, claim-evidence 96% / 49%, recall 98% / 98%. A unit is never omitted
+  # once the chat called or requested a tool it is needed by, so a wrong
+  # omission ends at the next decision.
+  guides:
+    question: Which of this guidance does completing this request need?
+    option_words: 8
+    omittable: [native-find-tool, native-summarize-tool, native-recall-tool, claim-evidence]
+    omit_below: 0.3
+    confidence_floor: 0.5
+  # Joint heads only: a confident answer_only kind can veto tool loading.
+  kind:
+    veto_tools: false
+    confidence_floor: 0.6
+    instructions: What kind of work does this request ask for?
+    options:
+      answer_only: an explanation, opinion, or answer that needs no tools
+      inspect: reading and understanding the project without changing it
+      change: a bounded edit, fix, or addition the coordinator can make directly
+      run: building, testing, running, or verifying something
+      delegate: a broad or multi-part change that parallel workers should split
+
+# request_tools ranks schemas against the stated need.
+# nearest_loads would load the closest tools when none clears load_at; the
+# recorded sessions show the nearest tool wrong both times it fired, and the
+# model's rephrase reaches the right one, so nothing loads below the bar.
+# A need that names files scores its tool lower than a bare operation does;
+# 1.8 still loads write for "create the app files: index.html, style.css".
+request:
+  deadline_ms: 10000
+  load_at: 1.8
+  max_loads: 4
+  nearest_loads: 0
+
+# Asked when the model calls skills_read with a description of the work: the
+# top skill is read at read_at when it leads the runner-up by margin;
+# otherwise the result names the candidates.
+lookup:
+  deadline_ms: 10000
+  read_at: 2.8
+  margin: 0.3
+
+# Asked once per turn, when the turn first calls a loadable tool: the skills
+# are ranked against the request and that tool. The top skill is read at
+# read_at and named in one line at pointer_at, each leading by margin. Tools
+# in skip never ask; editing tools rank skills about writing, not the work.
+tool_event:
+  deadline_ms: 10000
+  read_at: 2.8
+  pointer_at: 2.4
+  margin: 0.3
+  skip: [write, edit, replace_lines, code_rewrite, restore_version]
+
+# Reranking sites: host ranking seams where the engine rescores the lexical
+# top candidates against the task. Each site keeps its own lexical order and
+# adds weight × the engine's unit relevance to the candidates it scored.
+#   enabled         whether the site asks the engine at all
+#   deadline_ms     budget for the whole call; past it the lexical order stands
+#   max_candidates  lexical top K that reaches the engine
+#   chunk           candidates per engine request
+#   weight          added per unit of engine relevance, on the site's score scale
+# A site ranks only with its head loaded.
+# Evaluator: lycaon/internal/decide
+rerank:
+  # The bundled engine scores about 12 ms per candidate on an Apple M1 Pro
+  # GPU: 16 candidates in 190 ms, 48 in 560 ms. A CPU-only host answers late
+  # and the lexical order stands.
+  # summarize: files ordered for the structure tier (BM25F over path and head).
+  summarize_structure:
+    enabled: true
+    deadline_ms: 5000
+    max_candidates: 48
+    chunk: 16
+    weight: 2.5
+  # summarize: definitions ordered for the skeleton (BM25F plus kind salience).
+  summarize_definitions:
+    enabled: true
+    deadline_ms: 5000
+    max_candidates: 48
+    chunk: 16
+    weight: 2.0
+  # summarize: the symbol a source window focuses on inside one file.
+  summarize_windows:
+    enabled: true
+    deadline_ms: 1000
+    max_candidates: 32
+    chunk: 16
+    weight: 1.0
+  # summarize: fit-tier neighbor stubs, call sites, and import edges.
+  summarize_neighbors:
+    enabled: true
+    deadline_ms: 1000
+    max_candidates: 32
+    chunk: 16
+    weight: 1.0
+  summarize_call_sites:
+    enabled: true
+    deadline_ms: 1000
+    max_candidates: 32
+    chunk: 16
+    weight: 1.0
+  summarize_imports:
+    enabled: true
+    deadline_ms: 1000
+    max_candidates: 32
+    chunk: 16
+    weight: 1.0
+  # summarize: follow-up calls offered as next_actions.
+  summarize_next_actions:
+    enabled: true
+    deadline_ms: 500
+    max_candidates: 16
+    chunk: 16
+    weight: 1.0
+  # repomap: definitions inside one packed tags page, when a task is given.
+  repomap_tags:
+    enabled: true
+    deadline_ms: 5000
+    max_candidates: 48
+    chunk: 16
+    weight: 1.0
+  # project search: the live code leg behind Den search. The leg's own score
+  # is already strong, so a blend reorders it for the worse (MRR 0.78 to 0.62
+  # on the held-out corpus), and a typed query cannot wait on the engine.
+  project_search:
+    enabled: false
+    deadline_ms: 300
+    max_candidates: 16
+    chunk: 16
+    weight: 0.1
+  # web research: verified pages ordered by fetched content. Off until a
+  # web-rank head ships.
+  web_pages:
+    enabled: false
+    deadline_ms: 5000
+    max_candidates: 24
+    chunk: 8
+    weight: 0.5

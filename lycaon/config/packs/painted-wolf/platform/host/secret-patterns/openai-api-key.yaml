@@ -1,0 +1,4 @@
+id: openai-api-key
+upstream_id: openai-api-key
+title: OpenAI API key
+severity: critical

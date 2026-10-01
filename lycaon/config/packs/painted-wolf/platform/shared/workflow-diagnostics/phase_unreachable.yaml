@@ -1,0 +1,5 @@
+code: phase_unreachable
+message: |
+  Phase {{phase}} is never reachable from the start phase.
+replacement: |
+  Wire next links so every phase is reachable, or remove the orphan phase.

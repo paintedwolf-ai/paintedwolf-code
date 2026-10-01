@@ -1,0 +1,10 @@
+fixtures:
+- rule: redis-delete
+  positive:
+  - upstash redis delete --db-id abc123
+  - sudo upstash redis delete --db-id abc123
+  negative:
+  - upstash redis list
+  - upstash redis delete --db-id abc123 --dry-run
+  - upstash redis delete --db-id abc123 --help
+  - upstash redis create --name cache

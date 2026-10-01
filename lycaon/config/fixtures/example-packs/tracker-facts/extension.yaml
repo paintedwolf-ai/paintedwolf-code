@@ -1,0 +1,10 @@
+manifest_version: 1
+id: example/tracker-facts
+name: Example — Tracker Facts
+version: 1.0.0
+description: Project an MCP provider's JSON into named rule facts. Ships no provider — packs never can.
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

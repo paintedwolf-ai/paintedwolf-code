@@ -1,0 +1,41 @@
+title: Create a local account or grant it admin rights
+id: 4c7eca76-bb28-4fdd-b62e-02521f0834ad
+description: Adds an account that can log in to this machine, or puts one in a group that can act as root.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_account:
+    Image:
+      - useradd
+      - adduser
+      - dscl
+    CommandLine|contains:
+      - ' -create'
+      - ' --create-home'
+      - ' -G wheel'
+      - ' -G sudo'
+      - ' -aG'
+  selection_sudoers:
+    Image:
+      - visudo
+      - usermod
+    CommandLine|contains:
+      - ' -aG sudo'
+      - ' -aG wheel'
+      - ' -G sudo'
+  filter_rehearsal:
+    Argv|re: '^(--help|-read)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_account or selection_sudoers) and not filter_rehearsal and not filter_local

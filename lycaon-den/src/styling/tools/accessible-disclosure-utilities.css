@@ -1,0 +1,32 @@
+@utility den-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@utility den-letter-reveal {
+  display: inline;
+}
+
+@utility den-letter-reveal-char {
+  opacity: 0;
+  transition: opacity 460ms ease-in-out;
+}
+
+@utility den-letter-reveal-char--visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-letter-reveal-char {
+    opacity: 1;
+    transition: none;
+  }
+}
+

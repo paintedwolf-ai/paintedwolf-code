@@ -1,0 +1,438 @@
+rules:
+- id: lycaon.kotlin.sql-injection
+  languages:
+  - kotlin
+  severity: ERROR
+  message: Request input reaches SQL text; use bound parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - kotlin
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) = ...
+
+          '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) { ... }
+
+        '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) = ...
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: $STMT.executeQuery($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $STMT.executeUpdate($SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $CONN.prepareStatement($SQL)
+    - focus-metavariable: $SQL
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.kotlin.command-injection
+  languages:
+  - kotlin
+  severity: ERROR
+  message: Request input reaches an executable command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - kotlin
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) = ...
+
+          '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) { ... }
+
+        '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) = ...
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: Runtime.getRuntime().exec($CMD)
+    - metavariable-pattern:
+        metavariable: $CMD
+        patterns:
+        - pattern-not: arrayOf($PROGRAM, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: ProcessBuilder("sh","-c",$CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: Runtime.getRuntime().exec(arrayOf($PROGRAM, ...))
+    - focus-metavariable: $PROGRAM
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.kotlin.path-traversal
+  languages:
+  - kotlin
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - kotlin
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestParam(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.PathVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestHeader(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestBody(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.CookieValue(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.RequestPart(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...)
+          $V: $T, ...) = ...
+
+          '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) { ... }
+
+        '
+    - pattern-not: 'fun $M(..., @org.springframework.web.bind.annotation.ModelAttribute(...,
+        binding=false, ...) $V: $T, ...) = ...
+
+        '
+    - focus-metavariable: $V
+  - patterns:
+    - pattern-either:
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) { ... }
+
+          '
+      - pattern: 'fun $M(..., @org.springframework.web.bind.annotation.MatrixVariable(...)
+          $V: $T, ...) = ...
+
+          '
+    - focus-metavariable: $V
+  pattern-sinks:
+  - patterns:
+    - pattern: FileInputStream($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: Files.readString(Paths.get($PATH))
+    - focus-metavariable: $PATH
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.kotlin.open-redirect
+  languages:
+  - kotlin
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - kotlin
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.getParameter(...)
+    exact: true
+  - pattern: $REQ.getHeader(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $RES.sendRedirect($URL)
+    - focus-metavariable: $URL
+- id: lycaon.kotlin.weak-cipher
+  languages:
+  - kotlin
+  severity: ERROR
+  message: DES encryption is cryptographically broken
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - kotlin
+  pattern-either:
+  - pattern: Cipher.getInstance("DES")
+  - pattern: Cipher.getInstance("DES/ECB/PKCS5Padding")
+- id: lycaon.kotlin.ecb-encryption
+  languages:
+  - kotlin
+  severity: ERROR
+  message: ECB encryption reveals repeated plaintext blocks
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - kotlin
+  pattern-either:
+  - pattern: Cipher.getInstance("AES/ECB/PKCS5Padding")
+  - pattern: Cipher.getInstance("AES/ECB/NoPadding")
+- id: lycaon.kotlin.rsa-without-padding
+  languages:
+  - kotlin
+  severity: ERROR
+  message: RSA encryption explicitly omits cryptographic padding
+  metadata:
+    category: security
+    cwe: CWE-780
+    confidence: HIGH
+    technology:
+    - kotlin
+  pattern: Cipher.getInstance("RSA/ECB/NoPadding")

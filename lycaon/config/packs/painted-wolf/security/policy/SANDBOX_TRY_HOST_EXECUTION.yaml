@@ -1,0 +1,65 @@
+oar: '1.0'
+id: SANDBOX_TRY_HOST_EXECUTION
+kind: policy
+anchor: tool.post_invoke
+# command_output cannot carry a capability request; the retry is a fresh
+# command or verify call.
+selector:
+  tool:
+    - command
+    - verify
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.unsandboxed_refusals
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.unsandboxed_refusals) > 0
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: >-
+    In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{%
+    if paintedwolf.process_running %}, and the job is still running{% endif %}.
+  cause: >-
+    No sandbox capability admits these operations{% if paintedwolf.process_running %};
+    a process waiting on one of them may never finish{% endif %}.
+  why: >-
+    A retry with another capability_request field, or with a longer timeout,
+    is refused the same way.
+  fix: >-
+    If the task needs the operation, {% if paintedwolf.process_running %}stop
+    the job with `command_stop`, then {% endif %}reissue the same command with
+    `capability_request.host_execution` requested alone; the person reviews it
+    before it runs outside the sandbox. If the operation was optional, keep
+    the result.
+  instead: Request capability_request.host_execution for the command, or leave
+    the operation out — do not wait on it
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused an operation no sandbox capability admits
+x-paintedwolf-scenarios:
+  - id: vm_network_socket
+    vars:
+      tool: command
+      process_running: true
+      unsandboxed_refusals:
+        - network-bind /Users/person/.colima/_lima/_networks/user-v2/user-v2_fd.sock (limactl)
+    expect_contains:
+      - 'Code: SANDBOX_TRY_HOST_EXECUTION'
+      - capability_request.host_execution
+      - command_stop
+      - may never finish
+      - user-v2_fd.sock
+  - id: finished_failure
+    vars:
+      tool: verify
+      failed_stages: [make install]
+      unsandboxed_refusals: [iokit-open AppleUSBHostDevice (make)]
+    expect_contains:
+      - 'Code: SANDBOX_TRY_HOST_EXECUTION'
+      - capability_request.host_execution

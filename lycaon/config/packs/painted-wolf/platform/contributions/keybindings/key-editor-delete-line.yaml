@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-delete-line
+command: painted-wolf/platform:editor-delete-line
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+K"
+  windows:
+    - "Mod+Shift+K"
+  linux:
+    - "Mod+Shift+K"

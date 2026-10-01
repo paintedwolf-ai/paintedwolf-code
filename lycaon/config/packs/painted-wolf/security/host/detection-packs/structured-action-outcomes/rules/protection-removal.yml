@@ -1,0 +1,19 @@
+title: Remove repository or deployment protection
+id: d38c0c45-d4f5-472d-b07d-545d3cf23375
+status: stable
+description: Removes, disables, or bypasses a named branch, environment, review, check, or ruleset protection.
+references: [https://attack.mitre.org/techniques/T1562/001/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:protection-removal', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.defense-evasion]

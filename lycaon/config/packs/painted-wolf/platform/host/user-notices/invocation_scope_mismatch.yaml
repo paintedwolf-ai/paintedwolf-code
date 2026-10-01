@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Command sent to the wrong surface
+message: This command cannot run from here.
+suggested_action: Reload the app; if this keeps happening, report a bug.

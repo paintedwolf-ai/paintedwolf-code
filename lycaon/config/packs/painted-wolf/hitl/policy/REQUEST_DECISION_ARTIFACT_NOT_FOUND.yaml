@@ -1,0 +1,35 @@
+oar: '1.0'
+id: REQUEST_DECISION_ARTIFACT_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - request_decision
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_NOT_FOUND"
+effect: block
+copy:
+  what: request_decision referenced an unavailable artifact.
+  cause: The host could not resolve a usable artifact for this decision. A lookup failure does not prove the
+    artifact never existed.
+  why: The coordinator cannot review a missing artifact.
+  fix: Check the artifact ID from an actual result in this session tree. Preserve the review requirement while
+    the artifact or its storage is unavailable; do not substitute unrelated evidence.
+  instead: Branch on Code REQUEST_DECISION_ARTIFACT_NOT_FOUND; pass an in-tree artifact UUID
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_decision
+x-paintedwolf-message: artifact was not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: worker
+    tool: request_decision
+  expect_contains:
+  - 'Code: REQUEST_DECISION_ARTIFACT_NOT_FOUND'
+  - artifact

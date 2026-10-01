@@ -1,0 +1,12 @@
+# Build posture — product edits + delegation allowed.
+
+rules:
+  - id: build_posture_disallowed_agent
+    when:
+      posture_is: build
+      tool_is_task: true
+      disallowed_agent: true
+    then:
+      deny:
+        code: DISALLOWED_AGENT
+        message: agent_type is not in the workflow allowed_agents allowlist

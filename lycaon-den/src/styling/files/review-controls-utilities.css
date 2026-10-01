@@ -1,0 +1,84 @@
+/* A walk page's position line, without the editor toolbar's border. */
+@utility den-walk-page-position {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+@utility den-walk-transport__grip {
+  cursor: grab;
+}
+
+@utility den-file-version__copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+@utility den-file-version__host {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@utility den-sidebar-scope-picker {
+  flex: 0 0 var(--den-icon-target);
+}
+
+@utility den-sidebar-scope-picker__control {
+  width: var(--den-icon-target);
+}
+
+@utility den-review-lens__header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 0;
+}
+
+@utility den-review-lens__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+@utility den-review-lens__scope-header {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--den-text);
+}
+
+/* Sits beside the comparison's name and count. */
+@utility den-review-lens__diffs {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+@utility den-review-lens__total {
+  flex: 0 0 auto;
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+

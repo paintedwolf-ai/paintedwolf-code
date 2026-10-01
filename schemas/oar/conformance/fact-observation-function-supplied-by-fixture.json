@@ -1,0 +1,77 @@
+{
+  "id": "fact-observation-function-supplied-by-fixture",
+  "title": "A value supplied under an observation function's name is that function's result for every argument",
+  "covers": [
+    "OAR-FACT-9",
+    "OAR-CONF-26"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "OUTSIDE_SCOPE",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "tool",
+          "filesystem"
+        ]
+      },
+      "selector": {
+        "tool": [
+          "read"
+        ]
+      },
+      "when": "path_outside_scope(tool)"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "path_outside_scope": true
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "OUTSIDE_SCOPE"
+  }
+}

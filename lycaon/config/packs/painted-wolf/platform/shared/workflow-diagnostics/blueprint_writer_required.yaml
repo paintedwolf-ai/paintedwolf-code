@@ -1,0 +1,5 @@
+code: blueprint_writer_required
+message: |
+  Workflow {{workflow}} consumes a Blueprint but no phase declares blueprint_write.
+replacement: |
+  Mark every phase whose coordinator authors or revises the Blueprint with blueprint_write: true.

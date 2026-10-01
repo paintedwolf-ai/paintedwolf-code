@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-toggle-conversation
+command: painted-wolf/platform:layout-toggle-conversation
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+B"
+  windows:
+    - "Mod+Shift+B"
+  linux:
+    - "Mod+Shift+B"

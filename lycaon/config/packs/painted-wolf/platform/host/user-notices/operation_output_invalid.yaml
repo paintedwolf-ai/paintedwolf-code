@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Extension result unavailable
+message: The extension operation returned a result in a format this action cannot use. Its changes may already have taken effect.
+suggested_action: Check the operation’s result before running it again, and verify that the extension and provider versions are compatible.

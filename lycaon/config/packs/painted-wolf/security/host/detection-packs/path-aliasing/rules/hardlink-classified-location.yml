@@ -1,0 +1,56 @@
+title: Hard-link a classified location into the workspace
+id: 2b7d94e6-15c8-4f3a-9d02-6e8b41c7fa53
+description: >-
+  Creates a hard link whose source is a location the ask catalogue classifies as
+  personal or credential-bearing. The link names the same file from inside an
+  attached root, where ordinary entries do not fire, so the read that follows
+  raises nothing. A symbolic link is excluded because path resolution follows one
+  and the classification survives; only the hard link is invisible to it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-03'
+modified: '2026-09-03'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.path-aliasing
+level: high
+detection:
+  selection_link:
+    Image|endswith:
+      - 'ln'
+      - 'link'
+  selection_classified_source:
+    TargetFile|contains:
+      - '~/Documents/'
+      - '~/Desktop/'
+      - '~/Downloads/'
+      - '~/Library/Mail/'
+      - '~/Library/Messages/'
+      - '~/Library/Mobile Documents/'
+      - '~/Library/Calendars/'
+      - '~/Library/Application Support/AddressBook/'
+      - '~/Library/Cookies/'
+      - '~/Library/Safari/'
+      - '~/Library/Application Support/Google/Chrome/'
+      - '~/Library/Application Support/Firefox/Profiles/'
+      - '~/.aws/'
+      - '~/.kube/'
+      - '~/.azure/'
+      - '~/.config/gcloud/'
+      - '~/.config/gh/'
+      - '~/.netrc'
+      - '~/.git-credentials'
+      - '~/.npmrc'
+      - '~/.pgpass'
+      - '~/.vault-token'
+  filter_symbolic:
+    Argv:
+      - '-s'
+      - '--symbolic'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_link and selection_classified_source and not filter_symbolic and not filter_rehearsal

@@ -1,0 +1,23 @@
+id: OVERLAY_REBASE_CONFLICT
+emit: banner
+severity: warning
+what: 'Overlay {{ paintedwolf.overlay_id }} (stacked on {{ paintedwolf.base_overlay_id }}) has {{ paintedwolf.conflict_count }} path(s) in conflict after rebasing onto the just-promoted parent{% if paintedwolf.conflict_paths %}: {{ paintedwolf.conflict_paths }}{% endif %}'
+cause: The parent's promoted content overlaps with regions the child also modified — the 3-way merge could not auto-reconcile
+why: Auto-applying the child would either lose the parent's just-landed work or overwrite child edits silently — both are unacceptable (no silent skips)
+fix: 'Inspect the current preview for overlay {{ paintedwolf.overlay_id }} and resolve each actual conflict using the current per-path resolution schema. Preserve the parent landing, non-conflicting child edits and overlay identity. A conflict tier explains the overlap; it does not select a resolution for you.'
+instead: Branch on Code; resolve every conflicting path or reject the child before promoting
+category: recoverable
+message: Overlay {{ paintedwolf.overlay_id }} has {{ paintedwolf.conflict_count }} path(s) in conflict after rebasing onto promoted base {{ paintedwolf.base_overlay_id }}
+scenarios:
+  - id: default
+    vars:
+      base_overlay_id: ov-grep-impl
+      conflict_count: 2
+      conflict_paths:
+        - internal/auth/login.go
+      overlay_id: ov-grep-followup
+    expect_contains:
+      - ov-grep-followup
+      - ov-grep-impl
+      - internal/auth/login.go
+      - 'Code: OVERLAY_REBASE_CONFLICT'

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-go-to-line
+command: painted-wolf/platform:editor-go-to-line
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+G"
+  windows:
+    - "Leader G"
+  linux:
+    - "Leader G"

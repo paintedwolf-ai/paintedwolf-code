@@ -1,0 +1,23 @@
+/*
+ * System display preferences the host stamps on the root:
+ * data-den-transparency="reduced" follows Reduce Transparency.
+ * Increase Contrast adjusts theme tokens at application instead.
+ */
+
+/* Glass surfaces paint opaque instead of blurring what is behind them. */
+:root[data-den-transparency="reduced"] .den-crossbar,
+:root[data-den-transparency="reduced"] .den-workflow-feedback-card-artifact-badge,
+:root[data-den-transparency="reduced"] .den-workflow-feedback-card-artifact-zoom {
+  background: var(--den-background);
+  backdrop-filter: none;
+}
+
+:root[data-den-transparency="reduced"] .den-search-replace__footer {
+  background: var(--den-surface);
+  backdrop-filter: none;
+}
+
+:root[data-den-transparency="reduced"] .den-walk-transport__unit {
+  background: var(--den-surface-elevated);
+  backdrop-filter: none;
+}

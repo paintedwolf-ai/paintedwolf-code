@@ -1,0 +1,18 @@
+# The basic shape. Six lines carry the policy; copy carries the explanation.
+oar: "1.0"
+id: READ_OUTSIDE_SCOPE
+namespace: example.security
+kind: policy
+anchor: tool.pre_invoke
+selector:
+  tool: [read, grep]        # clause names the `tool` fact; matches by membership
+requires:
+  profiles: [tool, filesystem]
+when: 'path_outside_scope(tool)'
+effect: block
+on_error: fail_closed       # if the scope check itself fails, refuse
+status: stable
+copy:
+  title: Read outside the declared scope
+  what: The call reads a path outside the scope in force for this tool.
+  fix: Read inside the scope, or widen the scope deliberately.

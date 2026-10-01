@@ -1,0 +1,26 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} retains pending worker changes; compare the scoped preview before
+  resolving or discarding them.
+what: A primary read returns the primary version, which may exist already. The unpromoted worker version remains
+  in the overlay.
+cause: Reading the primary file does not reveal the pending worker changes.
+why: reject_overlay discards completed worker output that can land via `promote_overlay(resolutions=…)`
+fix: First confirm leg completion and passing current-revision evidence obligations. Use `preview_overlay(job_id="{{
+  paintedwolf.overlay_id }}", path=…)`{% if paintedwolf.spill_path %} or read the assessment at {{ paintedwolf.spill_path
+  }}{% endif %}. Land clean paths and resolve remaining conflicts using supported proposals or reviewed content/hunks.
+  keep_both requires merged content or hunks for overlapping edits.
+instead: Preserve and resume partial work. Reject the whole overlay only when the approach is wrong, superseded,
+  duplicated, or no longer wanted; a primary read failure alone does not justify discarding it.
+scenarios:
+- id: default
+  vars:
+    conflict_paths:
+    - tests/test_core_utils.py
+    overlay_id: job-tests
+    spill_path: promote-spills/job-tests.json
+  expect_contains:
+  - BANNER_PROMOTE_OVERLAY_BODY
+  - promote_overlay
+id: BANNER_PROMOTE_OVERLAY_BODY

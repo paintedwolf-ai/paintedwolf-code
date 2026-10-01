@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-diff-prev-file
+command: painted-wolf/platform:files-diff-prev-file
+scope: files
+bindings:
+  macos:
+    - "Mod+Alt+ArrowUp"
+  windows:
+    - "Mod+Alt+ArrowUp"
+  linux:
+    - "Mod+Alt+ArrowUp"

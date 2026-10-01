@@ -1,0 +1,6 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+title: Session needs your input
+message: The agent stopped after repeated grounding issues and needs a clearer direction.
+suggested_action: Send a specific next step or start a fresh session.

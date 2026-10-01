@@ -1,0 +1,35 @@
+oar: '1.0'
+id: USE_STAT_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "USE_STAT_NATIVE"
+effect: block
+copy:
+  what: The parsed command can be represented by the supplied stat call.
+  cause: The host validated this replacement against the tool currently offered.
+  why: Native stat returns structured mode, size and modification time within the active batch limits.
+  fix: Use the supplied replacement_calls entries exactly and in order; retain the intended paths, spans and
+    options.
+  instead: Use the validated stat replacement
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native stat instead of command stat
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_STAT_NATIVE'

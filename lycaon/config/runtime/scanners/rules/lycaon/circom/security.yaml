@@ -1,0 +1,15 @@
+rules:
+- id: lycaon.circom.signal-assertion
+  languages:
+  - circom
+  severity: ERROR
+  message: A signal is checked with assert instead of a circuit constraint
+  metadata:
+    category: security
+    cwe: CWE-20
+    confidence: HIGH
+    technology:
+    - circom
+  patterns:
+  - pattern-inside: template $NAME(...) { ... signal input $SIGNAL; ... }
+  - pattern: assert($SIGNAL == $VALUE);

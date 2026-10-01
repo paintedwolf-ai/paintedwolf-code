@@ -1,0 +1,495 @@
+paths:
+  /v1/mcp/recipes:
+    get:
+      tags:
+      - mcp
+      operationId: listMcpRecipes
+      summary: List known MCP provider recipes
+      description: >
+        Bundled catalog of common MCP providers. Ids are not a wire enum; adding a
+        row to the host YAML is the whole change. Custom (blank URL or command)
+        is the add-dialog escape hatch, not a catalog row.
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, `added` reflects the project-scoped catalog view.
+      responses:
+        '200':
+          description: Known MCP recipes
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpRecipeCatalogResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/mcp/providers:
+    get:
+      tags:
+      - mcp
+      operationId: listMcpProviders
+      summary: List configured MCP providers
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, merge the project overlay `mcp.yaml` overrides over device defaults.
+      responses:
+        '200':
+          description: MCP providers
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpProviderListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+    post:
+      tags:
+      - mcp
+      operationId: createMcpProvider
+      x-person-action: record
+      summary: Create an MCP provider overlay row
+      description: >
+        Writes a user-layer overlay by default (project overlay when project_id is set).
+        Default enabled is false. Enabling registers the provider's tools; workflow
+        agent tool policy determines which agents receive them.
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, write the new row to the project overlay (loopback URL only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/CreateMcpProviderRequest
+      responses:
+        '201':
+          description: Created MCP provider
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpProvider
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}:
+    patch:
+      tags:
+      - mcp
+      operationId: updateMcpProvider
+      x-person-action: record
+      summary: Patch an MCP provider overlay
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, write the patch to the project overlay.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/UpdateMcpProviderRequest
+      responses:
+        '200':
+          description: Updated MCP provider
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpProvider
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+    delete:
+      tags:
+      - mcp
+      operationId: deleteMcpProvider
+      x-person-action: record
+      summary: Remove an MCP provider overlay row
+      description: >
+        Removes the user or project overlay for this id. Distro base rows remain
+        with device defaults after overlay deletion.
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, clear the project overlay row only.
+      responses:
+        '204':
+          description: Overlay removed
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}/tools:
+    get:
+      tags:
+      - mcp
+      operationId: listMcpProviderTools
+      summary: List discovered tools for an MCP provider
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Discovered tools
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpToolListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}/refresh:
+    post:
+      tags:
+      - mcp
+      operationId: refreshMcpProvider
+      x-person-action: none
+      summary: Reconnect and re-register tools for one MCP provider
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Updated MCP provider after refresh
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpProvider
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/check:
+    post:
+      tags:
+      - mcp
+      operationId: checkMcpProviders
+      x-person-action: none
+      summary: Check MCP provider connections
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: When set, evaluate providers with project overlay enablement.
+      responses:
+        '200':
+          description: Connection check results
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpCheckResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/mcp/providers/{provider_id}/oauth/start:
+    post:
+      tags:
+      - mcp
+      operationId: startMcpOAuth
+      x-person-action: none
+      summary: Begin MCP Authorization (OAuth 2.1 + PKCE)
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: Optional project scope for OAuth flow
+      responses:
+        '200':
+          description: Authorize URL for system browser
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthStartResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}/oauth/cancel:
+    post:
+      tags:
+      - mcp
+      operationId: cancelMcpOAuth
+      x-person-action: none
+      summary: Cancel a pending MCP sign-in
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: Optional project scope for OAuth flow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthCancelRequest
+      responses:
+        '204':
+          description: Named attempt is no longer pending; stored credentials are unchanged.
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}/oauth/complete:
+    post:
+      tags:
+      - mcp
+      operationId: completeMcpOAuth
+      x-person-action: record
+      summary: Finish MCP Authorization code exchange
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: Optional project scope for OAuth flow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthCompleteRequest
+      responses:
+        '200':
+          description: Updated MCP provider after sign-in
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/mcp.yaml#/components/schemas/McpProvider
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/mcp/providers/{provider_id}/oauth:
+    delete:
+      tags:
+      - mcp
+      operationId: revokeMcpOAuth
+      x-person-action: record
+      summary: Revoke MCP OAuth tokens (Sign out)
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: Optional project scope for OAuth flow
+      responses:
+        '204':
+          description: OAuth tokens revoked
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '502':
+          $ref: ../components/responses.yaml#/components/responses/BadGateway
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable

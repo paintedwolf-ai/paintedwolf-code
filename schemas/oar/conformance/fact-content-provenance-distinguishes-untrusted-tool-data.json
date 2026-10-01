@@ -1,0 +1,63 @@
+{
+  "id": "fact-content-provenance-distinguishes-untrusted-tool-data",
+  "title": "The content-provenance profile exposes host-attributed segment authority and trust without inspecting content text",
+  "covers": [
+    "OAR-FACT-16"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.input",
+      "id": "UNTRUSTED_TOOL_DATA",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "content-provenance"
+        ]
+      },
+      "when": "content_contains_untrusted && content_segment_count == 2 && \"tool\" in content_origins && \"none\" in content_authorities"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "content-provenance"
+      ],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.input",
+    "facts": {
+      "content_roles": ["user", "tool"],
+      "content_origins": ["user", "tool"],
+      "content_authorities": ["user", "none"],
+      "content_trust_tiers": ["trusted", "untrusted"],
+      "content_sources": ["", "read#4"],
+      "content_segment_count": 2,
+      "content_contains_untrusted": true
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "UNTRUSTED_TOOL_DATA"
+  }
+}

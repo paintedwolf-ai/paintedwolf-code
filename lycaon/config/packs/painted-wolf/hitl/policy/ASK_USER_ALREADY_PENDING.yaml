@@ -1,0 +1,32 @@
+oar: '1.0'
+id: ASK_USER_ALREADY_PENDING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - ask_user
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.pending_input_id]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "ASK_USER_ALREADY_PENDING"
+effect: block
+copy:
+  what: ask_user cannot open a second coordinator-to-human wait while one is still pending.
+  cause: 'A user response is already pending{% if paintedwolf.pending_input_id %} for {{ paintedwolf.pending_input_id }}{% endif %}.'
+  why: A second request would compete with the unresolved response.
+  fix: Preserve the existing request and wait for its response. Ask another question only if a distinct unresolved need remains afterward.
+  instead: Do not repeat the question, infer an answer, or open replacement work to bypass the pending response.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: a user ask is already pending
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: stub
+      path: src/main.go
+      profile: coordinator
+      tool: ask_user
+    expect_contains:
+      - 'Code: ASK_USER_ALREADY_PENDING'
+      - pending

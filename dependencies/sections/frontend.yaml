@@ -1,0 +1,187 @@
+title: Frontend packages (`lycaon-den`)
+intro: |
+  Declared in `lycaon-den/package.json`; the Pinned column shows the `bun.lock` resolution.
+manifest:
+  kind: bun
+  path: lycaon-den/package.json
+  lock: lycaon-den/bun.lock
+  dependabot_group: bun-dependencies
+groups:
+  - title: Locally patched packages
+    intro: |
+      `patchedDependencies` applies these patches to one exact version, so a bump requires
+      rebasing the patch.
+    packages:
+      '@codemirror/view':
+        urgency: low
+        urgency_reason: |
+          Text rendering only; no HTML evaluation.
+        friction: high
+        friction_reason: |
+          The patch adds a measure-timing facet, line-padding measurement, and scroll and
+          wrapped-line height changes, duplicated across `dist/index.cjs` and `dist/index.js`.
+        updates: hold
+      overlayscrollbars:
+        urgency: low
+        friction: high
+        updates: hold
+        notes: |
+          Themed scrollbar chrome.
+
+  - title: Framework, state, and client libraries
+    rows:
+      - id: dompurify
+        name: '`dompurify` · via `isomorphic-dompurify`'
+        pins:
+          - npm-lock lycaon-den/bun.lock dompurify
+        upstream:
+          - npm dompurify
+        urgency: critical
+        friction: low
+        notes: |
+          The sanitizer itself. Patch releases arrive with a lockfile refresh inside
+          `isomorphic-dompurify`'s range.
+    packages:
+      isomorphic-dompurify:
+        urgency: critical
+        urgency_reason: |
+          `chat/markdown/markdown-render.ts` sanitizes all rendered Markdown HTML against XSS.
+        friction: moderate
+        friction_reason: |
+          Before a major bump, audit the configured hooks and allow-lists.
+      marked:
+        urgency: high
+        friction: low
+        notes: |
+          Parses model and file Markdown ahead of the sanitizer. Exact pin.
+      yjs:
+        urgency: high
+        friction: high
+        updates: hold
+        notes: |
+          Den's replica of the editor document. Must stay update-compatible with the host's
+          `yrs`; bump both together and test end to end against the WASM core.
+      solid-js:
+        urgency: moderate
+        friction: low
+      '@tanstack/solid-virtual':
+        urgency: moderate
+        friction: moderate
+        notes: |
+          The transcript virtualizer uses `anchorTo: "start"` with `followOnAppend: false`, and
+          its own motion controller owns tail anchoring and `shiftContent` corrections.
+          Re-verify scroll retention after a bump.
+      '@codemirror/state':
+        urgency: low
+        friction: moderate
+        notes: |
+          Bump the CodeMirror packages together with `@codemirror/view`.
+      '@codemirror/merge':
+        urgency: low
+        friction: moderate
+        notes: |
+          Exact pin.
+      '@codemirror/autocomplete':
+        urgency: low
+        friction: moderate
+      '@codemirror/commands':
+        urgency: low
+        friction: moderate
+      '@codemirror/language':
+        urgency: low
+        friction: moderate
+      '@codemirror/lint':
+        urgency: low
+        friction: moderate
+      '@codemirror/search':
+        urgency: low
+        friction: moderate
+      diff:
+        urgency: low
+        friction: moderate
+        notes: |
+          Audit hunk and patch APIs used by diff rendering and edit playback on a major bump.
+      '@tauri-apps/api':
+        urgency: moderate
+        friction: low
+        notes: |
+          Keep in step with the `tauri` crate.
+
+  - title: Dev, build, and test tooling
+    packages:
+      vite:
+        urgency: moderate
+        friction: low
+      tailwindcss:
+        urgency: low
+        friction: low
+      '@tailwindcss/vite':
+        urgency: low
+        friction: low
+      typescript:
+        urgency: moderate
+        friction: high
+        updates: no-major
+        notes: |
+          TypeScript 7 is the native compiler port. `typescript-eslint` and the Solid toolchain
+          must support it first; plan it as dedicated work.
+      vitest:
+        urgency: moderate
+        friction: moderate
+      '@vitest/coverage-v8':
+        urgency: moderate
+        friction: moderate
+      '@playwright/test':
+        urgency: moderate
+        friction: moderate
+        notes: |
+          Bumps the Chromium and WebKit builds that `scripts/e2e-den.sh` installs.
+      '@tauri-apps/cli':
+        urgency: moderate
+        friction: low
+        notes: |
+          Keep in step with the `tauri` crate.
+      openapi-typescript:
+        urgency: moderate
+        friction: moderate
+        notes: |
+          Exact pin. `scripts/codegen-den-types.sh` refuses a mismatched install, and a bump
+          regenerates `src/api/types.ts` through `./task codegen:den-types`.
+      '@redocly/cli':
+        urgency: low
+        friction: low
+        notes: |
+          Offline OpenAPI bundler and linter; `scripts/redocly-version.sh` reads this pin. Verify
+          with `./task openapi:bundle` and `./task openapi:lint`.
+      eslint:
+        urgency: low
+        friction: moderate
+      jsdom:
+        urgency: low
+        friction: moderate
+        notes: |
+          Check DOM behavior in component tests when bumping a major.
+      msw:
+        urgency: low
+        friction: low
+
+  - title: Transitive overrides
+    intro: |
+      `overrides` floors for vulnerable transitive versions. Drop one once every parent requires
+      a fixed version on its own.
+    packages:
+      'override:undici':
+        urgency: high
+        friction: low
+      'override:js-yaml':
+        urgency: high
+        friction: low
+      'override:browserslist':
+        urgency: moderate
+        friction: low
+      'override:postcss':
+        urgency: high
+        friction: low
+      'override:nanoid':
+        urgency: high
+        friction: low

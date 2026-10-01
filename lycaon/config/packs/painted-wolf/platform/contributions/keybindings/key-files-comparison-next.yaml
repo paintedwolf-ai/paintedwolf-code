@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-comparison-next
+command: painted-wolf/platform:files-comparison-next
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+ArrowRight"
+  windows:
+    - "Mod+Alt+ArrowRight"
+  linux:
+    - "Mod+Alt+ArrowRight"

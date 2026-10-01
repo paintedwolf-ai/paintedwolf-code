@@ -1,0 +1,12 @@
+# NoticeTier reflects whether the app remains usable. Catastrophic conditions
+# have no in-app fix and block the whole window.
+name: NoticeTier
+go_const_prefix: NoticeTier
+values:
+  - id: catastrophic
+    comment: >-
+      blocks the whole window from boot. No in-app fix exists, so navigation and
+      onboarding are unreachable until the condition clears.
+  - id: non_catastrophic
+    comment: >-
+      renders at one scope while the app keeps working.

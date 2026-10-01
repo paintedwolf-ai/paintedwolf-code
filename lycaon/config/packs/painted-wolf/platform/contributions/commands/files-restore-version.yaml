@@ -1,0 +1,15 @@
+id: painted-wolf/platform:files-restore-version
+title: "Restore historical version"
+scope: files
+keywords:
+  - "restore version"
+  - "revert to version"
+  - "restore file"
+category: edit
+when:
+  all:
+    - fact: files_stage_active
+    - fact: files_version_historical
+action:
+  kind: native_ui
+  handler: "files.restoreVersion"

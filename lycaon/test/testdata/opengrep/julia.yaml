@@ -1,0 +1,68 @@
+language: julia
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: shell-injection-context-only
+  file: sample.jl
+  source: "function run_command(cmd)\n run(`sh -c $cmd`)\nend\n"
+  want: []
+  covers: []
+- name: shell-injection-safe
+  file: sample.jl
+  source: "function show(file)\n run(`echo $file`)\nend\n"
+  want: []
+  covers: []
+- name: eval-parse-input-context-only
+  file: sample.jl
+  source: "function run(code)\n eval(Meta.parse(code))\nend\n"
+  want: []
+  covers: []
+- name: eval-parse-input-safe
+  file: sample.jl
+  source: "function run(code)\n JSON.parse(code)\nend\n"
+  want: []
+  covers: []
+- name: tls-verification-disabled-vulnerable
+  file: sample.jl
+  source: 'HTTP.request("GET","https://example.com",require_ssl_verification=false)
+
+    '
+  want:
+  - lycaon.julia.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.jl
+  source: 'HTTP.request("GET","https://example.com",require_ssl_verification=true)
+
+    '
+  want: []
+  covers:
+  - lycaon.julia.tls-verification-disabled
+- name: local-include
+  file: sample.jl
+  source: 'include(joinpath(@__DIR__, "helpers.jl"))
+
+    '
+  want: []
+  covers: []
+- name: genie-code-injection-flow
+  file: app.jl
+  source: "using Genie\nfunction handler()\n code = Genie.Requests.params(:code)\n Core.eval(Main, Meta.parse(code))\n\
+    end\n"
+  want:
+  - lycaon.julia.genie-code-injection
+  covers: &id001
+  - lycaon.julia.genie-code-injection
+- name: genie-code-injection-constant
+  file: app.jl
+  source: "using Genie\nfunction handler()\n code = Genie.Requests.params(:code)\n Core.eval(Main, Meta.parse(\"\
+    1 + 2\"))\nend\n"
+  want: []
+  covers:
+  - lycaon.julia.genie-code-injection
+- name: genie-code-injection-safe-api
+  file: app.jl
+  source: "using Genie\nfunction handler()\n code = Genie.Requests.params(:code)\n Meta.parse(code)\nend\n"
+  want: []
+  covers: *id001

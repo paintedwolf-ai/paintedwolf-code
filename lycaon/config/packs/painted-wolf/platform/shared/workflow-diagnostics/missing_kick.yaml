@@ -1,0 +1,5 @@
+code: missing_kick
+message: |
+  {{kick}} does not name an anchor in the catalog whose binding renders a guidance template in any enabled pack, or in this manifest's own pack.
+replacement: |
+  Point inject_kick at a catalog anchor id (for example worker.task.finished) whose inform binding has a render template, or point render at a template that exists.

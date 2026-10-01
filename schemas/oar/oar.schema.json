@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagentrules.org/spec/1.0/oar.schema.json",
+  "title": "Open Agent Rules rule document",
+  "description": "An OAR rule: where it applies (anchor + selector), when it applies (when + flow), and what happens (effect, transform, on_fire). Normative specification: https://openagentrules.org/spec/1.0/. The document world is closed \u2014 any key this schema does not declare is rejected, except x- extensions ([OAR-DOC-26], [OAR-DOC-27]).",
+  "type": "object",
+  "required": [
+    "oar",
+    "id",
+    "kind",
+    "anchor",
+    "effect"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "oar": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "Format marker and version, <major>.<minor>, each part a decimal integer with no leading zero. Its presence identifies the document as an OAR rule. An engine rejects an unsupported major and any minor greater than its own ([OAR-DOC-3]-[OAR-DOC-5])."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Stable rule identifier. Never reused for a rule with a different meaning ([OAR-DOC-6]). Not required to correspond to any storage location ([OAR-DOC-28])."
+    },
+    "namespace": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+      "description": "Publisher scope. Rule identity is the qualified identifier <namespace>/<id>; absent means the loading host's own scope ([OAR-DOC-7], [OAR-DOC-8])."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "schema",
+        "policy",
+        "invariant",
+        "detector"
+      ],
+      "description": "Fixes evaluation order and nothing else. Evaluation runs schema, then policy, then invariant, then detector ([OAR-DOC-10], [OAR-EVAL-1], [OAR-EVAL-2])."
+    },
+    "anchor": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "description": "The lifecycle moment. A core anchor identifier resolves through the host's anchor profile map; any other value is a host-native anchor ([OAR-DOC-12], [OAR-PROF-4], [OAR-PROF-5])."
+    },
+    "selector": {
+      "$ref": "#/$defs/selector"
+    },
+    "when": {
+      "type": "string",
+      "description": "Condition in the language of Appendix A, type-checked against the declared fact environment at load. Absent means the condition is satisfied ([OAR-DOC-14], [OAR-FACT-4])."
+    },
+    "flow": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Ordered step names matched as a non-contiguous subsequence of the recent activity window ([OAR-DOC-15], [OAR-FACT-12])."
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "block",
+        "warn",
+        "nudge",
+        "allow",
+        "transform"
+      ],
+      "description": "What the engine does when the rule fires ([OAR-DOC-11])."
+    },
+    "enforcement": {
+      "type": "string",
+      "enum": [
+        "enforce",
+        "monitor",
+        "off"
+      ],
+      "default": "enforce",
+      "description": "enforce applies the effect; monitor evaluates and records only; off loads without evaluating. off is the supported way to disable a rule \u2014 an unsatisfiable condition is not ([OAR-DOC-16], [OAR-OPS-2])."
+    },
+    "mandatory": {
+      "type": "boolean",
+      "default": false,
+      "description": "A mandatory rule cannot be disabled, downgraded, or suppressed by a configuration document, a pack, or another rule ([OAR-DOC-17], [OAR-OPS-7], [OAR-EVAL-17])."
+    },
+    "on_error": {
+      "type": "string",
+      "default": "fail_closed",
+      "anyOf": [
+        {
+          "enum": [
+            "fail_closed",
+            "fail_open"
+          ]
+        },
+        {
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*/[A-Z][A-Z0-9_]*$"
+        }
+      ],
+      "description": "What happens when the rule cannot be evaluated: fail_closed blocks under its own identifier, fail_open records and continues, or a bare or qualified rule identifier blocks under that rule's identifiers instead ([OAR-DOC-18], [OAR-OPS-3]-[OAR-OPS-5])."
+    },
+    "on_fire": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/onFireAction"
+      },
+      "default": [],
+      "description": "Closed vocabulary of engine side-effects applied when the rule fires and is enforced. Conditions never mutate state ([OAR-DOC-19], [OAR-FIRE-1], [OAR-FACT-10])."
+    },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ruleRef"
+      },
+      "default": [],
+      "uniqueItems": true,
+      "description": "Rules this rule suppresses for an occurrence at which it fires. Declarative mutual exclusion, replacing hand-inlined negation of a sibling's condition ([OAR-DOC-20], [OAR-EVAL-13]-[OAR-EVAL-17])."
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the rule needs from the host. Declaring it is what makes portability computable from the document alone ([OAR-DOC-21], [OAR-FACT-19], [OAR-FACT-20]).",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Capability profile names the rule's facts come from."
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/factName"
+          },
+          "uniqueItems": true,
+          "description": "Individual fact or function names the rule needs, including host-tier names."
+        }
+      }
+    },
+    "counter_scope": {
+      "$ref": "#/$defs/factName",
+      "description": "Names the declared string fact whose value keys this rule's counters. Absent means the counters are keyed by the rule and the session alone ([OAR-DOC-32], [OAR-FIRE-10])."
+    },
+    "transform": {
+      "$ref": "#/$defs/transform"
+    },
+    "detector": {
+      "$ref": "#/$defs/detector"
+    },
+    "copy": {
+      "$ref": "#/$defs/copy"
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "Interoperability taxonomy tags, for example owasp_llm or mitre_atlas. Never affects a decision ([OAR-DOC-25])."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "experimental",
+        "test",
+        "stable",
+        "deprecated"
+      ],
+      "default": "stable",
+      "description": "The author's confidence in the rule. Never affects a decision; acting on it is the operator's job, via enforcement and the configuration document ([OAR-DOC-29])."
+    },
+    "related": {
+      "type": "array",
+      "description": "Rule lineage, so a retired identifier stays traceable to the rule that replaced it. Never affects a decision, and a target need not be loaded ([OAR-DOC-30]).",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/ruleRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "derived",
+              "obsolete",
+              "merged",
+              "renamed",
+              "similar"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "patternProperties": {
+    "^x-[a-z0-9]+(-[a-z0-9]+)*$": {
+      "description": "Implementation extension. An engine ignores one it does not recognise, and it never affects a decision ([OAR-DOC-26])."
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "[OAR-DOC-23] detector is present if and only if kind is detector.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "detector"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "detector"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "detector"
+          ]
+        }
+      }
+    },
+    {
+      "$comment": "[OAR-DOC-22] transform is present if and only if effect is transform.",
+      "if": {
+        "properties": {
+          "effect": {
+            "const": "transform"
+          }
+        },
+        "required": [
+          "effect"
+        ]
+      },
+      "then": {
+        "required": [
+          "transform"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "transform"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "factName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+      "description": "A fact or observation function name. A dotted name is a host-tier fact under [OAR-FACT-18]."
+    },
+    "ruleRef": {
+      "type": "string",
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*/[A-Z][A-Z0-9_]*$"
+        }
+      ],
+      "description": "A bare id, resolved in the referring rule's own namespace, or a qualified <namespace>/<id>."
+    },
+    "onFireAction": {
+      "type": "string",
+      "enum": [
+        "increment_counter",
+        "reset_counter",
+        "publish_event",
+        "increment_breaker",
+        "reset_breaker"
+      ],
+      "description": "increment_counter and reset_counter write the core fact fire_count; increment_breaker and reset_breaker write breaker_count; publish_event writes no fact ([OAR-FIRE-3])."
+    },
+    "selector": {
+      "type": "object",
+      "description": "Clauses are named by declared facts and match by set membership; clauses are conjunctive and an omitted clause is permissive. A clause naming a fact the engine does not declare is a load error, never a silent match ([OAR-SEL-1]-[OAR-SEL-8]).",
+      "propertyNames": {
+        "$ref": "#/$defs/factName"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uniqueItems": true
+      }
+    },
+    "transform": {
+      "type": "object",
+      "required": [
+        "action",
+        "target"
+      ],
+      "additionalProperties": false,
+      "description": "A content mutation. Transforms accumulate across the rules that fire at an occurrence and apply in evaluation order ([OAR-OPS-13]-[OAR-OPS-18]).",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "redact",
+            "replace",
+            "annotate"
+          ],
+          "description": "redact removes the target, substituting the engine's placeholder when no replacement is given; replace substitutes the given replacement; annotate attaches the replacement without removing the target."
+        },
+        "target": {
+          "type": "string",
+          "description": "Either the literal string content, meaning the whole content at this anchor, or the name of a declared list<map> fact whose members carry the spans to act on ([OAR-OPS-14])."
+        },
+        "replacement": {
+          "type": "string",
+          "description": "Required for replace and annotate; optional for redact."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "replace",
+                  "annotate"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "replacement"
+            ]
+          }
+        }
+      ]
+    },
+    "detector": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "description": "Present if and only if kind is detector ([OAR-DOC-23]).",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^detector://[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "description": "A registered detector. An engine rejects a reference it cannot resolve ([OAR-OPS-12])."
+        }
+      }
+    },
+    "copy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Presentation text. A closed set of optional strings that MAY contain the bindings of Appendix C. No member may affect selection, evaluation, ordering, precedence, or the decision ([OAR-DOC-24], [OAR-COPY-6]).",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "what": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "fix": {
+          "type": "string"
+        },
+        "instead": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

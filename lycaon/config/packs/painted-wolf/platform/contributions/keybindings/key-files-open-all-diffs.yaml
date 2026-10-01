@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-open-all-diffs
+command: painted-wolf/platform:files-open-all-diffs
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+D"
+  windows:
+    - "Mod+Alt+Shift+D"
+  linux:
+    - "Mod+Alt+Shift+D"

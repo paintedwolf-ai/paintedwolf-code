@@ -1,0 +1,93 @@
+language: solidity
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: tx-origin-authorization-vulnerable
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run() external { require(tx.origin == owner); } }
+  want:
+  - lycaon.solidity.tx-origin-authorization
+  covers: []
+- name: tx-origin-authorization-safe
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run() external { require(msg.sender == owner); } }
+  want: []
+  covers:
+  - lycaon.solidity.tx-origin-authorization
+- name: user-controlled-delegatecall-vulnerable
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run(address target, bytes calldata data) external { target.delegatecall(data); } }
+  want:
+  - lycaon.solidity.user-controlled-delegatecall
+  covers: []
+- name: user-controlled-delegatecall-safe
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run(address target, bytes calldata data) external { require(msg.sender == owner); target.delegatecall(data); } }
+  want: []
+  covers:
+  - lycaon.solidity.user-controlled-delegatecall
+- name: unchecked-send-vulnerable
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run(address payable target) external { target.send(1); } }
+  want:
+  - lycaon.solidity.unchecked-send
+  covers: []
+- name: unchecked-send-safe
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function run(address payable target) external { require(target.send(1)); } }
+  want: []
+  covers:
+  - lycaon.solidity.unchecked-send
+- name: timestamp-randomness-context-only
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function draw() external view returns(uint) { return block.timestamp % 100; } }
+  want: []
+  covers: []
+- name: timestamp-randomness-safe
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function expired(uint deadline) external view returns(bool) { return block.timestamp > deadline; } }
+  want: []
+  covers: []
+- name: packed-dynamic-hash-context-only
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function check(string memory a, string memory b) public { bytes32 h=keccak256(abi.encodePacked(a,b)); } }
+  want: []
+  covers: []
+- name: packed-dynamic-hash-safe
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.20;
+    contract Audit { address owner; function check(string memory a, string memory b) public { bytes32 h=keccak256(abi.encode(a,b)); } }
+  want: []
+  covers: []
+- name: precision-time-bucket
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.0; contract Clock { function bucket() public view returns(uint) { return block.timestamp % 3600; } }
+  want: []
+  covers: []
+- name: precision-eoa-check
+  file: sample.sol
+  source: |
+    pragma solidity ^0.8.0; contract EOA { function f() public { require(tx.origin == msg.sender, "EOA only"); } }
+  want: []
+  covers: []

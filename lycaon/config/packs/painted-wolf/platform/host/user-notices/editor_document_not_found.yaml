@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Document not open"
+message: "That document is no longer open in the editor."
+suggested_action: "Open the file again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer open"

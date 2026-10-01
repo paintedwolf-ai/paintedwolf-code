@@ -1,0 +1,5 @@
+id: twitter-access-token
+upstream_id: twitter-access-token
+title: X OAuth 1 access token
+severity: critical
+enabled: false

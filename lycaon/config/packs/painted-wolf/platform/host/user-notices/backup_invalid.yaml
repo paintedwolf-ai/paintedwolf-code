@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Backup file not usable
+message: >-
+  That file does not look like a Painted Wolf backup archive, so the
+  restore was stopped before touching anything.
+suggested_action: Pick a backup zip exported from Settings → Advanced → Data.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - does not look like

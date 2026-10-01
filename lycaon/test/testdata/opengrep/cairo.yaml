@@ -1,0 +1,26 @@
+language: cairo
+comment:
+- //
+limits: Cairo account validation patterns; transaction invariants and cross-contract authorization require deeper
+  review.
+cases:
+- name: ordinary-source
+  file: sample.cairo
+  source: |
+    fn identity(x: felt252) -> felt252 { x }
+  want: []
+  covers: []
+- name: unconditional-account-validation-vulnerable
+  file: sample.cairo
+  source: |
+    fn __validate__(self: @ContractState, calls: Array<Call>) -> felt252 { starknet::VALIDATED }
+  want:
+  - lycaon.cairo.unconditional-account-validation
+  covers: []
+- name: unconditional-account-validation-safe
+  file: sample.cairo
+  source: |
+    fn __validate__(self: @ContractState, calls: Array<Call>) -> felt252 { validate_signature(calls) }
+  want: []
+  covers:
+  - lycaon.cairo.unconditional-account-validation

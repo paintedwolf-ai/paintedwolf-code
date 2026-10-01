@@ -1,0 +1,5 @@
+id: local-vm
+label: Local virtual machines
+description: >-
+  Hypervisor operations that delete a virtual machine and its disks, or force a
+  running one off.

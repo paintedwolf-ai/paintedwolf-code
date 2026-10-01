@@ -1,0 +1,6 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Couldn't draft a message
+message: >-
+  The AI summary couldn't be generated — no lite model is assigned, or the model didn't respond.
+suggested_action: Open Settings → AI providers and assign a lite model, then try again.

@@ -1,0 +1,53 @@
+@utility den-workflow-feedback-chicklet__hint {
+margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+
+@utility den-workflow-feedback-chicklet__prompt {
+margin: 0 0 6px;
+  font-size: var(--text-den-hint);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-workflow-feedback-chicklet__answer {
+margin: 0;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+
+@utility den-workflow-feedback-chicklet__answer-label {
+font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+.den-workers-tab-row--ack .den-workers-tab-select {
+  animation: workers-tab-select-ack 280ms var(--den-ease);
+}
+
+.den-workflow-start-card-hint code {
+  font-size: var(--text-den-caption);
+}
+
+.tabs__panel .den-workers-tab-empty {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+  padding: 0 0.65rem;
+  color: var(--den-text-muted);
+}
+
+.tabs__panel .den-workers-tab:has(> .den-workers-tab-empty) {
+  padding: 0;
+}
+

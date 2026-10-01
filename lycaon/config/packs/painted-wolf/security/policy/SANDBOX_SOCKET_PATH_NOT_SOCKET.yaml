@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_NOT_SOCKET
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_NOT_SOCKET"
+effect: block
+copy:
+  what: '{{ paintedwolf.path }} resolves to an object that is not an AF_UNIX socket.'
+  cause: The path names a regular file, directory, or other non-socket inode.
+  why: The grant names a canonical path whose current type must be a socket; it does not pin an inode identity.
+  fix: Point the socket request (`capability_request.socket_paths` or the tool's socket argument) at the socket
+    file itself, not a parent directory or a neighbouring regular file.
+  instead: Branch on Code; name the socket file — never parse stderr
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: path is not an AF_UNIX socket
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_NOT_SOCKET'
+  - socket

@@ -1,0 +1,20 @@
+id: worker_cycle_ready
+kind: delegate-worker-cycle
+purpose: |
+  All parallel `task()` jobs for the current work phase must be terminal and the worker
+  cycle must be idle before the host re-enters the build loop.
+missing_signals:
+  - id: pending_workers
+    when: "true"
+    detail: "One or more worker jobs are still pending or running on this session."
+    fix: "Wait for worker completion envelope(s) on the parent transcript before claiming done."
+  - id: no_terminal_proof
+    when: "true"
+    detail: "The host has not recorded terminal worker proof for the completing job."
+    fix: "Ensure `task()` jobs finish and AppendWorkerSummary lands on the parent session."
+satisfy_auto:
+  - "Wait until every enqueued `task()` job reports complete on the parent session."
+  - "Wait for worker completion; host re-prompts after worker_cycle_ready."
+satisfy:
+  - "Wait until every enqueued `task()` job reports complete on the parent session."
+  - "Wait for worker completion; host re-prompts after worker_cycle_ready."

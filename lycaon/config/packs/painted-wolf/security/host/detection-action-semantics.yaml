@@ -1,0 +1,424 @@
+# Trusted additive enrichment for structured tool identities. These mappings do
+# not authorize an action and cannot suppress a detection. Device overlays may
+# add provider-specific identities in detection-action-semantics.yaml.
+version: 1
+mappings:
+  - id: structured-financial-charge
+    description: Recognizes structured operations that create or capture a charge.
+    references: [https://attack.mitre.org/techniques/T1657/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create[-_]?charge|charge|capture[-_]?payment|create[-_]?payment[-_]?intent)$'
+    action_effects: [charge]
+    target_scopes: [item]
+    amount_args: [amount, amount_cents, amount_minor, value, price]
+    target_args: [customer, customer_id, account, account_id, payment_method]
+
+  - id: structured-financial-refund
+    description: Recognizes structured payment refund operations.
+    references: [https://attack.mitre.org/techniques/T1657/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create[-_]?refund|refund[-_]?payment|refund)$'
+    action_effects: [refund]
+    target_scopes: [item]
+    amount_args: [amount, amount_cents, amount_minor, value]
+    target_args: [charge, charge_id, payment, payment_id, transaction, transaction_id]
+
+  - id: structured-financial-transfer
+    description: Recognizes structured payout and money-transfer operations.
+    references: [https://attack.mitre.org/techniques/T1657/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create[-_]?(payout|transfer)|send[-_]?(money|funds)|payout|transfer)$'
+    action_effects: [payout, transfer]
+    target_scopes: [account]
+    amount_args: [amount, amount_cents, amount_minor, value]
+    target_args: [destination, destination_id, account, account_id, recipient, recipient_id]
+
+  - id: structured-subscription-cancel
+    description: Recognizes structured cancellation of a customer subscription.
+    references: [https://github.com/stripe/openapi]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](cancel|delete)[-_]?subscription$'
+    action_effects: [cancel]
+    target_scopes: [subscription]
+    target_args: [subscription, subscription_id, customer, customer_id]
+
+  - id: structured-message-send
+    description: Recognizes structured operations that send a message to people.
+    references: [https://attack.mitre.org/techniques/T1646/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](send|deliver)[-_]?(email|message|sms|notification)$'
+    action_effects: [send]
+    target_scopes: [recipient]
+    target_args: [to, recipient, recipient_id, email, phone, channel, channel_id]
+    bulk_args: [to, recipients, recipient_ids, emails, phones, channels]
+
+  - id: structured-campaign-send
+    description: Recognizes broadcasts and campaign sends to a collection of recipients.
+    references: [https://attack.mitre.org/techniques/T1646/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]((send|launch|publish)[-_]?(campaign|broadcast)|broadcast)$'
+    action_effects: [send, notify]
+    target_scopes: [campaign]
+    bulk_action: 'true'
+    target_args: [campaign, campaign_id, audience, audience_id, list, list_id]
+
+  - id: structured-publication
+    description: Recognizes structured publication of externally visible content.
+    references: [https://attack.mitre.org/techniques/T1646/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](publish|create[-_]?(post|comment|release)|post[-_]?(comment|message))$'
+    action_effects: [publish]
+    target_scopes: [item]
+    target_args: [repository, repository_id, channel, channel_id, page, page_id, target, target_id]
+
+  - id: structured-data-export
+    description: Recognizes structured exports of a dataset or account collection.
+    references: [https://attack.mitre.org/tactics/TA0010/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](export|bulk[-_]?(download|read)|download[-_]?(archive|backup|dataset))$'
+    action_effects: [export]
+    target_scopes: [dataset]
+    bulk_action: 'true'
+    target_args: [dataset, dataset_id, project, project_id, account, account_id, query]
+
+  - id: structured-public-share
+    description: Recognizes public links and access-sharing operations.
+    references: [https://attack.mitre.org/techniques/T1530/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create[-_]?(public|shared)[-_]?link|make[-_]?public|share[-_]?(publicly|externally)|publish[-_]?link)$'
+    action_effects: [share, expose]
+    target_scopes: [item]
+    principal_scopes: [public]
+    target_args: [file, file_id, folder, folder_id, document, document_id, resource, resource_id]
+
+  - id: structured-credential-mint
+    description: Recognizes creation of durable credentials or signing material.
+    references: [https://attack.mitre.org/techniques/T1098/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create|generate|mint)[-_]?(api[-_]?key|access[-_]?key|token|credential|signing[-_]?key)$'
+    action_effects: [create]
+    target_scopes: [account]
+    credential_persistence: [long_lived]
+    target_args: [account, account_id, user, user_id, service_account, service_account_id]
+
+  - id: structured-signing-key-rotate
+    description: Recognizes rotation or replacement of signing credentials.
+    references: [https://attack.mitre.org/techniques/T1098/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](rotate|replace)[-_]?((signing[-_]?(key|certificate|secret))|certificate)$'
+    action_effects: [rotate]
+    target_scopes: [service]
+    credential_persistence: [signing]
+    target_args: [key, key_id, certificate, certificate_id, secret, secret_id]
+
+  - id: structured-session-credential
+    description: Recognizes retrieval of short-lived access tokens and session credentials.
+    references: [https://attack.mitre.org/techniques/T1550/001/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]((get|print|generate)[-_]?(access[-_]?token|credentials|cluster[-_]?(user[-_]?)?credentials|session[-_]?credentials))$'
+    action_effects: [create]
+    target_scopes: [account]
+    credential_persistence: [session]
+    target_args: [account, account_id, project, project_id, cluster, cluster_id, scope, scopes]
+
+  - id: structured-account-lockout
+    description: Recognizes operations that remove account recovery or authentication access.
+    references: [https://attack.mitre.org/techniques/T1531/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]((disable|remove|delete)[-_]?(mfa|two[-_]?factor|recovery|authenticator)|reset[-_]?password|lock[-_]?account)$'
+    action_effects: [lockout]
+    target_scopes: [account]
+    principal_scopes: [named]
+    target_args: [account, account_id, user, user_id, principal, principal_id]
+
+  - id: structured-ownership-transfer
+    description: Recognizes transfer of organization, tenant, project, or domain ownership.
+    references: [https://attack.mitre.org/techniques/T1531/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]transfer[-_]?(ownership|organization|tenant|project|domain)$'
+    action_effects: [transfer]
+    target_scopes: [organization, tenant, domain, project]
+    target_args: [organization, organization_id, tenant, tenant_id, domain, domain_id, project, project_id, new_owner]
+
+  - id: structured-audit-disable
+    description: Recognizes disabling audit, monitoring, protection, or detection controls.
+    references: [https://attack.mitre.org/techniques/T1562/001/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](disable|delete|remove)[-_]?(audit|logging|monitoring|detection|protection|alert|alarm)$'
+    action_effects: [disable]
+    target_scopes: [service]
+    target_args: [service, service_id, rule, rule_id, alert, alert_id]
+
+  - id: structured-bulk-purge
+    description: Recognizes purge, wipe, and delete-all operations over a collection.
+    references: [https://attack.mitre.org/tactics/TA0040/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](purge([_-]?(all|many|bulk|collection|dataset))?|wipe([_-]?(all|collection|dataset))?|delete[-_]?(all|many|bulk|collection|dataset)|bulk[-_]?delete)$'
+    action_effects: [purge, delete]
+    target_scopes: [collection]
+    bulk_action: 'true'
+    target_args: [collection, collection_id, dataset, dataset_id, project, project_id, account, account_id]
+
+  - id: structured-bulk-encrypt
+    description: Recognizes bulk or recursive encryption of a dataset.
+    references: [https://attack.mitre.org/techniques/T1486/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](encrypt[-_]?(all|bulk|recursive|dataset)|bulk[-_]?encrypt)$'
+    action_effects: [encrypt]
+    target_scopes: [dataset]
+    bulk_action: 'true'
+    target_args: [dataset, dataset_id, project, project_id, path, paths]
+
+  - id: structured-costly-provision
+    description: Recognizes provisioning of compute, accelerator, cluster, or fleet resources.
+    references: [https://attack.mitre.org/techniques/T1496/004/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create|provision|launch|scale)[-_]?(gpu|accelerator|instance|cluster|node[-_]?pool|fleet|compute|training[-_]?job)$'
+    action_effects: [provision]
+    target_scopes: [resource]
+    target_args: [project, project_id, account, account_id, region, zone, instance_type, machine_type, count, replicas]
+
+  - id: structured-public-exposure
+    description: Recognizes structured operations that make a service, resource, or principal public.
+    references: [https://attack.mitre.org/techniques/T1530/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]((make|set|grant|allow)[-_]?(public|anonymous)|enable[-_]?(public|anonymous)[-_]?(access|invocation))$'
+    action_effects: [expose, grant]
+    target_scopes: [resource]
+    principal_scopes: [public, anonymous]
+    target_args: [resource, resource_id, project, project_id, service, service_id]
+
+  - id: structured-secret-access
+    description: Recognizes retrieval of a secret value rather than secret metadata.
+    references: [https://attack.mitre.org/techniques/T1555/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](get|read|reveal|print|download)[-_]?(secret|secret[-_]?value|credential[-_]?secret)$'
+    api_actions: [structured:secret-access]
+    action_effects: [read]
+    target_scopes: [secret]
+    target_args: [secret, secret_id, secret_name, name, key, key_id, path]
+
+  - id: structured-secret-destroy
+    description: Recognizes destructive removal or purge of stored secrets.
+    references: [https://attack.mitre.org/techniques/T1552/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|destroy|purge)[-_]?(secret|secret[-_]?version|credential[-_]?secret)$'
+    api_actions: [structured:secret-destroy]
+    action_effects: [delete]
+    target_scopes: [secret]
+    target_args: [secret, secret_id, secret_name, name, key, key_id, path, version, version_id]
+
+  - id: structured-secret-update
+    description: Recognizes creation, replacement, or rotation of a stored secret value.
+    references: [https://attack.mitre.org/techniques/T1098/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create|set|put|update|replace|rotate)[-_]?(secret|secret[-_]?value|credential[-_]?secret)$'
+    api_actions: [structured:secret-update]
+    action_effects: [update]
+    target_scopes: [secret]
+    target_args: [secret, secret_id, secret_name, name, key, key_id, path]
+
+  - id: structured-explicit-privileged-grant
+    description: Recognizes operations whose registry identity explicitly grants owner or administrator privilege.
+    references: [https://attack.mitre.org/techniques/T1098/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](grant|assign|add|promote|set)[-_]?(admin|administrator|owner|superuser|root)([-_]?(role|access|permission))?$'
+    api_actions: [structured:privilege-grant-explicit]
+    action_effects: [grant]
+    target_scopes: [role]
+    principal_scopes: [named]
+    target_args: [user, user_id, member, member_id, principal, principal_id, account, account_id, email]
+
+  - id: structured-role-assignment
+    description: Recognizes role assignment operations whose requested role is available in structured arguments.
+    references: [https://attack.mitre.org/techniques/T1098/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](assign|grant|add|update|set)[-_]?(role|role[-_]?assignment|member[-_]?role|user[-_]?role)$'
+    api_actions: [structured:role-assignment]
+    action_effects: [grant]
+    target_scopes: [role]
+    principal_scopes: [named]
+    target_args: [user, user_id, member, member_id, principal, principal_id, account, account_id, email]
+
+  - id: structured-identity-delete
+    description: Recognizes permanent deletion of a user, identity, or service account.
+    references: [https://attack.mitre.org/techniques/T1531/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|remove|destroy)[-_]?(user|identity|service[-_]?account|member[-_]?account)$'
+    api_actions: [structured:identity-delete]
+    action_effects: [delete]
+    target_scopes: [identity]
+    principal_scopes: [named]
+    target_args: [user, user_id, identity, identity_id, service_account, service_account_id, account, account_id, email]
+
+  - id: structured-identity-disable
+    description: Recognizes suspension or deactivation of a user or service identity.
+    references: [https://attack.mitre.org/techniques/T1531/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](disable|suspend|deactivate|block)[-_]?(user|identity|account|service[-_]?account)$'
+    api_actions: [structured:identity-disable]
+    action_effects: [disable]
+    target_scopes: [identity]
+    principal_scopes: [named]
+    target_args: [user, user_id, identity, identity_id, service_account, service_account_id, account, account_id, email]
+
+  - id: structured-access-revoke
+    description: Recognizes removal of a named principal's membership, role, or access.
+    references: [https://attack.mitre.org/techniques/T1531/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](remove|revoke|delete)[-_]?(member|membership|access|role[-_]?assignment|user[-_]?role|group[-_]?member)$'
+    api_actions: [structured:access-revoke]
+    action_effects: [revoke]
+    target_scopes: [group]
+    principal_scopes: [named]
+    target_args: [user, user_id, member, member_id, principal, principal_id, account, account_id, email]
+
+  - id: structured-catastrophic-resource-delete
+    description: Recognizes deletion of a top-level project, organization, tenant, repository, or application.
+    references: [https://attack.mitre.org/tactics/TA0040/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|destroy|remove)[-_]?(project|organization|tenant|repository|application|app)$'
+    api_actions: [structured:catastrophic-resource-delete]
+    action_effects: [delete]
+    target_scopes: [resource]
+    target_args: [project, project_id, organization, organization_id, tenant, tenant_id, repository, repository_id, repo, app, app_id, application, application_id, name]
+
+  - id: structured-stateful-resource-delete
+    description: Recognizes deletion of a named stateful service or data resource.
+    references: [https://attack.mitre.org/tactics/TA0040/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|destroy|drop|remove)[-_]?(database|schema|bucket|cluster|index|namespace|dataset|collection|volume|endpoint|stack|queue|topic)$'
+    api_actions: [structured:stateful-resource-delete]
+    action_effects: [delete]
+    target_scopes: [resource]
+    target_args: [resource, resource_id, database, database_id, schema, bucket, bucket_id, cluster, cluster_id, index, namespace, dataset, dataset_id, collection, collection_id, volume, volume_id, endpoint, endpoint_id, stack, stack_id, queue, queue_id, topic, topic_id, name]
+
+  - id: structured-recovery-delete
+    description: Recognizes deletion or purge of a backup, snapshot, restore point, or recovery vault.
+    references: [https://attack.mitre.org/techniques/T1490/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|destroy|purge|expire)[-_]?(backup|snapshot|restore[-_]?point|recovery[-_]?(point|vault))$'
+    api_actions: [structured:recovery-delete]
+    action_effects: [delete]
+    target_scopes: [backup, snapshot]
+    target_args: [backup, backup_id, snapshot, snapshot_id, restore_point, restore_point_id, recovery_vault, vault, vault_id, name]
+
+  - id: structured-backup-disable
+    description: Recognizes disabling, pausing, or removing backup protection.
+    references: [https://attack.mitre.org/techniques/T1490/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](disable|pause|stop|remove)[-_]?(backup|backups|backup[-_]?policy|backup[-_]?protection|point[-_]?in[-_]?time[-_]?recovery)$'
+    api_actions: [structured:backup-disable]
+    action_effects: [disable]
+    target_scopes: [backup]
+    target_args: [resource, resource_id, database, database_id, project, project_id, backup_policy, policy_id, name]
+
+  - id: structured-service-stop
+    description: Recognizes stopping, suspending, deallocating, or scaling a named service to zero.
+    references: [https://attack.mitre.org/techniques/T1489/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](stop|suspend|deallocate|pause|scale[-_]?to[-_]?zero)[-_]?(service|application|app|instance|cluster|deployment|endpoint|database|environment)$'
+    api_actions: [structured:service-stop]
+    action_effects: [stop]
+    target_scopes: [service]
+    target_args: [service, service_id, application, application_id, app, app_id, instance, instance_id, cluster, cluster_id, deployment, deployment_id, endpoint, endpoint_id, database, database_id, environment, environment_id, name]
+
+  - id: structured-production-deploy-explicit
+    description: Recognizes operations whose registry identity explicitly deploys or promotes to production.
+    references: [https://slsa.dev/spec/v1.2/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.]((deploy|release|promote)[-_]?(production|prod|live)|(production|prod|live)[-_]?(deploy|release))$'
+    api_actions: [structured:production-deploy-explicit]
+    action_effects: [deploy]
+    target_scopes: [environment]
+    target_args: [project, project_id, application, application_id, app, app_id, service, service_id, deployment, deployment_id]
+
+  - id: structured-production-deploy-contextual
+    description: Recognizes generic deployment operations whose destination environment is present in structured arguments.
+    references: [https://slsa.dev/spec/v1.2/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](deploy|release|promote|create[-_]?deployment|update[-_]?deployment)$'
+    api_actions: [structured:production-deploy-contextual]
+    action_effects: [deploy]
+    target_scopes: [environment]
+    target_args: [project, project_id, application, application_id, app, app_id, service, service_id, deployment, deployment_id]
+
+  - id: structured-artifact-publish
+    description: Recognizes distribution of a package, container image, artifact, or release asset.
+    references: [https://slsa.dev/spec/v1.2/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](publish|push|upload|distribute)[-_]?(package|artifact|image|container[-_]?image|release[-_]?asset)$'
+    api_actions: [structured:artifact-publish]
+    action_effects: [distribute]
+    target_scopes: [package]
+    target_args: [package, package_id, artifact, artifact_id, image, image_id, repository, repository_id]
+
+  - id: structured-app-submission
+    description: Recognizes submission or release of an application to an external distribution channel.
+    references: [https://slsa.dev/spec/v1.2/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](submit|release|publish)[-_]?(app|application|build)[-_]?(store|review|distribution|release)?$'
+    api_actions: [structured:app-submission]
+    action_effects: [submit]
+    target_scopes: [application]
+    target_args: [application, application_id, app, app_id, build, build_id]
+
+  - id: structured-artifact-withdraw
+    description: Recognizes removal of a published package, image, release, or release asset.
+    references: [https://slsa.dev/spec/v1.2/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](unpublish|yank|delete|remove)[-_]?(package|artifact|image|container[-_]?image|release|release[-_]?asset)$'
+    api_actions: [structured:artifact-withdraw]
+    action_effects: [unpublish]
+    target_scopes: [package, release, image]
+    target_args: [package, package_id, artifact, artifact_id, image, image_id, release, release_id, repository, repository_id]
+
+  - id: structured-remote-git-rewrite
+    description: Recognizes forced remote updates and deletion of remote branches or tags.
+    references: [https://attack.mitre.org/techniques/T1565/001/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](force[-_]?push|push[-_]?force|delete|remove)[-_]?(remote[-_]?)?(branch|tag)$'
+    api_actions: [structured:remote-git-rewrite]
+    action_effects: [delete]
+    target_scopes: [branch, tag]
+    target_args: [branch, branch_name, tag, tag_name, ref]
+
+  - id: structured-workflow-disable
+    description: Recognizes disabling, archiving, or pausing an automation workflow or pipeline.
+    references: [https://attack.mitre.org/techniques/T1489/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](disable|archive|pause)[-_]?(workflow|pipeline|automation|job)$'
+    api_actions: [structured:workflow-disable]
+    action_effects: [disable]
+    target_scopes: [workflow]
+    target_args: [workflow, workflow_id, pipeline, pipeline_id, automation, automation_id, job, job_id]
+
+  - id: structured-workflow-delete
+    description: Recognizes deletion of an automation workflow, pipeline, or job.
+    references: [https://attack.mitre.org/techniques/T1489/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](delete|remove)[-_]?(workflow|pipeline|automation|job)$'
+    api_actions: [structured:workflow-delete]
+    action_effects: [delete]
+    target_scopes: [workflow]
+    target_args: [workflow, workflow_id, pipeline, pipeline_id, automation, automation_id, job, job_id]
+
+  - id: structured-protection-removal
+    description: Recognizes removal or disabling of branch, environment, or repository protection.
+    references: [https://attack.mitre.org/techniques/T1562/001/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](disable|delete|remove|bypass)[-_]?(branch[-_]?protection|environment[-_]?protection|repository[-_]?protection|required[-_]?review|status[-_]?check|ruleset)$'
+    api_actions: [structured:protection-removal]
+    action_effects: [disable]
+    target_scopes: [protection]
+    target_args: [branch, branch_name, environment, environment_id, protection, protection_id, ruleset, ruleset_id]
+
+  - id: structured-deploy-secret-change
+    description: Recognizes mutation of a secret bound to deployment, CI, pipeline, repository, or environment execution.
+    references: [https://attack.mitre.org/techniques/T1552/]
+    approval_category: mcp
+    approval_subject_re: '(?i)^.+[.](create|set|put|update|replace|delete|remove)[-_]?(deploy(ment)?|ci|pipeline|repository|environment)[-_]?secret$'
+    api_actions: [structured:deploy-secret-change]
+    action_effects: [update]
+    target_scopes: [secret]
+    target_args: [secret, secret_id, secret_name, name, key]

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-toggle-comparison
+command: painted-wolf/platform:files-toggle-comparison
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+C"
+  windows:
+    - "Mod+Alt+Shift+C"
+  linux:
+    - "Mod+Alt+Shift+C"

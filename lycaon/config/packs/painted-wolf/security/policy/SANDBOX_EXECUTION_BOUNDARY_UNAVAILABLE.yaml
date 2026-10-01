@@ -1,0 +1,22 @@
+oar: '1.0'
+id: SANDBOX_EXECUTION_BOUNDARY_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "SANDBOX_EXECUTION_BOUNDARY_UNAVAILABLE"
+effect: block
+copy:
+  what: Process control cannot retain an active sandbox for this invocation.
+  cause: The host has no supported active confinement boundary for the requested roots.
+  why: Process control widens signaling only; it must not silently remove filesystem and network restrictions.
+  fix: Use process_list and process_signal for native process operations. If the command needs execution outside the sandbox, explicitly request capability_request.host_execution.
+  instead: Branch on Code; use native process tools or explicitly request host_execution for the command.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:execution_capability
+x-paintedwolf-message: process control boundary unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains: ['Code: SANDBOX_EXECUTION_BOUNDARY_UNAVAILABLE', 'Process control cannot retain']

@@ -1,0 +1,425 @@
+.tabs {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  /* Tab chrome clears transcript content. */
+  z-index: var(--den-z-chat-chrome);
+}
+
+.tabs__rail {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+}
+.tabs__strip {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* Containing block for the overlay panel: the chips row, not the dock below. */
+.tabs__row {
+  position: relative;
+  min-width: 0;
+}
+.tabs__chips {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--den-unified-chrome-row);
+  /* Container width controls the icon-only fallback. */
+  container-type: inline-size;
+  container-name: den-tab-chips;
+}
+/* Chips, overflow and pane controls share the titlebar's centerline. */
+.den-custom-chrome .den-shell-header-chat {
+  --den-chat-chrome-top: max(0px, calc(var(--den-pane-control-center) - var(--den-unified-chrome-row) / 2));
+  min-height: calc(var(--den-chat-chrome-top) + var(--den-unified-chrome-row));
+  padding: var(--den-chat-chrome-top) 0 0;
+}
+
+/* The header at the window's left edge clears the overlay traffic lights. */
+.den-custom-chrome .den-shell-header--window-leading.den-shell-header-chat .tabs__rail-leading {
+  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+}
+
+.den-custom-chrome
+  .den-shell-header--window-leading.den-shell-header-chat
+  .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
+  --tabs-rail-side: calc(
+    var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
+      var(--den-unified-chrome-row) + 0.25rem
+  );
+}
+
+/* Without a leading slot, the chips themselves start past the lights. */
+.den-custom-chrome
+  .den-shell-header--window-leading.den-shell-header-chat
+  .tabs__rail:not(:has(.tabs__rail-leading)) {
+  --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+}
+
+/* A hidden split stage leaves the conversation against the window controls. */
+.den-custom-chrome
+  .den-shell-nav-collapsed
+  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+    [data-conversation-hidden]
+  )
+  .den-shell-header-chat
+  .tabs__rail-leading {
+  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+}
+
+.den-custom-chrome
+  .den-shell-nav-collapsed
+  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+    [data-conversation-hidden]
+  )
+  .den-shell-header-chat
+  .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
+  --tabs-rail-side: calc(
+    var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
+      var(--den-unified-chrome-row) + 0.25rem
+  );
+}
+
+.den-custom-chrome
+  .den-shell-nav-collapsed
+  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+    [data-conversation-hidden]
+  )
+  .den-shell-header-chat
+  .tabs__rail:not(:has(.tabs__rail-leading)) {
+  --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+}
+
+/* Dock rows keep their header height; an open panel slides them below itself. */
+.tabs__dock {
+  /* Above the panel wash, below the open panel in the strip. */
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  min-width: 0;
+}
+.den-chat-top-dock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.den-chat-top-chrome-slot {
+  min-width: 0;
+}
+.den-chat-top-chrome-slot[data-collapsed] > .den-chat-top-chrome-slot__inner {
+  display: none;
+}
+.den-chat-top-chrome-slot__inner {
+  min-width: 0;
+}
+/* The header passes clicks to the drag layer; dock controls keep theirs. */
+.den-shell-header-chat .den-chat-top-dock {
+  pointer-events: auto;
+}
+/* Blend the notice rail into the dock column. */
+.den-chat-top-dock .den-notice-rail {
+  border-top: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+/* Align notice content with the dock edges. */
+.den-chat-top-dock .den-notice-rail-header,
+.den-chat-top-dock .den-notice-rail-list__content {
+  padding: 8px 0 0;
+}
+.den-chat-top-dock .system-nudge {
+  margin: 8px 0;
+}
+
+/* Shared stack layout and project attribution. */
+.den-notification-stack,
+.den-project-notices,
+.den-project-notices__cards {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.den-project-notices__scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.8571rem;
+  margin: 4px 0 -4px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.2;
+}
+.den-project-notices__kind {
+  font-weight: 600;
+}
+.den-project-notices__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--den-radius);
+  background: transparent;
+  color: var(--den-accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.den-project-notices__link:hover {
+  background: var(--den-tint-2);
+}
+.den-project-notices__link span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-project-notices__unavailable {
+  color: var(--den-text-muted);
+}
+.den-project-notices__cards .system-nudge + .system-nudge {
+  margin-top: 0;
+}
+.den-project-notices__more {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+/* Side controls stay aligned with the chip row. */
+.tabs__rail-leading {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: var(--den-unified-chrome-row);
+  padding-left: var(--den-tabs-slot-gutter-x);
+  margin-right: var(--den-tabs-slot-gap);
+}
+.tabs__rail-trailing {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: var(--den-unified-chrome-row);
+  padding-right: var(--den-tabs-slot-gutter-x);
+  margin-left: var(--den-tabs-slot-gap);
+  position: relative;
+  z-index: 1;
+}
+
+.tabs__chip {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--den-tabs-chip-gap);
+  font-size: var(--text-den-overline);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: var(--den-tabs-chip-py) var(--den-tabs-chip-px);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  z-index: 1;
+  margin-bottom: -1px;
+  transition: color var(--den-tabs-chrome-fade) var(--den-ease),
+    border-color var(--den-tabs-chrome-fade) var(--den-ease),
+    opacity var(--den-duration) var(--den-ease);
+}
+.tabs__chip:hover {
+  color: var(--den-text);
+}
+.tabs__chip:focus-visible {
+  outline: none;
+  z-index: 2;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+  border-radius: var(--den-radius-sm);
+}
+.tabs__rail:not(.tabs__rail--compact) .tabs__chips {
+  border-bottom: 1px solid var(--den-line);
+}
+.tabs__rail:not(.tabs__rail--compact) .tabs__chip {
+  border-bottom-color: transparent;
+  background: transparent;
+  color: var(--den-text-muted);
+}
+.tabs__rail:not(.tabs__rail--compact) .tabs__chip:hover:not(.tabs__chip--shown) {
+  color: var(--den-text);
+  background: transparent;
+}
+.tabs__rail:not(.tabs__rail--compact) .tabs__chip--shown {
+  color: var(--den-text);
+  font-weight: 600;
+  background: transparent;
+  border-bottom-color: var(--den-accent);
+  z-index: 1;
+}
+.tabs__chip--empty {
+  color: var(--den-text-muted);
+  opacity: 0.62;
+}
+.tabs__chip--empty:hover {
+  opacity: 0.85;
+}
+.tabs__chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+  color: inherit;
+  opacity: 0.72;
+  /* Isolate thin icon strokes during rail fades. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.tabs__chip:hover .tabs__chip-icon,
+.tabs__chip--shown .tabs__chip-icon {
+  opacity: 1;
+}
+.tabs__chip-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hide labels when four chips exceed the container. */
+@container den-tab-chips (max-width: 28rem) {
+  .tabs__chip--with-icon .tabs__chip-label {
+    display: none;
+  }
+  .tabs__chip--with-icon {
+    min-width: 0;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+  .tabs__chip--with-icon .tabs__chip-badge {
+    max-width: 2.75rem;
+  }
+}
+.tabs__chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+  flex-shrink: 0;
+}
+.tabs__chip-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 4.5rem;
+  min-height: 1.05rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 0.28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-chip-fg);
+}
+.tabs__chip--shown .tabs__chip-badge {
+  color: var(--den-accent-text);
+}
+/* The panel overlays the transcript without resizing its viewport. */
+.tabs__panel-shell {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+}
+/* The fade follows the panel edge. */
+.tabs__panel-fade {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: var(--chat-stream-edge-fade);
+  pointer-events: none;
+  background: var(--chat-stream-fade-down);
+  transition: opacity 110ms ease;
+}
+.tabs__panel-fade--hidden {
+  opacity: 0;
+}
+.tabs__panel-clip {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--den-line);
+  border-top: 0;
+  border-radius: 0 0 var(--den-radius) var(--den-radius);
+  /* Same fill as the chip row. */
+  background: var(--den-background);
+}
+/* Split view caps panel height against the window. */
+.den-shell-stage-host--split .den-split-col--chat .tabs__panel-clip {
+  max-height: 40dvh;
+}
+/* The open panel meets the chip row. */
+.tabs__rail:not(.tabs__rail--compact) .tabs__panel-clip {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.tabs__panel {
+  /* Child regions handle overflow. */
+  min-height: var(--den-tabs-panel-min-height);
+  overflow: visible;
+  user-select: text;
+  contain: layout style;
+  transition: opacity 110ms ease;
+}
+.tabs__panel--hidden {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs__panel {
+    transition: none;
+  }
+}
+/* Embedded strips use the panel frame. */
+.tabs__panel .progress-strip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.progress-strip--embedded .progress-strip__body {
+  animation: none;
+}
+.tabs__panel .progress-strip__item {
+  transition: none;
+}
+.tabs__panel[data-tab="progress"] {
+  transition: none;
+}
+.progress-strip__empty {
+  margin: 0;
+  padding: 0.25rem 0.25rem 0.4rem;
+  font-size: var(--text-den-compact);
+  color: var(--den-text-muted);
+}
+
+

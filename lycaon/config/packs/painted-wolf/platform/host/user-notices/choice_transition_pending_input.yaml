@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Answer the pending question
+message: This workflow is waiting for your response before it can move to another phase.
+suggested_action: Return to the conversation and answer the pending question or decision, then continue.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - This workflow is waiting for your response

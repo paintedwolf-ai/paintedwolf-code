@@ -1,0 +1,38 @@
+oar: '1.0'
+id: SURFACE_NOTE_ARTIFACT_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - surface_note
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.surface_presentable_ids
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SURFACE_NOTE_ARTIFACT_UNKNOWN"
+effect: block
+copy:
+  what: The note includes an artifact ID not observed as presentable in this turn.
+  cause: artifact_ids takes producer ids observed since the last user message; a made-up or stale id resolves
+    to nothing.
+  why: A presented still is a receipt. An id the turn never observed shows the user an image that answers a
+    different question, or nothing at all.
+  fix: 'Use an actual producer ID for the intended visual. Presentable IDs from this turn: {{ paintedwolf.surface_presentable_ids
+    }}. An available ID is not automatically the right evidence; preserve the note’s meaning, and capture the
+    required still if none matches.'
+  instead: Branch on Code SURFACE_NOTE_ARTIFACT_UNKNOWN; copy a producer artifact_id from this turn or capture
+    one before presenting
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:surface_note
+x-paintedwolf-message: That note named an artifact this turn has not produced.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: surface_note
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURFACE_NOTE_ARTIFACT_UNKNOWN'
+  - artifact_id

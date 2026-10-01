@@ -1,0 +1,13 @@
+id: implementer
+name: Implementer
+description: Product edits only — dispatch with scope.mode write + paths; host rejects read/default. Read-only survey → repo-researcher
+tool_profile: implement
+exec_mode: none
+skills: all
+topology_roles:
+  - worker
+dispatch_lanes:
+  - write
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/implementer.md

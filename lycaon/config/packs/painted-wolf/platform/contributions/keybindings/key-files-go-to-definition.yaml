@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-go-to-definition
+command: painted-wolf/platform:files-go-to-definition
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "F12"
+  windows:
+    - "F12"
+  linux:
+    - "F12"

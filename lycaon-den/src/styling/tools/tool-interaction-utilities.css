@@ -1,0 +1,331 @@
+.den-task-card--running .den-task-card-progress-fill {
+  background: color-mix(in srgb, var(--den-accent-signal) 72%, transparent);
+}
+
+.den-task-card--running .den-task-card-progress-fill--batch {
+  background: color-mix(in srgb, var(--den-accent-signal) 42%, transparent);
+}
+
+.den-tool-part[data-status="running"]:not([data-accordion-row]),
+.den-activity-span[data-status="running"] {
+  outline: none;
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--den-line);
+}
+
+/* Opacity pulses the static ring without repainting its shadow. */
+.den-tool-part[data-status="running"]:not([data-accordion-row])::after,
+.den-activity-span[data-status="running"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--den-line-pulse);
+  opacity: 0;
+  pointer-events: none;
+  animation: den-tool-running-pulse 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-tool-part[data-status="running"]:not([data-accordion-row])::after,
+  .den-activity-span[data-status="running"]::after {
+    animation: none;
+  }
+}
+
+/* Disclosure chrome and content share one measured timeline. */
+.den-tool-part > summary,
+.den-activity-span > summary,
+.den-citation-evidence-chicklet > summary {
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--den-duration-drawer) var(--den-ease);
+}
+
+.den-tool-part[data-closing] > summary,
+.den-activity-span[data-closing] > summary,
+.den-citation-evidence-chicklet[data-closing] > summary {
+  border-bottom-color: transparent;
+}
+
+.den-chat-stream details[data-animating]:not([data-closing])
+  > :not(summary) {
+  animation: den-transcript-disclosure-body-in 200ms var(--den-ease) both;
+}
+
+.den-chat-stream details[data-animating][data-closing] > :not(summary) {
+  animation: den-transcript-disclosure-body-out 160ms var(--den-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-tool-part > summary,
+  .den-activity-span > summary,
+  .den-citation-evidence-chicklet > summary,
+  .den-tool-part-chicklet {
+    transition: none;
+  }
+
+  .den-chat-stream details[data-animating] > :not(summary) {
+    animation: none;
+  }
+}
+
+.den-activity-span > summary {
+  list-style: none;
+  cursor: pointer;
+  display: block;
+  padding: 0;
+  font-size: var(--text-den-hint);
+  user-select: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.den-activity-span > summary::-webkit-details-marker { display: none; }
+
+.den-worker-group-item:not(:last-child) {
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
+}
+
+.den-worker-group-item .den-task-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 9px;
+  row-gap: 0;
+  border: none;
+  border-radius: 0;
+  padding: 11px 10px 12px;
+  background: transparent;
+}
+
+.den-worker-group-item .den-task-card--clickable:hover {
+  background: var(--den-tint-1);
+}
+
+.den-worker-group-item .den-task-card-header {
+  display: contents;
+}
+
+.den-worker-group-item .den-task-card-title {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  white-space: nowrap;
+  font-size: var(--text-den-label);
+}
+
+.den-worker-group-item .den-task-card-tags {
+  display: contents;
+}
+
+.den-worker-group-item .den-task-card-tags > :not(.den-task-card-status) {
+  display: none;
+}
+
+.den-worker-group-item .den-task-card-status {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  min-height: 18px;
+  padding: 0.1em calc(0.4em - 0.06em) 0.1em 0.4em;
+  line-height: 1;
+}
+
+.den-worker-group-item .den-task-card-status--live::before {
+  width: 5px;
+  height: 5px;
+  margin-right: 4px;
+}
+
+.den-worker-group-item .den-task-card-activity {
+  display: none;
+}
+
+.den-worker-group-item .den-task-card-progress {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 9px;
+}
+
+.den-worker-group-item .den-task-card-body {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container den-worker-group (max-width: 30rem) {
+  .den-worker-group-item .den-task-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .den-worker-group-item .den-task-card-title {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .den-worker-group-item .den-task-card-status {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .den-worker-group-item .den-task-card-body {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 1px;
+  }
+
+  .den-worker-group-item .den-task-card-progress {
+    grid-row: 3;
+  }
+}
+
+/* Activity details share the span card fill. */
+.den-tool-part[data-accordion-row] {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
+}
+
+.den-activity-span-items > .den-activity-span-item:last-child .den-tool-part[data-accordion-row] {
+  border-bottom: none;
+}
+
+.den-tool-part[data-accordion-row] > summary {
+  border-radius: 0;
+}
+
+.den-tool-part[data-accordion-row] .den-tool-part-chicklet {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-height: 29px;
+  padding: 5px 12px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.den-tool-part[data-accordion-row] .den-row-mark {
+  margin-left: auto;
+}
+
+.den-tool-part[data-accordion-row]:hover .den-tool-part-chicklet,
+.den-tool-part[data-accordion-row][open] .den-tool-part-chicklet {
+  background: color-mix(in srgb, var(--den-text) 4%, transparent);
+}
+
+.den-tool-part[data-accordion-row][open] .den-row-mark::after {
+  transform: scaleY(0);
+}
+
+.den-tool-part[data-accordion-row][open] .den-row-mark::before {
+  background: var(--den-text);
+}
+
+.den-tool-part[data-accordion-row][open] > .den-tool-part-body {
+  margin-top: 0;
+  padding: 8px 12px 10px;
+}
+
+@utility den-transcript-chicklet-summary {
+  list-style: none;
+  cursor: pointer;
+  display: block;
+  padding: 0;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  user-select: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-transcript-chicklet-summary:focus-visible,
+.den-tool-part > summary:focus-visible,
+.den-activity-span > summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+}
+
+.den-transcript-chicklet-summary::-webkit-details-marker { display: none; }
+
+.den-tool-part-card-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 5px 0;
+}
+
+.den-tool-part-card-facts > div + div {
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 45%, transparent);
+}
+
+.den-tool-part-card-facts > div:first-child { padding-top: 0; }
+.den-tool-part-card-facts > div:last-child { padding-bottom: 0; }
+
+.den-tool-part-card-facts > div.den-tool-part-card-facts--wide {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.den-tool-part-card-facts dt {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+.den-tool-part-card-facts dd {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-den-label);
+  line-height: 1.4;
+  text-align: right;
+  color: var(--den-text);
+  word-break: break-word;
+}
+
+.den-tool-part-card-facts > div.den-tool-part-card-facts--wide dd {
+  text-align: left;
+}
+
+.den-tool-part-card-log-digest-clusters li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--text-den-label);
+  line-height: 1.4;
+}
+
+.den-tool-part-card-log-digest-span,
+.den-tool-part-card-log-digest-records {
+  font-size: var(--text-den-hint);
+}
+
+.den-chat-content-link:hover {
+  text-decoration: underline;
+}
+
+.den-tool-part-card-section + .den-tool-part-card-section {
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+}
+

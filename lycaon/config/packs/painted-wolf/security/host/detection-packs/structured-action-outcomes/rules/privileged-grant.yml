@@ -1,0 +1,25 @@
+title: Grant administrator or owner privilege
+id: 41f828d9-dddc-4f2f-9a7c-d62288c4ad37
+status: stable
+description: Grants a named principal an explicitly privileged role through a structured identity operation.
+references: [https://attack.mitre.org/techniques/T1098/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection_explicit: {ApiAction: 'structured:privilege-grant-explicit', TargetPresent: 'true'}
+  selection_assignment:
+    ApiAction: 'structured:role-assignment'
+    TargetPresent: 'true'
+    ToolArg|re:
+      - '(?i)^(.*[.])?(role|role_name|member_role|permission|access_level)=(owner|admin|administrator|superuser|root)$'
+      - '(?i)^(.*[.])?roles[.][0-9]+=(owner|admin|administrator|superuser|root)$'
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: (selection_explicit or selection_assignment) and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.persistence]

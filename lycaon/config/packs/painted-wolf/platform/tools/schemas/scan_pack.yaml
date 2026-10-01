@@ -1,0 +1,47 @@
+tags: [scans]
+description: >-
+  Run the host's configured code scanners over the active project and return one
+  scan_pack. Use it when the ask is security or code-quality work and the board
+  shows no complete scan at the current head. Returns per_scan[].scan_id — pass
+  that exact array to scan_summary or scan_query for a cross-engine aggregate,
+  or set completion=summary to receive the aggregate when this call finishes.
+  Without paths it asks for a full pass and returns its pass_id; the pass's
+  scanners start together, so a scanner still finishing earlier work shows
+  as pending with no scan_id until then — scan_summary with pass_id reads the
+  pass at any point. Categories with no installed engine are rejected with
+  SCAN_PACK_NO_HOST_ENGINE.
+schema:
+  type: object
+  properties:
+    categories:
+      type: array
+      description: >-
+        Engine categories to run, or ["all"] for the full pack. Only categories
+        with at least one installed engine can run.
+      items:
+        type: string
+        # Pinned to api.AllScanCategoryValues() plus "all" by
+        # TestScanToolCatalogEnumsMatchWire.
+        enum: [all, security, sast, sca, container, secret, lint, types, style, license, custom]
+    paths:
+      type: array
+      description: Project-relative paths to limit the scan to. Omit to scan the project.
+      items:
+        type: string
+    completion:
+      type: string
+      enum: [enqueue, summary]
+      default: enqueue
+      description: >-
+        enqueue returns immediately with scan ids (default). summary waits for
+        every selected engine to finish and returns the cross-engine summary in
+        this call.
+    timeout_ms:
+      type: integer
+      minimum: 1000
+      maximum: 1800000
+      default: 600000
+      description: >-
+        Maximum wait when completion=summary (default 600000, max 1800000).
+        A timeout returns the current receipt; scans continue in the background.
+  additionalProperties: false

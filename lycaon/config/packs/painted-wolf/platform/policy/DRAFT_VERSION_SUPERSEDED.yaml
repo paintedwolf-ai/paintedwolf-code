@@ -1,0 +1,20 @@
+emit: ui:draft_version
+category: informational
+severity: info
+message: Superseded
+what: Prior draft attempt replaced by a newer version.
+cause: The coordinator regenerated prose for this turn.
+why: Review the current draft or expand version history.
+fix: Review the current draft or expand version history.
+instead: Continue from the latest draft body.
+scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: DRAFT_VERSION_SUPERSEDED'
+id: DRAFT_VERSION_SUPERSEDED

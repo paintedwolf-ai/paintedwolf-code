@@ -1,0 +1,77 @@
+{
+  "id": "expr-index-out-of-range-raises",
+  "title": "Indexing a list out of range raises, and the rule is handled per its on_error",
+  "covers": [
+    "OAR-EXPR-13",
+    "OAR-OPS-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.output",
+      "id": "OUT_OF_RANGE",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "\"kind\" in pii_entities[3]"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "model.output",
+    "facts": {
+      "pii_entities": []
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "OUT_OF_RANGE",
+    "applied": [
+      "oar.test/OUT_OF_RANGE:errored"
+    ]
+  }
+}

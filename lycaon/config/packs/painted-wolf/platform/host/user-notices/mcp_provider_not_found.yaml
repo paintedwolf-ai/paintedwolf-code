@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: MCP provider not found
+message: There is no provider with that id in this catalog.
+suggested_action: Refresh the list and try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not found
+      - Refresh

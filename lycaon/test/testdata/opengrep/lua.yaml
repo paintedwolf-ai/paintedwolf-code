@@ -1,0 +1,255 @@
+language: lua
+comment:
+- --
+limits: No qualified default security model. OpenResty globals, mutable API tables, and Lua environments require
+  value identity before request-flow findings are reliable. Loading a chunk alone does not prove execution. Context-only
+  and quiet examples are regression-tested.
+cases:
+- name: shell-injection-context-only
+  file: sample.lua
+  source: |
+    function run()
+     os.execute(ngx.var.arg_command)
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: shell-injection-safe
+  file: sample.lua
+  source: |
+    function run()
+     os.execute("echo ready")
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: code-injection-context-only
+  file: sample.lua
+  source: |
+    function run()
+     loadstring(ngx.var.arg_code)
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: code-injection-safe
+  file: sample.lua
+  source: |
+    function run()
+     cjson.decode(ngx.var.arg_data)
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: open-redirect-context-only
+  file: sample.lua
+  source: |
+    function run()
+     ngx.redirect(ngx.var.arg_next)
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: open-redirect-safe
+  file: sample.lua
+  source: |
+    function run()
+     ngx.exec(ngx.var.arg_next)
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: path-traversal-context-only
+  file: sample.lua
+  source: |
+    function run()
+     io.open(ngx.var.arg_path,"r")
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: path-traversal-safe
+  file: sample.lua
+  source: |
+    function run()
+     io.open("config.json","r")
+    end
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-nginx-internal-path
+  file: sample.lua
+  source: |+
+    local file = io.open(ngx.var.document_root)
+
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-nginx-server-command
+  file: sample.lua
+  source: |+
+    os.execute(ngx.var.server_command)
+
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-local-ngx-table
+  file: sample.lua
+  source: |
+    local ngx = {var = {arg_command = "echo ready", arg_code = "return 1", arg_path = "config.json", arg_next = "/home"}, redirect = function(value) return value end}
+    os.execute(ngx.var.arg_command)
+    load(ngx.var.arg_code)
+    io.open(ngx.var.arg_path, "r")
+    ngx.redirect(ngx.var.arg_next)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-local-os-table
+  file: sample.lua
+  source: |
+    local os = {execute = function(value) print(value) end}
+    os.execute(ngx.var.arg_command)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-local-io-table
+  file: sample.lua
+  source: |
+    local io = {popen = function(value) return value end, open = function(value) return value end}
+    io.popen(ngx.var.arg_command)
+    io.open(ngx.var.arg_path, "r")
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-local-load-function
+  file: sample.lua
+  source: |
+    local load = function(value) return value end
+    local loadstring = function(value) return value end
+    load(ngx.var.arg_code)
+    loadstring(ngx.var.arg_code)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-parameter-ngx
+  file: sample.lua
+  source: |
+    function render(ngx)
+      ngx.redirect(ngx.var.arg_next)
+      os.execute(ngx.var.arg_command)
+    end
+    render({var = {arg_next = "/home", arg_command = "echo ready"}, redirect = print})
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-replaced-shell-function
+  file: sample.lua
+  source: |
+    os.execute = function(value) print(value) end
+    os.execute(ngx.var.arg_command)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-replaced-path-function
+  file: sample.lua
+  source: |
+    io.open = function(value) return value end
+    io.open(ngx.var.arg_path, "r")
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-replaced-redirect-function
+  file: sample.lua
+  source: |
+    ngx.redirect = function(value) return value end
+    ngx.redirect(ngx.var.arg_next)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-replaced-request-table
+  file: sample.lua
+  source: |
+    ngx.var = {arg_command = "echo ready", arg_code = "return 1", arg_path = "config.json"}
+    os.execute(ngx.var.arg_command)
+    load(ngx.var.arg_code)
+    io.open(ngx.var.arg_path, "r")
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-replaced-environment
+  file: sample.lua
+  source: |
+    local _ENV = {os = {execute = function(value) return value end}, ngx = {var = {arg_command = "echo ready"}}}
+    os.execute(ngx.var.arg_command)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-unexecuted-load
+  file: sample.lua
+  source: |
+    local compiled = load(ngx.var.arg_code)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-unexecuted-loadstring
+  file: sample.lua
+  source: |
+    local compiled = loadstring(ngx.var.arg_code)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: compiled-chunk-execution-context-only
+  file: sample.lua
+  source: |
+    local compiled = assert(loadstring(ngx.var.arg_code))
+    compiled()
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-comments
+  file: sample.lua
+  source: |
+    -- os.execute(ngx.var.arg_command)
+    -- loadstring(ngx.var.arg_code)
+    -- io.open(ngx.var.arg_path, "r")
+    -- ngx.redirect(ngx.var.arg_next)
+    print("ready")
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua
+- name: precision-literal-code
+  file: sample.lua
+  source: |
+    local documentation = [[os.execute(ngx.var.arg_command)
+    loadstring(ngx.var.arg_code)
+    io.open(ngx.var.arg_path, "r")
+    ngx.redirect(ngx.var.arg_next)]]
+    print(documentation)
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.lua

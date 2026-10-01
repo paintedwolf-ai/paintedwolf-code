@@ -1,0 +1,157 @@
+# Rendered prompt caps measure UTF-8 bytes with fixture variables.
+# Model ceilings, attachment caps, and the perception window are manual.
+version: 1
+worker_personas:
+    code-reviewer: 14766
+    implementer: 34309
+    path-explorer: 14337
+    plan-reviewer: 10653
+    plan-reviewer-alt: 10386
+    plan-writer: 17150
+    repo-researcher: 14136
+    security-reviewer: 15746
+    skeptic: 13942
+    web-researcher: 8602
+coordinator_tripartite:
+    implement_dispatch_workflow_orchestrate: 20929
+    implement_investigate_first_user: 32523
+    implement_investigate_follow_up: 32523
+    implement_investigate_idle: 32523
+    implement_overlay_promote_pending_writes: 33675
+    implement_synthesis_implementer_chain: 20729
+    implement_synthesis_path_explorer_chain: 20729
+    implement_synthesis_repo_researcher_chain: 20729
+    implement_synthesis_with_feedback_overlay: 9293
+    plan_research_surface: 13420
+    workflow_compose: 7268
+coordinator_injects:
+    active_workflow: 1396
+    board_orientation: 1001
+    command_jobs: 5130
+    implement_spawn: 1311
+    source_changes: 5337
+    tool_procedures: 4596
+    worker_command_jobs: 5130
+    worker_leg: 334
+    worker_task_assignment: 1302
+    worker_task_preamble: 657
+agent_templates:
+    coordinator: 5917
+kicks:
+    active-workflow: 443
+    agents-md: 1
+    blueprint: 43
+    board-orientation: 59
+    command-jobs: 68
+    coordinator-authz-seal-failed: 415
+    coordinator-citation-grounding: 824
+    coordinator-closeout: 686
+    coordinator-compose-done: 101
+    coordinator-debate-select: 1221
+    coordinator-edit-follow-up-repeat: 320
+    coordinator-fanout-execute: 813
+    coordinator-feedback-pending: 176
+    coordinator-feedback-received: 98
+    coordinator-gate-blocked: 650
+    coordinator-iterations-low: 493
+    coordinator-leg-finished: 306
+    coordinator-overlay-promote-complete: 427
+    coordinator-phase-advanced: 652
+    coordinator-phase-exit-required: 269
+    coordinator-plan-critique: 1247
+    coordinator-process-finished: 5709
+    coordinator-process-refused: 5819
+    coordinator-progress-missing: 596
+    coordinator-progress-stale: 582
+    coordinator-recon-drill-plan: 684
+    coordinator-recon-pack-plan: 1247
+    coordinator-recon-reconcile: 653
+    coordinator-report-document: 514
+    coordinator-review-loop-continue: 100
+    coordinator-review-loop-decide: 264
+    coordinator-root-detach-canceled: 106
+    coordinator-roots-changed: 732
+    coordinator-scan-delta: 366
+    coordinator-scan-finished: 492
+    coordinator-scheduled: 801
+    coordinator-secret-withheld: 503
+    coordinator-security-challenge: 2379
+    coordinator-security-claims: 1647
+    coordinator-security-execute: 1688
+    coordinator-security-plan: 2872
+    coordinator-security-synthesis: 1743
+    coordinator-spend-runway-low: 524
+    coordinator-spend-soft-stop: 600
+    coordinator-survey-streak: 407
+    coordinator-topology-synthesis: 541
+    coordinator-turn-closeout: 255
+    coordinator-worker-budget-requested: 803
+    coordinator-worker-task-finished: 355
+    implement-spawn: 409
+    scan-guidance-ephemeral: 61
+    skill-pointer: 144
+    skill-procedure: 215
+    source-changes: 102
+    synthesis-evidence: 1
+    tool-procedures: 1
+    transition: 3
+    worker-budget-declined: 358
+    worker-budget-raised: 195
+    worker-cancel-closeout: 367
+    worker-citation-grounding: 2094
+    worker-closeout: 366
+    worker-iterations-low: 838
+    worker-leg: 258
+    worker-leg-started: 113
+    worker-summary-trim: 253
+    worker-task-assignment: 825
+    worker-task-preamble: 41
+    worker-task-started: 235
+tool_surfaces:
+    coordinator: 68935
+    editor_file: 29492
+    explore_readonly: 29513
+    implement: 62821
+    plan_review_readonly: 32744
+    plan_write_only: 30119
+    web_research: 17623
+    worker_readonly: 29994
+absolute_maximums:
+    model: accounts/fireworks/models/kimi-k2p7-code
+    model_context_window_tokens: 262144
+    reserved_session_tokens: 224000
+prompt_attachments:
+    composer:
+        auto_attach_paste_bytes: 16384
+        max_inline_text_bytes: 65536
+    counts:
+        max_attachments: 8
+        max_references: 64
+        max_images: 4
+    transport:
+        max_upload_bytes: 134217728
+        max_prompt_request_bytes: 4194304
+        max_image_bytes: 4194304
+    materialization:
+        max_body_bytes: 134217728
+        max_turn_bytes: 268435456
+        max_expansion_ratio: 20
+        max_unwrap_depth: 2
+    prompt:
+        max_body_preview_bytes: 16384
+        max_large_text_preview_bytes: 8192
+        max_turn_preview_bytes: 32768
+    document:
+        max_body_bytes: 16777216
+        max_extracted_bytes: 16384
+        max_worker_memory_bytes: 536870912
+        max_pages: 50
+        max_slides: 50
+        max_parse_seconds: 15
+    video:
+        max_body_bytes: 134217728
+agents_md_inject:
+    max_body_bytes: 65536
+perception:
+    max_tool_images: 8
+    drop_batch: 4

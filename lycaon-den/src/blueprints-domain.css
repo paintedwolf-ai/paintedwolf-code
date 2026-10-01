@@ -1,0 +1,170 @@
+/* Blueprints stage layout. List chrome lives in global-components.css. */
+
+.project-blueprints-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.project-blueprints-view .den-browse-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.den-blueprints-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.den-blueprints-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.den-blueprints-body__content {
+  padding: 16px var(--den-stage-inset-x) var(--spacing-den-8);
+}
+
+.den-blueprints-launcher {
+  flex-shrink: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.den-blueprints-launcher + .den-blueprints-empty,
+.den-blueprints-launcher + .den-blueprints-list-panel {
+  margin-top: 16px;
+}
+
+.den-blueprints-launcher .den-session-launcher {
+  margin: 0;
+}
+
+.den-blueprints-launcher-more {
+  min-width: 0;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  padding: 8px;
+}
+
+.den-blueprints-launcher-more__heading {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  padding: 2px 6px 8px;
+}
+
+.den-blueprints-launcher-more__list {
+  max-height: min(40vh, 280px);
+}
+
+.den-blueprints-launcher-more__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.den-blueprints-launcher-more__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.den-blueprints-launcher-more__row:hover:not(:disabled) {
+  background: var(--den-tint-1);
+}
+
+.den-blueprints-launcher-more__row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.den-blueprints-launcher-more__title {
+  font-weight: 600;
+  font-size: var(--text-den-body);
+}
+
+.den-blueprints-launcher-more__desc {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.den-blueprints-empty {
+  margin: 0;
+  padding: 8px 0 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  max-width: var(--den-prose-measure);
+}
+
+.den-blueprints-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-blueprints-picker__label {
+  font-weight: 500;
+}
+
+.den-blueprints-picker .den-select {
+  min-width: 8rem;
+  font: inherit;
+}
+
+.den-blueprints-run,
+.den-blueprints-cancel {
+  padding: 4px 10px;
+  border-radius: var(--den-radius-sm);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+}
+
+.den-blueprints-run {
+  border: 1px solid var(--den-border);
+  background: var(--den-surface);
+  color: var(--den-text);
+  font-weight: 600;
+}
+
+.den-blueprints-run:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.den-blueprints-cancel {
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+}

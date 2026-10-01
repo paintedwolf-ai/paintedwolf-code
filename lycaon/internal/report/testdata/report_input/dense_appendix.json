@@ -1,0 +1,322 @@
+{
+  "title": "Security review",
+  "headline": "Only the supply-chain leg's findings survived this run; four review areas need a second pass.",
+  "run_id": "dac40de1-903e-557b-b7c8-480daee5f82f",
+  "project": "lycaon",
+  "started_at": "2026-08-13T14:44:11Z",
+  "completed_at": "2026-08-13T16:09:55Z",
+  "head_sha": "115fcab4c9a1d0e7f2b3c4d5e6f708192a3b4c5d",
+  "workflow": {
+    "id": "security-survey",
+    "version": "1.0.0"
+  },
+  "workforce": {
+    "provider": "anthropic",
+    "model": "claude-opus-5",
+    "agents": [
+      {
+        "type": "security-reviewer",
+        "legs": 5
+      }
+    ]
+  },
+  "synthesis": "# Security review — Lycaon (partial)\n\nA broad security review ran against the accepted threat model documented in `docs/security.md` and SECURITY.md, split into five parallel read-only survey legs:\n\n1. Confinement and egress boundary (lycaon/internal/exec, confine, egressproxy, egressclass, secretmatch)\n2. API and authentication surface (lycaon/internal/api, settings)\n3. MCP, tools, and trust plane (lycaon/internal/mcp, settings, catalog)\n4. Web research and outbound egress controls (lycaon/internal/webresearch, api)\n5. Supply chain and dependency posture (go.mod, package.json, bun.lock, scripts/, lycaon/config/)\n\nAll five workers completed. The completion envelopes for legs 1–4 were not retrieved before this forced closeout, so only the supply-chain leg's detailed findings appear below. The other four areas need a follow-up pass to surface, adjudicate, and report their findings.\n\n## Supply-chain findings\n\nThe supply-chain posture is heavily pinned and verification-oriented.\n\n- **Medium — detection-rule vendoring tracks branch names, not commit pins, at clone time.** Vendored detection rules record upstream commit SHAs in provenance manifests after the clone, but the initial fetch uses a branch name. If a branch is force-pushed between clone and the provenance commit, the committed vendor can drift from the intended SHA. This is a residual risk, not an immediate gap, because the manifest is committed and can be audited.\n- **Low — cargo-about bootstrap is pinned to a version, not a commit hash.** Unlike Go tooling, the Rust bootstrap path does not pin to a cryptographic hash.\n  - The lockfile is committed but the bootstrap script re-resolves it.\n  - `cargo install --locked` would close most of this.\n\nThe remaining supply-chain surface is well controlled:\n\n| Area | Mechanism | Verdict |\n| --- | --- | --- |\n| Go modules | go.sum | locked |\n| Den/Bun | bun.lock integrity hashes | locked |\n| Native binaries | version + SHA-256, fail-closed | locked |\n\n### Recommendations\n\n1. **Re-run legs 1–4** and retrieve their worker envelopes so the full review can be completed.\n2. **For detection-rule vendoring**, change the vendor script to clone by commit SHA or tag and verify the SHA before writing the provenance manifest.\n3. For Rust bootstraps, pin cargo-about to a specific commit SHA or vendored lockfile rather than only a version.\n4. **Adopt automated supply-chain SBOM generation** at release time and include it in the release artifacts.\n\n```go\nfunc resolveWriteRoots(cfg Config) []string {\n    // A very long comment line that must character-break rather than run past the right margin of the code panel.\n    return append(defaultRoots(cfg.HomeDir, cfg.CacheDir, cfg.StateDir), cfg.ExtraRoots...)\n}\n```\n\n> The floor stays systemic: containment, write-root grants, and egress host rules remain the boundary.\n\nSee [the security doc](https://example.com/docs/security) for the accepted threat model.\n",
+  "limits": [
+    "Worker envelopes for legs 1–4 were not retrieved; four of five review areas are unreported.",
+    "No dynamic testing ran. Every claim below rests on reading the tree at this head."
+  ],
+  "evidence": [
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#1",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/proxy.go",
+      "trust_tier": "structured",
+      "matches": 40,
+      "match_files": 1,
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#2",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/socks5.go",
+      "trust_tier": "structured",
+      "matches": 7,
+      "match_files": 1
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#3",
+      "kind": "grep",
+      "path": "lycaon/internal/secretmatch",
+      "trust_tier": "structured",
+      "matches": 22,
+      "match_files": 4
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#4",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy",
+      "trust_tier": "structured",
+      "matches": 61,
+      "match_files": 9
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#5",
+      "kind": "grep",
+      "path": "docs",
+      "trust_tier": "structured",
+      "matches": 14,
+      "match_files": 6
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:list#6",
+      "kind": "list",
+      "path": "lycaon/internal/egressclass",
+      "trust_tier": "structured"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:read#7",
+      "kind": "read",
+      "path": "lycaon/internal/egressproxy/dial.go",
+      "line": 80,
+      "line_end": 88,
+      "trust_tier": "structured",
+      "cited_by": [
+        "report"
+      ],
+      "excerpt": "80  var o ProxyOptions\n81   if len(opts) > 0 {\n82     o = opts[0]\n83   }\n84   listenHTTP := o.ListenHTTP\n85   if listenHTTP == nil {\n86     listenHTTP = net.Listen\n87   }\n88   listenSOCKS := o.ListenSOCKS"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#8",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/proxy.go",
+      "trust_tier": "structured",
+      "matches": 12,
+      "match_files": 1
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#9",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/socks5.go",
+      "trust_tier": "structured",
+      "matches": 5,
+      "match_files": 1
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#10",
+      "kind": "grep",
+      "path": "lycaon/internal/secretmatch",
+      "trust_tier": "structured",
+      "matches": 103,
+      "match_files": 5
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#11",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy",
+      "trust_tier": "structured",
+      "matches": 18,
+      "match_files": 3
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#12",
+      "kind": "grep",
+      "path": "docs",
+      "trust_tier": "structured",
+      "matches": 31,
+      "match_files": 11
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:list#13",
+      "kind": "list",
+      "path": "lycaon/internal/egressclass",
+      "trust_tier": "structured"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:read#14",
+      "kind": "read",
+      "path": "lycaon/internal/egressproxy/dial.go",
+      "line": 80,
+      "line_end": 88,
+      "trust_tier": "structured",
+      "excerpt": "80  var o ProxyOptions\n81   if len(opts) > 0 {\n82     o = opts[0]\n83   }\n84   listenHTTP := o.ListenHTTP\n85   if listenHTTP == nil {\n86     listenHTTP = net.Listen\n87   }\n88   listenSOCKS := o.ListenSOCKS"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#15",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/proxy.go",
+      "trust_tier": "structured",
+      "matches": 9,
+      "match_files": 1
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#16",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/socks5.go",
+      "trust_tier": "structured",
+      "matches": 145,
+      "match_files": 2
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#17",
+      "kind": "grep",
+      "path": "lycaon/internal/secretmatch",
+      "trust_tier": "structured",
+      "matches": 6,
+      "match_files": 2
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#18",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy",
+      "trust_tier": "structured",
+      "matches": 27,
+      "match_files": 4
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#19",
+      "kind": "grep",
+      "path": "docs",
+      "trust_tier": "structured",
+      "matches": 166,
+      "match_files": 24
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:list#20",
+      "kind": "list",
+      "path": "lycaon/internal/egressclass",
+      "trust_tier": "structured"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:read#21",
+      "kind": "read",
+      "path": "lycaon/internal/egressproxy/dial.go",
+      "line": 80,
+      "line_end": 88,
+      "trust_tier": "structured",
+      "excerpt": "80  var o ProxyOptions\n81   if len(opts) > 0 {\n82     o = opts[0]\n83   }\n84   listenHTTP := o.ListenHTTP\n85   if listenHTTP == nil {\n86     listenHTTP = net.Listen\n87   }\n88   listenSOCKS := o.ListenSOCKS"
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#22",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/proxy.go",
+      "trust_tier": "structured",
+      "matches": 187,
+      "match_files": 3
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#23",
+      "kind": "grep",
+      "path": "lycaon/internal/egressproxy/socks5.go",
+      "trust_tier": "structured",
+      "matches": 2,
+      "match_files": 1
+    },
+    {
+      "handle": "da2aefce-7dec-4003-beeb-9a5a033302:grep#24",
+      "kind": "grep",
+      "path": "lycaon/internal/secretmatch",
+      "trust_tier": "structured",
+      "matches": 11,
+      "match_files": 3
+    }
+  ],
+  "evidence_total": 61,
+  "sources": [
+    {
+      "url": "https://sigmahq.io/docs/basics/rules.html",
+      "title": "Sigma rule basics",
+      "cited_by": [
+        "report"
+      ]
+    },
+    {
+      "url": "https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html",
+      "title": "Actions, resources, and condition keys for AWS services",
+      "cited_by": [
+        "report"
+      ]
+    }
+  ],
+  "scan_rules": [
+    {
+      "id": "opengrep:go.lang.security.audit.net.use-tls.use-tls",
+      "scanner": "opengrep",
+      "description": "Connection is made without TLS verification enabled; a network attacker between the sidecar and the declared destination can read or rewrite the stream."
+    },
+    {
+      "id": "supplychain.vendor.branch-not-pinned",
+      "scanner": "opengrep"
+    },
+    {
+      "id": "supplychain.rust.cargo-about-version-pin",
+      "scanner": "opengrep"
+    }
+  ],
+  "scan_rows": [
+    {
+      "severity": "high",
+      "rule_id": "opengrep:go.lang.security.audit.net.use-tls.use-tls",
+      "file": "lycaon/internal/egressproxy/dial.go",
+      "line": 31,
+      "message": "Connection is made without TLS verification enabled; a network attacker between the sidecar and the declared destination can read or rewrite the stream."
+    },
+    {
+      "severity": "medium",
+      "rule_id": "supplychain.vendor.branch-not-pinned",
+      "file": "scripts/vendor-detection-rules.sh",
+      "line": 12,
+      "message": "Clone tracks a branch name rather than a commit SHA."
+    },
+    {
+      "severity": "low",
+      "rule_id": "supplychain.rust.cargo-about-version-pin",
+      "file": "scripts/bootstrap-licenses.sh",
+      "line": 4,
+      "message": "cargo-about is pinned by version, not by commit hash."
+    }
+  ],
+  "summary": "Five review legs ran; one returned its findings and four did not, so this report covers the supply-chain surface only. The pinning posture is strong, with two residual gaps in how vendored rules and Rust tooling are fetched.",
+  "findings": [
+    {
+      "id": "sc-1",
+      "title": "Detection-rule vendoring clones by branch name rather than by commit",
+      "severity": "medium",
+      "impact": "A force-push between the clone and the provenance commit lets the committed vendor drift from the intended revision.",
+      "action": "Clone by commit SHA or tag and verify the SHA before writing the provenance manifest.",
+      "where": [
+        {
+          "path": "scripts/vendor-detection-rules.sh",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "id": "sc-2",
+      "title": "The Rust licence tool is pinned by version, not by hash",
+      "severity": "low",
+      "impact": "Unlike the Go toolchain, the bootstrap re-resolves the dependency and cannot detect a substituted artifact.",
+      "action": "Install with --locked against a committed lockfile, or pin the tool to a commit SHA.",
+      "where": [
+        {
+          "path": "scripts/bootstrap-licenses.sh",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "id": "sc-3",
+      "title": "Module, package and binary pinning is otherwise complete",
+      "status": "verified",
+      "impact": "Go modules, Bun packages and native binaries are all locked with integrity hashes and fail closed.",
+      "action": "No action needed.",
+      "where": [
+        {
+          "path": "go.sum",
+          "line": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-file-files-revert-file-changes
+slot: "app_menu.file"
+command: painted-wolf/platform:files-revert-file-changes
+group: "4"
+order: 12

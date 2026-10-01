@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-view-switch
+command: painted-wolf/platform:view-switch
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader V"
+  windows:
+    - "Leader V"
+  linux:
+    - "Leader V"

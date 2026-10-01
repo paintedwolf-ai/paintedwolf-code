@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-set-app-menu"
+description = "Replace the native application menu with the projection of Den's command registry. Sent on boot and whenever shell state or a key rebind changes what the menu should show."
+commands.allow = ["set_app_menu"]

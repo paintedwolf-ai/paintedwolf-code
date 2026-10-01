@@ -1,0 +1,80 @@
+name: Verification
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Catalog profile (check, nightly, or release)
+        required: true
+        type: string
+      suite:
+        description: Nightly suite selection
+        default: all
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Resolve verification jobs
+        id: plan
+        env:
+          PROFILE: ${{ inputs.profile }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: ${{ matrix.lane }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.job_minutes }}
+    env:
+      LYCAON_LLM_MOCK: '1'
+      LYCAON_GIT_REFERENCE: /usr/bin/git
+      BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+      SOAK: 10m
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-verification
+        with:
+          native: ${{ matrix.native }}
+
+      - name: Run verification
+        timeout-minutes: ${{ matrix.minutes }}
+        env:
+          LANE: ${{ matrix.lane }}
+        run: python3 scripts/ci_verification.py run "$LANE"
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: verification-${{ inputs.profile }}-${{ matrix.lane }}-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  verified:
+    if: always()
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require every selected verification job
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate

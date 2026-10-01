@@ -1,0 +1,448 @@
+diff --git a/browser/overlayscrollbars.browser.es6.js b/browser/overlayscrollbars.browser.es6.js
+index 4f6f437363a1c9bc4e85c053de5b7ae7ec4f9645..f5affd83c67e2209efd19dfce84584467977144d 100644
+--- a/browser/overlayscrollbars.browser.es6.js
++++ b/browser/overlayscrollbars.browser.es6.js
+@@ -1324,7 +1324,7 @@ var OverlayScrollbarsGlobal = function(t) {
+       return bind(runEachAndClear, push(n, appendChildren(t, s)));
+     }, () => o && intersectionObserverCallback(true, o.takeRecords()) ];
+   };
+-  const createObserversSetup = (t, n, o, s) => {
++  const createObserversSetup = (t, n, o, s, isSleeping) => {
+     let e;
+     let c;
+     let r;
+@@ -1335,14 +1335,24 @@ var OverlayScrollbarsGlobal = function(t) {
+     let f;
+     const _ = `[${B}]`;
+     const d = `[${X}]`;
+-    const v = [ "id", "class", "style", "open", "wrap", "cols", "rows" ];
++    const staticDirectionAttr = "data-overlayscrollbars-direction";
++    const v = [ "id", "class", "style", "open", "wrap", "cols", "rows", staticDirectionAttr ];
+     const {dt: g, vt: h, L: b, gt: y, ht: w, V: S, bt: m, yt: O, wt: C, St: $} = t;
+-    const getDirectionIsRTL = t => getStyles(t, "direction") === "rtl";
++    const getDirectionIsRTL = t => getAttr(t, staticDirectionAttr) === "rtl";
++    let contentSizePending = false;
++    let observersDisposed = false;
+     const createDebouncedObservesUpdate = () => {
+       let t;
+       let n;
+       let o;
+-      const e = debounce(s, {
++      const e = debounce(hints => {
++        if (observersDisposed || isSleeping()) return;
++        if (contentSizePending) {
++          contentSizePending = false;
++          hints.xt = D()[1] || hints.xt;
++        }
++        s(hints);
++      }, {
+         p: () => t,
+         v: () => n,
+         S: () => o,
+@@ -1447,14 +1457,19 @@ var OverlayScrollbarsGlobal = function(t) {
+       o(e, c);
+     };
+     const onContentMutation = (t, n) => {
++      // Size reads share the debounced update.
++      if (!n) {
++        contentSizePending = true;
++        if (!isSleeping()) z({}, t ? r : e);
++        return {};
++      }
++      contentSizePending = false;
+       const [, o] = D();
+       const s = {
+         xt: o
+       };
+       setDirection(s);
+-      if (o && !n) {
+-        z(s, t ? r : e);
+-      }
++
+       return s;
+     };
+     const onHostMutation = (t, n, o) => {
+@@ -1491,14 +1506,15 @@ var OverlayScrollbarsGlobal = function(t) {
+       const n = I && I();
+       const o = M();
+       const s = H.J((t => {
+-        const [, n] = D();
+-        z({
++        contentSizePending = true;
++        if (!isSleeping()) z({
+           Et: t,
+-          xt: n,
+           _t: m
+         }, i);
+       }));
+       return () => {
++        observersDisposed = true;
++        contentSizePending = false;
+         if (V) {
+           V.disconnect();
+         }
+@@ -1576,6 +1592,11 @@ var OverlayScrollbarsGlobal = function(t) {
+           assignDeep(s, onContentMutation(o[0], C));
+         }
+       }
++      // Explicit refreshes check content size without invalidating unrelated caches.
++      if (n || contentSizePending) {
++        contentSizePending = false;
++        s.xt = D()[1] || s.xt;
++      }
+       setDirection(s);
+       return s;
+     }, x ];
+@@ -2014,7 +2035,6 @@ var OverlayScrollbarsGlobal = function(t) {
+       }
+     }))), addEventListener(x, "scroll", skipEventIfSleeping((t => {
+       v((() => {
+-        A();
+         manageScrollbarsAutoHideInstantInteraction();
+       }));
+       r(t);
+@@ -2605,7 +2625,7 @@ var OverlayScrollbarsGlobal = function(t) {
+     const [i, l, a, u, f] = createStructureSetup(t);
+     const [_, d, p] = createObserversSetup(u, a, r, (t => {
+       update({}, t);
+-    }));
++    }), () => c.Kt);
+     const [v, g, , h] = createScrollbarsSetup(t, n, c, p, a, u, s);
+     const updateHintsAreTruthy = t => keys(t).some((n => !!t[n]));
+     const update = (t, s) => {
+diff --git a/overlayscrollbars.cjs.js b/overlayscrollbars.cjs.js
+index ab9d930b11ea64af9a2d5b7315b554db88cd5bbd..a430ecd0944c1a559b023f595f63fdbb744affc0 100644
+--- a/overlayscrollbars.cjs.js
++++ b/overlayscrollbars.cjs.js
+@@ -1540,7 +1540,7 @@ const createTrinsicObserver = (t, n) => {
+   }, () => o && intersectionObserverCallback(true, o.takeRecords()) ];
+ };
+ 
+-const createObserversSetup = (t, n, o, s) => {
++const createObserversSetup = (t, n, o, s, isSleeping) => {
+   let e;
+   let c;
+   let r;
+@@ -1551,14 +1551,24 @@ const createObserversSetup = (t, n, o, s) => {
+   let f;
+   const _ = `[${j}]`;
+   const p = `[${F}]`;
+-  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows" ];
++  const staticDirectionAttr = "data-overlayscrollbars-direction";
++  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows", staticDirectionAttr ];
+   const {dt: g, vt: h, L: b, gt: y, ht: w, V: S, bt: m, yt: O, wt: C, St: $} = t;
+-  const getDirectionIsRTL = t => getStyles(t, "direction") === "rtl";
++  const getDirectionIsRTL = t => getAttr(t, staticDirectionAttr) === "rtl";
++  let contentSizePending = false;
++  let observersDisposed = false;
+   const createDebouncedObservesUpdate = () => {
+     let t;
+     let n;
+     let o;
+-    const e = debounce(s, {
++    const e = debounce(hints => {
++      if (observersDisposed || isSleeping()) return;
++      if (contentSizePending) {
++        contentSizePending = false;
++        hints.xt = D()[1] || hints.xt;
++      }
++      s(hints);
++    }, {
+       p: () => t,
+       v: () => n,
+       S: () => o,
+@@ -1663,14 +1673,19 @@ const createObserversSetup = (t, n, o, s) => {
+     o(e, c);
+   };
+   const onContentMutation = (t, n) => {
++    // Size reads share the debounced update.
++    if (!n) {
++      contentSizePending = true;
++      if (!isSleeping()) z({}, t ? r : e);
++      return {};
++    }
++    contentSizePending = false;
+     const [, o] = D();
+     const s = {
+       xt: o
+     };
+     setDirection(s);
+-    if (o && !n) {
+-      z(s, t ? r : e);
+-    }
++
+     return s;
+   };
+   const onHostMutation = (t, n, o) => {
+@@ -1707,14 +1722,15 @@ const createObserversSetup = (t, n, o, s) => {
+     const n = I && I();
+     const o = M();
+     const s = H.G((t => {
+-      const [, n] = D();
+-      z({
++      contentSizePending = true;
++      if (!isSleeping()) z({
+         Et: t,
+-        xt: n,
+         _t: m
+       }, i);
+     }));
+     return () => {
++      observersDisposed = true;
++      contentSizePending = false;
+       if (V) {
+         V.disconnect();
+       }
+@@ -1792,6 +1808,11 @@ const createObserversSetup = (t, n, o, s) => {
+         assignDeep(s, onContentMutation(o[0], C));
+       }
+     }
++    // Explicit refreshes check content size without invalidating unrelated caches.
++    if (n || contentSizePending) {
++      contentSizePending = false;
++      s.xt = D()[1] || s.xt;
++    }
+     setDirection(s);
+     return s;
+   }, x ];
+@@ -2237,7 +2258,6 @@ const createScrollbarsSetup = (t, n, o, s, e, c, r) => {
+     }
+   }))), addEventListener(H, "scroll", skipEventIfSleeping((t => {
+     v((() => {
+-      A();
+       manageScrollbarsAutoHideInstantInteraction();
+     }));
+     r(t);
+@@ -2834,7 +2854,7 @@ const createSetups = (t, n, o, s) => {
+   const [i, l, a, u, f] = createStructureSetup(t);
+   const [_, d, p] = createObserversSetup(u, a, r, (t => {
+     update({}, t);
+-  }));
++  }), () => c.Kt);
+   const [v, g, , h] = createScrollbarsSetup(t, n, c, p, a, u, s);
+   const updateHintsAreTruthy = t => keys(t).some((n => !!t[n]));
+   const update = (t, s) => {
+diff --git a/overlayscrollbars.esm.js b/overlayscrollbars.esm.js
+index b05b8043eba78f20754a14e84daa09ff505e2fbc..73b03f6e282c576e773b0719ce14abf8f6f61b78 100644
+--- a/overlayscrollbars.esm.js
++++ b/overlayscrollbars.esm.js
+@@ -1534,7 +1534,7 @@ const createTrinsicObserver = (t, n) => {
+   }, () => o && intersectionObserverCallback(true, o.takeRecords()) ];
+ };
+ 
+-const createObserversSetup = (t, n, o, s) => {
++const createObserversSetup = (t, n, o, s, isSleeping) => {
+   let e;
+   let c;
+   let r;
+@@ -1545,14 +1545,24 @@ const createObserversSetup = (t, n, o, s) => {
+   let f;
+   const _ = `[${B}]`;
+   const p = `[${j}]`;
+-  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows" ];
++  const staticDirectionAttr = "data-overlayscrollbars-direction";
++  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows", staticDirectionAttr ];
+   const {dt: g, vt: h, L: b, gt: y, ht: w, V: S, bt: m, yt: O, wt: C, St: $} = t;
+-  const getDirectionIsRTL = t => getStyles(t, "direction") === "rtl";
++  const getDirectionIsRTL = t => getAttr(t, staticDirectionAttr) === "rtl";
++  let contentSizePending = false;
++  let observersDisposed = false;
+   const createDebouncedObservesUpdate = () => {
+     let t;
+     let n;
+     let o;
+-    const e = debounce(s, {
++    const e = debounce(hints => {
++      if (observersDisposed || isSleeping()) return;
++      if (contentSizePending) {
++        contentSizePending = false;
++        hints.xt = D()[1] || hints.xt;
++      }
++      s(hints);
++    }, {
+       p: () => t,
+       v: () => n,
+       S: () => o,
+@@ -1657,14 +1667,19 @@ const createObserversSetup = (t, n, o, s) => {
+     o(e, c);
+   };
+   const onContentMutation = (t, n) => {
++    // Size reads share the debounced update.
++    if (!n) {
++      contentSizePending = true;
++      if (!isSleeping()) z({}, t ? r : e);
++      return {};
++    }
++    contentSizePending = false;
+     const [, o] = D();
+     const s = {
+       xt: o
+     };
+     setDirection(s);
+-    if (o && !n) {
+-      z(s, t ? r : e);
+-    }
++
+     return s;
+   };
+   const onHostMutation = (t, n, o) => {
+@@ -1701,14 +1716,15 @@ const createObserversSetup = (t, n, o, s) => {
+     const n = I && I();
+     const o = M();
+     const s = H.G((t => {
+-      const [, n] = D();
+-      z({
++      contentSizePending = true;
++      if (!isSleeping()) z({
+         Et: t,
+-        xt: n,
+         _t: m
+       }, i);
+     }));
+     return () => {
++      observersDisposed = true;
++      contentSizePending = false;
+       if (V) {
+         V.disconnect();
+       }
+@@ -1786,6 +1802,11 @@ const createObserversSetup = (t, n, o, s) => {
+         assignDeep(s, onContentMutation(o[0], C));
+       }
+     }
++    // Explicit refreshes check content size without invalidating unrelated caches.
++    if (n || contentSizePending) {
++      contentSizePending = false;
++      s.xt = D()[1] || s.xt;
++    }
+     setDirection(s);
+     return s;
+   }, x ];
+@@ -2231,7 +2252,6 @@ const createScrollbarsSetup = (t, n, o, s, e, c, r) => {
+     }
+   }))), addEventListener(H, "scroll", skipEventIfSleeping((t => {
+     v((() => {
+-      A();
+       manageScrollbarsAutoHideInstantInteraction();
+     }));
+     r(t);
+@@ -2828,7 +2848,7 @@ const createSetups = (t, n, o, s) => {
+   const [i, l, a, u, f] = createStructureSetup(t);
+   const [_, d, p] = createObserversSetup(u, a, r, (t => {
+     update({}, t);
+-  }));
++  }), () => c.Kt);
+   const [v, g, , h] = createScrollbarsSetup(t, n, c, p, a, u, s);
+   const updateHintsAreTruthy = t => keys(t).some((n => !!t[n]));
+   const update = (t, s) => {
+diff --git a/overlayscrollbars.mjs b/overlayscrollbars.mjs
+index ae4c28abc9bbb5a972bdff8889bc552069bcf0fe..67052da1c348ec268b280ad28e5ae40bdacbd9c0 100644
+--- a/overlayscrollbars.mjs
++++ b/overlayscrollbars.mjs
+@@ -1534,7 +1534,7 @@ const createTrinsicObserver = (t, n) => {
+   }, () => o && intersectionObserverCallback(true, o.takeRecords()) ];
+ };
+ 
+-const createObserversSetup = (t, n, o, s) => {
++const createObserversSetup = (t, n, o, s, isSleeping) => {
+   let e;
+   let c;
+   let r;
+@@ -1545,14 +1545,24 @@ const createObserversSetup = (t, n, o, s) => {
+   let f;
+   const _ = `[${B}]`;
+   const p = `[${j}]`;
+-  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows" ];
++  const staticDirectionAttr = "data-overlayscrollbars-direction";
++  const v = [ "id", "class", "style", "open", "wrap", "cols", "rows", staticDirectionAttr ];
+   const {dt: g, vt: h, L: b, gt: y, ht: w, V: S, bt: m, yt: O, wt: C, St: $} = t;
+-  const getDirectionIsRTL = t => getStyles(t, "direction") === "rtl";
++  const getDirectionIsRTL = t => getAttr(t, staticDirectionAttr) === "rtl";
++  let contentSizePending = false;
++  let observersDisposed = false;
+   const createDebouncedObservesUpdate = () => {
+     let t;
+     let n;
+     let o;
+-    const e = debounce(s, {
++    const e = debounce(hints => {
++      if (observersDisposed || isSleeping()) return;
++      if (contentSizePending) {
++        contentSizePending = false;
++        hints.xt = D()[1] || hints.xt;
++      }
++      s(hints);
++    }, {
+       p: () => t,
+       v: () => n,
+       S: () => o,
+@@ -1657,14 +1667,19 @@ const createObserversSetup = (t, n, o, s) => {
+     o(e, c);
+   };
+   const onContentMutation = (t, n) => {
++    // Size reads share the debounced update.
++    if (!n) {
++      contentSizePending = true;
++      if (!isSleeping()) z({}, t ? r : e);
++      return {};
++    }
++    contentSizePending = false;
+     const [, o] = D();
+     const s = {
+       xt: o
+     };
+     setDirection(s);
+-    if (o && !n) {
+-      z(s, t ? r : e);
+-    }
++
+     return s;
+   };
+   const onHostMutation = (t, n, o) => {
+@@ -1701,14 +1716,15 @@ const createObserversSetup = (t, n, o, s) => {
+     const n = I && I();
+     const o = M();
+     const s = H.G((t => {
+-      const [, n] = D();
+-      z({
++      contentSizePending = true;
++      if (!isSleeping()) z({
+         Et: t,
+-        xt: n,
+         _t: m
+       }, i);
+     }));
+     return () => {
++      observersDisposed = true;
++      contentSizePending = false;
+       if (V) {
+         V.disconnect();
+       }
+@@ -1786,6 +1802,11 @@ const createObserversSetup = (t, n, o, s) => {
+         assignDeep(s, onContentMutation(o[0], C));
+       }
+     }
++    // Explicit refreshes check content size without invalidating unrelated caches.
++    if (n || contentSizePending) {
++      contentSizePending = false;
++      s.xt = D()[1] || s.xt;
++    }
+     setDirection(s);
+     return s;
+   }, x ];
+@@ -2231,7 +2252,6 @@ const createScrollbarsSetup = (t, n, o, s, e, c, r) => {
+     }
+   }))), addEventListener(H, "scroll", skipEventIfSleeping((t => {
+     v((() => {
+-      A();
+       manageScrollbarsAutoHideInstantInteraction();
+     }));
+     r(t);
+@@ -2828,7 +2848,7 @@ const createSetups = (t, n, o, s) => {
+   const [i, l, a, u, f] = createStructureSetup(t);
+   const [_, d, p] = createObserversSetup(u, a, r, (t => {
+     update({}, t);
+-  }));
++  }), () => c.Kt);
+   const [v, g, , h] = createScrollbarsSetup(t, n, c, p, a, u, s);
+   const updateHintsAreTruthy = t => keys(t).some((n => !!t[n]));
+   const update = (t, s) => {

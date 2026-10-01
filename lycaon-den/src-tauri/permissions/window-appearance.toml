@@ -1,0 +1,19 @@
+[[permission]]
+identifier = "allow-den-reveal-window"
+description = "Show a window after boot styles have parsed."
+commands.allow = ["den_reveal_window"]
+
+[[permission]]
+identifier = "allow-den-set-window-bounds"
+description = "Move and resize the window in one native step when a pane claims width."
+commands.allow = ["den_set_window_bounds"]
+
+[[permission]]
+identifier = "allow-den-set-window-backdrop"
+description = "Set the native window and webview backdrop to the active theme background."
+commands.allow = ["den_set_window_backdrop"]
+
+[[permission]]
+identifier = "allow-den-set-badge-count"
+description = "Set or clear the dock badge count."
+commands.allow = ["den_set_badge_count"]

@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SNAPSHOT_FILE_NOT_PRODUCED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SNAPSHOT_FILE_NOT_PRODUCED"
+effect: block
+copy:
+  what: '{{ tool }} ran with snapshot_capture, but the expected snapshot file {{ paintedwolf.path }} was not produced.'
+  cause: The command exited with code 0 without writing an image to the path specified in APP_SNAPSHOT.
+  why: Snapshot capture requires the process to render its view offscreen and write the resulting image file before exit.
+  fix: Ensure the application inspects the APP_SNAPSHOT environment variable at launch, renders the view hierarchy offscreen, and saves a PNG before terminating.
+  instead: Verify in-process snapshot handling or run without snapshot_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command
+x-paintedwolf-message: snapshot_capture target file was not produced
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: build/screen.png
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SNAPSHOT_FILE_NOT_PRODUCED'

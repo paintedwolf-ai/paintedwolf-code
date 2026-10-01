@@ -1,0 +1,36 @@
+oar: '1.0'
+id: WEB_SEARCH_DISABLED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "WEB_SEARCH_DISABLED"
+effect: block
+copy:
+  what: web_search, fetch_url, and the web-researcher worker are unavailable because web research is disabled
+    in settings
+  cause: Settings → Web research has web research turned off
+  why: The user disabled web research — outbound search and URL fetch are blocked
+  fix: Continue with available workspace evidence when it can answer the task, and omit unsupported external
+    claims. If external research is necessary, explain that dependency and that the user controls Settings
+    → Web research.
+  instead: Use available evidence or report the external research dependency
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:web_search
+x-paintedwolf-message: Web research is turned off in settings
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    agent_type: web-researcher
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WEB_SEARCH_DISABLED'
+- id: fetch_url
+  vars:
+    tool: fetch_url
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WEB_SEARCH_DISABLED'

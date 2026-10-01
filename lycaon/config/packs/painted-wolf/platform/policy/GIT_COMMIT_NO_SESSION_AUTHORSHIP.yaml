@@ -1,0 +1,37 @@
+oar: '1.0'
+id: GIT_COMMIT_NO_SESSION_AUTHORSHIP
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - git_commit
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path_required
+  - paintedwolf.git_changed_path_count
+when: paintedwolf.rejection_code == "GIT_COMMIT_NO_SESSION_AUTHORSHIP"
+effect: block
+copy:
+  what: git_commit could not establish any paths authored by this session in the active root; {{ paintedwolf.git_changed_path_count
+    }} changed paths were observed.
+  cause: No session-authored staging set was available from the ledger. This may reflect missing authorship
+    evidence or no authored changes.
+  why: Absent authorship evidence does not prove that another actor changed every file, and it does not authorize
+    staging the whole tree.
+  fix: Inspect the actual changes and commit authorization. Supply explicit paths only when committing those
+    changes is intended and authorized; otherwise leave the tree unchanged.
+  instead: Branch on Code; pass paths or leave the tree alone
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: git_commit found no paths authored by this session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: git_commit
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_COMMIT_NO_SESSION_AUTHORSHIP'

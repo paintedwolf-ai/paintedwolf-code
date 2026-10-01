@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_HANDOFF_FORBIDDEN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_HANDOFF_FORBIDDEN"
+effect: block
+copy:
+  cause: Handoff tools blocked until plan workflow milestones are met
+  why: Finish stub, research, expand, and human approval
+  fix: Finish stub, research, expand, and human approval
+  instead: Use `write`/`edit` for blueprint files until approval/handoff
+  what: Handoff tools blocked until plan workflow milestones are met
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Handoff tools blocked until plan workflow milestones are met
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: handoff_init
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_HANDOFF_FORBIDDEN'
+x-paintedwolf-audience:
+- coordinator

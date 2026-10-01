@@ -1,0 +1,10 @@
+description: Update model-authored scaffold data on the active workflow run
+schema:
+  type: object
+  properties:
+    path:
+      description: "Dotted path to model-authored data, such as artifact.summary. Host workflow controls are read-only."
+      type: string
+    value:
+      description: "New value for the scaffold var (any JSON type)."
+  required: [path, value]

@@ -1,0 +1,16 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: This catalog row is not valid
+message: >-
+  The row is missing required fields, or mixes settings that cannot apply
+  together.
+suggested_action: Check that HTTP rows have a URL, stdio rows have a command, and the two are not combined.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not valid
+      - URL

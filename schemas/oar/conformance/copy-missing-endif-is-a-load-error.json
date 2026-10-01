@@ -1,0 +1,47 @@
+{
+  "id": "copy-missing-endif-is-a-load-error",
+  "title": "copy missing endif is a load error",
+  "covers": [
+    "OAR-COPY-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "id": "TEST",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn",
+      "copy": {
+        "what": "{% if anchor %}yes"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "error": "endif"
+  }
+}

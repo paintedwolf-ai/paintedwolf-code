@@ -1,0 +1,14 @@
+{
+  "core": [],
+  "api": [
+    "core"
+  ],
+  "search": [
+    "core"
+  ],
+  "web": [
+    "api",
+    "search"
+  ],
+  "jobs": []
+}

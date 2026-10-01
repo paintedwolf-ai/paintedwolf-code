@@ -1,0 +1,15 @@
+id: painted-wolf/platform:shell-install-pw
+title: "Install pw command"
+icon: terminal
+scope: "global"
+keywords:
+  - "shell"
+  - "cli"
+  - "terminal"
+  - "path"
+  - "pw"
+  - "pw-logs"
+  - "command line"
+action:
+  kind: native_ui
+  handler: "shell.installPw"

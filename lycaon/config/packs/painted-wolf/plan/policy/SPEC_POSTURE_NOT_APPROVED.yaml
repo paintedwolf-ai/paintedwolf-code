@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_NOT_APPROVED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_NOT_APPROVED"
+effect: block
+copy:
+  cause: The current plan is awaiting approval.
+  why: Wait for the user to resolve the active plan approval card; dispatch and handoff remain closed while that gate is open.
+  fix: Wait for the user to resolve the active plan approval card; dispatch and handoff remain closed while that gate is open.
+  instead: Preserve the completed plan and wait for the approval decision
+  what: The current plan is awaiting approval.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: The current plan is awaiting approval.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: handoff_init
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_NOT_APPROVED'
+x-paintedwolf-audience:
+- coordinator

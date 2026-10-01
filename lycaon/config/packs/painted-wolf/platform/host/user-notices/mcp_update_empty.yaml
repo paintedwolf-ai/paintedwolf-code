@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Nothing to update
+message: The request did not name a field to change.
+suggested_action: Change a connection field or enablement, then save.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - field
+      - save

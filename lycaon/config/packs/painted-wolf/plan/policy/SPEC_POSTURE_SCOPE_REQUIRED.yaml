@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_SCOPE_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_SCOPE_REQUIRED"
+effect: block
+copy:
+  cause: Plan scope section required before research or critic Tasks
+  why: 'Add ## Plan implementation scope with **Size:** or ## Scope'
+  fix: 'Add ## Plan implementation scope with **Size:** or ## Scope'
+  instead: Capture scope in Phase 0 before spawning agents
+  what: Plan scope section required before research or critic Tasks
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Plan scope section required before research or critic Tasks
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_SCOPE_REQUIRED'
+x-paintedwolf-audience:
+- coordinator

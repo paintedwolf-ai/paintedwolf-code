@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-previous-region
+command: painted-wolf/platform:go-previous-region
+scope: global
+allow_in_input: true
+bindings:
+  macos:
+    - "Shift+F6"
+  windows:
+    - "Shift+F6"
+  linux:
+    - "Shift+F6"

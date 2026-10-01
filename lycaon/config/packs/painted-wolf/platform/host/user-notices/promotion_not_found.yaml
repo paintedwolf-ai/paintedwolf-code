@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: No save transition found
+message: This project does not have an active save-to-folder transition.
+suggested_action: Refresh the project. If it is still a draft, start Save to folder again.

@@ -1,0 +1,10 @@
+id: research-addenda
+extends: worker-leg-default
+description: "Research phase exploration checklist"
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "*"]
+  phase_ids: ["research"]
+checklist:
+  - "Use read, find, and grep only per Leg tools"
+  - "Report findings with file paths and symbols for coordinator dispatch"
+  - "Do not edit product source unless the leg brief explicitly allows writes"

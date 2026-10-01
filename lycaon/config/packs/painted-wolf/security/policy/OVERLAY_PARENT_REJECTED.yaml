@@ -1,0 +1,22 @@
+id: OVERLAY_PARENT_REJECTED
+emit: banner
+category: advisory
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} was orphaned because its base {{ paintedwolf.base_overlay_id
+  }} was rejected.
+what: Overlay {{ paintedwolf.overlay_id }} was orphaned because its base {{ paintedwolf.base_overlay_id }}
+  was rejected.
+cause: The host settled the dependent overlay as orphaned.
+why: This terminal overlay cannot be promoted or used as the base of another worker.
+fix: Preserve any useful retained report. If its remaining work is still wanted, dispatch a fresh task against
+  the current primary or another live base after checking the intended scope. Do not retry promotion or rejection
+  of this orphaned overlay.
+instead: Account for the orphaned child and re-dispatch only work still required
+scenarios:
+- id: default
+  vars:
+    base_overlay_id: ov-grep-impl
+    overlay_id: ov-grep-followup
+  expect_contains:
+  - ov-grep-followup
+  - 'Code: OVERLAY_PARENT_REJECTED'

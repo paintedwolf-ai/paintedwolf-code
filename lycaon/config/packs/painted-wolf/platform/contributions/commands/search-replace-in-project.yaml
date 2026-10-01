@@ -1,0 +1,10 @@
+id: painted-wolf/platform:search-replace-in-project
+title: "Replace in project"
+scope: "global"
+keywords:
+  - "replace"
+  - "rename"
+  - "find and replace"
+action:
+  kind: native_ui
+  handler: "search.replaceInProject"

@@ -1,0 +1,5 @@
+id: secrets-tooling
+label: Secret stores
+description: >-
+  Secret-store and cryptography operations that read or decrypt stored material,
+  issue a token, or change who a policy lets in.

@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SCAN_PASS_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - scan_summary
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - filesystem
+    - tool
+when: paintedwolf.rejection_code == "SCAN_PASS_NOT_FOUND"
+effect: block
+copy:
+  what: pass_id does not match a full pass the host recorded.
+  cause: The supplied id is missing, truncated, or was not returned by scan_pack.
+  why: A full pass is read by the pass_id scan_pack returned when it asked for the pass.
+  fix: Put the exact pass_id from the scan_pack receipt in pass_id, or pass that receipt's scan_ids instead, then retry scan_summary.
+  instead: Branch on Code SCAN_PASS_NOT_FOUND; reuse the scan_pack receipt's pass_id unchanged
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_drilldown
+x-paintedwolf-message: Full pass id not found
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      pass_id: deadbeef
+      tool: scan_summary
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SCAN_PASS_NOT_FOUND'
+      - scan_pack

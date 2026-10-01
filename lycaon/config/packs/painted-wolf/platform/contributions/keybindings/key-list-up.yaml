@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-list-up
+command: painted-wolf/platform:list-up
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "ArrowUp"
+  windows:
+    - "ArrowUp"
+  linux:
+    - "ArrowUp"

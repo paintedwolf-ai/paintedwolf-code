@@ -1,0 +1,60 @@
+{
+  "id": "doc-rule-set-position-does-not-set-order",
+  "title": "A member's position in the collection never affects identity, ordering, or precedence",
+  "covers": [
+    "OAR-DOC-31",
+    "OAR-DOC-28",
+    "OAR-EVAL-1"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "invariant",
+      "anchor": "tool.pre_invoke",
+      "id": "ZULU",
+      "effect": "warn"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "ALPHA",
+      "effect": "nudge"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "ALPHA",
+    "applied": [
+      "oar.test/ALPHA:fired",
+      "oar.test/ZULU:fired"
+    ]
+  }
+}

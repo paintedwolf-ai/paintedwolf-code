@@ -1,0 +1,19 @@
+# command_destructive — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    command_destructive:
+        tool: command_destructive
+        tier_hint: irreversible
+        what_changes: Runs a permanent or high-impact shell command that can cross the sandbox boundary (beyond attached folders, temp, and allowed cache locations).
+        who_affected: Systems outside allowed write roots — remotes, shared services, or data you cannot trivially restore.
+        if_wrong: Often cannot be undone from here once it completes.
+        allow_line: running `{{ command }}`
+        scenarios:
+            - id: default
+              vars:
+                command: git push origin main
+                project: my-app
+              expect_contains:
+                - permanent
+                - sandbox boundary

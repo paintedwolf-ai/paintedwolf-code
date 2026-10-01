@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Save this draft first
+message: Draft storage is app-managed and cannot be attached, detached, or relabeled.
+suggested_action: Use Save to folder, then change the saved project's folders.

@@ -1,0 +1,105 @@
+paths:
+  /v1/projects/{id}/source/file-briefings:
+    get:
+      tags: [projects]
+      operationId: getFileBriefing
+      summary: Get the AI briefing for one exact source presentation
+      description: >-
+        current accepts worker_id; document requires document_id and
+        document_revision; version requires version_id. Fields for other
+        presentation kinds are rejected.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: root_id
+        in: query
+        required: true
+        schema: {type: string, format: uuid}
+      - name: path
+        in: query
+        required: true
+        schema: {type: string}
+      - name: presentation
+        in: query
+        required: true
+        schema: {type: string, enum: [current, document, version]}
+      - name: worker_id
+        in: query
+        schema: {type: string, format: uuid}
+      - name: document_id
+        in: query
+        schema: {type: string, format: uuid}
+      - name: document_revision
+        in: query
+        schema: {type: integer, minimum: 1}
+      - name: version_id
+        in: query
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: File briefing lifecycle state
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingResponse}
+        '503':
+          description: File briefings are stopping with the engine (file_briefing_unavailable)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+    post:
+      tags: [projects]
+      operationId: requestFileBriefing
+      x-person-action: none
+      summary: Request an AI briefing for one exact source presentation
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingRequest}
+      responses:
+        '200':
+          description: Reusable lifecycle state already available
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingResponse}
+        '202':
+          description: Immediate structural preview with AI detail in progress
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingResponse}
+        '503':
+          description: File briefings are stopping with the engine (file_briefing_unavailable)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent

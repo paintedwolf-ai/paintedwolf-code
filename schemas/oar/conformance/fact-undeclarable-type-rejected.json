@@ -1,0 +1,52 @@
+{
+  "id": "fact-undeclarable-type-rejected",
+  "title": "A capability document declaring a fact type outside the published set is refused",
+  "covers": [
+    "OAR-FACT-22",
+    "OAR-FACT-24"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "ANY",
+      "effect": "warn"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false,
+      "host_facts": [
+        {
+          "name": "oar.testhost.count",
+          "type": "int64"
+        }
+      ]
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "error": "int64"
+  }
+}

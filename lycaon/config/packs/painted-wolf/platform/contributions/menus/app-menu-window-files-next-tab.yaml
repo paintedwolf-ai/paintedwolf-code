@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-window-files-next-tab
+slot: "app_menu.window"
+command: painted-wolf/platform:files-next-tab
+group: "0"
+order: 1
+label: "Next files tab"

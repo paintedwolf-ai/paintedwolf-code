@@ -1,0 +1,38 @@
+# 2026/08/25 17:52:45.600883 [TestInterruptedRunReconcileEmitsTerminalBoundary] [rapid] draw run: "38q738"
+# 2026/08/25 17:52:45.600885 [TestInterruptedRunReconcileEmitsTerminalBoundary] [rapid] draw phase: "closeout"
+# 2026/08/25 17:52:45.601061 [TestInterruptedRunReconcileEmitsTerminalBoundary] create run: constraint failed: UNIQUE constraint failed: workflow_runs.id (1555)
+# 
+v0.4.8#9200200914113292033
+0x1fe93d736210cc
+0x0
+0x10e50b67205c90
+0x3a
+0x28
+0x2e
+0x3
+0x13b543ec6e4470
+0x0
+0x1893c03d6b3ee7
+0x8
+0x72c39f00b054b
+0x0
+0x1d376940d7b1d6
+0x35
+0x1a
+0xcc882c3113a25
+0x0
+0x1c35c3a77dec02
+0x3f
+0x7
+0x693fec6f80b1a
+0x0
+0xbe8217c380841
+0x3
+0x3ed91c98e0c50
+0x0
+0x18951d9c66e384
+0x2a
+0x8
+0x50025bcb76e4d
+0x779c9a36ef99e
+0x2

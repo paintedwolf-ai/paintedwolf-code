@@ -1,0 +1,5 @@
+code: catalog_only_predicate
+message: |
+  Catalog-only condition {{leaf}} cannot gate bundled workflows.
+replacement: |
+  Use a shipped host predicate, or keep this leaf for catalog-only compose stubs.

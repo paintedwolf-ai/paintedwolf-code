@@ -1,0 +1,38 @@
+oar: '1.0'
+id: RECALL_SCOPE_NOT_PERMITTED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - recall
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.recall_widen_invalid
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RECALL_SCOPE_NOT_PERMITTED"
+effect: block
+copy:
+  what: '{% if paintedwolf.recall_widen_invalid %}recall received an unknown widen value.{% else %}This worker
+    may recall only its own session.{% endif %}'
+  cause: '{% if paintedwolf.recall_widen_invalid %}widen must be omitted or name subtree, project, or all.{%
+    else %}Session topology confines worker recall; query filters cannot widen that authority.{% endif %}'
+  why: A leg acts on what it was delegated. Reading a peer leg's observations would let it act on context it
+    was never given, which is the same boundary its writes already respect.
+  fix: '{% if paintedwolf.recall_widen_invalid %}Correct the scope argument for the intended permitted reach;
+    do not widen merely to clear validation.{% else %}Omit widen and search this leg. If missing peer context
+    is required, report that blocker to the coordinator through the offered completion or escalation surface.{%
+    endif %}'
+  instead: Preserve permitted recall scope and report missing context
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
+x-paintedwolf-message: A worker leg recalls its own session only.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: worker_readonly
+    tool: recall
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RECALL_SCOPE_NOT_PERMITTED'

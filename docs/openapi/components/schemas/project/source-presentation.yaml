@@ -1,0 +1,56 @@
+components:
+  schemas:
+    SourcePresentationCompletion:
+      x-go-generate: true
+      type: object
+      required: [file_id, effect_id, ordinal]
+      additionalProperties: false
+      description: |
+        The newest effect a Files or Review pane painted for the file. The look
+        covers every visible primary-tree effect of the file up to it, whoever
+        made them.
+      properties:
+        file_id: {type: string, format: uuid}
+        effect_id: {type: string, format: uuid}
+        ordinal: {type: integer, format: int64, minimum: 1}
+    SourceSeenFile:
+      x-go-generate: true
+      type: object
+      required: [file_id, root_id, path, tip, seen_at, through_ordinal, effects, effects_truncated]
+      additionalProperties: false
+      description: A file whose latest look is still current, with the effects that look covered.
+      properties:
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        tip:
+          $ref: 'source-versions.yaml#/components/schemas/SourceTip'
+        seen_at:
+          type: string
+          format: date-time
+          description: When the look completed.
+        through_ordinal:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Names the look. Withdrawing it quotes this value.
+        effects:
+          type: array
+          items: {$ref: 'source-walk.yaml#/components/schemas/SourceWalkEffect'}
+          description: Effects the look covered, newest first.
+        effects_truncated:
+          type: boolean
+          description: More effects than listed fell within the look.
+    SourceSeenList:
+      x-go-generate: true
+      type: object
+      required: [files]
+      additionalProperties: false
+      properties:
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/SourceSeenFile'}
+          description: Newest look first.
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Omitted on the final page.

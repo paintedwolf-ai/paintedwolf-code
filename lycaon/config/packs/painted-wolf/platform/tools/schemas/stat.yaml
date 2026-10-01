@@ -1,0 +1,12 @@
+description: "File metadata (mode, size, mtime, entry_count for directories) Replaces command: stat(1)."
+schema:
+  type: object
+  properties:
+    paths:
+      type: array
+      items:
+        type: string
+      maxItems: 50
+      description: Repo-relative paths (max 50)
+  required: [paths]
+  additionalProperties: false

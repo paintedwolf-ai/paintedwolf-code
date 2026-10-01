@@ -1,0 +1,8 @@
+description: Decompose an approved plan into delegation legs
+schema:
+  type: object
+  properties:
+    blueprint_path:
+      description: "Repo-relative path of the approved blueprint."
+      type: string
+  required: [blueprint_path]

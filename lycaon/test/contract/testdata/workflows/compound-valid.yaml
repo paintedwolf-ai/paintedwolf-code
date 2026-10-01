@@ -1,0 +1,8 @@
+id: compound-valid
+version: 1.0.0
+phases:
+  - id: ship
+    activity_label: Shipping the change
+    complete_when: "human_approval and evidence_passed:verify"
+    gates:
+      - delegation_closeout_complete

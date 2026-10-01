@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-list-first
+command: painted-wolf/platform:list-first
+scope: "overlay"
+bindings:
+  macos:
+    - "Home"
+  windows:
+    - "Home"
+  linux:
+    - "Home"

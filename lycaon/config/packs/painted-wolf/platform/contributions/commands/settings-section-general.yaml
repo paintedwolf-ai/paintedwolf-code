@@ -1,0 +1,13 @@
+id: painted-wolf/platform:settings-section-general
+title: "Settings: general"
+scope: "global"
+keywords:
+  - "display"
+  - "notifications"
+  - "editor"
+  - "keyboard"
+  - "updates"
+  - "about"
+action:
+  kind: native_ui
+  handler: "settings.section.general"

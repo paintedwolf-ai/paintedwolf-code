@@ -1,0 +1,41 @@
+rules:
+- id: lycaon.yaml.privileged-container
+  languages:
+  - yaml
+  severity: ERROR
+  message: A Kubernetes container explicitly enables privileged mode
+  metadata:
+    category: security
+    cwe: CWE-250
+    confidence: HIGH
+    technology:
+    - yaml
+  patterns:
+  - pattern-inside: 'kind: $KIND
+
+      ...'
+  - metavariable-regex:
+      metavariable: $KIND
+      regex: ^(Pod|Deployment|StatefulSet|DaemonSet|Job|CronJob)$
+  - pattern: "securityContext:\n  ...\n  privileged: true\n  ..."
+- id: lycaon.yaml.actions-script-injection
+  languages:
+  - yaml
+  severity: ERROR
+  message: Event text is interpolated into a workflow shell script; pass it through an environment variable
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - yaml
+    references:
+    - https://docs.github.com/en/actions/concepts/security/script-injections
+    - https://docs.github.com/en/actions/reference/workflows-and-actions/expressions
+  patterns:
+  - pattern-inside: 'run: $SCRIPT'
+  - pattern-regex: \$\{\{\s*github\.event\.(?:(?:issue|pull_request|discussion)\.(?:title|body)|(?:comment|review)\.body|head_commit\.message|pull_request\.head\.(?:ref|label))\s*\}\}
+  paths:
+    include:
+    - '**/.github/workflows/*.yml'
+    - '**/.github/workflows/*.yaml'

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-cost
+command: painted-wolf/platform:go-context-cost
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader O"
+  windows:
+    - "Leader O"
+  linux:
+    - "Leader O"

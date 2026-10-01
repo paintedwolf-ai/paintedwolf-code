@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-convert-indentation-to-spaces
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-convert-indentation-to-spaces
+group: "3"
+order: 13

@@ -1,0 +1,35 @@
+oar: '1.0'
+id: TERMINAL_CONTROL_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - terminal_send
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.unknown_target
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "TERMINAL_CONTROL_UNKNOWN"
+effect: block
+copy:
+  what: input contained an unknown {Token} or an unterminated control marker.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: Control markers are parsed before any bytes are sent; malformed input has not reached the terminal.
+  fix: Use a named control such as {Enter} or {Ctrl-C}. For literal text containing braces, encode each opening
+    brace as {LeftBrace}; {RightBrace} also emits a literal closing brace. Preserve the intended text.
+  instead: Branch on Code TERMINAL_CONTROL_UNKNOWN; use a locked control token
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
+x-paintedwolf-message: unknown or malformed control token in terminal_send input
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: implement
+    reason: unknown control token {F1}
+    tool: terminal_send
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TERMINAL_CONTROL_UNKNOWN'

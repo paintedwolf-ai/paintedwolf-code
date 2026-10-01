@@ -1,0 +1,194 @@
+{
+  "$comment": "Lycaon's own host schema. It is NOT part of the Open Agent Rules standard: the standard's vendored schemas live in schemas/oar/ and are never edited here. This one describes this engine's anchor catalog and binding grammar, which the format does not specify.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lycaon.dev/schemas/host/anchors.schema.json",
+  "title": "AnchorCatalog",
+  "description": "Anchor catalog SSOT. Named lifecycle moments with typed Envelopes. lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml validates against this schema. Emit uses catalog-validated ids (MustAnchor / string + contract).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "anchors"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Catalog document version (MAJOR.MINOR). Bump minor for additive anchors; major for id renames/removals."
+    },
+    "anchors": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/anchor"
+      }
+    }
+  },
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "required": [
+        "id",
+        "trigger_class",
+        "surface",
+        "envelope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "description": "Stable dotted lifecycle-moment id (e.g. leg.finished, tool.pre_invoke, gate.blocked)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Short human label for docs and authoring UIs."
+        },
+        "description": {
+          "type": "string",
+          "description": "When this moment fires (machine-state terms only)."
+        },
+        "trigger_class": {
+          "$ref": "#/$defs/triggerClass"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "coordinator",
+            "worker",
+            "phase"
+          ],
+          "description": "Emit surface. agent = shared coordinator/worker moment; phase = phase-bound workflow/topology moment."
+        },
+        "envelope": {
+          "$ref": "#/$defs/envelope"
+        },
+        "dedup": {
+          "$ref": "#/$defs/dedup",
+          "description": "Default dedup/suppression policy for Bindings on this anchor. Subsumes SignalEvent + ComputeSignalSuppression."
+        },
+        "planes": {
+          "type": "array",
+          "description": "Which Binding effect planes attach here. Default both when omitted.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "inform",
+              "block",
+              "transform"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      }
+    },
+    "triggerClass": {
+      "type": "string",
+      "description": "Closed trigger taxonomy covering host kick classes and OAR coarse lifecycle buckets.",
+      "enum": [
+        "manifest_on_reenter",
+        "phase_on_enter",
+        "tool_rejection",
+        "host_api",
+        "wait_trigger",
+        "observed_history",
+        "workflow_event",
+        "overlay_state",
+        "pre_invoke",
+        "tool_handler",
+        "post_tool",
+        "post_turn",
+        "finalize",
+        "input",
+        "output",
+        "tool_result",
+        "assembly_inject"
+      ]
+    },
+    "envelope": {
+      "type": "object",
+      "required": [
+        "vars"
+      ],
+      "additionalProperties": false,
+      "description": "Typed render/fact vars this anchor guarantees in scope when Emit fires. Formalizes what buildKickRenderData / mergeKickPolicyVars produced ad hoc.",
+      "properties": {
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/envelopeVar"
+          },
+          "description": "Map of variable names to type declarations. Templates and conditions may only reference declared variables and the shared OAR fact set."
+        }
+      }
+    },
+    "envelopeVar": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "string[]",
+            "int",
+            "bool",
+            "object",
+            "object[]",
+            "any"
+          ],
+          "description": "Host-assembled type. object/object[] are structured DTOs (e.g. gate_obligations rows)."
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, Emit must supply the var (fail closed if missing)."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "dedup": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Suppression policy when this anchor's inform Binding fires. Replaces SignalEvent rows.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable dedup channel id."
+        },
+        "omit_hint_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "Hint codes to suppress when an inform Binding on this anchor is queued."
+        },
+        "omit_inform_when": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "board_reinjected",
+              "loop_wake",
+              "same_turn_authoritative"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "Conditions under which inform render is omitted."
+        }
+      }
+    }
+  }
+}

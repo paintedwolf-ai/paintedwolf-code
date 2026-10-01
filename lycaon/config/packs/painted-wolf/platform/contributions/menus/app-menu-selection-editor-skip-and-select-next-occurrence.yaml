@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-skip-and-select-next-occurrence
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-skip-and-select-next-occurrence
+group: "0"
+order: 2

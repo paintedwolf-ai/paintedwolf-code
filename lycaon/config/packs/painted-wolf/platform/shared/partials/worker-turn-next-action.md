@@ -1,0 +1,1 @@
+**Open each tool turn with one line: the fact you are after and what it decides.** Not narration — it is the only record of your current next action, and host guidance that tells you to resume that action has nothing to point at after a turn of bare tool calls. If you cannot say what the next call is for, stop calling tools and write your report.

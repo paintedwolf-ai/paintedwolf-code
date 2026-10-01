@@ -1,0 +1,58 @@
+title: Delete a managed cloud resource
+id: cfa42cf9-3785-46cf-901b-629f7fbebb2c
+description: Deletes a database, cluster, disk, or other managed Azure resource.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: az
+  # ` group ` is absent: a resource group delete takes everything with it and is
+  # covered by group-delete at critical.
+  grp_resource:
+    CommandLine|contains:
+      - ' vm '
+      - ' vmss '
+      - ' aks '
+      - ' sql '
+      - ' postgres '
+      - ' mysql '
+      - ' cosmosdb '
+      - ' storage '
+      - ' network '
+      - ' webapp '
+      - ' functionapp '
+      - ' containerapp '
+      - ' disk '
+      - ' snapshot '
+      - ' backup '
+      - ' identity '
+  verbs_resource_destroy:
+    CommandLine|contains:
+      - ' delete'
+      - ' purge'
+  # Generic resource deletion has no group token.
+  selection_generic_resource:
+    CommandLine|contains: ' resource delete'
+  # A single blob is one object, and this rule's card names a managed resource.
+  # `blob delete-batch` is the bulk form and stays matched.
+  filter_single_blob:
+    CommandLine|re: '\sblob\s+delete\s'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and ((grp_resource and verbs_resource_destroy and not filter_single_blob)
+    or selection_generic_resource)
+    and not filter_rehearsal and not filter_local

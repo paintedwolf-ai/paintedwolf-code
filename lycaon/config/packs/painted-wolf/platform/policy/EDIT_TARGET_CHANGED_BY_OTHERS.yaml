@@ -1,0 +1,45 @@
+oar: '1.0'
+id: EDIT_TARGET_CHANGED_BY_OTHERS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - edit
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.old_string_chars
+  - paintedwolf.path
+  - paintedwolf.total_lines
+  - paintedwolf.change_count
+when: paintedwolf.rejection_code == "EDIT_TARGET_CHANGED_BY_OTHERS"
+effect: block
+copy:
+  what: edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars),
+    and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this
+    session.
+  cause: The ledger records other actors’ changes during this session. They may explain the miss, but a misquoted
+    old_string can also fail; changed_by identifies the recorded actors and times.
+  why: Read the current text before attributing the mismatch or recomputing an edit; the existence of a foreign
+    change alone does not prove it caused this miss.
+  fix: Re-read {{ paintedwolf.path }} to load the current bytes, then retry edit with a verbatim substring
+    of the new content. Query source_history for the full change record when the listed effects are not enough.
+  instead: Branch on Code; never retry the same old_string without a fresh read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:edit
+x-paintedwolf-message: edit target changed by another actor this session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    change_count: 2
+    old_string_chars: 42
+    path: internal/foo.go
+    profile: implement
+    tool: edit
+    total_lines: 120
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: EDIT_TARGET_CHANGED_BY_OTHERS'

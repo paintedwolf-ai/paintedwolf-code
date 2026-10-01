@@ -1,0 +1,64 @@
+{
+  "id": "ops-bare-substitute-prefers-own-namespace",
+  "title": "ops bare substitute prefers own namespace",
+  "covers": [
+    "OAR-DOC-8",
+    "OAR-OPS-5"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "id": "A",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn",
+      "when": "1 / 0 == 0",
+      "on_error": "FALLBACK"
+    },
+    {
+      "oar": "1.0",
+      "id": "FALLBACK",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn"
+    },
+    {
+      "oar": "1.0",
+      "id": "FALLBACK",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn",
+      "namespace": "vendor"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "block",
+    "rule": "FALLBACK",
+    "code": "FALLBACK"
+  }
+}

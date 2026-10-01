@@ -1,0 +1,14 @@
+id: painted-wolf/platform:files-toggle-tree
+title: "Toggle file tree"
+scope: "files"
+keywords:
+  - "file tree"
+  - "navigator"
+  - "hide files"
+  - "show files"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.toggleTree"

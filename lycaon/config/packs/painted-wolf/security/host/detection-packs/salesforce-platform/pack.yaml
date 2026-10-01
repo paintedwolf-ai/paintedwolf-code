@@ -1,0 +1,5 @@
+id: salesforce-platform
+label: Salesforce
+description: >-
+  Salesforce CLI operations that delete an org, run a destructive metadata
+  deploy, or bulk-delete records (recoverable or permanent).

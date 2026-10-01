@@ -1,0 +1,136 @@
+/* Bottom alignment anchors the input and actions during height animation. */
+@utility den-composer {
+position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  --den-composer-pad-start: 0.875em;
+  --den-composer-pad-end: 0.375em;
+  /* The action pad dimensions bound the scrollbar track; the column is the
+     shared icon target, so the pad tracks whatever size the buttons take. */
+  --den-composer-action-col: var(--den-icon-target);
+  --den-composer-action-gap: 0.375em;
+  --den-composer-action-pad-width: calc(
+    2 * var(--den-composer-action-col) + var(--den-composer-action-gap)
+  );
+  --den-composer-action-pad-height: calc(
+    2 * var(--den-composer-action-col) + var(--den-composer-action-gap)
+  );
+  --den-composer-scroll-max-height: 200px;
+  background: var(--den-background);
+  border: var(--den-composer-border) solid var(--den-line);
+  border-radius: 10px;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+  &:focus-within {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 30%, var(--den-line));
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--den-accent-signal) 14%, transparent),
+      0 0 4px 1px color-mix(in srgb, var(--den-accent-signal) 10%, transparent),
+      0 0 8px 2px color-mix(in srgb, var(--den-accent-signal) 4%, transparent);
+  }
+}
+
+
+@utility den-composer-body {
+flex: none;
+  display: flex;
+  /* Full-width hints and chips stack above the row to preserve input width. */
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: var(--den-composer-pad-y) var(--den-composer-pad-end) var(--den-composer-pad-y)
+    var(--den-composer-pad-start);
+}
+
+
+@utility den-composer-row {
+display: flex;
+  align-items: flex-end;
+  gap: var(--den-composer-action-gap);
+  min-width: 0;
+}
+
+
+@utility den-composer-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--den-composer-input-min-height);
+  max-height: var(--den-composer-scroll-max-height);
+  /* The scrollport extends beneath the action pad. */
+  margin-right: calc(
+    -1 * (var(--den-composer-action-pad-width) + var(--den-composer-action-gap))
+  );
+}
+
+
+@utility den-composer-action-pad {
+display: grid;
+  grid-template-columns: var(--den-composer-action-col) var(--den-composer-action-col);
+  grid-template-rows: var(--den-composer-action-col) var(--den-composer-action-col);
+  gap: var(--den-composer-action-gap);
+  flex-shrink: 0;
+  align-self: flex-end;
+  position: relative;
+  z-index: 1;
+}
+
+
+@utility den-composer-status-cluster {
+grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--den-composer-action-gap);
+  min-height: var(--den-composer-action-col);
+}
+
+
+@utility den-composer-status-item {
+flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+@utility den-composer-input {
+display: block;
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  min-height: var(--den-composer-input-min-height);
+  /* Padding reserves the icon lane inside the input host. */
+  padding: 0.5em calc(var(--den-composer-action-pad-width) + var(--den-composer-action-gap))
+    0.5em 0.25em;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  font-size: var(--text-den-input);
+  line-height: 1.5;
+  font-family: inherit;
+  overflow-y: hidden;
+  &::placeholder {
+    color: var(--den-text-muted);
+  }
+  &:focus::placeholder {
+    opacity: 0;
+  }
+}
+
+
+@utility den-composer-pause-hint {
+margin: 0 0 6px;
+  padding: 0 4px;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+/* The scrollbar track ends above the action icons. */
+.den-composer-scroll .os-scrollbar.os-scrollbar-vertical {
+  bottom: var(--den-composer-action-pad-height);
+}
+

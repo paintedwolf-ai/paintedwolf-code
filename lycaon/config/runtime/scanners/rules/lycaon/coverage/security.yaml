@@ -1,0 +1,128 @@
+rules:
+- id: lycaon.coverage.ql
+  languages:
+  - generic
+  severity: INFO
+  message: CodeQL queries are analysis definitions; no context-free security vulnerability rule is claimed.
+  metadata:
+    purpose: coverage
+    technology:
+    - ql
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.ql'
+- id: lycaon.coverage.promql
+  languages:
+  - generic
+  severity: INFO
+  message: Tenant isolation and monitoring correctness depend on deployment policy; ordinary selectors are not security
+    findings.
+  metadata:
+    purpose: coverage
+    technology:
+    - promql
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.promql'
+- id: lycaon.coverage.proto
+  languages:
+  - generic
+  severity: INFO
+  message: Authorization and transport security belong to service implementations and deployment; schema compatibility
+    is not a security finding.
+  metadata:
+    purpose: coverage
+    technology:
+    - proto
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.proto'
+- id: lycaon.coverage.clojure
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for clojure
+  metadata:
+    purpose: coverage
+    technology:
+    - clojure
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.clj'
+    - '*.cljs'
+    - '*.cljc'
+    - '*.edn'
+- id: lycaon.coverage.commonlisp
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for commonlisp
+  metadata:
+    purpose: coverage
+    technology:
+    - commonlisp
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.cl'
+    - '*.lisp'
+    - '*.lsp'
+- id: lycaon.coverage.ocaml
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for ocaml
+  metadata:
+    purpose: coverage
+    technology:
+    - ocaml
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.ml'
+    - '*.mli'
+- id: lycaon.coverage.scheme
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for scheme
+  metadata:
+    purpose: coverage
+    technology:
+    - scheme
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.scm'
+    - '*.ss'
+- id: lycaon.coverage.html
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for html
+  metadata:
+    purpose: coverage
+    technology:
+    - html
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.html'
+    - '*.htm'
+- id: lycaon.coverage.lua
+  languages:
+  - generic
+  severity: INFO
+  message: Internal target selection for lua
+  metadata:
+    purpose: coverage
+    technology:
+    - lua
+  pattern-regex: (?s)\A.
+  paths:
+    include:
+    - '*.lua'

@@ -1,0 +1,14 @@
+id: painted-wolf/platform:layout-toggle-conversation
+title: "Toggle conversation"
+scope: "global"
+keywords:
+  - "conversation"
+  - "chat"
+  - "hide conversation"
+  - "show conversation"
+  - "split"
+when:
+  fact: "split_live"
+action:
+  kind: native_ui
+  handler: "layout.toggleConversation"

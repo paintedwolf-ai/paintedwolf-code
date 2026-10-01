@@ -1,0 +1,44 @@
+<!--
+  DMG install-window background (source of truth). 1320x800 px = 2x the 660x400
+  point window in tauri.conf.json (crisp on retina; Finder scales to fit).
+  Finder overlays the real app icon at appPosition (~360,450 px) and the
+  Applications alias at applicationFolderPosition (~960,450 px); this art only
+  supplies the header, the drop wells, and the arrow between them. The wells are
+  sized (300 px = 150 pt) to frame a standard 128 pt Finder icon with margin.
+  Well/arrow Y must track appPosition.y in tauri.conf.json (px = pt x 2).
+
+  Re-render after edits (the 144 DPI tag is REQUIRED so Finder scales the 2x
+  art down to the 660x400 point window instead of showing only the top-left
+  quarter and running the header off the right edge):
+    rsvg-convert -w 1320 -h 800 background.svg -o background.png
+    sips -s dpiWidth 144 -s dpiHeight 144 background.png
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="800" viewBox="0 0 1320 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FCFCFD"/>
+      <stop offset="1" stop-color="#F4F4F5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1320" height="800" fill="url(#bg)"/>
+
+  <!-- Header -->
+  <text x="660" y="150" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="52" font-weight="600" letter-spacing="0.5" fill="#18181B">Painted Wolf Code</text>
+
+  <text x="660" y="202" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
+        font-size="25" font-weight="400" letter-spacing="0.2" fill="#71717A">Drag the app into your Applications folder to install</text>
+
+  <!-- Drop wells behind the two Finder icon slots (app: 360,450 · Applications: 960,450) -->
+  <rect x="210" y="300" width="300" height="300" rx="40" fill="#FFFFFF" stroke="#E4E4E7" stroke-width="2"/>
+  <rect x="810" y="300" width="300" height="300" rx="40" fill="#FAFAFA" stroke="#D4D4D8" stroke-width="2" stroke-dasharray="9 9"/>
+
+  <!-- Minimal connector arrow, centered between the two wells -->
+  <g stroke="#C2603F" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="566" y1="450" x2="748" y2="450"/>
+    <polyline points="726,432 754,450 726,468"/>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-view-close
+command: painted-wolf/platform:view-close
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader W"
+  windows:
+    - "Leader W"
+  linux:
+    - "Leader W"

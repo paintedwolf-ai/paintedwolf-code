@@ -1,0 +1,59 @@
+description: >-
+  Record the phase's review_loop verdict per verdict_schema. Terminal verdicts
+  satisfy its evidence_passed gate; other gates and advancement rules still apply.
+  Non-terminal verdicts re-loop within the cap. Terminal verdicts must cite observed
+  evidence paths/handles in cited_evidence or fetched URLs in cited_urls.
+  Invented references reject; non-terminal verdicts need no citations.
+schema:
+  type: object
+  properties:
+    verdict:
+      description: >-
+        Phase schema fields. Claims/challenges: arrays of {id, statement, status,
+        cited_evidence, scan_group_ids}. Group links alone establish no evidence.
+      type: object
+      properties:
+        verdict:
+          description: Phase verdict value from verdict_schema.
+          type: string
+          minLength: 1
+      required: [verdict]
+      additionalProperties: true
+    cited_evidence:
+      description: "Citations: observed evidence handle, or repo path with line/excerpt."
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        properties:
+          handle:
+            description: Identifier returned by the evidence-producing tool.
+            type: string
+            minLength: 1
+          path:
+            description: Repo-relative file path.
+            type: string
+            minLength: 1
+          line:
+            description: 1-based line number.
+            type: integer
+            minimum: 1
+          excerpt:
+            description: Verbatim excerpt at that location.
+            type: string
+        oneOf:
+          - required: [handle]
+            not: { required: [path] }
+          - required: [path]
+            not: { required: [handle] }
+      uniqueItems: true
+    cited_urls:
+      description: Verbatim URLs a reviewer envelope or this turn fetched.
+      type: array
+      items:
+        type: string
+        format: uri
+        pattern: '^https?://'
+      uniqueItems: true
+  required: [verdict]
+  additionalProperties: false

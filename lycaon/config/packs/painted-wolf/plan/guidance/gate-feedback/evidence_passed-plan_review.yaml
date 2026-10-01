@@ -1,0 +1,14 @@
+id: evidence_passed:plan_review
+kind: evidence-gate
+purpose: |
+  Plan review evidence must pass before leaving the review phase.
+missing_signals:
+  - id: review_incomplete
+    when: "true"
+    detail: "Plan review evidence has not passed."
+    fix: "Complete plan review via the optional critique leave from approve."
+satisfy_auto:
+  - "Dispatch `task` for review_loop agents from workflow allowed_agents (e.g. plan-reviewer / plan-reviewer-alt)."
+  - "Weigh the critique, then call `submit_verdict` (APPROVED|NEEDS_REVISION per the phase verdict_schema)."
+satisfy:
+  - "Dispatch review_loop critics and record the verdict via `submit_verdict` — a terminal verdict satisfies evidence_passed:plan_review."

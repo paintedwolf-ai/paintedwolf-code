@@ -1,0 +1,32 @@
+oar: '1.0'
+id: MCP_CONSENT_STATE_UNAVAILABLE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  - mcp
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.provider
+when: paintedwolf.rejection_code == "MCP_CONSENT_STATE_UNAVAILABLE"
+effect: block
+copy:
+  what: The accepted tool definition could not be saved for MCP provider {{ paintedwolf.provider }}.
+  cause: The host could not persist the tool definition required for this call.
+  why: The call cannot continue without durable consent state.
+  fix: The host must restore durable consent storage before calling this provider. Inspect the reported host issue;
+    retry only after storage is healthy. Chat approval cannot substitute for the missing persisted tool definition.
+  instead: Report the consent-storage failure and preserve the pending action
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mcp
+x-paintedwolf-message: MCP consent state is unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    provider: fixture
+    tool: mcp_fixture_echo
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MCP_CONSENT_STATE_UNAVAILABLE'

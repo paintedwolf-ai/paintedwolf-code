@@ -1,0 +1,78 @@
+# Third-party binaries and binary assets shipped inside the desktop artifact.
+# Dependency manifests (Go modules, npm, crates) cannot see these — they are
+# staged into the bundle by build scripts or compiled in with go:embed.
+# Copyleft entries must set license_text_file and a source location so the notices
+# generator embeds full text; OFL faces carry theirs because the licence
+# requires it to travel with the font.
+#
+# Schema:
+#   binaries[]:
+#     name: string
+#     artifact: opengrep derives version, licence and notices from its release
+#               (artifact entries contain only name and artifact)
+#     version: string
+#     license: SPDX id or short name
+#     source_url: URL where corresponding source may be obtained
+#     source_path: corresponding source inside the application resources
+#                  (exactly one of source_url or source_path)
+#     license_text_file: optional path relative to this file's directory
+#                        (required when license is copyleft / LGPL / GPL)
+
+binaries:
+  - name: opengrep
+    artifact: opengrep
+
+  # Git toolchain staged into the bundle by scripts/den-build-bundle.sh from the
+  # dugite-native archive pinned in lycaon/config/gitengine/pin.yaml. The tree is
+  # gitignored, so no dependency manifest sees it. Git Credential Manager is
+  # pruned by scripts/gitengine-fetch.sh and does not ship.
+  - name: git
+    version: "2.53.0"
+    license: GPL-2.0
+    source_url: https://github.com/git/git
+    license_text_file: texts/GPL-2.0.txt
+
+  - name: git-lfs
+    version: "3.7.1"
+    license: MIT
+    source_url: https://github.com/git-lfs/git-lfs
+    license_text_file: texts/MIT-git-lfs.txt
+
+  - name: chrome-headless-shell
+    version: "154.0.8037.92"
+    license: BSD-3-Clause
+    source_url: https://github.com/GoogleChromeLabs/chrome-for-testing
+    license_text_file: texts/BSD-3-Clause.txt
+
+  # TrueType faces embedded in the sidecar for workflow reports and
+  # terminal screen captures (lycaon/internal/fonts/). The webview sets itself
+  # in the same typefaces from a WOFF2 build — see designkit/provenance.yaml.
+  - name: Inter
+    version: "4.1"
+    license: OFL-1.1
+    source_url: https://github.com/rsms/inter
+    license_text_file: texts/OFL-1.1-inter.txt
+
+  - name: JetBrains Mono
+    version: "2.304"
+    license: OFL-1.1
+    source_url: https://github.com/JetBrains/JetBrainsMono
+    license_text_file: texts/OFL-1.1-jetbrainsmono.txt
+
+  # Compiled into bialy on Apple silicon (mlx-sys fetches the C++ with CMake, out
+  # of cargo-about's view); its kernels ship as engine-root/decide/mlx.metallib. The
+  # notice file covers the code MLX links in.
+  - name: MLX
+    version: "0.32.2"
+    license: MIT
+    source_url: https://github.com/ml-explore/mlx
+    license_text_file: texts/MIT-mlx.txt
+    notice_text_file: texts/mlx-compiled-notices.md
+
+  # Staged into engine-root/decide/models/ from the pins in bialy/models.go.
+  - name: Laya multilingual checkpoint
+    version: "e4e9ddf21a7b"
+    license: Apache-2.0
+    source_url: https://huggingface.co/convaiinnovations/laya-multilingual
+    license_text_file: texts/Apache-2.0.txt
+    notice_text_file: texts/laya-multilingual-notices.md

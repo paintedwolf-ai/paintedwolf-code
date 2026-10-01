@@ -1,0 +1,42 @@
+oar: '1.0'
+id: USE_GIT_DIFF_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.example
+  - paintedwolf.habit_redirect_match
+when: paintedwolf.rejection_code == "USE_GIT_DIFF_NATIVE"
+effect: block
+x-paintedwolf-audience:
+- coordinator
+copy:
+  what: The parsed command can be represented by the supplied git_diff call.
+  cause: The host parsed the supported command shape and validated the replacement against the tool currently
+    offered.
+  why: The native result pages files and hunks; follow next_offset with offset until absent. stat surveys counts,
+    paths narrows, base_ref selects the comparison, and untracked includes new files only when requested.
+  fix: Use the supplied replacement_calls entries exactly and in order. Account for each result before continuing;
+    native limits and partial-result receipts still apply.
+  instead: Use the validated git_diff replacement and preserve the intended operation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native git_diff instead of command git diff
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_GIT_DIFF_NATIVE'

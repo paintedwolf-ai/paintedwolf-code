@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SOURCE_VERSION_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - source_history
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.mode
+when: paintedwolf.rejection_code == "SOURCE_VERSION_REQUIRED"
+effect: block
+copy:
+  what: source_history mode {{ paintedwolf.mode }} requires version_id.
+  cause: Historical inspection requires a specific version ID to resolve retained bytes.
+  why: Retained states in the source ledger are addressed by immutable version IDs.
+  fix: Pass version_id from an effect row or read receipt.
+  instead: Branch on Code; pass version_id
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
+x-paintedwolf-message: version_id is required for version and diff modes
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      mode: version
+      profile: implement
+      tool: source_history
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SOURCE_VERSION_REQUIRED'

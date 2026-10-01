@@ -1,0 +1,11 @@
+# The chat opened, but its displayed rows could not resolve the requested anchor.
+scope: session
+title: Could not find that in the chat
+message: >-
+  The chat opened, but the message this came from is no longer part of it. It
+  was probably summarised away as the chat grew.
+scenarios:
+  - id: default
+    expect_contains:
+      - The chat opened
+      - no longer part of it

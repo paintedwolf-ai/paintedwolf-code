@@ -1,0 +1,8 @@
+id: pack-probe
+pattern: pack
+iteration_cap: 8
+task: Explore ambiguous entrypoints; return first consistent project map
+pack:
+  profile: path-explorer
+  count: 3
+  merge_strategy: first_valid

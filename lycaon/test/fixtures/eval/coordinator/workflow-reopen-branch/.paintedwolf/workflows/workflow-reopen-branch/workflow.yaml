@@ -1,0 +1,144 @@
+{
+  "id": "workflow-reopen-branch",
+  "version": "1.0.0",
+  "name": "Selective handoff invalidation",
+  "description": "Process the release according to README.md.",
+  "trigger": "/workflow-reopen-branch",
+  "request": {
+    "question": "Which release should this workflow process?"
+  },
+  "initial_posture": "build",
+  "agents": [
+    {
+      "id": "coordinator",
+      "tools": "all"
+    }
+  ],
+  "phases": [
+    {
+      "id": "baseline",
+      "activity_label": "Baseline",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/baseline.md",
+      "review_loop": {
+        "evidence_key": "baseline",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "east_revision": "string",
+          "east": "string",
+          "west_revision": "string",
+          "west": "string",
+          "north_revision": "string",
+          "north": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:baseline"
+      ],
+      "next": "reconcile"
+    },
+    {
+      "id": "reconcile",
+      "activity_label": "Reconcile",
+      "coordinator_surface": "recon_reconcile",
+      "surface_template": "agents/reconcile.md",
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "choice_transition_required"
+      ],
+      "next": "release_index",
+      "transitions": [
+        {
+          "id": "seal",
+          "to": "release_index",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Seal"
+        },
+        {
+          "id": "correct",
+          "to": "correction",
+          "actors": [
+            "coordinator"
+          ],
+          "label": "Correct"
+        }
+      ]
+    },
+    {
+      "id": "correction",
+      "activity_label": "Correction",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/correction.md",
+      "review_loop": {
+        "evidence_key": "correction",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "region": "string",
+          "before_revision": "string",
+          "revision": "string",
+          "before_artifact": "string",
+          "artifact": "string",
+          "dependency_revision": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:correction"
+      ],
+      "next": "reconcile"
+    },
+    {
+      "id": "release_index",
+      "activity_label": "Release index",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/release_index.md",
+      "review_loop": {
+        "evidence_key": "release_index",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "east_revision": "string",
+          "east": "string",
+          "west_revision": "string",
+          "west": "string",
+          "north_revision": "string",
+          "north": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:release_index"
+      ],
+      "next": "done"
+    },
+    {
+      "id": "done",
+      "activity_label": "Complete",
+      "terminal": true,
+      "complete_when": "orchestration_complete"
+    }
+  ],
+  "controls": {
+    "phase_advance": "host"
+  }
+}

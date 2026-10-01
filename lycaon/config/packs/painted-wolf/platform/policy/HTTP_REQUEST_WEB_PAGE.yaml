@@ -1,0 +1,50 @@
+oar: '1.0'
+id: HTTP_REQUEST_WEB_PAGE
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [http_request]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.http_request_web_page
+    - paintedwolf.host
+    - paintedwolf.bytes
+    - paintedwolf.content_type
+    - paintedwolf.fetch_url_deferred
+when: paintedwolf.http_request_web_page
+effect: warn
+copy:
+  what: 'http_request returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
+  cause: 'The response is {{ paintedwolf.content_type }}; http_request returns bodies verbatim, including scripts, styles, and navigation.'
+  why: 'Raw markup spends context on page structure instead of the text you need.'
+  fix: >-
+    To read this page or other documentation, call fetch_url with the same URL{% if paintedwolf.fetch_url_deferred %}
+    after loading it with request_tools{% endif %}. It extracts readable text as markdown and pages long documents
+    with offset and limit.
+  instead: Keep http_request when you need the exact markup, headers, or status of this endpoint
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: http_request delivered a web page as raw HTML
+x-paintedwolf-scenarios:
+  - id: loaded
+    vars:
+      tool: http_request
+      host: docs.example.test
+      bytes: '612480'
+      content_type: text/html; charset=utf-8
+      fetch_url_deferred: false
+    expect_contains:
+      - 'Code: HTTP_REQUEST_WEB_PAGE'
+      - 612480-byte HTML document from docs.example.test
+      - call fetch_url with the same URL.
+  - id: deferred
+    vars:
+      tool: http_request
+      host: docs.example.test
+      bytes: '612480'
+      content_type: text/html
+      fetch_url_deferred: true
+    expect_contains:
+      - 'Code: HTTP_REQUEST_WEB_PAGE'
+      - after loading it with request_tools

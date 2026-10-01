@@ -1,0 +1,155 @@
+.project-list-row {
+  display: grid;
+  grid-template-columns: 28px 28px minmax(0, 1fr) 5.5rem 26px 26px;
+  column-gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--den-line);
+}
+.project-list-row:last-child {
+  border-bottom: none;
+}
+.project-list-row:hover {
+  background: var(--den-selection-hover);
+}
+.project-list-row--selected {
+  background: var(--den-selection);
+  box-shadow: inset 2px 0 0 var(--den-accent);
+}
+.project-list-row--selected:hover {
+  background: var(--den-selection-hover);
+}
+.project-list-row__glyph {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  background: var(--den-tint-1);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.project-list-row__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.project-list-row__name,
+.project-list-row__path {
+  display: block;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+}
+.project-list-row__name {
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.project-list-row__name:hover {
+  color: var(--den-accent-text);
+}
+.project-list-row__path {
+  color: var(--den-text-muted);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+}
+.project-list-row__activity {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.project-list-row__rename {
+  width: 100%;
+  max-width: 24rem;
+  border: 1px solid var(--den-accent-warm);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  padding: 2px 6px;
+  outline: none;
+}
+.project-list-row__star,
+.project-list-row__menu-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.project-list-row__star--on,
+.project-list-row:hover .project-list-row__star,
+.project-list-row:hover .project-list-row__menu-btn,
+.project-list-row:focus-within .project-list-row__star,
+.project-list-row:focus-within .project-list-row__menu-btn,
+.project-list-row--selected .project-list-row__star,
+.project-list-row--selected .project-list-row__menu-btn {
+  opacity: 1;
+}
+.project-list-row__star--on {
+  color: var(--den-accent-text);
+}
+@media (hover: none) {
+  .project-list-row__star,
+  .project-list-row__menu-btn {
+    opacity: 1;
+  }
+}
+.project-list-row__menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+.project-list-row__menu {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  box-shadow: var(--den-shadow-md);
+}
+.project-list-row__menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-den-label);
+  color: var(--den-text);
+  padding: 7px 9px;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+.project-list-row__menu button:hover {
+  background: var(--den-tint-1);
+}
+.project-list-row__menu-danger {
+  color: var(--den-danger-text);
+}
+
+/* Blueprints list — den-list-panel with Kind + Run columns. */

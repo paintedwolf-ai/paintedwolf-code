@@ -1,0 +1,39 @@
+language: jsp
+comment:
+- <%--
+- --%>
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: request-expression-xss-vulnerable
+  file: sample.jsp
+  source: |
+    <html><%= request.getParameter("name") %></html>
+  want:
+  - lycaon.jsp.request-expression-xss
+  covers: []
+- name: request-expression-xss-safe
+  file: sample.jsp
+  source: |
+    <html><c:out value="${param.name}"/></html>
+  want: []
+  covers:
+  - lycaon.jsp.request-expression-xss
+- name: review-expression-after-link
+  file: sample.jsp
+  source: |
+    <a href="https://example.test/help">help</a><%= request.getParameter("name") %>
+  want:
+  - lycaon.jsp.request-expression-xss
+  covers: []
+- name: review-comment-after-link
+  file: sample.jsp
+  source: |
+    <a href="https://example.test/help">help</a><%-- <%= request.getParameter("name") %> --%>
+  want: []
+  covers: []
+- name: review-escaped-after-link
+  file: sample.jsp
+  source: |
+    <a href="https://example.test/help">help</a><c:out value="${param.name}"/>
+  want: []
+  covers: []

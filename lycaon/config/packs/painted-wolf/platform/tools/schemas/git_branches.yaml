@@ -1,0 +1,9 @@
+tags: [git, inspection]
+description: "List local branches JSON (`available`, `branches` with name/current). Replaces command: git branch."
+schema:
+  type: object
+  properties:
+    max_branches:
+      type: integer
+      description: Max branches to return (default 100)
+  additionalProperties: false

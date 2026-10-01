@@ -1,0 +1,30 @@
+oar: '1.0'
+id: WORKFLOW_TRANSITION_INACTIVE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_INACTIVE"
+effect: block
+copy:
+  cause: workflow_transition requires an active running workflow run
+  why: "A transition applies only to the current active run and cannot create or resume one implicitly."
+  fix: "Inspect the current session workflow state. If the task calls for a new workflow, use its proposal and human approval path; do not start a replacement merely to make this transition available."
+  instead: "Preserve completed or paused workflow state and use the current task's available actions."
+  what: "workflow_transition has no active running workflow to advance."
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
+x-paintedwolf-message: workflow_transition requires an active running workflow run
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: workflow_transition
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKFLOW_TRANSITION_INACTIVE'

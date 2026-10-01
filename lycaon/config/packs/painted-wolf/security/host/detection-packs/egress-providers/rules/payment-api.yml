@@ -1,0 +1,35 @@
+title: Reached a payments API
+id: 8a482ccd-2eb6-45b8-89a9-33460a005cbd
+description: Connected to a payment processor, where a request can move money.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # A hostname cannot tell a read from a charge, so this is a coarse signal and
+  # sits one band below any command rule for the same operation.
+  selection_host:
+    DestinationHostname:
+      - stripe.com
+      - paypal.com
+      - adyen.com
+      - checkout.com
+      - squareup.com
+      - braintreegateway.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .stripe.com
+      - .paypal.com
+      - .adyen.com
+      - .checkout.com
+      - .squareup.com
+      - .braintreegateway.com
+  condition: selection_host or selection_suffix

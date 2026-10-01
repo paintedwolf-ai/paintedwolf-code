@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagentrules.org/spec/1.0/oar-fixture.schema.json",
+  "title": "Open Agent Rules conformance fixture",
+  "description": "One anchor occurrence replayed against one rule set, with the outcome a conforming engine must produce. Every fixture declares the host it assumes, so it asks every implementation the same question ([OAR-CONF-17]-[OAR-CONF-26]).",
+  "type": "object",
+  "required": [
+    "id",
+    "covers",
+    "rules",
+    "input",
+    "expected"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Equals the fixture's file name stem ([OAR-CONF-17])."
+    },
+    "title": {
+      "type": "string"
+    },
+    "covers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^OAR-[A-Z]+-[0-9]+$"
+      },
+      "description": "Clause identifiers this fixture exercises. Every MUST clause is cited here or listed in exempt.json ([OAR-CONF-27])."
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object"
+      },
+      "description": "Rule documents, validated against oar.schema.json unless the fixture asserts a load-time error."
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "capability"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "The anchor at which the occurrence happens."
+        },
+        "capability": {
+          "$ref": "https://openagentrules.org/spec/1.0/oar-capability.schema.json",
+          "description": "The host this fixture assumes. Required of every fixture ([OAR-CONF-19])."
+        },
+        "facts": {
+          "type": "object",
+          "description": "Fact values for the occurrence. A value under the name of a declared observation function is that function's result for every argument ([OAR-CONF-26])."
+        },
+        "detector_facts": {
+          "type": "object",
+          "description": "Facts detector://fixture produces when a rule causes it to run. They reach the environment only through the detector's invocation, never beforehand ([OAR-CONF-25], [OAR-FACT-11])."
+        },
+        "recent_activity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The activity window flow matches against ([OAR-FACT-12])."
+        },
+        "session_id": {
+          "type": "string",
+          "description": "The scope counters are keyed by, together with the qualified rule identifier ([OAR-FIRE-5])."
+        },
+        "config": {
+          "type": "array",
+          "items": {
+            "$ref": "https://openagentrules.org/spec/1.0/oar-config.schema.json"
+          },
+          "description": "Operator configuration documents, applied in order ([OAR-CFG-7])."
+        },
+        "occurrences": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "anchor"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "type": "string",
+                "description": "The anchor at which this occurrence happens."
+              },
+              "facts": {
+                "type": "object",
+                "description": "Fact values for the occurrence. A value under the name of a declared observation function is that function's result for every argument ([OAR-CONF-26])."
+              },
+              "detector_facts": {
+                "type": "object",
+                "description": "Facts detector://fixture produces when a rule causes it to run at this occurrence ([OAR-CONF-25], [OAR-FACT-11])."
+              },
+              "recent_activity": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The activity window flow matches against ([OAR-FACT-12])."
+              },
+              "expected": {
+                "$ref": "#/$defs/expected",
+                "description": "What this occurrence resolved to. The fixture-level expected describes the final one ([OAR-CONF-31])."
+              },
+              "content": {
+                "type": "string",
+                "description": "The content at the occurrence, for a content anchor. Required when expected.content is asserted ([OAR-CONF-34])."
+              },
+              "tool_call": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "arguments"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "description": "Occurrences evaluated in order as one session against one counter store, each occurrence's side-effects applied before the next ([OAR-CONF-31]). Required to reach a non-zero counter ([OAR-CONF-32])."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content at the occurrence, for a content anchor. Required when expected.content is asserted ([OAR-CONF-34])."
+        },
+        "tool_call": {
+          "type": "object",
+          "required": [
+            "name",
+            "arguments"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "arguments": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "anchor"
+          ],
+          "not": {
+            "required": [
+              "occurrences"
+            ]
+          }
+        },
+        {
+          "required": [
+            "occurrences"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "anchor"
+                ]
+              },
+              {
+                "required": [
+                  "facts"
+                ]
+              },
+              {
+                "required": [
+                  "detector_facts"
+                ]
+              },
+              {
+                "required": [
+                  "recent_activity"
+                ]
+              },
+              {
+                "required": [
+                  "content"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "description": "The occurrence, or occurrences, the fixture evaluates. Exactly one of the two spellings ([OAR-CONF-18])."
+    },
+    "expected": {
+      "$ref": "#/$defs/expected",
+      "description": "What the final occurrence resolves to ([OAR-CONF-21], [OAR-CONF-31])."
+    }
+  },
+  "$defs": {
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A fixture asserts only the keys it is about. An engine rejects a key this schema does not define rather than passing it silently ([OAR-CONF-21], [OAR-CONF-22]).",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "block",
+            "transform",
+            "nudge",
+            "warn",
+            "none"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "description": "The bare identifier the decision carries."
+        },
+        "rule": {
+          "type": "string",
+          "description": "The qualified identifier the decision carries."
+        },
+        "on_fire": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "increment_counter",
+              "reset_counter",
+              "publish_event",
+              "increment_breaker",
+              "reset_breaker"
+            ]
+          },
+          "description": "Side-effects the engine applied, in application order."
+        },
+        "events": {
+          "type": "array",
+          "description": "Records publish_event emitted to the host event stream, in application order ([OAR-FIRE-7]).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule",
+              "anchor",
+              "effect"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string"
+              },
+              "anchor": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "block",
+                  "warn",
+                  "nudge",
+                  "allow",
+                  "transform"
+                ]
+              }
+            }
+          }
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "The accumulated transform list, in application order ([OAR-OPS-15])."
+        },
+        "advisories": {
+          "type": "array",
+          "description": "The accumulated advisory list, in evaluation order, when the decision is nudge or warn ([OAR-EVAL-20], [OAR-CONF-37]). Empty when the decision is block, transform, or none.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "The bare identifier of this advisory."
+              },
+              "rule": {
+                "type": "string",
+                "description": "The qualified identifier of this advisory."
+              },
+              "copy": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Rendered copy of this advisory. A fixture asserts only the members it is about.",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "what": {
+                    "type": "string"
+                  },
+                  "cause": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  },
+                  "fix": {
+                    "type": "string"
+                  },
+                  "instead": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": ":(fired|passed|errored|suppressed|monitored_fired|monitored_passed|monitored_errored)$"
+          },
+          "description": "The ordered trace, each entry written <qualified id>:<outcome> ([OAR-OPS-9])."
+        },
+        "counters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "description": "Qualified rule identifier to counter values expected after the occurrence."
+        },
+        "error": {
+          "type": "string",
+          "description": "Asserts a load-time rejection, matching when the engine's error contains this text ([OAR-CONF-21])."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content after the occurrence's accumulated transforms have been applied, compared by code point sequence ([OAR-CONF-34])."
+        },
+        "copy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Rendered copy of the rule whose identifiers the decision carries ([OAR-COPY-7]). A fixture asserts only the members it is about.",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "what": {
+              "type": "string"
+            },
+            "cause": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            },
+            "fix": {
+              "type": "string"
+            },
+            "instead": {
+              "type": "string"
+            }
+          }
+        },
+        "skipped_transforms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "rule",
+              "start",
+              "end",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reason": {
+                "const": "overlap"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+components:
+  schemas:
+    ScanQueryRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          type: string
+          description: Normalized finding level (critical, high, medium, low, info).
+        kind:
+          type: string
+          description: properties.lycaon.kind (sast, sca, secret, container, custom).
+        advisory_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+          description: OSV, CVE, or GHSA identifier.
+        fingerprint:
+          type: string
+          description: Exact fingerprints.primary match.
+        rule_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        path:
+          type: string
+          description: Location uri prefix.
+        code:
+          type: string
+          description: Hint code (properties.lycaon.hint_code).
+        cursor:
+          type: string
+          description: Opaque pagination cursor.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        dedupe:
+          type: boolean
+        introduced_since_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Only findings this scanner series first observed at or after this time.
+        fixed_since_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Also return findings this series recorded as fixed at or after this time, in fixed_findings.
+    ScanQueryResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scan_id
+      - guidance
+      - total_match
+      additionalProperties: false
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        findings:
+          type: array
+          items:
+            $ref: findings.yaml#/components/schemas/SecurityFinding
+        guidance:
+          type: array
+          items:
+            $ref: execution.yaml#/components/schemas/ScanGuidanceSummary
+        total_match:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+        next_cursor:
+          type: string
+        fixed_findings:
+          type: array
+          description: Findings fixed since the requested time, as they were last observed.
+          items:
+            $ref: findings.yaml#/components/schemas/SecurityFinding

@@ -1,0 +1,30 @@
+id: clarify-then-implement-template
+description: Ask user a clarifying question, then build (2 phases)
+parameters:
+  workflow_id:
+    type: string
+    required: true
+  question:
+    type: string
+    required: true
+manifest:
+  id: "${params.workflow_id}"
+  version: "1.0.0"
+  extends: plan@1.0.0
+  initial_posture: spec
+  phases:
+    - id: research
+      activity_label: Understanding the request
+      next: clarify
+    - id: clarify
+      activity_label: Waiting for your answer
+      on_enter:
+        request_user_feedback:
+          prompt: "${params.question}"
+      complete_when: user_feedback_received:clarify
+      next: build
+    - id: build
+      activity_label: Building the changes
+      on_enter:
+        set_posture: build
+      complete_when: delegation_closeout_complete

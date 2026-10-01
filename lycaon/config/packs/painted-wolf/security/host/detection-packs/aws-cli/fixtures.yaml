@@ -1,0 +1,190 @@
+# Service and operation names are validated against the command-line client.
+fixtures:
+- rule: audit-disable
+  positive:
+  - aws cloudtrail delete-trail --name org-trail
+  - aws cloudtrail stop-logging --name org-trail
+  - aws guardduty update-detector --detector-id d --enable false
+  # The service identifier is `configservice`.
+  - aws configservice delete-configuration-recorder --configuration-recorder-name default
+  - aws configservice stop-configuration-recorder --configuration-recorder-name default
+  - aws ec2 delete-flow-logs --flow-log-ids fl-0123456789abcdef0
+  - aws cloudtrail update-trail --name org-trail --no-is-multi-region-trail
+  - aws securityhub disable-security-hub
+  negative:
+  - aws cloudtrail describe-trails
+  - aws configservice describe-config-rules
+  - aws cloudtrail delete-trail --name org-trail --generate-cli-skeleton
+  - aws cloudtrail delete-trail help
+  # Lengthening retention hardens the trail, under the same operation name.
+  - aws logs put-retention-policy --log-group-name app --retention-in-days 3653
+  # A dashboard is a view of the data, not a control that collects it.
+  - aws cloudwatch delete-dashboards --dashboard-names ops
+  - aws cloudtrail update-trail --name org-trail --is-multi-region-trail
+- rule: organizations-leave
+  positive:
+  - aws organizations leave-organization
+  negative:
+  - aws organizations describe-organization
+  - aws organizations list-accounts
+  - aws organizations leave-organization --generate-cli-skeleton
+- rule: s3-remove-bucket
+  positive:
+  - aws s3 rb s3://old-bucket --force
+  negative:
+  - aws s3 ls s3://old-bucket
+  - aws --endpoint-url=http://localhost:4566 s3 rb s3://b
+  - aws s3 rb s3://old-bucket --dryrun
+  - aws s3 rb help
+- rule: s3-remove-recursive
+  positive:
+  - aws s3 sync ./build s3://prod-site --delete
+  - aws s3 mv s3://prod-data s3://archive --recursive
+  - aws s3 rm s3://old-bucket/ --recursive
+  - aws s3 rm s3://old-bucket/logs/ --recursive --exclude "*.keep"
+  - sudo aws s3 rm s3://old-bucket/ --recursive
+  negative:
+  - aws s3 rm s3://old-bucket/single-key.txt
+  - aws s3 ls s3://old-bucket
+  - aws s3 rm s3://old-bucket/ --recursive --dryrun
+  - aws --endpoint-url=http://localhost:4566 s3 rm s3://b/ --recursive
+  - aws s3 rm help
+- rule: iam-grant
+  positive:
+  - aws iam attach-user-policy --user-name x --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+  - aws s3api put-bucket-policy --bucket b --policy file://p.json
+  - aws iam add-user-to-group --user-name x --group-name admins
+  # Identity Center, Identity Store, and Cognito grants.
+  - aws sso-admin create-account-assignment --instance-arn a --permission-set-arn p --principal-type USER --principal-id u --target-id t --target-type AWS_ACCOUNT
+  - aws identitystore create-group-membership --identity-store-id d --group-id g --member-id UserId=u
+  - aws cognito-idp admin-add-user-to-group --user-pool-id p --username u --group-name admins
+  - aws s3api put-bucket-acl --bucket b --acl public-read
+  - aws sns set-topic-attributes --topic-arn a --attribute-name Policy --attribute-value file://p.json
+  negative:
+  - aws iam list-attached-user-policies --user-name x
+  - aws ec2 attach-volume --volume-id v --instance-id i --device /dev/sdf
+  # Tightening an ACL is the remedy for a public bucket, not a grant.
+  - aws s3api put-bucket-acl --bucket b --acl private
+  - aws s3api put-object-acl --bucket b --key k --acl private
+  # Queue and topic attribute writes carry ordinary settings as well as policy.
+  - aws sqs set-queue-attributes --queue-url u --attributes VisibilityTimeout=30
+  - aws sns set-topic-attributes --topic-arn a --attribute-name DisplayName --attribute-value app
+- rule: credential-mint
+  positive:
+  - aws iam create-access-key --user-name admin
+  - aws iam update-login-profile --user-name admin --password Correct-Horse-1
+  - aws iam upload-ssh-public-key --user-name admin --ssh-public-key-body file://k.pub
+  - aws ec2 create-key-pair --key-name deploy
+  - aws ec2-instance-connect send-ssh-public-key --instance-id i-1 --instance-os-user ec2-user --ssh-public-key file://k.pub
+  - aws cognito-idp admin-set-user-password --user-pool-id p --username u --password P --permanent
+  - aws iam update-access-key --user-name admin --access-key-id example-key-id --status Active
+  - aws rds modify-db-instance --db-instance-identifier prod --master-user-password Correct-Horse-1
+  negative:
+  - aws iam list-access-keys --user-name admin
+  - aws iam get-user --user-name admin
+  # Deactivating shares an operation name with re-enabling.
+  - aws iam update-access-key --user-name admin --access-key-id example-key-id --status Inactive
+- rule: secret-read
+  positive:
+  - aws secretsmanager get-secret-value --secret-id prod-db
+  - aws ssm get-parameter --name /prod/db --with-decryption
+  - aws ssm get-parameters-by-path --path /prod --with-decryption --recursive
+  - aws kms decrypt --ciphertext-blob fileb://payload.bin
+  - aws apigateway get-api-key --api-key k --include-value
+  - aws lightsail get-relational-database-master-user-password --relational-database-name d
+  negative:
+  - aws secretsmanager list-secrets
+  - aws secretsmanager describe-secret --secret-id prod-db
+  # Parameter Store returns ciphertext until it is asked to decrypt.
+  - aws ssm get-parameter --name /prod/db
+  - aws apigateway get-api-key --api-key k
+- rule: resource-destroy
+  positive:
+  - aws rds delete-db-instance --db-instance-identifier prod --skip-final-snapshot
+  - aws ec2 terminate-instances --instance-ids i-1234567890abcdef0
+  - aws cloudformation delete-stack --stack-name prod
+  - aws eks delete-cluster --name prod
+  - aws lambda delete-function --function-name handler
+  - aws elbv2 delete-load-balancer --load-balancer-arn a
+  - aws cloudfront delete-distribution --id d --if-match e
+  negative:
+  - aws rds describe-db-instances
+  # A label, parameter group, row, or single object is not the resource.
+  - aws ec2 delete-tags --resources i-1234567890abcdef0 --tags Key=owner
+  - aws s3api delete-bucket-tagging --bucket b
+  - aws rds delete-db-parameter-group --db-parameter-group-name pg
+  - aws dynamodb delete-item --table-name t --key file://key.json
+  - aws s3api delete-object --bucket b --key k
+  - aws sqs delete-message --queue-url u --receipt-handle r
+- rule: service-disrupt
+  positive:
+  - aws ec2 stop-instances --instance-ids i-1234567890abcdef0
+  - aws rds reboot-db-instance --db-instance-identifier prod
+  negative:
+  - aws ec2 start-instances --instance-ids i-1234567890abcdef0
+  - aws ec2 describe-instance-status
+- rule: session-credentials
+  positive:
+  - aws sts assume-role --role-arn arn:aws:iam::1:role/deploy --role-session-name s
+  - aws eks update-kubeconfig --name prod
+  # get-login-password is the CLI verb; get-authorization-token is the API name.
+  - aws ecr get-login-password --region us-east-1
+  - aws eks get-token --cluster-name prod
+  negative:
+  - aws sts get-caller-identity
+  - aws eks list-clusters
+- rule: public-exposure
+  positive:
+  - aws s3api delete-public-access-block --bucket b
+  - aws rds modify-db-instance --db-instance-identifier prod --publicly-accessible --apply-immediately
+  - aws ec2 modify-image-attribute --image-id ami-1 --launch-permission file://Group=all.json
+  - aws s3 presign s3://b/report.csv --expires-in 604800
+  - aws sagemaker create-presigned-notebook-instance-url --notebook-instance-name nb
+  negative:
+  - aws s3api get-public-access-block --bucket b
+  - aws rds describe-db-instances
+  # The negated spelling is the one that removes the exposure.
+  - aws rds modify-db-instance --db-instance-identifier prod --no-publicly-accessible
+  - aws ec2 describe-image-attribute --image-id ami-1 --attribute launchPermission
+- rule: remote-execution
+  positive:
+  - aws ssm send-command --instance-ids i-1 --document-name AWS-RunShellScript --parameters file://cmd.json
+  - aws ssm start-session --target i-1
+  negative:
+  - aws ssm list-commands
+  - aws ssm describe-instance-information
+  - aws ssm send-command --instance-ids i-1 --document-name AWS-RunShellScript --generate-cli-skeleton
+- rule: protection-removal
+  positive:
+  - aws s3api put-bucket-versioning --bucket b --versioning-configuration Status=Suspended
+  - aws ec2 modify-instance-attribute --instance-id i-1 --no-disable-api-termination
+  - aws rds modify-db-instance --db-instance-identifier prod --no-deletion-protection
+  - aws iam delete-account-password-policy
+  - aws organizations disable-policy-type --root-id r --policy-type SERVICE_CONTROL_POLICY
+  - aws iam deactivate-mfa-device --user-name admin --serial-number arn
+  negative:
+  - aws s3api get-bucket-versioning --bucket b
+  # Turning the guard on is the opposite action and shares the operation name.
+  - aws ec2 modify-instance-attribute --instance-id i-1 --disable-api-termination
+  - aws iam get-account-password-policy
+- rule: key-destroy
+  positive:
+  - aws kms schedule-key-deletion --key-id abcd-1234 --pending-window-in-days 7
+  - aws kms disable-key --key-id abcd-1234
+  - aws secretsmanager delete-secret --secret-id prod-db --force-delete-without-recovery
+  negative:
+  - aws kms describe-key --key-id abcd-1234
+  - aws kms list-keys
+  # A secret deleted with its recovery window intact can be restored.
+  - aws secretsmanager delete-secret --secret-id prod-db --recovery-window-in-days 30
+- rule: identity-destroy
+  positive:
+  - aws iam delete-user --user-name contractor
+  - aws iam delete-role --role-name deploy
+  - aws cognito-idp delete-user-pool --user-pool-id p
+  - aws organizations close-account --account-id 123456789012
+  negative:
+  - aws iam list-users
+  - aws iam get-role --role-name deploy
+  # Removing one grant is not removing the identity.
+  - aws iam remove-user-from-group --user-name contractor --group-name admins

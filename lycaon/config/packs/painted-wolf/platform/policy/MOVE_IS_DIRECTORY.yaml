@@ -1,0 +1,36 @@
+oar: '1.0'
+id: MOVE_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - move
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "MOVE_IS_DIRECTORY"
+effect: block
+copy:
+  cause: The native move operation accepts files.
+  why: A rejected item does not undo earlier successful moves in the batch.
+  fix: Inspect the intended directory transfer and choose an offered operation that supports it within current
+    authority. Do not move an arbitrary child as a substitute for the whole directory.
+  instead: Resolve the reported item and preserve completed move receipts
+  what: Move source {{ paintedwolf.path }} is a directory.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
+x-paintedwolf-message: move:move source is a directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: move
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MOVE_IS_DIRECTORY'

@@ -1,0 +1,178 @@
+@utility den-settings-mcp-inbox {
+  margin-bottom: 0;
+}
+
+@utility den-settings-mcp-detail-wrap {
+  padding: 0;
+  max-width: none;
+}
+
+@utility den-settings-mcp-connection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-4);
+  margin-bottom: var(--spacing-den-3);
+
+  & .den-settings-subhead {
+    margin: 0;
+  }
+}
+
+@utility den-settings-mcp-connection--compact {
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--den-line);
+  background: var(--den-background);
+}
+
+@utility den-settings-mcp-connection-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@utility den-settings-mcp-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 6px 2px;
+  min-width: 0;
+}
+
+@utility den-settings-mcp-connection-row__id {
+  font-weight: 550;
+  font-size: var(--text-den-label);
+  min-width: 0;
+}
+
+@utility den-settings-mcp-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  font-size: var(--text-den-label);
+}
+
+@utility den-settings-mcp-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-3);
+}
+
+@utility den-settings-mcp-tools-list {
+  margin: var(--spacing-den-3) 0 0;
+  padding-left: var(--spacing-den-6);
+  font-size: var(--text-den-label);
+}
+
+@utility den-settings-mcp-connection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-5);
+}
+
+@utility den-settings-mcp-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-5);
+  width: 100%;
+  min-width: 0;
+
+  & .den-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  & .den-input,
+  & .den-select,
+  & .den-settings-mcp-env {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
+
+@utility den-settings-mcp-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.5rem, 9.5rem);
+  gap: var(--spacing-den-4);
+  width: 100%;
+  min-width: 0;
+  align-items: start;
+}
+
+@utility den-settings-mcp-recipes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@utility den-settings-mcp-recipe {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--den-text-muted);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+@utility den-settings-mcp-recipe__label {
+  font-weight: 550;
+  font-size: var(--text-den-label);
+}
+
+@utility den-settings-mcp-recipe__docs {
+  margin: -2px 0 4px 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+@utility den-settings-mcp-env {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--text-den-label) * 1.4 * 3 + 1.25em);
+  padding: 6px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-label);
+  line-height: 1.4;
+  resize: vertical;
+  box-sizing: border-box;
+}
+

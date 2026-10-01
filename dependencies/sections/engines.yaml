@@ -1,0 +1,90 @@
+title: Bundled engines and hermetic binaries
+intro: |
+  Bundled binaries are hermetic-or-fail: the host never falls back to an unpinned system binary.
+  Pin, fetch, prune, and signing details live in
+  [Dependencies policy](../dependencies.md#bundled-git-toolchain).
+
+rows:
+  - id: chrome
+    name: Chrome headless shell (Chrome for Testing)
+    pins:
+      - go-const lycaon/internal/browserengine/chrome_pin.go PinnedChromeHeadlessShell
+    upstream:
+      - label: Stable
+        from: chrome-for-testing Stable
+    urgency: critical
+    urgency_reason: |
+      Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because
+      host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.
+    friction: high
+    friction_reason: |
+      Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with
+      `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol.
+      Re-verify confinement with `./task test:seatbelt` and the CI `browser-confinement` job.
+      The macOS bundle Developer ID–signs the tree.
+
+  - id: git-engine
+    name: Dugite Git and Git LFS
+    pins:
+      - label: Git
+        from: yaml lycaon/config/gitengine/pin.yaml git_version
+      - label: LFS
+        from: yaml lycaon/config/gitengine/pin.yaml lfs_version
+      - label: dugite build
+        from: yaml lycaon/config/gitengine/pin.yaml platforms.darwin-arm64.build
+    upstream:
+      - label: Git
+        from: 'github-tag git/git ^v\d+\.\d+\.\d+$'
+      - label: LFS
+        from: github-release git-lfs/git-lfs
+      - label: dugite
+        from: github-release desktop/dugite-native
+    urgency: critical
+    urgency_reason: |
+      Git runs against untrusted repositories and remotes on the workstation.
+    friction: high
+    friction_reason: |
+      Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so
+      a newer Git is usable only once a dugite release ships it. Follow the
+      [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails
+      closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS
+      bundle signs every Mach-O with Developer ID and hardened runtime.
+
+  - id: opengrep
+    name: Opengrep
+    pins:
+      - yaml lycaon/config/runtime/scanners/bundled-manifest.yaml opengrep.version
+    upstream:
+      - label: Opengrep
+        from: github-release opengrep/opengrep
+      - label: fork
+        from: github-release paintedwolf-ai/paintedwolf-opengrep
+    urgency: high
+    urgency_reason: |
+      SAST engine for secret screening and code policy.
+    friction: high
+    friction_reason: |
+      Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in
+      `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release
+      with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`,
+      then run `./task test:scanners` so first-party and vendored rules still load.
+
+  - id: document-core
+    name: Document core (WASM)
+    pins:
+      - label: yrs
+        from: cargo-lock lycaon/internal/documentcore/native/Cargo.lock yrs
+      - label: target
+        from: json lycaon/internal/documentcore/core.manifest.json target
+    upstream:
+      - label: yrs
+        from: crate yrs
+    urgency: high
+    urgency_reason: |
+      Divergence in CRDT state loses user edits.
+    friction: high
+    friction_reason: |
+      Built by `scripts/build-document-core.sh` into `core.wasm`; `core.manifest.json` pins the
+      source hashes, and `wazero` loads the result. Den binds CodeMirror to Yjs text and the
+      host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a
+      0.x minor bump as breaking.

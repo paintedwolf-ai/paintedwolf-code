@@ -1,0 +1,10 @@
+id: painted-wolf/platform:find-select-all-matches
+title: "Select all find matches"
+palette: false
+scope: "files"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "find.selectAllMatches"

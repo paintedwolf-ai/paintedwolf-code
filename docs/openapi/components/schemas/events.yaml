@@ -1,0 +1,1081 @@
+components:
+  schemas:
+    # Enum values from docs/openapi/vocab/EventTopic.yaml — do not hand-edit.
+    EventTopic:
+      $ref: event-topic.generated.yaml#/components/schemas/EventTopic
+    SourceChangeOp:
+      $ref: source-change-op.generated.yaml#/components/schemas/SourceChangeOp
+    SourceChangeOrigin:
+      $ref: source-change-origin.generated.yaml#/components/schemas/SourceChangeOrigin
+    SourceWorkspaceKind:
+      $ref: source-workspace-kind.generated.yaml#/components/schemas/SourceWorkspaceKind
+    MessageChangeOp:
+      type: string
+      description: >-
+        append adds a new transcript row; patch replaces the row with the same
+        message id.
+      enum:
+      - append
+      - patch
+    LLMCallStatus:
+      type: string
+      enum:
+      - active
+      - ok
+      - error
+    LLMRetryReason:
+      type: string
+      description: >-
+        Why a provider request is being reissued: status (throttle / transient
+        5xx), capacity (503/529), hold (turn-level wait), cooldown (slot),
+        unreachable (the request never reached the provider), or silent (the
+        provider took the request and sent no response headers), or
+        empty_completion (the provider completed without assistant text or a
+        tool call). The last three carry no HTTP status, so a client must not
+        expect one alongside them.
+      enum:
+      - status
+      - capacity
+      - hold
+      - cooldown
+      - unreachable
+      - silent
+      - empty_completion
+    ActivityStatus:
+      type: string
+      description: Lifecycle edge for one host-observed activity lease.
+      enum:
+      - active
+      - done
+    ActivityKind:
+      type: string
+      description: Closed host work phase; presentation copy is client-supplied.
+      enum:
+      - preparing_context
+      - running_tool
+      - starting_workflow
+      - awaiting_wake
+      - deciding
+    EventEnvelope:
+      $ref: event-envelope.generated.yaml#/components/schemas/EventEnvelope
+    EventEnvelopeBase:
+      type: object
+      required:
+      - v
+      - event_id
+      - cursor
+      - topic
+      - published_at
+      - scope
+      - data
+      additionalProperties: false
+      description: Shared fields of every topic-discriminated EventHub SSE envelope.
+      properties:
+        v:
+          type: integer
+          const: 1
+          description: Schema version.
+        event_id:
+          type: string
+          format: uuid
+          description: Stable mutation event identity retained across delivery retries.
+        entity_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Monotonic authoritative entity revision when the topic has one, for
+            rejecting an out-of-order delivery. Carried by workflow (the run's
+            revision, scoped to the run in the event's own workflow_run_id), session
+            lifecycle snapshots, and the session-scoped progress, queue, and findings
+            topics. Absent on
+            every other topic, which has no single monotonic entity behind it —
+            treat a missing value as "cannot be compared", never as revision 0.
+        cursor:
+          type: string
+          description: Opaque replay boundary for this delivered event.
+        topic:
+          $ref: events.yaml#/components/schemas/EventTopic
+        published_at:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp.
+        scope:
+          $ref: events.yaml#/components/schemas/EventScope
+        data:
+          description: Topic-specific payload, narrowed by EventEnvelope.
+    EventScopeKind:
+      type: string
+      enum:
+      - device
+      - project
+      - session
+    EventScope:
+      description: Closed, attributable delivery scope for an event.
+      oneOf:
+      - type: object
+        required:
+        - kind
+        additionalProperties: false
+        properties:
+          kind:
+            allOf:
+            - $ref: events.yaml#/components/schemas/EventScopeKind
+            - const: device
+      - type: object
+        required:
+        - kind
+        - project_id
+        additionalProperties: false
+        properties:
+          kind:
+            allOf:
+            - $ref: events.yaml#/components/schemas/EventScopeKind
+            - const: project
+          project_id:
+            type: string
+            format: uuid
+      - type: object
+        required:
+        - kind
+        - project_id
+        - session_id
+        additionalProperties: false
+        properties:
+          kind:
+            allOf:
+            - $ref: events.yaml#/components/schemas/EventScopeKind
+            - const: session
+          project_id:
+            type: string
+            format: uuid
+          session_id:
+            type: string
+            format: uuid
+    MessageEvent:
+      x-go-generate: true
+      type: object
+      description: >-
+        One transcript row change. message is always the full post-write row:
+        apply it as a whole-row snapshot ordered by seq, never a field merge
+        onto a cached row — an absent field means the row no longer has it.
+      required:
+      - session_id
+      - op
+      - message
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        op:
+          $ref: events.yaml#/components/schemas/MessageChangeOp
+        seq:
+          type: integer
+          format: int64
+        message:
+          $ref: session/messages.yaml#/components/schemas/Message
+    WorkerEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      - status
+      additionalProperties: false
+      properties:
+        dependencies:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerDependency
+        worker_id:
+          type: string
+          format: uuid
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerStatus
+        agent_type:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+        parent_session_id:
+          type: string
+          format: uuid
+        brief:
+          type: string
+          description: Worker assignment goal used for card titles.
+        merge_status:
+          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
+        max_tool_loops:
+          type: integer
+          minimum: 0
+        budget_request:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
+          description: The worker's unanswered request for more tool rounds; absent once granted
+        tool_loops_used:
+          type: integer
+          minimum: 0
+        tool_calls_used:
+          type: integer
+          minimum: 0
+        turn_tool_calls:
+          type: integer
+          minimum: 0
+        turn_tools_done:
+          type: integer
+          minimum: 0
+        context_usage:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerContextUsage
+        workspace_preparation:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkspacePreparation
+        result:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerResult
+        failure:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerFailure
+        error:
+          type: string
+    BoardEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - snapshot
+      - detail_level
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        snapshot:
+          $ref: board.yaml#/components/schemas/BoardView
+        detail_level:
+          $ref: board.yaml#/components/schemas/BoardDetailLevel
+    DelegationEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - delegation_id
+      - status
+      - leg_id
+      - phase
+      additionalProperties: false
+      properties:
+        delegation_id:
+          type: string
+          format: uuid
+        status:
+          $ref: delegation.yaml#/components/schemas/DelegationStatus
+        leg_id:
+          type: string
+          format: uuid
+        phase:
+          $ref: delegation.yaml#/components/schemas/DelegationPhase
+    LLMTokenCounts:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        prompt:
+          type: integer
+          minimum: 0
+        completion:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+        context_window:
+          type: integer
+          minimum: 0
+        compaction_threshold:
+          type: integer
+          minimum: 0
+    CoordinatorLoopProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        host_turn:
+          type: boolean
+        iteration:
+          type: integer
+          minimum: 0
+          description: 1-based index of the model turn now running.
+        max_iterations:
+          type: integer
+          minimum: 0
+        prose_finish:
+          type: boolean
+          description: >-
+            Tools-omitted closeout turn — reserved last iteration or early
+            closeout (blocked loop, cancel, spend, timeout).
+        surface:
+          type: string
+        activity_label:
+          type: string
+          description: Host-projected activity label from the coordinator surface catalog.
+        guarded:
+          type: boolean
+        provisional_hidden:
+          type: boolean
+    LLMCallEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - call_id
+      - session_id
+      - provider
+      - model
+      - status
+      - tokens
+      additionalProperties: false
+      properties:
+        call_id:
+          type: string
+          format: uuid
+        session_id:
+          description: Session whose coordinator turn this call belongs to. The
+            event stream is project-scoped, so clients must attribute activity by
+            this id rather than by whichever session they currently display.
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          $ref: events.yaml#/components/schemas/LLMCallStatus
+        tokens:
+          $ref: events.yaml#/components/schemas/LLMTokenCounts
+        coordinator_loop:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/CoordinatorLoopProgress
+        attempt:
+          type: integer
+          description: >-
+            1-based index of the attempt now running. Present only while the call is
+            being retried, so a rate-limited provider is distinguishable from a slow
+            one; the first attempt omits it. Republished on the same call_id with
+            status active.
+        max_attempts:
+          type: integer
+          description: The initial request plus every retry the provider policy allows.
+        retry_wait_ms:
+          type: integer
+          format: int64
+          description: Backoff slept before this attempt, in milliseconds.
+        retry_reason:
+          $ref: events.yaml#/components/schemas/LLMRetryReason
+        silence_ms:
+          type: integer
+          format: int64
+          description: >-
+            How long the previous attempt went unanswered after its request was
+            delivered, in milliseconds. Present only with retry_reason silent.
+            This is the number that separates a slow model from a stalled one:
+            both look identical while a turn is open, and only this says which.
+    ActivityEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - activity_id
+      - session_id
+      - kind
+      - status
+      - started_at
+      additionalProperties: false
+      description: >-
+        One session-scoped host activity lease. The active edge opens the lease
+        and the done edge with the same activity_id closes it. Further active
+        edges replace measured progress on that lease; arguments remain on the
+        canonical transcript tool call.
+        A lease outlives the turn that opened it: an awaiting_wake lease spans an
+        idle session, so a client closes leases on their done edge or an authoritative
+        session activity snapshot, never on a session status change.
+      properties:
+        activity_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: events.yaml#/components/schemas/ActivityKind
+        status:
+          $ref: events.yaml#/components/schemas/ActivityStatus
+        started_at:
+          type: string
+          format: date-time
+        tool_name:
+          type: string
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        progress:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/ToolProgress
+        wait_triggers:
+          type: array
+          items:
+            type: string
+          description: >-
+            Subscriptions that will end an awaiting_wake lease, in the host's own
+            vocabulary (timer, next_worker_done, process_done, …). Present only on
+            awaiting_wake, and what the client names rather than inferring a
+            subject from the sleep reason.
+        decision_trigger:
+          $ref: turn-load.yaml#/components/schemas/TurnLoadTrigger
+          description: >-
+            What asked the local decision engine. Present only on deciding,
+            which the host opens only while an available engine is answering;
+            the answer arrives as a turn_load event.
+    ToolProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [phase, files_searched, files_skipped, matches]
+      description: Measured discovery work. Counts are observations, not a completion estimate.
+      properties:
+        phase:
+          type: string
+          enum: [selecting, searching]
+        files_searched:
+          type: integer
+          minimum: 0
+        files_skipped:
+          type: integer
+          minimum: 0
+        matches:
+          type: integer
+          minimum: 0
+    OAROnFireEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - session_id
+      - rule
+      - anchor
+      - effect
+      additionalProperties: false
+      description: >-
+        One Open Agent Rules publish_event record. It is host-observed telemetry,
+        never a fact visible to another rule at the occurrence.
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        rule:
+          type: string
+          description: Qualified OAR rule identifier.
+        anchor:
+          type: string
+        effect:
+          type: string
+          enum: [block, warn, nudge, allow, transform]
+    BackgroundProcessEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - process_id
+      - session_id
+      - stream
+      - end_offset
+      - running
+      additionalProperties: false
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        session_id:
+          type: string
+          format: uuid
+        stream:
+          type: string
+        text:
+          type: string
+        end_offset:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Byte offset just past the process output this event reflects; 0 for
+            a held call, which has no byte stream.
+        running:
+          type: boolean
+        exit_code:
+          x-go-pointer: true
+          type: integer
+        truncated:
+          type: boolean
+        reset:
+          type: boolean
+          description: Replace previously projected text instead of appending it.
+    BackgroundProcessStage:
+      x-go-generate: true
+      type: object
+      required:
+      - command
+      additionalProperties: false
+      properties:
+        command:
+          type: string
+        exit_code:
+          x-go-pointer: true
+          type: integer
+          description: >-
+            Absent while the stage has not exited, and for a stage a sequencing
+            operator skipped. A skipped stage reached no status, so reporting 0
+            would read as success.
+        skipped:
+          type: boolean
+          description: >-
+            The stage never ran: the preceding group's exit status did not satisfy
+            the connector joining them.
+        connector:
+          type: string
+          enum: ['|', '&&', '||', ';']
+          description: >-
+            Operator joining this stage to the previous one. Absent on the first
+            stage. `|` wires the previous stage's stdout into this one; the rest
+            gate on the previous group's exit status.
+    BackgroundProcess:
+      x-go-generate: true
+      type: object
+      required:
+      - process_id
+      - running
+      additionalProperties: false
+      properties:
+        output:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BackgroundProcessOutput'
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        running:
+          type: boolean
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/BackgroundProcessStage'
+        exit_code:
+          x-go-pointer: true
+          type: integer
+    BackgroundProcessChunk:
+      x-go-generate: true
+      type: object
+      required:
+      - offset
+      - stream
+      - text
+      additionalProperties: false
+      properties:
+        offset:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Byte offset of the first process output byte this chunk covers.
+        stream:
+          type: string
+        text:
+          type: string
+    BackgroundProcessOutput:
+      x-go-generate: true
+      type: object
+      description: >-
+        The screened tail of one process's retained output, bounded by the host.
+        It is a snapshot, not a page: live output continues on the process
+        event topic.
+      required:
+      - process_id
+      - chunks
+      - running
+      additionalProperties: false
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/BackgroundProcessChunk'
+        running:
+          type: boolean
+        truncated:
+          type: boolean
+          description: Earlier output was evicted from the host buffer or cut from this snapshot.
+        exit_code:
+          x-go-pointer: true
+          type: integer
+    BackgroundProcessStopResult:
+      x-go-generate: true
+      type: object
+      required:
+      - process_id
+      - stop_requested
+      - running
+      additionalProperties: false
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        stop_requested:
+          type: boolean
+          description: The host requested termination; this does not assert process exit.
+        running:
+          type: boolean
+          description: True until the host has observed terminal process state. Wait for the process event instead of repeating stop.
+        exit_code:
+          x-go-pointer: true
+          type: integer
+    PreviewActionOverlay:
+      x-go-generate: true
+      type: object
+      required:
+      - label
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+        target:
+          type: string
+        x:
+          x-go-pointer: true
+          type: number
+          format: double
+        y:
+          x-go-pointer: true
+          type: number
+          format: double
+        w:
+          x-go-pointer: true
+          type: number
+          format: double
+        h:
+          x-go-pointer: true
+          type: number
+          format: double
+    PreviewEventOp:
+      type: string
+      enum:
+      - attach
+      - detach
+      - frame
+      - action
+      - state
+      description: Live preview stream message kind.
+    PreviewEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - op
+      - session_id
+      - page_id
+      - assistant_message_id
+      - tool_call_id
+      - seq
+      additionalProperties: false
+      description: >-
+        Read-only live page mirror (CDP screencast frames + driven-action overlay).
+        Frames ride the authenticated host SSE channel; Den never forwards input.
+      properties:
+        op:
+          $ref: '#/components/schemas/PreviewEventOp'
+        session_id:
+          type: string
+          format: uuid
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        assistant_message_id:
+          type: string
+          format: uuid
+          description: Assistant transcript row that originated this preview surface.
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Tool invocation within the containing assistant row.
+        parent_session_id:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int64
+        mime:
+          type: string
+        jpeg_b64:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        url:
+          type: string
+        title:
+          type: string
+        idle:
+          x-go-pointer: true
+          type: boolean
+        action:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/PreviewActionOverlay
+    PreviewAttachment:
+      x-go-generate: true
+      type: object
+      required:
+      - session_id
+      - page_id
+      - assistant_message_id
+      - tool_call_id
+      additionalProperties: false
+      description: Held page identity for restoring a preview watch; frames are omitted
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        assistant_message_id:
+          type: string
+          format: uuid
+          description: Assistant transcript row that originated this preview surface.
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Tool invocation within the containing assistant row.
+        parent_session_id:
+          type: string
+          format: uuid
+        width:
+          type: integer
+        height:
+          type: integer
+        url:
+          type: string
+        title:
+          type: string
+        idle:
+          x-go-pointer: true
+          type: boolean
+    PreviewWatchRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - watching
+      - page_id
+      additionalProperties: false
+      properties:
+        watching:
+          type: boolean
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    PreviewWatchResult:
+      x-go-generate: true
+      type: object
+      required:
+      - watching
+      - page_id
+      additionalProperties: false
+      properties:
+        watching:
+          type: boolean
+        page_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    ProviderEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - provider_id
+      - action
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        action:
+          type: string
+    ModelPolicyEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - action
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+        action:
+          type: string
+    SettingsEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - area
+      - scope
+      - action
+      additionalProperties: false
+      properties:
+        area:
+          $ref: settings-area.generated.yaml#/components/schemas/SettingsArea
+        scope:
+          $ref: settings/preferences.yaml#/components/schemas/SettingsScope
+        action:
+          type: string
+    ArtifactChangeOp:
+      type: string
+      enum:
+      - written
+      - deleted
+    ArtifactEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - artifact_id
+      - project_id
+      - op
+      additionalProperties: false
+      description: >-
+        A durable visual artifact was written or deleted. Identity only: clients
+        re-read the artifact list so one tile's metadata, reference counts, and
+        bytes all render from one place.
+      properties:
+        artifact_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: Producing (holder) session, when one is known.
+        root_session_id:
+          type: string
+          format: uuid
+          description: Session tree that resolves the event, when one is known.
+        op:
+          $ref: events.yaml#/components/schemas/ArtifactChangeOp
+    SourceChange:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - op
+      - origin
+      - changed_at
+      additionalProperties: false
+      description: >-
+        One host-authoritative or external filesystem transition. Rename
+        carries from_path; agent/user changes may carry attribution and
+        after_sha256.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          description: Root-relative path after the change (destination for rename).
+        from_path:
+          type: string
+          description: Root-relative path before a rename; omit for other ops.
+        op:
+          $ref: events.yaml#/components/schemas/SourceChangeOp
+        origin:
+          $ref: events.yaml#/components/schemas/SourceChangeOrigin
+        is_dir:
+          x-go-pointer: true
+          type: boolean
+          description: Entry kind after an upsert; omitted when unknown or deleted.
+        session_id:
+          type: string
+          format: uuid
+          description: Producing session attribution; never event-delivery scope.
+        worker_id:
+          type: string
+          format: uuid
+        turn:
+          type: integer
+          minimum: 0
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        after_sha256:
+          type: string
+          description: Hex SHA-256 of content after a host write; omit for external and delete.
+        changed_at:
+          type: string
+          format: date-time
+    SourceChangesEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - workspace_id
+      - workspace_kind
+      - changes
+      - resync
+      additionalProperties: false
+      description: >-
+        A bounded set of filesystem transitions for one physical source
+        workspace. Resync means the path set overflowed or exact transitions
+        are unavailable; clients rehydrate their loaded projection.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          pattern: '^ws_[0-9a-f]{32}$'
+          minLength: 1
+        workspace_kind:
+          $ref: '#/components/schemas/SourceWorkspaceKind'
+        changes:
+          type: array
+          maxItems: 512
+          items:
+            $ref: '#/components/schemas/SourceChange'
+        resync:
+          type: boolean
+        git_changed:
+          type: boolean
+          description: >-
+            A git ref surface moved in this window — possibly with no file
+            changes at all (a commit). Consumers refresh git-derived
+            comparisons even when changes is empty.
+    EditorDocumentEvent:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        Document invalidation and presentation metadata. Reconcile through
+        state-vector synchronization; events never transport document text.
+      required: [id, project_id, workspace_id, file_id, root_id, path, base_sha256, encoding, size_bytes, eol, base_eol, mixed_eol, base_mixed_eol, revision, dirty, diverged, absent, secret_screen_status, content_changed]
+      properties:
+        epoch: {type: integer, format: int64, minimum: 1}
+        published_revision: {type: integer, format: int64, minimum: 1}
+        participants:
+          type: array
+          items: {$ref: project/editor-documents.yaml#/components/schemas/EditorParticipant}
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        base_sha256: {type: string}
+        encoding: {$ref: project/source-content.yaml#/components/schemas/SourceEncoding}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        eol: {type: string, enum: [lf, crlf]}
+        base_eol: {type: string, enum: [lf, crlf]}
+        mixed_eol: {type: boolean}
+        base_mixed_eol: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 1}
+        dirty: {type: boolean}
+        diverged: {type: boolean}
+        absent:
+          type: boolean
+          description: >-
+            The path has no file on disk. The document keeps its draft and
+            saved base; a save recreates the file, and a file that reappears
+            merges in as an outside change.
+        held_agent_version_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: >-
+            The retained state holding an agent edit this draft carries and
+            disk does not. Omitted once a save settles the hold.
+        secret_screen_status: {$ref: project/editor-secrets.yaml#/components/schemas/SecretScreenStatus}
+        content_changed:
+          type: boolean
+          description: Whether the accepted text changed during this transition.
+        secret_screen:
+          x-go-pointer: true
+          $ref: project/editor-secrets.yaml#/components/schemas/SecretScreen
+    CLIOpenAction:
+      type: string
+      enum:
+      - open
+      - create
+    PreflightEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - probe_id
+      additionalProperties: false
+      description: >-
+        Host readiness changed while the app was running. Device-scoped: the
+        report is about the machine, not one project, even when a probe's result
+        names the projects it is about.
+
+        Carries no verdict. A probe's copy, tier, and scope resolve together from
+        the user-notice catalog when `GET /v1/preflight` runs, so re-reading is
+        what keeps one condition described one way.
+      properties:
+        probe_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: >-
+            Probe whose verdict may have moved, e.g. `provider_configured`. A hint
+            for clients that only care about some of them; the report is still the
+            authority on every probe.
+    CLIOpenEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - action
+      - path
+      additionalProperties: false
+      description: >-
+        A `lycaon open` invocation that the host resolved but did not enact.
+        Device-scoped, so it reaches the window whatever project it
+        is showing. `open` names a project that already exists and may be
+        switched to directly — the human typing the command is the explicit
+        action. `create` only proposes a root: minting a project is a durable
+        act that needs trust, so Den confirms rather than the CLI deciding.
+      properties:
+        action:
+          $ref: events.yaml#/components/schemas/CLIOpenAction
+        project_id:
+          type: [string, "null"]
+          format: uuid
+          description: Resolved project for `open`; null for `create`.
+        path:
+          type: string
+          description: >-
+            Absolute canonical path the CLI resolved. The proposed root for
+            `create`; for `open`, the path that matched, which may be a
+            subdirectory of the project root rather than the root itself.
+    PreviewListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - previews
+      additionalProperties: false
+      properties:
+        previews:
+          type: array
+          items:
+            $ref: events.yaml#/components/schemas/PreviewAttachment
+    BackgroundProcessListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - processes
+      additionalProperties: false
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: events.yaml#/components/schemas/BackgroundProcess

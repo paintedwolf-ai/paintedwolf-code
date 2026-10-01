@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-recent-back
+command: painted-wolf/platform:session-recent-back
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Ctrl+Shift+Tab"
+  windows:
+    - "Mod+Shift+Tab"
+  linux:
+    - "Mod+Shift+Tab"

@@ -1,0 +1,5 @@
+code: extends_depth_exceeded
+message: |
+  extends depth exceeded.
+replacement: |
+  Shorten the extends chain (max depth 3).

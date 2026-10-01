@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Can't show that file as an image
+message: >-
+  The image viewer serves only files whose bytes read as an image. This file's
+  contents are something else, whatever its extension says.
+suggested_action: Open it in the editor to read it as text, or reveal it in your file manager to open it elsewhere.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - image viewer
+      - extension

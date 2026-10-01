@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Built-in pack"
+message: "Packs that ship with Painted Wolf Code cannot be changed or removed here."
+suggested_action: "Turn off the units you do not want instead."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "cannot be changed or removed"

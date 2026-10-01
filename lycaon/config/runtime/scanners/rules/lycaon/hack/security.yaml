@@ -1,0 +1,43 @@
+rules:
+- id: lycaon.hack.request-eval
+  languages:
+  - hack
+  severity: ERROR
+  message: Request input is evaluated as code
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - hack
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  - pattern: $_POST[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: eval($CODE)
+    - focus-metavariable: $CODE
+- id: lycaon.hack.request-command-injection
+  languages:
+  - hack
+  severity: ERROR
+  message: Request input reaches a shell command
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: shell_exec($X)
+    - focus-metavariable: $X
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - hack
+    references:
+    - https://hhvm.com/blog/2021/10/05/hhvm-4.130.html

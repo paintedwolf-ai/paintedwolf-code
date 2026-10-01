@@ -1,0 +1,35 @@
+oar: '1.0'
+id: WEB_SEARCH_PROVIDERS_FAILED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.search_provider_statuses
+when: paintedwolf.rejection_code == "WEB_SEARCH_PROVIDERS_FAILED"
+effect: block
+copy:
+  what: The selected search providers did not produce web evidence.
+  cause: '{{ paintedwolf.detail }}{% if paintedwolf.search_provider_statuses %} Provider status: {{ paintedwolf.search_provider_statuses
+    }}.{% endif %}'
+  why: Rewording the same request usually reaches the same unavailable providers and does not make their failure
+    useful evidence
+  fix: Make at most one materially different retry when the query itself can be corrected. Missing configuration,
+    disabled providers, or unavailable services require their own remedy; rewording does not repair them. Otherwise
+    proceed without web evidence and state that limitation.
+  instead: Use existing evidence or continue without an external claim
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:web_search
+x-paintedwolf-message: Every configured web_search provider failed
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: 'direct: upstream unavailable; brave: HTTP 422'
+    tool: web_search
+  expect_contains:
+  - 'Code: WEB_SEARCH_PROVIDERS_FAILED'
+  - materially different retry
+  - proceed without web evidence

@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-comparison-next
+title: "Next comparison scope"
+scope: "files"
+keywords:
+  - "cycle eye"
+  - "next lens"
+  - "compare"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.comparisonNext"

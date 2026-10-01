@@ -1,0 +1,80 @@
+tags: [browser, automation]
+description: >-
+  Open a live page; returns an id held across turns. The page has its own cookies and storage,
+  which persist until page_close. Up to max_pages stay open per session; re-opening a held
+  target reloads it with the given viewport and routes. Prefer capture_page for a single check.
+  Bindings match capture_page (project_dir or url).
+schema:
+  type: object
+  properties:
+    project_dir:
+      type: string
+      description: Sandboxed file-tree probe (same as capture_page). Mount the site root, not a leaf page.
+    path:
+      type: string
+      description: Optional site-relative path within project_dir (same as capture_page).
+    url:
+      type: string
+      description: Loopback http(s) URL (same as capture_page).
+    process_handle:
+      type: string
+      description: Optional command background:true handle.
+    viewport:
+      description: "Optional CSS-pixel viewport size for the capture/open."
+      type: object
+      properties:
+        width:
+          description: "Viewport width in CSS pixels."
+          type: integer
+          minimum: 1
+        height:
+          description: "Viewport height in CSS pixels."
+          type: integer
+          minimum: 1
+      required: [width, height]
+      additionalProperties: false
+    wait:
+      type: string
+      enum: [idle]
+      description: Settle after navigate.
+    routes:
+      type: array
+      maxItems: 16
+      description: "Request fixtures installed before load and kept while held; a page_act route step replaces them."
+      items:
+        type: object
+        description: "Answers matching requests instead of the network."
+        properties:
+          url: {type: string, description: "Full URL, or a path starting with / that matches any origin; * matches any run of characters."}
+          method: {type: string, description: "Method to match; default any."}
+          status: {type: integer, minimum: 100, maximum: 599, description: "Response status; default 200 when a body is given."}
+          body: {type: string, description: "Response body text."}
+          body_path: {type: string, description: "Workspace file served as the body."}
+          content_type: {type: string, description: "Response Content-Type; default from body_path's extension, else application/json."}
+          headers: {type: object, additionalProperties: {type: string}, description: "Extra response headers."}
+          delay_ms: {type: integer, minimum: 0, maximum: 30000, description: "Wait before answering; given alone, it slows a request that still reaches the network."}
+          fail: {type: string, enum: [failed, aborted, timed_out, connection_refused, connection_reset, name_not_resolved, internet_disconnected, blocked], description: "Fail the request with this network error instead of answering it."}
+          times: {type: integer, minimum: 1, description: "Answer only the first N matching requests, then let later ones through."}
+        required: [url]
+        additionalProperties: false
+    capability_request:
+      type: object
+      description: >-
+        Loopback authority for a url target. Not needed for project_dir, which
+        serves from disk and opens no socket.
+      properties:
+        loopback_connect:
+          type: object
+          description: Loopback authority for exact ports.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              uniqueItems: true
+              description: Loopback TCP ports this target may connect to.
+              items: {type: integer, minimum: 1, maximum: 65535}
+          additionalProperties: false
+      required: [loopback_connect]
+      additionalProperties: false
+  additionalProperties: false

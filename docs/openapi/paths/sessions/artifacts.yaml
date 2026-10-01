@@ -1,0 +1,172 @@
+paths:
+  /v1/sessions/{id}/artifacts:
+    get:
+      tags:
+      - sessions
+      operationId: listSessionArtifacts
+      summary: List durable visual artifact metadata for a session tree
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque cursor from the previous page's next_cursor.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+        description: Max items to return
+      responses:
+        '200':
+          description: Artifact metadata for the session tree (no bytes)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags:
+      - sessions
+      operationId: createSessionArtifact
+      x-person-action: record
+      summary: Persist a live-tool recording as a visual artifact
+      description: >-
+        Accepts a client-created low-frame-rate baseline H.264 MP4 recording of
+        authenticated live-preview frames produced by a held page tool. The
+        sidecar enforces the recording MIME type and artifact byte cap before
+        writing through the shared visual artifact store.
+
+
+        Identity is durable, not process-local. operation_id is one client
+        action, so a retried upload lands on the record it already wrote rather
+        than failing; holder + page + assistant_message_id + tool_call_id is one
+        invocation-specific product slot, so re-recording that invocation replaces
+        its recording rather than multiplying it. Both identities survive a
+        sidecar restart. The upload path session is the page holder (coordinator
+        root or worker child), and Den remounts the recording at the originating
+        ordered tool row.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: page_id
+        in: query
+        required: true
+        description: Held page-tool attachment that produced the preview frames.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+      - name: assistant_message_id
+        in: query
+        required: true
+        description: Ordered assistant transcript row that opened the recording episode.
+        schema:
+          type: string
+          format: uuid
+      - name: tool_call_id
+        in: query
+        required: true
+        description: Tool invocation within the containing assistant row.
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+      - name: operation_id
+        in: query
+        required: true
+        description: >-
+          Client-chosen id for this upload action. Replaying it returns the same
+          artifact instead of writing a second one.
+        schema:
+          type: string
+          format: uuid
+      - name: recorded_at
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: duration_ms
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          video/mp4:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Persisted live-tool recording
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/artifacts.yaml#/components/schemas/VisualArtifact
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/sessions/{id}/artifacts/{artifact_id}:
+    get:
+      tags:
+      - sessions
+      operationId: getSessionArtifact
+      summary: Fetch visual artifact bytes for a session tree
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Artifact bytes
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: The artifact belongs to a different session tree (artifact_foreign)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        '404':
+          description: No such session (session_not_found) or artifact (artifact_not_found)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        '410':
+          description: The artifact was deleted (artifact_deleted) or its bytes are no longer retained (artifact_unavailable)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest

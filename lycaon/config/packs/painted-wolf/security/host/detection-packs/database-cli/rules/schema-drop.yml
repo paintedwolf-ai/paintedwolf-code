@@ -1,0 +1,47 @@
+title: Drop a database, schema, or table
+id: 65627d80-3bad-4c54-bdf1-cda7d4d5c281
+description: Drops a database, schema, or table through a database client.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - psql
+      - mysql
+      - mariadb
+      - sqlite3
+      - mongosh
+      - mongo
+      - cockroach
+      - clickhouse-client
+      - cqlsh
+      - snowsql
+      - snow
+  # SQL arrives inside -c '…', so the statement boundary is a quote as often as
+  # a space.
+  verbs_schema_drop:
+    CommandLine|re:
+      - '(?i)[\s''"(]drop\s+(database|schema|table|keyspace)\b'
+      - '(?i)\.drop(Database|Collection)\s*\('
+      # db.<collection>.drop() is the more common idiom for dropping one
+      # collection than the explicit .dropCollection() call above.
+      - '(?i)\.drop\(\s*\)'
+  selection_dropdb_image:
+    Image: dropdb
+  # `-h` is the host flag for these clients, never help.
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image and verbs_schema_drop or selection_dropdb_image) and not filter_rehearsal and not filter_local

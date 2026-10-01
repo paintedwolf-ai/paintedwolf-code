@@ -1,0 +1,102 @@
+# Evidence kind → shape declarations (SSOT).
+# Tools declare produces_evidence.kind; shape resolves via evidence_kinds.
+
+evidence_kinds:
+  read:    { shape: file_region, survey: true, transcript_diet: shape_bounded }
+  grep:    { shape: file_region, survey: true }
+  find:    { shape: file_region, survey: true }
+  list:    { shape: file_region, survey: true }
+  stat:    { shape: file_region, survey: true }
+  wc:      { shape: file_region, survey: true }
+  edit:    { shape: file_region, mutation: true }
+  write:   { shape: file_region, mutation: true }
+  replace: { shape: file_region, mutation: true }
+  restore: { shape: file_region, mutation: true }
+  # A structural rewrite authors bytes at every match, across one path or many.
+  rewrite: { shape: file_region, mutation: true }
+  delete:  { shape: file_region, mutation: true }
+  diff:    { shape: file_region }
+  web:     { shape: url }
+  command:    { shape: command }
+  git:     { shape: command, survey: true }
+  git_receipt: { shape: command }
+  scan:    { shape: artifact, transcript_diet: spill_pointer }
+  survey:  { shape: file_region, survey: true }
+  summarize: { shape: file_region, transcript_diet: anchor_residue }
+  # Recall observes index results, not file contents.
+  recall:  { shape: file_region, survey: true, transcript_diet: shape_bounded }
+  # Provenance observes recorded history, not current file contents.
+  provenance: { shape: file_region, survey: true }
+  skill:   { shape: artifact, transcript_diet: preserve_structure }
+  # Render is authored intent; page, tui, and http are observed surfaces.
+  render: { shape: visual }
+  page:   { shape: surface_snapshot }
+  tui:    { shape: surface_snapshot }
+  # Page geometry is a text measurement.
+  page_geometry: { shape: page_geometry }
+  # Secret lifecycle bodies contain metadata and managed references.
+  secret_lifecycle: { shape: structured_event, transcript_diet: shape_bounded }
+  http_response: { shape: surface_snapshot, transcript_diet: shape_bounded }
+  terminal_session: { shape: surface_snapshot, transcript_diet: shape_bounded }
+
+tools:
+  read:          { produces_evidence: { kind: read } }
+  grep:          { produces_evidence: { kind: grep } }
+  find:          { produces_evidence: { kind: find } }
+  list_dir:      { produces_evidence: { kind: list } }
+  stat:          { produces_evidence: { kind: stat } }
+  wc:            { produces_evidence: { kind: wc } }
+  write:         { produces_evidence: { kind: write } }
+  edit:          { produces_evidence: { kind: edit } }
+  replace_lines: { produces_evidence: { kind: replace } }
+  restore_version: { produces_evidence: { kind: restore } }
+  code_rewrite:  { produces_evidence: { kind: rewrite } }
+  jq_edit:       { produces_evidence: { kind: write } }
+  delete:        { produces_evidence: { kind: delete } }
+  web_search:    { produces_evidence: { kind: web } }
+  fetch_url:     { produces_evidence: { kind: web } }
+  command:
+    produces_evidence:
+      kind: command
+      variants:
+        - when_arg_present: terminal_capture
+          kind: tui
+  diff:          { produces_evidence: { kind: diff } }
+  git_commit:    { produces_evidence: { kind: git_receipt } }
+  git_restore:   { produces_evidence: { kind: git_receipt } }
+  git_checkout:  { produces_evidence: { kind: git_receipt } }
+  git_merge:     { produces_evidence: { kind: git_receipt } }
+  git_stash:     { produces_evidence: { kind: git_receipt } }
+  git_branches:  { produces_evidence: { kind: git } }
+  git_ref:       { produces_evidence: { kind: git } }
+  git_compare:   { produces_evidence: { kind: git } }
+  git_stash_list: { produces_evidence: { kind: git } }
+  git_status:    { produces_evidence: { kind: git } }
+  git_diff:      { produces_evidence: { kind: git } }
+  git_log:       { produces_evidence: { kind: git } }
+  git_show:      { produces_evidence: { kind: git } }
+  git_blame:     { produces_evidence: { kind: git } }
+  source_history: { produces_evidence: { kind: provenance } }
+  scan_pack:     { produces_evidence: { kind: scan } }
+  scan_list:     { produces_evidence: { kind: scan } }
+  scan_summary:  { produces_evidence: { kind: scan } }
+  scan_query:    { produces_evidence: { kind: scan } }
+  scan_compare:  { produces_evidence: { kind: scan } }
+  survey_repo:   { produces_evidence: { kind: survey } }
+  summarize:     { produces_evidence: { kind: summarize } }
+  recall:        { produces_evidence: { kind: recall } }
+  skills_read:   { produces_evidence: { kind: skill } }
+  render_view:   { produces_evidence: { kind: render } }
+  capture_page:  { produces_evidence: { kind: page } }
+  page_open:     { produces_evidence: { kind: page } }
+  page_snapshot: { produces_evidence: { kind: page } }
+  measure_page:  { produces_evidence: { kind: page_geometry } }
+  secret_generate: { produces_evidence: { kind: secret_lifecycle } }
+  secret_list:     { produces_evidence: { kind: secret_lifecycle } }
+  secret_revoke:   { produces_evidence: { kind: secret_lifecycle } }
+  http_request:    { produces_evidence: { kind: http_response } }
+  terminal_open:   { produces_evidence: { kind: terminal_session } }
+  terminal_send:   { produces_evidence: { kind: terminal_session } }
+  terminal_read:   { produces_evidence: { kind: terminal_session } }
+  terminal_snapshot: { produces_evidence: { kind: terminal_session } }
+  terminal_close:  { produces_evidence: { kind: terminal_session } }

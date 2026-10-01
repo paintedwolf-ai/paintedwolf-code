@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Extension source unavailable
+message: The extension source needs a ready MCP provider and a permitted read-only tool.
+suggested_action: Check the extension requirements and provider tool settings, then try again.

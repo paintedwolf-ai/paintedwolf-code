@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-to-upper-case
+title: "Upper case"
+scope: "files"
+keywords:
+  - "uppercase"
+  - "to upper"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.toUpperCase"

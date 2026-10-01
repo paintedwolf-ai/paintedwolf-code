@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Path not found
+message: >-
+  Nothing exists at that path.
+suggested_action: >-
+  Check the path — it may have been moved, renamed, or deleted since it was listed.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Nothing exists
+      - renamed

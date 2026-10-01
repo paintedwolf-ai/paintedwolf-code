@@ -1,0 +1,16 @@
+diff --git a/python/exec/rule-linux-command-wildcard-injection.yml b/python/exec/rule-linux-command-wildcard-injection.yml
+index aa774d89c..2f8676965 100644
+--- a/python/exec/rule-linux-command-wildcard-injection.yml
++++ b/python/exec/rule-linux-command-wildcard-injection.yml
+@@ -45,8 +45,9 @@ rules:
+       - metavariable-regex:
+           metavariable: $CMD
+           regex: '(.*?)(\*|\?)'
++      - metavariable-regex:
++          metavariable: $X
++          regex: '^(system|popen|popen2|popen3|popen4)$'
+       - pattern-not-inside: |-
+           os.spawnvp(...)
+-    metavariable-regex:
+-      X: "(system|popen|popen2|popen3|popen4)"
+     severity: "WARNING"

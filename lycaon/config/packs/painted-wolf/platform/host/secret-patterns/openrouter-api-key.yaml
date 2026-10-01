@@ -1,0 +1,8 @@
+id: openrouter-api-key
+title: OpenRouter API key
+regex: '\b(sk-or-v1-[a-f0-9]{64})\b'
+keywords:
+  - sk-or-v1-
+severity: critical
+secret_group: 1
+entropy: 3

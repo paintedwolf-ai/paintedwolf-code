@@ -1,0 +1,73 @@
+fixtures:
+- rule: policy-or-token-grant
+  positive:
+  - vault policy write admin admin-policy.hcl
+  - vault token create -policy=admin
+  - bao policy write admin admin-policy.hcl
+  - vault auth enable approle
+  - vault write auth/approle/role/ci policies=admin
+  - vault write sys/policy/admin policy=@admin.hcl
+  negative:
+  - vault policy list
+  - vault status
+  - vault policy read admin
+  - vault token create --help
+  - bao auth list
+- rule: secret-decrypt
+  positive:
+  - vault kv get secret/prod/database
+  - sops --decrypt secrets.enc.yaml
+  - bao read secret/data/prod
+  - vault unwrap
+  - gpg --decrypt secrets.gpg
+  - age -d -i key.txt secrets.age
+  - sops -d secrets.enc.yaml
+  negative:
+  - vault kv list secret/prod
+  - sops --encrypt secrets.yaml
+  - gpg --list-keys
+  - age --encrypt -r pubkey -o out.age secrets.txt
+  - vault kv get --help
+- rule: secret-destroy
+  positive:
+  - vault kv metadata delete secret/prod/database
+  - vault secrets disable kv/
+  - bao kv destroy -versions=1,2 secret/prod/database
+  - vault kv delete secret/prod/database
+  - vault operator seal
+  negative:
+  - vault kv list secret/
+  - vault secrets list
+  - vault kv destroy --help
+  - bao secrets disable --help
+  - vault operator unseal
+- rule: vault-item-delete
+  positive:
+  - bw delete item 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --permanent
+  - bw delete item --permanent 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a
+  - sudo bw delete item 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --permanent
+  negative:
+  - bw delete item 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a
+  - bw get item 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a
+  - bw delete item 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --permanent --help
+  - bw delete folder 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --permanent
+- rule: collection-delete
+  positive:
+  - bw delete org-collection 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --organizationid 1a2b3c
+  - sudo bw delete org-collection 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --organizationid 1a2b3c
+  negative:
+  - bw list org-collections --organizationid 1a2b3c
+  - bw delete org-collection 8c4c0b3e-9c1a-4b1a-9c1a-4b1a9c1a4b1a --help
+- rule: secret-write
+  positive:
+  - vault write secret/data/prod value=1
+  - vault kv put secret/prod/database password=hunter2
+  - bao kv put secret/prod/database password=hunter2
+  - vault write secret prod/data value=1
+  - sudo vault write secret/data/prod value=1
+  negative:
+  - vault status
+  - vault kv list secret/
+  - vault write secretsmanager/foo bar=1
+  - vault write secret/data/prod value=1 --help
+  - vault operator step-down

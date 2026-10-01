@@ -1,0 +1,30 @@
+oar: '1.0'
+id: WORKER_IMPLEMENT_NO_ARTIFACT
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.worker_artifact_present
+    - paintedwolf.worker_artifact_measured
+    - paintedwolf.worker_attempted_mutation
+when: 'paintedwolf.worker_artifact_measured && !paintedwolf.worker_artifact_present && paintedwolf.worker_attempted_mutation'
+effect: block
+copy:
+  what: An attempted file mutation has no confirmed artifact in this worker's completion evidence.
+  cause: The mutation was attempted, but no successful mutation result or workspace change established an artifact.
+  why: An attempted operation alone cannot support a claim that the intended file change is complete.
+  fix: Inspect the mutation result and workspace. If work remains, make the intended change with an available mutation tool, then call complete_leg with grounded evidence. If it cannot be completed, use complete_leg to report a partial result, the concrete blocker, and remaining risk.
+  instead: Preserve any retained work and report what is established; do not claim completion from a failed attempt or replay a change without inspecting its result.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker
+x-paintedwolf-message: Implementer finished the turn without writing or editing files
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: read
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKER_IMPLEMENT_NO_ARTIFACT'

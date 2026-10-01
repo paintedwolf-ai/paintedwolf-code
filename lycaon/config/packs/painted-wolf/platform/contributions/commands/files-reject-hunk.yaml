@@ -1,0 +1,11 @@
+id: painted-wolf/platform:files-reject-hunk
+title: "Restore these lines"
+scope: "files"
+keywords:
+  - "reject this change"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.rejectHunk"

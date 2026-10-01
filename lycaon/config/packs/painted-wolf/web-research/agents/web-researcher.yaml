@@ -1,0 +1,17 @@
+id: web-researcher
+name: Web researcher
+description: Fetches external docs, release notes, and open-web evidence via web_search and fetch_url
+tool_profile: web_research
+exec_mode: none
+skills:
+  - research-current-information
+capabilities:
+  - research
+  - external
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/web-researcher.md

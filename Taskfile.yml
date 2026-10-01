@@ -1,0 +1,1821 @@
+version: '3'
+
+vars:
+  GO_DIR: lycaon
+  SCRIPTS_DIR: '{{.ROOT_DIR}}/scripts'
+  BIN_DIR:
+    sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py bin {{.ROOT_DIR}}
+  BUILD_DIR:
+    sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py build {{.ROOT_DIR}}
+  ARTIFACT_DIR:
+    sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py artifacts {{.ROOT_DIR}}
+
+tasks:
+  default:
+    desc: Fast local checks (handoff default)
+    cmds:
+      - task: check-fast
+
+  setup-dev:
+    desc: One-time complete dev setup — toolchains, dependencies, pinned tools, bundled runtimes
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/setup-dev.sh {{.CLI_ARGS}}
+
+  licenses:notices:
+    desc: Generate THIRD-PARTY-NOTICES.md (Go + Den npm + Tauri crates + bundled binaries); fail-closed on unknown licenses
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v cargo
+        msg: cargo required — install Rust from https://rustup.rs
+      - sh: test -d lycaon-den/node_modules
+        msg: lycaon-den/node_modules missing — run bun install in lycaon-den
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/licenses-notices.sh
+
+  comments:lint:
+    desc: Scan repository source comments
+    internal: true
+    dir: scripts/commentlint
+    cmds:
+      - go run . --root ../.. --config .commentlint.json {{.CLI_ARGS}}
+
+  comments:test:
+    desc: Test the source comment scanner
+    internal: true
+    dir: scripts/commentlint
+    cmds:
+      - go test ./...
+
+  comments:check:
+    desc: Test the source comment scanner and scan the repository
+    cmds:
+      - task: comments:test
+      - task: comments:lint
+
+  dev:signing-identity:
+    desc: 'macOS — provision the stable self-signed identity dev builds are signed with (`-- --remove` to undo)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/dev-signing-identity.sh {{.CLI_ARGS}}
+
+  build:
+    desc: Compile all Go packages in lycaon/
+    dir: '{{.GO_DIR}}'
+    sources:
+      - '**/*.go'
+      - 'internal/harnessfixture/contract.json'
+      - 'internal/documentcore/**'
+      - '../scripts/build-document-core.sh'
+      - '../scripts/document-core-manifest.py'
+      - 'internal/db/*.sql'
+      - 'internal/db/released-baselines.json'
+      - 'internal/backup/archive-limits.json'
+      - go.mod
+      - go.sum
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/document-core-manifest.py check
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
+
+  build:cross:
+    desc: Cross-compile smoke for GOOS=windows — guards platform-tagged files CI's linux runner never builds
+    dir: '{{.GO_DIR}}'
+    sources:
+      - '**/*.go'
+      - 'internal/harnessfixture/contract.json'
+      - 'internal/documentcore/**'
+      - '../scripts/build-document-core.sh'
+      - '../scripts/document-core-manifest.py'
+      - 'internal/db/*.sql'
+      - 'internal/db/released-baselines.json'
+      - 'internal/backup/archive-limits.json'
+      - go.mod
+      - go.sum
+    env:
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/document-core-manifest.py check
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
+
+  build:lycaon-dev:
+    desc: Build lycaon-dev + sibling pw-logs — local den:sidecar + stable @self MCP (not go run)
+    dir: '{{.GO_DIR}}'
+    sources:
+      - '**/*.go'
+      - 'internal/harnessfixture/contract.json'
+      - 'internal/documentcore/**'
+      - '../scripts/build-document-core.sh'
+      - '../scripts/document-core-manifest.py'
+      - 'internal/db/*.sql'
+      - 'internal/db/released-baselines.json'
+      - 'internal/backup/archive-limits.json'
+      - 'config/**/*'
+      - go.mod
+      - go.sum
+      - '../VERSION'
+      - '../scripts/sign-dev-binary.sh'
+      - '../scripts/dev-signing-config.sh'
+      - '../scripts/build-dev-engine.sh'
+      - '../scripts/resolve-opengrep.sh'
+      - '../scripts/stage-bundled-opengrep.sh'
+    generates:
+      - '{{.BUILD_DIR}}/lycaon-dev'
+      - '{{.BUILD_DIR}}/pw-logs'
+    status:
+      - env -u LYCAON_OPENGREP_CANDIDATE '{{.BUILD_DIR}}/lycaon-dev' scan engines verify-bundled --root {{.ROOT_DIR}}/lycaon-den/src-tauri/engine-root >/dev/null
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/build-dev-engine.sh
+
+  build:decide:
+    desc: Build the decision engine sidecar (bialy) into the build directory
+    sources:
+      - 'lycaon/internal/decide/native/src/**/*.rs'
+      - lycaon/internal/decide/native/Cargo.toml
+      - lycaon/internal/decide/native/Cargo.lock
+      - scripts/build-decide.sh
+    generates:
+      - '{{.BUILD_DIR}}/bialy'
+    preconditions:
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/build-decide.sh
+
+  browser:ensure:
+    desc: Provision pinned chrome-headless-shell into the development browser cache (download-once)
+    deps:
+      - build:lycaon-dev
+    env:
+      # The development channel shares the managed browser cache.
+      LYCAON_DEV: '1'
+    cmds:
+      - '{{.BUILD_DIR}}/lycaon-dev browser ensure'
+
+  gitengine:fetch:
+    desc: Download and SHA-256-verify the pinned dugite-native git toolchain into engine-root/gitengine
+    sources:
+      - lycaon/config/gitengine/pin.yaml
+      - '{{.SCRIPTS_DIR}}/gitengine-fetch.sh'
+    generates:
+      - lycaon-den/src-tauri/engine-root/gitengine/VERSION
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/gitengine-fetch.sh
+
+  lint:fast:
+    desc: Go vet + fast golangci-lint
+    dir: '{{.GO_DIR}}'
+    sources:
+      - '**/*.go'
+      - .golangci.yml
+      - .deadcode-exclude
+      - '{{.SCRIPTS_DIR}}/lint-go.sh'
+      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
+
+  lint:full:
+    desc: Go vet + full golangci-lint + deadcode
+    dir: '{{.GO_DIR}}'
+    sources:
+      - '**/*.go'
+      - .golangci.yml
+      - '{{.SCRIPTS_DIR}}/lint-go.sh'
+      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/lint-go.sh full {{.CLI_ARGS}}
+
+  lint:vuln:
+    desc: Offline govulncheck symbol scan against the vendored database (required in check; allowlist in lycaon/govulncheck-allowlist.yaml)
+    dir: '{{.GO_DIR}}'
+    # The database is vendored so one source produces one verdict; freshness is
+    # lint:vuln:fresh, which runs where the network is available.
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/lint-vuln.sh
+
+  lint:vuln:vendor:
+    desc: Re-materialize the pinned Go vulnerability database, pruned to this module's dependencies
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/vendor-vulndb.py
+
+  lint:vuln:vendor:check:
+    desc: Offline — verify the vendored vulnerability database against its pin and this module's dependencies
+    sources:
+      - lycaon/vulndb/**/*
+      - lycaon/vulndb-provenance.json
+      - lycaon/go.mod
+      - lycaon/go.sum
+      - scripts/vendor-vulndb.py
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/vendor-vulndb.py --check
+
+  lint:vuln:fresh:
+    desc: Scheduled — govulncheck against the live upstream database, to catch disclosures made since the pin
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_VULNDB: https://vuln.go.dev
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/lint-vuln.sh
+
+  test:race:
+    desc: Go race detector with full integration scenarios (excludes test/security); release gate
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:race -- {{.CLI_ARGS}}
+
+  perf:bench:
+    desc: 'Run all Go microbenchmarks repeatedly; PERF_BENCH_BASELINE=/path compares reports'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/go-bench.sh {{.CLI_ARGS}}
+
+  perf:sidecar:
+    desc: 'Release-sidecar workload: boot, project, task, prompt, source, concurrency, resources, and correctness'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - mkdir -p '{{.BUILD_DIR}}' '{{.ARTIFACT_DIR}}/perf'
+      - >-
+        go build -tags=paintedwolf_release,paintedwolf_performance
+        -ldflags="-X github.com/lycaon/lycaon/internal/version.Version=$(tr -d '[:space:]' < ../VERSION)"
+        -o '{{.BUILD_DIR}}/lycaon-perf-sidecar' ./cmd/lycaon
+      - >-
+        go run ./cmd/lycaon-perf
+        --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
+        --output '{{.ARTIFACT_DIR}}/perf/sidecar.json'
+        --scale medium --enforce {{.CLI_ARGS}}
+
+  perf:soak:
+    desc: 'Long sidecar stability run; SOAK defaults to 30m and may be overridden'
+    dir: '{{.GO_DIR}}'
+    vars:
+      SOAK: '{{default "30m" .SOAK}}'
+    cmds:
+      - mkdir -p '{{.BUILD_DIR}}' '{{.ARTIFACT_DIR}}/perf'
+      - >-
+        go build -tags=paintedwolf_release,paintedwolf_performance
+        -ldflags="-X github.com/lycaon/lycaon/internal/version.Version=$(tr -d '[:space:]' < ../VERSION)"
+        -o '{{.BUILD_DIR}}/lycaon-perf-sidecar' ./cmd/lycaon
+      - >-
+        go run ./cmd/lycaon-perf
+        --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
+        --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
+        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} --enforce {{.CLI_ARGS}}
+
+  check:coverage:
+    desc: Minimum statement coverage on internal/* (default 62%% floor)
+    sources:
+      - 'lycaon/**/*.go'
+      - '{{.SCRIPTS_DIR}}/coverage-check.sh'
+      - '{{.SCRIPTS_DIR}}/coverage-packages.sh'
+      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
+      - '{{.SCRIPTS_DIR}}/go-test-digest.sh'
+      - '{{.SCRIPTS_DIR}}/test-digest.py'
+      - '{{.SCRIPTS_DIR}}/verification_timings.py'
+      - 'lycaon/coverage-exempt.txt'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/coverage-check.sh
+
+  check:coverage:packages:
+    desc: 'Per-package coverage report for internal/* (advisory; COVERAGE_PKG_ENFORCE=1 to gate)'
+    sources:
+      - 'lycaon/**/*.go'
+      - 'lycaon/coverage-exempt.txt'
+      - '{{.SCRIPTS_DIR}}/coverage-packages.sh'
+      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
+      - '{{.SCRIPTS_DIR}}/go-test-digest.sh'
+      - '{{.SCRIPTS_DIR}}/test-digest.py'
+      - '{{.SCRIPTS_DIR}}/verification_timings.py'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/coverage-packages.sh
+
+  test:short:
+    desc: Go unit and component tests with -short (excludes contract, external integration, wiring, smoke, and HTTP journey tiers); failures condensed via digest
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:short -- {{.CLI_ARGS}}
+
+  test:pause:
+    desc: Pause admission of local verification runs across checkouts
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py pause {{.CLI_ARGS}}
+
+  test:resume:
+    desc: Resume queued local verification runs
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py resume
+
+  test:status:
+    desc: Show the shared verification queue, advisories, and active worker budget
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py status
+
+  test:cancel:
+    desc: 'Withdraw one queued or running request: `-- <ticket> --reason "<why>" [--force]`'
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py cancel -- {{.CLI_ARGS}}
+
+  test:runner:
+    desc: Verify execution scheduling, cancellation, and worker limits
+    cmds:
+      - python3 -m unittest discover -s scripts -p 'test_*execution.py'
+
+  test:stress:
+    desc: Large database, source-tree, Git operation, attribution, and working-year storage fixtures
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:stress -- {{.CLI_ARGS}}
+
+  test:wiring:
+    desc: Integration harness tests (test/wiring); included in test:full and test:race, excluded from test:short
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:wiring -- {{.CLI_ARGS}}
+
+  test:integration:
+    desc: Assembled Go component tests and randomized SQLite lifecycle properties
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:integration -- {{.CLI_ARGS}}
+
+  test:full:
+    desc: Full Go behavior and required bundled scanner tests (mock LLM)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:full -- {{.CLI_ARGS}}
+
+  test:live-scanners:
+    desc: 'Catalog scanner rows against the real installed CLIs — runs whichever binaries are on PATH, skips the rest. Never in a blocking gate; the only check that catches a row whose argv the tool no longer accepts.'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags live_scanners --name test:live-scanners -- ./internal/scan/drivers/external/ -run TestCatalogScannerLive
+
+  test:contract:
+    desc: Repository contracts (wire, generated artifacts, catalogs, and architectural seams)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:contract -- {{.CLI_ARGS}}
+
+  # Confinement and gated integration tests use separate filters.
+  test:seatbelt:
+    desc: 'Applied Seatbelt + Available()-gated confinement (--full, darwin)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
+      # The scope contract derives this applied-confinement inventory.
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... -run '^(TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce)$'
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+
+  test:fuzz:
+    desc: 'Run Go native fuzz targets briefly (FUZZTIME=20s default; e.g. task test:fuzz -- ./internal/parse/...)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/fuzz-short.sh {{.CLI_ARGS | default "./..."}}
+
+  test:failed:
+    desc: Replay the latest failed Go run with its source, flags, and test environment
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/go-test-failed.sh
+
+  test:fail-messages:
+    desc: Rewrite bare t.Fatal(err) → testutil.FailErr with inferred step labels
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py
+
+  test:fail-messages:check:
+    desc: CI guard — fail if any bare t.Fatal(err) patterns remain in test files
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py --check
+
+  check:digest:
+    desc: 'Lighter summarized pass (build + lint:fast + Go + Den + harness canary); not the ship gate. FULL=1 for full Go tests'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/check-summary.sh
+
+  test:digest:
+    desc: 'Go tests only, condensed to a failure digest (e.g. task test:digest -- ./internal/workflow/...)'
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:digest -- {{.CLI_ARGS}}
+
+  gocache:trim:
+    desc: 'Apply the Go cache size budget and trim compiled and diagnostic caches unused for more than a week'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/gocache-trim.sh
+
+  test:security:
+    desc: Security HTTP journey E2E (test/security; full run, not -short)
+    # HTTP journeys need a wider per-package budget.
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:security -- {{.CLI_ARGS}}
+
+  e2e:den:
+    desc: 'Tier B — Den Playwright vs Docker sidecar + Vite (Docker required; filter: LYCAON_E2E_GREP=boot)'
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+      - sh: command -v docker
+        msg: Docker required for ./task e2e:den
+      - sh: docker info >/dev/null 2>&1
+        msg: Docker daemon must be running for ./task e2e:den
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/e2e-den.sh {{.CLI_ARGS}}
+
+  e2e:den:desktop:
+    desc: Tier C — Den Playwright vs Tauri dev + attach sidecar (needs Rust/cargo; macOS CI)
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v cargo
+        msg: cargo required for Tauri desktop E2E
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/e2e-den-desktop.sh {{.CLI_ARGS}}
+
+  den:harness:
+    desc: 'LLM-drivable native stack — mock-LLM sidecar + Vite, same-origin (no Docker, no CORS). Ctrl-C to stop.'
+    # Interactive stacks run on every invocation.
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-harness.sh {{.CLI_ARGS}}
+
+  den:harness:test:
+    desc: 'Run Playwright web tier against the native (Docker-free) harness stack (filter: -- --grep "name")'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-harness-test.sh {{.CLI_ARGS}}
+
+  den:webkit:scroll:
+    desc: 'WebKit scroll-thread invariants: host wheel glides into the harness Den in a real WKWebView (macOS)'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-webkit-scroll.sh
+
+  den:harness:canary:
+    desc: 'Minimal harness e2e slice (boot + driver chat + prompt) — the tier-is-alive check run by check:digest'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-harness-canary.sh
+
+  e2e:cleanup:
+    desc: Remove leftover E2E Docker projects/volumes and Playwright output (safe after failed runs)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/e2e-cleanup.sh
+
+  e2e:
+    desc: All self-contained E2E tiers (API + Den web)
+    cmds:
+      - task: test:security
+      - task: e2e:den
+
+  den:typecheck:
+    desc: Frontend TypeScript check (lycaon-den)
+    dir: lycaon-den
+    sources:
+      - 'src/**/*.{ts,tsx}'
+      - tsconfig.json
+      - package.json
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run typecheck
+
+  den:lint:
+    desc: 'Frontend ESLint (errors only): typescript-eslint + eslint-plugin-solid'
+    dir: lycaon-den
+    sources:
+      - 'src/**/*.{ts,tsx}'
+      - eslint.config.js
+      - package.json
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint
+
+  den:lint:full:
+    desc: Frontend ESLint with warnings visible (full report)
+    dir: lycaon-den
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint:full
+
+  den:lint:fix:
+    desc: Frontend ESLint auto-fix
+    dir: lycaon-den
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bun run lint:fix
+
+  den:test:
+    desc: Frontend Vitest including repo-scan suites (lycaon-den); failures condensed via digest
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test
+
+  den:test:fast:
+    desc: Vitest seam canaries (model + DOM; exhaustive suite runs at closeout)
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    env:
+      LYCAON_VITEST_FAST: '1'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:fast
+
+  den:test:digest:
+    desc: 'Vitest with failure digest (e.g. task den:test:digest -- src/**/*.test.ts)'
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
+
+  den:test:transcript-scale:
+    desc: 'Transcript hydration performance at 5000 and 10000 messages'
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - LYCAON_VITEST_PERF=1 bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:transcript-scale -- src/chat/transcript/layout/transcript-scale.perf.test.ts
+
+  den:test:rust:
+    desc: Tauri shell Rust tests and operational examples
+    dir: lycaon-den/src-tauri
+    sources:
+      - 'src/**/*.rs'
+      - 'examples/**/*.rs'
+      - build.rs
+      - 'tauri*.conf.json'
+      - 'permissions/**/*.toml'
+      - 'capabilities/**/*.json'
+      - ../../VERSION
+      - ../../packaging/update-keys.json
+      - ../../lycaon/internal/backup/archive-limits.json
+      - ../shared/local-file-formats.json
+      - Cargo.toml
+      - Cargo.lock
+    preconditions:
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+    cmds:
+      - cargo test --all-targets --quiet
+
+  decide:test:
+    desc: Decision engine (bialy) Rust tests
+    dir: lycaon/internal/decide/native
+    sources:
+      - 'src/**/*.rs'
+      - Cargo.toml
+      - Cargo.lock
+    env:
+      CARGO_TARGET_DIR: '{{.BUILD_DIR}}/decide-target'
+      MLX_RS_METAL_PATH: '{{.BUILD_DIR}}/mlx-metal'
+    preconditions:
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+    cmds:
+      # Parity tests use the shipped binary's features.
+      - cargo test --all-targets --quiet --features "$(bash {{.SCRIPTS_DIR}}/decide-features.sh)"
+
+  den:test:coverage:
+    desc: Frontend Vitest with v8 coverage report
+    dir: lycaon-den
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - bun run test:coverage
+
+  den:coverage-check:
+    desc: Fail if lycaon-den coverage is below DEN_COVERAGE_MIN_* floors
+    sources:
+      - lycaon-den/src/**/*
+      - '{{.SCRIPTS_DIR}}/den-coverage-check.sh'
+      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
+      - '{{.SCRIPTS_DIR}}/vitest-digest.sh'
+      - '{{.SCRIPTS_DIR}}/vitest-digest.py'
+      - '{{.SCRIPTS_DIR}}/verification_timings.py'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-coverage-check.sh
+
+  den:sidecar:stop:
+    desc: 'Stop local engines — dev-store lock holders, LYCAON_ADDR listeners, and bundled pw processes'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-sidecar-stop.sh
+
+  den:sidecar:
+    desc: 'Den dev terminal 1 — Go sidecar (stderr logs); pair with den:dev. Refuses if a live engine already holds LYCAON_ADDR'
+    # Foreground servers run on every invocation.
+    # Nested tasks require explicit variables from debug wrappers.
+    deps:
+      - build:lycaon-dev
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+    vars:
+      LYCAON_LLM_DEBUG:
+        sh: 'printf %s "${LYCAON_LLM_DEBUG:-0}"'
+      LYCAON_HTTP_DEBUG:
+        sh: 'printf %s "${LYCAON_HTTP_DEBUG:-0}"'
+      LYCAON_SSE_DEBUG:
+        sh: 'printf %s "${LYCAON_SSE_DEBUG:-0}"'
+      LYCAON_DEBUG_SESSION:
+        sh: 'printf %s "${LYCAON_DEBUG_SESSION:-0}"'
+      LYCAON_LOG_LEVEL:
+        sh: 'printf %s "${LYCAON_LOG_LEVEL:-info}"'
+      LYCAON_TOOL_FEEDBACK_VERBOSE:
+        sh: 'printf %s "${LYCAON_TOOL_FEEDBACK_VERBOSE:-0}"'
+      LYCAON_DB_FRESH:
+        sh: 'printf %s "${LYCAON_DB_FRESH:-0}"'
+    env:
+      LYCAON_LLM_DEBUG: '{{.LYCAON_LLM_DEBUG}}'
+      LYCAON_HTTP_DEBUG: '{{.LYCAON_HTTP_DEBUG}}'
+      LYCAON_SSE_DEBUG: '{{.LYCAON_SSE_DEBUG}}'
+      LYCAON_DEBUG_SESSION: '{{.LYCAON_DEBUG_SESSION}}'
+      LYCAON_LOG_LEVEL: '{{.LYCAON_LOG_LEVEL}}'
+      LYCAON_TOOL_FEEDBACK_VERBOSE: '{{.LYCAON_TOOL_FEEDBACK_VERBOSE}}'
+      LYCAON_DB_FRESH: '{{.LYCAON_DB_FRESH}}'
+    cmds:
+      # Preflight reports browser provisioning failures after startup.
+      - cmd: |
+          if ! '{{.BIN_DIR}}/task' browser:ensure; then
+            echo 'warning: browser provisioning failed; retry when the host is online with ./task browser:ensure' >&2
+          fi
+      # Preflight reports missing dependencies after startup.
+      - cmd: bash {{.SCRIPTS_DIR}}/gitengine-ensure.sh
+        ignore_error: true
+      - bash {{.SCRIPTS_DIR}}/den-dev-sidecar.sh
+
+  den:sidecar:fresh:
+    desc: 'Den sidecar — wipe Den session state, db:wipe, serve with LYCAON_DB_FRESH=1'
+    cmds:
+      # The guarded wipe requires the engine to be stopped.
+      - task: den:sidecar:stop
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh wipe
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh mark
+      - task: db:wipe
+      - task: den:sidecar
+        vars:
+          LYCAON_DB_FRESH: '1'
+
+  db:wipe:
+    desc: 'Remove store.db (+ WAL) under the channel config dir'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/db-wipe.sh
+
+  den:sidecar:llm-debug:
+    desc: 'Den sidecar with LYCAON_LLM_DEBUG — provider payloads to ~/.config/paintedwolf-dev/llm-requests.jsonl'
+    vars:
+      LYCAON_DB_FRESH:
+        sh: 'printf %s "${LYCAON_DB_FRESH:-0}"'
+    cmds:
+      - task: den:sidecar
+        vars:
+          LYCAON_LLM_DEBUG: '1'
+          LYCAON_DB_FRESH: '{{.LYCAON_DB_FRESH}}'
+
+  den:sidecar:llm-debug:fresh:
+    desc: 'LLM debug capture + Den session wipe + db:wipe + LYCAON_DB_FRESH=1'
+    cmds:
+      # The guarded wipe requires the engine to be stopped.
+      - task: den:sidecar:stop
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh wipe
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh mark
+      - task: db:wipe
+      - task: den:sidecar:llm-debug
+        vars:
+          LYCAON_DB_FRESH: '1'
+
+  den:sidecar:full-debug:
+    desc: 'Den sidecar with full debug capture — slog, HTTP, SSE, LLM payloads, tool timing, verbose tool rejects'
+    vars:
+      LYCAON_DB_FRESH:
+        sh: 'printf %s "${LYCAON_DB_FRESH:-0}"'
+    cmds:
+      - task: den:sidecar
+        vars:
+          LYCAON_DEBUG_SESSION: '1'
+          LYCAON_LOG_LEVEL: debug
+          LYCAON_LLM_DEBUG: '1'
+          LYCAON_HTTP_DEBUG: '1'
+          LYCAON_SSE_DEBUG: '1'
+          LYCAON_TOOL_DEBUG: '1'
+          LYCAON_DEN_PERF_DEBUG: '1'
+          LYCAON_PERF_DEBUG: '1'
+          LYCAON_TOOL_FEEDBACK_VERBOSE: '1'
+          LYCAON_DB_FRESH: '{{.LYCAON_DB_FRESH}}'
+
+  den:sidecar:full-debug:fresh:
+    desc: 'Full debug capture + regen codegen + Den session wipe + db:wipe + LYCAON_DB_FRESH=1'
+    cmds:
+      - task: codegen:tool-command-equivalence
+      - task: codegen:guidance-registry
+      # The guarded wipe requires the engine to be stopped.
+      - task: den:sidecar:stop
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh wipe
+      - bash {{.SCRIPTS_DIR}}/den-fresh-session-state.sh mark
+      - task: db:wipe
+      - task: den:sidecar:full-debug
+        vars:
+          LYCAON_DB_FRESH: '1'
+
+  debug:tail:
+    desc: 'Follow sidecar slog capture log (LYCAON_LOG_FILE or latest session sidecar.log)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail log
+
+  debug:clear:
+    desc: 'Truncate sidecar slog capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear log
+
+  debug:clear-all:
+    desc: 'Truncate all dev capture logs in the latest session, including Den and sidecar performance'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear-all
+
+  http:debug:tail:
+    desc: 'Follow HTTP capture log (LYCAON_HTTP_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail http
+
+  http:debug:clear:
+    desc: 'Truncate HTTP capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear http
+
+  sse:debug:tail:
+    desc: 'Follow SSE capture log (LYCAON_SSE_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail sse
+
+  sse:debug:clear:
+    desc: 'Truncate SSE capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear sse
+
+  tool:debug:tail:
+    desc: 'Follow tool invocation capture log (LYCAON_TOOL_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail tool
+
+  tool:debug:clear:
+    desc: 'Truncate tool invocation capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear tool
+
+  den-perf:debug:tail:
+    desc: 'Follow Den main-thread perf/stall capture (LYCAON_DEN_PERF_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail den-perf
+
+  den-perf:debug:clear:
+    desc: 'Truncate Den main-thread perf/stall capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear den-perf
+
+  perf:debug:tail:
+    desc: 'Follow sidecar performance capture (LYCAON_PERF_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail perf
+
+  perf:debug:clear:
+    desc: 'Truncate sidecar performance capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear perf
+
+  llm:debug:tail:
+    desc: 'Follow LLM capture log (LYCAON_LLM_DEBUG_FILE or session/default path)'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh tail llm
+
+  llm:debug:clear:
+    desc: 'Truncate LLM capture log'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/debug-capture.sh clear llm
+
+  # Log viewers use the development capture tree.
+  logs:
+    desc: 'Interactive log browser (TUI) over the latest full-debug capture; plain dashboard when piped'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs {{.CLI_ARGS}}
+
+  logs:tui:
+    desc: 'Force the interactive log browser (LLM/HTTP/SSE/sessions, expand & follow)'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs tui {{.CLI_ARGS}}
+
+  logs:prompt:
+    desc: 'Pretty-print one LLM call transcript — `./task logs:prompt -- [N] [--no-system] [--tools]` (default: last call)'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs prompt {{.CLI_ARGS}}
+
+  logs:llm:
+    desc: 'Compact list of captured LLM calls — `./task logs:llm -- [--agent NAME] [--surface NAME] [-n N]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs llm {{.CLI_ARGS}}
+
+  logs:http:
+    desc: 'Status-colored HTTP request log — `./task logs:http -- [--errors] [-n N]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs http {{.CLI_ARGS}}
+
+  logs:den-perf:
+    desc: 'Den main-thread stall/perf log — `./task logs:den-perf -- [-f] [--json]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs den-perf {{.CLI_ARGS}}
+
+  logs:sse:
+    desc: 'SSE event stream by topic — `./task logs:sse -- [--topic NAME] [-n N]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs sse {{.CLI_ARGS}}
+
+  logs:sessions:
+    desc: 'Coordinator/worker session topology tree'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs sessions {{.CLI_ARGS}}
+
+  logs:dump:
+    desc: 'Annotated synthetic coordinator prompt — `./task logs:dump -- --fixture implement_investigate_idle [--previous-family orchestrate]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs dump {{.CLI_ARGS}}
+
+  logs:config:
+    desc: 'View or change logs viewer settings — `./task logs:config -- [get KEY | set KEY VALUE | path]`'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - go run ./cmd/lycaon-debug logs config {{.CLI_ARGS}}
+
+  eval:tool-usage:
+    desc: 'Agent outcomes: tool-usage driver or BENCHMARK=prepare|test|run|service|report|analyze|smoke|providers'
+    dir: '{{.GO_DIR}}'
+    env:
+      LYCAON_DEV: '1'
+    cmds:
+      - |
+        case '{{.BENCHMARK | default ""}}' in
+          test)
+            cd ..
+            bash scripts/test-source-snapshot.sh run -- python3 scripts/coordinator-benchmark/python_runtime.py -m unittest discover -s scripts/coordinator-benchmark -p 'test_*.py' {{.CLI_ARGS}} ;;
+          providers) python3 ../scripts/coordinator-benchmark/python_runtime.py ../scripts/coordinator-benchmark/provider_checks.py {{.CLI_ARGS}} ;;
+          prepare|run|service|report|analyze|smoke) python3 ../scripts/coordinator-benchmark/python_runtime.py ../scripts/coordinator-benchmark/{{.BENCHMARK}}.py {{.CLI_ARGS}} ;;
+          '')
+            mkdir -p '{{.BUILD_DIR}}'
+            go build -o '{{.BUILD_DIR}}/lycaon-debug' ./cmd/lycaon-debug
+            if [ '{{.BUILD_ONLY | default "false"}}' != 'true' ]; then
+              '{{.BUILD_DIR}}/lycaon-debug' eval tool-usage {{.CLI_ARGS}}
+            fi ;;
+          *) echo 'Unknown benchmark action' >&2; exit 2 ;;
+        esac
+
+  den:dev:
+    desc: 'Den dev terminal 2 — Tauri shell (attach to den:sidecar; no bundled spawn)'
+    # Interactive shells run on every invocation.
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health check
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+      - sh: command -v rustc
+        msg: rustc required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+      - sh: test -d lycaon-den/node_modules
+        msg: lycaon-den/node_modules missing — run ./task setup-dev
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-dev-app.sh
+
+  den:app:
+    desc: 'Local .app with Web Inspector; `-- --debug` enables an isolated config override, `-- --no-devtools` matches shipped UI, `-- --open` launches it'
+    # Whole-tree inputs require a build on every invocation.
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v cargo
+        msg: cargo required — install Rust from https://rustup.rs
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-build-app.sh {{.CLI_ARGS}}
+
+  den:stage-engine:
+    desc: 'Stage the sidecar and maintained scanner for Tauri development without the browser payload'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+
+  den:bundle:
+    desc: 'Build desktop bundle (.dmg on macOS; AppImage on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v cargo
+        msg: cargo required — install Rust from https://rustup.rs
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh
+
+  bundle:verify:
+    desc: 'Audit a built .app/.dmg — arch slices, macOS floor, dylib paths, signing, hardened runtime, staple'
+    preconditions:
+      - sh: '[ "$(uname -s)" = "Darwin" ]'
+        msg: bundle:verify is macOS-only
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/verify-bundle.sh {{.CLI_ARGS}}
+
+  bundle:smoke:
+    desc: 'Launch a stably signed .app/.dmg through LaunchServices and prove its GUI-spawned engine serves (--app PATH | --dmg PATH)'
+    preconditions:
+      - sh: '[ "$(uname -s)" = "Darwin" ]'
+        msg: bundle:smoke is macOS-only
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/bundle-smoke.sh {{.CLI_ARGS}}
+
+  openapi:bundle:
+    desc: Bundle modular docs/openapi/ sources to docs/openapi.yaml
+    sources:
+      - docs/openapi/**/*
+      - '{{.SCRIPTS_DIR}}/bundle-openapi.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - '{{.SCRIPTS_DIR}}/redocly-version.sh'
+    preconditions:
+      - sh: command -v npx
+        msg: npx required (Node 26+)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh generate -- bash {{.SCRIPTS_DIR}}/bundle-openapi.sh bundle
+
+  openapi:bundle:check:
+    desc: Fail if docs/openapi.yaml is stale vs modular sources
+    sources:
+      - docs/openapi/**/*
+      - docs/openapi.yaml
+      - '{{.SCRIPTS_DIR}}/bundle-openapi.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - '{{.SCRIPTS_DIR}}/redocly-version.sh'
+    preconditions:
+      - sh: command -v npx
+        msg: npx required (Node 26+)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/bundle-openapi.sh check
+
+  codegen:tool-command-equivalence:
+    desc: Generate exact command equivalence tables and sync tool-schema replaces suffixes
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
+      - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/schemas/**/*
+    generates:
+      - internal/tools/command_equivalence_gen.go
+      - internal/confine/read_habit_catalog_gen.go
+    cmds:
+      - go run ./cmd/codegen-tool-command-equivalence --root .
+
+  codegen:tool-command-equivalence:check:
+    desc: Fail if command equivalence codegen outputs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
+      - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - internal/tools/command_equivalence_gen.go
+      - internal/confine/read_habit_catalog_gen.go
+    cmds:
+      - go run ./cmd/codegen-tool-command-equivalence --root . --check
+
+  codegen:guidance-registry:
+    desc: Regenerate schemas/guidance_registry.json from stock pack policy/ dirs (never rewrites hint YAML)
+    dir: '{{.GO_DIR}}'
+    generates:
+      - ../schemas/guidance_registry.json
+    cmds:
+      - go run ./cmd/codegen-guidance-registry --root .
+
+  codegen:guidance-registry:check:
+    desc: Fail if guidance_registry.json is stale vs stock pack policy/
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/codegen-guidance-registry --root . --check
+
+  oar:vendor:
+    desc: Copy the Open Agent Rules schemas + vocabulary from the standard into schemas/oar/ (lycaon consumes the standard; it does not publish it)
+    cmds:
+      - ./scripts/vendor-oar-spec.sh
+
+  oar:vendor:check:
+    desc: Verify vendored OAR members and their pinned source manifest
+    sources:
+      - schemas/oar/**/*
+      - scripts/vendor-oar-spec.sh
+    cmds:
+      - ./scripts/vendor-oar-spec.sh --check
+
+  scan:rules:vendor:
+    desc: Re-materialize every vendored OpenGrep rule catalog at its pinned commit in rules-provenance.yaml
+    cmds:
+      - ./scripts/vendor-scan-rules.sh
+
+  scan:rules:vendor:bump:
+    desc: 'Move one vendored rule catalog pin: ./task scan:rules:vendor:bump -- <id>=<tag|branch|sha>'
+    cmds:
+      - ./scripts/vendor-scan-rules.sh --bump {{.CLI_ARGS}}
+
+  scan:rules:vendor:check:
+    desc: Offline — verify vendored rule catalogs
+    sources:
+      - lycaon/config/runtime/scanners/rules/vendor/**/*
+      - lycaon/config/runtime/scanners/rules-provenance.yaml
+      - scripts/vendor-scan-rules.sh
+    cmds:
+      - ./scripts/vendor-scan-rules.sh --check
+
+  secret-mint:vendor:
+    desc: Re-materialize the zxcvbn passwords list at its pinned commit
+    cmds:
+      - ./scripts/vendor-zxcvbn-passwords.sh
+
+  secret-mint:vendor:bump:
+    desc: 'Move the zxcvbn passwords pin: ./task secret-mint:vendor:bump -- <id>=<tag|branch|sha>'
+    cmds:
+      - ./scripts/vendor-zxcvbn-passwords.sh --bump {{.CLI_ARGS}}
+
+  secret-mint:vendor:check:
+    desc: Offline — fail if the vendored zxcvbn passwords list was hand-edited or drifted from its pin
+    sources:
+      - lycaon/config/packs/painted-wolf/security/host/secret-mint/vendor/**/*
+      - lycaon/config/packs/painted-wolf/security/host/secret-mint/zxcvbn-provenance.yaml
+      - scripts/vendor-zxcvbn-passwords.sh
+    cmds:
+      - ./scripts/vendor-zxcvbn-passwords.sh --check
+
+  codegen:approval-explanations:
+    desc: Scaffold/enrich each pack's approvals/ explanation registry entries
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/**/approvals/**
+      - internal/approvals/**
+      - internal/settings/approval_tiers.generated.go
+      - internal/settings/reversibility.go
+      - cmd/codegen-approval-explanations/**/*
+    cmds:
+      - go run ./cmd/codegen-approval-explanations
+
+  codegen:approval-explanations:check:
+    desc: Fail if approval explanation registry is stale or incomplete
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/**/approvals/**
+      - internal/approvals/**
+      - internal/settings/approval_tiers.generated.go
+      - internal/settings/reversibility.go
+      - cmd/codegen-approval-explanations/**/*
+    cmds:
+      - go run ./cmd/codegen-approval-explanations --check
+
+  codegen:native-tool-contracts:
+    desc: >-
+      Generate host approval membership and exact invocation contracts from
+      pack native-tools.yaml
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - cmd/codegen-native-tool-contracts/**/*
+      - internal/nativemanifest/**/*
+    generates:
+      - internal/settings/approval_tiers.generated.go
+      - internal/toolcontract/contracts.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-native-tool-contracts
+        --out-go ./internal/settings/approval_tiers.generated.go
+        --out-contract-go ./internal/toolcontract/contracts.generated.go
+
+  codegen:native-tool-contracts:check:
+    desc: Fail if native tool contract outputs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - cmd/codegen-native-tool-contracts/**/*
+      - internal/nativemanifest/**/*
+      - internal/settings/approval_tiers.generated.go
+      - internal/toolcontract/contracts.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-native-tool-contracts
+        --out-go ./internal/settings/approval_tiers.generated.go
+        --out-contract-go ./internal/toolcontract/contracts.generated.go
+        --check
+
+  codegen:worker-branch-tools:
+    desc: >-
+      Generate the host set of tools that require a private write-worker branch
+      from pack native-tools.yaml requires_worker_branch
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - cmd/codegen-worker-branch-tools/**/*
+      - internal/nativemanifest/**/*
+    generates:
+      - internal/tools/worker_branch_tools.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-worker-branch-tools
+        --out-go ./internal/tools/worker_branch_tools.generated.go
+
+  codegen:worker-branch-tools:check:
+    desc: Fail if worker-branch tools codegen output is stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - cmd/codegen-worker-branch-tools/**/*
+      - internal/nativemanifest/**/*
+      - internal/tools/worker_branch_tools.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-worker-branch-tools
+        --out-go ./internal/tools/worker_branch_tools.generated.go
+        --check
+
+  codegen:tool-presentation:
+    desc: >-
+      Generate Den tool activity copy + host/Den transcript visibility lists from
+      pack tool-presentation.yaml
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
+      - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - cmd/codegen-tool-presentation/**/*
+    generates:
+      - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
+      - internal/toolpresentation/visibility.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-tool-presentation --root .
+        --out-ts ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
+        --out-go ./internal/toolpresentation/visibility.generated.go
+
+  codegen:tool-presentation:check:
+    desc: Fail if tool presentation codegen output is stale or drifts from tools/schemas
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
+      - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - cmd/codegen-tool-presentation/**/*
+      - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
+      - internal/toolpresentation/visibility.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-tool-presentation --root .
+        --out-ts ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
+        --out-go ./internal/toolpresentation/visibility.generated.go
+        --check
+
+  # The generator discovers its complete output set.
+  codegen:wire-enums:
+    desc: >-
+      Generate OpenAPI enum fragments, pkg/api consts, and the complete typed
+      EventHub contract from docs/openapi/vocab/*.yaml
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - bash ../scripts/repo-snapshot-lock.sh generate -- bash ../scripts/codegen-wire-enums.sh generate
+
+  codegen:wire-enums:check:
+    desc: Fail if wire-enum codegen outputs are stale vs docs/openapi/vocab
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - bash ../scripts/repo-snapshot-lock.sh read -- bash ../scripts/codegen-wire-enums.sh check
+
+  codegen:client-notices:
+    desc: Generate Den client-notice copy + routing scopes from host/client-notices/
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/host/client-notices/**
+      - cmd/codegen-client-notices/**/*
+      - internal/clientnotice/**/*
+      - config/packs/painted-wolf/platform/host/user-notices/**
+    generates:
+      - ../lycaon-den/src/notices/client-notices.generated.ts
+      - pkg/api/notice_codes.generated.go
+      - ../docs/openapi/components/schemas/notice-code.generated.yaml
+    cmds:
+      - >-
+        go run ./cmd/codegen-client-notices
+        --out-ts ../lycaon-den/src/notices/client-notices.generated.ts
+        --out-go pkg/api/notice_codes.generated.go
+        --out-openapi ../docs/openapi/components/schemas/notice-code.generated.yaml
+        --user-notices-dir config/packs/painted-wolf/platform/host/user-notices
+
+  codegen:client-notices:check:
+    desc: Fail if Den client-notice codegen output is stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/platform/host/client-notices/**
+      - cmd/codegen-client-notices/**/*
+      - internal/clientnotice/**/*
+      - config/packs/painted-wolf/platform/host/user-notices/**
+      - ../lycaon-den/src/notices/client-notices.generated.ts
+      - pkg/api/notice_codes.generated.go
+      - ../docs/openapi/components/schemas/notice-code.generated.yaml
+    cmds:
+      - >-
+        go run ./cmd/codegen-client-notices --check
+        --out-ts ../lycaon-den/src/notices/client-notices.generated.ts
+        --out-go pkg/api/notice_codes.generated.go
+        --out-openapi ../docs/openapi/components/schemas/notice-code.generated.yaml
+        --user-notices-dir config/packs/painted-wolf/platform/host/user-notices
+
+  codegen:host-markers:
+    desc: Generate Den bindings for host transcript markers and worker leg statuses
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-host-markers/**/*
+      - internal/hostmarker/**/*
+      - internal/session/workercompletion/leg_status.go
+    generates:
+      - ../lycaon-den/src/chat/host-markers.generated.ts
+    cmds:
+      - >-
+        go run ./cmd/codegen-host-markers
+        --out-ts ../lycaon-den/src/chat/host-markers.generated.ts
+
+  codegen:host-markers:check:
+    desc: Fail if the Den host-marker bindings are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-host-markers/**/*
+      - internal/hostmarker/**/*
+      - internal/session/workercompletion/leg_status.go
+      - ../lycaon-den/src/chat/host-markers.generated.ts
+    cmds:
+      - >-
+        go run ./cmd/codegen-host-markers --check
+        --out-ts ../lycaon-den/src/chat/host-markers.generated.ts
+
+  codegen:web-research-catalog:
+    desc: >-
+      Generate Den catalog TS, OpenAPI WebSearchProvider enum, and pkg/api
+      provider id consts from web-research-providers.yaml
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/**/web-research-providers.yaml
+      - cmd/codegen-web-research-catalog/**/*
+      - internal/webresearch/catalog.go
+    generates:
+      - ../lycaon-den/src/settings/web-research-catalog.generated.ts
+      - ../docs/openapi/components/schemas/web-search-provider.generated.yaml
+      - pkg/api/webresearch_provider_ids.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-web-research-catalog
+        --out-ts ../lycaon-den/src/settings/web-research-catalog.generated.ts
+        --out-openapi ../docs/openapi/components/schemas/web-search-provider.generated.yaml
+        --out-go ./pkg/api/webresearch_provider_ids.generated.go
+
+  codegen:web-research-catalog:check:
+    desc: Fail if web research catalog / wire-id codegen outputs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/**/web-research-providers.yaml
+      - cmd/codegen-web-research-catalog/**/*
+      - internal/webresearch/catalog.go
+      - ../lycaon-den/src/settings/web-research-catalog.generated.ts
+      - ../docs/openapi/components/schemas/web-search-provider.generated.yaml
+      - pkg/api/webresearch_provider_ids.generated.go
+    cmds:
+      - >-
+        go run ./cmd/codegen-web-research-catalog
+        --out-ts ../lycaon-den/src/settings/web-research-catalog.generated.ts
+        --out-openapi ../docs/openapi/components/schemas/web-search-provider.generated.yaml
+        --out-go ./pkg/api/webresearch_provider_ids.generated.go
+        --check
+
+  codegen:contribution-facts:
+    desc: Generate the Den contribution fact vocabulary and reserved-chord tables from the Go schema
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-contribution-facts/**/*
+      - internal/contribution/vocabulary.go
+    generates:
+      - ../lycaon-den/src/contributions/contribution-facts.generated.ts
+      - ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
+    cmds:
+      - >-
+        go run ./cmd/codegen-contribution-facts
+        --out-ts ../lycaon-den/src/contributions/contribution-facts.generated.ts
+        --out-reserved-ts ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
+
+  codegen:contribution-facts:check:
+    desc: Fail if the contribution fact or reserved-chord codegen output is stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-contribution-facts/**/*
+      - internal/contribution/vocabulary.go
+      - ../lycaon-den/src/contributions/contribution-facts.generated.ts
+      - ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
+    cmds:
+      - >-
+        go run ./cmd/codegen-contribution-facts
+        --out-ts ../lycaon-den/src/contributions/contribution-facts.generated.ts
+        --out-reserved-ts ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
+        --check
+
+  codegen:theme-tokens:
+    desc: >-
+      Derive the baked token stylesheet, CodeMirror highlight style, theme
+      author schema, Den vocabulary map, and token reference from the stock
+      theme units
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-theme-tokens/**/*
+      - internal/theme/**/*
+      - config/packs/painted-wolf/platform/contributions/themes/**/*
+    generates:
+      - ../lycaon-den/src/tokens.generated.css
+      - ../lycaon-den/src/components/source/editor/codemirror-highlight.generated.ts
+      - ../lycaon-den/src/contributions/theme-vocabulary.generated.ts
+      - ../docs/schemas/theme-unit.schema.json
+      - ../docs/theme-tokens.md
+    cmds:
+      - go run ./cmd/codegen-theme-tokens --root .
+
+  codegen:theme-tokens:check:
+    desc: Fail if the theme codegen outputs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-theme-tokens/**/*
+      - internal/theme/**/*
+      - config/packs/painted-wolf/platform/contributions/themes/**/*
+      - ../lycaon-den/src/tokens.generated.css
+      - ../lycaon-den/src/components/source/editor/codemirror-highlight.generated.ts
+      - ../lycaon-den/src/contributions/theme-vocabulary.generated.ts
+      - ../docs/schemas/theme-unit.schema.json
+      - ../docs/theme-tokens.md
+    cmds:
+      - go run ./cmd/codegen-theme-tokens --root . --check
+
+  codegen:dependency-inventory:
+    desc: >-
+      Project dependencies/policy.yaml, the tree's pins, and the upstream snapshot into
+      docs/operations/dependency-inventory.md and .github/dependabot.yml
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/codegen-dependency-inventory --repo ..
+
+  codegen:dependency-inventory:check:
+    desc: Fail if dependencies/ no longer matches the manifests or .github/dependabot.yml is stale (offline)
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/codegen-dependency-inventory --repo .. --check
+
+  codegen:dependency-inventory:upstream:
+    desc: Query package registries into dependencies/upstream.json, then regenerate (network)
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/codegen-dependency-inventory --repo .. --refresh-upstream
+
+  codegen:den-fonts:
+    desc: >-
+      Ship the designkit type pack into the Den bundle — faces, licences, and
+      the font catalog — from lycaon-den/fonts.yaml
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-den-fonts/**/*
+      - internal/browser/designkit/fonts/**/*
+      - internal/browser/designkit/licenses/**/*
+      - internal/browser/designkit/provenance.yaml
+      - ../lycaon-den/fonts.yaml
+    generates:
+      - ../lycaon-den/src/fonts/font-catalog.generated.ts
+      - ../lycaon-den/src/fonts/font-faces.generated.css
+      - ../lycaon-den/public/fonts/**/*
+    cmds:
+      - go run ./cmd/codegen-den-fonts --root .
+
+  codegen:den-fonts:check:
+    desc: Fail if the shipped fonts or the generated catalog are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-den-fonts/**/*
+      - internal/browser/designkit/fonts/**/*
+      - internal/browser/designkit/licenses/**/*
+      - internal/browser/designkit/provenance.yaml
+      - ../lycaon-den/fonts.yaml
+      - ../lycaon-den/src/fonts/font-catalog.generated.ts
+      - ../lycaon-den/src/fonts/font-faces.generated.css
+      - ../lycaon-den/public/fonts/**/*
+    cmds:
+      - go run ./cmd/codegen-den-fonts --root . --check
+
+  codegen:contribution-inventory:
+    desc: >-
+      Derive Den's stock handler inventory and stock frame fixture from the
+      shipped contribution declarations
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-contribution-inventory/**/*
+      - config/packs/painted-wolf/platform/contributions/**/*
+      - internal/theme/**/*
+    generates:
+      - ../lycaon-den/src/contributions/native-ui-handlers.generated.ts
+      - ../lycaon-den/src/contributions/stock-frame.generated.ts
+    cmds:
+      - go run ./cmd/codegen-contribution-inventory --root .
+
+  codegen:contribution-inventory:check:
+    desc: Fail if the contribution inventory codegen outputs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - cmd/codegen-contribution-inventory/**/*
+      - config/packs/painted-wolf/platform/contributions/**/*
+      - internal/theme/**/*
+      - ../lycaon-den/src/contributions/native-ui-handlers.generated.ts
+      - ../lycaon-den/src/contributions/stock-frame.generated.ts
+    cmds:
+      - go run ./cmd/codegen-contribution-inventory --root . --check
+
+  codegen:detection-packs:
+    desc: >-
+      Offline: generate the GCP and Azure structured-action packs from the
+      vendored catalog under security/host/detection-pack-upstream/
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/security/host/detection-pack-upstream/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/gcloud-cli/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/azure-cli/**/*
+      - cmd/codegen-detection-packs/**/*
+    generates:
+      - config/packs/painted-wolf/security/host/detection-packs/gcp-structured-actions/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/azure-structured-actions/**/*
+    cmds:
+      - go run ./cmd/codegen-detection-packs --root .
+
+  codegen:detection-packs:check:
+    desc: Fail if generated structured cloud packs are stale
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/painted-wolf/security/host/detection-pack-upstream/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/gcloud-cli/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/azure-cli/**/*
+      - cmd/codegen-detection-packs/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/gcp-structured-actions/**/*
+      - config/packs/painted-wolf/security/host/detection-packs/azure-structured-actions/**/*
+    cmds:
+      - go run ./cmd/codegen-detection-packs --root . --check
+
+  codegen:den-types:
+    desc: >-
+      Generate Go and Den wire DTOs and operation bindings from docs/openapi.yaml.
+      Prefer ./task openapi:bundle first when OpenAPI sources change.
+    sources:
+      - docs/openapi.yaml
+      - lycaon-den/package.json
+      - '{{.SCRIPTS_DIR}}/codegen-den-types.sh'
+      - '{{.SCRIPTS_DIR}}/codegen-den-wire.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - lycaon/cmd/codegen-operations/**/*
+    generates:
+      - lycaon-den/src/api/types.ts
+      - lycaon-den/src/api/operations.generated.ts
+      - lycaon/internal/api/operations.generated.go
+      - lycaon/pkg/api/types.generated.go
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh generate -- bash {{.SCRIPTS_DIR}}/codegen-den-wire.sh
+
+  codegen:den-types:check:
+    desc: Fail if Go or Den wire generation is stale vs docs/openapi.yaml
+    sources:
+      - docs/openapi.yaml
+      - lycaon-den/package.json
+      - lycaon-den/src/api/types.ts
+      - '{{.SCRIPTS_DIR}}/codegen-den-types.sh'
+      - '{{.SCRIPTS_DIR}}/codegen-den-wire.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - lycaon/cmd/codegen-operations/**/*
+      - lycaon-den/src/api/operations.generated.ts
+      - lycaon/internal/api/operations.generated.go
+      - lycaon/pkg/api/types.generated.go
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/codegen-den-wire.sh check
+
+  oar:import-invariant:
+    desc: Convert an Invariant-subset rule file into OAR hint YAML
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/oar-import-invariant {{.CLI_ARGS}}
+
+  oar:verify:
+    desc: Verify OAR semantics, shipped catalog startup, recovery vocabulary, and rejection delivery
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- oar:verify
+
+  test:oar:
+    desc: OAR engine and production catalog component tests, condensed via digest
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:oar -- {{.CLI_ARGS}}
+
+  oar:conformance:
+    desc: 'Run the vendored Open Agent Rules conformance corpus through the production internal/oar engine; --json emits the reference runner report shape for the differential gate'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/oar-conformance {{.CLI_ARGS}}
+
+  db:sqlc:
+    desc: Generate sqlc typed queries for internal/db (schema.sql SSOT)
+    sources:
+      - lycaon/internal/db/schema.sql
+      - lycaon/internal/db/sqlc.yaml
+      - lycaon/internal/db/queries/**
+      - '{{.SCRIPTS_DIR}}/db-sqlc.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - '{{.SCRIPTS_DIR}}/sqlc-version.sh'
+    generates:
+      - lycaon/internal/db/db.go
+      - lycaon/internal/db/models.go
+      - lycaon/internal/db/*.sql.go
+    preconditions:
+      - sh: command -v go
+        msg: go required
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh generate -- bash {{.SCRIPTS_DIR}}/db-sqlc.sh generate
+
+  db:sqlc:check:
+    desc: Fail if sqlc generated Go in internal/db is stale
+    sources:
+      - lycaon/internal/db/schema.sql
+      - lycaon/internal/db/sqlc.yaml
+      - lycaon/internal/db/queries/**
+      - lycaon/internal/db/db.go
+      - lycaon/internal/db/models.go
+      - lycaon/internal/db/*.sql.go
+      - '{{.SCRIPTS_DIR}}/db-sqlc.sh'
+      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
+      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
+      - '{{.SCRIPTS_DIR}}/sqlc-version.sh'
+    preconditions:
+      - sh: command -v go
+        msg: go required
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/db-sqlc.sh check
+
+  db:sqlc:vet:
+    desc: Lint sqlc queries in internal/db (no SELECT *, DELETE/UPDATE require WHERE)
+    sources:
+      - lycaon/internal/db/schema.sql
+      - lycaon/internal/db/sqlc.yaml
+      - lycaon/internal/db/queries/**
+      - '{{.SCRIPTS_DIR}}/db-sqlc.sh'
+      - '{{.SCRIPTS_DIR}}/sqlc-version.sh'
+    preconditions:
+      - sh: command -v go
+        msg: go required
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/db-sqlc.sh vet
+
+  upgrade:corpus:seed:
+    desc: 'Seed a retained-history-v1 upgrade fixture. Pass --out DIR and/or --sidecar PATH after --'
+    deps:
+      - build:lycaon-dev
+    preconditions:
+      - sh: command -v curl && command -v jq && command -v sqlite3 && command -v node
+        msg: curl, jq, sqlite3, and node required for upgrade corpus seed
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/upgrade-corpus-seed.sh {{.CLI_ARGS}}
+
+  upgrade:corpus:boot:
+    desc: 'Boot every retained (or named) upgrade-corpus fixture against {{.BUILD_DIR}}/lycaon-dev'
+    deps:
+      - build:lycaon-dev
+    preconditions:
+      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
+        msg: curl, jq, python3, sqlite3, and node required for upgrade corpus boot
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/upgrade-corpus-boot.sh {{.CLI_ARGS}}
+
+  upgrade:rehearse:
+    desc: 'Rehearse supported released-store upgrades, semantic history, and full backup restore (prior-release leg skips before v1)'
+    deps:
+      - build:lycaon-dev
+    preconditions:
+      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
+        msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+
+  upgrade:corpus:prepare:
+    desc: 'Prepare the versioned upgrade fixture for VERSION before tagging'
+    deps:
+      - build:lycaon-dev
+    preconditions:
+      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
+        msg: curl, jq, python3, sqlite3, and node required for upgrade corpus preparation
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/upgrade-corpus-prepare.sh
+
+  release:preflight:
+    desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
+    deps:
+      - build:lycaon-dev
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
+
+  release:halt:
+    desc: 'Stop discovery on one release channel by restoring its last-good pointer. Pass --channel stable|preview --bad VERSION --last-good VERSION after --'
+    preconditions:
+      - sh: command -v curl && command -v jq && command -v python3
+        msg: curl, jq, and python3 required for release:halt
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-halt.sh {{.CLI_ARGS}}
+
+  release:recovery:prepare:
+    desc: 'Record provenance for a higher-version recovery release. Pass --withdraws BAD --restores-from LAST_GOOD after --'
+    preconditions:
+      - sh: command -v jq && command -v python3
+        msg: jq and python3 required for release:recovery:prepare
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
+
+  release:live-test:
+    desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
+    preconditions:
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
+        msg: bun, curl, jq, python3, and ruby required for release:live-test
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+
+  openapi:diff:
+    desc: 'Report OpenAPI breaking changes against the release-review baseline'
+    sources:
+      - docs/openapi.yaml
+      - docs/openapi/baseline-bundle.yaml
+      - '{{.SCRIPTS_DIR}}/diff-openapi.sh'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/diff-openapi.sh
+
+  openapi:lint:
+    desc: Validate modular OpenAPI sources with Redocly CLI
+    sources:
+      - docs/openapi/**/*
+      - docs/openapi.yaml
+      - docs/redocly.yaml
+      - '{{.SCRIPTS_DIR}}/validate-openapi.sh'
+      - '{{.SCRIPTS_DIR}}/redocly-version.sh'
+    preconditions:
+      - sh: command -v npx
+        msg: npx required (Node 26+)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/validate-openapi.sh
+
+  validate:workflows:
+    desc: Validate bundled workflows (host-runnable catalog SSOT)
+    dir: '{{.GO_DIR}}'
+    sources:
+      - config/packs/**/workflows/**/*
+      - config/packs/**/workflow-diagnostics/**/*
+      - config/runtime/coordinator-surfaces.yaml
+      - config/runtime/compose-policy.yaml
+      - config/runtime/kicks/**/*
+      - internal/workflowvalidate/**/*
+      - internal/workflowdiag/**/*
+      - cmd/lycaon/workflow.go
+    cmds:
+      - go run ./cmd/lycaon workflow validate --bundled
+
+  extensions:
+    desc: "Extension packs CLI (install|install-meta|lock|remove|remove-meta|validate|inspect-command|new-theme|apply-profile|disable|enable|enable-suite|disable-suite|own|update|reload). Device scope unless --project DIR. Pass args after --"
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/lycaon extensions {{.CLI_ARGS}}
+
+  extensions:validate:
+    desc: Resolve + print packs, units, and diagnostics (exit 1 when any diagnostic is error severity). Pass --project DIR after --
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/lycaon extensions validate {{.CLI_ARGS}}
+
+  test:lycaon-rules:
+    desc: Verify the shipping OpenGrep rules against the complete language corpus
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/test-lycaon-rules.sh {{.CLI_ARGS}}
+
+  scan:opengrep:stage:
+    desc: 'Download or reuse the verified, pinned OpenGrep release for this host'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/resolve-opengrep.sh {{.CLI_ARGS}}
+
+  scan:opengrep:select:
+    desc: 'Authenticate and select an engine release: -- --tag TAG --expected-commit SHA <release.json path or HTTPS URL>'
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/select-opengrep-release.sh {{.CLI_ARGS}}
+
+  test:scanners:
+    desc: 'Bundled-scanner suite against the committed corpus — a missing engine fails rather than skips'
+    cmds:
+      - |
+        bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
+          bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags integration --name test:scanners -- \
+          ./internal/scan/... ./test/security/... \
+          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery)$'
+
+  check-fast:
+    desc: Handoff gate on one stable source snapshot
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/test-source-snapshot.sh run -- ./task check-fast:workspace
+
+  check-fast:workspace:
+    desc: Sequential handoff stages with bounded workers
+    cmds:
+      - test -n "${PW_SOURCE_SNAPSHOT_COMMIT:-}"
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- check-fast
+
+  check:tests:
+    desc: Complete runtime test legs in sequence
+    internal: true
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- check:tests
+
+  docs:links:
+    desc: Validate relative markdown links and heading anchors under docs/
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/doc-link-check.sh
+
+  check:drift:
+    desc: Codegen, OpenAPI bundle, and sqlc drift guards (full check only)
+    internal: true
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- check:drift
+
+  check:
+    desc: Complete ship gate on one stable source snapshot
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/test-source-snapshot.sh run -- ./task check:workspace
+
+  check:workspace:
+    desc: Complete build, drift, test, and lint gate
+    cmds:
+      - test -n "${PW_SOURCE_SNAPSHOT_COMMIT:-}"
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- check

@@ -1,0 +1,52 @@
+{
+  "id": "conf-selector-on-anchor-uses-the-core-spelling",
+  "title": "A selector clause on the core fact anchor matches the core identifier, not the host-local one",
+  "covers": [
+    "OAR-CONF-29",
+    "OAR-SEL-7"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.output",
+      "id": "ONLY_OUTPUT",
+      "effect": "nudge",
+      "selector": {
+        "anchor": [
+          "model.output"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "gateway.after_model",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "gateway.after_model"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "ONLY_OUTPUT"
+  }
+}

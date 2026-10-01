@@ -1,0 +1,18 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - provider_id
+title: This project cannot store MCP credentials
+message: >-
+  Static tokens and HTTP headers are device secrets. A project overlay cannot
+  set them, or point a credential-bearing provider at an address it controls.
+suggested_action: >-
+  Add the credential on the device MCP provider, or use a credential-free
+  loopback URL.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - device secrets
+      - credential

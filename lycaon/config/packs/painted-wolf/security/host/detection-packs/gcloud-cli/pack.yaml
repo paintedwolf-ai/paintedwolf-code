@@ -1,0 +1,5 @@
+id: gcloud-cli
+label: Google Cloud CLI
+description: >-
+  Precise Google Cloud CLI operations that disable logging controls, delete a
+  project, or grant access to everyone on the internet.

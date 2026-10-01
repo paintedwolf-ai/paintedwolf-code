@@ -1,0 +1,37 @@
+oar: '1.0'
+id: CHMOD_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chmod
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.max_paths
+  - paintedwolf.requested
+  - paintedwolf.bulk_denied
+when: paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
+effect: block
+copy:
+  what: chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
+  cause: The explicit path batch exceeds the per-call bound.
+  why: Bounded batches keep permission changes reviewable.
+  fix: Use at most {{ paintedwolf.max_paths }} explicit paths per call, and retain the intended scope when
+    splitting the batch. Do not add targets simply to fill a batch.
+  instead: Branch on Code; reduce paths[] length
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
+x-paintedwolf-message: chmod requested too many paths in one call
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: chmod
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHMOD_BULK_DENIED'

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-save
+slot: "app_menu.file"
+command: painted-wolf/platform:files-save
+group: "2"
+order: 5
+label: "Save"

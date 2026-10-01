@@ -1,0 +1,498 @@
+components:
+  schemas:
+    EditorDocument:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Accepted collaborative document for a stable logical file in the project branch.
+      required: [id, project_id, workspace_id, file_id, root_id, path, base_sha256, encoding, size_bytes, eol, base_eol, mixed_eol, base_mixed_eol, revision, dirty, diverged, absent, secret_screen_status, epoch, state_vector, crdt_update, published_revision, participants]
+      properties:
+        save_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Original revision reserved for this save operation when its publication already has a durable journal. The document itself is the current accepted state.
+
+        command_history:
+          x-go-pointer: true
+          $ref: '#/components/schemas/EditorCommandHistory'
+        epoch: {type: integer, format: int64, minimum: 1}
+        state_vector: {type: string, format: byte, x-go-type: "[]byte"}
+        crdt_update: {type: string, format: byte, x-go-type: "[]byte", x-go-name: CRDTUpdate}
+        replica_id: {type: integer, format: int64, x-go-type: uint32}
+        published_revision: {type: integer, format: int64, minimum: 1}
+        accepted_revision: {type: integer, format: int64, minimum: 1}
+        accepted_operation_id: {type: string, format: uuid}
+        participants:
+          type: array
+          items: {$ref: '#/components/schemas/EditorParticipant'}
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        base_content:
+          x-go-pointer: true
+          type: string
+          description: Normalized saved base; omitted when byte-identical to the accepted text, which crdt_update carries with line endings normalized to LF.
+        base_sha256: {type: string}
+        encoding: {$ref: 'source-content.yaml#/components/schemas/SourceEncoding'}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        eol: {type: string, enum: [lf, crlf]}
+        base_eol: {type: string, enum: [lf, crlf]}
+        mixed_eol: {type: boolean}
+        base_mixed_eol: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 1}
+        dirty: {type: boolean}
+        diverged: {type: boolean}
+        absent:
+          type: boolean
+          description: >-
+            The path has no file on disk. The document keeps its draft and
+            saved base; a save recreates the file, and a file that reappears
+            merges in as an outside change.
+        held_agent_version_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: >-
+            The retained state holding an agent edit this draft carries and
+            disk does not, so reload and discard can say it is recoverable.
+            Omitted once a save settles the hold.
+        secret_screen_status:
+          $ref: editor-secrets.yaml#/components/schemas/SecretScreenStatus
+        secret_screen:
+          x-go-pointer: true
+          $ref: editor-secrets.yaml#/components/schemas/SecretScreen
+    EditorCommandHistory:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Exact text transition of an explicit editor command, replayable independently of later shared edits.
+      required: [operation_id, epoch, before_update, update]
+      properties:
+        operation_id: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        before_update: {type: string, format: byte, x-go-type: "[]byte"}
+        update: {type: string, format: byte, x-go-type: "[]byte"}
+    EditorReplicaFrame:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Differential accepted replica state. Text is carried by crdt_update; base_content is included only when the requested base_sha256 differs.
+      required: [id, project_id, workspace_id, file_id, root_id, path, base_sha256, encoding, size_bytes, eol, base_eol, mixed_eol, base_mixed_eol, revision, dirty, diverged, absent, secret_screen_status, epoch, state_vector, crdt_update, published_revision, participants]
+      properties:
+        epoch: {type: integer, format: int64, minimum: 1}
+        state_vector: {type: string, format: byte, x-go-type: "[]byte"}
+        crdt_update: {type: string, format: byte, x-go-type: "[]byte", x-go-name: CRDTUpdate}
+        replica_id: {type: integer, format: int64, x-go-type: uint32}
+        published_revision: {type: integer, format: int64, minimum: 1}
+        accepted_revision: {type: integer, format: int64, minimum: 1}
+        accepted_operation_id: {type: string, format: uuid}
+        participants:
+          type: array
+          items: {$ref: '#/components/schemas/EditorParticipant'}
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        base_content:
+          x-go-pointer: true
+          type: string
+          description: Normalized saved base; omitted when the request already has this base_sha256.
+        base_sha256: {type: string}
+        encoding: {$ref: 'source-content.yaml#/components/schemas/SourceEncoding'}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        eol: {type: string, enum: [lf, crlf]}
+        base_eol: {type: string, enum: [lf, crlf]}
+        mixed_eol: {type: boolean}
+        base_mixed_eol: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 1}
+        dirty: {type: boolean}
+        diverged: {type: boolean}
+        absent:
+          type: boolean
+          description: >-
+            The path has no file on disk. The document keeps its draft and
+            saved base; a save recreates the file, and a file that reappears
+            merges in as an outside change.
+        held_agent_version_id:
+          x-go-pointer: true
+          type: string
+          format: uuid
+          description: >-
+            The retained state holding an agent edit this draft carries and
+            disk does not, so reload and discard can say it is recoverable.
+            Omitted once a save settles the hold.
+        secret_screen_status:
+          $ref: editor-secrets.yaml#/components/schemas/SecretScreenStatus
+        secret_screen:
+          x-go-pointer: true
+          $ref: editor-secrets.yaml#/components/schemas/SecretScreen
+    OpenEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, root_id, client_id]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative, slash-separated file path.
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root that contains the file.
+        client_id:
+          type: string
+          minLength: 1
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Stable id for the client view opening the document.
+        decode_as:
+          type: string
+          enum: [utf-16le, utf-16be]
+          description: Explicit decoding for BOM-less UTF-16 text.
+        replica:
+          x-go-pointer: true
+          $ref: '#/components/schemas/RetainedReplica'
+    RetainedReplica:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [document_id, epoch, state_vector, base_sha256]
+      description: State the client already holds, from a live replica or from the synchronized checkpoint it preserved. When it names the current document and epoch, crdt_update carries only the state missing from state_vector and base_content is omitted for a matching base_sha256 (a client without the saved text sends an empty hash, which never matches); otherwise the response is a full snapshot.
+      properties:
+        document_id: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        state_vector: {type: string, format: byte, x-go-type: "[]byte"}
+        base_sha256: {type: string}
+    ReplaceEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, operation_id, expected_revision, content, eol, mixed_eol, history_vector, session_id]
+      properties:
+        history_vector:
+          type: [string, "null"]
+          format: byte
+          x-go-type: "[]byte"
+          description: Invoking replica's state vector, which requests an exact command transition for its document undo history; null records no transition.
+        session_id:
+          type: [string, "null"]
+          format: uuid
+          description: Focused chat when this change was authored; null when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        operation_id: {type: string, format: uuid}
+        client_id:
+          type: string
+          minLength: 1
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Invoking editor client.
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Document revision the update was authored against.
+        content:
+          type: string
+          description: Replacement draft text; CRLF is normalized to LF. Decoded text must fit 8 MiB and the file serialized with the document encoding and requested line endings must fit 4 MiB. Invalid or oversize content returns 400 invalid_request without changing the draft or revision. The JSON envelope permits escaping of the full supported content.
+        eol:
+          type: string
+          enum: [lf, crlf]
+          description: Line ending to use on save.
+        mixed_eol:
+          type: boolean
+          description: Whether the draft represents mixed line endings.
+    EditorDocumentCommandRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, operation_id, expected_revision]
+      properties:
+        history_vector:
+          type: string
+          format: byte
+          x-go-type: "[]byte"
+          description: Invoking replica's state vector. Requests an exact command transition for its document undo history.
+        session_id:
+          type: string
+          format: uuid
+          description: Focused chat when this change was authored; omitted when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        operation_id: {type: string, format: uuid}
+        client_id:
+          type: string
+          minLength: 1
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Invoking editor client.
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Document revision the command was authored against.
+    ObserveEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id]
+      properties:
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+    ResolveEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, operation_id, expected_revision, disk_sha256, content, eol]
+      properties:
+        history_vector:
+          type: string
+          format: byte
+          x-go-type: "[]byte"
+          description: Invoking replica's state vector. Requests an exact command transition for its document undo history.
+        session_id:
+          type: string
+          format: uuid
+          description: Focused chat when this change was authored; omitted when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        operation_id: {type: string, format: uuid}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+        disk_sha256: {type: string, minLength: 64, maxLength: 64}
+        content: {type: string}
+        eol: {type: string, enum: [lf, crlf]}
+    EditorPresenceRange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [anchor, head]
+      properties:
+        anchor: {type: string, format: byte, x-go-type: "[]byte", maxLength: 1024}
+        head: {type: string, format: byte, x-go-type: "[]byte", maxLength: 1024}
+    EditorParticipant:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, person_id, ranges, main]
+      properties:
+        client_id: {type: string, pattern: '^[a-zA-Z0-9:._-]+$'}
+        person_id:
+          type: string
+          format: uuid
+          description: Person working in this client. A client belongs to one person.
+        window_number:
+          type: integer
+          minimum: 1
+          description: Host-assigned fallback window number, stable across documents and reconnects for this host lifetime. Desktop presentation uses its native window registry.
+        ranges:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/EditorPresenceRange'}
+        main: {type: integer, minimum: 0, maximum: 255}
+    SyncEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, incarnation, epoch]
+      properties:
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        incarnation: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        base_sha256: {type: string}
+        state_vector: {type: string, format: byte, x-go-type: "[]byte"}
+    UpdateEditorDocumentPresenceRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, incarnation, ranges, main]
+      properties:
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        incarnation: {type: string, format: uuid}
+        ranges:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/EditorPresenceRange'}
+        main: {type: integer, minimum: 0, maximum: 255}
+    SubmitEditorDocumentUpdateRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, replica_id, epoch, operation_id, update]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Focused chat when this change was authored; omitted when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        replica_id: {type: integer, format: int64, x-go-type: uint32, minimum: 1, maximum: 4294967295}
+        epoch: {type: integer, format: int64, minimum: 1}
+        operation_id: {type: string, format: uuid}
+        update: {type: string, format: byte, x-go-type: "[]byte"}
+        base_sha256: {type: string}
+        state_vector: {type: string, format: byte, x-go-type: "[]byte"}
+    LeaveEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, incarnation]
+      properties:
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        incarnation: {type: string, format: uuid}
+    PinEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id]
+      properties:
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        operation_id:
+          type: string
+          format: uuid
+          description: Reserves this snapshot for the save with this operation identity. Omit for a bounded read snapshot.
+    SaveEditorDocumentRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, expected_revision, operation_id]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Focused chat when this change was authored; omitted when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        client_id:
+          type: string
+          minLength: 1
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Invoking editor client.
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Document revision the command was authored against.
+        operation_id:
+          type: string
+          format: uuid
+          description: Stable mutation identity; an exact retry returns the original saved document and reusing this id with different save input returns 409 idempotency_conflict.
+    EditorDocumentChange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [revision, epoch, operation_id, actor_kind, person_id, client_id, reverted_by, created_at, session_id, session_title, turn]
+      properties:
+        session_id: {type: string, format: uuid}
+        session_title: {type: string}
+        turn: {type: integer}
+        revision: {type: integer, x-go-type: int64}
+        epoch: {type: integer, x-go-type: int64}
+        operation_id: {type: string, format: uuid}
+        actor_kind: {type: string, enum: [user, agent, restore]}
+        person_id:
+          type: string
+          format: uuid
+          description: Person who made a user or restore change; empty for agent changes.
+        client_id:
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Client the person used; empty for agent changes.
+        reverted_by: {type: string}
+        created_at: {type: string, format: date-time}
+    EditorDocumentChanges:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [changes]
+      properties:
+        changes: {type: array, items: {$ref: '#/components/schemas/EditorDocumentChange'}}
+        next_cursor: {type: string}
+    RevertEditorDocumentChangeRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, operation_id, epoch]
+      properties:
+        history_vector:
+          type: string
+          format: byte
+          x-go-type: "[]byte"
+          description: Invoking replica's state vector. Requests an exact command transition for its document undo history.
+        session_id:
+          type: string
+          format: uuid
+          description: Focused chat when this change was authored; omitted when unaffiliated. The host records the chat's turn at acceptance and drops a chat it cannot place instead of refusing the change.
+        client_id: {type: string, minLength: 1, pattern: '^[a-zA-Z0-9:._-]+$'}
+        operation_id: {type: string, format: uuid}
+        epoch: {type: integer, minimum: 1, x-go-type: int64}
+    EditorDocumentStatusesRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [document_ids]
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, format: uuid}
+    EditorDocumentStatuses:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [documents, missing]
+      properties:
+        documents:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/EditorDocumentStatus'}
+        missing:
+          type: array
+          maxItems: 64
+          items: {type: string, format: uuid}
+    EditorDocumentStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Accepted document metadata without text, replica admission, or filesystem reconciliation.
+      required: [id, file_id, root_id, path, branch_id, revision, epoch, published_revision, dirty, diverged, absent, base_sha256, size_bytes, encoding, eol, base_eol, mixed_eol, base_mixed_eol]
+      properties:
+        id: {type: string, format: uuid}
+        file_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        branch_id: {type: string, pattern: '^[a-zA-Z0-9:._-]*$'}
+        revision: {type: integer, format: int64, minimum: 1}
+        epoch: {type: integer, format: int64, minimum: 1}
+        published_revision: {type: integer, format: int64, minimum: 1}
+        dirty: {type: boolean}
+        diverged: {type: boolean}
+        absent:
+          type: boolean
+          description: >-
+            The path has no file on disk. The document keeps its draft and
+            saved base; a save recreates the file, and a file that reappears
+            merges in as an outside change.
+        base_sha256: {type: string}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        encoding: {$ref: 'source-content.yaml#/components/schemas/SourceEncoding'}
+        eol: {type: string, enum: [lf, crlf]}
+        base_eol: {type: string, enum: [lf, crlf]}
+        mixed_eol: {type: boolean}
+        base_mixed_eol: {type: boolean}
+        held_agent_version_id: {type: string, format: uuid}
+    ReplaceEditorDocumentRetentionRequest:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [client_id, retained_clients, document_ids]
+      properties:
+        client_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[a-zA-Z0-9:._-]+$'}
+        retained_clients:
+          type: array
+          maxItems: 16384
+          uniqueItems: true
+          description: Live client identities from the native window inventory or browser window locks. Must include client_id. Only orphan references in the calling client’s window or browser namespace are swept; omit until the inventory is ready.
+          items: {type: string, minLength: 1, maxLength: 256, pattern: '^[a-zA-Z0-9:._-]+$'}
+        document_ids:
+          type: array
+          maxItems: 16384
+          uniqueItems: true
+          items: {type: string, format: uuid}
+

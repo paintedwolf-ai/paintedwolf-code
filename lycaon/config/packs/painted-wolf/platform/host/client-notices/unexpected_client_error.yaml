@@ -1,0 +1,8 @@
+scope: app
+title: Could not complete request
+message: The last action did not complete, and there is no more detail for this one.
+suggested_action: Try again. If it keeps happening, report it from Settings → Advanced → Diagnostics.
+scenarios:
+  - id: default
+    expect_contains:
+      - did not complete

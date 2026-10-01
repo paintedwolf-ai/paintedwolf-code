@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not initialize Git
+message: >-
+  Git could not initialize a repository in this folder. Check folder access and any existing Git metadata.
+suggested_action: >-
+  Choose a writable project folder and resolve repository errors before retrying.

@@ -1,0 +1,7 @@
+scope: app
+title: Project removal needs review
+message: Review the project and extension settings to confirm the removal outcome.
+scenarios:
+  - id: default
+    expect_contains:
+      - Project removal needs review

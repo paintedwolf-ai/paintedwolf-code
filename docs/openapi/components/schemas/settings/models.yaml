@@ -1,0 +1,154 @@
+components:
+  schemas:
+    ModelPolicy:
+      x-go-generate: true
+      type: object
+      description: An absent coordinator or lite assigns no model at this layer.
+      required: [agent_pool]
+      additionalProperties: false
+      properties:
+        coordinator:
+          x-go-type: '*ModelRefDTO'
+          $ref: "#/components/schemas/ModelRef"
+        lite:
+          x-go-type: '*ModelRefDTO'
+          $ref: "#/components/schemas/ModelRef"
+        agent_pool:
+          x-go-type: AgentPoolDTO
+          $ref: ../orchestration.yaml#/components/schemas/AgentPool
+        thinking_overrides:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThinkingOverride"
+          description: Overrides keyed by provider and model; omitted pairs inherit.
+    ModelPolicyPatch:
+      x-go-generate: true
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: Omitted keys stay stored. A null coordinator or lite clears this layer's assignment so it inherits. A present thinking_overrides array replaces this layer's overrides; an empty array restores inheritance.
+      properties:
+        coordinator:
+          x-go-type: '*ModelRefDTO'
+          oneOf:
+          - $ref: "#/components/schemas/ModelRef"
+          - type: "null"
+        lite:
+          x-go-type: '*ModelRefDTO'
+          oneOf:
+          - $ref: "#/components/schemas/ModelRef"
+          - type: "null"
+        agent_pool:
+          x-go-type: '*AgentPoolDTO'
+          $ref: ../orchestration.yaml#/components/schemas/AgentPool
+        thinking_overrides:
+          x-go-pointer: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ThinkingOverride"
+    ThinkingOverride:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [provider_id, model, mode]
+      properties:
+        provider_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        model:
+          type: string
+          minLength: 1
+        mode:
+          type: string
+          enum: [application, fixed]
+        effort:
+          type: string
+          pattern: '^[a-z0-9_-]{1,32}$'
+        enabled:
+          type: boolean
+          x-go-pointer: true
+        budget_tokens:
+          type: integer
+          minimum: 1
+          x-go-pointer: true
+      description: Fixed requires exactly one native effort, enabled flag, or token budget. Application carries no controls and explicitly restores application behavior.
+    ThinkingCapabilities:
+      x-go-generate: true
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [unknown, unsupported, supported]
+        efforts:
+          type: array
+          items:
+            type: string
+        can_enable:
+          type: boolean
+        can_disable:
+          type: boolean
+        budget:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ThinkingBudgetRange"
+        default_effort:
+          type: string
+        source:
+          type: string
+      description: Native thinking controls resolved by the host from provider configuration, model discovery, and model-family rules, constrained by transport support.
+    ThinkingBudgetRange:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [min]
+      properties:
+        min:
+          type: integer
+          minimum: 1
+        max:
+          type: integer
+          minimum: 1
+    ModelRef:
+      type: object
+      required:
+      - provider_id
+      - model
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        model:
+          type: string
+    ModelRoleEligibility:
+      x-go-generate: true
+      type: object
+      required: [state, code, reason, selectable]
+      additionalProperties: false
+      properties:
+        selectable:
+          type: boolean
+          description: Host assignment decision. Unknown tool support does not block an otherwise chat-capable model.
+        state:
+          type: string
+          enum: [eligible, unverified, incompatible]
+        code:
+          type: string
+        reason:
+          type: string
+        rule_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+    ModelRoleEligibilitySet:
+      x-go-generate: true
+      type: object
+      required: [coordinator, agent_pool, lite]
+      additionalProperties: false
+      properties:
+        coordinator:
+          $ref: "#/components/schemas/ModelRoleEligibility"
+        agent_pool:
+          $ref: "#/components/schemas/ModelRoleEligibility"
+        lite:
+          $ref: "#/components/schemas/ModelRoleEligibility"

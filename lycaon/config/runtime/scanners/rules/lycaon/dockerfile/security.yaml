@@ -1,0 +1,44 @@
+rules:
+- id: lycaon.dockerfile.unverified-http-add
+  languages:
+  - dockerfile
+  severity: ERROR
+  message: An image downloads a build input over plaintext HTTP
+  metadata:
+    category: security
+    cwe: CWE-319
+    confidence: HIGH
+    technology:
+    - dockerfile
+  patterns:
+  - pattern: ADD $URL $DEST
+  - metavariable-regex:
+      metavariable: $URL
+      regex: http://
+- id: lycaon.dockerfile.remote-script-pipe
+  languages:
+  - dockerfile
+  severity: ERROR
+  message: The image build directly executes a downloaded shell script
+  metadata:
+    category: security
+    cwe: CWE-494
+    confidence: HIGH
+    technology:
+    - dockerfile
+  pattern-either:
+  - patterns:
+    - pattern: RUN curl ... $URL ... | sh ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://
+  - patterns:
+    - pattern: RUN curl ... $URL ... | bash ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://
+  - patterns:
+    - pattern: RUN wget ... $URL ... | sh ...
+    - metavariable-regex:
+        metavariable: $URL
+        regex: ^["']?https?://

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Resource not found"
+message: "This computer has no resource setting with that name."
+suggested_action: "Refresh Settings and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no resource setting"

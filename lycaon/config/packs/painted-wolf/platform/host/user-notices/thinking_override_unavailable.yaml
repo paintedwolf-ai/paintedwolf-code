@@ -1,0 +1,20 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional: [provider_id, model, reason]
+title: Thinking override cannot be applied
+message: >-
+  The saved thinking override{% if model %} for {{ model }}{% endif %} cannot be applied{% if reason %}: {{ reason }}{% else %}.{% endif %}
+suggested_action: Choose a supported thinking setting or remove the override in AI providers, then try again.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: unsupported
+    vars: {model: example-model, reason: "thinking cannot be disabled"}
+    expect_contains: ["example-model", "thinking cannot be disabled"]
+  - id: generic
+    vars: {}
+    expect_contains: ["saved thinking override"]

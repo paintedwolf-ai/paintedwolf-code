@@ -1,0 +1,520 @@
+paths:
+  /v1/projects/{id}/editor-documents:
+    post:
+      tags: [projects]
+      operationId: openEditorDocument
+      x-person-action: none
+      summary: Open or resume a workspace-pinned editor document
+      description: Opens writable text as a collaborative document, preserving any unsaved draft. Read-only files return source_read_only and remain available through the source reader.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/OpenEditorDocumentRequest}}}
+      responses:
+        '200': {description: Reused existing editor document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '201': {description: Canonical editor document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '400': {description: Invalid document identity or request body, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '409': {description: Physical workspace changed while the document was opening, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/editor-documents/retention:
+    put:
+      tags: [projects]
+      operationId: replaceEditorDocumentRetention
+      x-person-action: none
+      summary: Replace this person's open tab references for a window
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/ReplaceEditorDocumentRetentionRequest}
+      responses:
+        '204': {description: The window's references were replaced atomically}
+        '400': {$ref: ../../components/responses.yaml#/components/responses/Error}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/status:
+    post:
+      tags: [projects]
+      operationId: readEditorDocumentStatuses
+      x-person-action: none
+      summary: Read bounded document metadata without loading text or joining replicas
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocumentStatusesRequest}
+      responses:
+        '200':
+          description: Known document metadata and unavailable identities within the project
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocumentStatuses}
+        '400': {$ref: ../../components/responses.yaml#/components/responses/Error}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}:
+    put:
+      tags: [projects]
+      operationId: replaceEditorDocument
+      x-person-action: none
+      summary: Persist a draft using a compare-and-swap revision
+      description: Replaces the host draft without writing the workspace file. The draft must be encodable within the 4 MiB source-file cap; invalid or oversize content is rejected without changing the stored revision.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/ReplaceEditorDocumentRequest}}}
+      responses:
+        '200': {description: Updated document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: "Stale revision, workspace mismatch, or reused operation identity", content: {application/json: {
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/editor-documents/{document_id}/changes:
+    get:
+      tags: [projects]
+      operationId: listEditorDocumentChanges
+      summary: List semantic collaborative edits and their undo state
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - name: cursor
+        in: query
+        required: false
+        schema: {type: string}
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 500, default: 50}
+      responses:
+        '200': {description: Semantic document changes, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocumentChanges}}}}
+        '404': {description: Document not found, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+  /v1/projects/{id}/editor-documents/{document_id}/changes/{change_id}/revert:
+    post:
+      tags: [projects]
+      operationId: revertEditorDocumentChange
+      x-person-action: record
+      summary: Selectively undo one semantic edit while preserving later contributions
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: change_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/RevertEditorDocumentChangeRequest}}}
+      responses:
+        '200': {description: Accepted draft after selective undo, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: Edit cannot be undone in the current document state, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/snapshots:
+    post:
+      tags: [projects]
+      operationId: createEditorDocumentSnapshot
+      x-person-action: none
+      summary: Pin an immutable accepted snapshot for a read or save
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/PinEditorDocumentRequest}}}
+      responses:
+        '201': {description: Accepted document and synchronization state, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/resolve:
+    post:
+      tags: [projects]
+      operationId: resolveEditorDocumentConflict
+      x-person-action: record
+      summary: Apply and publish a reviewed merge against exact document and disk versions
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/ResolveEditorDocumentRequest}}}
+      responses:
+        '200': {description: Accepted document and synchronization state, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/sync:
+    post:
+      tags: [projects]
+      operationId: syncEditorDocument
+      x-person-action: none
+      summary: Synchronize a collaborative replica and join presence
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/SyncEditorDocumentRequest}}}
+      responses:
+        '200': {description: Accepted document and synchronization state, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorReplicaFrame}}}}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/editor-documents/{document_id}/updates:
+    post:
+      tags: [projects]
+      operationId: submitEditorDocumentUpdate
+      x-person-action: none
+      summary: Durably accept an idempotent collaborative update
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/SubmitEditorDocumentUpdateRequest}}}
+      responses:
+        '200': {description: Accepted document and synchronization state, content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorReplicaFrame}}}}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}/editor-documents/{document_id}/leave:
+    post:
+      tags: [projects]
+      operationId: leaveEditorDocument
+      x-person-action: none
+      summary: Leave document presence
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/LeaveEditorDocumentRequest}}}
+      responses:
+        '204': {description: Presence updated}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/presence:
+    post:
+      tags: [projects]
+      operationId: publishEditorDocumentPresence
+      x-person-action: none
+      summary: Publish ephemeral relative cursor positions
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: ../../components/schemas/project/editor-documents.yaml#/components/schemas/UpdateEditorDocumentPresenceRequest}}}
+      responses:
+        '204': {description: Presence updated}
+        '409': {description: Replica requires synchronization or retained draft recovery, content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/discard:
+    post:
+      tags: [projects]
+      operationId: discardEditorDocument
+      x-person-action: record
+      summary: Atomically discard the draft back to its durable base
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocumentCommandRequest}}}
+      responses:
+        '200': {description: Clean document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: "Stale revision, workspace mismatch, or reused operation identity", content: {application/json: {
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/reload:
+    post:
+      tags: [projects]
+      operationId: reloadEditorDocument
+      x-person-action: record
+      summary: Replace the draft and base from the pinned workspace file
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocumentCommandRequest}}}
+      responses:
+        '200': {description: Reloaded document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: "Stale revision, workspace mismatch, or reused operation identity", content: {application/json: {
+              schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/observe:
+    post:
+      tags: [projects]
+      operationId: observeEditorDocument
+      x-person-action: none
+      summary: Compare an editor document's saved base with the workspace file
+      description: Reconciles through the same host transition as filesystem observation. Clean documents adopt current editable bytes; dirty documents retain their draft and saved base and update divergence. Unsupported current bytes leave the document diverged so the client can refresh its presentation.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/ObserveEditorDocumentRequest}}}
+      responses:
+        '200': {description: Reconciled editor document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: Workspace mismatch, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/editor-documents/{document_id}/save:
+    post:
+      tags: [projects]
+      operationId: saveEditorDocument
+      x-person-action: record
+      summary: Atomically save the workspace-pinned document
+      description: The operation id makes a retry resume the same save rather than create another file mutation.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - {name: document_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref:
+                ../../components/schemas/project/editor-documents.yaml#/components/schemas/SaveEditorDocumentRequest}}}
+      responses:
+        '200': {description: Saved document, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/project/editor-documents.yaml#/components/schemas/EditorDocument}}}}
+        '409': {description: "Stale document revision, workspace mismatch, or external file change",
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

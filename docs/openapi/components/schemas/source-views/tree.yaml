@@ -1,0 +1,495 @@
+components:
+  schemas:
+    SourceTreeAddress:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "root_id"
+        - "path"
+      properties:
+        root_id:
+          type: "string"
+          format: "uuid"
+        path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
+    SourceTreeDisclosure:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "address"
+        - "open"
+        - "recursive"
+      properties:
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+        open:
+          type: "boolean"
+        recursive:
+          type: "boolean"
+    SourceTreeReviewScope:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "baseline"
+      properties:
+        baseline:
+          type: "string"
+        mark_user_edits:
+          type: "boolean"
+          x-go-pointer: true
+    SourceTreeIntent:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required: []
+      properties:
+        disclosures:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SourceTreeDisclosure"
+          maxItems: 2048
+        filter:
+          type: "string"
+          maxLength: 4096
+        review:
+          $ref: "#/components/schemas/SourceTreeReviewScope"
+          x-go-pointer: true
+    SourceTreeViewCreate:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - operation_id
+        - "client_id"
+        - "workspace_id"
+        - "intent"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        operation_id:
+          type: "string"
+          format: "uuid"
+        client_id:
+          type: "string"
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          minLength: 1
+          maxLength: 256
+          description: "Stable window identity shared with editor requests; grants no authority."
+        session_id:
+          type: "string"
+          format: "uuid"
+        workspace_id:
+          type: "string"
+          pattern: '^ws_[0-9a-f]{32}$'
+          minLength: 1
+        intent:
+          $ref: "#/components/schemas/SourceTreeIntent"
+    SourceTreeView:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "id"
+        - "intent_revision"
+        - "projection_revision"
+        - "state"
+        - "extent"
+        - "expires_at"
+        - "workspace_id"
+        - "intent"
+        - "roots"
+        - "loading_directories"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        id:
+          type: "string"
+          format: "uuid"
+        intent_revision:
+          type: "string"
+          format: uuid
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        state:
+          type: "string"
+          enum:
+            - "preparing"
+            - "ready"
+            - "failed"
+        extent:
+          $ref: "views.yaml#/components/schemas/SourceViewExtent"
+        expires_at:
+          type: "string"
+          format: "date-time"
+        failure:
+          $ref: "views.yaml#/components/schemas/SourceViewFailure"
+          x-go-pointer: true
+        workspace_id:
+          type: "string"
+          pattern: '^ws_[0-9a-f]{32}$'
+          minLength: 1
+        intent:
+          $ref: "#/components/schemas/SourceTreeIntent"
+        roots:
+          type: "array"
+          items:
+            $ref: "../project/identity.yaml#/components/schemas/ProjectRoot"
+        loading_directories:
+          type: "integer"
+          minimum: 0
+          description: Directory reads still pending for this view.
+    SourceTreeDisclose:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "disclosures"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "disclose"
+        disclosures:
+          type: "array"
+          minItems: 1
+          maxItems: 2048
+          description: "Ordered disclosure changes applied as one intent revision."
+          items:
+            $ref: "#/components/schemas/SourceTreeDisclosure"
+    SourceTreeToggle:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required: ["kind", "address"]
+      properties:
+        kind:
+          type: "string"
+          enum: ["toggle"]
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+        collapse_descendants:
+          type: "boolean"
+          description: "When the folder is open, collapse its descendants and leave it open. A closed folder opens normally."
+    SourceTreeReveal:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "address"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "reveal"
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+    SourceTreeFilter:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "query"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "filter"
+        query:
+          type: "string"
+          maxLength: 4096
+    SourceTreeReview:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "review"
+        scope:
+          $ref: "#/components/schemas/SourceTreeReviewScope"
+          x-go-pointer: true
+    SourceTreeCommand:
+      oneOf:
+        -
+          $ref: "#/components/schemas/SourceTreeToggle"
+        -
+          $ref: "#/components/schemas/SourceTreeDisclose"
+        -
+          $ref: "#/components/schemas/SourceTreeReveal"
+        -
+          $ref: "#/components/schemas/SourceTreeFilter"
+        -
+          $ref: "#/components/schemas/SourceTreeReview"
+      discriminator:
+        propertyName: "kind"
+        mapping:
+          toggle: "#/components/schemas/SourceTreeToggle"
+          disclose: "#/components/schemas/SourceTreeDisclose"
+          reveal: "#/components/schemas/SourceTreeReveal"
+          filter: "#/components/schemas/SourceTreeFilter"
+          review: "#/components/schemas/SourceTreeReview"
+    SourceTreeViewUpdate:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - operation_id
+        - "expected_intent_revision"
+        - "command"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        operation_id:
+          type: "string"
+          format: "uuid"
+        expected_intent_revision:
+          type: "string"
+          format: uuid
+        base_presentation_id:
+          type: "string"
+          format: "uuid"
+          description: "Resolve a toggle against the displayed presentation while preserving current disclosure intent. A presentation this view no longer presents answers source_view_revision_changed."
+        command:
+          $ref: "#/components/schemas/SourceTreeCommand"
+    SourceTreeRow:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "address"
+        - "name"
+        - "kind"
+        - "depth"
+        - "expanded"
+      properties:
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+        name:
+          type: "string"
+        kind:
+          type: "string"
+          enum:
+            - "file"
+            - "directory"
+            - "loading"
+            - "empty"
+            - "error"
+        depth:
+          type: "integer"
+          minimum: 0
+        expanded:
+          type: "boolean"
+        symlink:
+          type: "boolean"
+        deleted:
+          type: "boolean"
+        file_id:
+          type: "string"
+          format: "uuid"
+        error:
+          type: "string"
+          maxLength: 4096
+    SourceTreeAncestor:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "row"
+        - "index"
+        - "end"
+      properties:
+        row:
+          $ref: "#/components/schemas/SourceTreeRow"
+        index:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+        end:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+    SourceTreeFramePrefix:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required: ["end", "fingerprint"]
+      properties:
+        end:
+          type: "integer"
+          format: "int64"
+          minimum: 1
+          description: "Exclusive end of the validated row prefix."
+        fingerprint:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+          description: "Opaque fingerprint of the intent, root order, and preceding tree rows."
+    SourceTreeFrame:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "intent_revision"
+        - "projection_revision"
+        - "extent"
+        - "span"
+        - "anchor"
+        - "rows"
+        - "ancestors"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        view_id:
+          type: "string"
+          format: "uuid"
+        intent_revision:
+          type: "string"
+          format: uuid
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        extent:
+          $ref: "views.yaml#/components/schemas/SourceViewExtent"
+        span:
+          $ref: "views.yaml#/components/schemas/SourceViewSpan"
+        target:
+          type: "integer"
+          format: "int64"
+          minimum: 0
+          x-go-pointer: true
+          description: "Resolved anchor plus offset before subtracting before, in this snapshot. Present on anchored reads, including when leading context is clamped at the beginning."
+        prefix:
+          $ref: "#/components/schemas/SourceTreeFramePrefix"
+          x-go-pointer: true
+          description: "Reusable prefix proof for this frame. May be absent for filtered or review projections."
+        retained_prefix:
+          $ref: "#/components/schemas/SourceTreeFramePrefix"
+          x-go-pointer: true
+          description: "Largest supplied prefix proven unchanged in this snapshot. Cached rows below end retain their positions; ancestor bounds beyond end require fresh context."
+        anchor:
+          $ref: "#/components/schemas/SourceTreeAddress"
+        rows:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SourceTreeRow"
+          maxItems: 200
+        ancestors:
+          type: "array"
+          description: "Complete root-first ancestor chain for the frame's first row."
+          items:
+            $ref: "#/components/schemas/SourceTreeAncestor"
+    SourceTreeLocation:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "projection_revision"
+        - "index"
+        - "visible"
+        - "pending"
+        - "address"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        view_id:
+          type: "string"
+          format: "uuid"
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        index:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+        pending:
+          type: "boolean"
+          description: Directory facts on this path are not ready; reveal the path to request them and retry after the projection changes.
+        visible:
+          type: "boolean"
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+    SourceTreeSearchMatch:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "address"
+        - "index"
+        - "from"
+        - "to"
+      properties:
+        address:
+          $ref: "#/components/schemas/SourceTreeAddress"
+        index:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+        from:
+          type: "integer"
+          minimum: 0
+        to:
+          type: "integer"
+          minimum: 0
+    SourceTreeSearchPage:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+        - "view_id"
+        - "projection_revision"
+        - "next_cursor"
+        - "complete"
+        - "matches"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "tree"
+        view_id:
+          type: "string"
+          format: "uuid"
+        projection_revision:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        next_cursor:
+          type: "string"
+        complete:
+          type: "boolean"
+        matches:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SourceTreeSearchMatch"
+          maxItems: 200

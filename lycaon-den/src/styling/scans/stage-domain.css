@@ -1,0 +1,191 @@
+.project-scans-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.project-scans-view .den-browse-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.project-scans-view .den-browse-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-scans-view .den-browse-main > .den-settings-hint {
+  flex-shrink: 0;
+  margin: 8px var(--den-stage-inset-x) 0;
+}
+
+.den-scans-chrome-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.den-scans-chrome-chips__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.den-scans-chrome-chips .den-browse-segmented {
+  font-variant-numeric: tabular-nums;
+}
+
+.den-scans-chrome-chips .den-browse-segment {
+  min-width: 4.5rem;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.den-scans-severity-filters {
+  flex-shrink: 1;
+}
+
+.den-scans-chrome-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-right: 12px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.den-scans-chrome-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--den-line);
+}
+
+.den-scans-primary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.den-scans-query {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+}
+
+.den-scans-query:focus-within {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+}
+
+.den-scans-query__glyph {
+  flex-shrink: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.den-scans-query input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+
+.den-scans-query input:focus,
+.den-scans-query input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.den-scans-query input::placeholder {
+  color: var(--den-text-muted);
+}
+
+.den-scans-filter-clear {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-label);
+  cursor: pointer;
+}
+
+.den-scans-filter-clear:hover {
+  color: var(--den-accent-text);
+}
+
+/* Stack when chrome space is constrained. */
+@container den-browse-chrome (max-width: 520px) {
+  .den-scans-chrome-chips {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .den-scans-chrome-chips__filters {
+    flex: none;
+    width: 100%;
+    padding-bottom: 10px;
+  }
+
+  .den-scans-chrome-meta {
+    margin-left: 0;
+    padding-right: 0;
+    padding-bottom: 8px;
+    width: 100%;
+  }
+
+  .den-scans-chrome-tools {
+    margin-left: 0;
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--den-line);
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .project-scans-view .den-browse-chrome__meta {
+    flex-shrink: 1;
+    min-width: 0;
+    margin-left: 0;
+  }
+}
+

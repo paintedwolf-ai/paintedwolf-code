@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudflare/circl"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.6.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-1229",
+  "GHSA-q9hv-hpm4-hj6x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4550"
+ },
+ "details": "CIRCL has an incorrect calculation in secp384r1 CombinedMult in github.com/cloudflare/circl",
+ "id": "GO-2026-4550",
+ "modified": "2026-02-27T02:17:00Z",
+ "published": "2026-02-27T02:17:00Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudflare/circl/security/advisories/GHSA-q9hv-hpm4-hj6x"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-1229"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cloudflare/circl/pull/583"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudflare/circl/releases/tag/v1.6.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "CIRCL has an incorrect calculation in secp384r1 CombinedMult in github.com/cloudflare/circl"
+}

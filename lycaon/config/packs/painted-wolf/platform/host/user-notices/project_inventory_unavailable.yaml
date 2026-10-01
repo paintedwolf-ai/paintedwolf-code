@@ -1,0 +1,6 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Project content unavailable
+retryable: true
+message: The project's agent content could not be indexed.
+suggested_action: Try opening project trust again. Check that the project folders are accessible if this continues.

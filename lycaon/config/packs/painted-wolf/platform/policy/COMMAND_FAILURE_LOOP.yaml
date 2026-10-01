@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COMMAND_FAILURE_LOOP
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.count
+when: paintedwolf.rejection_code == "COMMAND_FAILURE_LOOP"
+effect: block
+copy:
+  what: command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row.
+  cause: Repeating the same confined invocation without changing the approach burns budget without new information.
+  why: The same command line, cwd, and capability keep returning a non-zero exit. Follow the Fix on the preceding
+    Code, or change the command; replaying the identical invocation is not a new approach.
+  fix: Inspect the preceding outcome and follow any structured refusal’s recovery fields. Resolve an observed
+    cause before retrying. Changing arguments, cwd, or capability declarations merely to evade this guard is
+    not progress; do not replay the unchanged failing invocation.
+  instead: Stop replaying the identical invocation; follow the preceding Code's Fix or change approach
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_loop
+x-paintedwolf-message: command is stuck in a failure loop
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    command: go mod tidy
+    count: 3
+  expect_contains:
+  - 'Code: COMMAND_FAILURE_LOOP'
+  - go mod tidy
+  - failed 3 times

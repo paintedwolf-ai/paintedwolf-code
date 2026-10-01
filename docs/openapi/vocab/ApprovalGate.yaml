@@ -1,0 +1,95 @@
+# ApprovalGate — the closed set of reasons a human is interrupted.
+#
+# Values are ordered by citation priority. The first match is primary.
+# `comment` becomes Go documentation; `label` becomes card copy.
+name: ApprovalGate
+go_const_prefix: Gate
+description: >-
+  The reason a human was interrupted. Closed set; every approval card names one.
+ts_labels:
+  path: lycaon-den/src/chat/checkpoint/gate-copy.generated.ts
+  const: GATE_LABELS
+  type_import: ../../api/types.ts
+  doc: >-
+    Human labels for the host's closed gate vocabulary.
+values:
+  - id: secret_outbound
+    comment: >-
+      fires when an outbound payload would increase credential disclosure.
+    label: A credential was about to leave this machine
+  - id: consent_drift
+    comment: >-
+      fires when a remote tool definition differs from its pinned definition.
+    label: This tool changed since you approved it
+  - id: remote_package_execution
+    comment: >-
+      fires before remote package code executes when identity is unresolved,
+      unverified, or newly published.
+    label: This downloads and runs package code
+  - id: remote_package_execution_known
+    comment: >-
+      fires before known, verified remote package code executes.
+    label: This downloads and runs package code
+  - id: authority_misuse
+    comment: >-
+      fires when a detection flags an external, unrecoverable operation.
+    label: A detection matched this action
+  - id: agent_policy_change
+    comment: >-
+      fires at Balanced and Strict before a change to project files that steer
+      or authorize agents: instructions, skills, prompt overrides, and project
+      settings. A chat lease covers later changes to the same trust surface, or
+      the same files at Strict.
+    label: This changes project instructions or settings agents follow
+  - id: sensitive_location
+    comment: >-
+      fires when an outside-root path matches the sensitive-path catalog.
+    label: This is a sensitive location outside your project
+  - id: agent_chosen_outbound
+    comment: >-
+      fires on the first reach to an unconfigured agent-selected destination.
+      A catalogued public package registry is not agent-selected until
+      credential-class content enters the chat. Cites the
+      chat's ingestion state when it has one.
+    label: The agent chose this destination, not your setup
+  - id: secret_exposed_outbound
+    comment: >-
+      is the Strict ask when a credential-exposed chat sends outbound content.
+    label: This chat has read a credential, and this sends content out
+  - id: user_rule
+    comment: >-
+      fires on an ask authored by the user or project.
+    label: A rule you wrote asks about this
+  - id: outside_roots_write
+    comment: >-
+      fires on a filesystem write or mutation outside the attached roots.
+    label: This writes outside your attached folders
+  - id: outside_roots_read
+    comment: >-
+      fires on a filesystem read outside the attached roots.
+    label: This reads outside your attached folders
+  - id: unobserved_channel
+    comment: >-
+      fires when an execution boundary prevents required observation.
+    label: This runs where the app cannot observe it
+  - id: explicit_approval_request
+    comment: >-
+      fires when a typed host surface explicitly requests review.
+    label: This action explicitly requested your approval
+  - id: capability_widening
+    comment: >-
+      fires when a structured request would widen local-network authority.
+    label: This chat has not been granted this capability
+  - id: first_host
+    comment: >-
+      is the Strict confirmation for a command's first contact with an outbound host.
+    label: First contact with this host in this chat
+  - id: mcp_unleased
+    go: MCPUnleased
+    comment: >-
+      is the Strict confirmation for an MCP call without an exact lease.
+    label: This MCP tool is not covered by an approval
+  - id: incomplete_facts
+    comment: >-
+      fires when a required approval fact is missing.
+    label: The app could not confirm what this would do

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-to-lower-case
+title: "Lower case"
+scope: "files"
+keywords:
+  - "lowercase"
+  - "to lower"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.toLowerCase"

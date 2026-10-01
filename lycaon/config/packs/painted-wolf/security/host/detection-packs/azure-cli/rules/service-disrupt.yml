@@ -1,0 +1,38 @@
+title: Stop or scale down a running resource
+id: 88997578-432f-43cc-85d9-23494807e617
+description: Stops, deallocates, or scales down a running Azure resource.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image: az
+  grp_resource:
+    CommandLine|contains:
+      - ' vm '
+      - ' vmss '
+      - ' aks '
+      - ' sql '
+      - ' webapp '
+      - ' functionapp '
+      - ' containerapp '
+  verbs_service_disrupt:
+    CommandLine|contains:
+      - ' stop'
+      - ' deallocate'
+      - ' restart'
+      - ' scale'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and grp_resource and verbs_service_disrupt and not filter_rehearsal and not filter_local

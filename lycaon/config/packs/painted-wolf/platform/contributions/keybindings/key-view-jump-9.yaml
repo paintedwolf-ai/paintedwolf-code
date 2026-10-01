@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-view-jump-9
+command: painted-wolf/platform:view-jump-9
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader 9"
+  windows:
+    - "Leader 9"
+  linux:
+    - "Leader 9"

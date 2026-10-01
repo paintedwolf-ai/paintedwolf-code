@@ -1,0 +1,9 @@
+# 2026/08/25 17:52:45.657782 [TestStorePatchNeverRemovesRows] [rapid] draw count: 1
+# 2026/08/25 17:52:45.657787 [TestStorePatchNeverRemovesRows] [rapid] draw body: ""
+# 2026/08/25 17:52:45.657870 [TestStorePatchNeverRemovesRows] append: load evidence ledger: SQL logic error: no such column: body (1)
+# 
+v0.4.8#7021807421478874765
+0x0
+0x0
+0x0
+0x0

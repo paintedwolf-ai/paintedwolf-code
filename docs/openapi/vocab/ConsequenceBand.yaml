@@ -1,0 +1,7 @@
+name: ConsequenceBand
+go_const_prefix: ConsequenceBand
+values:
+  - id: standard
+    comment: is routine approval chrome.
+  - id: high_risk
+    comment: is elevated chrome; presentation only.

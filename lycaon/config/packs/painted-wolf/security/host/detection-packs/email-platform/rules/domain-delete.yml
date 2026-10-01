@@ -1,0 +1,27 @@
+title: Delete a verified sending domain
+id: f4b7fae2-f53a-4d73-a98d-c8b8d9db627d
+description: Removes a verified email-sending domain, so mail sent from it starts failing.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: resend
+    CommandLine|contains: ' domains delete'
+  selection_confirm:
+    CommandLine|contains: '--yes'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and selection_confirm and not filter_rehearsal and not filter_local

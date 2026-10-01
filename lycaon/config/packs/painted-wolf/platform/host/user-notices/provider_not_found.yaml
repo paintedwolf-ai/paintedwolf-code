@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Model provider not found
+message: >-
+  No provider is configured under that id.
+suggested_action: >-
+  Add or re-select the provider in Settings → AI providers.
+action: open_ai_providers
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - No provider is configured
+      - AI providers

@@ -1,0 +1,6 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Trust changes updated
+retryable: true
+message: The project changed while its trust review was opening.
+suggested_action: Open Trust again to capture the latest changes.

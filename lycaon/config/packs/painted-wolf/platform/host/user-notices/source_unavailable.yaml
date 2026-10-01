@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Folder unavailable
+message: This folder cannot be read right now.
+suggested_action: Check that the folder is still attached and readable, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [cannot be read right now]

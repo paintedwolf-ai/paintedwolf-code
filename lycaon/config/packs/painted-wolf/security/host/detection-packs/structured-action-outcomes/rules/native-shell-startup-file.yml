@@ -1,0 +1,19 @@
+title: Change a shell startup file
+id: 2b01af53-b88e-4a34-b81c-5e91d7c451d5
+status: stable
+description: Mutates a user or system shell startup file through a native file action.
+references: [https://attack.mitre.org/techniques/T1546/004/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, git_restore]
+    TargetFile|re:
+      - '^~[/][.](bash_profile|bash_login|bashrc|profile|zprofile|zshenv|zshrc|config/fish/config[.]fish)$'
+      - '^/etc/(profile|bashrc|bash[.]bashrc|zprofile|zshenv|zshrc)$'
+      - '^/etc/profile[.]d/[^/]+[.]sh$'
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.persistence]

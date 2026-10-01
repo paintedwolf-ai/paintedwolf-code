@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-jump-back
+title: "Go back in files jump history"
+scope: "files"
+keywords:
+  - "back"
+  - "jump back"
+  - "navigate back"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.jumpBack"

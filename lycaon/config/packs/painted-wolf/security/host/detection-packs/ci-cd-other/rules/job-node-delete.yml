@@ -1,0 +1,31 @@
+title: Delete a CI job, pipeline, or agent
+id: 43ae8128-473d-481a-8277-246742264b6b
+description: Permanently removes a job's build history and configuration, or an agent registration.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_jenkins:
+    Image: java
+    CommandLine|contains: 'jenkins-cli.jar'
+    Argv|contains:
+      - 'delete-job'
+      - 'delete-node'
+      - 'delete-builds'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_jenkins and not filter_rehearsal and not filter_local

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:files-reopen-closed-tab
+title: "Reopen closed files tab"
+scope: "files"
+keywords:
+  - "reopen tab"
+  - "restore tab"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.reopenClosedTab"

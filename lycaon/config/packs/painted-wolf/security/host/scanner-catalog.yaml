@@ -1,0 +1,115 @@
+# External scanner catalog. Binaries remain user-installed.
+# Commands use fixed argv and must consume {{scan_target}}.
+# {{project_dir}} names the publication root; {{report_path}} names a host-managed file.
+# output_parser is limited to the user-layer parser allowlist.
+# Empty ok_exit_codes accepts every exit code.
+# Empty install uses docs_url alone.
+
+scanners:
+  # ---- Dependencies / SCA ----------------------------------------------------
+  - id: trivy_sca
+    label: Trivy — dependencies
+    binary: trivy
+    engine: trivy
+    scope_kind: dependencies
+    categories: [sca, security]
+    command: [trivy, fs, --quiet, --format, sarif, --scanners, vuln, "{{scan_target}}"]
+    output_parser: sarif
+    probe: [trivy, --version]
+    install: brew install trivy
+    docs_url: https://trivy.dev/docs/
+    hint: Scans lockfiles and manifests for known CVEs. One binary also covers secrets and IaC — add those separately.
+
+  - id: osv_scanner
+    label: OSV-Scanner
+    binary: osv-scanner
+    engine: osv-scanner
+    scope_kind: dependencies
+    categories: [sca, security]
+    command: [osv-scanner, scan, source, --format, sarif, --recursive, "{{scan_target}}"]
+    output_parser: sarif
+    probe: [osv-scanner, --version]
+    install: brew install osv-scanner
+    docs_url: https://google.github.io/osv-scanner/
+    hint: Google's OSV CLI — the same advisory database as the built-in OSV-Scalibr, a different tool around it. Reads lockfiles; writes the report to stdout.
+
+  - id: grype
+    label: Grype
+    binary: grype
+    engine: grype
+    scope_kind: dependencies
+    categories: [sca, security]
+    command: [grype, "dir:{{scan_target}}", -o, sarif, -q]
+    output_parser: sarif
+    probe: [grype, version]
+    install: brew install anchore/grype/grype
+    docs_url: https://github.com/anchore/grype
+    hint: Anchore's vulnerability scanner. Accepts directories or SBOMs.
+
+  # ---- Static analysis / SAST ------------------------------------------------
+  - id: opengrep_sast
+    label: OpenGrep — your rules
+    binary: opengrep
+    engine: opengrep
+    scope_kind: source_driver
+    categories: [sast, security]
+    command: [opengrep, scan, --quiet, --sarif, --config, "{{project_dir}}/.opengrep", "{{scan_target}}"]
+    output_parser: sarif
+    probe: [opengrep, --version]
+    ok_exit_codes: [0]
+    docs_url: https://opengrep.dev/
+    hint: The same engine as the built-in code scanner, running your rules from .opengrep/ instead of ours. Create that directory before selecting this.
+
+  - id: semgrep_sast
+    label: Semgrep — code
+    binary: semgrep
+    engine: semgrep
+    scope_kind: source_driver
+    categories: [sast, security]
+    command: [semgrep, scan, --quiet, --sarif, --config, "{{project_dir}}/.semgrep", "{{scan_target}}"]
+    output_parser: sarif
+    probe: [semgrep, --version]
+    ok_exit_codes: [0]
+    install: brew install semgrep
+    docs_url: https://semgrep.dev/docs/cli-reference
+    hint: Reads your rules from .semgrep/. Registry rulesets (p/default and friends) work if you point --config at them.
+
+  - id: gosec
+    label: gosec — Go
+    binary: gosec
+    engine: gosec
+    scope_kind: source_driver
+    categories: [sast, security]
+    command: [gosec, -fmt, sarif, "{{scan_target}}"]
+    output_parser: sarif
+    probe: [gosec, --version]
+    install: brew install gosec
+    docs_url: https://github.com/securego/gosec
+    hint: Go-only. Receives the exact host-selected source path for each invocation.
+
+  # ---- Secrets ---------------------------------------------------------------
+  - id: gitleaks
+    label: Gitleaks
+    binary: gitleaks
+    engine: gitleaks
+    scope_kind: secrets
+    categories: [secret, security]
+    command: [gitleaks, dir, "{{scan_target}}", --report-format, sarif, --report-path, "{{report_path}}", --no-banner, --exit-code, "0"]
+    output_parser: sarif
+    probe: [gitleaks, version]
+    install: brew install gitleaks
+    docs_url: https://github.com/gitleaks/gitleaks
+    hint: The same engine as the built-in secret scanner, run as your own install with upstream's rules and your .gitleaks.toml. Writes its report to a file rather than stdout, so the host supplies the path.
+
+  - id: trivy_secrets
+    label: Trivy — secrets
+    binary: trivy
+    engine: trivy
+    scope_kind: secrets
+    categories: [secret, security]
+    command: [trivy, fs, --quiet, --format, sarif, --scanners, secret, "{{scan_target}}"]
+    output_parser: sarif
+    probe: [trivy, --version]
+    install: brew install trivy
+    docs_url: https://trivy.dev/docs/scanner/secret/
+    hint: Same trivy binary as the dependency scanner, pointed at its secret rules.

@@ -1,0 +1,5 @@
+id: algolia-api-key
+upstream_id: algolia-api-key
+title: Algolia API key
+severity: critical
+enabled: false

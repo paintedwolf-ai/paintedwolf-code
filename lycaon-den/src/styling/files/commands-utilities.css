@@ -1,0 +1,35 @@
+@utility den-editor-command-bar__input {
+  .den-editor-command-bar--find & {
+    flex: 1 1 10rem;
+    min-width: 4rem;
+  }
+}
+
+/* The count yields before the field does. */
+@utility den-editor-command-bar__count {
+  .den-editor-command-bar--find & {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.den-editor-command-bar-host--files .den-editor-command-bar--goto {
+  grid-template-columns: auto minmax(6rem, 1fr) auto auto auto;
+  width: min(28rem, 100%);
+  margin-left: auto;
+  display: grid;
+}
+
+.den-editor-command-bar--goto .den-editor-command-bar__count {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.den-editor-command-bar-host--files .den-editor-command-bar--goto
+  .den-editor-command-bar__input {
+  flex: 1 1 10rem;
+}
+

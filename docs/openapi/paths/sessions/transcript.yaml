@@ -1,0 +1,207 @@
+paths:
+  /v1/sessions/{id}/messages:
+    get:
+      tags:
+      - sessions
+      operationId: listSessionMessages
+      summary: List a paginated Ord window of session messages
+      description: |
+        Returns one contiguous message window ordered by immutable Ord, plus the
+        transcript watermark. Omit before/after to fetch the newest page (live
+        tail), or from=oldest for the first page. Pass a page's before_cursor as
+        before for the older window, or its after_cursor as after for the newer
+        one; before_message_id and after_message_id open the window beside a
+        message the client already holds. A request names at most one of these
+        positions. worker_id restricts a reused child session to one immutable
+        worker run before pagination is applied.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+        description: Max messages in the window (default 100, max 500)
+      - name: before
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque pagination cursor — return older messages before this cursor
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque pagination cursor — return newer messages after this cursor
+      - name: before_message_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Return the window of messages older than this message of the chat
+      - name: after_message_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Return the window of messages newer than this message of the chat
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [newest, oldest]
+          default: newest
+        description: Which end of the transcript an unpositioned window starts from
+      - name: worker_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Restrict messages to the associated worker run
+      responses:
+        '200':
+          description: One Ord window plus cursors and the transcript watermark
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/messages.yaml#/components/schemas/SessionTranscriptPage
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/sessions/{id}/export:
+    get:
+      tags:
+      - sessions
+      operationId: exportSessionTranscript
+      summary: Export one session transcript as Markdown or JSON
+      description: >-
+        Downloads a portable copy of one conversation. format=md (default) is a
+        human-readable conversation with transcript chrome filtered out.
+        format=json is the full-fidelity SessionTranscriptPage. Filename is
+        derived from the session title and the first eight characters of the
+        session id.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - md
+          - json
+          default: md
+        description: Export format (default md)
+      responses:
+        '200':
+          description: Transcript export attachment
+          content:
+            text/markdown:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/messages.yaml#/components/schemas/SessionTranscriptPage
+        '400':
+          description: Unknown export format
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+  /v1/sessions/{id}/stream:
+    get:
+      tags:
+      - sessions
+      operationId: streamSession
+      summary: Stream one message for a session
+      description: >-
+        Each SSE data frame is a JSON object. `token` carries message text;
+        `reset` selects replacement instead of append, including when `token`
+        is empty; `tool_calls` replaces the in-flight tool-call list when
+        present; `done` terminates the stream. Live frames are full snapshots
+        with `reset` true. Settled replay resets on its first chunk and appends
+        later chunks; a persisted fallback is one reset snapshot.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: message
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Message ID to stream
+      responses:
+        '200':
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: ../../components/schemas/session/prompts.yaml#/components/schemas/PromptStreamChunk
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/navigation:
+    post:
+      tags: [sessions]
+      operationId: resolveMessageNavigation
+      x-person-action: none
+      summary: Resolve a settled message's navigation destinations
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/session/navigation.yaml#/components/schemas/ResolveMessageNavigationRequest
+      responses:
+        '200':
+          description: Bounded navigation resolutions, including incomplete coverage and candidate pages
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/navigation.yaml#/components/schemas/MessageNavigationResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

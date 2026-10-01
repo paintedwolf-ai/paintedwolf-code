@@ -1,0 +1,14 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Low disk space
+message: >-
+  Only {{ free_mb }} MB is free. Scans, browser pages, and session history
+  need room to work, and writes may start failing.
+suggested_action: Free up a few gigabytes, then re-check.
+scenarios:
+  - id: default
+    vars:
+      free_mb: "900"
+    expect_contains:
+      - 900 MB is free
+      - Free up

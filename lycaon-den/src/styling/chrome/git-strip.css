@@ -1,0 +1,469 @@
+.git-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  font-size: var(--text-den-compact);
+}
+.git-strip__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2rem;
+}
+.git-strip__row--nav {
+  flex-wrap: wrap;
+}
+.git-strip__row--compose {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+.git-strip__compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid var(--den-control-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  transition:
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+}
+/* The card displays focus for its borderless textarea. */
+.git-strip__compose:focus-within {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 30%, var(--den-line));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--den-accent-signal) 14%, transparent),
+    0 0 4px 1px color-mix(in srgb, var(--den-accent-signal) 10%, transparent);
+}
+.git-strip__row--compose .git-strip__message {
+  /* In column layout, the textarea content determines its height. */
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-den-body);
+}
+.git-strip__message-scroll {
+  max-height: 10rem;
+}
+.git-strip__row--compose .git-strip__message:focus,
+.git-strip__row--compose .git-strip__message:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.git-strip__row--compose .git-strip__message:disabled {
+  background: transparent;
+}
+.git-strip__compose-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+.git-strip__compose-foot .git-strip__commit {
+  margin-inline-start: auto;
+}
+.git-strip--empty {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+}
+.git-strip__empty {
+  color: var(--den-text-muted);
+}
+.git-strip__empty-hint {
+  flex: 1 1 100%;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__row--scope {
+  flex-wrap: wrap;
+}
+.git-strip__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--den-text);
+  white-space: nowrap;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.git-strip__scope-label {
+  font-weight: 600;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-strip__scope-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__scope-unpin {
+  font-size: var(--text-den-micro);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-border);
+  color: var(--den-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__scope-total {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__scope-meta {
+  margin-left: auto;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__repos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.git-strip__repo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-surface);
+}
+.git-strip__repo-card-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.git-strip__repo-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-strip__repo-branch {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  padding: 0.05rem 0.35rem;
+}
+.git-strip__repo-count {
+  margin-left: auto;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__repo-open {
+  font-size: var(--text-den-micro);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-border);
+  color: var(--den-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__repos-footnote {
+  margin: 0;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__init {
+  font-size: var(--text-den-overline);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-border));
+  color: var(--den-accent-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__init:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.git-strip__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--den-text);
+  white-space: nowrap;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.git-strip__leaf {
+  color: var(--den-text-muted);
+}
+.git-strip__branch-name {
+  font-weight: 600;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-strip__caret {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+.git-strip__clean {
+  color: var(--den-accent-text);
+}
+.git-strip__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.git-strip__track {
+  display: inline-flex;
+  gap: 0.3rem;
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+}
+.git-strip__sync-btn {
+  font-size: var(--text-den-micro);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-border);
+  color: var(--den-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__sync-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.git-strip__discard {
+  font-size: var(--text-den-overline);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-danger) 45%, var(--den-border));
+  color: var(--den-danger);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__discard:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.git-strip__count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: var(--text-den-micro);
+  padding: 0.1rem 0.2rem;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+.git-strip__count:hover {
+  color: var(--den-text);
+}
+.git-strip__count-n {
+  font-weight: 600;
+  color: var(--den-text);
+}
+.git-strip__ai-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.git-strip__files {
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-surface);
+  max-height: 13rem;
+}
+.git-strip__files-content {
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+}
+.git-strip__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-surface);
+}
+.git-strip__branch-list {
+  max-height: 11rem;
+}
+.git-strip__branch-list-content {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.git-strip__branch-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  text-align: left;
+  font-size: var(--text-den-caption);
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  border-radius: var(--den-radius);
+  background: transparent;
+  color: var(--den-text);
+  cursor: pointer;
+}
+.git-strip__branch-item:hover:not(:disabled) {
+  background: var(--den-tint-1);
+}
+.git-strip__branch-item--current {
+  color: var(--den-accent-text);
+  cursor: default;
+}
+.git-strip__file {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.15rem 0.3rem;
+  font-size: var(--text-den-overline);
+}
+.git-strip__file-status {
+  flex-shrink: 0;
+  width: 4.2rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+.git-strip__message {
+  flex: 1 1 10rem;
+  min-width: 6rem;
+  font-size: var(--text-den-caption);
+  font-family: inherit;
+  line-height: 1.35;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-control-bg);
+  color: var(--den-text);
+}
+/* The wrapper scrolls the growing commit message. */
+textarea.git-strip__message {
+  resize: none;
+  overflow-y: hidden;
+}
+.git-strip__ai {
+  flex-shrink: 0;
+  font-size: var(--text-den-micro);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-border));
+  color: var(--den-accent-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.git-strip__row--compose .git-strip__ai,
+.git-strip__row--compose .git-strip__commit,
+.git-strip__row--compose .git-strip__stash,
+.git-strip__row--compose .git-strip__discard {
+  min-height: max(1.7143rem, calc(var(--text-den-label) * 1.4 + 0.5em));
+  padding: 0 0.5rem;
+  font-size: var(--text-den-label);
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.git-strip__row--compose .git-strip__ai {
+  border-color: transparent;
+  background: transparent;
+}
+.git-strip__row--compose .git-strip__ai:hover:not(:disabled) {
+  background: var(--den-selection-hover);
+}
+.git-strip__row--compose .git-strip__commit {
+  padding: 0 0.7rem;
+  font-weight: 600;
+}
+.git-strip__row--compose .git-strip__commit:disabled {
+  border-color: var(--den-border);
+  background: var(--den-tint-3);
+  color: var(--den-text-muted);
+  opacity: 1;
+}
+.git-strip__row--compose .git-strip__stash,
+.git-strip__row--compose .git-strip__discard {
+  border-color: transparent;
+  color: var(--den-text-muted);
+}
+.git-strip__row--compose .git-strip__stash:hover:not(:disabled) {
+  background: var(--den-selection-hover);
+  color: var(--den-text);
+}
+.git-strip__row--compose .git-strip__discard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--den-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--den-danger) 8%, transparent);
+  color: var(--den-danger-text);
+}
+.git-strip__commit {
+  font-size: var(--text-den-overline);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-primary-border);
+  color: var(--den-primary-text);
+  background: var(--den-primary-bg);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+}
+.git-strip__commit:hover:not(:disabled) {
+  background: var(--den-primary-bg-hover);
+  border-color: var(--den-primary-border-hover);
+}
+.git-strip__commit:active:not(:disabled) {
+  background: var(--den-primary-bg-active);
+}
+.git-strip__stash {
+  font-size: var(--text-den-overline);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-border);
+  color: var(--den-text);
+  background: transparent;
+  cursor: pointer;
+}
+.git-strip__ai:disabled,
+.git-strip__commit:disabled,
+.git-strip__stash:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.git-strip__message:disabled {
+  background: var(--den-control-bg-disabled);
+  color: var(--den-text-muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+

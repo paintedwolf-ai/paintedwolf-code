@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-sidebar
+command: painted-wolf/platform:go-sidebar
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader B"
+  windows:
+    - "Leader B"
+  linux:
+    - "Leader B"

@@ -1,0 +1,19 @@
+# extract_archive — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    extract_archive:
+        tool: extract_archive
+        tier_hint: recoverable
+        what_changes: Extract an archive into the project.
+        who_affected: Destination paths in this project — existing files may be overwritten.
+        if_wrong: Overwrites may be reversible via git for tracked paths.
+        allow_line: extracting archives in this project
+        scenarios:
+            - id: default
+              vars:
+                path: vendor/pkg
+                project: my-app
+              expect_contains:
+                - Extract
+                - project

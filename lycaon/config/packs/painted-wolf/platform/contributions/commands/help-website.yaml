@@ -1,0 +1,9 @@
+id: painted-wolf/platform:help-website
+title: "Visit website"
+scope: "global"
+keywords:
+  - "website"
+  - "homepage"
+action:
+  kind: native_ui
+  handler: "help.website"

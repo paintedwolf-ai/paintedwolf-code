@@ -1,0 +1,7 @@
+id: layout_overview
+description: "Use when you cannot name any directory yet — root map / file inventory (prefer list_dir(\".\") first; not a briefing)"
+probes:
+  - kind: list_dir
+    path: "."
+    label: layout
+    priority: 10

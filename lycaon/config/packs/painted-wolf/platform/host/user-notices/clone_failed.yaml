@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not clone the repository
+message: The repository could not be cloned.
+suggested_action: Check the repository URL, your access to it, and the network connection, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - The repository could not be cloned.

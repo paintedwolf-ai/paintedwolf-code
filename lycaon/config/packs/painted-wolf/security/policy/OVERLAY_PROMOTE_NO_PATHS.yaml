@@ -1,0 +1,53 @@
+oar: '1.0'
+id: OVERLAY_PROMOTE_NO_PATHS
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+  - paintedwolf.remaining_overlay_paths
+when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NO_PATHS"
+effect: block
+copy:
+  what: Overlay {{ paintedwolf.job_id }} has no applicable paths for this operation.
+  cause: '{% if paintedwolf.remaining_overlay_paths %}Changes remain at {{ paintedwolf.remaining_overlay_paths
+    }}, but this operation selected no paths to apply.{% else %}The current overlay inspection found no
+    remaining changes.{% endif %}'
+  why: An empty path selection does not establish that the leg’s work is complete or that its overlay
+    should be discarded.
+  fix: '{% if paintedwolf.remaining_overlay_paths %}Preserve the overlay. Use `preview_overlay` for the
+    current paths and resolve the remaining changes before retrying promotion; inspect its scope and change
+    report if no paths qualify.{% else %}Inspect the leg’s result and existing primary work. Use `reject_overlay(overlay_id="{{
+    paintedwolf.job_id }}", reason=…)` only when this empty overlay is no longer needed. Then use `update_progress`
+    to close only rows whose completion or skip is supported by evidence. Dispatch a fresh `task` with
+    a corrected brief only if work remains.{% endif %}'
+  instead: Do not repeat the unchanged promotion or discard remaining work merely to clear the error.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Overlay {{ paintedwolf.job_id }} has no paths to promote
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-empty
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: OVERLAY_PROMOTE_NO_PATHS'
+  - job-empty
+  - reject_overlay
+  - update_progress
+- id: remaining_changes
+  vars:
+    job_id: job-partial
+    remaining_overlay_paths:
+    - src/remaining.go
+  expect_contains:
+  - src/remaining.go
+  - Preserve the overlay
+  - preview_overlay
+selector:
+  tool:
+  - preview_overlay
+  - promote_overlay

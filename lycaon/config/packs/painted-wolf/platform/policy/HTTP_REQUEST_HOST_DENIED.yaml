@@ -1,0 +1,38 @@
+oar: '1.0'
+id: HTTP_REQUEST_HOST_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - http_request
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.http_requests_started
+  - paintedwolf.http_responses_received
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "HTTP_REQUEST_HOST_DENIED"
+effect: block
+copy:
+  what: The HTTP destination was not authorized.
+  cause: The host denied access to this destination or redirect hop before dialing it.{% if paintedwolf.http_requests_started
+    %} Earlier exchange attempts have already started ({{ paintedwolf.http_requests_started }} attempts, {{ paintedwolf.http_responses_received
+    }} responses).{% endif %}{% if paintedwolf.rejection_reason %} {{ paintedwolf.rejection_reason }}{% endif %}
+  why: Every redirect hop and direct destination crosses the normal egress approval boundary.
+  fix: Preserve any earlier exchange outcome. Continue only through an authorized destination or return the blocked
+    dependency to the caller; do not replay a mutation merely to retry a denied redirect.
+  instead: Do not bypass the boundary through another network client
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: The HTTP destination was not authorized
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    host: api.example.test
+    profile: implement
+    tool: http_request
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: HTTP_REQUEST_HOST_DENIED'

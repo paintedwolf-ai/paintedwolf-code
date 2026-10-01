@@ -1,0 +1,51 @@
+oar: '1.0'
+id: SUMMARIZE_NO_MATERIAL
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - summarize
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.match_count
+    - paintedwolf.path
+    - paintedwolf.pattern
+    - paintedwolf.sample_identifiers
+    - paintedwolf.paths
+    - paintedwolf.summary_source_limited
+    - paintedwolf.summary_skipped_count
+    - paintedwolf.summary_skipped_paths
+when: paintedwolf.rejection_code == "SUMMARIZE_NO_MATERIAL"
+effect: block
+copy:
+  what: '`summarize` gathered no usable material{% if paintedwolf.paths %} from {{ paintedwolf.paths }}{% endif %}{% if paintedwolf.pattern %} for pattern {{ paintedwolf.pattern }}{% endif %}.'
+  cause: 'The bounded gather produced no candidates.{% if paintedwolf.summary_source_limited %} Source reads reached a host budget.{% endif %}{% if paintedwolf.summary_skipped_count %} Omitted {{ paintedwolf.summary_skipped_count }} unreadable, non-text or budget-limited paths; sample: {{ paintedwolf.summary_skipped_paths }}.{% endif %}{% if paintedwolf.sample_identifiers %} Observed identifiers: {{ paintedwolf.sample_identifiers }}.{% endif %}'
+  why: No brief or anchors can be grounded in this result. Zero candidates do not establish absence outside the inspected readable scope.
+  fix: '{% if paintedwolf.summary_source_limited %}Narrow the requested paths to fit the source budget.{% else %}{% if paintedwolf.summary_skipped_count %}Inspect the omitted paths and their access or format before drawing a conclusion.{% else %}Check the requested scope{% if paintedwolf.pattern %} and broaden or correct the pattern using observed identifiers{% endif %} before retrying.{% endif %}{% endif %}'
+  instead: Keep this failed gather separate from evidence that the requested material does not exist.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:summarize
+x-paintedwolf-message: Summarize gathered no usable material
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: empty/
+      profile: coordinator
+      tool: summarize
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SUMMARIZE_NO_MATERIAL'
+  - id: pattern_miss
+    vars:
+      match_count: 0
+      path: lycaon/internal/api/server.go
+      pattern: func handle[A-Z]
+      profile: coordinator
+      sample_identifiers: handleSessions, handleWorkflowRuns, NewServer
+      tool: summarize
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SUMMARIZE_NO_MATERIAL'

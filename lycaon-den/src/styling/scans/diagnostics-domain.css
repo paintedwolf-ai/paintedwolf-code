@@ -1,0 +1,122 @@
+/* Empty states share spacing to keep navigation from shifting the layout. */
+.den-scans-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 56px var(--den-stage-inset-x) 64px;
+}
+
+@media (max-height: 620px) {
+  .den-scans-empty-state {
+    padding-top: 28px;
+    padding-bottom: 32px;
+  }
+}
+
+.den-scans-empty-state__title {
+  margin: 0;
+  font-size: var(--text-den-subhead);
+  font-weight: 600;
+  color: var(--den-text);
+  letter-spacing: -0.01em;
+}
+
+.den-scans-empty-state__body {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.55;
+  color: var(--den-text-muted);
+  text-wrap: pretty;
+}
+
+.den-scans-empty-state__note {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  line-height: 1.5;
+  color: var(--den-text-muted);
+}
+
+/* Detail sits below the action behind a rule: it is reference, not the point. */
+.den-scans-empty-state__detail {
+  align-self: stretch;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--den-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.den-scans-empty-state__detail-title {
+  margin: 0;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--den-text-muted);
+}
+
+/* Name and state in two columns so three scanners read as a table, not as
+   three run-on sentences. */
+.den-scans-scanner-rows {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: var(--text-den-hint);
+}
+
+.den-scans-scanner-rows dt {
+  margin: 0;
+  color: var(--den-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.den-scans-scanner-rows dt.den-scans-scanner-rows__off {
+  color: var(--den-text-muted);
+}
+
+.den-scans-scanner-rows dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+:where(.den-browse-stage[data-browse-band~="max-560"]) {
+  .den-scans-scanner-rows {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .den-scans-scanner-rows dd {
+    margin-bottom: 6px;
+  }
+}
+
+/* Row checkboxes sit beside the row button, positioned over its first column,
+   so selecting doesn't open the detail. */
+.den-ledger-row {
+  position: relative;
+}
+
+.den-ledger-check {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  cursor: pointer;
+}
+
+.den-list-header__cell[data-column="select"] .den-ledger-check {
+  position: static;
+  width: 100%;
+}
+

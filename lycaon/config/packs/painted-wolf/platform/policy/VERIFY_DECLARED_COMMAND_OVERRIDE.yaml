@@ -1,0 +1,40 @@
+oar: '1.0'
+id: VERIFY_DECLARED_COMMAND_OVERRIDE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.declared
+  - paintedwolf.requested
+  - paintedwolf.can_command
+when: paintedwolf.rejection_code == "VERIFY_DECLARED_COMMAND_OVERRIDE"
+effect: block
+copy:
+  what: this project declares its verify command as `{{ paintedwolf.declared }}`, and verify() was given `{{
+    paintedwolf.requested }}` instead.
+  cause: The supplied command differs from the project gate; verify refused it before execution.
+  why: The wrap-up gate only counts evidence from the declared command, so a substitute cannot produce the
+    verdict this is reaching for — it produces a result shaped like one. A green substitute would read as verified
+    when nothing the project recognizes has run.
+  fix: Call verify with no command to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} For
+    a narrower check while iterating, use the offered command tool; its result does not replace the project
+    gate.{% endif %}
+  instead: Drop the command argument and let verify run `{{ paintedwolf.declared }}`
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: verify runs the declared command, not a substitute
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    declared: ./task check
+    requested: go test ./internal/foo/...
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VERIFY_DECLARED_COMMAND_OVERRIDE'
+  - ./task check

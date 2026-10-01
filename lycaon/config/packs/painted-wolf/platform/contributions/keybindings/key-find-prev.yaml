@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-prev
+command: painted-wolf/platform:find-prev
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+G"
+  windows:
+    - "Mod+Shift+G"
+  linux:
+    - "Mod+Shift+G"

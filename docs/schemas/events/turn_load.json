@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/turn_load.json",
+  "$ref": "../../openapi/components/schemas/turn-load.yaml#/components/schemas/TurnLoad",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TurnLoad"
+}

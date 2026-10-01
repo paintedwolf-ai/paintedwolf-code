@@ -1,0 +1,15 @@
+{{!-- Markdown fragment for cargo-about; primary path uses --format json. --}}
+# Rust crates
+
+{{#each licenses}}
+## {{id}}
+
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

@@ -1,0 +1,7 @@
+# SourceChangeOrigin — who authored a source_changed event.
+name: SourceChangeOrigin
+go_const_prefix: SourceChangeOrigin
+values:
+  - id: agent
+  - id: user
+  - id: external

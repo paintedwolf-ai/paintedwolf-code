@@ -1,0 +1,216 @@
+.den-search-replace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.den-search-replace__truncated {
+  margin: 8px 16px 0;
+  color: var(--den-accent-text);
+}
+
+.den-search-replace__list {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 0 72px;
+}
+
+.den-search-replace__file {
+  border-bottom: 1px solid var(--den-line);
+}
+
+.den-search-replace__file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+}
+
+.den-search-replace__chevron {
+  width: 22px;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-search-replace__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.den-search-replace__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+}
+
+.den-search-replace__count {
+  flex-shrink: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+}
+
+.den-search-replace__hunks {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px 40px;
+}
+
+.den-search-replace__hunk {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.den-search-replace__line {
+  color: var(--den-text-muted);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+}
+
+.den-search-replace__diff {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  user-select: text;
+}
+
+.den-search-replace__diff ::selection {
+  background-color: var(--den-diff-selection);
+  color: var(--den-text);
+}
+
+.den-search-replace__before {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--den-diff-delete-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.den-search-replace__after {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--den-diff-add-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.den-search-replace__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--den-line);
+  background: color-mix(in srgb, var(--den-surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.den-search-replace__summary {
+  padding: 16px;
+}
+
+.den-search-replace__summary-title {
+  margin: 0 0 12px;
+  font-size: var(--text-den-subhead);
+  font-weight: 600;
+}
+
+.den-search-replace__skipped {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--den-danger) 40%, var(--den-border));
+  border-radius: var(--den-radius);
+  background: color-mix(in srgb, var(--den-danger) 8%, var(--den-surface));
+}
+
+.den-search-replace__skipped-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--den-danger-text);
+}
+
+.den-search-replace__skipped ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.den-search-replace__skipped li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: var(--text-den-hint);
+}
+
+.den-search-replace__skipped-path {
+  font-family: var(--den-font-mono);
+}
+
+.den-search-replace__skipped-reason {
+  color: var(--den-text-muted);
+}
+
+.den-search-replace__rename-banner {
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--den-line);
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+}
+
+.den-search-replace__rename-banner code {
+  font-family: var(--den-font-mono);
+  color: var(--den-accent-text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.den-search-replace__context-chip {
+  margin-left: 6px;
+}
+
+.den-search-replace__summary-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.den-search-replace__revert-report {
+  margin: 6px 0 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-search-replace__summary-title code {
+  font-family: var(--den-font-mono);
+  color: var(--den-accent-text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Layout only; links keep their own color. */
+.den-search-row__secondary,
+.den-search-detail__source {
+  font-size: var(--text-den-caption);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

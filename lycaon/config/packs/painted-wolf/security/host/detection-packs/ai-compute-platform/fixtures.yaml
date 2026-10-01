@@ -1,0 +1,73 @@
+fixtures:
+- rule: volume-delete
+  positive:
+  - modal volume delete my-volume -y
+  - modal volume delete my-volume --yes
+  - modal volume delete my-volume --env prod -y
+  - sudo modal volume delete my-volume -y
+  negative:
+  - modal volume delete my-volume
+  - modal volume list
+  - modal volume create my-volume
+  - modal volume get my-volume /data
+  - modal volume delete my-volume -y --help
+  - modal volume delete --help
+  - modal volume delete my-volume --dynamic
+- rule: secret-delete
+  positive:
+  - modal secret delete my-secret -y
+  - modal secret delete my-secret --yes
+  - sudo modal secret delete my-secret -y
+  negative:
+  - modal secret delete my-secret
+  - modal secret list
+  - modal secret create my-secret KEY=value
+  - modal secret delete my-secret --help
+  - modal secret delete my-secret -y --help
+- rule: app-stop
+  positive:
+  - modal app stop my-app -y
+  - modal app stop my-app --yes
+  - sudo modal app stop my-app -y
+  negative:
+  - modal app stop my-app
+  - modal app list
+  - modal app logs my-app
+  - modal app stop my-app --help
+  - modal app stop my-app -y --help
+- rule: runpod-pod-delete
+  positive:
+  - runpodctl remove pod abc123
+  - runpodctl remove pods my-pod --podCount 3
+  - sudo runpodctl remove pod abc123
+  negative:
+  - runpodctl get pod
+  - runpodctl get pods
+  - runpodctl create pod --name my-pod
+  - runpodctl remove pod --help
+  - runpodctl remove pods --help
+  - runpodctl remove podman-image xyz
+- rule: together-files-delete
+  positive:
+  - tg files delete file-6f50f9d1-5b95-416c-9040-0799b2b4b894
+  - together files delete file-6f50f9d1-5b95-416c-9040-0799b2b4b894
+  - sudo tg files delete file-6f50f9d1-5b95-416c-9040-0799b2b4b894
+  negative:
+  - tg files list
+  - together files list
+  - together files retrieve file-6f50f9d1-5b95-416c-9040-0799b2b4b894
+  - together files upload data.jsonl
+  - together files delete file-6f50f9d1-5b95-416c-9040-0799b2b4b894 --help
+  - together files delete --help
+- rule: together-endpoint-delete
+  positive:
+  - tg endpoints delete endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  - together endpoints delete endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  - sudo tg endpoints delete endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  negative:
+  - tg endpoints list --mine
+  - together endpoints list --mine
+  - together endpoints get endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  - together endpoints start endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  - together endpoints stop endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx
+  - together endpoints delete endpoint-e6c6b82f-90f7-45b7-af39-3ca3b51d08xx --help

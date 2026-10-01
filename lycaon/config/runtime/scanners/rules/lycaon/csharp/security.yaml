@@ -1,0 +1,112 @@
+rules:
+- id: lycaon.csharp.command-injection
+  languages:
+  - csharp
+  severity: ERROR
+  message: Request input reaches an executable command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - c_sharp
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.Query[...]
+    exact: true
+  - pattern: $REQ.Form[...]
+    exact: true
+  - pattern: $REQ.Headers[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Process.Start($PROGRAM,...)
+    - focus-metavariable: $PROGRAM
+- id: lycaon.csharp.path-traversal
+  languages:
+  - csharp
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - c_sharp
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.Query[...]
+    exact: true
+  - pattern: $REQ.Form[...]
+    exact: true
+  - pattern: $REQ.Headers[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: File.ReadAllText($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: File.OpenRead($PATH)
+    - focus-metavariable: $PATH
+- id: lycaon.csharp.open-redirect
+  languages:
+  - csharp
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - c_sharp
+  mode: taint
+  pattern-sources:
+  - pattern: $REQ.Query[...]
+    exact: true
+  - pattern: $REQ.Form[...]
+    exact: true
+  - pattern: $REQ.Headers[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Response.Redirect($URL)
+    - focus-metavariable: $URL
+- id: lycaon.csharp.binary-formatter
+  languages:
+  - csharp
+  severity: ERROR
+  message: BinaryFormatter deserialization can execute code
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: HIGH
+    technology:
+    - c_sharp
+  patterns:
+  - pattern-inside: var $F = new BinaryFormatter(); ...
+  - pattern: $F.Deserialize(...)
+- id: lycaon.csharp.certificate-callback-accept-all
+  languages:
+  - csharp
+  severity: ERROR
+  message: The HTTP client certificate callback unconditionally accepts certificates
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - c_sharp
+  pattern: $HANDLER.ServerCertificateCustomValidationCallback = (...) => true
+- id: lycaon.csharp.xml-network-entities
+  languages:
+  - csharp
+  severity: ERROR
+  message: XML reader settings enable DTDs and an external URL resolver
+  metadata:
+    category: security
+    cwe: CWE-611
+    confidence: HIGH
+    technology:
+    - c_sharp
+  pattern: new XmlReaderSettings { ..., DtdProcessing = DtdProcessing.Parse, ..., XmlResolver = new XmlUrlResolver(),
+    ... }

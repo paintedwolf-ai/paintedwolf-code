@@ -1,0 +1,38 @@
+oar: '1.0'
+id: EDITOR_DOCUMENT_CHANGING
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+    - write
+    - edit
+    - replace_lines
+    - code_rewrite
+    - jq_edit
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "EDITOR_DOCUMENT_CHANGING"
+effect: block
+copy:
+  what: 'The shared document `{{ paintedwolf.path }}` changed in an area this edit depends on; this edit was not applied.'
+  cause: The edit no longer matches the lines in your retained read, or the prepared publication changed before acceptance.
+  why: Recomputing against unseen text could overwrite another participant’s work.
+  fix: Read the file again, inspect the changed lines, and recompute the edit.
+  instead: Branch on Code; work on another file first, or wait before re-reading this one
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:editor_document
+x-paintedwolf-message: open editor document changed under the write
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: src/main.go
+      profile: implement
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EDITOR_DOCUMENT_CHANGING'

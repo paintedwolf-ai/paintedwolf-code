@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Worktree already bound
+message: This chat already has a worktree.
+suggested_action: Land or remove the existing worktree first.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - already has a worktree

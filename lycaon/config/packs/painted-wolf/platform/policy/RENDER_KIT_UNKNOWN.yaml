@@ -1,0 +1,41 @@
+oar: '1.0'
+id: RENDER_KIT_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.unknown_target
+  - paintedwolf.render_kit_kind
+  - paintedwolf.render_kit_available
+  - paintedwolf.render_kit_suggestions
+when: paintedwolf.rejection_code == "RENDER_KIT_UNKNOWN"
+effect: block
+copy:
+  what: render_view rejected a {{ paintedwolf.render_kit_kind }} catalog selection.
+  cause: The supplied selection is not recognized by the active hermetic design kit.
+  why: Mockups stay offline and deterministic — only host-bundled OFL fonts, Lucide-adapted icons, themes,
+    and viewport presets are allowed.
+  fix: '{% if paintedwolf.render_kit_available %}Available selections: {{ paintedwolf.render_kit_available
+    }}. {% endif %}{% if paintedwolf.render_kit_suggestions %}Candidate spellings: {{ paintedwolf.render_kit_suggestions
+    }}. {% endif %}Choose an intended catalog entry, using the current kit payload and naming guide. Suggestions
+    are candidates, not proof of semantic equivalence.'
+  instead: Use the current kit vocabulary and preserve the intended design
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Unknown design-kit name
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_KIT_UNKNOWN'

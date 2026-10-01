@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-to-upper-case
+command: painted-wolf/platform:editor-to-upper-case
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+U"
+  windows:
+    - "Leader U"
+  linux:
+    - "Leader U"

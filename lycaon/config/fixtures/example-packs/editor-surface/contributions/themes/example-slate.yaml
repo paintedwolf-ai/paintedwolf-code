@@ -1,0 +1,19 @@
+# The host derives the remaining theme tokens.
+# Contrast failures reject the theme.
+id: example/editor-surface:example-slate
+name: Slate
+appearance: dark
+window_colors:
+  main: "#6cb6ff"
+  anchors: ["#7ee787", "#e3b341", "#1b1f24", "#e6edf3"]
+  hue_spread: 18
+  chroma_min: 0.04
+  chroma_max: 0.12
+
+tokens:
+  background: "#1b1f24"
+  text: "#e6edf3"
+  accent: "#6cb6ff"
+  danger: "#ff7b72"
+  warning: "#e3b341"
+  status-positive: "#7ee787"

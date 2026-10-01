@@ -1,0 +1,79 @@
+# These rules match the paths an action names, so fixtures carry target_files.
+# Paths are home-relative, the form the event projection produces.
+fixtures:
+- rule: container-registry-auth
+  positive:
+  - command: docker login registry.example.test
+    target_files: ['~/.docker/config.json']
+  - command: podman login quay.example.test
+    target_files: ['~/.config/containers/auth.json']
+  - command: docker context create remote
+    target_files: ['~/.docker/contexts/meta/abc/meta.json']
+  negative:
+  - command: docker build -t api:dev .
+    target_files: ['~/code/app/Dockerfile']
+  # The plugin directory is not the credential file; the rule must not fire for it.
+  - command: docker buildx install
+    target_files: ['~/.docker/cli-plugins/docker-buildx']
+  - command: docker login registry.example.test --help
+    target_files: ['~/.docker/config.json']
+- rule: cloud-cli-auth
+  positive:
+  - command: aws configure set aws_access_key_id AKIA
+    target_files: ['~/.aws/credentials']
+  - command: gcloud auth login
+    target_files: ['~/.config/gcloud/credentials.db']
+  - command: kubectl config set-credentials dev
+    target_files: ['~/.kube/config']
+  - command: az login
+    target_files: ['~/.azure/msal_token_cache.json']
+  # The refused path is normally the temporary sibling a save writes before it
+  # renames over the target.
+  - command: aws configure set aws_access_key_id AKIA
+    target_files: ['~/.aws/.tmp-credentials88123']
+  negative:
+  - command: terraform apply
+    target_files: ['~/code/infra/main.tf']
+  - command: aws configure set aws_access_key_id AKIA --help
+    target_files: ['~/.aws/credentials']
+- rule: source-host-auth
+  positive:
+  - command: gh auth login
+    target_files: ['~/.config/gh/hosts.yml']
+  - command: glab auth login
+    target_files: ['~/.config/glab-cli/config.yml']
+  - command: git config credential.helper store
+    target_files: ['~/.git-credentials']
+  negative:
+  - command: git commit -m 'work'
+    target_files: ['~/code/app/main.go']
+  - command: gh auth login --help
+    target_files: ['~/.config/gh/hosts.yml']
+- rule: package-registry-auth
+  positive:
+  - command: npm login --registry https://registry.example.test
+    target_files: ['~/.npmrc']
+  - command: cargo login
+    target_files: ['~/.cargo/credentials.toml']
+  - command: mvn deploy
+    target_files: ['~/.m2/settings.xml']
+  negative:
+  - command: npm install
+    target_files: ['~/code/app/package-lock.json']
+  - command: npm login --help
+    target_files: ['~/.npmrc']
+- rule: secrets-manager-auth
+  positive:
+  - command: vault login -method=oidc
+    target_files: ['~/.vault-token']
+  - command: op signin
+    target_files: ['~/.config/op/config']
+  - command: rclone config create remote s3
+    target_files: ['~/.config/rclone/rclone.conf']
+  - command: terraform login
+    target_files: ['~/.terraform.d/credentials.tfrc.json']
+  negative:
+  - command: vault kv get secret/app
+    target_files: ['~/code/app/values.yaml']
+  - command: vault login -method=oidc --help
+    target_files: ['~/.vault-token']

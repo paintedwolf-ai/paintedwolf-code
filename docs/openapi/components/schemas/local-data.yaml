@@ -1,0 +1,248 @@
+components:
+  schemas:
+    # Enum values from docs/openapi/vocab/LocalDataBucketId.yaml — do not hand-edit.
+    LocalDataBucketId:
+      $ref: local-data-bucket-id.generated.yaml#/components/schemas/LocalDataBucketId
+    LocalDataBucketStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - present
+      properties:
+        id:
+          $ref: '#/components/schemas/LocalDataBucketId'
+        present:
+          type: boolean
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Best-effort on-disk size; may be omitted when unknown
+    LocalDataStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - buckets
+        - workspace_caches
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalDataBucketStatus'
+        workspace_caches:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceCacheStatus'
+    WorkspaceCacheStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, source_root, logical_bytes, allocated_bytes, last_used_at]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{16}$'
+        source_root:
+          type: string
+        logical_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        allocated_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Best-effort allocated bytes retained by the immutable bridge cache
+        last_used_at:
+          type: string
+          format: date-time
+    LocalDataClearRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        buckets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LocalDataBucketId'
+        workspace_cache_ids:
+          x-go-name: "WorkspaceCacheIDs"
+          type: array
+          minItems: 1
+          items:
+            type: string
+            pattern: '^[0-9a-f]{16}$'
+    LocalDataClearResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ok
+      properties:
+        id:
+          $ref: '#/components/schemas/LocalDataBucketId'
+        ok:
+          x-go-name: "OK"
+          type: boolean
+        code:
+          $ref: './api-error-code.generated.yaml#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+          description: Host copy when ok is false; branch on code.
+    LocalDataClearResponse:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - results
+        - workspace_cache_results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalDataClearResult'
+        workspace_cache_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceCacheClearResult'
+    WorkspaceCacheClearResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, ok]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{16}$'
+        ok:
+          x-go-name: "OK"
+          type: boolean
+        code:
+          $ref: './api-error-code.generated.yaml#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+          description: Host copy when ok is false; branch on code.
+
+    HistoryRetentionRule:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: {type: string, enum: [forever, max_age, max_bytes]}
+        max_age_days: {type: integer, format: int64, minimum: 1}
+        max_bytes: {type: integer, format: int64, minimum: 1}
+    HistoryRetentionPolicy:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [version, revision, suspended, recordings, checkpoints, source_revisions, scan_detail, receipt_detail]
+      properties:
+        version: {type: integer, minimum: 1, maximum: 1}
+        revision: {type: integer, format: int64, minimum: 1}
+        suspended: {type: boolean}
+        recordings: {$ref: '#/components/schemas/HistoryRetentionRule'}
+        checkpoints: {$ref: '#/components/schemas/HistoryRetentionRule'}
+        source_revisions: {$ref: '#/components/schemas/HistoryRetentionRule'}
+        scan_detail: {$ref: '#/components/schemas/HistoryRetentionRule'}
+        receipt_detail: {$ref: '#/components/schemas/HistoryRetentionRule'}
+    HistoryStorageLane:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [id, stored_bytes, logical_bytes, shared_bytes]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        stored_bytes:
+          type: integer
+          format: int64
+          description: Retained file bytes, deduplicated within the lane. This is not exclusive filesystem allocation. The upgrade-recovery lane reports zero here because its independent snapshots may share physical extents with live files.
+        logical_bytes:
+          type: integer
+          format: int64
+          description: Uncompressed content bytes where available. For upgrade-recovery, the sum of retained snapshot file lengths, which may share physical disk space and must not be added to a physical storage total.
+        shared_bytes: {type: integer, format: int64}
+    HistoryProtection:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [scope_type, scope_id, protected]
+      properties:
+        scope_type: {type: string, enum: [project, session]}
+        scope_id:
+          type: string
+          format: uuid
+        protected: {type: boolean}
+    HistoryStorageStatus:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [policy, lanes, protections]
+      properties:
+        policy: {$ref: '#/components/schemas/HistoryRetentionPolicy'}
+        lanes: {type: array, items: {$ref: '#/components/schemas/HistoryStorageLane'}}
+        protections: {type: array, items: {$ref: '#/components/schemas/HistoryProtection'}}
+    HistoryRetentionRequest:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      properties:
+        policy: {$ref: '#/components/schemas/HistoryRetentionPolicy'}
+        preview_token:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+    HistoryPruneCandidate:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [id, class, project_id, created_at, reclaimable_bytes]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        class: {type: string}
+        project_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        reclaimable_bytes: {type: integer, format: int64}
+    HistoryRetentionPreview:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [token, policy_revision, candidates, eligible_count, reclaimable_bytes, shared_protected_bytes, complete]
+      properties:
+        token:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        policy_revision: {type: integer, format: int64}
+        candidates: {type: array, items: {$ref: '#/components/schemas/HistoryPruneCandidate'}}
+        eligible_count: {type: integer, format: int64}
+        reclaimable_bytes: {type: integer, format: int64}
+        shared_protected_bytes: {type: integer, format: int64}
+        complete: {type: boolean}
+    HistoryPruneResult:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [removed_count, released_bytes, complete, preview_token]
+      properties:
+        removed_count: {type: integer, format: int64}
+        released_bytes:
+          type: integer
+          format: int64
+          description: Encoded body bytes whose retained references were released; physical unlink and page reclamation may finish later.
+        complete: {type: boolean}
+        preview_token:
+          type: string
+          pattern: '^[a-z0-9_-]+$'

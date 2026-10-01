@@ -1,0 +1,130 @@
+/* Chat stages paint an opaque crossfade surface. */
+.den-shell-stage-host .den-shell-header,
+.den-shell-stage-host .den-shell-main {
+  background: transparent;
+}
+
+.den-shell-stage--chat .den-shell-header::before,
+.den-shell-stage--chat .den-shell-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--den-z-stage-fill);
+  pointer-events: none;
+  background: var(--den-background);
+}
+
+.den-shell-stage-host .den-shell-header > *,
+.den-shell-stage-host .den-shell-main > * {
+  position: relative;
+  z-index: var(--den-z-content);
+}
+
+.den-shell-stage--chat .den-shell-main {
+  overflow: visible;
+}
+
+/* Dock popovers overflow the column; this layer clears the header banners. */
+.den-shell-stage--chat .den-shell-main > .den-chat {
+  z-index: var(--den-z-composer-dock);
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-shell-stage-wash {
+    transition: none;
+  }
+}
+
+.den-custom-chrome .den-shell-header {
+  flex-wrap: nowrap;
+  align-content: stretch;
+  height: auto;
+  min-height: 0;
+  padding: 0 var(--den-chat-gutter-x);
+}
+
+.den-shell-header-chat {
+  align-items: stretch;
+  min-height: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap) + var(--den-unified-chrome-row)
+  );
+  /* The strip controls horizontal gutters. */
+  padding: calc(var(--den-titlebar-inset) + var(--den-tabs-top-gap)) 0 0;
+  z-index: var(--den-z-chat-chrome);
+}
+
+.den-shell-header-chat .tabs {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  /* The header drag layer receives unused clicks. */
+  pointer-events: none;
+}
+
+.den-shell-header-chat .tabs__chip,
+.den-shell-header-chat .tabs__rail-leading,
+.den-shell-header-chat .tabs__rail-trailing,
+.den-shell-header-chat .tabs__panel-shell {
+  pointer-events: auto;
+}
+
+/* The tab rail aligns with chat content and scrollbar clearance. */
+.den-shell-header-chat .tabs__rail {
+  min-height: var(--den-unified-chrome-row);
+  --chat-scrollbar-shift: var(--den-chat-scrollbar-shift);
+  --tabs-rail-side: calc(
+    var(--den-tabs-gutter-x) + var(--den-unified-chrome-row) + 0.25rem
+  );
+  --tabs-strip-inset-start: var(--den-tabs-gutter-x);
+  --tabs-strip-inset-end: calc(
+    var(--den-tabs-gutter-x) + var(--chat-scrollbar-shift)
+  );
+}
+
+.den-shell-header-chat .tabs__rail:has(.tabs__rail-leading):not(
+    :has(.tabs__rail-trailing)
+  ) {
+  --tabs-strip-inset-start: 0px;
+  --tabs-strip-inset-end: calc(
+    var(--tabs-rail-side) + var(--chat-scrollbar-shift)
+  );
+}
+
+.den-shell-header-chat .tabs__rail:has(.tabs__rail-trailing):not(
+    :has(.tabs__rail-leading)
+  ) {
+  --tabs-strip-inset-start: var(--tabs-rail-side);
+  --tabs-strip-inset-end: var(--chat-scrollbar-shift);
+}
+
+.den-shell-header-chat .tabs__rail:has(.tabs__rail-leading):has(
+    .tabs__rail-trailing
+  ) {
+  --tabs-strip-inset-start: 0px;
+  --tabs-strip-inset-end: var(--chat-scrollbar-shift);
+}
+
+/* The dock aligns with chat content regardless of which side slots the rail has. */
+.den-shell-header-chat .tabs__dock {
+  padding-left: var(--den-chat-gutter-x);
+  padding-right: calc(var(--den-chat-gutter-x) + var(--den-chat-scrollbar-shift));
+}
+
+.den-shell-header[data-tauri-drag-region],
+.den-shell-chrome-drag-surface[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.den-custom-chrome .den-shell-header[data-tauri-drag-region] {
+  border-bottom: none;
+}
+
+.den-shell-chrome-drag-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+

@@ -1,0 +1,36 @@
+oar: '1.0'
+id: MOVE_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - move
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "MOVE_PATH_DENIED"
+effect: block
+copy:
+  cause: A source or destination is protected.
+  why: A rejected item does not undo earlier successful moves in the batch.
+  fix: Preserve completed moves. Correct a mistaken target only within existing authority; another tool or
+    renamed path cannot bypass the boundary.
+  instead: Resolve the reported item and preserve completed move receipts
+  what: Moving {{ paintedwolf.path }} is denied by the host path policy.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
+x-paintedwolf-message: move:move path matches deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: move
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MOVE_PATH_DENIED'

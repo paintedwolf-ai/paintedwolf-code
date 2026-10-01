@@ -1,0 +1,10 @@
+id: painted-wolf/platform:key-files-diff-next-file
+command: painted-wolf/platform:files-diff-next-file
+scope: files
+bindings:
+  macos:
+    - "Mod+Alt+ArrowDown"
+  windows:
+    - "Mod+Alt+ArrowDown"
+  linux:
+    - "Mod+Alt+ArrowDown"

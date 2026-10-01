@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-go-to-line
+title: "Go to line"
+scope: "files"
+keywords:
+  - "goto line"
+  - "jump to line"
+  - "line number"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.goToLine"

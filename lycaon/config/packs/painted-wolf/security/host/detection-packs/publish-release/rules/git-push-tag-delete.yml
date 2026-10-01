@@ -1,0 +1,28 @@
+title: Delete a remote tag or branch
+id: a1101f8b-26fc-415c-93d3-42c2fd1f854c
+description: Deletes a remote tag or branch via push.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: git
+  selection_push:
+    CommandLine|contains|all:
+      - ' push'
+      - ' --delete'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run|-n|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_push and not filter_rehearsal and not filter_local

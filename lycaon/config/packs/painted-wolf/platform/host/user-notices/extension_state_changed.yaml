@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Extension state changed
+message: >-
+  Extensions changed since this view loaded, so the action was not applied.
+  Nothing was committed.
+suggested_action: Reload the Extensions view and retry the action.

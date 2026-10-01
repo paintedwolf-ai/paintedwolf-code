@@ -1,0 +1,14 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': compose.done
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-compose-done
+tier: builtin
+invariants:
+  trigger_class: workflow_event
+  fires_in:
+  - workflow compose draft published — coordinator should start the run
+  required:
+  - coordinator_brief
+  - start the workflow run

@@ -1,0 +1,37 @@
+oar: '1.0'
+id: REPORT_INVENTORY_UNACCOUNTED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.reject_observation
+    - paintedwolf.rejection_reason
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_sample
+    - paintedwolf.offenders_omitted
+when: paintedwolf.reject_observation == "report_inventory_unaccounted"
+effect: block
+copy:
+  what: '{{ paintedwolf.rejection_reason }}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
+  cause: The run's bound scans exist to inform its review, so the report accounts for every scanner group they reported.
+  why: A group nobody assessed is not cleared; left unaccounted, the report cannot say the review used its scan results.
+  fix: 'Link each group a finding assesses through that finding''s scan_group_ids, and account for the rest with set_asides: [{scanner, paths, reason}] selects every group one scanner reported entirely inside the path globs (for example test fixtures), or name groups with scan_group_ids. Group ids come from scan_query with view groups on the run''s scan_ids; a scan id is not a group id.'
+  instead: Set a group aside only with a reason that holds for every group it selects; assess anything that could affect the rating.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Scan results used
+  ui_check_id: report_inventory
+  in_session_retry: true
+x-paintedwolf-message: The run report leaves scanner groups unaccounted
+x-paintedwolf-scenarios:
+  - id: unaccounted_groups
+    vars:
+      rejection_reason: 232 of 232 scanner groups have no assessment and no set-aside
+      offender_count: 232
+      offenders_sample: 'group:6cca317c · lycaon-sca · critical · osv:CVE-2019-10744 · lycaon/test/testdata/scan/package-lock.json'
+      offenders_omitted: 231
+    expect_contains:
+      - 'Code: REPORT_INVENTORY_UNACCOUNTED'
+      - set_asides
+      - scan_group_ids

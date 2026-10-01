@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SPEC_POSTURE_DELEGATION_FORBIDDEN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_DELEGATION_FORBIDDEN"
+effect: block
+copy:
+  cause: Delegation/implement tools are forbidden until the plan workflow is complete
+  why: Complete plan phases before delegate_dispatch or delegate_init
+  fix: Complete plan phases before delegate_dispatch or delegate_init
+  instead: Finish plan workflow before delegation tools
+  what: Delegation/implement tools are forbidden until the plan workflow is complete
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Delegation/implement tools are forbidden until the plan workflow is complete
+x-paintedwolf-scenarios:
+- id: spec_posture_delegation_smoke
+  tool: delegate_dispatch
+  vars:
+    tool: delegate_dispatch
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_DELEGATION_FORBIDDEN'
+x-paintedwolf-audience:
+- coordinator

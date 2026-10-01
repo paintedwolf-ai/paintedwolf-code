@@ -1,0 +1,12 @@
+id: painted-wolf/platform:view-jump-8
+title: "Focus window 8"
+scope: "global"
+keywords:
+  - "peer"
+  - "window 8"
+  - "focus window"
+when:
+  fact: "peer_views_present"
+action:
+  kind: native_ui
+  handler: "view.jump8"

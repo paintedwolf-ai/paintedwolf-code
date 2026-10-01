@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-rename-symbol
+title: "Rename symbol"
+scope: "files"
+keywords:
+  - "rename"
+  - "f2"
+  - "refactor rename"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.renameSymbol"

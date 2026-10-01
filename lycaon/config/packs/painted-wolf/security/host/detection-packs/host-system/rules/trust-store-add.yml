@@ -1,0 +1,39 @@
+title: Add a trusted certificate authority
+id: d3c95014-8e05-4da7-a68a-d8d9b6c5da61
+description: Installs a certificate the machine will trust for any site it signs.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_macos:
+    Image: security
+    CommandLine|contains:
+      - ' add-trusted-cert'
+      - ' add-certificates'
+  selection_java:
+    Image: keytool
+    CommandLine|contains: ' -importcert'
+  selection_linux:
+    Image:
+      - update-ca-certificates
+      - update-ca-trust
+      - trust
+    CommandLine|contains:
+      - ' anchor'
+      - ' extract'
+      - ' --fresh'
+  filter_rehearsal:
+    Argv|re: '^(--help|-list)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_macos or selection_java or selection_linux) and not filter_rehearsal and not filter_local

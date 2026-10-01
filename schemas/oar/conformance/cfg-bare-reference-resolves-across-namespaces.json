@@ -1,0 +1,66 @@
+{
+  "id": "cfg-bare-reference-resolves-across-namespaces",
+  "title": "An operator writes the bare id; it resolves against every loaded rule whatever its namespace",
+  "covers": [
+    "OAR-CFG-8",
+    "OAR-CFG-2"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "vendor.pack",
+      "id": "NOISY",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "block"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "vendor.pack",
+      "id": "KEPT",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "config": [
+      {
+        "oar_config": "1.0",
+        "disable": [
+          "NOISY"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "KEPT",
+    "applied": [
+      "vendor.pack/KEPT:fired"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-help-help-third-party-software
+slot: "app_menu.help"
+command: painted-wolf/platform:help-third-party-software
+group: "2"
+order: 5

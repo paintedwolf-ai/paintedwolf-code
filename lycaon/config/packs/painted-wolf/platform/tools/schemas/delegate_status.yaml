@@ -1,0 +1,7 @@
+description: Return delegation status and legs
+schema:
+  type: object
+  properties:
+    delegation_id:
+      description: "Delegation id from delegate_init."
+      type: string

@@ -1,0 +1,5 @@
+code: unknown_extends_parent
+message: |
+  Unknown extends parent {{extends}}.
+replacement: |
+  Point extends at a known id@version.

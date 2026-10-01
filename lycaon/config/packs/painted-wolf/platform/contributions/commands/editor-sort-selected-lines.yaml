@@ -1,0 +1,11 @@
+id: painted-wolf/platform:editor-sort-selected-lines
+title: "Sort selected lines"
+scope: "files"
+keywords:
+  - "sort lines"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.sortSelectedLines"

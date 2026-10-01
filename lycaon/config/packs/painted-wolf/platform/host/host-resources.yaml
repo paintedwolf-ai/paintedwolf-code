@@ -1,0 +1,988 @@
+version: 1
+resources:
+  - id: aws-cli
+    family: cloud
+    label: AWS CLI
+    category: Cloud
+    description: AWS command-line client available on this device.
+    docs_url: https://docs.aws.amazon.com/cli/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [aws]
+        connections:
+          - mode: proxy
+  - id: azure-cli
+    family: cloud
+    label: Azure CLI
+    category: Cloud
+    description: Azure command-line client available on this device.
+    docs_url: https://learn.microsoft.com/cli/azure/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [az]
+        connections:
+          - mode: proxy
+  - id: bun
+    family: runtimes
+    label: Bun
+    category: Runtimes
+    description: Bun JavaScript runtime and package manager available on this device.
+    docs_url: https://bun.sh/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [bun]
+        connections:
+          - mode: proxy
+  - id: cmake
+    family: build-tools
+    label: CMake
+    category: Build tools
+    description: CMake build-system generator available on this device.
+    docs_url: https://cmake.org/documentation/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [cmake]
+        connections:
+          - mode: none
+  - id: colima
+    family: containers.local
+    label: Colima
+    category: Containers
+    description: Colima container runtime manager available on this device.
+    docs_url: https://github.com/abiosoft/colima
+    surfaces: [process_exec]
+    realizations:
+      - platforms: [macos]
+        discover:
+          executable:
+            names: [colima]
+        connections:
+          - mode: dynamic
+  - id: deno
+    family: runtimes
+    label: Deno
+    category: Runtimes
+    description: Deno JavaScript and TypeScript runtime available on this device.
+    docs_url: https://docs.deno.com/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [deno]
+        connections:
+          - mode: proxy
+  - id: docker
+    family: containers.local
+    label: Docker
+    category: Containers
+    description: Docker client with a reachable local daemon available on this device.
+    docs_url: https://docs.docker.com/
+    surfaces: [process_exec]
+    realizations:
+      - platforms: [macos, linux]
+        discover:
+          all:
+            - executable:
+                names: [docker]
+            - path:
+                kind: socket
+                paths:
+                  - "{home}/.docker/run/docker.sock"
+                  - "{home}/.colima/default/docker.sock"
+                  - "{home}/.rd/docker.sock"
+                  - "{home}/.orbstack/run/docker.sock"
+                  - "{runtime_dir}/docker.sock"
+                  - "/var/run/docker.sock"
+                capture: daemon_socket
+        connections:
+          - mode: local_service
+            transport: unix_socket
+            target_from: daemon_socket
+        write_roots:
+          - "{home}/.docker/buildx"
+      - platforms: [windows]
+        discover:
+          all:
+            - executable:
+                names: [docker]
+            - named_pipe:
+                names: ['\\.\pipe\docker_engine']
+                capture: daemon_pipe
+        connections:
+          - mode: local_service
+            transport: named_pipe
+            target_from: daemon_pipe
+        write_roots:
+          - "{home}/.docker/buildx"
+  - id: dotnet
+    family: runtimes
+    label: .NET
+    category: Runtimes
+    description: .NET SDK available on this device.
+    docs_url: https://learn.microsoft.com/dotnet/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [dotnet]
+        connections:
+          - mode: proxy
+  - id: gcloud-cli
+    family: cloud
+    label: Google Cloud CLI
+    category: Cloud
+    description: Google Cloud command-line client available on this device.
+    docs_url: https://cloud.google.com/sdk/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [gcloud]
+        connections:
+          - mode: proxy
+  - id: gh-cli
+    family: developer-services
+    label: GitHub CLI
+    category: Developer services
+    description: GitHub command-line client available on this device.
+    docs_url: https://cli.github.com/manual/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [gh]
+        connections:
+          - mode: proxy
+  - id: go
+    family: runtimes
+    label: Go
+    category: Runtimes
+    description: Go compiler and toolchain available on this device.
+    docs_url: https://go.dev/doc/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [go]
+        connections:
+          - mode: proxy
+  - id: java
+    family: runtimes
+    label: Java
+    category: Runtimes
+    description: Java runtime available on this device.
+    docs_url: https://dev.java/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [java]
+        connections:
+          - mode: proxy
+  - id: kubectl
+    family: orchestration
+    label: kubectl
+    category: Orchestration
+    description: Kubernetes command-line client available on this device.
+    docs_url: https://kubernetes.io/docs/reference/kubectl/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [kubectl]
+        connections:
+          - mode: dynamic
+  - id: make
+    family: build-tools
+    label: Make
+    category: Build tools
+    description: Make build automation available on this device.
+    docs_url: https://www.gnu.org/software/make/manual/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [make, gmake]
+        connections:
+          - mode: none
+  - id: node
+    family: runtimes
+    label: Node.js
+    category: Runtimes
+    description: Node.js runtime available on this device.
+    docs_url: https://nodejs.org/docs/latest/api/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [node]
+        connections:
+          - mode: proxy
+  - id: ollama
+    family: ai-runtimes
+    label: Ollama
+    category: AI runtimes
+    description: Ollama client and local API available on this device.
+    docs_url: https://docs.ollama.com/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          all:
+            - executable:
+                names: [ollama]
+            - loopback_http:
+                urls:
+                  - http://127.0.0.1:11434/api/version
+                status: 200
+                timeout_ms: 500
+                capture: api_url
+        connections:
+          - mode: baseline_loopback
+            target: http://127.0.0.1:11434
+  - id: opentofu
+    family: infrastructure
+    label: OpenTofu
+    category: Infrastructure
+    description: OpenTofu infrastructure-as-code client available on this device.
+    docs_url: https://opentofu.org/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [tofu]
+        connections:
+          - mode: proxy
+  - id: perl
+    family: runtimes
+    label: Perl
+    category: Runtimes
+    description: Perl runtime available on this device.
+    docs_url: https://perldoc.perl.org/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [perl]
+        connections:
+          - mode: proxy
+  - id: php
+    family: runtimes
+    label: PHP
+    category: Runtimes
+    description: PHP runtime available on this device.
+    docs_url: https://www.php.net/docs.php
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [php]
+        connections:
+          - mode: proxy
+  - id: podman
+    family: containers.local
+    label: Podman
+    category: Containers
+    description: Podman client with a reachable local service available on this device.
+    docs_url: https://docs.podman.io/
+    surfaces: [process_exec]
+    realizations:
+      - platforms: [macos, linux]
+        discover:
+          all:
+            - executable:
+                names: [podman]
+            - path:
+                kind: socket
+                paths:
+                  - "{home}/.local/share/containers/podman/machine/podman.sock"
+                  - "{runtime_dir}/podman/podman.sock"
+                capture: daemon_socket
+        connections:
+          - mode: local_service
+            transport: unix_socket
+            target_from: daemon_socket
+      - platforms: [windows]
+        discover:
+          executable:
+            names: [podman]
+        connections:
+          - mode: dynamic
+  - id: python
+    family: runtimes
+    label: Python
+    category: Runtimes
+    description: Python runtime available on this device.
+    docs_url: https://docs.python.org/3/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [python3, python]
+        connections:
+          - mode: proxy
+  - id: ruby
+    family: runtimes
+    label: Ruby
+    category: Runtimes
+    description: Ruby runtime available on this device.
+    docs_url: https://docs.ruby-lang.org/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [ruby]
+        connections:
+          - mode: proxy
+  - id: rust
+    family: runtimes
+    label: Rust
+    category: Runtimes
+    description: Rust compiler and Cargo package manager available on this device.
+    docs_url: https://doc.rust-lang.org/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          all:
+            - executable:
+                names: [rustc]
+            - executable:
+                names: [cargo]
+        connections:
+          - mode: proxy
+  - id: swift
+    family: runtimes
+    label: Swift
+    category: Runtimes
+    description: Swift compiler and package manager available on this device.
+    docs_url: https://www.swift.org/documentation/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [swift]
+        connections:
+          - mode: proxy
+  - id: terraform
+    family: infrastructure
+    label: Terraform
+    category: Infrastructure
+    description: Terraform infrastructure-as-code client available on this device.
+    docs_url: https://developer.hashicorp.com/terraform/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [terraform]
+        connections:
+          - mode: proxy
+  - id: xcode
+    family: build-tools
+    label: Xcode toolchain
+    category: Build tools
+    description: Apple Xcode command-line toolchain available on this device.
+    docs_url: https://developer.apple.com/xcode/
+    surfaces: [process_exec]
+    realizations:
+      - platforms: [macos]
+        discover:
+          path:
+            kind: file
+            paths:
+              - /usr/bin/xcodebuild
+        connections:
+          - mode: none
+  - id: clang
+    family: compilers
+    label: Clang
+    category: Compilers
+    description: Clang C and C++ compiler available on this device.
+    docs_url: https://clang.llvm.org/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [clang]
+        connections:
+          - mode: none
+  - id: cloudflare-wrangler
+    family: cloud
+    label: Cloudflare Wrangler
+    category: Cloud
+    description: Cloudflare developer command-line client available on this device.
+    docs_url: https://developers.cloudflare.com/workers/wrangler/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [wrangler]
+        connections:
+          - mode: proxy
+  - id: devcontainer-cli
+    family: containers.local
+    label: Dev Container CLI
+    category: Containers
+    description: Development Containers command-line client available on this device.
+    docs_url: https://containers.dev/supporting
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [devcontainer]
+        connections:
+          - mode: dynamic
+  - id: firebase-cli
+    family: cloud
+    label: Firebase CLI
+    category: Cloud
+    description: Firebase command-line client available on this device.
+    docs_url: https://firebase.google.com/docs/cli
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [firebase]
+        connections:
+          - mode: proxy
+  - id: fly-cli
+    family: cloud
+    label: Fly.io CLI
+    category: Cloud
+    description: Fly.io command-line client available on this device.
+    docs_url: https://fly.io/docs/flyctl/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [flyctl]
+        connections:
+          - mode: proxy
+  - id: gcc
+    family: compilers
+    label: GCC
+    category: Compilers
+    description: GNU C and C++ compiler toolchain available on this device.
+    docs_url: https://gcc.gnu.org/onlinedocs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [gcc]
+        connections:
+          - mode: none
+  - id: gradle
+    family: build-tools
+    label: Gradle
+    category: Build tools
+    description: Gradle build automation available on this device.
+    docs_url: https://docs.gradle.org/current/userguide/userguide.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [gradle]
+        connections:
+          - mode: proxy
+  - id: helm
+    family: orchestration
+    label: Helm
+    category: Orchestration
+    description: Helm package manager for Kubernetes available on this device.
+    docs_url: https://helm.sh/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [helm]
+        connections:
+          - mode: dynamic
+  - id: kind
+    family: orchestration
+    label: kind
+    category: Orchestration
+    description: Kubernetes-in-Docker cluster manager available on this device.
+    docs_url: https://kind.sigs.k8s.io/docs/user/quick-start/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [kind]
+        connections:
+          - mode: dynamic
+  - id: localstack
+    family: developer-services
+    label: LocalStack
+    category: Developer services
+    description: LocalStack client and local cloud API available on this device.
+    docs_url: https://docs.localstack.cloud/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          all:
+            - executable:
+                names: [localstack]
+            - loopback_http:
+                urls:
+                  - http://127.0.0.1:4566/_localstack/health
+                status: 200
+                timeout_ms: 500
+        connections:
+          - mode: baseline_loopback
+            target: http://127.0.0.1:4566
+  - id: maven
+    family: build-tools
+    label: Maven
+    category: Build tools
+    description: Apache Maven build automation available on this device.
+    docs_url: https://maven.apache.org/guides/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [mvn]
+        connections:
+          - mode: proxy
+  - id: minikube
+    family: orchestration
+    label: minikube
+    category: Orchestration
+    description: Local Kubernetes cluster manager available on this device.
+    docs_url: https://minikube.sigs.k8s.io/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [minikube]
+        connections:
+          - mode: dynamic
+  - id: mysql-cli
+    family: data-tools
+    label: MySQL client
+    category: Data tools
+    description: MySQL command-line client available on this device.
+    docs_url: https://dev.mysql.com/doc/refman/8.4/en/mysql.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [mysql]
+        connections:
+          - mode: dynamic
+  - id: ninja
+    family: build-tools
+    label: Ninja
+    category: Build tools
+    description: Ninja build system available on this device.
+    docs_url: https://ninja-build.org/manual.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [ninja]
+        connections:
+          - mode: none
+  - id: nix
+    family: package-managers
+    label: Nix
+    category: Package managers
+    description: Nix package manager available on this device.
+    docs_url: https://nix.dev/manual/nix/latest/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [nix]
+        connections:
+          - mode: proxy
+  - id: npm
+    family: package-managers
+    label: npm
+    category: Package managers
+    description: npm package manager available on this device.
+    docs_url: https://docs.npmjs.com/cli/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [npm]
+        connections:
+          - mode: proxy
+  - id: pnpm
+    family: package-managers
+    label: pnpm
+    category: Package managers
+    description: pnpm package manager available on this device.
+    docs_url: https://pnpm.io/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [pnpm]
+        connections:
+          - mode: proxy
+  - id: postgresql-cli
+    family: data-tools
+    label: PostgreSQL client
+    category: Data tools
+    description: PostgreSQL command-line client available on this device.
+    docs_url: https://www.postgresql.org/docs/current/app-psql.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [psql]
+        connections:
+          - mode: dynamic
+  - id: redis-cli
+    family: data-tools
+    label: Redis CLI
+    category: Data tools
+    description: Redis command-line client available on this device.
+    docs_url: https://redis.io/docs/latest/develop/tools/cli/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [redis-cli]
+        connections:
+          - mode: dynamic
+  - id: sqlite
+    family: data-tools
+    label: SQLite
+    category: Data tools
+    description: SQLite command-line client available on this device.
+    docs_url: https://sqlite.org/cli.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [sqlite3]
+        connections:
+          - mode: none
+  - id: supabase-cli
+    family: cloud
+    label: Supabase CLI
+    category: Cloud
+    description: Supabase command-line client available on this device.
+    docs_url: https://supabase.com/docs/guides/local-development/cli/getting-started
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [supabase]
+        connections:
+          - mode: dynamic
+  - id: uv
+    family: package-managers
+    label: uv
+    category: Package managers
+    description: uv Python package and project manager available on this device.
+    docs_url: https://docs.astral.sh/uv/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [uv]
+        connections:
+          - mode: proxy
+  - id: yarn
+    family: package-managers
+    label: Yarn
+    category: Package managers
+    description: Yarn package manager available on this device.
+    docs_url: https://yarnpkg.com/getting-started
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [yarn]
+        connections:
+          - mode: proxy
+  - id: ansible
+    family: infrastructure
+    label: Ansible
+    category: Infrastructure
+    description: Ansible configuration-management client available on this device.
+    docs_url: https://docs.ansible.com/
+    surfaces: [process_exec]
+    realizations:
+      - platforms: [macos, linux]
+        discover:
+          executable:
+            names: [ansible]
+        connections:
+          - mode: dynamic
+  - id: bazel
+    family: build-tools
+    label: Bazel
+    category: Build tools
+    description: Bazel build system available on this device.
+    docs_url: https://bazel.build/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [bazel, bazelisk]
+        connections:
+          - mode: proxy
+  - id: duckdb
+    family: data-tools
+    label: DuckDB
+    category: Data tools
+    description: DuckDB command-line client available on this device.
+    docs_url: https://duckdb.org/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [duckdb]
+        connections:
+          - mode: none
+  - id: mongodb-shell
+    family: data-tools
+    label: MongoDB Shell
+    category: Data tools
+    description: MongoDB shell client available on this device.
+    docs_url: https://www.mongodb.com/docs/mongodb-shell/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [mongosh]
+        connections:
+          - mode: dynamic
+  - id: netlify-cli
+    family: cloud
+    label: Netlify CLI
+    category: Cloud
+    description: Netlify command-line client available on this device.
+    docs_url: https://docs.netlify.com/cli/get-started/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [netlify]
+        connections:
+          - mode: proxy
+  - id: pulumi
+    family: infrastructure
+    label: Pulumi
+    category: Infrastructure
+    description: Pulumi infrastructure-as-code client available on this device.
+    docs_url: https://www.pulumi.com/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [pulumi]
+        connections:
+          - mode: proxy
+  - id: stripe-cli
+    family: developer-services
+    label: Stripe CLI
+    category: Developer services
+    description: Stripe command-line client available on this device.
+    docs_url: https://docs.stripe.com/stripe-cli
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [stripe]
+        connections:
+          - mode: proxy
+  - id: vercel-cli
+    family: cloud
+    label: Vercel CLI
+    category: Cloud
+    description: Vercel command-line client available on this device.
+    docs_url: https://vercel.com/docs/cli
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [vercel]
+        connections:
+          - mode: proxy
+  - id: 1password-cli
+    family: secrets
+    label: 1Password CLI
+    category: Secrets
+    description: 1Password command-line client available on this device.
+    docs_url: https://developer.1password.com/docs/cli/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [op]
+        connections:
+          - mode: proxy
+  - id: android-sdk
+    family: mobile
+    label: Android SDK tools
+    category: Mobile
+    description: Android debug bridge and platform tools available on this device.
+    docs_url: https://developer.android.com/tools/adb
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [adb]
+        connections:
+          - mode: dynamic
+  - id: clickhouse
+    family: data-tools
+    label: ClickHouse
+    category: Data tools
+    description: ClickHouse client and local query engine available on this device.
+    docs_url: https://clickhouse.com/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [clickhouse]
+        connections:
+          - mode: dynamic
+  - id: doppler
+    family: secrets
+    label: Doppler
+    category: Secrets
+    description: Doppler secrets-management client available on this device.
+    docs_url: https://docs.doppler.com/docs/cli
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [doppler]
+        connections:
+          - mode: proxy
+  - id: elasticsearch
+    family: search
+    label: Elasticsearch
+    category: Search
+    description: Local Elasticsearch service reachable on this device.
+    docs_url: https://www.elastic.co/docs
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          loopback_http:
+            urls:
+              - http://127.0.0.1:9200/
+            status: 200
+            timeout_ms: 500
+        connections:
+          - mode: baseline_loopback
+            target: http://127.0.0.1:9200
+  - id: ffmpeg
+    family: media
+    label: FFmpeg
+    category: Media
+    description: FFmpeg media processing tools available on this device.
+    docs_url: https://ffmpeg.org/documentation.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          all:
+            - executable:
+                names: [ffmpeg]
+            - executable:
+                names: [ffprobe]
+        connections:
+          - mode: none
+  - id: flutter
+    family: mobile
+    label: Flutter
+    category: Mobile
+    description: Flutter SDK available on this device.
+    docs_url: https://docs.flutter.dev/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [flutter]
+        connections:
+          - mode: proxy
+  - id: imagemagick
+    family: media
+    label: ImageMagick
+    category: Media
+    description: ImageMagick image processing tools available on this device.
+    docs_url: https://imagemagick.org/script/command-line-tools.php
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [magick]
+        connections:
+          - mode: none
+  - id: kcat
+    family: messaging
+    label: kcat
+    category: Messaging
+    description: kcat Kafka command-line client available on this device.
+    docs_url: https://github.com/edenhill/kcat
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [kcat]
+        connections:
+          - mode: dynamic
+  - id: pandoc
+    family: documents
+    label: Pandoc
+    category: Documents
+    description: Pandoc document converter available on this device.
+    docs_url: https://pandoc.org/MANUAL.html
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [pandoc]
+        connections:
+          - mode: none
+  - id: promtool
+    family: observability
+    label: promtool
+    category: Observability
+    description: Prometheus promtool client available on this device.
+    docs_url: https://prometheus.io/docs/prometheus/latest/command-line/promtool/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [promtool]
+        connections:
+          - mode: dynamic
+  - id: rpk
+    family: messaging
+    label: Redpanda rpk
+    category: Messaging
+    description: Redpanda rpk Kafka-compatible client available on this device.
+    docs_url: https://docs.redpanda.com/current/reference/rpk/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [rpk]
+        connections:
+          - mode: dynamic
+  - id: sops
+    family: secrets
+    label: sops
+    category: Secrets
+    description: sops encrypted-file tool available on this device.
+    docs_url: https://getsops.io/docs/
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          executable:
+            names: [sops]
+        connections:
+          - mode: proxy

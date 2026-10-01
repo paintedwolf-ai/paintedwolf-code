@@ -1,0 +1,38 @@
+title: Reached a package publish endpoint
+id: 841bb2ab-1c6a-4f0f-8b9a-05c3204b8299
+description: >-
+  Connected to a package or artifact publish endpoint. Uses upload-specific or
+  private-registry hosts so mass install traffic (registry.npmjs.org, pypi.org,
+  proxy.golang.org, index.crates.io) stays quiet. npm still shares one host for
+  install and publish — the CLI pack covers that path.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - upload.pypi.org
+      - test.pypi.org
+      - upload.test.pypi.org
+      - central.sonatype.com
+      - oss.sonatype.org
+      - s01.oss.sonatype.org
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .pkg.github.com
+      - .gemfury.com
+      - .jfrog.io
+      - .jfrog.com
+      - .cloudrepo.io
+      - .packagecloud.io
+      - .packages.gitlab.com
+  condition: selection_host or selection_suffix

@@ -1,0 +1,132 @@
+/* The attribute outranks the scrollport frame's base min-width. */
+.den-context-menu[data-den-scrollport] {
+  min-width: 160px;
+}
+.den-context-menu__content {
+  display: flex;
+  min-width: 100%;
+  flex-direction: column;
+  padding: 4px;
+}
+.den-context-menu__content > * {
+  flex: 0 0 auto;
+}
+.den-context-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-body);
+  text-align: left;
+  color: var(--den-text);
+  background: transparent;
+  cursor: default;
+}
+.den-context-menu__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.den-context-menu__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-context-menu__description {
+  display: block;
+  max-width: 30ch;
+  margin-block-start: 2px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  white-space: normal;
+}
+.den-context-menu__shortcut {
+  flex: 0 0 auto;
+  margin-inline-start: 18px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  white-space: nowrap;
+}
+.den-context-menu__submenu-arrow {
+  flex: 0 0 auto;
+  margin-inline-start: 18px;
+  color: var(--den-text-muted);
+  line-height: 0.8;
+}
+/* `--virtual-focus` marks the active row while the field keeps DOM focus. */
+.den-context-menu__item:hover,
+.den-context-menu__item:focus-visible,
+.den-context-menu__item--virtual-focus {
+  background: color-mix(in srgb, var(--den-text) 8%, transparent);
+}
+.den-context-menu__item--danger {
+  color: var(--den-danger-text);
+}
+/* Every row reserves the check column. */
+.den-context-menu__check {
+  flex: 0 0 12px;
+  margin-inline-end: 7px;
+  font-size: var(--text-den-micro);
+  line-height: 1;
+  color: var(--den-accent-text);
+  visibility: hidden;
+}
+.den-context-menu__check--on {
+  visibility: visible;
+}
+.den-context-menu__item:disabled,
+.den-context-menu__item--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.den-context-menu__item:disabled:hover,
+.den-context-menu__item--disabled:hover,
+.den-context-menu__item:disabled:focus-visible,
+.den-context-menu__item--disabled:focus-visible {
+  background: transparent;
+}
+.den-context-menu__header {
+  padding: 6px 12px 3px;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+.den-context-menu__header-label {
+  display: block;
+}
+.den-context-menu__header--descriptive {
+  padding: 8px 12px 7px;
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  letter-spacing: normal;
+  color: var(--den-text);
+}
+.den-context-menu__header-kicker {
+  display: block;
+  margin-bottom: 2px;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+.den-context-menu__header--descriptive .den-context-menu__header-label {
+  overflow: hidden;
+  font-family: var(--den-font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-context-menu__header-description {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-den-caption);
+  font-weight: 400;
+  color: var(--den-text-muted);
+}
+
+.den-context-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--den-line);
+}
+
+/* Compact trust rows keep each surface on one line. */

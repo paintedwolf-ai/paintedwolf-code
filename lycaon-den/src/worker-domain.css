@@ -1,0 +1,90 @@
+/* Explicit selectors include dynamically composed status classes. */
+.den-worker-transcript-section-status--complete {
+  color: var(--den-status-positive-text);
+}
+
+.den-worker-transcript-section-status--failed {
+  color: var(--den-danger-text);
+}
+
+.den-worker-transcript-section-status--partial {
+  color: var(--den-status-running);
+}
+
+.den-worker-transcript-section-status--pending {
+  color: var(--den-text-muted);
+}
+
+.den-worker-transcript-section-status--working {
+  color: var(--den-accent-text);
+}
+
+.den-worker-transcript-section:nth-child(1) .den-worker-transcript-section-summary { top: 0; border-top: none; }
+
+.den-worker-transcript-section:nth-child(2) .den-worker-transcript-section-summary { top: calc(var(--worker-header-h) - 1px); }
+
+.den-worker-transcript-section:nth-child(3) .den-worker-transcript-section-summary { top: calc(2 * var(--worker-header-h) - 2px); }
+
+.den-worker-transcript-section:nth-child(4) .den-worker-transcript-section-summary { top: calc(3 * var(--worker-header-h) - 3px); }
+
+.den-worker-transcript-section:nth-last-child(1) .den-worker-transcript-section-summary { bottom: 0; }
+
+.den-worker-transcript-section:nth-last-child(2) .den-worker-transcript-section-summary { bottom: calc(var(--worker-header-h) - 1px); }
+
+.den-worker-transcript-section:nth-last-child(3) .den-worker-transcript-section-summary { bottom: calc(2 * var(--worker-header-h) - 2px); }
+
+.den-worker-transcript-section:nth-last-child(4) .den-worker-transcript-section-summary { bottom: calc(3 * var(--worker-header-h) - 3px); }
+
+/* The last body fills the reading area under the full header stack, so every section
+   can scroll up into its slot and the drawer ends with all headers stacked. */
+.den-worker-transcript-section:last-child .den-worker-transcript-section-body {
+  box-sizing: border-box;
+  min-height: max(0px, calc(var(--worker-reading-h, 0px) - var(--worker-sticky-stack)));
+}
+
+/* Stack clearance includes the one-pixel header overlaps. */
+.den-worker-transcript-pane {
+  --worker-sticky-stack: var(--worker-header-h);
+}
+
+.den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(2)) {
+  --worker-sticky-stack: calc(2 * var(--worker-header-h) - 1px);
+}
+
+.den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(3)) {
+  --worker-sticky-stack: calc(3 * var(--worker-header-h) - 2px);
+}
+
+.den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(4)) {
+  --worker-sticky-stack: calc(4 * var(--worker-header-h) - 3px);
+}
+
+.den-worker-transcript-section-status--working svg {
+  transform: translateZ(0);
+  will-change: transform;
+  animation: worker-section-status-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-worker-transcript-section-status--working svg,
+  .den-worker-working-indicator-spinner {
+    animation: none;
+  }
+  .den-worker-working-indicator-spinner {
+    opacity: 0.7;
+  }
+}
+
+@keyframes worker-section-status-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes worker-working-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

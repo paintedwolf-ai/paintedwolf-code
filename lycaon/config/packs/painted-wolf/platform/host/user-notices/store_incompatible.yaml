@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Store needs recovery
+message: This version cannot safely open the local store.
+suggested_action: Restore the recovery snapshot or install a compatible version.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [cannot safely open]

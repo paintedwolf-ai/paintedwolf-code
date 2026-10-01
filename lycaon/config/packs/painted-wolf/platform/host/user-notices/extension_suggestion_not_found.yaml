@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Suggestion not found"
+message: "That extension suggestion is no longer offered for this project."
+suggested_action: "Refresh the suggestions."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no longer offered"

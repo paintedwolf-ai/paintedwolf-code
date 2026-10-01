@@ -1,0 +1,7 @@
+scope: app
+title: Removal outcome is unknown
+message: The removal outcome could not be confirmed. The request may already have completed. Reconnect and retry if the project is still listed; otherwise, review extension settings.
+scenarios:
+  - id: default
+    expect_contains:
+      - could not be confirmed

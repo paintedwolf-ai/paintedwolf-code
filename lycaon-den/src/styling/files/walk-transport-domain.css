@@ -1,0 +1,129 @@
+.den-walk-transport {
+  position: absolute;
+  z-index: 24;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.den-walk-transport--positioned {
+  bottom: auto;
+  transform: none;
+}
+
+.den-walk-transport__unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--den-control-line);
+  border-radius: var(--den-radius);
+  background: color-mix(in srgb, var(--den-surface-elevated) 92%, transparent);
+  box-shadow: var(--den-shadow-md);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.den-walk-transport--dragging .den-walk-transport__unit {
+  box-shadow: var(--den-shadow-lg);
+}
+
+.den-walk-transport--docked {
+  position: relative;
+  flex: none;
+  order: 1;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  display: flex;
+  justify-content: center;
+  padding: 0.25rem;
+  border-top: 1px solid var(--den-line);
+  border-left: 1px solid var(--den-line);
+  background: var(--den-surface-elevated);
+}
+
+.den-walk-transport--docked .den-walk-transport__unit {
+  flex-wrap: wrap;
+  justify-content: center;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.den-walk-dock-target {
+  position: absolute;
+  z-index: 23;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--den-accent);
+  pointer-events: none;
+}
+
+.den-walk-transport__button,
+.den-walk-transport__grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-den-caption);
+  line-height: 1;
+}
+
+.den-walk-transport__button:hover:not(:disabled),
+.den-walk-transport__grip:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.den-walk-transport__button:focus-visible,
+.den-walk-transport__grip:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1px;
+}
+
+.den-walk-transport__button:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.den-walk-transport__refresh {
+  color: var(--den-text);
+}
+
+.den-walk-transport__refresh:disabled {
+  color: var(--den-text-muted);
+}
+
+.den-walk-transport__grip {
+  touch-action: none;
+}
+
+.den-walk-transport--dragging .den-walk-transport__grip {
+  cursor: grabbing;
+  color: var(--den-text);
+}
+
+.den-walk-transport__divider {
+  width: 1px;
+  height: var(--spacing-den-8);
+  margin: 0 2px;
+  background: var(--den-line);
+}
+
+.den-walk-transport__close:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--den-danger) 10%, transparent);
+  color: var(--den-danger);
+}
+
+/* Keeps the timeline above the tree and editor seam. */

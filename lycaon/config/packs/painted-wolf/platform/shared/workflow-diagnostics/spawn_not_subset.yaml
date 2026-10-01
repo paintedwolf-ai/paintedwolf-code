@@ -1,0 +1,5 @@
+code: spawn_not_subset
+message: |
+  Spawn allowlist agent {{agent}} is not in implement allowed_agents.
+replacement: |
+  Add the agent to implement/workflow.yaml allowed_agents or remove it from implement-default-spawn.yaml.

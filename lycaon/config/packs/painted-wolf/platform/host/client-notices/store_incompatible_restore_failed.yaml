@@ -1,0 +1,9 @@
+scope: app
+title: Could not prepare the restore
+message: >-
+  The restore could not be prepared. Your current data was not changed.
+scenarios:
+  - id: default
+    expect_contains:
+      - could not be prepared
+      - was not changed

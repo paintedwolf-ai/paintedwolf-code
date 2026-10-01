@@ -1,0 +1,30 @@
+tags: [edit, filesystem]
+description: "Replace an exact span of text in an existing file: a line, a block, or a name, in place. Batch independent edits to distinct files. Read in an earlier response (same-batch read+edit rejects: EDITOR_DOCUMENT_READ_REQUIRED). Copy old_string after line-number tab; unique unless replace_all. Parse-breaking splices: MUTATION_BROKE_PARSE. Replaces command: sed -i / perl -pi in-place edit."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      minLength: 1
+      description: Repo-relative file path
+    old_string:
+      type: string
+      minLength: 1
+      description: Literal bytes to find in the file.
+    new_string:
+      type: string
+      description: Replacement text. May be empty to delete the span. Must differ from old_string.
+    replace_all:
+      type: boolean
+      description: Replace every occurrence of old_string (default false; old_string must otherwise be unique).
+    syntax_override_reason:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      pattern: '\S'
+      description: Recorded reason to override final syntax validation for this call. Other mutation checks still apply.
+    resolve_secret_references:
+      type: boolean
+      description: Whether to resolve managed secret references in old_string and new_string. Defaults to true.
+  required: [path, old_string, new_string]
+  additionalProperties: false

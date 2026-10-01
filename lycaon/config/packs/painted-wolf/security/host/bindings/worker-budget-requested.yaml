@@ -1,0 +1,17 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.budget.requested
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-worker-budget-requested
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - coordinator wait() on next_worker_done or all_workers_idle — a running worker
+    called request_budget
+  required:
+  - extend_worker_budget
+  - wait(resume=true)
+  forbidden:
+  - workflow_advance

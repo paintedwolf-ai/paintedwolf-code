@@ -1,0 +1,35 @@
+oar: '1.0'
+id: VIDEO_FRAMES_BOUNDS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.count
+  - paintedwolf.max
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_FRAMES_BOUNDS"
+effect: block
+copy:
+  what: '{{ tool }} was asked for {% if paintedwolf.count %}{{ paintedwolf.count }}{% else %}too many{% endif %} frames
+    in one view.'
+  cause: One view draws at most {% if paintedwolf.max %}{{ paintedwolf.max }}{% else %}24{% endif %} frames.
+  why: Every frame in a view is sent to the model as one sheet, so a larger set would shrink each frame past legibility.
+  fix: Narrow the window with start_ms and end_ms, or split the times across several views.
+  instead: Branch on Code VIDEO_FRAMES_BOUNDS; request fewer frames per view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video frame count out of bounds
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    count: '40'
+    max: '24'
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_FRAMES_BOUNDS'

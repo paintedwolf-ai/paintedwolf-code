@@ -1,0 +1,88 @@
+# Bundled asset provenance.
+# Entries permit commercial redistribution.
+
+kit_version: 1
+origin: http://lycaon.designkit/
+# Bundled fonts also fulfill remote font requests during capture.
+
+fonts:
+  - family: Inter
+    file: fonts/Inter.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-inter.txt
+    source: https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+    upstream: https://github.com/rsms/inter
+    copyright: Copyright 2020 The Inter Project Authors
+  - family: Source Serif 4
+    file: fonts/SourceSerif4.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-sourceserif4.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/source-serif-4@5.2.5/files/source-serif-4-latin-wght-normal.woff2
+    upstream: https://github.com/adobe-fonts/source-serif
+    copyright: Copyright 2014-2021 Adobe (http://www.adobe.com/)
+  - family: Source Sans 3
+    file: fonts/SourceSans3.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-sourcesans3.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/source-sans-3@5.2.5/files/source-sans-3-latin-wght-normal.woff2
+    upstream: https://github.com/adobe-fonts/source-sans
+    copyright: Copyright 2010-2020 Adobe (http://www.adobe.com/)
+  - family: JetBrains Mono
+    file: fonts/JetBrainsMono.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-jetbrainsmono.txt
+    source: https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+    upstream: https://github.com/JetBrains/JetBrainsMono
+    copyright: Copyright 2020 The JetBrains Mono Project Authors
+  - family: Fraunces
+    file: fonts/Fraunces.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-fraunces.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces@5.2.5/files/fraunces-latin-wght-normal.woff2
+    upstream: https://github.com/undercasetype/Fraunces
+    copyright: Copyright 2019 The Fraunces Project Authors
+  - family: Space Grotesk
+    file: fonts/SpaceGrotesk.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-spacegrotesk.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk@5.2.5/files/space-grotesk-latin-wght-normal.woff2
+    upstream: https://github.com/floriankarsten/space-grotesk
+    copyright: Copyright 2020 The Space Grotesk Project Authors
+  - family: DM Sans
+    file: fonts/DMSans.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-dmsans.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/dm-sans@5.2.5/files/dm-sans-latin-wght-normal.woff2
+    upstream: https://github.com/googlefonts/dm-fonts
+    copyright: Copyright 2014 The DM Sans Project Authors
+  - family: Playfair Display
+    file: fonts/PlayfairDisplay.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-playfairdisplay.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/playfair-display@5.2.5/files/playfair-display-latin-wght-normal.woff2
+    upstream: https://github.com/clauseggers/Playfair-Display
+    copyright: Copyright 2017 The Playfair Display Project Authors
+  - family: IBM Plex Sans
+    file: fonts/IBMPlexSans.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-ibmplexsans.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/ibm-plex-sans@5.2.5/files/ibm-plex-sans-latin-wght-normal.woff2
+    upstream: https://github.com/IBM/plex
+    copyright: Copyright 2017 IBM Corp.
+  - family: Literata
+    file: fonts/Literata.woff2
+    license: OFL-1.1
+    license_file: licenses/OFL-literata.txt
+    source: https://cdn.jsdelivr.net/npm/@fontsource-variable/literata@5.2.5/files/literata-latin-wght-normal.woff2
+    upstream: https://github.com/googlefonts/literata
+    copyright: Copyright 2017 The Literata Project Authors
+
+icons:
+  license: ISC
+  license_file: licenses/Lucide-ISC.txt
+  upstream: https://github.com/lucide-icons/lucide
+  package: lucide-static@0.469.0
+  copyright: Copyright (c) 2026 Lucide Icons and Contributors
+  note: >
+    Canonical Lucide-adapted stroke catalog in icons_data.go. Sprite injection
+    is reference-scoped from markup #kit-* uses.

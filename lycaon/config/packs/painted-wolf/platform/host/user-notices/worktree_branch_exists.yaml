@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Branch already exists
+message: A branch with that name already exists.
+suggested_action: Choose a different branch name, then create the worktree again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - already exists

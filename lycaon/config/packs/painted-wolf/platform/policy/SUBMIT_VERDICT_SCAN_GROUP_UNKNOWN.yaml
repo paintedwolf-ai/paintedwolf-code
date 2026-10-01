@@ -1,0 +1,43 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.review_unknown_groups
+    - paintedwolf.review_scan_id_groups
+    - paintedwolf.review_empty_set_asides
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN"
+effect: block
+copy:
+  what: "The verdict accounts for scanner groups outside this run's inventory{% if paintedwolf.review_unknown_groups %}: it names {{ paintedwolf.review_unknown_groups }}{% endif %}{% if paintedwolf.review_scan_id_groups %}. {{ paintedwolf.review_scan_id_groups }}{% endif %}{% if paintedwolf.review_empty_set_asides %}. These set-asides select no group of the run's scans: {{ paintedwolf.review_empty_set_asides }}{% endif %}."
+  cause: "scan_group_ids takes group ids (group:…) from this run's bound scans, and a set-aside selector must match groups one scanner reported. A scan id, a group from a scan outside the run, or a selector that matches nothing accounts for nothing."
+  why: "The report counts a scanner group as assessed only when a claim or finding links it, or a set-aside selects it, within the run's inventory."
+  fix: "Replace each id with the group ids from this run's bound scans; scan_query with view groups on the run's scan_ids returns them. Correct or remove a set-aside whose scanner and paths match no group. Resubmit the same verdict with corrected ids."
+  instead: "Keep the assessment and its evidence; correct only the ids and selectors. Do not drop a link to make the call pass."
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: The verdict names scanner groups outside the run's inventory.
+x-paintedwolf-scenarios:
+  - id: scan_id_as_group
+    vars:
+      review_unknown_groups: []
+      review_scan_id_groups: ['e865229e-f77c-48c3-b3a9-8a7dacb15338 is a scan id; its groups in this run include group:3fa9226f3bf756303f1004dd837f6b32']
+      review_empty_set_asides: []
+    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'scan id', 'group:3fa9226f']
+  - id: unknown_group
+    vars:
+      review_unknown_groups: ['group:0000']
+      review_scan_id_groups: []
+      review_empty_set_asides: []
+    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'group:0000']
+  - id: empty_set_aside
+    vars:
+      review_unknown_groups: []
+      review_scan_id_groups: []
+      review_empty_set_asides: ['e2e fixture lockfiles']
+    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'e2e fixture lockfiles']
+x-paintedwolf-emit: guard:workflow

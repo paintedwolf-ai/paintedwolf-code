@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: File changed on disk
+message: >-
+  This file was modified outside the editor after it was loaded, so the save
+  was refused to avoid overwriting those changes.
+suggested_action: Reload the file to pick up the on-disk version, then re-apply your edit.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - modified outside
+      - save
+      - refused

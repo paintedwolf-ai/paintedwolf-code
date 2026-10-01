@@ -1,0 +1,17 @@
+description: Release one or more path reservations held by the caller agent.
+schema:
+  type: object
+  properties:
+    session_id:
+      description: "Parent session id (defaults to caller session)."
+      type: string
+    agent:
+      description: "Worker job id or agent id (defaults to caller binding)."
+      type: string
+    paths:
+      description: "Repo-relative paths to release."
+      type: array
+      items:
+        type: string
+  required: [paths]
+  additionalProperties: false

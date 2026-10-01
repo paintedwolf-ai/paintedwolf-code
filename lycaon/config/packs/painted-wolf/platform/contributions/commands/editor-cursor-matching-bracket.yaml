@@ -1,0 +1,9 @@
+id: painted-wolf/platform:editor-cursor-matching-bracket
+title: "Go to matching bracket"
+scope: files
+category: editing
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "editor.cursorMatchingBracket"

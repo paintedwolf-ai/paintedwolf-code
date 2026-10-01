@@ -1,0 +1,5 @@
+code: prompt_required
+message: |
+  Phase {{phase}}: request_user_feedback.prompt is required.
+replacement: |
+  Set on_enter.request_user_feedback.prompt.

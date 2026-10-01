@@ -1,0 +1,164 @@
+name: perf-scan-hard-gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: perf-scan-hard-gate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fleet:
+    runs-on: [self-hosted, perf]
+    timeout-minutes: 360
+    env:
+      PERF_CORPUS_DIR: /srv/gotreesitter-perf
+      PERF_OUT: cgo_harness/perf_scan/out/hard_gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cgo_harness/go.mod
+
+      - name: Authenticate corpus lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(awk 'NF { print $1; exit }' cgo_harness/perf_scan/corpus_sources.lock.sha256)"
+          actual="$(sha256sum "$PERF_CORPUS_DIR/corpus_sources.lock" | awk '{ print $1 }')"
+          test "$actual" = "$expected"
+          test -d "$PERF_CORPUS_DIR/corpus_sources"
+
+      - name: Verify pinned corpus checkouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock="$PERF_CORPUS_DIR/corpus_sources.lock"
+          root="$PERF_CORPUS_DIR/corpus_sources"
+          rows=0
+          declare -A seen=()
+          fail() {
+            echo "::error::$*" >&2
+            exit 1
+          }
+          while read -r name repo commit subdir extensions extra; do
+            if test -z "${name:-}" || [[ "$name" == \#* ]]; then
+              continue
+            fi
+            test -z "${extra:-}" || fail "invalid extra field in corpus lock row for $name"
+            test -n "${repo:-}" || fail "missing repository URL for $name"
+            test -n "${commit:-}" || fail "missing commit for $name"
+            test -n "${extensions:-}" || test "$name" = "gomod" || fail "missing extension filter for $name"
+            test -z "${seen[$name]:-}" || fail "duplicate corpus lock row for $name"
+            seen[$name]=1
+            rows=$((rows + 1))
+
+            checkout="$root/$name"
+            test -d "$checkout" || fail "missing corpus checkout for $name: $checkout"
+            actual_repo="$(git -C "$checkout" remote get-url origin)" || fail "cannot resolve origin URL for $name"
+            test "${actual_repo%.git}" = "${repo%.git}" || fail "corpus origin drift for $name: got $actual_repo, want $repo"
+            test ! -s "$checkout/.git/objects/info/alternates" || fail "external Git object alternate is not allowed for $name"
+            git -C "$checkout" cat-file -e "$commit^{commit}" || fail "locked commit is unavailable for $name: $commit"
+            head="$(git -C "$checkout" rev-parse --verify HEAD)" || fail "cannot resolve HEAD for $name"
+            test "$head" = "$commit" || fail "corpus HEAD drift for $name: got $head, want $commit"
+            git -C "$checkout" diff --quiet --ignore-submodules=none "$commit" -- || fail "tracked worktree drift for $name"
+            git -C "$checkout" diff --cached --quiet --ignore-submodules=none "$commit" -- || fail "index drift for $name"
+
+            if test -n "${subdir:-}" && test "$subdir" != "."; then
+              test -e "$checkout/$subdir" || fail "locked corpus subpath is missing for $name: $subdir"
+            fi
+          done < "$lock"
+          test "$rows" -eq 206 || fail "corpus lock contains $rows language rows, want 206"
+
+      - name: Verify provisioned corpus files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$PERF_OUT"
+          mkdir -p "$PERF_OUT"
+          (
+            cd cgo_harness
+            GOWORK=off go run ./cmd/real_corpus_inventory \
+              -grammar-dir ../grammars/grammar_blobs \
+              -lock ../grammars/languages.lock \
+              -corpus-source-root "$PERF_CORPUS_DIR/corpus_sources" \
+              -corpus-source-lock "$PERF_CORPUS_DIR/corpus_sources.lock" \
+              -require-corpus-sources \
+              -out-json "../$PERF_OUT/source_inventory.json"
+          )
+
+      - name: Restore C reference build cache
+        uses: actions/cache@v4
+        with:
+          path: harness_out/parity_c_ref_cache
+          key: perf-c-ref-${{ runner.os }}-${{ hashFiles('grammars/languages.lock') }}
+
+      - name: Run authenticated fleet gate in Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash cgo_harness/docker/run_parity_in_docker.sh \
+            --label perf-scan-hard-gate \
+            --memory 8g \
+            --cpus 2 \
+            --pids 4096 \
+            --gomemlimit 6GiB \
+            --goflags -p=1 \
+            --mount "$PERF_CORPUS_DIR:/corpus:ro" \
+            -- "cd /workspace/cgo_harness && \
+              GOWORK=off \
+              GTS_PERF_SCAN=1 \
+              GTS_PERF_SCAN_HARD_GATE=1 \
+              GTS_PERF_SCAN_REQUIRE_FLEET=1 \
+              GTS_PERF_SCAN_CORPUS_ROOT=/corpus/corpus_sources \
+              GTS_REAL_CORPUS_BENCH_LOCK=/corpus/corpus_sources.lock \
+              GTS_PERF_SCAN_MAX_FILES=8 \
+              GTS_PERF_SCAN_ORDER=largest \
+              GTS_PERF_SCAN_REPS=5 \
+              GTS_PERF_SCAN_WARMUP=1 \
+              GTS_PERF_SCAN_FILE_BUDGET_MS=10000 \
+              GTS_PERF_SCAN_LANG_TIMEOUT_MS=900000 \
+              GTS_PERF_SCAN_CHILD_RSS_LIMIT_MB=6144 \
+              GTS_PERF_SCAN_OUT=perf_scan/out/hard_gate \
+              go test -tags 'treesitter_c_parity treesitter_c_perfscan' \
+                -run '^TestPerfScanSweep$' -v -count=1 -timeout 0 -p 1 ."
+
+      - name: Render gate status
+        if: always()
+        working-directory: cgo_harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOWORK=off go test ./cmd/perf_scan_budget ./cmd/perf_scan_status -count=1
+          GOWORK=off go run ./cmd/perf_scan_budget \
+            -budget perf_scan/perf_ratio_budgets.json
+          if test -f perf_scan/out/hard_gate/scoreboard.json; then
+            budget_result=0
+            GOWORK=off go run ./cmd/perf_scan_budget \
+              -budget perf_scan/perf_ratio_budgets.json \
+              -scoreboard perf_scan/out/hard_gate/scoreboard.json \
+              -hard-gate-only \
+              -out-md perf_scan/out/hard_gate/budget.md || budget_result=$?
+            GOWORK=off go run ./cmd/perf_scan_status \
+              -budget perf_scan/perf_ratio_budgets.json \
+              -fleet tier_scan/exts.tsv \
+              -scoreboards perf_scan/out/hard_gate/scoreboard.json \
+              -out-json perf_scan/out/hard_gate/status.json \
+              -out-md perf_scan/out/hard_gate/status.md
+            exit "$budget_result"
+          fi
+
+      - name: Upload perf gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-hard-gate-${{ github.run_id }}
+          path: |
+            cgo_harness/perf_scan/out/hard_gate
+            harness_out/docker
+          if-no-files-found: warn
+          retention-days: 90

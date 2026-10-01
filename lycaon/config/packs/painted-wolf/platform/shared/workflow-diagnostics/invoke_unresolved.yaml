@@ -1,0 +1,5 @@
+code: invoke_unresolved
+message: |
+  invoke_workflow target {{workflow_id}}@{{version}} is not in the registry.
+replacement: |
+  Point invoke_workflow at a known id@version.

@@ -1,0 +1,4 @@
+id: email-platform
+label: Email platforms
+description: >-
+  Resend operations that delete a verified sending domain or revoke an API key.

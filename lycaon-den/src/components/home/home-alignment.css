@@ -1,0 +1,34 @@
+/* Home's 72px composer stack aligns with the sidebar's 38px search stack. */
+.home-view {
+  --home-view-top-inset: calc(
+    var(--den-tabs-top-gap) + var(--den-unified-chrome-row) - 34px
+  );
+  position: relative;
+}
+
+.home-view__content {
+  padding-top: var(--home-view-top-inset);
+}
+
+/* Fill Home's empty top inset with a drag target. */
+.home-view__chrome-drag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--home-view-top-inset);
+}
+
+.home-view__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* Custom chrome includes the titlebar inset and 10px sidebar offset. */
+.den-custom-chrome .home-view {
+  --home-view-top-inset: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap) +
+      var(--den-unified-chrome-row) - 44px
+  );
+}

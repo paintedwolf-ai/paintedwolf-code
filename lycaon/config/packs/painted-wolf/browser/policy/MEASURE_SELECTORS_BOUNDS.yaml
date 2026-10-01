@@ -1,0 +1,39 @@
+oar: '1.0'
+id: MEASURE_SELECTORS_BOUNDS
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - measure_page
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_limit
+  - paintedwolf.count
+  - paintedwolf.max
+when: paintedwolf.rejection_code == "MEASURE_SELECTORS_BOUNDS"
+effect: block
+copy:
+  what: measure_page received {{ paintedwolf.count }} normalized selectors; the current bound is {{ paintedwolf.max
+    }}.
+  cause: The nonblank, unique selector set exceeds the per-probe bound.
+  why: Bounds keep a single probe fast and the report diffable.
+  fix: Keep each requested set within {{ paintedwolf.max }} selectors. Preserve the intended elements and use
+    the same held-page state when comparing geometry across batches; fresh navigations may measure different
+    state.
+  instead: Branch on Code MEASURE_SELECTORS_BOUNDS; reduce selectors
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: measure_page selectors list exceeds the host bound
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    count: 20
+    max: 16
+    tool: measure_page
+  expect_contains:
+  - 'Code: MEASURE_SELECTORS_BOUNDS'
+  - '20'
+  - '16'

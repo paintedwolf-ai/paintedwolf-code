@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Backup is incompatible with this version
+message: >-
+  This backup was made for a different version of the app, so restoring it
+  here could lose data. Nothing was changed.
+suggested_action: Use a compatible app version, then restore the backup again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - compatible

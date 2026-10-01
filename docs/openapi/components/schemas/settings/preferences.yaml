@@ -1,0 +1,270 @@
+components:
+  schemas:
+    SettingsLimitsPatch:
+      x-go-generate: true
+      description: Merge selected limits. Omitted fields remain unchanged; null restores the global value for project scope or the built-in default for global scope.
+      type: object
+      additionalProperties: false
+      properties:
+        max_iterations:
+          type: [integer, "null"]
+          minimum: 1
+          description: Tool-loop iteration cap per prompt turn.
+        overlay_promote_max_iterations:
+          type: [integer, "null"]
+          minimum: 1
+          description: Iteration cap for coordinator overlay promote surface.
+        max_tool_result_bytes:
+          type: [integer, "null"]
+          minimum: 0
+          description: Tool results larger than this are truncated before LLM history append.
+        coordinator_loop:
+          x-go-pointer: true
+          type: [boolean, "null"]
+          description: When true (default), host may auto-prompt coordinator after worker legs.
+        max_coordinator_loop_cycles:
+          type: [integer, "null"]
+          minimum: 0
+          description: Per workflow run cap on coordinator loop wake cycles.
+        llm_turn_timeout_ms:
+          type: [integer, "null"]
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) for one LLM stream completion, in whole seconds.
+        coordinator_host_turn_timeout_ms:
+          type: [integer, "null"]
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) for one host-initiated coordinator prompt turn, in whole seconds.
+        coordinator_max_sleep_ms:
+          type: [integer, "null"]
+          minimum: 1000
+          multipleOf: 1000
+          description: Maximum wait() sleep duration (milliseconds) for the coordinator loop, in whole seconds.
+        await_parent_workers_timeout_ms:
+          type: [integer, "null"]
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
+        worker_tool_budget_default:
+          type: [integer, "null"]
+          minimum: 2
+          maximum: 120
+          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
+        worker_tool_budget_min:
+          type: [integer, "null"]
+          minimum: 2
+          maximum: 120
+          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
+        worker_tool_budget_max:
+          type: [integer, "null"]
+          minimum: 2
+          maximum: 120
+          description: Largest worker tool-round ceiling the coordinator may set or grant.
+        session_spend_ceiling_nano_usd:
+          x-go-name: "SessionSpendCeilingNanoUSD"
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          description: Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
+        spend_warning_ratio:
+          type: [number, "null"]
+          minimum: 0.1
+          maximum: 0.95
+          description: Share of the session spend limit at which the host emits a one-shot warning.
+        spend_ceiling_enabled:
+          type: [boolean, "null"]
+          description: When true and session_spend_ceiling_nano_usd is greater than zero, land and pause the loop once estimated session spend reaches the ceiling.
+        spend_soft_stop:
+          x-go-pointer: true
+          type: [boolean, "null"]
+          description: When true (default), a coordinator that crosses the ceiling while already running receives one final tool-capable wind-down round. A response without tool calls is final; after tool calls, the host requests one prose-only closeout. New prompts and worker sessions remain blocked at the ceiling.
+    SettingsLimitsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - scope
+      - max_iterations
+      - max_tool_result_bytes
+      - overlay_promote_max_iterations
+      - llm_turn_timeout_ms
+      - coordinator_host_turn_timeout_ms
+      - coordinator_max_sleep_ms
+      - await_parent_workers_timeout_ms
+      - worker_tool_budget_default
+      - worker_tool_budget_min
+      - worker_tool_budget_max
+      - spend_soft_stop
+      - merged_from
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: "#/components/schemas/SettingsScope"
+        max_iterations:
+          type: integer
+          description: Tool-loop iteration cap per prompt turn.
+        overlay_promote_max_iterations:
+          type: integer
+          description: Iteration cap for coordinator overlay promote surface.
+        max_tool_result_bytes:
+          type: integer
+          description: Tool results larger than this are truncated before LLM history append.
+        coordinator_loop:
+          x-go-pointer: true
+          type: boolean
+          description: When true (default), host may auto-prompt coordinator after worker legs.
+        max_coordinator_loop_cycles:
+          type: integer
+          description: Per workflow run cap on coordinator loop wake cycles.
+        llm_turn_timeout_ms:
+          type: integer
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) for one LLM stream completion, in whole seconds.
+        coordinator_host_turn_timeout_ms:
+          type: integer
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) for one host-initiated coordinator prompt turn, in whole seconds.
+        coordinator_max_sleep_ms:
+          type: integer
+          minimum: 1000
+          multipleOf: 1000
+          description: Maximum wait() sleep duration (milliseconds) for the coordinator loop, in whole seconds.
+        await_parent_workers_timeout_ms:
+          type: integer
+          minimum: 1000
+          multipleOf: 1000
+          description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
+        worker_tool_budget_default:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
+        worker_tool_budget_min:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
+        worker_tool_budget_max:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: Largest worker tool-round ceiling the coordinator may set or grant.
+        session_spend_ceiling_nano_usd:
+          x-go-name: "SessionSpendCeilingNanoUSD"
+          type: integer
+          format: int64
+          minimum: 0
+          description: Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
+        spend_warning_ratio:
+          type: number
+          minimum: 0.1
+          maximum: 0.95
+          description: Share of the session spend limit at which the host emits a one-shot warning.
+        spend_ceiling_enabled:
+          type: boolean
+          description: When true and session_spend_ceiling_nano_usd is greater than zero, land and pause the loop once estimated session spend reaches the ceiling.
+        spend_soft_stop:
+          type: boolean
+          default: true
+          description: When true, a coordinator that crosses the ceiling while already running receives one final tool-capable wind-down round. A response without tool calls is final; after tool calls, the host requests one prose-only closeout. New prompts and worker sessions remain blocked at the ceiling.
+        merged_from:
+          type: array
+          items:
+            type: string
+    SettingsScope:
+      type: string
+      enum:
+      - global
+      - project
+    FileSummariesSettingsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - enabled
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            Device-wide File summaries switch. When false, briefing requests are
+            rejected, running briefing work is canceled, and stored briefings are deleted.
+    UpdateFileSummariesSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+    PowerSettingsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - keep_awake_while_working
+      - supported
+      - inhibiting
+      - active_work_count
+      additionalProperties: false
+      properties:
+        keep_awake_while_working:
+          type: boolean
+          description: Device preference for preventing macOS idle sleep while authoritative host work is active.
+        supported:
+          type: boolean
+          description: Whether this host supports an idle-sleep assertion.
+        inhibiting:
+          type: boolean
+          description: Whether the host currently holds the assertion.
+        active_work_count:
+          type: integer
+          minimum: 0
+          description: Number of distinct active host work leases keeping the assertion requested.
+        last_error:
+          type: string
+          description: Most recent assertion failure, omitted after a successful acquisition.
+    UpdatePowerSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        keep_awake_while_working:
+          type: boolean
+    SecurityScannersSettingsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - enabled
+      - merged_from
+      - landed_change_scope
+      - source_verify
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            Main switch for Security scanners. When false, Context → Security scanners is hidden,
+            project-open and tool/workflow scans do not run, and scan tools reject.
+        merged_from:
+          type: array
+          items:
+            type: string
+        landed_change_scope:
+          $ref: verification.yaml#/components/schemas/LandedChangeScope
+          description: >
+            Effective landed-change scan scope.
+        source_verify:
+          $ref: verification.yaml#/components/schemas/SourceVerify
+          description: >
+            Effective source re-read policy for scan publications.
+    UpdateSecurityScannersSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        landed_change_scope:
+          $ref: verification.yaml#/components/schemas/LandedChangeScope
+        source_verify:
+          $ref: verification.yaml#/components/schemas/SourceVerify

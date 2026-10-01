@@ -1,0 +1,822 @@
+paths:
+  /v1/projects/{id}/source:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSource
+      summary: Read a project file for the in-app source viewer
+      description: |
+        Returns UTF-8 file content under the same path jail as agent tools
+        (evidence.NormalizeCitationPath + sandbox symlink escape rejection).
+        Editable ceiling is 4 MiB. Over-limit and binary (including image)
+        reads return metadata with empty content — never a truncated prefix.
+        Image bytes load from GET …/source/raw. UTF-16 text with a byte-order
+        mark is decoded for editing and restored to the matching on-disk
+        encoding on save. BOM-less UTF-16 is reported as binary metadata by
+        default; a human may explicitly reopen it with decode_as=utf-16le or
+        decode_as=utf-16be. Unsupported codepage text is refused with 415
+        unsupported_encoding (never source_binary).
+        Successful text reads carry encoding and writable.
+
+        Pass worker_id to read a write worker's file as the worker left it. A write
+        worker mutates an isolated overlay copy, not the project roots, so until
+        promote lands the change the path exists only on that overlay. With
+        worker_id an available overlay is the exclusive source, including when
+        a file is absent there; it never falls through to a primary copy.
+        Without an available overlay, only the project roots are searched. A worker_id that is unknown or belongs to another project
+        contributes no overlay — the read falls back to the project roots.
+
+        Pass root_id to pin the read to one attached root. Omitted, every root
+        is searched primary-first — ambiguous when two roots hold the same
+        relative path, so root-addressed surfaces (the Files tree) always pin.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        description: Repo-relative path (slash-separated)
+        schema:
+          type: string
+          minLength: 1
+      - name: root_id
+        in: query
+        required: false
+        description: Attached root to pin the read to; omitted searches every root primary-first
+        schema:
+          type: string
+          format: uuid
+      - name: worker_id
+        in: query
+        required: false
+        description: |
+          Worker job whose live overlay contains this path. Reads stay within
+          that overlay while it is available, including absent files.
+        schema:
+          type: string
+          format: uuid
+      - name: include_deleted
+        in: query
+        description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths.
+        schema:
+          type: boolean
+          default: false
+      - name: decode_as
+        in: query
+        required: false
+        description: |
+          Explicit human choice to reopen an otherwise unsupported file as
+          BOM-less UTF-16. Only utf-16le and utf-16be are accepted; supported
+          files must be opened without this parameter.
+        schema:
+          type: string
+          enum: [utf-16le, utf-16be]
+      responses:
+        '200':
+          description: Editable text content, or metadata for over-limit / binary / image
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/ProjectSourceReadResponse
+        '400':
+          description: Empty or invalid path, or an invalid query parameter
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Physical workspace changed while the file was being read
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          description: |
+            Unsupported codepage text (unsupported_encoding). details.detected is
+            unknown. Distinct from binary metadata on 200.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+    post:
+      tags:
+      - projects
+      operationId: createProjectSourceEntry
+      x-person-action: record
+      summary: Create a new, empty project file or folder from the Files tree
+      description: |
+        Creates a file or folder that does not exist yet, under the same path
+        jail as the source read; kind picks which. Missing parent folders are
+        created along the way, so one call handles a nested path. The target
+        must be a new path — an existing file or folder is refused with 409
+        source_already_exists rather than overwritten or adopted; use PUT to
+        change a file that already exists. A new file starts empty and is then
+        read like any other file, so its first content arrives through PUT.
+        Creation always lands on the project roots — worker overlays are
+        read-only.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/CreateProjectSourceEntryRequest
+      responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '201':
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/ProjectSourceEntryCreatedResponse
+        '400':
+          description: Missing path, or kind is not file/folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or root not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: A file or folder already exists at that path
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+    put:
+      tags:
+      - projects
+      operationId: replaceProjectSource
+      x-person-action: record
+      summary: Save an in-app editor change to a project file
+      description: |
+        Overwrites an existing project file with full replacement content,
+        under the same path jail as the source read. Only files the viewer
+        could fully load are writable: the target must already exist, be a
+        regular non-binary file, and be at most 4 MiB before and after the
+        save. encoding must exactly echo the representation named by the read,
+        and base_sha256 must echo the sha256 the read (or previous save)
+        reported for this file; when the on-disk file no longer hashes to
+        that value the save is refused with 409 source_write_conflict so an
+        edit can never silently clobber a concurrent change. Saves always
+        land on the project roots — worker overlays are read-only.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/PutProjectSourceRequest
+      responses:
+        '200':
+          description: Save completed
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/ProjectSourceWriteResponse
+        '400':
+          description: Missing path / encoding / base_sha256, unsupported encoding, or content over the save cap
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: File changed on disk since it was loaded
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          description: Unsupported binary content
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '413':
+          description: Content exceeds the editor cap (source_content_too_large)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+    delete:
+      tags:
+      - projects
+      operationId: deleteProjectSource
+      x-person-action: record
+      summary: Move a project file or folder to Trash
+      description: |
+        Moves one file or folder into the macOS Trash under the same path jail
+        as the source read. The entry is never permanently deleted — if the
+        Trash move fails the path is left untouched and the call returns 500
+        source_trash_failed. Non-empty folders require recursive=true; without
+        it the call returns 409 source_not_empty. Engine and VCS metadata
+        paths (.git, the project overlay directory) and the root itself are refused.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        description: Root-relative path to move to Trash
+        schema:
+          type: string
+          minLength: 1
+      - name: operation_id
+        in: query
+        required: true
+        description: Stable mutation identity; exact retries return the original result and conflicting reuse returns
+          409 idempotency_conflict.
+        schema:
+          type: string
+          format: uuid
+      - name: root_id
+        in: query
+        required: false
+        description: Attached root to pin; omitted uses the primary root
+        schema:
+          type: string
+          format: uuid
+      - name: recursive
+        in: query
+        required: false
+        description: Required true when deleting a non-empty folder
+        schema:
+          type: boolean
+      responses:
+        '204':
+          description: Entry moved to Trash
+        '400':
+          description: Missing path, or path is the root itself
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Directory is not empty and recursive was not set
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '500':
+          description: Trash move failed; source path is untouched
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/projects/{id}/source/raw:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSourceRaw
+      summary: Read a jailed image payload for the in-app image viewer
+      description: |
+        Streams image bytes under the same path jail as GET /source. Content
+        type is sniffed from the first bytes (not the extension). Only the
+        locked image MIME set is served; non-images return 415. Payloads over
+        8 MiB return 413. SVG is served as image/svg+xml for `<img>` rendering
+        only — never as injectable markup.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        description: Repo-relative path (slash-separated)
+        schema:
+          type: string
+          minLength: 1
+      - name: root_id
+        in: query
+        required: false
+        description: Attached root to pin the read to
+        schema:
+          type: string
+          format: uuid
+      - name: worker_id
+        in: query
+        required: false
+        description: Worker job whose live overlay contains this path
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Image bytes
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/svg+xml:
+              schema:
+                type: string
+                format: binary
+            image/bmp:
+              schema:
+                type: string
+                format: binary
+            image/x-icon:
+              schema:
+                type: string
+                format: binary
+            image/avif:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Length:
+              schema:
+                type: integer
+        '403':
+          description: Path denied by sandbox
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Physical workspace changed after the image metadata read
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '413':
+          description: Image exceeds the 8 MiB raw cap
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '415':
+          description: Not a sniffed image type
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+  /v1/projects/{id}/source/editorconfig:
+    get:
+      tags:
+      - projects
+      operationId: getProjectSourceEditorConfig
+      summary: Resolve the EditorConfig pairs in effect for a project path
+      description: |
+        Resolves `.editorconfig` files from the path's directory toward its
+        attached root, stopping at `root = true` or at the root itself, with
+        nearer files and later sections winning. The host applies the same
+        resolution when it checks agent writes. The file itself need not exist.
+        Unrecognized keys and values are ignored; `unset` clears a pair from a
+        farther file. An absent property is not declared for this path.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: path
+        in: query
+        required: true
+        description: Repo-relative path (slash-separated)
+        schema:
+          type: string
+          minLength: 1
+      - name: root_id
+        in: query
+        required: true
+        description: Attached root that holds the path
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Pairs in effect for the path
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/SourceEditorConfig
+        '400':
+          description: Missing or invalid path or root_id
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project or root not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+  /v1/projects/{id}/source/editable:
+    post:
+      tags:
+      - projects
+      operationId: makeProjectSourceEditable
+      x-person-action: record
+      summary: Make a read-only project file editable
+      description: |
+        Adds only the owner-write permission bit to one existing regular file.
+        The path is resolved inside the selected project root without symlink
+        traversal, and base_sha256 must still match the bytes returned by the
+        source read. Repeating the same request is safe. Worker overlays and
+        historical versions never call this operation; their toolbar actions
+        return to the current project file instead.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/MakeProjectSourceEditableRequest
+      responses:
+        '200':
+          description: File permission updated, or already owner-writable
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/MakeProjectSourceEditableResponse
+        '400':
+          description: Missing path, root_id, or base_sha256
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by the project filesystem boundary
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project, root, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: File bytes changed since the editor loaded them
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '422':
+          description: Host filesystem refused the permission transition
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/source/browse:
+    get:
+      tags:
+      - projects
+      operationId: browseProjectSource
+      summary: List one directory level for the project Files tree
+      description: |
+        Lists the immediate children of a directory under one attached root so
+        the Files tree can expand lazily. Dot-entries and the project overlay
+        directory, VCS metadata, and ignored directories are included. Symlinked children are
+        classified by their target and dangling links are dropped. Entries come
+        back folders first, then case-insensitive by name. The browse follows
+        the same root jail as the source read: a dir that resolves outside the
+        selected root — including through a symlink — is denied.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceRootIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceDirQuery
+      responses:
+        '200':
+          description: Immediate children of the directory
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/SourceDirListing
+        '400':
+          description: Project has no attached folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Directory resolves outside the selected root
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project, root, or directory not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Physical workspace changed while the directory was being read
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+  /v1/projects/{id}/source/rename:
+    post:
+      tags:
+      - projects
+      operationId: renameProjectSource
+      x-person-action: record
+      summary: Rename or move a project file or folder within one root
+      description: |
+        Moves one file or folder to a new root-relative path under the same
+        attached root. Missing parent folders on the destination are created.
+        An occupied destination returns 409 source_already_exists. A path that
+        exists only under a different root returns 400 source_cross_root.
+        Engine and VCS metadata paths and the root itself are refused.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/RenameProjectSourceRequest
+      responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '200':
+          description: Canonical destination address
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/ProjectSourceLifecycleResponse
+        '400':
+          description: Missing paths, root itself, or cross-root move
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project, root, or source path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Destination path already exists
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/projects/{id}/source/copy:
+    post:
+      tags:
+      - projects
+      operationId: copyProjectSource
+      x-person-action: record
+      summary: Copy a project file or folder within one root
+      description: |
+        Copies one file or folder (recursive) to a new root-relative path under
+        the same attached root. Modes are preserved. An occupied destination
+        returns 409 source_already_exists. Cross-root copies return 400
+        source_cross_root. Engine and VCS metadata paths and the root itself
+        are refused.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/CopyProjectSourceRequest
+      responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
+        '200':
+          description: Canonical destination address
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-content.yaml#/components/schemas/ProjectSourceLifecycleResponse
+        '400':
+          description: Missing paths, root itself, or cross-root copy
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '403':
+          description: Path denied by sandbox / outside project roots
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '404':
+          description: Project, root, or source path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Destination path already exists
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/projects/{id}/source/storage:
+    get:
+      tags: [projects]
+      operationId: getProjectSourceStorage
+      summary: Get retained content usage relevant to a project
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      responses:
+        '200':
+          description: Retained content usage by storage lane
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/source-storage.yaml#/components/schemas/SourceStorage}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

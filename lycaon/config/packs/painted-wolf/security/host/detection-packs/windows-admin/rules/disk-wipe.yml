@@ -1,0 +1,41 @@
+title: Format or wipe a Windows volume
+id: 31442016-52c9-444b-81c7-4e27633d9a1b
+description: Formats a volume or cleans a disk's partition table, destroying what was on it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_powershell:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    CommandLine|contains:
+      - 'Format-Volume'
+      - 'Clear-Disk'
+      - 'Remove-Partition'
+  selection_diskpart:
+    Image:
+      - diskpart
+      - diskpart.exe
+  selection_format:
+    Image:
+      - format
+      - format.com
+    CommandLine|re: '(?i)^\s*format\.?(com)?\s+[a-z]:'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(-whatif|/[?])(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_powershell or selection_diskpart or selection_format) and not filter_rehearsal and not filter_local

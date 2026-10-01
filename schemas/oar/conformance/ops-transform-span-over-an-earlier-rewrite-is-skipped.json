@@ -1,0 +1,119 @@
+{
+  "id": "ops-transform-span-over-an-earlier-rewrite-is-skipped",
+  "title": "A span overlapping a range an earlier transform rewrote is not applied, and is not clamped",
+  "covers": [
+    "OAR-OPS-16",
+    "OAR-OPS-20"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "A_MASK",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "size(secret_matches) > 0",
+      "transform": {
+        "action": "redact",
+        "target": "secret_matches",
+        "replacement": "[A]"
+      }
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "model.output",
+      "id": "B_MASK",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "size(pii_entities) > 0",
+      "transform": {
+        "action": "redact",
+        "target": "pii_entities",
+        "replacement": "[B]"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 or 555-0199 now",
+    "facts": {
+      "secret_matches": [
+        {
+          "start": 5,
+          "end": 13
+        }
+      ],
+      "pii_entities": [
+        {
+          "start": 9,
+          "end": 20
+        },
+        {
+          "start": 26,
+          "end": 29
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "A_MASK",
+    "content": "call [A] or 555-0199 [B]"
+  }
+}

@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-inline-edit
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-inline-edit
+group: "1"
+order: 7
+label: "Inline edit"

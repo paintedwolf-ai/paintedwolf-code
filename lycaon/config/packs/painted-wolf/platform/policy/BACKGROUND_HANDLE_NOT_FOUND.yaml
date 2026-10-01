@@ -1,0 +1,39 @@
+oar: '1.0'
+id: BACKGROUND_HANDLE_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command_output
+  - command_stop
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.handle
+when: paintedwolf.rejection_code == "BACKGROUND_HANDLE_NOT_FOUND"
+effect: block
+copy:
+  what: Handle {{ paintedwolf.handle }} is unavailable to {{ tool }}, although this session has other running
+    jobs.
+  cause: The supplied handle was not found in this session’s retained command jobs.
+  why: A handle identifies a particular execution; another running job is not a substitute.
+  fix: Use the intended execution’s handle from its actual spawn or yield result. If that result is already
+    final or its handle is no longer retained, use the retained outcome and do not restart completed work merely
+    to obtain a handle.
+  instead: Resolve the intended job identity before polling or stopping it
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: background handle {{ paintedwolf.handle }} was not found
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    handle: bg-1
+    path: src/main.go
+    profile: coordinator
+    tool: command_output
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: BACKGROUND_HANDLE_NOT_FOUND'

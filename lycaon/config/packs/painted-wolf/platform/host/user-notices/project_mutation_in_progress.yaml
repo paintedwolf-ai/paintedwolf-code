@@ -1,0 +1,8 @@
+surfaces: [host_error, http]
+notification: { tier: non_catastrophic, scope: session }
+title: Project is changing
+message: A folder or draft lifecycle transition holds this project's lifecycle lock.
+suggested_action: Wait for the transition to finish, then try again.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'

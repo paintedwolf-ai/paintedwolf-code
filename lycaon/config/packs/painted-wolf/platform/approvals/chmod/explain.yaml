@@ -1,0 +1,19 @@
+# chmod — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    chmod:
+        tool: chmod
+        tier_hint: recoverable
+        what_changes: Change file approvals on {{ path }}.
+        who_affected: The named path in this project.
+        if_wrong: Approvals can break access until changed back.
+        allow_line: changing approvals on project files
+        scenarios:
+            - id: default
+              vars:
+                path: scripts/run.sh
+                project: my-app
+              expect_contains:
+                - approvals
+                - scripts/run.sh

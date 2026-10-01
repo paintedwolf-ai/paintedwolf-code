@@ -1,0 +1,27 @@
+oar: '1.0'
+id: SANDBOX_SOCKS_PROXY_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKS_PROXY_INVALID"
+effect: block
+copy:
+  what: The SOCKS proxy environment request was invalid for this action.
+  cause: socks_proxy was not a boolean, or it was combined with capability_request.direct_ip.
+  why: Mediated SOCKS env injection is optional and separate from direct IP, which strips proxy variables.
+  fix: Pass socks_proxy true alone when a client needs ALL_PROXY for non-HTTP TCP. Omit it for ordinary HTTP(S).
+    Do not combine it with direct_ip.
+  instead: Branch on Code; correct or remove socks_proxy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socks_proxy
+x-paintedwolf-message: socks proxy env request invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKS_PROXY_INVALID'
+  - SOCKS

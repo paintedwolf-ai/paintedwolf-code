@@ -1,0 +1,77 @@
+title: Disable or delete an audit or detection control
+id: b59a0b47-8422-4f01-9b89-156699ff8c72
+description: >-
+  Removes or turns off a logging, monitoring, or security detection control, so a
+  later action leaves no record.
+references:
+  - https://docs.aws.amazon.com/cli/latest/reference/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  # The service name differs from the policy prefix.
+  svc_audit:
+    ApiAction|startswith:
+      - 'cloudtrail:'
+      - 'configservice:'
+      - 'guardduty:'
+      - 'securityhub:'
+      - 'macie2:'
+      - 'accessanalyzer:'
+      - 'inspector2:'
+      - 'detective:'
+      - 'logs:'
+  verbs_audit_destroy:
+    ApiAction|contains:
+      - ':delete-'
+      - ':remove-'
+      - ':deregister-'
+      - ':disassociate-'
+      - ':revoke-'
+      - ':disable-'
+  # Recording turned off without a destructive verb. Exact identities only.
+  selection_audit_ops:
+    ApiAction:
+      - 'cloudtrail:stop-logging'
+      - 'configservice:stop-configuration-recorder'
+      - 'ec2:delete-flow-logs'
+      - 'guardduty:update-detector'
+      - 'securityhub:update-standards-control'
+  # Narrowing a trail's scope leaves it running and recording less.
+  selection_trail_narrow:
+    ApiAction: 'cloudtrail:update-trail'
+    CommandLine|contains:
+      - ' --no-is-multi-region-trail'
+      - ' --no-include-global-service-events'
+      - ' --no-is-organization-trail'
+  # Exclude presentation and ambiguous retention operations.
+  filter_presentation:
+    ApiAction|endswith:
+      - ':delete-dashboards'
+      - ':delete-alarms'
+      - ':put-retention-policy'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_image or selection_structured) and ((svc_audit and verbs_audit_destroy and not filter_presentation)
+    or selection_audit_ops or selection_trail_narrow)
+    and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

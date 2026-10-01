@@ -1,0 +1,14 @@
+language: ql
+comment:
+- //
+limits: CodeQL queries are analysis definitions; no context-free security vulnerability rule is claimed.
+cases:
+- name: ordinary-source
+  file: sample.ql
+  source: |
+    import javascript
+    from Function f select f
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.ql

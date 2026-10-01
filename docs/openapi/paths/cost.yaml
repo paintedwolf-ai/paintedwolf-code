@@ -1,0 +1,88 @@
+paths:
+  /v1/cost/summary:
+    get:
+      tags:
+      - cost
+      operationId: getCostSummary
+      summary: Get cost summary for session or project
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Session-scoped cost summary (mutually exclusive with project_id)
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Project-scoped cost summary (mutually exclusive with session_id)
+      responses:
+        '200':
+          description: Cost summary
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/cost.yaml#/components/schemas/CostSummary
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/cost-report:
+    get:
+      tags:
+      - cost
+      operationId: getProjectCostReport
+      summary: Get project cost totals and per-session breakdown
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectId
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 40
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      - name: q
+        in: query
+        schema:
+          type: string
+          maxLength: 500
+        description: Literal case-insensitive chat title substring.
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum: [cost, tokens, activity, id]
+          default: cost
+        description: Descending order with the session id as tie breaker. Use id for a stable export traversal.
+      responses:
+        '200':
+          description: Project cost report
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/cost.yaml#/components/schemas/ProjectCostReport
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict

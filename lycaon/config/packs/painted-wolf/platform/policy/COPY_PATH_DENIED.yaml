@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COPY_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - copy
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "COPY_PATH_DENIED"
+effect: block
+copy:
+  cause: A source or destination crossed the host write-protection boundary.
+  why: The copy operation checks both paths against its required authority.
+  fix: Leave the protected path unchanged. Do not use another tool or a broader write glob to bypass this floor.
+    Preserve any earlier copies reported as completed.
+  instead: Respect the protected-path boundary
+  what: The copy path {{ paintedwolf.path }} is protected.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
+x-paintedwolf-message: copy:copy path matches deny glob
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: copy
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COPY_PATH_DENIED'

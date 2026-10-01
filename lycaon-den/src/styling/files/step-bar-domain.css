@@ -1,0 +1,313 @@
+.den-step-bar {
+  container-type: inline-size;
+  container-name: walk-bar;
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--den-line);
+  background: var(--den-surface);
+  font-size: var(--text-den-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+}
+
+.den-walk-chapter__reveal {
+  flex: none;
+  padding: 0.25rem;
+  color: var(--den-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.den-walk-chapter__reveal:hover,
+.den-walk-chapter__reveal:focus-visible {
+  color: var(--den-text);
+  text-decoration: underline;
+}
+
+.den-walk-chapter__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.25rem 0.375rem;
+  color: var(--den-text-muted);
+}
+
+.den-walk-chapter__label b {
+  flex: none;
+  color: var(--den-text);
+}
+
+.den-step-bar__read b {
+  color: var(--den-text);
+  font-weight: 600;
+}
+
+.den-step-bar__read {
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.den-step-bar__read:hover,
+.den-step-bar__browse:hover:not(:disabled) {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+
+.den-step-bar__read:focus-visible,
+.den-step-bar__browse:focus-visible {
+  outline: 1px solid var(--den-accent-signal);
+  outline-offset: -1px;
+}
+
+.den-step-bar__browse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface);
+  color: var(--den-text-muted);
+  cursor: pointer;
+}
+
+.den-step-bar__browse:disabled {
+  visibility: hidden;
+}
+
+/* Fixed width keeps long labels inside the popover. */
+.den-walk-picker[data-den-anchored-surface] {
+  width: min(24rem, calc(100vw - 32px));
+  min-width: 0;
+  padding: 6px;
+}
+
+
+.den-walk-navigator__turn {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 0;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--den-border);
+}
+
+.den-walk-navigator__row {
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.den-walk-navigator__row:hover,
+.den-walk-navigator__row[aria-current] {
+  background: var(--den-tint-1);
+}
+
+.den-walk-navigator__row:focus-visible {
+  outline: 1px solid var(--den-accent-signal);
+  outline-offset: -1px;
+  background: var(--den-tint-1);
+}
+
+.den-walk-navigator__row-head {
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+}
+
+.den-walk-navigator__path {
+  min-width: 0;
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+@container walk-bar (max-width: 28rem) {
+  .den-step-bar__read { grid-column: 1 / -1; justify-self: start; }
+  .den-step-bar__viewport { grid-column: 1 / -1; }
+}
+
+.den-step-bar__line {
+  background: var(--den-line);
+}
+
+/* Clears the tallest marker: a hovered current halo reaches 11.25px above the line. */
+.den-step-bar__chapter {
+  position: absolute;
+  top: 0;
+  height: 1.3rem;
+  line-height: 1.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-left: 1px solid var(--den-line);
+  padding-left: 0.25rem;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+}
+
+/* Step state reaches the marker through these properties. */
+.den-step-bar__dot {
+  --den-step-marker-size: 0.7;
+  --den-step-marker-lift: 1;
+  --den-step-marker-ink: 0.42;
+  --den-step-marker-halo: transparent;
+  --den-step-marker-halo-opacity: 0;
+  border: 0;
+  background: transparent;
+  color: var(--den-text-muted);
+}
+
+.den-step-bar__dot--past {
+  --den-step-marker-ink: 0.74;
+}
+
+.den-step-bar__dot--write {
+  color: var(--den-accent-signal);
+}
+
+.den-step-bar__dot--create {
+  color: var(--den-status-positive);
+}
+
+.den-step-bar__dot--delete {
+  color: var(--den-danger);
+}
+
+.den-step-bar__dot--git,
+.den-step-bar__dot--command,
+.den-step-bar__dot--outside {
+  color: var(--den-text-muted);
+}
+
+/* Marks steps that arrived during the walk and are not yet visited. */
+.den-step-bar__dot--new {
+  --den-step-marker-ink: 1;
+  --den-step-marker-halo: color-mix(in srgb, var(--den-accent-signal) 32%, var(--den-surface));
+  --den-step-marker-halo-opacity: 1;
+}
+
+.den-step-bar__dot:hover {
+  z-index: 2;
+  --den-step-marker-lift: var(--den-step-marker-hover);
+  --den-step-marker-ink: 1;
+  --den-step-marker-halo: color-mix(in srgb, currentColor 40%, var(--den-surface));
+  --den-step-marker-halo-opacity: 1;
+}
+
+/* Equal specificity gives the current halo precedence over hover. */
+.den-step-bar__dot.den-step-bar__dot--current {
+  z-index: 1;
+  --den-step-marker-size: 1;
+  --den-step-marker-ink: 1;
+  --den-step-marker-halo: color-mix(in srgb, currentColor 72%, var(--den-surface));
+  --den-step-marker-halo-opacity: 1;
+}
+
+.den-step-bar__dot:focus-visible {
+  outline: none;
+  --den-step-marker-ink: 1;
+  --den-step-marker-halo: var(--den-accent-signal);
+  --den-step-marker-halo-opacity: 1;
+}
+
+.den-step-marker {
+  scale: calc(var(--den-step-marker-size) * var(--den-step-marker-lift));
+  transition: scale var(--den-duration) var(--den-ease);
+}
+
+/* An opaque marker masks the track beneath it. */
+.den-step-marker__halo {
+  fill: var(--den-surface);
+  stroke: var(--den-step-marker-halo);
+  opacity: var(--den-step-marker-halo-opacity);
+  transition:
+    opacity var(--den-duration) var(--den-ease),
+    stroke var(--den-duration) var(--den-ease);
+}
+
+.den-step-marker__knockout {
+  fill: var(--den-surface);
+}
+
+.den-step-marker__body {
+  fill: currentColor;
+  opacity: var(--den-step-marker-ink);
+  transition: opacity var(--den-duration) var(--den-ease);
+}
+
+/* Inverse scaling keeps outline weight constant. */
+.den-step-marker--hollow .den-step-marker__body {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: calc(var(--den-step-marker-stroke) / var(--den-step-marker-size));
+  transition:
+    opacity var(--den-duration) var(--den-ease),
+    stroke-width var(--den-duration) var(--den-ease);
+}
+
+.den-step-tooltip {
+  pointer-events: auto;
+}
+
+.den-step-tooltip__path {
+  font-family: var(--den-font-mono);
+}
+
+.den-step-tooltip__meta span + span::before {
+  content: "·";
+  color: var(--den-text-muted);
+}
+
+.den-sidebar-scope-picker__menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--den-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-step-marker,
+  .den-step-marker * {
+    transition: none;
+  }
+
+  .project-files-stage-boundary__loading,
+  .project-files-stage-boundary__loading--ready,
+  .project-files-stage-boundary__content,
+  .project-files-stage-boundary__content--ready,
+  .den-files-root-summary {
+    transition: none;
+  }
+}
+
+/* The receipt identifies the captured span without repeating its value. */
+

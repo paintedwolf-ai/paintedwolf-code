@@ -1,0 +1,5 @@
+code: blueprint_writer_without_blueprint
+message: |
+  Phase {{phase}} in workflow {{workflow}} declares blueprint_write without a workflow Blueprint.
+replacement: |
+  Declare the workflow Blueprint or remove blueprint_write from the phase.

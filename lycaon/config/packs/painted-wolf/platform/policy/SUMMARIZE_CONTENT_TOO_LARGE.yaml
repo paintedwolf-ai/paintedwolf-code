@@ -1,0 +1,40 @@
+oar: '1.0'
+id: SUMMARIZE_CONTENT_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - summarize
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bytes
+  - paintedwolf.cap
+  - paintedwolf.resource_limit
+when: paintedwolf.rejection_code == "SUMMARIZE_CONTENT_TOO_LARGE"
+effect: block
+copy:
+  what: '`summarize` inline content is {{ paintedwolf.bytes }} bytes, above the {{ paintedwolf.cap }}-byte
+    cap.'
+  cause: Inline content mode is for short pasted text, not whole-repo dumps.
+  why: Oversized inline payloads blow the latency and token budget before reduce can run.
+  fix: Use path or paths for the intended repository files. If inline input is necessary, split or reduce it
+    only while retaining the required scope and explicitly accounting for omitted material; do not silently
+    truncate evidence.
+  instead: Branch on Code; use path/paths or shrink content
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:summarize
+x-paintedwolf-message: inline content is {{ paintedwolf.bytes }} bytes; cap is {{ paintedwolf.cap }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    bytes: 500000
+    cap: 400000
+    path: README.md
+    profile: coordinator
+    tool: summarize
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SUMMARIZE_CONTENT_TOO_LARGE'

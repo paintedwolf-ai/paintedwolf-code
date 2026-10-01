@@ -1,0 +1,5 @@
+id: contentful-delivery-api-token
+upstream_id: contentful-delivery-api-token
+title: Contentful delivery API token
+severity: critical
+enabled: false

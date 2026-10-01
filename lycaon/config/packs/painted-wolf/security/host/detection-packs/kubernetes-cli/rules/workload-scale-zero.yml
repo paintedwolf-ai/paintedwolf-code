@@ -1,0 +1,36 @@
+title: Scale a workload down to zero replicas
+id: 427098ac-cdb3-46a4-95c3-941fb617493d
+description: >-
+  Sets a workload's replica count to zero, stopping every pod it runs. Scaling to
+  any other size is ordinary capacity work and is not matched.
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  verbs_replica_scale:
+    CommandLine|contains: ' scale '
+  # Padding distinguishes target size from prefixes and preconditions.
+  selection_zero_target:
+    CommandLine|contains:
+      - ' --replicas=0 '
+      - ' --replicas 0 '
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_replica_scale and selection_zero_target and not filter_rehearsal and not filter_local

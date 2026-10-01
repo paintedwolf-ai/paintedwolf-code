@@ -1,0 +1,38 @@
+# Session prompt loop settings.
+# Per-turn tool-loop cap.
+max_iterations: 500
+# Coordinator overlay promote surface may use a higher per-turn tool iteration cap.
+overlay_promote_max_iterations: 150
+# max_tool_result_bytes and max_coordinator_loop_cycles are derived from true_window
+# (ScaleLimitsFromTrueWindow / ApplyLiveBudget). Omitted here.
+# Hard ceiling per spill file under the project host data dir
+# (disk: ~/.config/paintedwolf/projects/{id}/tool-output/, promote-spills/, prompt-attachments/).
+# Agent wire uses host-data-relative paths only — see docs/host-contract.md
+# § Agent-visible host spill paths.
+# Structured JSON over this cap is rejected (TOOL_OUTPUT_SPILL_CAP_EXCEEDED); opaque
+# prose may spill the first max_tool_spill_bytes (TOOL_OUTPUT_SPILL_CAPPED). Unbounded
+# tool emits without a truncation receipt are rejected at commit (TOOL_RESULT_TOO_LARGE).
+max_tool_spill_bytes: 67108864 # 64 MiB
+# Host may auto-Prompt coordinator after worker legs / phase auto-advance.
+coordinator_loop: true
+# Wall-clock caps (seconds). Zero in an overlay is ignored; bundled defaults apply.
+# Ceiling for one model stream, measured from the send: a secret hold before it
+# does not spend the window. Generous for a slow local model.
+llm_turn_timeout_sec: 14400
+# Maximum silent gap between stream deltas.
+llm_stream_stall_timeout_sec: 1800
+# Whole host turn across all tool iterations.
+coordinator_host_turn_timeout_sec: 86400
+# Maximum wait() sleep.
+coordinator_max_sleep_sec: 10800
+# Parent wait exceeds a full worker budget; expiry does not stop the worker.
+await_parent_workers_timeout_sec: 3600
+# Worker tool-round ceilings. Omitted task(max_tool_loops) selects the default;
+# explicit ceilings and granted requests stay within [min, max].
+worker_tool_budget_default: 20
+worker_tool_budget_min: 2
+worker_tool_budget_max: 120
+session_spend_ceiling_usd: 0 # should: 0 — no per-session USD ceiling by default; a positive value pauses the session at the cap
+spend_warning_ratio: 0.8 # should: 0.8 — warn once at this share of an armed session spend limit
+spend_ceiling_enabled: false # should: false — the ceiling only pauses when explicitly armed in Settings
+spend_soft_stop: true # should: true — crossing the cap mid-run gets one bounded tool round, then a prose closeout

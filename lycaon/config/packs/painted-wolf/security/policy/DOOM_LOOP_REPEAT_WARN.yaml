@@ -1,0 +1,95 @@
+oar: '1.0'
+id: DOOM_LOOP_REPEAT_WARN
+kind: invariant
+anchor: tool.post_invoke
+requires:
+  profiles: [tool]
+  facts:
+  - paintedwolf.max
+  - paintedwolf.worker_leg
+  - paintedwolf.repeat_count
+  - paintedwolf.deferred_unactivated
+  - paintedwolf.handle
+when: paintedwolf.repeat_count >= 3 && paintedwolf.repeat_count <= 8
+effect: warn
+copy:
+  cause: The same tool+args completed repeatedly without new information
+  why: Repeating the same invocation wastes the turn; the host hard-blocks after {{ paintedwolf.max }} identical
+    repeats
+  fix: '{% if paintedwolf.handle %}Stop polling handle `{{ paintedwolf.handle }}`. Call `wait(until_complete=true,
+    conditions=[{"kind":"process_done","handles":["{{ paintedwolf.handle }}"]}], reason="waiting for command
+    completion")`. Read more output only when
+    needed, using the exact `next_cursor` from the preceding result. {% else %}Stop this tool arc and reuse
+    the existing result.{% if paintedwolf.deferred_unactivated %} If the next action needs
+    a tool listed as deferred in the tool catalog, activate that tool with `request_tools`. Tools withheld
+    from the current role or mode cannot be activated this way.{% endif %} If the repeated tool is the active Phase exit, follow the last structured
+    `Code:` remedy and resubmit corrected arguments; abandoning the exit cannot advance the workflow. {% if
+    paintedwolf.worker_leg %}Return to the leg assignment pinned at the top of this context and the next action
+    you named for it; call another tool only when that action requires a named missing fact. If that action
+    is no longer reachable, finish the leg with `leg_status: partial`.{% else %}Return to the active workflow
+    Phase exit or current next action; call another tool only when that action requires a named missing fact.{%
+    endif %}{% endif %}'
+  instead: '{% if paintedwolf.handle %}Wait on the existing process handle; do not reuse the previous output
+    cursor. {% else %}Reuse existing evidence and resume the current next action. If that action is the active
+    Phase exit, follow its structured `Code:` remedy and resubmit corrected arguments. Do not vary arguments
+    merely to evade the repeat guard. {% if paintedwolf.worker_leg %}If that action is no longer reachable,
+    finish the leg with `leg_status: partial` rather than spending the remaining rounds here.{% endif %}{%
+    endif %}'
+  what: Identical {{ tool }} call repeated {{ paintedwolf.repeat_count }} times — stop this tool arc and resume
+    the current next action; identical tool+args hard-blocks after {{ paintedwolf.max }} repeats
+x-paintedwolf-category: expected_behavior
+x-paintedwolf-emit: guard:doom_loop
+x-paintedwolf-message: Identical {{ tool }} call repeated {{ paintedwolf.repeat_count }} times — stop this
+  tool arc and resume the current next action; identical tool+args hard-blocks after {{ paintedwolf.max }}
+  repeats
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    repeat_count: 3
+    detail: bad args
+    max: 8
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT_WARN'
+  - current next action
+- id: deferred_unactivated
+  vars:
+    repeat_count: 3
+    deferred_unactivated: 12
+    detail: bad args
+    max: 8
+    path: src/main.go
+    profile: coordinator
+    tool: update_progress
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT_WARN'
+  - request_tools
+  - listed as deferred in the tool catalog
+- id: worker_leg
+  vars:
+    repeat_count: 3
+    detail: bad args
+    max: 8
+    path: src/main.go
+    profile: explore_readonly
+    tool: grep
+    worker_leg: true
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT_WARN'
+  - leg assignment pinned at the top
+  - 'leg_status: partial'
+- id: command_output
+  vars:
+    repeat_count: 3
+    handle: cmd_docker_01
+    max: 8
+    profile: coordinator
+    tool: command_output
+  expect_contains:
+  - 'Code: DOOM_LOOP_REPEAT_WARN'
+  - '"handles":["cmd_docker_01"]'
+  - process_done
+  - next_cursor
+  - previous output cursor

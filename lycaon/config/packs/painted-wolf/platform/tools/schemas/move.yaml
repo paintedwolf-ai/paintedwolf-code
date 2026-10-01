@@ -1,0 +1,22 @@
+tags: [filesystem]
+description: "Rename files within write scope (never use command mv); a replaced destination can be undone. Replaces command: mv(1)."
+schema:
+  type: object
+  properties:
+    moves:
+      description: "Batch of from→to file renames (max 10)."
+      type: array
+      maxItems: 10
+      items:
+        type: object
+        properties:
+          from:
+            type: string
+            description: Repo-relative source file
+          to:
+            type: string
+            description: Repo-relative destination file
+        required: [from, to]
+        additionalProperties: false
+  required: [moves]
+  additionalProperties: false

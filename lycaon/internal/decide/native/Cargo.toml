@@ -1,0 +1,42 @@
+[package]
+name = "bialy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+publish = false
+description = "Bialy: the tuned local decision engine"
+
+[lib]
+name = "bialy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bialy"
+path = "src/main.rs"
+
+[dependencies]
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+clap = { version = "4.5", features = ["derive"] }
+indexmap = { version = "2.7", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+thiserror = "2.0"
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+mlx-rs = { version = "0.32", optional = true }
+
+[features]
+default = []
+# Candle GPU backends; scripts/decide-features.sh picks per host.
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+metal = ["candle-core/metal", "candle-nn/metal"]
+# MLX runtime for the same model, Apple silicon only; `--device mlx` or `auto`.
+mlx = ["dep:mlx-rs"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

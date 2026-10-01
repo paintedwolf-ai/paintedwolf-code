@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-mode-messages
+command: painted-wolf/platform:search-mode-messages
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+3"
+  windows:
+    - "Mod+3"
+  linux:
+    - "Mod+3"

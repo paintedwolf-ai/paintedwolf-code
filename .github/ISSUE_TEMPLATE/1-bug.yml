@@ -1,0 +1,153 @@
+name: Bug report
+description: Something in the app is broken and you can reproduce it.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This form is for reproducible defects only.**
+
+        Use a different door for:
+
+        - **Questions, ideas, feature requests** → Discussions.
+        - **The app will not start** → the *App won't start* form. It asks for different things.
+        - **The agent stayed inside its permissions and did something you did not want** → the
+          *The agent did something wrong* form. Read that form first; not every such report is a
+          defect.
+        - **A security vulnerability** → the private advisory flow. Never a public issue.
+
+        Reports that skip the required fields get labelled and closed automatically. That is
+        queue management — a report without these cannot be acted on. Filing one does not
+        entitle you to a reply or a fix.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and this is not already reported.
+          required: true
+        - label: This is one bug. I will file separate reports for separate bugs.
+          required: true
+        - label: I reproduced this on the latest release.
+          required: true
+        - label: Nothing I am pasting below contains secrets, credentials, or code I cannot publish. This issue will be public forever.
+          required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: The behaviour you observed. Be specific about what you saw, not what you concluded.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Numbered, starting from a fresh session. If it only happens in a particular
+        project or with a particular model, say so — that is usually the whole bug.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Is this a regression?
+      description: Did this work in an earlier version?
+      options:
+        - ""
+        - "Yes — it worked in an earlier version"
+        - "No — it has never worked"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: input
+    id: last_working
+    attributes:
+      label: Last working version
+      description: Only if you answered yes above.
+
+  - type: textarea
+    id: system_info
+    attributes:
+      label: System information
+      description: >-
+        In the app: **Settings → Advanced → Diagnostics → System information → Copy for bug report**, then paste
+        it here. It contains your versions and the readiness checks — no keys, and nothing about
+        your projects. A report without this cannot be acted on.
+      render: text
+      placeholder: |
+        app version: 1.0.0
+        den version: 1.0.0
+        store schema_version: 1
+        readiness: ok
+    validations:
+      required: true
+
+  - type: input
+    id: report_id
+    attributes:
+      label: Report id
+      description: >-
+        In the app: **Settings → Advanced → Diagnostics → Save diagnostics bundle**, then paste the
+        **filename** here (it looks like `painted-wolf-code-diagnostics-20260729-141530.zip`).
+        **Keep the file — do not attach it.** It contains your file paths and recent logs, which
+        do not belong in a public issue. If a maintainer needs it, they will ask on the issue —
+        send it to info@paintedwolf.ai. Do not email it unasked, and do not email for help.
+      placeholder: painted-wolf-code-diagnostics-20260729-141530.zip
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app
+      options:
+        - ""
+        - "Chat / agent"
+        - "Files editor"
+        - "Settings"
+        - "Scanners"
+        - "MCP"
+        - "Extensions"
+        - "Git"
+        - "Install / update"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: >-
+        Optional, and only if you already know which lines matter. **Read them first** — logs can
+        contain file paths, source code, and prompt text. Do not paste the whole bundle here.
+      value: |
+        <details><summary>Log excerpt</summary>
+
+        ```log
+
+        ```
+
+        </details>
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

@@ -1,0 +1,543 @@
+language: go
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: shell-injection-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { exec.Command("sh","-c",r.FormValue("cmd")) }
+
+    '
+  want:
+  - lycaon.go.shell-injection
+  covers: []
+- name: shell-injection-safe
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { exec.Command("printf","%s",r.FormValue("text")) }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.shell-injection
+- name: sql-injection-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { db.Query("SELECT * FROM users WHERE name = " + r.FormValue("name")) }
+
+    '
+  want:
+  - lycaon.go.sql-injection
+  covers: []
+- name: sql-injection-safe
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { db.Query("SELECT * FROM users WHERE name = ?", r.FormValue("name")) }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.sql-injection
+- name: path-traversal-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { os.ReadFile(r.FormValue("path")) }
+
+    '
+  want:
+  - lycaon.go.path-traversal
+  covers: []
+- name: path-traversal-safe
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { os.ReadFile("config.json") }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.path-traversal
+- name: ssrf-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { http.Get(r.FormValue("url")) }
+
+    '
+  want:
+  - lycaon.go.ssrf
+  covers: []
+- name: ssrf-safe
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { http.Get("https://example.com") }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.ssrf
+- name: template-bypass-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { template.HTML(r.FormValue("html")) }
+
+    '
+  want:
+  - lycaon.go.template-bypass
+  covers: []
+- name: template-bypass-safe
+  file: sample.go
+  source: 'package sample
+
+    import ("net/http"; "os"; "os/exec"; "database/sql"; "html/template")
+
+    func f(r *http.Request, db *sql.DB) { template.HTMLEscapeString(r.FormValue("html")) }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.template-bypass
+- name: tls-verification-disabled-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/tls"
+
+    var c = tls.Config{InsecureSkipVerify:true}
+
+    '
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: tls-verification-disabled-safe
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/tls"
+
+    var c = tls.Config{InsecureSkipVerify:false}
+
+    '
+  want: []
+  covers:
+  - lycaon.go.tls-verification-disabled
+- name: ssh-hostkey-disabled-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import "golang.org/x/crypto/ssh"
+
+    var verify = ssh.InsecureIgnoreHostKey()
+
+    '
+  want:
+  - lycaon.go.ssh-hostkey-disabled
+  covers: []
+- name: ssh-hostkey-disabled-safe
+  file: sample.go
+  source: 'package sample
+
+    var verify = knownHostsCallback
+
+    '
+  want: []
+  covers:
+  - lycaon.go.ssh-hostkey-disabled
+- name: weak-digest-context-only
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/md5"
+
+    var h = md5.New()
+
+    '
+  want: []
+  covers: []
+- name: weak-digest-safe
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/sha256"
+
+    var h = sha256.New()
+
+    '
+  want: []
+  covers: []
+- name: weak-cipher-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/des"
+
+    func f(k []byte) { des.NewCipher(k) }
+
+    '
+  want:
+  - lycaon.go.weak-cipher
+  covers: []
+- name: weak-cipher-safe
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/aes"
+
+    func f(k []byte) { aes.NewCipher(k) }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.weak-cipher
+- name: world-writable-mode-context-only
+  file: sample.go
+  source: 'package sample
+
+    import "os"
+
+    func f() { os.Chmod("file",0777) }
+
+    '
+  want: []
+  covers: []
+- name: world-writable-mode-safe
+  file: sample.go
+  source: 'package sample
+
+    import "os"
+
+    func f() { os.Chmod("file",0600) }
+
+    '
+  want: []
+  covers: []
+- name: weak-rsa-key-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import("crypto/rsa";"crypto/rand")
+
+    func f(){ rsa.GenerateKey(rand.Reader,1024) }
+
+    '
+  want:
+  - lycaon.go.weak-rsa-key
+  covers: []
+- name: weak-rsa-key-safe
+  file: sample.go
+  source: 'package sample
+
+    import("crypto/rsa";"crypto/rand")
+
+    func f(){ rsa.GenerateKey(rand.Reader,3072) }
+
+    '
+  want: []
+  covers:
+  - lycaon.go.weak-rsa-key
+- name: obsolete-tls-maximum-vulnerable
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/tls"
+
+    var cfg=tls.Config{MaxVersion:tls.VersionTLS11}
+
+    '
+  want:
+  - lycaon.go.obsolete-tls-maximum
+  covers: []
+- name: obsolete-tls-maximum-safe
+  file: sample.go
+  source: 'package sample
+
+    import "crypto/tls"
+
+    var cfg=tls.Config{MinVersion:tls.VersionTLS12}
+
+    '
+  want: []
+  covers:
+  - lycaon.go.obsolete-tls-maximum
+- name: precision-custom-tls-verification
+  file: sample.go
+  source: 'package main
+
+    import "crypto/tls"
+
+    func f(){ _ = tls.Config{InsecureSkipVerify:true, VerifyConnection:verifyPeer} }
+
+    '
+  want: []
+  covers: []
+- name: precision-umask-file-mode
+  file: sample.go
+  source: 'package main
+
+    import "os"
+
+    func f(){ os.WriteFile("cache",data,0666); os.Mkdir("cache-dir",0777) }
+
+    '
+  want: []
+  covers: []
+- name: precision-restricted-root-read
+  file: sample.go
+  source: 'package main
+
+    import "os"
+
+    func f(){ root.Open(r.FormValue("path")); os.ReadFile("config.json") }
+
+    '
+  want: []
+  covers: []
+- name: precision-checksum
+  file: sample.go
+  source: 'package main
+
+    import "crypto/md5"
+
+    func f(){ _ = md5.Sum(data) }
+
+    '
+  want: []
+  covers: []
+- name: precision-tls-noop-verifier
+  file: sample.go
+  source: 'package main
+
+    import "crypto/tls"
+
+    func f(){ _ = tls.Config{InsecureSkipVerify:true, VerifyConnection:func(cs tls.ConnectionState) error { return
+    nil }} }
+
+    '
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: precision-tls-nil-verifier
+  file: sample.go
+  source: 'package main
+
+    import "crypto/tls"
+
+    func f(){ _ = tls.Config{InsecureSkipVerify:true, VerifyConnection:nil} }
+
+    '
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: precision-safe-conversion
+  file: sample.go
+  source: 'package main
+
+    import "net/http"
+
+    func f(){ http.Get("https://example.com/search?q="+r.FormValue("q")) }
+
+    '
+  want: []
+  covers: []
+- name: precision-mixed-noop-tls-verifiers
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    var c = tls.Config{InsecureSkipVerify: true, VerifyConnection: nil, VerifyPeerCertificate: func([][]byte, [][]*x509.Certificate) error { return nil }}
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: precision-both-noop-tls-verifiers
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    var c = tls.Config{InsecureSkipVerify: true, VerifyConnection: func(tls.ConnectionState) error { return nil }, VerifyPeerCertificate: func([][]byte, [][]*x509.Certificate) error { return nil }}
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-peer-pinned-after-literal
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    cfg.VerifyPeerCertificate = pinned
+    return cfg
+    }
+  want: []
+  covers: []
+- name: review-connection-pinned-after-literal
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    cfg.VerifyConnection = verify
+    return cfg
+    }
+  want: []
+  covers: []
+- name: review-reenabled-after-literal
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    cfg.InsecureSkipVerify = false
+    return cfg
+    }
+  want: []
+  covers: []
+- name: review-used-before-reenable
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    tls.Dial("tcp", "example.test:443", cfg)
+    cfg.InsecureSkipVerify = false
+    return cfg
+    }
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-nil-verifier-after-literal
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    cfg.VerifyPeerCertificate = nil
+    return cfg
+    }
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-noop-verifier-after-literal
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    cfg.VerifyConnection = func(tls.ConnectionState) error { return nil }
+    return cfg
+    }
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-conditional-reenable
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    if enabled { cfg.InsecureSkipVerify = false }
+    return cfg
+    }
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-distinct-config-reenable
+  file: sample.go
+  source: |
+    package sample
+    import ("crypto/tls"; "crypto/x509")
+    func f(pinned func([][]byte, [][]*x509.Certificate) error, verify func(tls.ConnectionState) error, enabled bool) *tls.Config {
+    cfg := &tls.Config{InsecureSkipVerify: true}
+    other := &tls.Config{}
+    other.InsecureSkipVerify = false
+    return cfg
+    }
+  want:
+  - lycaon.go.tls-verification-disabled
+  covers: []
+- name: review-ssrf-constant-origin
+  file: sample.go
+  source: |
+    package sample
+    import "net/http"
+    const apiBase = "https://api.example.com/"
+    func f(r *http.Request) { http.Get(apiBase + r.FormValue("path")) }
+  want: []
+  covers: []
+- name: review-ssrf-dynamic-authority
+  file: sample.go
+  source: |
+    package sample
+    import "net/http"
+    const apiBase = "https://"
+    func f(r *http.Request) { http.Get(apiBase + r.FormValue("host")) }
+  want:
+  - lycaon.go.ssrf
+  covers: []
+- name: review-ssrf-constant-origin-trimmed
+  file: sample.go
+  source: |
+    package sample
+    import("net/http";"strings")
+    const apiBase = "https://api.example.com/"
+    func f(r *http.Request) { http.Get(strings.TrimPrefix(apiBase + r.FormValue("url"), apiBase)) }
+  want:
+  - lycaon.go.ssrf
+  covers: []
+- name: review-ssrf-origin-reassigned
+  file: sample.go
+  source: |
+    package sample
+    import "net/http"
+    func f(r *http.Request) {
+      apiBase := "https://api.example.com/"
+      apiBase = r.FormValue("url")
+      http.Get(apiBase + r.FormValue("path"))
+    }
+  want:
+  - lycaon.go.ssrf
+  covers: []
+- name: review-ssrf-origin-shadowed
+  file: sample.go
+  source: |
+    package sample
+    import "net/http"
+    const apiBase = "https://api.example.com/"
+    func f(r *http.Request) {
+      apiBase := r.FormValue("url")
+      http.Get(apiBase + r.FormValue("path"))
+    }
+  want:
+  - lycaon.go.ssrf
+  covers: []

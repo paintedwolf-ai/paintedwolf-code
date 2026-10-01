@@ -1,0 +1,48 @@
+oar: '1.0'
+id: WORKER_EVIDENCE_HANDLE_UNKNOWN
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.observed_paths_sample
+    - paintedwolf.observed_urls_sample
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.profile
+    - paintedwolf.unobserved_cited_handles
+when: paintedwolf.profile == "worker" && size(paintedwolf.unobserved_cited_handles) > 0
+effect: block
+copy:
+  what: 'Worker cited {{ paintedwolf.offender_count }} finding reference(s) that did not resolve in this leg evidence.'
+  cause: 'A findings evidence handle or path did not match a recorded observation for this leg.'
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: 'Correct complete_leg using an exact observed evidence handle, or a recorded path, line and verbatim excerpt{% if paintedwolf.observed_paths_sample %}; observed paths include {{ paintedwolf.observed_paths_sample }}{% endif %}. For web evidence, cite the exact URL in cited_urls{% if paintedwolf.observed_urls_sample %}; observed URLs include {{ paintedwolf.observed_urls_sample }}{% endif %}. Remove unsupported findings or use offered tools to observe the missing scope before submitting again.'
+  instead: 'Use complete_leg with partial status and remaining_risk for unresolved evidence. Keep existing work; do not repeat a worker assignment solely to replace a bad citation.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-evidence:
+  ui_label: Evidence handles
+  ui_check_id: evidence_handles
+  in_session_retry: true
+x-paintedwolf-message: 'Worker finding reference did not resolve in this leg'
+x-paintedwolf-scenarios:
+  - id: unobserved_path
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: internal/missing.go:1
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKER_EVIDENCE_HANDLE_UNKNOWN'
+      - complete_leg
+  - id: url_in_findings_path
+    vars:
+      observed_urls_sample: https://bazzite.gg/
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: https:/bazzite.gg:3
+    expect_contains:
+      - 'Code: WORKER_EVIDENCE_HANDLE_UNKNOWN'
+      - cite the exact URL in cited_urls
+      - 'observed URLs include https://bazzite.gg/'

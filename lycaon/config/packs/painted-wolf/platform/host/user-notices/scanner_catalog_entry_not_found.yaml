@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Scanner not in catalog"
+message: "That scanner is not in the scanner catalog."
+suggested_action: "Refresh the scanner list."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "not in the scanner catalog"

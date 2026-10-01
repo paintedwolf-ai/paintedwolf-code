@@ -1,0 +1,61 @@
+description: >-
+  Stamp a planned parallel fan-out (1–N read-only legs). Call on fanout_planned phases,
+  then workflow_advance. Stamping records the plan only; it does not enqueue workers.
+  In the worker phase, dispatch each leg with task and its host-issued
+  workflow_work_id. Recover incomplete legs within the plan's attempt allowance.
+schema:
+  type: object
+  required: [legs]
+  properties:
+    legs:
+      description: "Leg objects: agent_type, subject, prompt, optional scope and max_tool_loops."
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required: [agent_type, subject, prompt]
+        properties:
+          agent_type:
+            description: "Worker agent id for this leg."
+            type: string
+          subject:
+            description: >-
+              The area this leg covers, named for a reader who never saw the
+              plan (at most 60 characters), such as "Desktop app".
+            type: string
+            maxLength: 60
+          prompt:
+            description: "Narrow prompt for this leg."
+            type: string
+          scope:
+            description: "Optional mode and assignment paths for this leg."
+            type: object
+            properties:
+              mode:
+                description: "read or write scope mode for this leg."
+                type: string
+                enum: [read, write]
+              paths:
+                description: "Optional repo-relative focus globs; never an access boundary."
+                type: array
+                items:
+                  type: string
+          max_tool_loops:
+            type: integer
+            minimum: 2
+            maximum: 120
+            description: >-
+              Optional tool-round ceiling for this leg; omit for the host default.
+              Size it to the ground the leg must cover: a leg spanning a
+              whole subsystem needs more rounds than one reading a few files.
+              task() for the leg uses it unless the call sets its own.
+    rationale:
+      description: "Why this fan-out shape (shown in host/UI)."
+      type: string
+    threat_model:
+      description: >-
+        Stated or inferred target threat model: system kind, who can reach it,
+        and how authentication works. Required when the plan phase sets
+        fanout.require_threat_model.
+      type: string
+  additionalProperties: false

@@ -1,0 +1,14 @@
+surfaces: [http]
+# The earlier action stands and this one did nothing; the default copy would
+# call that an unknown failure.
+notification: { tier: non_catastrophic, scope: session }
+title: Already used for a different action
+message: >-
+  This action reused a receipt that belongs to a different one, so it was not
+  run. Nothing changed, and the earlier action still stands.
+suggested_action: Start the action again from the control you used.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not run

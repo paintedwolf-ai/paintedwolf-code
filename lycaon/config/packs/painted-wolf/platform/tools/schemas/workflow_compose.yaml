@@ -1,0 +1,12 @@
+description: Compose a session workflow from YAML. Returns effective_summary; host replays coordinator_brief each Prompt.
+schema:
+  type: object
+  properties:
+    manifest_yaml:
+      description: "Workflow manifest YAML document."
+      type: string
+    dry_run:
+      description: "When true, validate/compose without activating."
+      type: boolean
+  required: [manifest_yaml]
+  additionalProperties: false

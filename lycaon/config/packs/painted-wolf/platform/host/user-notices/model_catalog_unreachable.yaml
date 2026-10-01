@@ -1,0 +1,16 @@
+surfaces:
+  - http
+notification: { tier: non_catastrophic, scope: session }
+title: Could not refresh the model list
+message: >-
+  The provider did not answer, so the model list could not be refreshed. The
+  models already saved for this AI provider are still listed and still work.
+suggested_action: >-
+  Check your connection, then try again. You can keep using the saved models
+  in the meantime.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - could not be refreshed
+      - still listed

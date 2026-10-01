@@ -1,0 +1,206 @@
+.project-artifacts-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.project-artifacts-view .den-browse-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.project-artifacts-view .den-browse-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.den-artifacts-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--den-text);
+}
+
+.den-artifacts-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.den-artifacts-chat-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+.den-artifacts-chat-filter__label {
+  font-weight: 500;
+}
+
+.den-artifacts-chat-filter .den-select {
+  min-width: 7rem;
+  font: inherit;
+}
+
+.den-artifacts-grid {
+  flex: 1;
+  min-height: 0;
+}
+
+.den-artifacts-grid__content {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, 15rem), 1fr)
+  );
+  grid-auto-rows: max-content;
+  gap: 16px;
+  padding: var(--den-stage-inset-x);
+  align-content: start;
+}
+
+.project-artifacts-tile {
+  min-width: 0;
+  margin: 0;
+}
+
+.project-artifacts-tile .den-transcript-visual__frame {
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.project-artifacts-tile .den-transcript-visual__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.den-artifacts-page-error {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px var(--den-stage-inset-x);
+  color: var(--den-danger);
+  font-size: var(--text-den-hint);
+}
+
+.den-artifacts-empty {
+  margin: 24px var(--den-stage-inset-x);
+  max-width: var(--den-prose-measure);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+.project-artifacts-tile__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.project-artifacts-tile__caption {
+  font-size: var(--text-den-hint);
+  color: var(--den-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-artifacts-tile__source {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--den-border);
+  font-size: var(--text-den-micro);
+  letter-spacing: 0.02em;
+  color: var(--den-text-muted);
+  background: var(--den-surface);
+}
+
+.project-artifacts-tile__chat,
+.project-artifacts-tile__when {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-artifacts-lightbox__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--den-line);
+}
+
+.project-artifacts-reveal {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--den-border);
+  border-radius: 6px;
+  background: var(--den-surface);
+  color: var(--den-text);
+  font: inherit;
+  font-size: var(--text-den-hint);
+  cursor: pointer;
+}
+
+.project-artifacts-reveal:hover {
+  background: var(--den-surface-elevated);
+}
+
+.project-artifacts-delete__impact {
+  margin: 0;
+  padding: 16px;
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+}
+
+.project-artifacts-delete__error {
+  margin: 0;
+  padding: 0 16px 16px;
+  color: var(--den-danger-text);
+  font-size: var(--text-den-body);
+}
+
+.project-artifacts-delete__actions {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--den-line);
+}
+
+.project-extensions-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-extensions-view .den-browse-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.project-extensions-view .den-browse-main__content {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--den-stage-inset-x) var(--den-stage-inset-x);
+}

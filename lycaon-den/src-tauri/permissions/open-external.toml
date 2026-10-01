@@ -1,0 +1,19 @@
+[[permission]]
+identifier = "allow-open-in-editor"
+description = "Open a path under attached project roots in an external editor."
+commands.allow = ["open_in_editor"]
+
+[[permission]]
+identifier = "allow-open-in-browser"
+description = "Open an http(s)/mailto/tel URL in a chosen browser preset."
+commands.allow = ["open_in_browser"]
+
+[[permission]]
+identifier = "allow-detect-editors"
+description = "List external editors installed on this machine for the Settings dropdown."
+commands.allow = ["detect_editors"]
+
+[[permission]]
+identifier = "allow-open-local-path"
+description = "Open an existing project file in the configured browser or default application."
+commands.allow = ["open_local_path"]

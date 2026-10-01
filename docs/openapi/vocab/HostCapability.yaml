@@ -1,0 +1,9 @@
+# HostCapability — what the host offers the client asking.
+name: HostCapability
+description: A facility the host offers the client on this connection.
+go_const_prefix: HostCapability
+values:
+  - id: shared_device
+    comment: >-
+      the client runs on the host's device, so host paths, the file manager,
+      native pickers, and local editors address the same machine

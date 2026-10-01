@@ -1,0 +1,48 @@
+paths:
+  /v1/events:
+    get:
+      tags:
+      - events
+      operationId: subscribeEvents
+      summary: SSE EventHub stream for a project or the device
+      description: 'Each SSE `data:` line is JSON matching `docs/schemas/events/envelope.json`.
+
+        Topic payloads are defined in `docs/schemas/events/{topic}.json`.
+
+        Human checkpoints use topic `checkpoint` (`checkpoint.json`, OpenAPI `CheckpointEvent`).
+
+        Session lifecycle (including async prompt failures) uses topic `session` (`session.json`, OpenAPI `SessionEvent`).
+
+        Six topics are device-scoped and are delivered on every open stream regardless of the `project_id` this one
+        subscribed with: `attention`, `cli_open`, `preflight`, `settings`, `providers`, and `model_policy`. Each reports a
+        fact whose audience is the device rather than one project — `attention` carries the whole cross-project
+        `AttentionView` precisely to report the projects the client is *not* watching, and a readiness probe or a settings
+        change still has to reach a window looking somewhere else. The `project` registry lifecycle topic also reaches
+        every stream, with the affected project retained in its scope, so project switchers stay current. Live delivery
+        and replay use the same audience. Every other topic stays filtered to this stream''s project.
+        `events.ValidatePublishScope` refuses a project-less key on any other topic, so
+        the set cannot widen by accident.
+
+        '
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/EventsProjectIDQuery
+      - $ref: ../components/parameters.yaml#/components/parameters/EventsAfterQuery
+      - $ref: ../components/parameters.yaml#/components/parameters/EventsClientIDQuery
+      responses:
+        '200':
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE lines containing EventEnvelope JSON
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict

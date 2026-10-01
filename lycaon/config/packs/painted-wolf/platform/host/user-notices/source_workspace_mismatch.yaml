@@ -1,0 +1,17 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - actual_workspace_id
+    - expected_workspace_id
+title: File belongs to another checkout
+message: >-
+  The workspace changed while this file was being read, so the bytes would have
+  come from a different checkout than the one now open.
+suggested_action: Open the file again to read it from the current checkout.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - workspace changed
+      - different checkout

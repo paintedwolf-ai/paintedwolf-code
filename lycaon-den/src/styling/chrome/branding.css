@@ -1,0 +1,142 @@
+body:not(.den-app-ready) .den-nav-brand {
+  display: none;
+}
+.den-nav-brand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: auto;
+  margin: 0 var(--den-nav-rail-gutter) 6px;
+  /* Same top inset as stage panels (--den-stage-inset-y). */
+  padding: var(--den-stage-inset-y) 8px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.den-nav-brand:hover {
+  background: var(--den-tint-1);
+}
+.den-brand-lockup {
+  --den-brand-glyph-size: 24px;
+  --den-brand-label-size: var(--text-den-subhead);
+  --den-brand-glyph-mark: var(--den-accent-signal);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.den-brand-lockup__glyph {
+  display: inline-flex;
+  width: var(--den-brand-glyph-size);
+  height: var(--den-brand-glyph-size);
+  flex-shrink: 0;
+}
+.den-brand-lockup__glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Disabling flex shrink preserves the icon’s width. */
+.den-theme-icon {
+  flex: none;
+  stroke-width: calc(
+    var(--den-icon-stroke-scale, 1) * var(--den-icon-slot-weight, 1.25)
+  );
+  stroke-linecap: var(--den-icon-stroke-cap, round);
+  stroke-linejoin: var(--den-icon-stroke-join, round);
+}
+
+/* Layout controls icon direction. */
+.den-theme-icon--mirror {
+  transform: scaleX(-1);
+}
+
+/* Preserve glyph space while hiding the mark. */
+:root[data-den-logomark="hidden"] .den-brand-lockup__glyph {
+  visibility: hidden;
+}
+.den-brand-lockup__label {
+  font-size: var(--den-brand-label-size);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.home-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 0 10px 12px;
+  gap: 1px;
+}
+/* Fixed height keeps the search and section dividers on one pixel row. */
+.home-nav__search {
+  height: 34px;
+  margin-bottom: 8px;
+  position: relative;
+}
+.home-nav__search::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  /* The half-pixel offset centers both fixed-height divider rules. */
+  bottom: -4.5px;
+  height: 1px;
+  background: var(--den-line);
+}
+.home-nav__search:hover {
+  background: var(--den-tint-1);
+}
+.home-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.home-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.home-nav__item:hover {
+  background: var(--den-tint-1);
+}
+.home-nav__item--active {
+  background: var(--den-nav-selection-bg);
+}
+.home-nav__item-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--den-text-muted);
+}
+.home-nav__item--active .home-nav__item-icon {
+  color: var(--den-accent-text);
+}
+.home-nav__item-label {
+  flex: 1;
+  min-width: 0;
+}
+.home-nav__count {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+

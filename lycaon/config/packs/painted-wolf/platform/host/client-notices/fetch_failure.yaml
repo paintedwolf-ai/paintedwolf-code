@@ -1,0 +1,7 @@
+scope: app
+title: Could not connect
+message: The app lost its connection to its own background service.
+scenarios:
+  - id: default
+    expect_contains:
+      - lost its connection

@@ -1,0 +1,39 @@
+fixtures:
+- rule: snapshot-delete
+  positive:
+  - restic forget --keep-last 1 --prune
+  - restic prune
+  - borg delete ::prod-2026-08-01
+  - borg prune --keep-daily 7 /srv/repo
+  - borg compact /srv/repo
+  - velero backup delete nightly --confirm
+  - sudo restic forget --keep-last 1 --prune
+  negative:
+  - restic snapshots
+  - restic backup /srv/data
+  - restic check
+  - borg list /srv/repo
+  - borg create ::prod /srv/data
+  - borg prune --keep-daily 7 -n /srv/repo
+  - velero backup delete nightly
+  - velero backup get
+  - restic forget --help
+- rule: backup-disable
+  positive:
+  - tmutil disable
+  - tmutil disablelocal
+  - sudo tmutil disable
+  negative:
+  - tmutil enable
+  - tmutil status
+  - tmutil listbackups
+  - tmutil disable --help
+- rule: local-snapshot-delete
+  positive:
+  - tmutil delete /Volumes/Backups/2026-08-01-000000
+  - sudo tmutil delete -d /Volumes/Backups -t 2026-08-01-000000
+  negative:
+  - tmutil listbackups
+  - tmutil latestbackup
+  - tmutil compare
+  - tmutil delete /Volumes/Backups/2026-08-01-000000 --help

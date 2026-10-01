@@ -1,0 +1,19 @@
+id: painted-wolf/platform:go-context-files
+title: "Show files"
+scope: "global"
+keywords:
+  - "files"
+  - "project files"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "files"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.files"

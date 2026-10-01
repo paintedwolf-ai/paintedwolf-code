@@ -1,0 +1,14 @@
+# Vet posture — readonly coordinator.
+#
+# The write boundary is the surface: a vet turn resolves to an observe_ surface,
+# which carries no path-mutating or command-scoped tool to offer or defer.
+
+rules:
+  - id: vet_posture_no_delegation
+    when:
+      posture_is: vet
+      tool_is_delegation: true
+    then:
+      deny:
+        code: VET_POSTURE_DELEGATION_FORBIDDEN
+        message: vet sessions do not dispatch implementers

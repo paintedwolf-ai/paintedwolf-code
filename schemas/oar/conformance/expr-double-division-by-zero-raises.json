@@ -1,0 +1,52 @@
+{
+  "id": "expr-double-division-by-zero-raises",
+  "title": "Division by a double zero raises rather than producing an IEEE infinity, and fail_closed then blocks with the rule's identifiers",
+  "covers": [
+    "OAR-EXPR-14",
+    "OAR-OPS-3"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "DIV_ZERO_DOUBLE",
+      "effect": "warn",
+      "when": "1.0 / 0.0 > 0.5"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "block",
+    "code": "DIV_ZERO_DOUBLE",
+    "rule": "oar.test/DIV_ZERO_DOUBLE",
+    "applied": [
+      "oar.test/DIV_ZERO_DOUBLE:errored"
+    ]
+  }
+}

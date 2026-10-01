@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/rekor"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.5.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-23831",
+  "GHSA-273p-m2cw-6833"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4354"
+ },
+ "details": "Rekor's COSE v0.0.1 entry type nil pointer dereference in Canonicalize via empty Message in github.com/sigstore/rekor",
+ "id": "GO-2026-4354",
+ "modified": "2026-02-02T21:05:55Z",
+ "published": "2026-02-02T21:05:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/rekor/security/advisories/GHSA-273p-m2cw-6833"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-23831"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/rekor/commit/39bae3d192bce48ef4ef2cbd1788fb5770fee8cd"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/sigstore/rekor/releases/tag/v1.5.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Rekor's COSE v0.0.1 entry type nil pointer dereference in Canonicalize via empty Message in github.com/sigstore/rekor"
+}

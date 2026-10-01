@@ -1,0 +1,47 @@
+# Summarize operator caps.
+version: 1
+
+gather:
+  metadata_nodes: 512
+  index_wait_ms: 100
+  file_read_bytes: 1048576
+  max_bytes: 4000000        # detailed source material before remaining scope stays in rollups/cursors
+  file_chunk_bytes: 1048576 # bounded parser window for file structure extraction
+  pattern_page_files: 32   # candidate source files per cursor page
+  max_files_read: 32       # source reads shared by pattern probing and outlining
+  max_list_depth: 6         # directory-gather recursion depth
+  file_head_lines: 400      # source span retained around the task's strongest definition
+  symbol_window_lines: 24   # substance window around a ranked definition
+  # All three stay off by default to avoid repository-wide reference scans.
+  neighbor_max: 0           # one-hop referencing/referenced files as stubs; 0 disables
+  call_site_max: 0          # top grep hit-row excerpts as call_sites; 0 disables
+  import_edge_max: 0        # inbound+outbound module edges in pack.imports; 0 disables
+  inline_max_bytes: 400000  # reject inline content above this (TOO_LARGE)
+  inline_min_bytes: 200     # below this: verbatim if unparseable; structure-reduce if outline-usable
+  inline_chunk_lines: 200   # line-bounded chunk size for inline mode
+  pattern_match_sample_max: 8  # grep hit lines echoed in gather.sample_matches
+  prune_nested_vcs: true       # prune subdirs that own a .git from walks + greps
+
+anchors:
+  default: 12
+  max: 24
+
+pack:
+  input_budget_tokens: 2200
+  wire_budget_tokens: 2400
+  size_divisor: 4             # est_tokens = ceil(chars / size_divisor)
+  breadth_fraction_pct: 25    # skeleton share of budget before depth
+  multi_path_identity_soft_paths: 8
+  multi_path_identity_fraction_pct: 25  # identity share when path count ≥ soft_paths
+  subtree_fanout_max: 24      # max children with own allocation before "+N more" tail
+  subtree_damping: sqrt       # material→share: proportional | sqrt | log
+  subtree_min_rollup_share_pct: 20  # coverage floor: every child ≥ a rollup row
+  subtree_doclink_max: 32     # docrefs from README/AGENTS/docs for depth tiebreak; 0=off
+  subtree_fanin_max: 64       # inbound import edges for depth tiebreak; 0=off
+  subtree_fanin_grep_max: 0   # opt-in repository-wide fan-in scan; 0 preserves structural/task/doc-link ranking
+  subtree_min_drills: 4       # force depth when fit-or-rollup would drill 0 (flat leaf dirs); 0=off
+  subtree_max_drills: 6       # cap depth admits under one parent (even when entry-cost fits fanout); 0=unlimited
+  subtree_task_depth_alpha: 4 # soft-starve free depth toward task×name hits; 0=material-only
+  subtree_name_index_max: 24  # pre-drill name outlines for task affinity; 0=path-only
+  next_actions_max: 3         # agent-facing next_actions highlight cap (host-managed shortlist)
+  subtree_substance_floor: true  # drill 1 representative file for a citable window when a dir map has no substance; false = map-only

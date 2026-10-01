@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: File summaries are stopping
+message: File summaries are not available while Painted Wolf Code shuts down.
+suggested_action: Try again after Painted Wolf Code restarts.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [not available while Painted Wolf Code shuts down]

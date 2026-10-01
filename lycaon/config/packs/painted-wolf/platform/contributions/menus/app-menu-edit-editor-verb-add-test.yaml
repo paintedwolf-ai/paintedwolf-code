@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-add-test
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-add-test
+group: "1"
+order: 11
+label: "Add test for selection"

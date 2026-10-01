@@ -1,0 +1,9 @@
+id: painted-wolf/platform:files-save-and-close
+title: "Save and close file"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.saveAndClose"

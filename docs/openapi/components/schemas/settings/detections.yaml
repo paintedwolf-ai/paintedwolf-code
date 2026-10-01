@@ -1,0 +1,199 @@
+components:
+  schemas:
+    DetectionPackList:
+      x-go-generate: true
+      type: object
+      required: [packs, rejected]
+      additionalProperties: false
+      properties:
+        packs:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionPack"
+        rejected:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DetectionPackRejectedRow"
+          description: >
+            Rows in this project's detection-packs.yaml overlay the merge
+            refused, keyed by pack id. Present only when the request named a project whose
+            overlay applies; a refused row changed nothing, so without this a
+            pack the person believes they turned off is still running.
+    DetectionPackRejectedRow:
+      x-go-generate: true
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: The pack id the row named. Absent when the row omitted one.
+        code:
+          type: string
+          description: >
+            Why the row was refused, from a closed set shared with the scanner
+            catalogue: project_unknown_id, project_fields_forbidden,
+            project_unreadable, duplicate_id, invalid_entry. Clients branch on
+            this rather than on detail.
+        detail:
+          type: string
+          description: What was wrong, for display beside the row.
+    DetectionPack:
+      x-go-generate: true
+      type: object
+      required: [id, label, description, source, enabled, removable, rules]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,39}$'
+        label:
+          type: string
+        description:
+          type: string
+        source:
+          type: string
+          enum: [bundled, generated, extension, device]
+          description: >
+            Where the pack's bytes came from. bundled and generated ship inside
+            the app, extension arrives with an installed extension pack, and
+            device is a folder imported into the configuration directory.
+        provider_pack_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+          description: >
+            Extension pack carrying this detection pack. Absent only for an
+            imported folder, which belongs to no extension.
+        removable:
+          type: boolean
+          description: >
+            Whether this pack can be deleted from the detections catalog. A pack
+            an extension provides is removed by uninstalling that pack.
+        enabled:
+          type: boolean
+        equivalent_binaries:
+          type: array
+          items:
+            type: string
+          description: >
+            Drop-in alternatives this pack's rules also match, flattened from the
+            pack's equivalents map. Display only.
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionRuleSummary"
+        load_warnings:
+          type: array
+          items:
+            type: string
+          description: >
+            What this pack could not load — a rule disabled in extension state,
+            refused as a foreign contribution, or that would not parse.
+    DetectionRuleSummary:
+      x-go-generate: true
+      type: object
+      required: [id, title, level, supported]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        title:
+          type: string
+        description:
+          type: string
+        level:
+          type: string
+          enum: [informational, low, medium, high, critical]
+        supported:
+          type: boolean
+        unsupported_reason:
+          type: string
+        references:
+          type: array
+          items:
+            type: string
+        recent_asks:
+          type: integer
+          minimum: 1
+          description: >-
+            Approval asks for this rule since the app started. Process-lifetime
+            only; not persisted across restarts.
+    DetectionMatch:
+      x-go-generate: true
+      type: object
+      required: [pack_id, rule_id, rule_title, level, correlation_id]
+      additionalProperties: false
+      properties:
+        pack_id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,39}$'
+        rule_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        rule_title:
+          type: string
+        level:
+          type: string
+          enum: [medium, high, critical]
+        correlation_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Stable task-bounded related-alert grouping id. Informational only; never reusable authority.
+    DetectionPackImportRequest:
+      x-go-generate: true
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          description: Absolute path to a folder containing pack.yaml.
+        dry_run:
+          type: boolean
+        replace:
+          type: boolean
+    DetectionPackImportResult:
+      x-go-generate: true
+      type: object
+      required: [dry_run, pack, rejected_rules, ignored]
+      additionalProperties: false
+      properties:
+        dry_run:
+          type: boolean
+        pack:
+          $ref: "#/components/schemas/DetectionPack"
+        rejected_rules:
+          x-go-type: "[]DetectionPackRejectedRule"
+          type: array
+          items:
+            type: object
+            required: [file, reason]
+            additionalProperties: false
+            properties:
+              file:
+                type: string
+              reason:
+                type: string
+        ignored:
+          type: array
+          items:
+            type: string
+        rehearsal:
+          type: array
+          items:
+            type: string
+          description: >
+            Cases the folder's own fixtures.yaml declared that did not hold when
+            run through the production adapters. Informational — the pack still
+            imports, because a rule that misses only means silence.
+    UpdateDetectionPackRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean

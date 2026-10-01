@@ -1,0 +1,19 @@
+title: Disable backup protection
+id: 53a01ede-1119-477e-9b2b-f578a37fb768
+status: stable
+description: Disables, pauses, stops, or removes backup protection for a named resource.
+references: [https://attack.mitre.org/techniques/T1490/]
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection: {ApiAction: 'structured:backup-disable', TargetPresent: 'true'}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection and not filter_rehearsal and not filter_local
+level: medium
+tags: [lycaon.effect.external, attack.impact]

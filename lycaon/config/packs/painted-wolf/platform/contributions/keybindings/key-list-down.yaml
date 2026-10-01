@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-list-down
+command: painted-wolf/platform:list-down
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "ArrowDown"
+  windows:
+    - "ArrowDown"
+  linux:
+    - "ArrowDown"

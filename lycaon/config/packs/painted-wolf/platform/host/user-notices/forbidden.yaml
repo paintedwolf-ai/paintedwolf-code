@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: Not allowed on this host
+message: >-
+  Your role on this host does not include this action.
+suggested_action: >-
+  Ask the host's owner to do it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - role on this host
+      - owner

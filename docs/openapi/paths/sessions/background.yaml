@@ -1,0 +1,99 @@
+paths:
+  /v1/sessions/{id}/background/{process_id}/stop:
+    post:
+      tags:
+      - sessions
+      operationId: stopBackgroundProcess
+      x-person-action: record
+      summary: Stop a running background process
+      description: >-
+        Command endpoint that terminates a background command process, or cancels a
+        held call, started in the session. RPC-style, not a REST resource — background process
+        lifecycle is a host control action, and generic tool invocation stays on
+        the agent loop rather than the HTTP surface.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      responses:
+        '200':
+          description: Stop result
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/BackgroundProcessStopResult
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/background:
+    get:
+      tags:
+      - sessions
+      operationId: listSessionBackgroundProcesses
+      summary: List recoverable background processes
+      description: >-
+        Snapshot of visible background processes for a session, bounded to active
+        and retained recoverable background processes for this session: command jobs
+        and read-only calls held past their foreground wait, which report a state and
+        no output. Den uses this read-only endpoint to rebuild its process cards
+        after a frontend reload; incremental output remains on the process SSE topic.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Visible background processes
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/BackgroundProcessListResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/background/{process_id}/output:
+    get:
+      tags:
+      - sessions
+      operationId: getSessionBackgroundProcessOutput
+      summary: Get the retained output tail of a background process
+      description: >-
+        Returns the screened tail of one visible background process's retained
+        output with its lifecycle state. The snapshot is bounded by the host and
+        takes no position: truncated reports cut or evicted output, and live
+        output continues on the process event topic.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      responses:
+        '200':
+          description: Process output snapshot
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/BackgroundProcessOutput
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

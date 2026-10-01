@@ -1,0 +1,109 @@
+{
+  "id": "workflow-revision-reapproval",
+  "version": "1.0.0",
+  "name": "Compatible release reapproval",
+  "description": "Process the release according to README.md.",
+  "trigger": "/workflow-revision-reapproval",
+  "request": {
+    "question": "Which release should this workflow process?"
+  },
+  "initial_posture": "build",
+  "agents": [
+    {
+      "id": "coordinator",
+      "tools": "all"
+    }
+  ],
+  "phases": [
+    {
+      "id": "selection",
+      "activity_label": "Selection",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/selection.md",
+      "review_loop": {
+        "evidence_key": "selection",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "core": "string",
+          "api": "string",
+          "cli": "string",
+          "web": "string",
+          "jobs": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:selection"
+      ],
+      "next": "impact"
+    },
+    {
+      "id": "impact",
+      "activity_label": "Impact",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/impact.md",
+      "review_loop": {
+        "evidence_key": "impact",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "core": "string",
+          "api": "string",
+          "cli": "string",
+          "web": "string",
+          "jobs": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:impact"
+      ],
+      "next": "release_index"
+    },
+    {
+      "id": "release_index",
+      "activity_label": "Release index",
+      "coordinator_surface": "decision_adjudicate",
+      "surface_template": "agents/release_index.md",
+      "review_loop": {
+        "evidence_key": "release_index",
+        "iteration_cap": 6,
+        "verdict_schema": {
+          "verdict": "RECORDED",
+          "release": "string",
+          "core": "string",
+          "api": "string",
+          "cli": "string",
+          "web": "string",
+          "jobs": "string"
+        }
+      },
+      "on_enter": {
+        "prompt_coordinator": true
+      },
+      "complete_when": "gates_satisfied",
+      "gates": [
+        "evidence_passed:release_index"
+      ],
+      "next": "done"
+    },
+    {
+      "id": "done",
+      "activity_label": "Complete",
+      "terminal": true,
+      "complete_when": "orchestration_complete"
+    }
+  ],
+  "controls": {
+    "phase_advance": "host"
+  }
+}

@@ -1,0 +1,11 @@
+scope: app
+title: This app can't open your data
+message: >-
+  Your conversation history uses a different data format, and no recovery
+  snapshot is available. Restore a compatible backup to continue.
+scenarios:
+  - id: default
+    expect_contains:
+      - different data format
+      - no recovery snapshot
+      - compatible backup

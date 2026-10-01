@@ -1,0 +1,2 @@
+CEF:0|Vendor|Product|1.0|100|Login failed|7|src=10.0.0.1 dst=10.0.0.2 msg=auth failure rt=Jan 15 2024 10:00:00
+CEF:0|Vendor|Product|1.0|101|Login success|3|src=10.0.0.3 msg=ok rt=Jan 15 2024 10:01:00

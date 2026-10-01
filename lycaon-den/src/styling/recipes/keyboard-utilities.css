@@ -1,0 +1,372 @@
+@utility den-keyboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-den-6);
+}
+
+@utility den-keyboard-header__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-3);
+  min-width: 0;
+}
+
+@utility den-keyboard-search {
+  width: min(100%, 18rem);
+}
+
+@utility den-keyboard-callout {
+  margin: 0;
+  padding: var(--spacing-den-5) var(--spacing-den-6);
+  border-radius: var(--den-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--den-danger) 28%, var(--den-border));
+  background: color-mix(in srgb, var(--den-danger) 8%, var(--den-background));
+  color: var(--den-danger-text);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+}
+
+@utility den-keyboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-4);
+}
+
+@utility den-keyboard-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-1);
+}
+
+@utility den-keyboard-section__title {
+  margin: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+@utility den-keyboard-section__hint {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  opacity: 0.85;
+}
+
+@utility den-keyboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  background: var(--den-background);
+  overflow: hidden;
+}
+
+@utility den-keyboard-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-6);
+  padding: var(--spacing-den-5) var(--spacing-den-7);
+  min-height: 3.1429rem;
+  border-bottom: 1px solid var(--den-line-quiet);
+  transition: background var(--den-duration) var(--den-ease);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--den-tint-hue) 8%, var(--den-background));
+  }
+
+  &.den-keyboard-row--recording {
+    background: color-mix(in srgb, var(--den-accent-text) 8%, var(--den-background));
+  }
+
+  &.den-keyboard-row--conflict {
+    background: color-mix(in srgb, var(--den-danger) 5%, var(--den-background));
+  }
+}
+
+@utility den-keyboard-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-den-3);
+  min-width: 0;
+}
+
+@utility den-keyboard-row__label {
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-text);
+}
+
+@utility den-keyboard-row__provider {
+  max-width: 14rem;
+  overflow: hidden;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-keyboard-row__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.0714rem 0.5rem;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+@utility den-keyboard-row__badge--custom {
+  color: var(--den-text-muted);
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+}
+
+@utility den-keyboard-row__badge--conflict {
+  color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 12%, var(--den-background));
+}
+
+@utility den-keyboard-row__chord {
+  display: inline-flex;
+  align-items: center;
+}
+
+@utility den-keyboard-row__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-den-2);
+}
+
+@utility den-keyboard-bind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1429rem;
+  min-width: 4.5rem;
+  padding: 0.2143rem var(--spacing-den-4);
+  margin: 0;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-selection-hover);
+    border-color: color-mix(in srgb, var(--den-text-muted) 35%, var(--den-border));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--den-accent-text);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &.den-keyboard-bind--recording {
+    border-color: var(--den-accent-text);
+    background: color-mix(in srgb, var(--den-accent-text) 10%, var(--den-background));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--den-accent-text) 35%, transparent);
+  }
+
+  &.den-keyboard-bind--conflict {
+    border-color: color-mix(in srgb, var(--den-danger) 45%, var(--den-border));
+  }
+}
+
+@utility den-keyboard-bind__listening {
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  color: var(--den-accent-text);
+  white-space: nowrap;
+  animation: den-keyboard-pulse 1.2s ease-in-out infinite;
+}
+
+@utility den-keyboard-reset {
+  opacity: 0.72;
+
+  .den-keyboard-row:hover &,
+  .den-keyboard-row:focus-within & {
+    opacity: 1;
+  }
+}
+
+@utility den-keyboard-recording-hint {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+@utility den-keycaps {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-den-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@utility den-keycaps__chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2143rem;
+}
+
+@utility den-keycaps__or {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  padding: 0 var(--spacing-den-1);
+}
+
+@utility den-keycaps__sequence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-den-2);
+}
+
+@utility den-keycaps__then {
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  padding: 0 var(--spacing-den-1);
+}
+
+@utility den-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  min-height: 1.35rem;
+  padding: 0.0714rem var(--spacing-den-3);
+  border: 1px solid var(--den-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--den-background);
+  color: var(--den-text);
+  font-family: var(--font-den-mono);
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  line-height: 1.2;
+  box-shadow: none;
+}
+
+@utility den-keycap--empty {
+  color: var(--den-text-muted);
+  border-style: dashed;
+  border-bottom-width: 1px;
+  background: transparent;
+}
+
+@utility den-shortcut-help {
+  position: relative;
+  z-index: 1;
+  width: min(31.4286rem, calc(100vw - 2.2857rem));
+  max-height: min(72vh, 45.7143rem);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-den-lg);
+  background: var(--den-background);
+  border: 1px solid var(--den-line);
+  box-shadow: var(--den-shadow-overlay);
+  overflow: hidden;
+}
+
+@utility den-shortcut-help__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-4);
+  padding: var(--spacing-den-5) var(--spacing-den-6);
+  border-bottom: 1px solid var(--den-line);
+}
+
+@utility den-shortcut-help__title {
+  margin: 0;
+  font-size: var(--text-den-title);
+  font-weight: 600;
+}
+
+@utility den-shortcut-help__body {
+  flex: 1;
+}
+
+@utility den-shortcut-help__body-content {
+  padding: var(--spacing-den-4) var(--spacing-den-6) var(--spacing-den-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+}
+
+@utility den-shortcut-help__scope-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-4);
+}
+
+@utility den-shortcut-help__scope {
+  margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+}
+
+@utility den-shortcut-help__group {
+  display: flex;
+  flex-direction: column;
+}
+
+@utility den-shortcut-help__group-title {
+  margin: 0 0 var(--spacing-den-3);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+@utility den-shortcut-help__row {
+  min-height: 2.7143rem;
+  padding-top: var(--spacing-den-4);
+  padding-bottom: var(--spacing-den-4);
+
+  &:hover {
+    background: transparent;
+  }
+}
+
+@utility den-shortcut-help__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-den-3);
+  padding: var(--spacing-den-4) var(--spacing-den-6);
+  border-top: 1px solid var(--den-line);
+}
+
+@utility den-shortcut-help__footnote {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+@utility den-shortcut-help__footnote-keys {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 var(--spacing-den-1);
+}
+

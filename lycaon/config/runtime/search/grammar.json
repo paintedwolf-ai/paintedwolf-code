@@ -1,0 +1,36 @@
+{
+  "comment": "single_valued marks equality filters over single-valued columns: two different required values can never match one hit, so the compiler rejects the AND and the facet UI composes an OR group instead.",
+  "fields": [
+    {
+      "id": "kind",
+      "label": "Hit type",
+      "single_valued": true,
+      "values": ["evidence", "message", "claim", "finding", "web", "code", "file", "symbol", "tool", "network", "artifact", "outcome", "scan"]
+    },
+    { "id": "shape", "label": "Evidence shape", "single_valued": true },
+    {
+      "id": "source",
+      "label": "Source",
+      "single_valued": true,
+      "values": ["message", "tool", "finding", "artifact", "gate", "code"]
+    },
+    { "id": "path", "label": "File path" },
+    { "id": "session", "label": "Session", "single_valued": true },
+    { "id": "agent", "label": "Agent", "single_valued": true },
+    { "id": "project", "label": "Project" },
+    { "id": "role", "label": "Message role", "single_valued": true },
+    { "id": "handle", "label": "Evidence handle", "single_valued": true },
+    { "id": "leg", "label": "Workflow leg", "single_valued": true },
+    { "id": "url", "label": "URL", "single_valued": true },
+    { "id": "verified", "label": "Verified", "single_valued": true },
+    { "id": "check", "label": "Check", "single_valued": true },
+    { "id": "trust", "label": "Trust", "single_valued": true },
+    { "id": "tool", "label": "Tool" },
+    { "id": "before", "label": "Before" },
+    { "id": "after", "label": "After" },
+    { "id": "run", "label": "Workflow run", "single_valued": true },
+    { "id": "verdict", "label": "Gate verdict", "single_valued": true },
+    { "id": "ref", "label": "Source ref", "single_valued": true },
+    { "id": "untrusted", "label": "External content", "single_valued": true }
+  ]
+}

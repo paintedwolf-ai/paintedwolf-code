@@ -1,0 +1,10 @@
+id: plan-write-addenda
+extends: worker-leg-default
+description: "Plan authoring phase checklist"
+triggers:
+  topology_patterns: ["pipeline", "default-pipeline", "plan", "*"]
+  phase_ids: ["plan", "research"]
+checklist:
+  - "Write or edit `${overlay_dir}/blueprints/**/*.md` only — no product implementation"
+  - "Align plan sections with leg CompletionCriteria"
+  - "On PLAN_MODE_* tool rejects, branch on the reject Code: per your tool guidance"

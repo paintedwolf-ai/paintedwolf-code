@@ -1,0 +1,34 @@
+title: Grant a privileged directory role
+id: 4c40faa3-52a5-4c37-b84b-57048191efad
+description: Adds a principal to a standing administrative role in the directory.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # Add-ADGroupMember is not matched: it targets any group, including an
+  # ordinary distribution list, so it cannot tell a role grant from routine
+  # membership work. These two name a directory role by construction.
+  selection_powershell:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    CommandLine|contains:
+      - 'Add-MsolRoleMember'
+      - 'New-MgRoleManagementDirectoryRoleAssignment'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(--help|-whatif)(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: selection_powershell and not filter_rehearsal and not filter_local

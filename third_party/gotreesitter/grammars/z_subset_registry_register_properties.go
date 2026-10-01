@@ -1,0 +1,13 @@
+//go:build grammar_subset && grammar_subset_properties
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           "properties",
+		Extensions:     []string{".properties"},
+		Language:       PropertiesLanguage,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: "(comment) @comment\n\n(key) @property\n\n(value) @string\n\n(value (escape) @string.escape)\n\n((index) @number\n  (#match? @number \"^[0-9]+$\"))\n\n((substitution (key) @constant)\n  (#match? @constant \"^[A-Z0-9_]+\"))\n\n(substitution\n  (key) @function\n  \"::\" @punctuation.special\n  (secret) @embedded)\n\n(property [ \"=\" \":\" ] @operator)\n\n[ \"${\" \"}\" ] @punctuation.special\n\n(substitution \":\" @punctuation.special)\n\n[ \"[\" \"]\" ] @punctuation.bracket\n\n[ \".\" \"\\\\\" ] @punctuation.delimiter\n",
+	})
+}

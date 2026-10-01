@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: The MCP overlay has an unknown field
+message: A field in the overlay file is not recognized, so that row was not applied.
+suggested_action: Open the overlay file and remove or rename the unknown field.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - unknown field
+      - overlay

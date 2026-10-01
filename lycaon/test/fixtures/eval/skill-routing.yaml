@@ -1,0 +1,17 @@
+id: consolidated-skill-routing
+tasks:
+  - id: retry-policy-review
+    prompt: >-
+      Review this hypothetical worker's failure and retry policy before implementation.
+      There is no existing worker implementation to inspect. The proposal is:
+      a timeout is always retried, each attempt gets a new idempotency key, the
+      maximum attempt count is five, and shutdown stops immediately even with
+      requests in flight. Identify unsafe assumptions and propose a precise policy
+      for ambiguous outcomes, duplicate delivery, cancellation, and shutdown. This
+      is a design review only: do not edit files, run commands, or delegate.
+  - id: named-procedure-routing
+    prompt: >-
+      Use evolve-a-system to review this hypothetical retry policy: every timeout
+      retries with a new idempotency key. Explain the failure mode and a corrected
+      policy in under 200 words. There is no existing implementation to inspect.
+      This is a design review only: do not edit files, run commands, or delegate.

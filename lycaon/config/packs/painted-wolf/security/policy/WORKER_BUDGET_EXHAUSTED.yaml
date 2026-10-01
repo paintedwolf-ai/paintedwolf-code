@@ -1,0 +1,42 @@
+oar: '1.0'
+id: WORKER_BUDGET_EXHAUSTED
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+  - paintedwolf.child_session_id
+  - paintedwolf.job_id
+  - paintedwolf.max_tool_loops
+  - paintedwolf.suggested_resume_max
+  - paintedwolf.tool_loops_used
+  - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "budget_exhausted"
+effect: block
+copy:
+  what: Worker hit iteration_cap closeout without a verified completion report
+  cause: Job {{ paintedwolf.job_id }} used {{ paintedwolf.tool_loops_used }}/{{ paintedwolf.max_tool_loops
+    }} tool rounds and finished partial
+  why: Coordinators resume exhausted workers on the preserved child session instead of respawning
+  fix: On worker-task-finished wake, call `task(child_session_id="{{ paintedwolf.child_session_id }}",
+    max_tool_loops={{ paintedwolf.suggested_resume_max }}, brief={"goal":"Continue the preserved leg.","done_when":["Finish
+    the original leg or return a grounded blocker."]})` — use suggested_resume_max, not a fresh write-scoped
+    redispatch
+  instead: Resume via `task(child_session_id, max_tool_loops=suggested_resume_max, brief)` when the host
+    reports the worker finished
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-message: Worker exhausted tool budget at {{ paintedwolf.tool_loops_used }}/{{ paintedwolf.max_tool_loops
+  }} — resume on child {{ paintedwolf.child_session_id }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    child_session_id: child-1
+    job_id: job-1
+    max_tool_loops: 40
+    suggested_resume_max: 80
+    tool_loops_used: 39
+  expect_contains:
+  - WORKER_BUDGET_EXHAUSTED
+  - child_session_id
+x-paintedwolf-audience:
+- coordinator

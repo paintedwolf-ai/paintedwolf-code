@@ -1,0 +1,19 @@
+# path_outside_project — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    path_outside_project:
+        tool: path_outside_project
+        tier_hint: irreversible
+        what_changes: Change files outside attached folders at {{ path }}.
+        who_affected: Paths outside the attached folder boundary.
+        if_wrong: Not confined to project undo — may affect other repos or system files.
+        allow_line: changing files outside attached folders
+        scenarios:
+            - id: default
+              vars:
+                path: /etc/hosts
+                project: my-app
+              expect_contains:
+                - outside attached folders
+                - /etc/hosts

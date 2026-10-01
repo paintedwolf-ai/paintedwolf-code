@@ -1,0 +1,2 @@
+LEEF:1.0|Vendor|Product|1.0|200|devTime=2024-01-15T10:00:00Z	sev=5	cat=auth	src=10.0.0.1
+LEEF:1.0|Vendor|Product|1.0|201|devTime=2024-01-15T10:01:00Z	sev=3	cat=auth	src=10.0.0.2

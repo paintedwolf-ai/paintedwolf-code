@@ -1,0 +1,33 @@
+oar: '1.0'
+id: BROWSER_ENGINE_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "BROWSER_ENGINE_UNAVAILABLE"
+effect: block
+copy:
+  what: The host's bundled browser is unavailable for {{ tool }}.
+  cause: Browser setup could not find a usable installed binary{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.
+  why: Visual tools require the host-managed browser and its resources before a page can be opened.
+  fix: The user or host must repair the browser installation; development setup may provision it through the supported
+    browser setup task. Retrying arguments or switching visual tools cannot supply a missing browser. Preserve the
+    requested visual validation as unfinished.
+  instead: Report the missing browser prerequisite without claiming the page was tested or starting an unrelated
+    server.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_browser
+x-paintedwolf-message: The installed browser is unavailable
+x-paintedwolf-scenarios:
+- id: missing_browser
+  vars:
+    tool: page_open
+    reason: no_bundled_browser
+  expect_contains:
+  - 'Code: BROWSER_ENGINE_UNAVAILABLE'
+  - no_bundled_browser

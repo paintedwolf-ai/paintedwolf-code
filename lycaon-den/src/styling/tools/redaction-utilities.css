@@ -1,0 +1,54 @@
+/* Hides the marker visually; its text remains for copy and screen readers. */
+@utility den-redaction-mark {
+display: inline-block;
+  color: transparent;
+  padding: 0.12em 0.2em;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--den-text) 42%, var(--den-surface));
+  background-color: color-mix(in srgb, var(--den-text) 82%, var(--den-surface));
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 2.6px,
+    color-mix(in srgb, var(--den-text) 42%, var(--den-surface)) 2.6px 4px
+  );
+  vertical-align: baseline;
+}
+
+
+/* Standing policy uses quieter styling. */
+@utility den-redaction-mark--mask {
+border-color: transparent;
+  background-color: transparent;
+  background-image: linear-gradient(color-mix(in srgb, var(--den-text-muted) 55%, var(--den-surface)), color-mix(in srgb, var(--den-text-muted) 55%, var(--den-surface)));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 0.5em;
+}
+
+
+/* References stay readable and wrap as text. */
+@utility den-redaction-mark--reference {
+display: inline;
+  padding-block: 0;
+  color: var(--den-text-muted);
+  border-color: var(--den-line-quiet);
+  background-color: var(--den-surface-inset);
+  background-image: none;
+  font-family: var(--font-den-mono);
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+}
+
+
+/* Summarizes a card's host replacements. */
+@utility den-redaction-chicklet {
+display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.12em 0.45em;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-chip-border);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  white-space: nowrap;
+}

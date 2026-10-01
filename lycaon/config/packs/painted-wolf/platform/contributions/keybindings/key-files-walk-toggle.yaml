@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-walk-toggle
+command: painted-wolf/platform:files-walk-toggle
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+W"
+  windows:
+    - "Mod+Alt+W"
+  linux:
+    - "Mod+Alt+W"

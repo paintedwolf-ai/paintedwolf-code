@@ -1,0 +1,31 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+title: Model's tool call was malformed
+message: >-
+  {% if model -%}
+  {{ model }} wrote a tool call as plain text that couldn't be parsed, so the action didn't run.
+  {%- else -%}
+  The model wrote a tool call as plain text that couldn't be parsed, so the action didn't run.
+  {%- endif %}
+suggested_action: Try again, or switch to a model with reliable tool calling in Settings → AI providers.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_model
+    vars:
+      model: qwen2.5-7b
+    expect_contains:
+      - qwen2.5-7b
+      - couldn't be parsed
+  - id: generic
+    vars: {}
+    expect_contains:
+      - plain text
+      - couldn't be parsed

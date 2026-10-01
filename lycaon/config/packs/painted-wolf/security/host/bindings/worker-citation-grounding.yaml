@@ -1,0 +1,7 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.citation.grounding
+selector:
+  surface: worker
+effect: inform
+render: worker-citation-grounding
+tier: builtin

@@ -1,0 +1,21 @@
+title: Transfer control of an organization
+id: a2efde38-5be1-423c-b922-42f446574d56
+status: stable
+description: Transfers ownership of an organization, tenant, project, or domain.
+references:
+  - https://attack.mitre.org/techniques/T1531/
+author: Painted Wolf Code
+date: '2026-08-11'
+modified: '2026-08-11'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection_effect: {ActionEffect: transfer}
+  selection_scope: {TargetScope: [organization, tenant, project, domain]}
+  filter_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local: {EffectReach: local}
+  condition: selection_effect and selection_scope and not filter_rehearsal and not filter_local
+level: critical
+tags: [lycaon.effect.external, lycaon.effect.unrecoverable, attack.impact]

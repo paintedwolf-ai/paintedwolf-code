@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Extension evidence changed
+message: The project removal assessment changed. This request did not remove the project or its extensions.
+suggested_action: Delete the project again to review the current assessment.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Extension evidence changed

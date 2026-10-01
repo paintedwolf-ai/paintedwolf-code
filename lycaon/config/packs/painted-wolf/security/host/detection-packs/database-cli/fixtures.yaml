@@ -1,0 +1,65 @@
+fixtures:
+- rule: schema-drop
+  positive:
+  - psql -h db.internal -c 'DROP TABLE orders'
+  - mysql -e 'DROP DATABASE analytics'
+  - cqlsh -e 'DROP KEYSPACE analytics'
+  - snowsql -q 'DROP DATABASE analytics'
+  - snow sql -q 'DROP TABLE orders'
+  - mongosh --eval 'db.dropDatabase()'
+  - dropdb analytics
+  - sqlite3 app.db 'DROP TABLE sessions'
+  - mongosh --eval 'db.orders.drop()'
+  negative:
+  - psql -h db.internal -c 'SELECT count(*) FROM orders'
+  - mysql -e 'SHOW TABLES'
+  - cqlsh -e 'DESCRIBE KEYSPACES'
+  - snow sql -q 'SELECT * FROM orders'
+  - dropdb --help
+  - psql -c 'SELECT * FROM dropped_orders'
+- rule: data-truncate
+  positive:
+  - psql -c 'TRUNCATE TABLE sessions'
+  - redis-cli FLUSHALL
+  - cqlsh -e 'TRUNCATE analytics.events'
+  - snowsql -q 'TRUNCATE TABLE sessions'
+  - valkey-cli FLUSHALL
+  - redis-cli FLUSHDB
+  - mongosh --eval 'db.orders.deleteMany({})'
+  - mongo --eval 'db.orders.deleteMany({})'
+  - clickhouse-client -q 'TRUNCATE TABLE events'
+  negative:
+  - redis-cli KEYS 'session:*'
+  - psql -c 'SELECT * FROM sessions LIMIT 10'
+  - cqlsh -e 'SELECT * FROM analytics.events'
+  - mongosh --eval 'db.orders.deleteMany({status:"old"})'
+  - psql -c 'SELECT * FROM truncated_log'
+- rule: grant-privileges
+  positive:
+  - psql -c 'GRANT ALL ON DATABASE prod TO bot'
+  - psql -c 'CREATE ROLE deploy WITH SUPERUSER LOGIN'
+  - cqlsh -e 'CREATE ROLE deploy'
+  - snowsql -q 'GRANT ALL ON DATABASE prod TO ROLE bot'
+  - psql -c 'ALTER USER bot WITH SUPERUSER'
+  - psql -c 'GRANT SELECT ON orders TO analyst'
+  - mongosh --eval 'db.createUser({user:"bot",pwd:"x",roles:["root"]})'
+  - mongosh --eval 'db.grantRolesToUser("bot", ["readWrite"])'
+  - createuser --superuser bot
+  negative:
+  - psql -c 'SELECT rolname FROM pg_roles'
+  - mysql -e 'SHOW GRANTS'
+  - cqlsh -e 'LIST ROLES'
+  - psql -c 'CREATE TABLE app_users (id int)'
+  - createuser --help
+- rule: unfiltered-write
+  positive:
+  - psql -c 'DELETE FROM sessions'
+  - snowsql -q 'DELETE FROM sessions'
+  - mysql -e 'UPDATE users SET active=0'
+  - clickhouse-client -q 'DELETE FROM events'
+  - psql -c 'DELETE FROM sessions WHERE 1=1'
+  negative:
+  - psql -c 'DELETE FROM sessions WHERE expired_at < now()'
+  - psql -c 'SELECT * FROM sessions'
+  - cqlsh -e 'DELETE FROM sessions WHERE session_id = 1'
+  - mysql -e 'UPDATE users SET active=0 WHERE id=5'

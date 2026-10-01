@@ -1,0 +1,43 @@
+title: Write to a table with no row filter
+id: 89724501-6f53-47af-8b15-692fee76b4c8
+description: Runs a delete or update that names no filter, so it covers every row.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # cqlsh is absent: Cassandra requires a partition key in DELETE/UPDATE, so an
+  # unfiltered write is not a valid CQL statement to begin with.
+  selection_image:
+    Image:
+      - psql
+      - mysql
+      - mariadb
+      - sqlite3
+      - cockroach
+      - clickhouse-client
+      - snowsql
+      - snow
+  verbs_bulk_write:
+    CommandLine|re:
+      - '(?i)[\s''"(]delete\s+from\b'
+      - '(?i)[\s''"(]update\s+\S+\s+set\b'
+  filter_row_filter:
+    CommandLine|re: '(?i)\bwhere\b'
+  # A tautology is a WHERE clause in name only — it still covers every row, so
+  # it must not earn the filter_row_filter exemption above.
+  selection_tautology:
+    CommandLine|re: '(?i)\bwhere\s+([''"]?1[''"]?\s*=\s*[''"]?1[''"]?|true)\b'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_bulk_write and (not filter_row_filter or selection_tautology) and not filter_rehearsal and not filter_local

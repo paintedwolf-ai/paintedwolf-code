@@ -1,0 +1,21 @@
+# A portable path-prefix check: no regular expression and no host observation
+# function. `starts_with` is a built-in ([OAR-EXPR-16]). `tool_args` is an
+# unparameterised map and cannot be indexed, so the typed accessor reads the
+# member and `in` short-circuits ahead of it ([OAR-EXPR-5], [OAR-EXPR-19]).
+oar: "1.0"
+id: WRITE_OUTSIDE_WORKSPACE
+namespace: example.security
+kind: policy
+anchor: tool.pre_invoke
+selector:
+  tool: [write, edit]
+requires:
+  profiles: [tool]
+when: '"path" in tool_args && !starts_with(tool_arg_string("path"), "/workspace/")'
+effect: block
+on_error: fail_closed
+status: stable
+copy:
+  title: Write outside the workspace
+  what: The call writes to a path that is not under /workspace/.
+  fix: Write inside the workspace, or move the file there deliberately.

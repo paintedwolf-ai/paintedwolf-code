@@ -1,0 +1,53 @@
+{
+  "id": "ops-transform-annotate-content-appends-at-the-end",
+  "title": "annotate on a content target inserts at the end of the content",
+  "covers": [
+    "OAR-OPS-21"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "ANNOTATE_ALL",
+      "effect": "transform",
+      "transform": {
+        "action": "annotate",
+        "target": "content",
+        "replacement": " [reviewed]"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 or 555-0199 now"
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "ANNOTATE_ALL",
+    "content": "call 555-0100 or 555-0199 now [reviewed]"
+  }
+}

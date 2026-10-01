@@ -1,0 +1,20 @@
+id: hotfix
+version: 1.0.0
+extends: plan@1.0.0
+initial_posture: spec
+trigger: /hotfix-fixture
+agents:
+  - { id: plan-writer, tools: profile }
+  - { id: implementer, tools: profile }
+phases:
+  - id: research
+    activity_label: Gathering the hotfix request
+    next: build
+  - id: build
+    activity_label: Building the hotfix
+    on_enter:
+      set_posture: build
+    complete_when: gates_satisfied
+    gates:
+      - delegation_closeout_complete
+      - evidence_passed:verify

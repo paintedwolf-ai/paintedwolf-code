@@ -1,0 +1,47 @@
+oar: '1.0'
+id: RENDER_ASSET_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_limit
+  - paintedwolf.render_total_exceeded
+  - paintedwolf.path
+  - paintedwolf.total_bytes
+  - paintedwolf.max_render_bytes
+  - paintedwolf.max_asset_bytes
+  - paintedwolf.bytes
+when: paintedwolf.rejection_code == "RENDER_ASSET_TOO_LARGE"
+effect: block
+copy:
+  what: '{% if paintedwolf.render_total_exceeded %}Serving {{ paintedwolf.path }} would bring render assets
+    to {{ paintedwolf.total_bytes }} bytes; the limit is {{ paintedwolf.max_render_bytes }}.{% else %}Asset
+    {{ paintedwolf.path }} exceeds {{ paintedwolf.max_asset_bytes }} bytes (observed {{ paintedwolf.bytes }}).{%
+    endif %}'
+  cause: A single referenced file is over the per-asset cap, or the sum of all assets served for this render
+    is over the per-render cap.
+  why: Rasterization stays bounded — oversized assets would balloon offline renders and the artifacts they
+    produce.
+  fix: Use an appropriate smaller export or partition the render while preserving required visual content.
+    Do not alter source assets or omit required content merely to clear the byte bound.
+  instead: Branch on Code RENDER_ASSET_TOO_LARGE; shrink or drop assets until under the caps in the reject
+    data, then retry render_view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Project asset bytes exceed the render budget
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: assets/hero.png
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_ASSET_TOO_LARGE'

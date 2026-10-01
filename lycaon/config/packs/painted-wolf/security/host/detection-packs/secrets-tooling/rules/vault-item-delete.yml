@@ -1,0 +1,27 @@
+title: Permanently delete a password manager item
+id: b67403ab-9e1c-4178-ba1d-09843248c8ce
+description: Deletes a stored vault item outright, bypassing the trash retention period.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: bw
+    CommandLine|contains|all:
+      - ' delete item'
+      - ' --permanent'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and not filter_rehearsal and not filter_local

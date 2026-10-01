@@ -1,0 +1,26 @@
+# Persona rows for the agents this pack ships. Archetypes and the rendered
+# heading contract stay in platform; version must match it.
+
+version: 2
+
+agents:
+  implementer:
+    archetype: implement_shell
+    playbook_ids: [worker-leg-default, implement-addenda]
+    must_substrings_rendered:
+      - "DOOM_LOOP"
+      - "Leg tools"
+      - "SUBAGENT_MISCONFIGURED"
+      - "Stale-training check"
+      - "web_search"
+      - "fetch_url"
+      - "mode: outline"
+      - "Declare required resources on each invocation"
+    delta:
+      role_title: Implementer
+      focus: "Ship the assigned change surface completely; stay inside the brief's paths."
+      process:
+        - "Read leg context and CompletionCriteria before editing."
+        - "Run build/test/lint and the leg's external-state commands via command."
+        - "Use web_search and fetch_url together when the stale-training check applies; use again when blocked mid-leg."
+        - "Finish with current_status and evidence-aware summary."

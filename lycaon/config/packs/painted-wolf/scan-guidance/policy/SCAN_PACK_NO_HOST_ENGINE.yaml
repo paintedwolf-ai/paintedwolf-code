@@ -1,0 +1,40 @@
+oar: '1.0'
+id: SCAN_PACK_NO_HOST_ENGINE
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.categories
+  - paintedwolf.engines
+  - paintedwolf.project_dir
+  - paintedwolf.valid_categories
+  - paintedwolf.scan_no_engines
+when: paintedwolf.rejection_code == "SCAN_PACK_NO_HOST_ENGINE"
+effect: block
+copy:
+  what: scan_pack categories {{ paintedwolf.categories }} match no host scanner at {{ paintedwolf.project_dir
+    }}.
+  cause: '{% if paintedwolf.scan_no_engines %}No host scanners are registered.{% else %}Registered engines
+    {{ paintedwolf.engines }} do not cover the requested categories. Available categories: {{ paintedwolf.valid_categories
+    }}.{% endif %}'
+  why: Unavailable scanner coverage cannot establish that the project is free of findings.
+  fix: '{% if paintedwolf.scan_no_engines %}Report missing host scanner setup; all or default categories cannot
+    run without an engine.{% else %}Choose a supported category only if it meets the requested assessment.
+    Report any required category that remains unavailable.{% endif %}'
+  instead: Preserve the requested assessment coverage and resolve missing host support
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_pack
+x-paintedwolf-message: scan_pack categories match no host scanner
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_PACK_NO_HOST_ENGINE'

@@ -1,0 +1,41 @@
+title: Write to a source host through its raw API
+id: 28ae7f40-cb08-4313-8839-6253d3613e13
+description: Sends a raw API request that changes something on the hosting platform rather than reading from it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # A method and a path cannot tell a deleted repository from a posted comment,
+  # so this is a coarse signal and sits a band below the precise path rule that
+  # covers the destructive routes. A default `gh api` is a GET and stays silent.
+  selection_image:
+    Image:
+      - gh
+      - glab
+      - tea
+  selection_api:
+    CommandLine|contains: ' api '
+  selection_write_method:
+    CommandLine|re: '(?i)\s(-X|--method)\s+(POST|DELETE|PUT|PATCH)\b'
+  # -f/-F add parameters, which switches the request to POST without a method
+  # flag ever appearing on the line.
+  selection_implicit_post:
+    CommandLine|re: '(?i)\s(-f|-F|--field|--raw-field|--input)\s'
+  filter_explicit_get:
+    CommandLine|re: '(?i)\s(-X|--method)\s+GET\b'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_api and (selection_write_method or selection_implicit_post) and not filter_explicit_get and not filter_rehearsal and not filter_local

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-search-escalate
+command: painted-wolf/platform:search-escalate
+scope: "overlay"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Enter"
+  windows:
+    - "Mod+Enter"
+  linux:
+    - "Mod+Enter"

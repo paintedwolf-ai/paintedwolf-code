@@ -1,0 +1,16 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': turn.survey.streak
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-survey-streak
+tier: builtin
+invariants:
+  trigger_class: observed_history
+  fires_in:
+  - Prompt turn after a run of consecutive tool batches in which every completed
+    call was a read-only tool (tool lifecycle read_only), at each multiple of the
+    streak cap
+  required:
+  - read-only
+  - act on what you have

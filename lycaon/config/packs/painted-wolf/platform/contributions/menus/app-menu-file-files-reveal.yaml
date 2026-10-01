@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-reveal
+slot: "app_menu.file"
+command: painted-wolf/platform:files-reveal
+group: "3"
+order: 9
+label: "Reveal active file in tree"

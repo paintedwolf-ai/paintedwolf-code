@@ -1,0 +1,41 @@
+oar: '1.0'
+id: COMMAND_EXEC_DENIED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "COMMAND_EXEC_DENIED"
+effect: block
+copy:
+  what: '{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused
+    to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif
+    %}'
+  cause: The kernel refused the resolved image. Executable permissions, operating-system policy, or sandbox
+    restrictions can cause this; the errno alone does not identify which. This is not a missing-PATH miss.
+  why: Repeating the unchanged launch does not resolve an execution permission failure.
+  fix: Inspect the intended executable and its observed permissions. Use an offered chmod operation only when
+    an executable-bit change is intended and permitted by the write scope. If the command needs execution outside
+    the sandbox, including setuid or passwordless sudo, reissue the exact action with capability_request.host_execution
+    to request approval. Use sudo -n; password entry is not supported. An interpreter is appropriate only for a
+    supported script within the same authority. This launch failed, so there is no running job to poll.
+  instead: Resolve executable permissions or explicitly declare the required host_execution capability; do not poll a failed launch
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: The kernel refused the resolved executable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: ./ntp_check.py
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_EXEC_DENIED'
+  - ./ntp_check.py
+  - chmod

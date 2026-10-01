@@ -1,0 +1,558 @@
+paths:
+  /v1/projects/{id}/scans:
+    get:
+      tags:
+      - scan
+      operationId: listCodeScans
+      summary: List code scans for a project
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID.
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        description: Maximum scans to return (default 20)
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque next_cursor from the preceding page.
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum: [date, engine, status]
+          default: date
+      - name: order
+        in: query
+        schema:
+          type: string
+          enum: [asc, desc]
+          default: desc
+      responses:
+        '200':
+          description: Stable recent-scan history page (summary view)
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/execution.yaml#/components/schemas/CodeScanPage
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags:
+      - scan
+      operationId: startFullScan
+      x-person-action: record
+      summary: Run a full pass of every admitted file
+      description: >-
+        Records a full pass in which each named scanner scans every file of one
+        source generation, in resumable chunks. Members start together: a
+        scanner still finishing earlier work holds the pass until it is free.
+        An unfinished pass that covers the named scanners is joined, and one
+        that has not started takes the new scanners, rather than another pass
+        starting.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID.
+      - name: root_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Attached folder identity. Unknown or detached identities are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/overview.yaml#/components/schemas/FullScanRequest
+      responses:
+        '202':
+          description: Full pass accepted
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/overview.yaml#/components/schemas/FullScanResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/projects/{id}/scans/{scan_id}:
+    get:
+      tags:
+      - scan
+      operationId: getCodeScan
+      summary: Get code scan result
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID.
+      - name: scan_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Scan UUID.
+      - name: view
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - summary
+          - full
+          default: summary
+        description: summary returns guidance only; full includes the complete normalized finding set
+      responses:
+        '200':
+          description: Code scan
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/execution.yaml#/components/schemas/CodeScan
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+
+  /v1/projects/{id}/scans/{scan_id}/query:
+    post:
+      tags:
+      - scan
+      operationId: queryCodeScan
+      x-person-action: none
+      summary: Query stored scan guidance
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID.
+      - name: scan_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Scan UUID.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/queries.yaml#/components/schemas/ScanQueryRequest
+      responses:
+        '200':
+          description: Filtered scan guidance
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/queries.yaml#/components/schemas/ScanQueryResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/projects/{id}/scans/{scan_id}/sarif:
+    get:
+      tags:
+      - scan
+      operationId: exportCodeScanSARIF
+      summary: Export stored scan findings as SARIF 2.1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID.
+      - name: scan_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Scan UUID.
+      responses:
+        '200':
+          description: SARIF 2.1 document rebuilt from stored SecurityFinding rows
+          content:
+            application/sarif+json:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Unknown scan id
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '409':
+          description: Scan pending, running, or failed
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+
+  /v1/scanners:
+    get:
+      tags:
+      - scan
+      operationId: listScanners
+      summary: List merged scanner catalog with install status
+      responses:
+        '200':
+          description: Scanner catalog entries
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/ScannerListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+    post:
+      tags:
+      - scan
+      operationId: createScanner
+      x-person-action: record
+      summary: Create a user-layer external scanner or add from catalog
+      description: Writes {configdir}/scanners.yaml.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/CreateScannerRequest
+      responses:
+        '201':
+          description: Created scanner summary
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/execution.yaml#/components/schemas/ScannerSummary
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/scanners/catalog:
+    get:
+      tags:
+      - scan
+      operationId: listScannerCatalog
+      summary: List known third-party scanners we can drive
+      description: >-
+        Bundled catalog of scanner CLIs the host knows how to invoke. No binaries are
+        shipped or installed; each row carries the install command and whether the
+        binary is currently on PATH.
+      responses:
+        '200':
+          description: Known scanner catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/ScannerCatalogResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+
+  /v1/scanners/check:
+    post:
+      tags:
+      - scan
+      operationId: checkScanners
+      x-person-action: none
+      summary: Check installed scanner binaries
+      description: >-
+        Runs each external scanner's probe command (usually --version) and reports
+        whether the installed binary actually works on this device.
+      responses:
+        '200':
+          description: One probe row per external scanner
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/ScannerCheckResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+
+  /v1/scanners/slots/{category}:
+    put:
+      tags:
+      - scan
+      operationId: replaceScannerSlot
+      x-person-action: record
+      summary: Choose the single scanner for one category slot
+      description: >-
+        Exactly one scanner is enabled per slot (sast, sca, secret). Selecting is a
+        replacement: the previous occupant is disabled in the same write.
+      parameters:
+      - name: category
+        in: path
+        required: true
+        schema:
+          $ref: ../components/schemas/scan/findings.yaml#/components/schemas/ScanCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/SelectScannerSlotRequest
+      responses:
+        '200':
+          description: Merged scanner catalog after the swap
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/ScannerListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+
+  /v1/scanners/{scanner_id}:
+    patch:
+      tags:
+      - scan
+      operationId: updateScanner
+      x-person-action: record
+      summary: Update a user scanner definition
+      description: Host stock may be replaced only by a complete external definition. Slot selection is a separate
+        atomic operation.
+      parameters:
+      - name: scanner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/UpdateScannerRequest
+      responses:
+        '200':
+          description: Updated scanner summary
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/execution.yaml#/components/schemas/ScannerSummary
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - scan
+      operationId: deleteScanner
+      x-person-action: record
+      summary: Delete a user-layer scanner overlay row
+      description: Host stock remains. 404 when no user row exists.
+      parameters:
+      - name: scanner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+
+  /v1/projects/{id}/scanners:
+    get:
+      tags:
+      - scan
+      operationId: listProjectScanners
+      summary: List scanners with project-tier enablement
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '200':
+          description: Scanner catalog entries with project enablement
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/ScannerListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+
+  /v1/projects/{id}/scanners/{scanner_id}:
+    patch:
+      tags:
+      - scan
+      operationId: updateProjectScanner
+      x-person-action: record
+      summary: Update project enablement overlay for one scanner
+      description: >-
+        Writes scanners.yaml in the project overlay directory with id+enabled only.
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectId
+      - name: scanner_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/scan/scanners.yaml#/components/schemas/UpdateProjectScannerRequest
+      responses:
+        '200':
+          description: Updated scanner summary for the project merge
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/scan/execution.yaml#/components/schemas/ScannerSummary
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge

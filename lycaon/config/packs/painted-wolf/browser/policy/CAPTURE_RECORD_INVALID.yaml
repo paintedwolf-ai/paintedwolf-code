@@ -1,0 +1,39 @@
+oar: '1.0'
+id: CAPTURE_RECORD_INVALID
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  - paintedwolf.max
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_RECORD_INVALID"
+effect: block
+copy:
+  what: '{{ tool }} received recording options it cannot use{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason
+    }}){% endif %}.'
+  cause: record takes up to {% if paintedwolf.max %}{{ paintedwolf.max }}{% else %}8{% endif %} non-empty watch selectors
+    and a tail_ms from 0 to 5000, and on capture_page it applies only with capture timeline.
+  why: A recording is bounded so its frames and events stay one reviewable timeline.
+  fix: Trim watch to the elements the claim is about, keep tail_ms within bounds, and pass capture:"timeline" when
+    recording with capture_page.
+  instead: Branch on Code CAPTURE_RECORD_INVALID; correct record and retry the same drive
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: Timeline recording options are invalid
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: page_act
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_RECORD_INVALID'
+- id: record_without_timeline
+  vars:
+    reason: record_without_timeline
+    tool: capture_page
+  expect_contains:
+  - 'Code: CAPTURE_RECORD_INVALID'
+  - timeline

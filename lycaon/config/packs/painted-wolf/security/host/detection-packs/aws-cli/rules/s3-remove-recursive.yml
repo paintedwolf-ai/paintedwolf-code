@@ -1,0 +1,48 @@
+title: Bulk-delete or displace S3 objects under a prefix
+id: 0605df06-fd96-4eb4-9eb7-7c0a14162f05
+description: Deletes every object under an S3 prefix — directly, or as the destination side of a sync or move.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image: aws
+  selection_structured:
+    Tool|startswith: 'mcp_'
+  selection_rm:
+    CommandLine|contains|all:
+      - ' s3 '
+      - ' rm '
+      - ' --recursive'
+  # `sync --delete` removes destination objects absent from the source;
+  # `mv --recursive` deletes each source object after it lands.
+  selection_sync_delete:
+    CommandLine|contains|all:
+      - ' s3 '
+      - ' sync '
+      - ' --delete'
+  selection_mv_recursive:
+    CommandLine|contains|all:
+      - ' s3 '
+      - ' mv '
+      - ' --recursive'
+  # --dryrun is the s3 high-level form; --dry-run the API form.
+  filter_rehearsal:
+    Argv|re: '^(--dryrun|--dry-run(=.*)?|--generate-cli-skeleton|help)$'
+  filter_structured_rehearsal:
+    ToolArg|re:
+      - '(?i)^(.*[.])?(dry_run|dryrun|preview|validate_only|generate_cli_skeleton)=true$'
+      - '(?i)^(.*[.])?(mode|execution_mode)=(dry_run|preview|validate)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_image or selection_structured) and (selection_rm or selection_sync_delete or selection_mv_recursive) and not filter_rehearsal and not filter_structured_rehearsal and not filter_local

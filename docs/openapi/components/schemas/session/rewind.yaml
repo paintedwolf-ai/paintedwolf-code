@@ -1,0 +1,112 @@
+components:
+  schemas:
+    RewindMode:
+      type: string
+      description: Restores state before the selected user turn.
+      enum:
+      - before_turn
+    RewindPreviewRequest:
+      x-go-generate: true
+      type: object
+      required: [message_id]
+      additionalProperties: false
+      properties:
+        message_id: {type: string, format: uuid}
+    RewindIssue:
+      x-go-generate: true
+      type: object
+      required: [root_id, path, code]
+      additionalProperties: false
+      properties:
+        root_id: {type: string, format: uuid, x-go-name: RootID}
+        path: {type: string}
+        code:
+          type: string
+          description: Structured reason the host cannot safely reverse a source effect.
+    RewindPreviewFile:
+      x-go-generate: true
+      type: object
+      required: [root_id, path, target_path]
+      additionalProperties: false
+      properties:
+        root_id: {type: string, format: uuid, x-go-name: RootID}
+        path: {type: string}
+        target_path: {type: string}
+    RewindPreviewResponse:
+      x-go-generate: true
+      type: object
+      required: [plan_digest, files, issues, truncated_message_count]
+      additionalProperties: false
+      properties:
+        plan_digest: {type: string}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/RewindPreviewFile'}
+        issues:
+          type: array
+          items: {$ref: '#/components/schemas/RewindIssue'}
+        truncated_message_count: {type: integer}
+    RewindSessionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - operation_id
+      - message_id
+      - plan_digest
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Durable identity for this rewind; exact retries replay the committed result.
+        message_id:
+          type: string
+          format: uuid
+          description: >-
+            The visible user message to rewind to. Only a user ask that is not an
+            internal host kick, workflow boundary, or continuation is eligible; anything
+            else is rejected with rewind_anchor_ineligible.
+        plan_digest:
+          type: string
+          description: Digest returned by the preview; a changed plan is rejected.
+        mode:
+          $ref: '#/components/schemas/RewindMode'
+    RewindSessionResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - restored_paths
+      - truncated_message_count
+      additionalProperties: false
+      properties:
+        restored_paths:
+          type: array
+          description: >-
+            Root-relative paths changed by reversing the entire selected suffix.
+            Missing exact history and conflicting later contributions block the
+            whole rewind before files or transcript rows change.
+          items:
+            type: string
+        truncated_message_count:
+          type: integer
+          description: Transcript rows removed, counting the anchor itself
+        restored_prompt:
+          type: string
+          description: >-
+            The anchor ask's user-authoritative prose only (never attachment
+            fences). Den's Edit flow preloads the composer from this rather than
+            reading the row it just asked the host to delete.
+        restored_content_parts:
+          type: array
+          description: >-
+            The anchor's mixed-origin content parts so Edit can restage
+            attachment and reference chips after the transcript row is removed.
+          items:
+            $ref: messages.yaml#/components/schemas/MessageContentPart
+        restored_artifact_ids:
+          x-go-name: "RestoredArtifactIDs"
+          type: array
+          description: Visual artifact ids linked on the anchor ask for Edit restage.
+          items:
+            type: string
+            format: uuid

@@ -1,0 +1,43 @@
+oar: '1.0'
+id: EXTRACT_ZIP_SLIP
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - extract_archive
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.entry
+  - paintedwolf.extraction_started
+  - paintedwolf.dest
+  - paintedwolf.extracted_entries
+  - paintedwolf.extracted_bytes
+  - paintedwolf.extracted_paths_sample
+  - paintedwolf.extracted_paths_omitted
+when: paintedwolf.rejection_code == "EXTRACT_ZIP_SLIP"
+effect: block
+copy:
+  what: archive entry {{ paintedwolf.entry }} resolves outside the destination directory.
+  cause: Zip-slip paths (.. segments or absolute names) are rejected before write.
+  why: Unpack must stay under the write-scoped dest directory.
+  fix: 'Remove or correct the invalid entry in the archive upstream. A different destination does not
+    make parent traversal or an absolute entry name valid.{% if paintedwolf.extraction_started %} Extraction
+    stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{
+    paintedwolf.extracted_bytes }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional completed paths are retained in the structured result.{% endif %} The destination and parent directories may also have been created; completed changes
+    remain in place. Inspect them before retrying so you do not overwrite work.{% endif %}'
+  instead: Keep extraction inside the intended destination; do not bypass the entry-path check.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extract_archive
+x-paintedwolf-message: extract_archive entry escapes destination
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    entry: ../escape.txt
+    profile: implement
+    tool: extract_archive
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: EXTRACT_ZIP_SLIP'

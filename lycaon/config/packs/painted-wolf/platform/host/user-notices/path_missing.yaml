@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Linked pack folder missing
+message: >-
+  The linked development pack's source folder is missing or unreadable, so the
+  pack cannot reload.
+suggested_action: Restore the linked folder, then use Reload from disk.

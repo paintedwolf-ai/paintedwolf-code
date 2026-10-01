@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - errors
+title: "Workflow is not valid"
+message: "The workflow has problems that must be fixed before it can be used."
+suggested_action: "Fix the listed problems and try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "must be fixed"

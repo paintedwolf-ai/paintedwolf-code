@@ -1,0 +1,85 @@
+{
+  "id": "ops-transform-annotate-inserts-after-the-span",
+  "title": "annotate inserts its replacement immediately after the span end and removes nothing",
+  "covers": [
+    "OAR-OPS-21"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "ANNOTATE_SPAN",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "when": "size(pii_entities) > 0",
+      "transform": {
+        "action": "annotate",
+        "target": "pii_entities",
+        "replacement": "(pii)"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "call 555-0100 or 555-0199 now",
+    "facts": {
+      "pii_entities": [
+        {
+          "start": 5,
+          "end": 13
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "ANNOTATE_SPAN",
+    "content": "call 555-0100(pii) or 555-0199 now"
+  }
+}

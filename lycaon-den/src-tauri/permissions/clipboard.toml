@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-read-clipboard-text"
+description = "Read plain text from the OS clipboard for context-menu Paste."
+commands.allow = ["read_clipboard_text"]
+
+[[permission]]
+identifier = "allow-write-clipboard-text"
+description = "Write plain text to the OS clipboard for copy and cut actions."
+commands.allow = ["write_clipboard_text"]
+
+[[permission]]
+identifier = "allow-paste-into-focused-view"
+description = "Run the system Paste action in the focused web view for context-menu Paste on macOS."
+commands.allow = ["paste_into_focused_view"]

@@ -1,0 +1,12 @@
+id: painted-wolf/platform:layout-toggle-orientation
+title: "Mirror workspace"
+scope: "global"
+keywords:
+  - "mirror"
+  - "orientation"
+  - "layout"
+when:
+  fact: "project_open"
+action:
+  kind: native_ui
+  handler: "layout.toggleOrientation"

@@ -1,0 +1,158 @@
+name: issue-sweep
+
+# Label-driven issue lifecycle: a label starts a grace period, then the issue closes. Also
+# locks long-closed issues. The nudge and sweep jobs each hold a LIFECYCLE table; their
+# grace periods must match.
+
+on:
+  issues:
+    types: [labeled]
+  schedule:
+    # 10:00 and 22:00 UTC. Twice a day is enough for a day-granularity clock.
+    - cron: "0 10,22 * * *"
+  workflow_dispatch:
+    inputs:
+      debug_only:
+        description: "Report what would happen without commenting, closing, or locking"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  LOCK_CLOSED_AFTER_DAYS: "14"
+  UPVOTE_EXEMPT_THRESHOLD: "10"
+
+jobs:
+  # Posts the deadline when a lifecycle label lands.
+  nudge:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const LIFECYCLE = {
+              "needs-info": {
+                days: 7,
+                nudge:
+                  "This needs a bit more information before it can be investigated — see the note above.",
+              },
+              "needs-repro": {
+                days: 7,
+                nudge:
+                  "This could not be reproduced from what is here. Could you add the exact steps — what you ran, what happened, and what you expected?",
+              },
+              "stale": {
+                days: 14,
+                nudge: "This has been quiet for a while.",
+              },
+            };
+
+            const label = context.payload.label?.name;
+            const entry = LIFECYCLE[label];
+            if (!entry) return;
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.payload.issue.number,
+              body: [
+                entry.nudge,
+                "",
+                `If there is no activity within ${entry.days} days this will close automatically.`,
+                "That is queue management rather than a verdict — a single comment reopens it.",
+              ].join("\n"),
+            });
+
+  sweep:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          # Manual runs default to a dry run; scheduled runs always act.
+          DEBUG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}
+        with:
+          script: |
+            const LIFECYCLE = {
+              "needs-info": { days: 7, reason: "we still need a bit more information to move forward" },
+              "needs-repro": { days: 7, reason: "we still need reproduction steps to investigate" },
+              "stale": { days: 14, reason: "it has been inactive for too long" },
+            };
+
+            const debugOnly = process.env.DEBUG_ONLY === "true";
+
+            const upvoteExempt = Number(process.env.UPVOTE_EXEMPT_THRESHOLD);
+            const lockAfter = Number(process.env.LOCK_CLOSED_AFTER_DAYS);
+            const now = Date.now();
+            const days = (ms) => ms / 86400000;
+
+            // ---- close expired lifecycle labels -------------------------------------------
+            for (const [label, cfg] of Object.entries(LIFECYCLE)) {
+              const found = await github.paginate(github.rest.search.issuesAndPullRequests, {
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open is:unlocked label:"${label}"`,
+                per_page: 100,
+              });
+
+              for (const item of found) {
+                if (item.pull_request) continue;
+                if (item.assignee || (item.assignees || []).length) continue;
+                if ((item.reactions?.["+1"] || 0) >= upvoteExempt) continue;
+
+                // When was the label applied? Anything the reporter said after that point means
+                // the ball is back with us, not with them.
+                const events = await github.paginate(github.rest.issues.listEvents, {
+                  ...context.repo, issue_number: item.number, per_page: 100,
+                });
+                const labeledAt = events
+                  .filter((e) => e.event === "labeled" && e.label?.name === label)
+                  .map((e) => new Date(e.created_at).getTime())
+                  .pop();
+                if (!labeledAt) continue;
+                if (days(now - labeledAt) < cfg.days) continue;
+
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  ...context.repo, issue_number: item.number, since: new Date(labeledAt).toISOString(),
+                  per_page: 100,
+                });
+                const humanReplied = comments.some(
+                  (c) => c.user?.type !== "Bot" && new Date(c.created_at).getTime() > labeledAt,
+                );
+                if (humanReplied) continue;
+
+                core.info(`${debugOnly ? "[dry-run] " : ""}close #${item.number} (${label})`);
+                if (debugOnly) continue;
+
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: item.number,
+                  body: `Closing for now — ${cfg.reason}. Please comment if this is still relevant and it will be reopened.`,
+                });
+                await github.rest.issues.update({
+                  ...context.repo, issue_number: item.number,
+                  state: "closed", state_reason: "not_planned",
+                });
+              }
+            }
+
+            // ---- lock issues that have been closed a while --------------------------------
+            const cutoff = new Date(now - lockAfter * 86400000).toISOString().slice(0, 10);
+            const closed = await github.paginate(github.rest.search.issuesAndPullRequests, {
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:closed is:unlocked updated:<${cutoff}`,
+              per_page: 100,
+            });
+
+            let locked = 0;
+            for (const item of closed) {
+              if (item.pull_request) continue;
+              if (locked >= 250) { core.info("lock cap reached; remainder next run"); break; }
+              core.info(`${debugOnly ? "[dry-run] " : ""}lock #${item.number}`);
+              if (debugOnly) continue;
+              await github.rest.issues.lock({
+                ...context.repo, issue_number: item.number, lock_reason: "resolved",
+              });
+              locked += 1;
+            }

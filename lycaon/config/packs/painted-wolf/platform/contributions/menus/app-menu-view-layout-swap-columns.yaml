@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-layout-swap-columns
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-swap-columns
+group: "1"
+order: 3
+label: "Swap chat and context"

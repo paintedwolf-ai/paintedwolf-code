@@ -1,0 +1,36 @@
+oar: '1.0'
+id: SURFACE_NOTE_URL_ONLY_UNGROUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - surface_note
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SURFACE_NOTE_URL_ONLY_UNGROUND"
+effect: block
+copy:
+  what: URLs alone cannot ground this note because the current coordinator/worker evidence union has no citable
+    observation.
+  cause: The note supplied only URLs, without observed evidence available to bind cited_evidence.
+  why: A URL is a claim about something read elsewhere. Without one in-session observation the note has no
+    anchor the host can resolve.
+  fix: Use an offered tool to acquire the required observation, then add its actual citation alongside the
+    existing URLs. Preserve the URLs; they are not the invalid part.
+  instead: Branch on Code SURFACE_NOTE_URL_ONLY_UNGROUND; observe once and add a cited_evidence entry — keep
+    the URLs, they are not the problem
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:surface_note
+x-paintedwolf-message: URLs alone cannot ground a note with an empty evidence ledger.
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    tool: surface_note
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SURFACE_NOTE_URL_ONLY_UNGROUND'
+  - URLs alone cannot ground

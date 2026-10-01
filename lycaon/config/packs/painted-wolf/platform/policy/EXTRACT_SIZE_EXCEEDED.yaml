@@ -1,0 +1,48 @@
+oar: '1.0'
+id: EXTRACT_SIZE_EXCEEDED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - extract_archive
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bytes
+  - paintedwolf.max_uncompressed_bytes
+  - paintedwolf.resource_limit
+  - paintedwolf.extraction_started
+  - paintedwolf.dest
+  - paintedwolf.extracted_entries
+  - paintedwolf.extracted_bytes
+  - paintedwolf.extracted_paths_sample
+  - paintedwolf.extracted_paths_omitted
+when: paintedwolf.rejection_code == "EXTRACT_SIZE_EXCEEDED"
+effect: block
+copy:
+  what: The next entry would exceed the {{ paintedwolf.max_uncompressed_bytes }}-byte uncompressed limit;
+    that entry was not committed.
+  cause: The uncompressed byte budget bounds extraction even when the archive is highly compressed.
+  why: Bounded unpack protects disk and memory from hostile archives.
+  fix: 'Split the archive upstream into parts within the reported byte budget. Review any completed extraction
+    before retrying a smaller part.{% if paintedwolf.extraction_started %} Extraction stopped in {{ paintedwolf.dest
+    }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes }}
+    bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional completed paths are retained in the structured result.{% endif %} The destination and parent directories may also have been created; completed changes remain
+    in place. Inspect them before retrying so you do not overwrite work.{% endif %}'
+  instead: Do not rerun the unchanged extraction; reducing the compressed size does not reduce its uncompressed
+    byte cost.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extract_archive
+x-paintedwolf-message: extract_archive exceeds max_uncompressed_bytes
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    bytes: 60000000
+    max_uncompressed_bytes: 52428800
+    profile: implement
+    tool: extract_archive
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: EXTRACT_SIZE_EXCEEDED'

@@ -1,0 +1,144 @@
+components:
+  schemas:
+    LogFormat:
+      type: string
+      enum:
+        - json_lines
+        - logfmt
+        - syslog_rfc5424
+        - syslog_rfc3164
+        - cef
+        - leef
+        - clf
+        - combined
+    OutlineKind:
+      type: string
+      enum:
+        - symbols
+        - log_digest
+    LogDigestTimeSpan:
+      x-go-generate: true
+      type: object
+      required:
+        - start_at
+        - end_at
+      properties:
+        start_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        end_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    LogDigestFieldStat:
+      x-go-generate: true
+      type: object
+      required:
+        - key
+        - coverage_pct
+      properties:
+        key:
+          type: string
+        coverage_pct:
+          x-go-name: "Coverage"
+          type: integer
+    LogDigestFacetValue:
+      x-go-generate: true
+      type: object
+      required:
+        - value
+        - count
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    LogDigestFacet:
+      x-go-generate: true
+      type: object
+      required:
+        - key
+        - values
+      properties:
+        key:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogDigestFacetValue'
+    LogDigestCluster:
+      x-go-generate: true
+      type: object
+      required:
+        - template
+        - count
+        - first_line
+        - last_line
+      properties:
+        template:
+          type: string
+        count:
+          type: integer
+        severity:
+          type: string
+        first_line:
+          type: integer
+        last_line:
+          type: integer
+    LogDigest:
+      x-go-generate: true
+      type: object
+      required:
+        - format
+        - record_count
+        - parsed_count
+        - truncated
+      properties:
+        format:
+          $ref: '#/components/schemas/LogFormat'
+        record_count:
+          type: integer
+        parsed_count:
+          type: integer
+        time_span:
+          x-go-pointer: true
+          $ref: '#/components/schemas/LogDigestTimeSpan'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogDigestFieldStat'
+        facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogDigestFacet'
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogDigestCluster'
+        truncated:
+          type: boolean
+    ReadOutlineResponse:
+      x-go-generate: true
+      x-tool-output: [read]
+      type: object
+      required:
+        - path
+        - mode
+        - total_lines
+      properties:
+        path:
+          type: string
+        mode:
+          type: string
+        outline_kind:
+          $ref: '#/components/schemas/OutlineKind'
+        outline_source:
+          type: string
+        total_lines:
+          type: integer
+        log_digest:
+          x-go-pointer: true
+          $ref: '#/components/schemas/LogDigest'
+        truncation_banner:
+          type: string

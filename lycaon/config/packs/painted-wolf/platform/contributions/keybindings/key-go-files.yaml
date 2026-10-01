@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-files
+command: painted-wolf/platform:go-files
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader T"
+  windows:
+    - "Leader T"
+  linux:
+    - "Leader T"

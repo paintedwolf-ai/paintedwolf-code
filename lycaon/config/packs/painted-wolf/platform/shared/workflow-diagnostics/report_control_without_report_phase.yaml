@@ -1,0 +1,5 @@
+code: report_control_without_report_phase
+message: |
+  controls.report.enabled is set but no phase is gated on topology_report_delivered — the run would never produce the report the PDF is assembled from.
+replacement: |
+  Gate the phase that delivers the run's report on topology_report_delivered, or drop controls.report.

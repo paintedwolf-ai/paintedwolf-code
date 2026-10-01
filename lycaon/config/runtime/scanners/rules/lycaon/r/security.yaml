@@ -1,0 +1,107 @@
+rules:
+- id: lycaon.r.shell-interpolation
+  languages:
+  - r
+  severity: ERROR
+  message: User input is concatenated into a shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - r
+    references:
+    - https://shiny.posit.co/r/reference/shiny/latest/shinyserver.html
+  mode: taint
+  pattern-sources: &id001
+  - patterns:
+    - pattern: shiny::shinyServer(function($INPUT, $OUTPUT, ...) { ... })
+    - focus-metavariable: $INPUT
+    exact: true
+  - patterns:
+    - pattern: shiny::shinyApp(..., server = function($INPUT, $OUTPUT, ...) { 
+        ... }, ...)
+    - focus-metavariable: $INPUT
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: system($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: system2("sh",c("-c",$CMD))
+    - focus-metavariable: $CMD
+- id: lycaon.r.sql-interpolation
+  languages:
+  - r
+  severity: ERROR
+  message: User input reaches SQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - r
+    references:
+    - https://shiny.posit.co/r/reference/shiny/latest/shinyserver.html
+  mode: taint
+  pattern-sources: *id001
+  pattern-sinks:
+  - patterns:
+    - pattern: DBI::dbGetQuery($DB,$SQL)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: sqldf($SQL)
+    - focus-metavariable: $SQL
+- id: lycaon.r.tls-verification-disabled
+  languages:
+  - r
+  severity: ERROR
+  message: HTTP certificate verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - r
+  pattern-either:
+  - pattern: httr::config(ssl_verifypeer = 0)
+  - pattern: curl::handle_setopt(..., ssl_verifypeer = FALSE, ...)
+- id: lycaon.r.plumber-command-injection
+  languages:
+  - r
+  severity: ERROR
+  message: Plumber query parameters reach a shell command
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: plumber::pr_get(..., function($REQ, ...) { ... }, ...)
+    - pattern: $REQ$argsQuery[[...]]
+    exact: true
+  - patterns:
+    - pattern-inside: plumber::pr_post(..., function($REQ, ...) { ... }, ...)
+    - pattern: $REQ$argsQuery[[...]]
+    exact: true
+  - patterns:
+    - pattern-inside: plumber::pr_put(..., function($REQ, ...) { ... }, ...)
+    - pattern: $REQ$argsQuery[[...]]
+    exact: true
+  - patterns:
+    - pattern-inside: plumber::pr_delete(..., function($REQ, ...) { ... }, ...)
+    - pattern: $REQ$argsQuery[[...]]
+    exact: true
+  - patterns:
+    - pattern-inside: plumber::pr_head(..., function($REQ, ...) { ... }, ...)
+    - pattern: $REQ$argsQuery[[...]]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: system($X)
+    - focus-metavariable: $X
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - r
+    references:
+    - https://www.rplumber.io/articles/routing-and-input.html

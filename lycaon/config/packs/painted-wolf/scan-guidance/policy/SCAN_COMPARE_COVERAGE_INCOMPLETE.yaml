@@ -1,0 +1,36 @@
+oar: '1.0'
+id: SCAN_COMPARE_COVERAGE_INCOMPLETE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - scan_compare
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SCAN_COMPARE_COVERAGE_INCOMPLETE"
+effect: block
+copy:
+  what: The scans do not establish compatible authoritative coverage for comparison.
+  cause: A finding set is missing, coverage is incomplete, or bounded scans disagree about unobserved source
+    boundaries.
+  why: Absence from a partial result is not evidence that a finding was resolved.
+  fix: Compare authoritative scans under the same scanner definition with compatible coverage. Matching bounded
+    scans support only a bounded comparison; retain and report their unobserved boundary. Do not treat absence
+    outside that boundary as resolution.
+  instead: Preserve actual comparison coverage and unknown regions
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
+x-paintedwolf-message: Incomplete coverage — comparison cannot prove a source diff
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: incomplete coverage
+    path: src/main.go
+    profile: coordinator
+    tool: scan_compare
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SCAN_COMPARE_COVERAGE_INCOMPLETE'

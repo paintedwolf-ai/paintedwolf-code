@@ -1,0 +1,29 @@
+oar: '1.0'
+id: EDITOR_DOCUMENT_READ_REQUIRED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool: [write, edit, replace_lines, code_rewrite, jq_edit, restore_version]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "EDITOR_DOCUMENT_READ_REQUIRED"
+effect: block
+copy:
+  what: 'Read `{{ paintedwolf.path }}` before editing its shared document.'
+  cause: 'This response has no usable prior read of the current file identity. A read in this same response does not count; a write of your own complete text does, so a file you just wrote can be edited again in the same response.'
+  why: A write must be based on text you have seen so concurrent changes can be preserved.
+  fix: Use read for this file and wait for its result. Inspect the content, then recompute the edit in your next response.
+  instead: Continue with another file until you are ready to read this one.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:editor_document
+x-paintedwolf-message: shared document requires an agent read
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: src/main.go
+      profile: implement
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EDITOR_DOCUMENT_READ_REQUIRED'

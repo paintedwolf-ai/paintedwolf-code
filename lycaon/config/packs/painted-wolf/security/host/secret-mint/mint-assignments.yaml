@@ -1,0 +1,73 @@
+# Credential-slot recognition is best effort; the secret scanner also checks argument values.
+# Original first-party catalog YAML is CC-BY-4.0.
+
+# These parsers supplement structured-field inspection for all tools.
+surfaces:
+  command: {kind: command}
+  verify: {kind: command}
+  terminal_open: {kind: command}
+  terminal_send: {kind: terminal, content_arg: input}
+  write: {kind: content, content_arg: content}
+  edit: {kind: content, content_arg: new_string}
+  replace_lines: {kind: content, content_arg: new_content}
+  code_rewrite: {kind: content, content_arg: rewrite}
+
+# Pagination cursor keys are excluded by normalized identifier segments.
+excluded_keys:
+  - next_token
+  - continuation_token
+  - page_token
+  - pagination_token
+
+command_images:
+  - image: htpasswd
+    # -b selects the password from argv.
+    require_flags: ["-b"]
+    value: last_positional
+  - image: useradd
+    value_flags: ["-p", "--password"]
+  - image: usermod
+    value_flags: ["-p", "--password"]
+
+# Long flags match separate or attached values, including after wrapper delimiters.
+value_flags:
+  - "--new-password"
+  - "--api-key"
+  - "--access-key"
+  - "--secret-key"
+  - "--client-secret"
+  - "--auth-token"
+
+# Explicit keys cover names outside the shared credential terms.
+env_keys:
+  - RABBITMQ_DEFAULT_PASS
+
+# Terms match the final identifier segment after separator and camelCase splitting.
+key_terms:
+  - secret
+  - password
+  - passwd
+  - passphrase
+  - token
+  - credential
+  - credentials
+  - apikey
+
+# Ordered pairs match the final two identifier segments.
+key_term_pairs:
+  - [api, key]
+  - [access, key]
+  - [private, key]
+  - [secret, key]
+  - [signing, key]
+  - [encryption, key]
+  - [auth, token]
+
+# Explicit file keys match case-insensitively alongside the shared credential terms.
+file_keys:
+  - RABBITMQ_DEFAULT_PASS
+
+# SQL fragments select the next quoted string within a process command line.
+sql_mint:
+  - pattern: 'IDENTIFIED BY'
+  - pattern: 'SET PASSWORD'

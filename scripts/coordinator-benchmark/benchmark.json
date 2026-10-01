@@ -1,0 +1,958 @@
+{
+  "id": "coordinator-operations",
+  "revision": 2,
+  "application_contract": 3,
+  "release_repetitions": 5,
+  "suite": "lycaon/test/fixtures/eval/coordinator-benchmark.json",
+  "operations": [
+    {
+      "id": "current-verification",
+      "title": "Current verification",
+      "grader": "current-verification",
+      "family": "current-verification",
+      "role": "scored",
+      "verification": true,
+      "scenario": "current-verification",
+      "tier": "gate"
+    },
+    {
+      "id": "workspace-conflict",
+      "title": "Workspace conflict",
+      "grader": "workspace-conflict",
+      "family": "workspace-conflict",
+      "role": "scored",
+      "verification": true,
+      "scenario": "workspace-conflict",
+      "tier": "gate"
+    },
+    {
+      "id": "worker-complete",
+      "title": "Progress reconciliation \u2014 Completed worker return",
+      "grader": "worker-complete",
+      "family": "progress-reconciliation",
+      "role": "scored",
+      "verification": true,
+      "scenario": "progress-reconciliation",
+      "progress": {
+        "Read status requirements": "done",
+        "Apply status labels": "done"
+      },
+      "tier": "gate"
+    },
+    {
+      "id": "worker-partial",
+      "title": "Partial worker return",
+      "grader": "worker-partial",
+      "family": "worker-return",
+      "role": "scored",
+      "verification": false,
+      "scenario": "worker-partial",
+      "tier": "gate"
+    },
+    {
+      "id": "changed-intent",
+      "title": "Closeout citations \u2014 Changed filtering requirement",
+      "grader": "changed-intent",
+      "family": "closeout-grounding",
+      "role": "scored",
+      "verification": false,
+      "scenario": "closeout-grounding",
+      "closeout_paths": [
+        "report.py"
+      ],
+      "tier": "gate"
+    },
+    {
+      "id": "fresh-service",
+      "title": "Fresh service evidence",
+      "grader": "fresh-service",
+      "family": "fresh-service",
+      "role": "scored",
+      "verification": false,
+      "scenario": "fresh-service",
+      "tier": "gate"
+    },
+    {
+      "id": "permission-approved",
+      "title": "Permission granted",
+      "grader": "permission-approved",
+      "family": "permission-continuation",
+      "role": "scored",
+      "verification": false,
+      "scenario": "permission-approved",
+      "tier": "gate"
+    },
+    {
+      "id": "permission-denied",
+      "title": "Permission denied",
+      "grader": "permission-denied",
+      "family": "permission-continuation",
+      "role": "scored",
+      "verification": false,
+      "scenario": "permission-denied",
+      "tier": "gate"
+    },
+    {
+      "id": "current-verification-ties",
+      "title": "Verification after a tie-break change",
+      "grader": "current-verification-ties",
+      "family": "current-verification",
+      "role": "scored",
+      "verification": true,
+      "scenario": "current-verification",
+      "tier": "gate"
+    },
+    {
+      "id": "workspace-conflict-normalize-deduplicate",
+      "title": "Normalization and deduplication",
+      "grader": "workspace-conflict-normalize-deduplicate",
+      "family": "workspace-conflict",
+      "role": "scored",
+      "verification": true,
+      "scenario": "workspace-conflict",
+      "tier": "gate"
+    },
+    {
+      "id": "worker-complete-normalized",
+      "title": "Progress reconciliation \u2014 Worker return after a user edit",
+      "grader": "worker-complete-normalized",
+      "family": "progress-reconciliation",
+      "role": "scored",
+      "verification": true,
+      "scenario": "progress-reconciliation",
+      "progress": {
+        "Read status requirements": "done",
+        "Apply status labels": "done",
+        "Export status report": "na"
+      },
+      "tier": "gate"
+    },
+    {
+      "id": "changed-intent-input-order",
+      "title": "Closeout citations \u2014 Reversed ordering requirement",
+      "grader": "changed-intent-input-order",
+      "family": "closeout-grounding",
+      "role": "scored",
+      "verification": false,
+      "scenario": "closeout-grounding",
+      "closeout_paths": [
+        "report.py"
+      ],
+      "tier": "gate"
+    },
+    {
+      "id": "fresh-service-denied",
+      "title": "Service access denied",
+      "grader": "fresh-service-denied",
+      "family": "fresh-service",
+      "role": "scored",
+      "verification": false,
+      "scenario": "fresh-service",
+      "tier": "gate"
+    },
+    {
+      "id": "targeted-repair",
+      "title": "Targeted repair",
+      "grader": "repair",
+      "family": "calibration",
+      "role": "calibration",
+      "verification": true,
+      "scenario": "targeted-repair",
+      "tier": "gate"
+    },
+    {
+      "id": "worker-integration",
+      "title": "Worker integration",
+      "grader": "repair",
+      "family": "calibration",
+      "role": "calibration",
+      "verification": true,
+      "scenario": "worker-integration",
+      "tier": "gate"
+    },
+    {
+      "id": "wave-review",
+      "title": "Review and cite both integrated worker changes",
+      "grader": "wave-review",
+      "family": "wave",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": true,
+      "scenario": "wave",
+      "dispatch": {
+        "dependencies": {
+          "Report review": [
+            "Ranking fix",
+            "Status labels"
+          ]
+        }
+      },
+      "cited_findings": [
+        {
+          "path": "ranking.py",
+          "line": 2
+        },
+        {
+          "path": "labels.py",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "id": "conflict-superseded",
+      "title": "Superseded leg rejected",
+      "grader": "conflict-superseded",
+      "family": "conflict",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": true,
+      "scenario": "conflict",
+      "overlay_outcomes": {
+        "Prefix filtering": "merged",
+        "Pagination": "rejected"
+      },
+      "progress": {
+        "Read catalog requirements": "done",
+        "Integrate prefix filtering": "done",
+        "Integrate worker pagination": "na"
+      }
+    },
+    {
+      "id": "leg-failed",
+      "title": "Reconcile successful and failed siblings independently",
+      "grader": "leg-failed",
+      "family": "decision",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": false,
+      "scenario": "decision",
+      "progress": {
+        "Read status requirements": [
+          "done"
+        ],
+        "Apply status labels": [
+          "na"
+        ],
+        "Apply prefix filtering": "done"
+      },
+      "dispatch": {}
+    },
+    {
+      "id": "denied-no-fallback",
+      "title": "Finish independent work after a denied input",
+      "grader": "denied-no-fallback",
+      "family": "escalation",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": false,
+      "scenario": "escalation",
+      "progress": {
+        "Public receipt": "done",
+        "Private receipt": "na"
+      }
+    },
+    {
+      "id": "capability-write-root",
+      "title": "External write root on retry",
+      "grader": "capability-write-root",
+      "family": "capability",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": false,
+      "scenario": "capability",
+      "capability": {
+        "granted": [
+          "write_root_set"
+        ],
+        "cards_at_most_once": [
+          "write_root_set"
+        ],
+        "executed_with": {
+          "program": "export.py",
+          "capabilities": [
+            "write_root"
+          ],
+          "arguments": [
+            "--out",
+            "${sandbox_path}/report.json"
+          ]
+        }
+      }
+    },
+    {
+      "id": "capability-background-service",
+      "title": "Background service receipt",
+      "grader": "capability-background-service",
+      "family": "capability",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": false,
+      "scenario": "capability",
+      "capability": {
+        "cards_at_most_once": [
+          "local_listen",
+          "loopback_connect"
+        ],
+        "no_retry_codes_after_grant": [
+          "SANDBOX_TRY_LOOPBACK_CONNECT"
+        ],
+        "artifact_from_service": {
+          "artifact": "receipt.json",
+          "program": "client.py",
+          "service_program": "serve.py"
+        }
+      }
+    },
+    {
+      "id": "closeout-blocked",
+      "title": "Blocked verification declared",
+      "grader": "closeout-blocked",
+      "family": "closeout",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": true,
+      "scenario": "closeout",
+      "closeout_method": "blocked",
+      "capability": {
+        "denied": [
+          "direct_ip"
+        ]
+      },
+      "progress": {
+        "Change default limit": "done",
+        "Run local tests": "done",
+        "Run required network check": "na"
+      }
+    },
+    {
+      "id": "wave-join",
+      "title": "Integrate both prerequisites before the consumer",
+      "grader": "wave-join",
+      "family": "wave",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": true,
+      "scenario": "wave",
+      "dispatch": {
+        "dependencies": {
+          "Consumer selection": [
+            "Name normalization",
+            "Stable deduplication"
+          ]
+        }
+      },
+      "decisions": {
+        "Name normalization": {
+          "option": "Enable"
+        },
+        "Stable deduplication": {
+          "option": "Disable"
+        }
+      }
+    },
+    {
+      "id": "closeout-resumed",
+      "title": "Resume, verify and ground the integrated return",
+      "grader": "closeout-resumed",
+      "family": "closeout",
+      "role": "scored",
+      "tier": "orchestration",
+      "verification": true,
+      "scenario": "closeout",
+      "progress": {
+        "Read status requirements": "done",
+        "Finish status labels": "done",
+        "Verify integrated status labels": "done"
+      },
+      "closeout_paths": [
+        "status.py"
+      ]
+    },
+    {
+      "id": "workflow-revision-reapproval",
+      "title": "Compatible release reapproval",
+      "grader": "workflow-revision-reapproval",
+      "family": "revision-reapproval",
+      "role": "scored",
+      "tier": "workflow",
+      "scenario": "revision-reapproval",
+      "verification": false,
+      "workflow": {
+        "id": "workflow-revision-reapproval",
+        "version": "1.0.0",
+        "terminal_phase": "done",
+        "receipts": [
+          {
+            "id": "selection",
+            "phase": "selection",
+            "identity": {},
+            "after": [],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "core": "k2",
+              "api": "a9",
+              "cli": "c2",
+              "web": "w5",
+              "jobs": "j1"
+            },
+            "citations": [
+              {
+                "path": "approvals.json"
+              }
+            ]
+          },
+          {
+            "id": "impact",
+            "phase": "impact",
+            "identity": {},
+            "after": [
+              "selection"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "core": "renew",
+              "api": "renew",
+              "cli": "renew",
+              "web": "renew",
+              "jobs": "retain"
+            },
+            "citations": [
+              {
+                "path": "baseline.json"
+              },
+              {
+                "path": "approvals.json"
+              }
+            ]
+          },
+          {
+            "id": "index",
+            "phase": "release_index",
+            "identity": {},
+            "after": [
+              "impact"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "core": "check-7",
+              "api": "check-4",
+              "cli": "check-6",
+              "web": "check-3",
+              "jobs": "check-1"
+            },
+            "citations": [
+              {
+                "path": "baseline.json"
+              },
+              {
+                "path": "approvals.json"
+              }
+            ]
+          }
+        ],
+        "source_paths": [
+          "README.md",
+          "approvals.json",
+          "baseline.json"
+        ]
+      }
+    },
+    {
+      "id": "workflow-scoped-exception",
+      "title": "Scoped exception and atomic release",
+      "grader": "workflow-scoped-exception",
+      "family": "scoped-exception",
+      "role": "scored",
+      "tier": "workflow",
+      "scenario": "scoped-exception",
+      "verification": false,
+      "workflow": {
+        "id": "workflow-scoped-exception",
+        "version": "1.0.0",
+        "terminal_phase": "done",
+        "receipts": [
+          {
+            "phase": "api_disposition",
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "api",
+              "revision": "a8",
+              "disposition": "excepted",
+              "exception": "E2"
+            },
+            "citations": [
+              {
+                "path": "release.json"
+              },
+              {
+                "path": "exceptions.json"
+              }
+            ],
+            "id": "api_disposition",
+            "identity": {},
+            "after": []
+          },
+          {
+            "phase": "web_disposition",
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "web",
+              "revision": "w4",
+              "disposition": "blocked",
+              "exception": "none"
+            },
+            "citations": [
+              {
+                "path": "release.json"
+              },
+              {
+                "path": "exceptions.json"
+              }
+            ],
+            "id": "web_disposition",
+            "identity": {},
+            "after": [
+              "api_disposition"
+            ]
+          },
+          {
+            "phase": "hold",
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "action": "hold",
+              "api": "excepted",
+              "web": "blocked"
+            },
+            "citations": [
+              {
+                "path": "release.json"
+              },
+              {
+                "path": "exceptions.json"
+              }
+            ],
+            "id": "hold",
+            "identity": {},
+            "after": [
+              "web_disposition"
+            ]
+          },
+          {
+            "phase": "release_index",
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "api": "held",
+              "web": "held"
+            },
+            "citations": [
+              {
+                "path": "release.json"
+              }
+            ],
+            "id": "release_index",
+            "identity": {},
+            "after": [
+              "hold"
+            ]
+          }
+        ],
+        "source_paths": [
+          "README.md",
+          "exceptions.json",
+          "release.json"
+        ]
+      }
+    },
+    {
+      "id": "workflow-reopen-branch",
+      "title": "Selective handoff invalidation",
+      "grader": "workflow-reopen-branch",
+      "family": "reopen-branch",
+      "role": "scored",
+      "tier": "workflow",
+      "scenario": "reopen-branch",
+      "verification": false,
+      "workflow": {
+        "id": "workflow-reopen-branch",
+        "version": "1.0.0",
+        "terminal_phase": "done",
+        "receipts": [
+          {
+            "id": "baseline",
+            "phase": "baseline",
+            "identity": {},
+            "after": [],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "east_revision": "e1",
+              "east": "east-v1",
+              "west_revision": "w1",
+              "west": "west-v1",
+              "north_revision": "n1",
+              "north": "north-v1"
+            },
+            "citations": [
+              {
+                "path": "handoffs.json"
+              }
+            ]
+          },
+          {
+            "id": "correct-east",
+            "phase": "correction",
+            "identity": {
+              "region": "east"
+            },
+            "after": [
+              "baseline"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "region": "east",
+              "before_revision": "e1",
+              "revision": "e2",
+              "before_artifact": "east-v1",
+              "artifact": "east-v2",
+              "dependency_revision": "none"
+            },
+            "citations": [
+              {
+                "path": "handoffs.json"
+              },
+              {
+                "path": "amendment.json"
+              }
+            ]
+          },
+          {
+            "id": "correct-west",
+            "phase": "correction",
+            "identity": {
+              "region": "west"
+            },
+            "after": [
+              "correct-east"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "region": "west",
+              "before_revision": "w1",
+              "revision": "w3",
+              "before_artifact": "west-v1",
+              "artifact": "west-v3",
+              "dependency_revision": "e2"
+            },
+            "citations": [
+              {
+                "path": "handoffs.json"
+              },
+              {
+                "path": "replacements.json"
+              }
+            ]
+          },
+          {
+            "id": "index",
+            "phase": "release_index",
+            "identity": {},
+            "after": [
+              "correct-west"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "east_revision": "e2",
+              "east": "east-v2",
+              "west_revision": "w3",
+              "west": "west-v3",
+              "north_revision": "n1",
+              "north": "north-v1"
+            },
+            "citations": [
+              {
+                "path": "handoffs.json"
+              },
+              {
+                "path": "amendment.json"
+              },
+              {
+                "path": "replacements.json"
+              }
+            ]
+          }
+        ],
+        "source_paths": [
+          "README.md",
+          "amendment.json",
+          "handoffs.json",
+          "replacements.json"
+        ]
+      }
+    },
+    {
+      "id": "workflow-dependent-recovery",
+      "title": "Dependency graph recovery",
+      "grader": "workflow-dependent-recovery",
+      "family": "dependent-recovery",
+      "role": "scored",
+      "tier": "workflow",
+      "scenario": "dependent-recovery",
+      "verification": false,
+      "workflow": {
+        "id": "workflow-dependent-recovery",
+        "version": "1.0.0",
+        "terminal_phase": "done",
+        "receipts": [
+          {
+            "id": "scope",
+            "phase": "recovery_scope",
+            "identity": {},
+            "after": [],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "core": "failed",
+              "api": "dependent",
+              "search": "dependent",
+              "web": "dependent",
+              "jobs": "preserved"
+            },
+            "citations": [
+              {
+                "path": "dependencies.json"
+              },
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "suspend-web",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "web",
+              "action": "suspend"
+            },
+            "after": [
+              "scope"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "web",
+              "action": "suspend",
+              "artifact": "web-v3"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "suspend-api",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "api",
+              "action": "suspend"
+            },
+            "after": [
+              "suspend-web"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "api",
+              "action": "suspend",
+              "artifact": "api-v3"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "suspend-search",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "search",
+              "action": "suspend"
+            },
+            "after": [
+              "suspend-web"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "search",
+              "action": "suspend",
+              "artifact": "search-v3"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "restore-core",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "core",
+              "action": "restore"
+            },
+            "after": [
+              "suspend-api",
+              "suspend-search"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "core",
+              "action": "restore",
+              "artifact": "core-v2"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "restore-api",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "api",
+              "action": "restore"
+            },
+            "after": [
+              "restore-core"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "api",
+              "action": "restore",
+              "artifact": "api-v2"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "restore-search",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "search",
+              "action": "restore"
+            },
+            "after": [
+              "restore-core"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "search",
+              "action": "restore",
+              "artifact": "search-v2"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "restore-web",
+            "phase": "recovery_action",
+            "identity": {
+              "component": "web",
+              "action": "restore"
+            },
+            "after": [
+              "restore-api",
+              "restore-search"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "component": "web",
+              "action": "restore",
+              "artifact": "web-v2"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          },
+          {
+            "id": "index",
+            "phase": "release_index",
+            "identity": {},
+            "after": [
+              "restore-web"
+            ],
+            "verdict": {
+              "verdict": "RECORDED",
+              "release": "R17",
+              "core": "core-v2",
+              "api": "api-v2",
+              "search": "search-v2",
+              "web": "web-v2",
+              "jobs": "jobs-v3"
+            },
+            "citations": [
+              {
+                "path": "deployments.json"
+              }
+            ]
+          }
+        ],
+        "source_paths": [
+          "README.md",
+          "dependencies.json",
+          "deployments.json"
+        ]
+      }
+    }
+  ],
+  "acceptance_revision": 34,
+  "exploration_repetitions": 2,
+  "maturity": "pilot",
+  "tiers": {
+    "gate": {
+      "release_repetitions": 5,
+      "families": 7
+    },
+    "orchestration": {
+      "release_repetitions": 5,
+      "families": 6
+    },
+    "workflow": {
+      "release_repetitions": 5,
+      "families": 4
+    }
+  },
+  "infrastructure": {
+    "provider_availability": {
+      "statuses": [429, 500, 502, 503, 504],
+      "transport_faults": ["unreachable", "silent"],
+      "initial_ms": 5000,
+      "max_backoff_ms": 900000
+    }
+  }
+}

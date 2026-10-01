@@ -1,0 +1,43 @@
+oar: '1.0'
+id: TEXT_WRITE_CONFLICT
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - write
+  - edit
+  - replace_lines
+  - restore_version
+  - code_rewrite
+  - jq_edit
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.text_base_changed
+when: paintedwolf.rejection_code == "TEXT_WRITE_CONFLICT"
+effect: block
+copy:
+  what: '{% if paintedwolf.text_base_changed %}{{ paintedwolf.path }} no longer matches the validated write
+    base.{% else %}The host could not confirm the current write base for {{ paintedwolf.path }}.{% endif %}'
+  cause: '{% if paintedwolf.text_base_changed %}The expected absent path now exists, or the current bytes differ
+    from the opened snapshot.{% else %}The current source could not be read and validated as a regular bounded
+    file; this alone does not prove its contents changed.{% endif %}'
+  why: Writing now could erase a concurrent human, editor, agent, or filesystem change.
+  fix: Preserve the current file. Re-read and recompute the intended edit once the base is readable and valid;
+    do not overwrite unseen state or replay against stale bytes.
+  instead: Branch on Code; re-read before producing another mutation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:text_write_base
+x-paintedwolf-message: text write refused after concurrent disk change
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: src/main.go
+    profile: implement
+    tool: edit
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: TEXT_WRITE_CONFLICT'

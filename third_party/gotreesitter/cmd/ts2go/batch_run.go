@@ -1,0 +1,491 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
+
+	"github.com/odvcencio/gotreesitter/internal/grammarpatch"
+	"golang.org/x/sync/errgroup"
+)
+
+// RunBatchManifest clones each grammar repo in the manifest, extracts parser
+// tables, and writes generated Go grammar files to outDir.
+func RunBatchManifest(manifestPath, outDir, pkg string, compact bool) error {
+	entries, err := ParseManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("parse manifest: %w", err)
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("manifest is empty: %s", manifestPath)
+	}
+
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return fmt.Errorf("mkdir outdir: %w", err)
+	}
+	blobDir := filepath.Join(outDir, "grammar_blobs")
+	if err := os.MkdirAll(blobDir, 0755); err != nil {
+		return fmt.Errorf("mkdir blob dir: %w", err)
+	}
+
+	tmpRoot, err := os.MkdirTemp("", "ts2go-batch-*")
+	if err != nil {
+		return fmt.Errorf("mktemp: %w", err)
+	}
+	defer os.RemoveAll(tmpRoot)
+
+	compactor := NewLanguageCompactor()
+	loaderSpecs := make([]embeddedLoaderSpec, 0, len(entries))
+
+	grp, grpCtx := errgroup.WithContext(context.Background())
+	grp.SetLimit(runtime.GOMAXPROCS(-1))
+	var mu sync.Mutex
+	for _, entry := range entries {
+		if err := grpCtx.Err(); err != nil {
+			break
+		}
+		if grammargenOwnedBlobs[entry.Name] {
+			// This language's checked-in blob is compiled by grammargen, not
+			// ts2go. Keep the embedded loader entry pointing at the existing
+			// blob but never re-extract it from C tables or emit a ts2go
+			// register stub for it (its registry entry advertises
+			// GrammarSourceGrammargenBlob).
+			mu.Lock()
+			loaderSpecs = append(loaderSpecs, embeddedLoaderSpec{
+				Name:     entry.Name,
+				BlobName: safeFileBase(entry.Name) + ".bin",
+			})
+			mu.Unlock()
+			fmt.Println(grammargenOwnedBlobSkipMessage(entry.Name))
+			continue
+		}
+		grp.Go(func() error {
+			if err := grpCtx.Err(); err != nil {
+				return err
+			}
+			repoDir := filepath.Join(tmpRoot, safeFileBase(entry.Name))
+			if err := cloneRepo(entry.RepoURL, entry.Commit, repoDir); err != nil {
+				return fmt.Errorf("%s: clone: %w", entry.Name, err)
+			}
+			if err := applyUpstreamGrammarPatch(entry, repoDir, filepath.Dir(manifestPath)); err != nil {
+				return fmt.Errorf("%s: apply upstream grammar patch: %w", entry.Name, err)
+			}
+
+			parserPath := filepath.Join(repoDir, entry.Subdir, "parser.c")
+			if _, err := os.Stat(parserPath); err != nil {
+				detected, derr := findParserC(repoDir)
+				if derr != nil {
+					return fmt.Errorf("%s: parser.c not found under %s", entry.Name, repoDir)
+				}
+				parserPath = detected
+			}
+			source, err := os.ReadFile(parserPath)
+			if err != nil {
+				return fmt.Errorf("%s: read %s: %w", entry.Name, parserPath, err)
+			}
+
+			grammar, err := ExtractGrammar(string(source))
+			if err != nil {
+				return fmt.Errorf("%s: extract: %w", entry.Name, err)
+			}
+			grammar.Name = entry.Name
+
+			fileBase := safeFileBase(entry.Name)
+			blobName := fileBase + ".bin"
+			blobPath := filepath.Join(blobDir, blobName)
+
+			lang := BuildLanguage(grammar)
+			if err := applyCertifiedConflictPolicyProfiles(source, grammar, lang); err != nil {
+				return fmt.Errorf("%s: certified conflict policy: %w", entry.Name, err)
+			}
+			if compact {
+				mu.Lock()
+				compactor.CompactLanguage(lang)
+				mu.Unlock()
+			}
+			blob, err := EncodeLanguageBlob(lang)
+			if err != nil {
+				return fmt.Errorf("%s: encode blob: %w", entry.Name, err)
+			}
+			if err := os.WriteFile(blobPath, blob, 0644); err != nil {
+				return fmt.Errorf("%s: write %s: %w", entry.Name, blobPath, err)
+			}
+
+			mu.Lock()
+			loaderSpecs = append(loaderSpecs, embeddedLoaderSpec{
+				Name:     grammar.Name,
+				BlobName: blobName,
+			})
+			mu.Unlock()
+
+			highlightQuery, _ := loadHighlightQuery(repoDir)
+			if err := writeRegisterStub(outDir, entry, highlightQuery); err != nil {
+				return fmt.Errorf("%s: write register stub: %w", entry.Name, err)
+			}
+			sourceComment := externalLexStatesSourceComment(entry)
+			if err := writeExternalLexStatesSidecar(outDir, pkg, entry.Name, sourceComment, grammar.ExternalLexStates); err != nil {
+				return fmt.Errorf("%s: write external lex states: %w", entry.Name, err)
+			}
+
+			fmt.Printf("generated %s (%d states, %d symbols)\n", blobPath, grammar.StateCount, grammar.SymbolCount)
+			return nil
+		})
+	}
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+
+	if err := removeLegacyLoaderFiles(outDir); err != nil {
+		return fmt.Errorf("cleanup old loader stubs: %w", err)
+	}
+	outFile, err := writeEmbeddedLoaderAggregate(outDir, pkg, loaderSpecs)
+	if err != nil {
+		return fmt.Errorf("write embedded loader aggregate: %w", err)
+	}
+	fmt.Printf("generated %s (%d languages)\n", outFile, len(loaderSpecs))
+
+	return nil
+}
+
+// applyUpstreamGrammarPatch applies a checked-in, pinned source patch before
+// extracting a generated parser table. Patches are intentionally narrow: they
+// are only used while an upstream grammar fix has not been released, and a
+// changed upstream context fails loudly instead of silently changing grammar
+// semantics during regeneration.
+func applyUpstreamGrammarPatch(entry ManifestEntry, repoDir, manifestDir string) error {
+	spec, ok := grammarpatch.Lookup(entry.Name)
+	if !ok {
+		return nil
+	}
+	patchPath := upstreamGrammarPatchPath(entry.Name, manifestDir)
+	if _, err := os.Stat(patchPath); err != nil {
+		return fmt.Errorf("read patch %s: %w", patchPath, err)
+	}
+	for _, args := range [][]string{{"apply", "--check", patchPath}, {"apply", patchPath}} {
+		cmd := exec.Command("git", append([]string{"-C", repoDir}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+	if spec.RegenerateParser {
+		if err := regeneratePatchedTypeScriptParser(repoDir, entry.Subdir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func regeneratePatchedTypeScriptParser(repoDir, subdir string) error {
+	// tree-sitter-cli's executable is installed by its package lifecycle
+	// scripts, so this must remain a normal lockfile-pinned install.
+	install := exec.Command("npm", "ci")
+	install.Dir = repoDir
+	if out, err := install.CombinedOutput(); err != nil {
+		return fmt.Errorf("npm ci: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	generator := filepath.Join(repoDir, "node_modules", ".bin", "tree-sitter")
+	generate := exec.Command(generator, "generate")
+	// The manifest points to generated parser.c under <grammar>/src, while
+	// tree-sitter generate reads grammar.js from the parent grammar directory.
+	generate.Dir = filepath.Join(repoDir, filepath.Dir(subdir))
+	if out, err := generate.CombinedOutput(); err != nil {
+		return fmt.Errorf("tree-sitter generate: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func upstreamGrammarPatchPath(name, manifestDir string) string {
+	spec, ok := grammarpatch.Lookup(name)
+	if !ok {
+		return ""
+	}
+	return filepath.Join(manifestDir, "patches", spec.File)
+}
+
+type embeddedLoaderSpec struct {
+	Name     string
+	BlobName string
+}
+
+func removeLegacyLoaderFiles(outDir string) error {
+	matches, err := filepath.Glob(filepath.Join(outDir, "*_grammar_loader.go"))
+	if err != nil {
+		return err
+	}
+	for _, p := range matches {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeEmbeddedLoaderAggregate(outDir, pkg string, specs []embeddedLoaderSpec) (string, error) {
+	sort.Slice(specs, func(i, j int) bool {
+		return specs[i].Name < specs[j].Name
+	})
+
+	var b strings.Builder
+	b.WriteString("// Code generated by ts2go batch. DO NOT EDIT.\n\n")
+	fmt.Fprintf(&b, "package %s\n\n", pkg)
+	b.WriteString("import \"github.com/odvcencio/gotreesitter\"\n\n")
+
+	for _, spec := range specs {
+		funcName := languageFuncName(spec.Name)
+		fmt.Fprintf(&b, "// %s returns the %s language definition.\n", funcName, spec.Name)
+		fmt.Fprintf(&b, "func %s() *gotreesitter.Language {\n", funcName)
+		fmt.Fprintf(&b, "\treturn loadEmbeddedLanguage(%q)\n", spec.BlobName)
+		b.WriteString("}\n\n")
+	}
+
+	outFile := filepath.Join(outDir, "embedded_grammars_gen.go")
+	if err := os.WriteFile(outFile, []byte(b.String()), 0644); err != nil {
+		return "", err
+	}
+	return outFile, nil
+}
+
+func cloneRepo(repoURL, commit, dest string) error {
+	cmd := exec.Command("git", "clone", "--depth=1", repoURL, dest)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+	}
+	if commit == "" {
+		return nil
+	}
+
+	// Fast path: pinned commit is already available in shallow clone.
+	cmd = exec.Command("git", "-C", dest, "checkout", "--detach", commit)
+	if _, err := cmd.CombinedOutput(); err == nil {
+		return nil
+	}
+
+	// Fallback: fetch the exact pinned commit, then detach at FETCH_HEAD.
+	cmd = exec.Command("git", "-C", dest, "fetch", "--depth=1", "origin", commit)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fetch commit %s: %v: %s", commit, err, strings.TrimSpace(string(out)))
+	}
+	cmd = exec.Command("git", "-C", dest, "checkout", "--detach", "FETCH_HEAD")
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("checkout commit %s: %v: %s", commit, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func loadHighlightQuery(repoDir string) (string, bool) {
+	candidates := []string{
+		filepath.Join(repoDir, "queries", "highlights.scm"),
+		filepath.Join(repoDir, "queries", "highlight.scm"),
+	}
+	for _, p := range candidates {
+		b, err := os.ReadFile(p)
+		if err == nil {
+			return string(b), true
+		}
+	}
+	return "", false
+}
+
+// grammargenOwnedBlobs lists languages whose checked-in grammar_blobs/*.bin
+// is compiled by grammargen (go run ./cmd/grammargen emit ...)
+// instead of the ts2go C-table extraction pipeline. Batch regeneration must
+// not clobber these blobs or relabel their registry entries: they advertise
+// GrammarSourceGrammargenBlob in grammars/registry_builtin_gen.go.
+var grammargenOwnedBlobs = map[string]bool{
+	"go":    true,
+	"swift": true,
+	"yaml":  true,
+	"regex": true,
+}
+
+// grammargenOwnedBlobSkipMessage returns the batch-skip log line for a
+// grammargen-owned blob, with a regeneration hint accurate for how that
+// specific language is actually built. "go", "swift", and "yaml" are
+// grammargen builtin grammar names (see builtinGrammars in
+// cmd/grammargen/main.go) and regenerate via the emit subcommand below.
+// "regex" is not a grammargen builtin name. It imports a resolved
+// tree-sitter grammar.json with grammargen's -json flag. The builtin command
+// would fail for regex.
+// See grammargen/regex_import_parity_test.go for the import path this blob
+// must remain parity-checked.
+func grammargenOwnedBlobSkipMessage(name string) string {
+	if name == "go" || name == "yaml" {
+		return fmt.Sprintf("skipped %s (grammargen-owned blob; regenerate with: go run ./cmd/grammargen emit %s -bin grammars/grammar_blobs/%s.bin)",
+			name, name, safeFileBase(name))
+	}
+	if name == "regex" {
+		return fmt.Sprintf("skipped %s (grammargen-owned blob; regex.bin is grammargen-built via a "+
+			"tree-sitter grammar.json import, not a grammargen builtin grammar name — "+
+			"see grammargen/regex_import_parity_test.go for the import/parity path; "+
+			"do not regenerate it through this batch pipeline or clobber it here)", name)
+	}
+	return fmt.Sprintf("skipped %s (grammargen-owned blob; regenerate with: go run ./cmd/grammargen emit %s -lr-split -bin grammars/grammar_blobs/%s.bin)",
+		name, name, safeFileBase(name))
+}
+
+func writeRegisterStub(outDir string, entry ManifestEntry, highlightQuery string) error {
+	nameIdent := languageRegisterIdentifier(entry.Name)
+	funcName := languageFuncName(entry.Name)
+
+	var extList strings.Builder
+	for i, ext := range entry.Extensions {
+		if i > 0 {
+			extList.WriteString(", ")
+		}
+		extList.WriteString(fmt.Sprintf("%q", ext))
+	}
+	extExpr := "nil"
+	if extList.Len() > 0 {
+		extExpr = "[]string{" + extList.String() + "}"
+	}
+
+	code := fmt.Sprintf(`// Code generated by ts2go batch. DO NOT EDIT.
+
+package grammars
+
+func init() {
+	Register(LangEntry{
+		Name:           %q,
+		Extensions:     %s,
+		Language:       %s,
+		GrammarSource:  GrammarSourceTS2GoBlob,
+		HighlightQuery: %sHighlightQuery,
+		TokenSourceFactory: defaultTokenSourceFactory(%q),
+	})
+}
+
+const %sHighlightQuery = %q
+`, entry.Name, extExpr, funcName, nameIdent, entry.Name, nameIdent, highlightQuery)
+
+	outFile := filepath.Join(outDir, safeFileBase(entry.Name)+"_register.go")
+	return os.WriteFile(outFile, []byte(code), 0644)
+}
+
+func safeFileBase(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return "lang"
+	}
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+func languageRegisterIdentifier(name string) string {
+	id := toExportedIdentifier(name)
+	if id == "" {
+		id = "Lang"
+	}
+	return strings.ToLower(id[:1]) + id[1:]
+}
+
+func externalLexStatesSourceComment(entry ManifestEntry) string {
+	parts := []string{entry.RepoURL}
+	if entry.Commit != "" {
+		parts = append(parts, entry.Commit)
+	}
+	if entry.Subdir != "" {
+		parts = append(parts, filepath.Join(entry.Subdir, "parser.c"))
+	} else {
+		parts = append(parts, "parser.c")
+	}
+	comment := strings.Join(parts, " ")
+	if spec, ok := grammarpatch.Lookup(entry.Name); ok {
+		comment += " + grammars/patches/" + spec.File
+	}
+	return comment
+}
+
+func writeExternalLexStatesSidecar(outDir, pkg, name, sourceComment string, states [][]bool) error {
+	if len(states) == 0 {
+		return nil
+	}
+
+	fileBase := safeFileBase(name)
+	varName := languageRegisterIdentifier(name) + "ExternalLexStates"
+	buildTag := "grammar_subset_" + fileBase
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "//go:build !grammar_subset || %s\n\n", buildTag)
+	b.WriteString("// Code generated from tree-sitter parser.c; DO NOT EDIT.\n")
+	if strings.TrimSpace(sourceComment) != "" {
+		fmt.Fprintf(&b, "// Source: %s\n", sourceComment)
+	}
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "package %s\n\n", pkg)
+	fmt.Fprintf(&b, "// %s mirrors C tree-sitter ts_external_scanner_states.\n", varName)
+	fmt.Fprintf(&b, "var %s = [][]bool{\n", varName)
+	width := len(fmt.Sprintf("%d", len(states)-1))
+	for i, row := range states {
+		fmt.Fprintf(&b, "\t/* %*d */ {", width, i)
+		for j, v := range row {
+			if j > 0 {
+				b.WriteString(", ")
+			}
+			if v {
+				b.WriteString("true")
+			} else {
+				b.WriteString("false")
+			}
+		}
+		b.WriteString("},\n")
+	}
+	b.WriteString("}\n\n")
+	b.WriteString("func init() {\n")
+	fmt.Fprintf(&b, "\tRegisterExternalLexStates(%q, %s)\n", name, varName)
+	b.WriteString("}\n")
+
+	outFile := filepath.Join(outDir, fileBase+"_external_lex_states_gen.go")
+	return os.WriteFile(outFile, []byte(b.String()), 0644)
+}
+
+func findParserC(repoDir string) (string, error) {
+	var candidates []string
+	err := filepath.WalkDir(repoDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			base := filepath.Base(path)
+			if base == ".git" || base == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == "parser.c" {
+			candidates = append(candidates, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("parser.c not found")
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, string(filepath.Separator)+"src"+string(filepath.Separator)+"parser.c") {
+			return c, nil
+		}
+	}
+	return candidates[0], nil
+}

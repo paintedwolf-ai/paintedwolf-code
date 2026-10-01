@@ -1,0 +1,53 @@
+Drop jsp-likely-xss: it declares `mode: join`, which the OpenGrep engine this
+product ships does not support, so `opengrep validate` rejects the catalog.
+
+The rule is not rewritten here. Join mode correlates a metavariable across two
+independent sub-rules anywhere in a file; a single-pattern approximation is a
+different rule, and shipping one under upstream's id and message would report
+findings that upstream's rule did not make. The narrower check lives in
+rules/lycaon/jsp/security.yaml under a first-party id instead.
+
+diff --git a/rules/generic/jsp-likely-xss.yaml b/rules/generic/jsp-likely-xss.yaml
+deleted file mode 100644
+index 3d8336879..0000000000
+--- a/rules/generic/jsp-likely-xss.yaml
++++ /dev/null
+@@ -1,38 +0,0 @@
+-rules:
+-  - id: jsp-likely-xss
+-    mode: join
+-    severity: ERROR
+-    message: >-
+-      Detected a XSS vulnerability $VAR is rendered
+-      unsafely in template
+-    metadata:
+-      category: security
+-      subcategory: vuln
+-      likelihood: LOW
+-      impact: LOW
+-      confidence: HIGH
+-      semgrep-bugs:
+-        - HTML Language Strict Processing Doesn't Allow Writing JSP etc https://github.com/returntocorp/semgrep/issues/5735
+-        - Cannot reference metavariables in rule message in join mode https://github.com/returntocorp/semgrep/issues/5807
+-      technology:
+-        - html
+-        - javascript
+-        - JSP
+-    join:
+-      rules:
+-        - id: jsp-scriptlet-param
+-          languages: [generic]
+-          patterns:
+-            - pattern-inside: |
+-                <% ... %>
+-            - pattern: |
+-                $VAR = request.getParameter(...)
+-        - id: template-vars
+-          languages: [generic]
+-          patterns:
+-            - pattern-inside: |
+-                <%= ... %>
+-            - pattern: |
+-                $VAR
+-      on:
+-        - jsp-scriptlet-param.$VAR == template-vars.$VAR

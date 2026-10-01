@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "File changed"
+message: "The file changed after you opened it."
+suggested_action: "Reload it to read the current version."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "changed after you opened it"

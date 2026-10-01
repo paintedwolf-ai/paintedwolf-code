@@ -1,0 +1,127 @@
+/* Inline controls act; status marks report. */
+
+.den-inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0.2em 0.55em;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-pill);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-family: inherit;
+  font-size: var(--text-den-overline);
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  transition:
+    border-color var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+
+.den-inline-control:hover {
+  border-color: var(--den-accent-signal);
+  color: var(--den-accent-text);
+}
+
+.den-inline-control:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: 2px;
+}
+
+.den-inline-control[data-tone="accent"] {
+  border-color: color-mix(in srgb, var(--den-accent-signal) 35%, transparent);
+  color: var(--den-accent-text);
+}
+
+.den-inline-control[data-tone="warning"] {
+  border-color: color-mix(in srgb, var(--den-warning) 40%, var(--den-line));
+  color: var(--den-warning);
+}
+
+.den-inline-control[data-tone="warning"]:hover {
+  border-color: var(--den-warning);
+}
+
+/* Pressed and open controls share one held state. */
+.den-inline-control[aria-expanded="true"],
+.den-inline-control[aria-pressed="true"] {
+  border-color: var(--den-accent-signal);
+  background: color-mix(in srgb, var(--den-accent-signal) 14%, transparent);
+  color: var(--den-text);
+}
+
+.den-inline-control:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.den-inline-control:disabled:hover {
+  border-color: var(--den-line);
+  color: var(--den-text);
+}
+
+.den-status-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0.15em 0.4em;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+  font-family: inherit;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accent marks stay quiet on tinted surfaces. */
+.den-status-mark[data-tone="accent"] {
+  color: var(--den-accent-text);
+  background: color-mix(in srgb, var(--den-accent-signal) 12%, transparent);
+}
+
+.den-status-mark[data-tone="positive"] {
+  color: var(--den-status-positive-text);
+  background: color-mix(in srgb, var(--den-status-positive) 12%, transparent);
+}
+
+.den-status-mark[data-tone="warning"] {
+  color: var(--den-warning);
+  background: color-mix(in srgb, var(--den-warning) 12%, transparent);
+}
+
+.den-status-mark[data-tone="danger"] {
+  color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 12%, transparent);
+}
+
+/*
+ * A file name carries its change wherever it appears; the stroke keeps deletion
+ * legible without hue. The doubled attribute outranks a surface's base name
+ * colour, which loads later; stateful compound rules still win.
+ */
+[data-file-change][data-file-change="added"] {
+  color: var(--den-status-positive);
+}
+
+[data-file-change][data-file-change="changed"] {
+  color: var(--den-accent-signal);
+}
+
+[data-file-change][data-file-change="deleted"] {
+  color: var(--den-danger-text);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Marks inside controls inherit the control's shape. */

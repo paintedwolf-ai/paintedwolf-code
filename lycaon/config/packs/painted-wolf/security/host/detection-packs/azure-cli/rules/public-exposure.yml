@@ -1,0 +1,33 @@
+title: Open a resource to the public network
+id: f7c5c78f-b8c0-4f69-92e1-33866c927251
+description: Opens an Azure resource to the public internet.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-07-28'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: az
+  selection_public:
+    CommandLine|contains:
+      - ' --public-network-access enabled'
+      - ' --allow-blob-public-access true'
+      - ' --start-ip-address 0.0.0.0'
+      - ' --source-address-prefixes internet'
+      - ' --source-address-prefixes *'
+      - 'publicnetworkaccess=enabled'
+      - 'allowblobpublicaccess=true'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--what-if)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_public and not filter_rehearsal and not filter_local

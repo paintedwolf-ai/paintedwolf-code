@@ -1,0 +1,32 @@
+oar: '1.0'
+id: VIDEO_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_IS_DIRECTORY"
+effect: block
+copy:
+  what: '{{ tool }} was given the directory {{ paintedwolf.path }}, not a video file.'
+  cause: The path names a directory.
+  why: One view draws frames from one recording.
+  fix: List the directory with list_dir and pass the recording's file path.
+  instead: Branch on Code VIDEO_IS_DIRECTORY; pass a file path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video path is a directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: recordings
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_IS_DIRECTORY'

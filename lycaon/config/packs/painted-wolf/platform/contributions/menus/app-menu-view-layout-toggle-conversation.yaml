@@ -1,0 +1,9 @@
+id: painted-wolf/platform:app-menu-view-layout-toggle-conversation
+slot: "app_menu.view"
+command: painted-wolf/platform:layout-toggle-conversation
+group: "0"
+order: 2
+label: "Hide conversation"
+state:
+  fact: "conversation_collapsed"
+state_label: "Show conversation"

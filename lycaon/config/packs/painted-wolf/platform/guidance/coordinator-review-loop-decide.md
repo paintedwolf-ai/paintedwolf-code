@@ -1,0 +1,1 @@
+At this phase's review cap, weigh the required reviewer envelopes and any extra completed reviews, then submit a terminal verdict with `submit_verdict`. Another non-terminal verdict is rejected at the cap. Follow the phase's remaining gates and advancement rules.

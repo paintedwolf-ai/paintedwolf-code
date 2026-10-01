@@ -1,0 +1,460 @@
+# Path matches add sensitive_location approval asks at Balanced.
+# consequence-band.yaml controls the risk band of an existing ask.
+# Unlisted paths retain the posture floor; Strict asks outside attached roots.
+# Content screening applies independently of path matches.
+#
+# Mode selects read, write, or both. Attached roots suppress ordinary entries;
+# protected entries apply inside attached roots as well.
+# `paths` are subtree prefixes; `names` are basename globs.
+# Longest path wins, and path matches outrank name matches.
+# Canonicalization covers symlinks, firmlinks, and case differences.
+# Hard-link creation is covered by the path-aliasing detection pack.
+# Host configuration is the control plane, which every write door denies outright.
+version: 1
+
+locations:
+  # ---------------------------------------------------------------- user data
+  # Apple's own privacy boundary, published through TCC. Reading is the event.
+  - id: user-documents
+    title: Your Documents folder
+    mode: read
+    paths: ["~/Documents"]
+  - id: user-desktop
+    title: Your Desktop
+    mode: read
+    paths: ["~/Desktop"]
+  - id: user-downloads
+    title: Your Downloads folder
+    mode: read
+    paths: ["~/Downloads"]
+  - id: user-media
+    title: Your photos, music and movies
+    mode: read
+    paths: ["~/Pictures", "~/Movies", "~/Music"]
+  - id: icloud-drive
+    title: iCloud Drive
+    mode: read
+    paths: ["~/Library/Mobile Documents"]
+  - id: external-volumes
+    title: An external or network volume
+    mode: read
+    paths: ["/Volumes"]
+  - id: personal-records
+    title: Contacts, calendars, mail and messages
+    mode: read
+    paths:
+      - "~/Library/Application Support/AddressBook"
+      - "~/Library/Calendars"
+      - "~/Library/Mail"
+      - "~/Library/Messages"
+      - "~/Library/Containers/com.apple.mail"
+      - "~/Library/Group Containers/group.com.apple.notes"
+  - id: device-backups
+    title: iOS device backups
+    mode: read
+    paths: ["~/Library/Application Support/MobileSync"]
+  - id: derived-personal-data
+    title: Spotlight and Siri suggestions
+    mode: read
+    paths: ["~/Library/Suggestions", "~/Library/Metadata/CoreSpotlight"]
+
+  # ------------------------------------------------------------ system layout
+  # Reads are ordinary toolchain access; only specific /Library persistence paths match writes.
+  - id: system-tree
+    title: A system directory
+    mode: write
+    paths:
+      - "/System"
+      - "/Applications"
+      - "/usr/bin"
+      - "/usr/lib"
+      - "/usr/sbin"
+      - "/usr/share"
+      - "/bin"
+      - "/sbin"
+      - "/boot"
+      - "/lib"
+      - "/lib64"
+  - id: system-config
+    title: System configuration
+    mode: write
+    paths: ["/private/etc", "/etc"]
+  - id: account-database
+    title: Accounts and privilege configuration
+    mode: write
+    paths:
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "/etc/sudoers"
+      - "/etc/sudoers.d"
+      - "/etc/pam.d"
+      - "/etc/pam.conf"
+      - "/etc/security/pwquality.conf"
+  - id: name-resolution
+    title: Name resolution
+    mode: write
+    paths: ["/etc/hosts", "/etc/resolv.conf"]
+  - id: loader-injection
+    title: Dynamic loader configuration
+    mode: write
+    paths: ["/etc/ld.so.preload", "/etc/ld.so.conf.d"]
+  - id: package-database
+    title: The system package database
+    mode: write
+    paths: ["/var/lib/dpkg", "/var/lib/rpm"]
+
+  # -------------------------------------------------- exec and persistence
+  # Writes change subsequent program execution.
+  - id: launch-services
+    title: Login and background service definitions
+    mode: write
+    paths:
+      - "~/Library/LaunchAgents"
+      - "/Library/LaunchAgents"
+      - "/Library/LaunchDaemons"
+      - "/System/Library/LaunchAgents"
+      - "/System/Library/LaunchDaemons"
+      - "/var/db/launchd.db"
+      - "/private/var/db/com.apple.xpc.launchd"
+  - id: login-items
+    title: Login items and background task management
+    mode: write
+    paths:
+      - "~/Library/Preferences/com.apple.loginitems.plist"
+      - "~/Library/Preferences/com.apple.loginwindow.plist"
+      - "~/Library/Application Support/com.apple.backgroundtaskmanagementagent"
+      - "/private/var/db/com.apple.backgroundtaskmanagement"
+  - id: scheduled-jobs
+    title: Scheduled jobs
+    mode: write
+    paths:
+      - "/usr/lib/cron/tabs"
+      - "/usr/lib/cron/at"
+      - "/var/at/tabs"
+      - "/etc/crontab"
+      - "/etc/cron.d"
+      - "/etc/cron.daily"
+      - "/etc/cron.hourly"
+      - "/etc/cron.weekly"
+      - "/etc/cron.monthly"
+      - "/var/spool/cron"
+      - "/etc/periodic"
+      - "/etc/defaults/periodic.conf"
+  - id: system-plugins
+    title: A plugin that loads into other programs
+    mode: write
+    paths:
+      - "/Library/SystemExtensions"
+      - "/Library/Extensions"
+      - "/Library/StagedExtensions"
+      - "~/Library/Services"
+      - "/Library/Services"
+      - "~/Library/QuickLook"
+      - "/Library/QuickLook"
+      - "~/Library/Spotlight"
+      - "/Library/Spotlight"
+      - "/Library/Audio/Plug-Ins"
+      - "~/Library/Screen Savers"
+      - "/Library/Screen Savers"
+      - "~/Library/ColorPickers"
+      - "~/Library/Colors"
+      - "~/Library/Application Support/Dock"
+      - "~/Library/Input Methods"
+      - "/Library/Input Methods"
+      - "~/Library/Contextual Menu Items"
+  - id: privileged-helpers
+    title: Privileged helpers and authorization plugins
+    mode: write
+    paths:
+      - "/Library/Security/SecurityAgentPlugins"
+      - "/Library/PrivilegedHelperTools"
+  - id: legacy-init
+    title: Legacy init scripts
+    mode: write
+    paths:
+      - "/etc/rc.common"
+      - "/etc/rc.local"
+      - "/etc/init.d"
+      - "/private/etc/emond.d"
+      - "/private/var/db/emondClients"
+      - "/etc/update-motd.d"
+  - id: systemd-units
+    title: systemd units
+    mode: write
+    paths:
+      - "~/.config/systemd/user"
+      - "/etc/systemd/system"
+      - "/usr/lib/systemd/system"
+  - id: desktop-autostart
+    title: Desktop autostart entries
+    mode: write
+    paths: ["~/.config/autostart", "/etc/xdg/autostart"]
+  - id: shell-startup
+    title: A shell startup file
+    mode: write
+    paths:
+      - "~/.zshrc"
+      - "~/.zshenv"
+      - "~/.zprofile"
+      - "~/.zlogin"
+      - "~/.zlogout"
+      - "~/.config/zsh"
+      - "~/.bashrc"
+      - "~/.bash_profile"
+      - "~/.bash_login"
+      - "~/.bash_logout"
+      - "~/.profile"
+      - "~/.config/fish/config.fish"
+      - "~/.config/fish/conf.d"
+      - "~/.inputrc"
+      - "~/.editrc"
+      - "/etc/zshenv"
+      - "/etc/zshrc"
+      - "/etc/zprofile"
+      - "/etc/bashrc"
+      - "/etc/profile"
+      - "/etc/profile.d"
+  - id: git-hooks
+    title: Git hooks in another checkout
+    mode: write
+    names: ["hooks"]
+  - id: git-config
+    title: Git configuration
+    mode: write
+    paths: ["~/.gitconfig", "~/.config/git/config"]
+  - id: container-tooling-config
+    title: Container tooling configuration
+    # These paths select execution and hosts; build state and credentials have separate treatment.
+    mode: write
+    paths:
+      - "~/.docker/contexts"
+      - "~/.docker/daemon.json"
+      - "~/.docker/cli-plugins"
+      - "~/.docker/plugins"
+
+  # ------------------------------------------------------------ key material
+  # Both reads and writes affect credentials, including inside attached roots.
+  - id: ssh-keys
+    title: SSH keys
+    mode: any
+    protected: true
+    paths: ["~/.ssh", "/etc/ssh"]
+  - id: gpg-keys
+    title: GnuPG keyring
+    mode: any
+    protected: true
+    paths: ["~/.gnupg"]
+  - id: keychain
+    title: The system keychain
+    mode: any
+    protected: true
+    paths: ["~/Library/Keychains", "/Library/Keychains"]
+  - id: password-store
+    title: A local password store
+    mode: any
+    protected: true
+    paths: ["~/.password-store", "~/.pki", "~/.local/share/pki", "~/.local/share/keyrings"]
+  - id: age-identities
+    title: age and sops private keys
+    mode: any
+    protected: true
+    paths: ["~/.config/sops/age", "~/.age"]
+  - id: image-signing-keys
+    title: Container image signing keys
+    mode: any
+    protected: true
+    paths: ["~/.docker/trust"]
+  - id: token-cache
+    title: A live session token cache
+    mode: read
+    protected: true
+    paths: ["~/.aws/sso/cache", "~/.azure/msal_token_cache.json"]
+  - id: private-key-file
+    title: A private key or certificate file
+    mode: read
+    protected: true
+    names:
+      - "id_rsa"
+      - "id_dsa"
+      - "id_ecdsa"
+      - "id_ed25519"
+      - "*.pem"
+      - "*.p12"
+      - "*.pfx"
+      - "*.jks"
+      - "*.keystore"
+
+  # ------------------------------------------------- credential and secret stores
+  # Published credential-store locations.
+  - id: cloud-credentials
+    title: Cloud provider credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.aws"
+      - "~/.kube"
+      - "~/.config/gcloud"
+      - "~/.azure"
+      - "~/.oci"
+      - "~/.aliyun"
+      - "~/.ibmcloud"
+      - "~/.config/doctl"
+      - "~/.fly"
+      - "~/.railway"
+      - "~/.vercel"
+      - "~/.netlify"
+      - "~/.heroku"
+      - "~/.config/heroku"
+      - "~/.render"
+      - "~/.config/scaleway"
+      - "~/.linode-cli"
+      - "~/.civo"
+  - id: container-credentials
+    title: Container registry and cluster credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.docker/config.json"
+      - "~/.config/containers/auth.json"
+      - "~/.helm"
+      - "~/.config/k9s"
+      - "~/.rancher"
+      - "~/.talos"
+  - id: secrets-manager
+    title: A secrets manager or IaC credential store
+    mode: any
+    protected: true
+    paths:
+      - "~/.terraform.d"
+      - "~/.terraformrc"
+      - "~/.pulumi"
+      - "~/.vault-token"
+      - "~/.config/vault"
+      - "~/.config/sops"
+      - "~/.config/op"
+      - "~/.1password"
+      - "~/Library/Application Support/Bitwarden"
+      - "~/.config/keybase"
+      - "~/.chef"
+      - "~/.puppetlabs"
+      - "~/.ansible/vault_password_file"
+  - id: forge-credentials
+    title: Source forge credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.config/gh"
+      - "~/.config/hub"
+      - "~/.config/glab"
+      - "~/.config/tea"
+      - "~/.git-credentials"
+      - "~/.netrc"
+      - "~/.authinfo"
+      - "~/.authinfo.gpg"
+  - id: registry-credentials
+    title: Package registry credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.npmrc"
+      - "~/.yarnrc.yml"
+      - "~/.pypirc"
+      - "~/.config/pip/pip.conf"
+      - "~/.cargo/credentials.toml"
+      - "~/.m2/settings.xml"
+      - "~/.gradle/gradle.properties"
+      - "~/.gem/credentials"
+      - "~/.nuget/NuGet/NuGet.Config"
+      - "~/.composer/auth.json"
+      - "~/.bundle/config"
+      - "~/.config/hex"
+      - "~/.dart/pub-credentials.json"
+  - id: database-credentials
+    title: Database credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.pgpass"
+      - "~/.my.cnf"
+      - "~/.mylogin.cnf"
+      - "~/.mongorc.js"
+      - "~/.rediscli_auth"
+      - "~/.dbt"
+      - "~/.snowflake"
+      - "~/.databricks"
+      - "~/.config/clickhouse-client"
+  - id: transfer-credentials
+    title: File transfer and sync credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.config/rclone/rclone.conf"
+      - "~/.s3cfg"
+      - "~/.config/rsnapshot"
+  - id: commercial-api-credentials
+    title: Commercial API credentials
+    mode: any
+    protected: true
+    paths:
+      - "~/.config/stripe"
+      - "~/.stripe"
+      - "~/.twilio-cli"
+      - "~/.sentryclirc"
+  - id: loose-credential-file
+    title: A credential file
+    mode: any
+    protected: true
+    names:
+      - ".env"
+      - ".env.*"
+      - "credentials"
+      - "credentials.json"
+      - "service-account*.json"
+      - ".htpasswd"
+
+  # -------------------------------------------------------- browser profiles
+  # Profiles contain cookies and session tokens.
+  - id: browser-profile
+    title: A browser profile
+    mode: read
+    protected: true
+    paths:
+      - "~/Library/Application Support/Google/Chrome"
+      - "~/Library/Application Support/Chromium"
+      - "~/Library/Application Support/BraveSoftware"
+      - "~/Library/Application Support/Microsoft Edge"
+      - "~/Library/Application Support/Arc"
+      - "~/Library/Application Support/Firefox/Profiles"
+      - "~/Library/Safari"
+      - "~/Library/Containers/com.apple.Safari"
+      - "~/Library/Cookies"
+      - "~/.config/google-chrome"
+      - "~/.config/chromium"
+      - "~/.config/BraveSoftware"
+      - "~/.mozilla/firefox"
+  - id: browser-artifact
+    title: A browser credential store
+    mode: read
+    protected: true
+    names:
+      - "Cookies"
+      - "Cookies.binarycookies"
+      - "Login Data"
+      - "Web Data"
+      - "logins.json"
+      - "key3.db"
+      - "key4.db"
+      - "cert9.db"
+      - "cookies.sqlite"
+      - "signons.sqlite"
+
+  # ------------------------------------------------ messaging and app data
+  - id: messaging-app-data
+    title: A messaging application's local data
+    mode: read
+    paths:
+      - "~/Library/Application Support/Signal"
+      - "~/Library/Application Support/Slack"
+      - "~/Library/Application Support/discord"
+      - "~/Library/Application Support/Telegram Desktop"
+      - "~/Library/Application Support/zoom.us"

@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CAPTURE_SERVE_FAILED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_SERVE_FAILED"
+effect: block
+copy:
+  what: The host could not prepare browser request interception for {{ tool }}.
+  cause: '{% if paintedwolf.rejection_reason %}Browser setup stage: {{ paintedwolf.rejection_reason }}.{% endif
+    %}{% if paintedwolf.detail %} {{ paintedwolf.detail }}{% endif %}'
+  why: project_dir and hermetic font substitutes serve through CDP Fetch (no TCP listen); the hijack must attach
+    before navigate.
+  fix: Retry the requested browser operation after its setup problem is resolved. A mock visual from render_view,
+    when offered, does not verify the running page. Do not start a local http.server to repair request interception.
+  instead: Branch on Code CAPTURE_SERVE_FAILED; repair browser setup without substituting a TCP server
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: Host could not attach the capture Fetch hijack
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_SERVE_FAILED'

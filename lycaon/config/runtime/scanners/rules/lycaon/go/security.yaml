@@ -1,0 +1,312 @@
+rules:
+- id: lycaon.go.shell-injection
+  languages:
+  - go
+  severity: ERROR
+  message: Request input reaches a shell command; pass data as separate arguments
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - go
+  mode: taint
+  pattern-sources:
+  - pattern: $R.URL.Query().Get(...)
+    exact: true
+  - pattern: $R.FormValue(...)
+    exact: true
+  - pattern: $R.PostFormValue(...)
+    exact: true
+  - pattern: $CTX.Query(...)
+    exact: true
+  - pattern: $CTX.Param(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: exec.Command("sh", "-c", $CMD, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: exec.CommandContext($CTX, "sh", "-c", $CMD, ...)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: exec.Command("bash", "-c", $CMD, ...)
+    - focus-metavariable: $CMD
+- id: lycaon.go.sql-injection
+  languages:
+  - go
+  severity: ERROR
+  message: Request input reaches SQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - go
+  mode: taint
+  pattern-sources:
+  - pattern: $R.URL.Query().Get(...)
+    exact: true
+  - pattern: $R.FormValue(...)
+    exact: true
+  - pattern: $R.PostFormValue(...)
+    exact: true
+  - pattern: $CTX.Query(...)
+    exact: true
+  - pattern: $CTX.Param(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.Query($SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB.Exec($SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB.QueryContext($CTX,$SQL, ...)
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB.QueryRow($SQL, ...)
+    - focus-metavariable: $SQL
+  options:
+    taint_assume_safe_numbers: true
+- id: lycaon.go.path-traversal
+  languages:
+  - go
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - go
+  mode: taint
+  pattern-sources:
+  - pattern: $R.URL.Query().Get(...)
+    exact: true
+  - pattern: $R.FormValue(...)
+    exact: true
+  - pattern: $R.PostFormValue(...)
+    exact: true
+  - pattern: $CTX.Query(...)
+    exact: true
+  - pattern: $CTX.Param(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: os.Open($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: os.ReadFile($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: http.ServeFile($W,$R,$PATH)
+    - focus-metavariable: $PATH
+- id: lycaon.go.ssrf
+  languages:
+  - go
+  severity: ERROR
+  message: Request input selects an HTTP destination
+  metadata:
+    category: security
+    cwe: CWE-918
+    confidence: HIGH
+    technology:
+    - go
+  mode: taint
+  pattern-sources:
+  - pattern: $R.URL.Query().Get(...)
+    exact: true
+  - pattern: $R.FormValue(...)
+    exact: true
+  - pattern: $R.PostFormValue(...)
+    exact: true
+  - pattern: $CTX.Query(...)
+    exact: true
+  - pattern: $CTX.Param(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: http.Get($URL)
+    - pattern-not:
+        patterns:
+        - pattern: http.Get($BASE + $REST)
+        - metavariable-regex:
+            metavariable: $BASE
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[^\"'\\\\]*$
+            constant-propagation: true
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: http.Post($URL, ...)
+    - pattern-not:
+        patterns:
+        - pattern: http.Post($BASE + $REST, ...)
+        - metavariable-regex:
+            metavariable: $BASE
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[^\"'\\\\]*$
+            constant-propagation: true
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: http.NewRequest($METHOD,$URL,...)
+    - pattern-not:
+        patterns:
+        - pattern: http.NewRequest($METHOD,$BASE + $REST,...)
+        - metavariable-regex:
+            metavariable: $BASE
+            regex: ^https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[^\"'\\\\]*$
+            constant-propagation: true
+    - focus-metavariable: $URL
+  pattern-sanitizers:
+  - patterns:
+    - pattern: $BASE + $REST
+    - metavariable-regex:
+        metavariable: $BASE
+        regex: ^["']https?://[A-Za-z0-9.-]+(?::[0-9]+)?/[^"'\\]*["']$
+    exact: true
+- id: lycaon.go.template-bypass
+  languages:
+  - go
+  severity: ERROR
+  message: Request input is marked as trusted template HTML
+  metadata:
+    category: security
+    cwe: CWE-79
+    confidence: HIGH
+    technology:
+    - go
+  mode: taint
+  pattern-sources:
+  - pattern: $R.URL.Query().Get(...)
+    exact: true
+  - pattern: $R.FormValue(...)
+    exact: true
+  - pattern: $R.PostFormValue(...)
+    exact: true
+  - pattern: $CTX.Query(...)
+    exact: true
+  - pattern: $CTX.Param(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: template.HTML($INPUT)
+    - focus-metavariable: $INPUT
+  - patterns:
+    - pattern: template.JS($INPUT)
+    - focus-metavariable: $INPUT
+- id: lycaon.go.tls-verification-disabled
+  languages:
+  - go
+  severity: ERROR
+  message: TLS verification is disabled without a custom certificate verifier
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - go
+  match:
+    all:
+    - pattern: 'tls.Config{..., InsecureSkipVerify: true, ...}'
+    - any:
+      - all:
+        - pattern: tls.Config{...}
+        - not:
+            pattern: 'tls.Config{..., VerifyConnection: $VERIFY, ...}'
+      - pattern: 'tls.Config{..., VerifyConnection: nil, ...}'
+      - pattern: 'tls.Config{..., VerifyConnection: func(...) error { return nil }, ...}'
+    - any:
+      - all:
+        - pattern: tls.Config{...}
+        - not:
+            pattern: 'tls.Config{..., VerifyPeerCertificate: $VERIFY, ...}'
+      - pattern: 'tls.Config{..., VerifyPeerCertificate: nil, ...}'
+      - pattern: 'tls.Config{..., VerifyPeerCertificate: func(...) error { return nil }, ...}'
+    - not:
+        inside: |
+          $CFG := &tls.Config{...}
+          $CFG.VerifyPeerCertificate = $VERIFY
+          return $CFG
+        where:
+        - metavariable: $VERIFY
+          all:
+          - pattern: $CALLBACK
+          - not:
+              pattern: nil
+          - not:
+              pattern: func(...) error { return nil }
+    - not:
+        inside: |
+          $CFG := &tls.Config{...}
+          $CFG.VerifyConnection = $VERIFY
+          return $CFG
+        where:
+        - metavariable: $VERIFY
+          all:
+          - pattern: $CALLBACK
+          - not:
+              pattern: nil
+          - not:
+              pattern: func(...) error { return nil }
+    - not:
+        inside: |
+          $CFG := &tls.Config{...}
+          $CFG.InsecureSkipVerify = false
+          return $CFG
+- id: lycaon.go.ssh-hostkey-disabled
+  languages:
+  - go
+  severity: ERROR
+  message: SSH host identity verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - go
+  pattern: ssh.InsecureIgnoreHostKey()
+- id: lycaon.go.weak-cipher
+  languages:
+  - go
+  severity: ERROR
+  message: DES or RC4 encryption is cryptographically broken
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - go
+  pattern-either:
+  - pattern: des.NewCipher(...)
+  - pattern: des.NewTripleDESCipher(...)
+  - pattern: rc4.NewCipher(...)
+- id: lycaon.go.weak-rsa-key
+  languages:
+  - go
+  severity: ERROR
+  message: RSA key generation uses fewer than 2048 bits
+  metadata:
+    category: security
+    cwe: CWE-326
+    confidence: HIGH
+    technology:
+    - go
+  patterns:
+  - pattern: rsa.GenerateKey($RANDOM,$BITS)
+  - metavariable-comparison:
+      metavariable: $BITS
+      comparison: $BITS < 2048
+- id: lycaon.go.obsolete-tls-maximum
+  languages:
+  - go
+  severity: ERROR
+  message: The TLS maximum version prevents negotiation of a modern protocol
+  metadata:
+    category: security
+    cwe: CWE-327
+    confidence: HIGH
+    technology:
+    - go
+  pattern-either:
+  - pattern: 'tls.Config{..., MaxVersion: tls.VersionTLS10, ...}'
+  - pattern: 'tls.Config{..., MaxVersion: tls.VersionTLS11, ...}'

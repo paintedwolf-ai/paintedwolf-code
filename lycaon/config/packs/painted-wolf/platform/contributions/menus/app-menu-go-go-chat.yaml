@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-chat
+slot: "app_menu.go"
+command: painted-wolf/platform:go-chat
+group: "3"
+order: 12
+label: "Chat"

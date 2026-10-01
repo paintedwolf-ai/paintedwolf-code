@@ -1,0 +1,10 @@
+version: 1
+env_keys: [SERVICE_ACCESS_VALUE]
+file_keys: [SERVICE_ACCESS_VALUE]
+value_flags: [--access-value]
+surfaces:
+  service_apply: {kind: content, content_arg: document}
+command_images:
+  - image: servicectl
+    require_flags: [--create]
+    value_flags: [-x]

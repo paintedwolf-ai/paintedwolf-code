@@ -1,0 +1,138 @@
+language: groovy
+comment:
+- //
+limits: Native Groovy expression matching. Dynamic aliases and indirect dispatch need additional analysis.
+cases:
+- name: evaluate-input-vulnerable
+  file: sample.groovy
+  source: |
+    evaluate("${params.code}")
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: evaluate-input-safe
+  file: sample.groovy
+  source: |
+    evaluate("return 1")
+  want: []
+  covers:
+  - lycaon.groovy.evaluate-input
+- name: jenkins-shell-interpolation-vulnerable
+  file: sample.groovy
+  source: |
+    sh """
+     echo ${params.command}
+    """
+  want:
+  - lycaon.groovy.jenkins-shell-interpolation
+  covers: []
+- name: jenkins-shell-interpolation-safe
+  file: sample.groovy
+  source: |
+    sh 'printf %s "$VALUE"'
+  want: []
+  covers:
+  - lycaon.groovy.jenkins-shell-interpolation
+- name: sql-string-concatenation-context-only
+  file: sample.groovy
+  source: |
+    sql.execute("SELECT * FROM users WHERE name = " + user)
+  want: []
+  covers: []
+- name: sql-string-concatenation-safe
+  file: sample.groovy
+  source: |
+    sql.execute("SELECT * FROM users WHERE name = ${user}")
+  want: []
+  covers: []
+- name: shell-interpolation-vulnerable
+  file: sample.groovy
+  source: |
+    ["sh", "-c", "echo ${params.command}"].execute()
+  want:
+  - lycaon.groovy.shell-interpolation
+  covers: []
+- name: shell-interpolation-safe
+  file: sample.groovy
+  source: |
+    ["printf", "%s", params.text].execute()
+  want: []
+  covers:
+  - lycaon.groovy.shell-interpolation
+- name: gradle-evaluate
+  file: build.gradle
+  source: |
+    evaluate("${params.code}")
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: gvy-evaluate
+  file: job.gvy
+  source: |
+    evaluate("${params.code}")
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: jenkinsfile-multiline
+  file: Jenkinsfile
+  source: |
+    sh """
+     echo ${params.command}
+    """
+  want:
+  - lycaon.groovy.jenkins-shell-interpolation
+  covers: []
+- name: script-after-block-comment
+  file: sample.groovy
+  source: |
+    /* evaluate(params.code) */
+    evaluate(params.code)
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: precision-literal-evaluate-example
+  file: sample.groovy
+  source: |
+    println 'evaluate(params.code)'
+  want: []
+  covers: []
+- name: precision-gstring-evaluation
+  file: sample.groovy
+  source: |
+    println "${evaluate(params.code)}"
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: review-jenkins-url
+  file: sample.groovy
+  source: |
+    sh "curl https://artifacts.example.test/build/${params.NAME}"
+  want:
+  - lycaon.groovy.jenkins-shell-interpolation
+  covers: []
+- name: review-explicit-shell-url
+  file: sample.groovy
+  source: |
+    ["sh", "-c", "curl https://artifacts.example.test/${params.NAME}"].execute()
+  want:
+  - lycaon.groovy.shell-interpolation
+  covers: []
+- name: review-evaluate-after-url
+  file: sample.groovy
+  source: |
+    def url = "https://example.test/"; evaluate(params.code)
+  want:
+  - lycaon.groovy.evaluate-input
+  covers: []
+- name: review-url-comment
+  file: sample.groovy
+  source: |
+    // sh "curl https://example.test/${params.NAME}"
+  want: []
+  covers: []
+- name: review-literal-shell-example
+  file: sample.groovy
+  source: |
+    println 'sh "curl https://example.test/${params.NAME}"'
+  want: []
+  covers: []

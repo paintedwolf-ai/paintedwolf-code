@@ -1,0 +1,18 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: This URL is not valid
+message: >-
+  MCP HTTP providers need a host the app can parse, using http:// or https://.
+suggested_action: >-
+  Enter a URL such as http://127.0.0.1:8765/mcp. A host and port without a
+  scheme is fine — loopback is treated as local HTTP, anything else as
+  remote HTTPS.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - host
+      - http

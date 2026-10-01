@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-next
+command: painted-wolf/platform:session-next
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+ArrowDown"
+  windows:
+    - "Alt+ArrowDown"
+  linux:
+    - "Alt+ArrowDown"

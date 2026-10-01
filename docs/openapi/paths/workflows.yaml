@@ -1,0 +1,836 @@
+paths:
+  /v1/workflows:
+    get:
+      tags:
+      - workflows
+      operationId: listWorkflows
+      summary: Catalog of bundled and project-overlay workflow manifests
+      parameters:
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: When set, merges the overlay `workflows/` directory from the project path over bundled manifests.
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: When set, merges session-scoped manifests from SQLite over bundled and project tiers.
+      responses:
+        '200':
+          description: Workflow catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/workflows/compose:
+    post:
+      tags:
+      - workflows
+      operationId: composeWorkflow
+      x-person-action: record
+      summary: Validate and register a session-scoped workflow manifest
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: When true, validate only without persisting to session_workflows.
+      requestBody:
+        required: true
+        content:
+          application/yaml:
+            schema:
+              type: string
+              description: Workflow manifest YAML body
+      responses:
+        '200':
+          description: Composed session workflow dry-run result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/ComposeWorkflowResponse
+        '201':
+          description: Composed session workflow
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/ComposeWorkflowResponse
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/WorkflowValidationFailed
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/workflow-templates:
+    get:
+      tags:
+      - workflows
+      operationId: listWorkflowTemplates
+      summary: List bundled workflow compose templates
+      responses:
+        '200':
+          description: Workflow template catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowTemplateListResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+  /v1/sessions/{id}/workflows/compose-from-template:
+    post:
+      tags:
+      - workflows
+      operationId: composeWorkflowFromTemplate
+      x-person-action: record
+      summary: Compose a session workflow from a bundled template
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/ComposeFromTemplateRequest
+      responses:
+        '200':
+          description: Composed session workflow dry-run result
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/ComposeWorkflowResponse
+        '201':
+          description: Composed session workflow
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/ComposeWorkflowResponse
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/WorkflowValidationFailed
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/sessions/{id}/workflows/{workflow_id}/persist:
+    post:
+      tags:
+      - workflows
+      operationId: persistWorkflow
+      x-person-action: record
+      summary: Promote a session workflow to the project overlay workflows/ directory
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,48}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/PersistWorkflowRequest
+      responses:
+        '201':
+          description: Workflow persisted to project overlay
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/PersistWorkflowResponse
+        '403':
+          description: Persist not confirmed or HITL approval invalid
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/WorkflowValidationFailed
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/sessions/{id}/workflow-runs:
+    get:
+      tags:
+      - workflows
+      operationId: listSessionWorkflowRuns
+      summary: Workflow run history for a session (newest first)
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: status
+        in: query
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRunStatus
+        description: WorkflowRunStatus values to filter by.
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque next_cursor from the preceding page.
+      responses:
+        '200':
+          description: Stable workflow-run history page, newest first
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRunPage
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags:
+      - workflows
+      operationId: startWorkflowRun
+      x-person-action: record
+      summary: Start or replace a workflow run on a session
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/StartWorkflowRunRequest
+      responses:
+        '201':
+          description: Workflow run started
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/sessions/{id}/workflow-runs/active:
+    get:
+      tags:
+      - workflows
+      operationId: getActiveWorkflowRun
+      summary: Get the active workflow run for a session
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Active workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/ActiveWorkflowRunResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+  /v1/workflow-runs/{id}:
+    get:
+      tags:
+      - workflows
+      operationId: getWorkflowRun
+      summary: Get workflow run by ID
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+  /v1/workflow-runs/{id}/report:
+    get:
+      tags:
+      - workflows
+      operationId: getWorkflowRunReport
+      summary: Download the grounded workflow report PDF
+      description: |
+        Assembles a ReportInput on demand from durable records (grounded closeout
+        message, every review phase's verdict evidence, scan findings and their
+        rules, the evidence ledger, and visual artifacts) and renders a
+        deterministic PDF: the same records produce byte-identical bytes.
+        Returns 404 report_not_found unless the workflow enables reports, the
+        run is terminal, the host has recorded report delivery, and a grounded
+        run-scoped closeout message exists for that run.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Workflow report PDF
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="…"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: report_not_found or workflow_run_not_found
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+  /v1/workflow-runs/{id}/pause:
+    post:
+      tags:
+      - workflows
+      operationId: pauseWorkflowRun
+      x-person-action: record
+      summary: Pause a workflow run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowControlRequest
+      responses:
+        '200':
+          description: Paused workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/resume:
+    post:
+      tags:
+      - workflows
+      operationId: resumeWorkflowRun
+      x-person-action: record
+      summary: Resume a paused workflow run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowControlRequest
+      responses:
+        '200':
+          description: Resumed workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/cancel:
+    post:
+      tags:
+      - workflows
+      operationId: cancelWorkflowRun
+      x-person-action: record
+      summary: Cancel a workflow run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowControlRequest
+      responses:
+        '200':
+          description: Canceled workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/exit:
+    post:
+      tags:
+      - workflows
+      operationId: exitWorkflowRun
+      x-person-action: record
+      summary: Exit a reviewed active workflow run
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowControlRequest
+      responses:
+        '200':
+          description: Workflow run exited
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/Error
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/advance:
+    post:
+      tags:
+      - workflows
+      operationId: advanceWorkflowRun
+      x-person-action: record
+      summary: Advance workflow run to the next phase
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/AdvanceWorkflowRunRequest
+      responses:
+        '200':
+          description: Advanced workflow run
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/transitions/{transition_id}:
+    post:
+      tags:
+      - workflows
+      operationId: fireWorkflowTransition
+      x-person-action: record
+      summary: Fire a named choice transition on the current phase (human actor)
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: transition_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/FireWorkflowTransitionRequest
+      responses:
+        '200':
+          description: Workflow run after choice transition
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/workflow-runs/{id}/decisions/{phase_id}:
+    post:
+      tags:
+      - workflows
+      operationId: resolveWorkflowDecision
+      x-person-action: record
+      summary: Resolve a structured user decision for a workflow phase
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: phase_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/ResolveWorkflowDecisionRequest
+      responses:
+        '200':
+          description: Workflow run after decision
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/workflow-runs/{id}/feedback/{phase_id}:
+    post:
+      tags:
+      - workflows
+      operationId: resolveWorkflowFeedback
+      x-person-action: record
+      summary: Resolve open-ended user feedback for a workflow phase
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: phase_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/ResolveUserFeedbackRequest
+      responses:
+        '200':
+          description: Workflow run after feedback
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/workflow-runs/{id}/feedback/{phase_id}/secret:
+    post:
+      tags:
+      - workflows
+      operationId: resolveWorkflowSecret
+      x-person-action: record
+      summary: Resolve a protected secret response for a workflow ask
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: phase_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/workflow.yaml#/components/schemas/ResolveUserSecretRequest
+      responses:
+        '200':
+          description: Workflow run after protected storage
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
+        '422':
+          $ref: ../components/responses.yaml#/components/responses/UnprocessableContent

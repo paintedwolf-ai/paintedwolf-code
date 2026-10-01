@@ -1,0 +1,33 @@
+language: jsonnet
+comment:
+- //
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: privileged-container-vulnerable
+  file: sample.jsonnet
+  source: |
+    {kind: "Pod", spec: {containers: [{name:"app",securityContext:{privileged:true}}]}}
+  want:
+  - lycaon.jsonnet.privileged-container
+  covers: []
+- name: privileged-container-safe
+  file: sample.jsonnet
+  source: |
+    {kind: "Pod", spec: {containers: [{name:"app",securityContext:{privileged:false}}]}}
+  want: []
+  covers:
+  - lycaon.jsonnet.privileged-container
+- name: host-process-namespace-context-only
+  file: sample.jsonnet
+  source: |
+    {kind:"Pod",spec:{hostPID:true}}
+  want: []
+  covers: []
+- name: host-process-namespace-safe
+  file: sample.jsonnet
+  source: |
+    {kind:"Pod",spec:{hostPID:false}}
+  want: []
+  covers: []
+comment_suffix: |
+  {}

@@ -1,0 +1,5 @@
+id: database-cli
+label: Databases
+description: >-
+  Database client statements that drop schema, empty a table, or flush a
+  keyspace, and writes that carry no row filter.

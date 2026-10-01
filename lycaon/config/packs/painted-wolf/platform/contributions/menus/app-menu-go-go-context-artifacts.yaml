@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-go-context-artifacts
+slot: "app_menu.go"
+command: painted-wolf/platform:go-context-artifacts
+group: "2"
+order: 9
+label: "Artifacts"

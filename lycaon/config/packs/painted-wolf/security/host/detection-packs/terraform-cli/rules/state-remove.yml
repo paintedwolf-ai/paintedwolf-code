@@ -1,0 +1,36 @@
+title: Rewrite Terraform state
+id: 875f2aa7-263c-4cc7-b2ca-b47a35bb8fdf
+description: Removes or replaces entries in Terraform state, detaching them from config.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_image:
+    Image:
+      - terraform
+      - tofu
+      - terragrunt
+      - tf
+  verbs_state_rewrite:
+    CommandLine|contains:
+      - ' state rm'
+      - ' state mv'
+      - ' state replace-provider'
+      - ' state push'
+      - ' force-unlock'
+      - ' workspace delete'
+  filter_rehearsal:
+    Argv|re: '^(-help|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_state_rewrite and not filter_rehearsal and not filter_local

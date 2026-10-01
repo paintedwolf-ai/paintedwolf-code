@@ -1,0 +1,59 @@
+{
+  "id": "doc-bare-id-is-the-qualified-identifier",
+  "title": "A rule with no namespace has the bare id as its qualified identifier \u2014 no separator, no host name",
+  "covers": [
+    "OAR-DOC-8",
+    "OAR-EVAL-8"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "id": "UNSCOPED",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "effect": "warn",
+      "on_fire": [
+        "increment_counter"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "UNSCOPED",
+    "rule": "UNSCOPED",
+    "applied": [
+      "UNSCOPED:fired"
+    ],
+    "counters": {
+      "UNSCOPED": {
+        "fire_count": 1
+      }
+    }
+  }
+}

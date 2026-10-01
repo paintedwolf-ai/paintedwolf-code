@@ -1,0 +1,24 @@
+id: api_routes
+description: "Use when hunting where HTTP /v1 routes and handlers are registered (server surface; client routers via `summarize`)"
+probes:
+  # Exact quoted /v1/… literals — highest signal for HTTP API surface.
+  - kind: grep
+    pattern: "[\"']/v1/[A-Za-z0-9_./\\-{}:]*[\"']"
+    path: "."
+    label: http_path_literals
+    priority: 10
+    emit_cap: 40
+  # Method/handler regs that open a quoted path (rejects bare GET( noise).
+  - kind: grep
+    pattern: "HandleFunc\\s*\\(|\\.Handle\\s*\\(\\s*[\"'][^\"']+[\"']|(\\s|\\.)(GET|POST|PUT|PATCH|DELETE|Get|Post|Put|Patch|Delete)\\s*\\(\\s*[\"']/"
+    path: "."
+    label: http_handler_regs
+    priority: 8
+    emit_cap: 40
+  # Router constructors only — not every mux.|chi. identifier mention.
+  - kind: grep
+    pattern: "NewRouter\\s*\\(|chi\\.New(Mux|Router)\\s*\\(|gin\\.(Default|New)\\s*\\(|echo\\.New\\s*\\(|mux\\.NewRouter\\s*\\("
+    path: "."
+    label: router_constructors
+    priority: 6
+    emit_cap: 20

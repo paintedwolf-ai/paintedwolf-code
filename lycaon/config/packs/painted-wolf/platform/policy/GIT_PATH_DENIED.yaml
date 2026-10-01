@@ -1,0 +1,32 @@
+oar: '1.0'
+id: GIT_PATH_DENIED
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - filesystem
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "GIT_PATH_DENIED"
+effect: block
+copy:
+  what: '{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope.'
+  cause: Git tools only operate on sandbox-relative paths inside the project.
+  why: Structured rejects let agents branch without parsing free-form errors.
+  fix: Use the intended path only within the active repository and its permitted read/write scope. Do not choose
+    another Git operation to bypass the same path boundary.
+  instead: Branch on Code; fix args and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: git path denied for {{ tool }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: src/main.go
+    profile: coordinator
+    tool: git_diff
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_PATH_DENIED'

@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: No explanation yet
+message: This file does not have an AI explanation yet.
+suggested_action: Request an explanation from the Review lens.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [does not have an AI explanation]

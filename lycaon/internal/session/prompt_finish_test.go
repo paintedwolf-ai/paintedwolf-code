@@ -1,0 +1,288 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+type sessionStatusFailStore struct {
+	*store.Memory
+	err error
+}
+
+type alwaysWithholdPromptLLM struct{}
+
+func (alwaysWithholdPromptLLM) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	return nil, &llm.ModelRequestSecretWithheldError{Guidance: "continue without it"}
+}
+
+func (alwaysWithholdPromptLLM) Stream(context.Context, modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	return nil, &llm.ModelRequestSecretWithheldError{Guidance: "continue without it"}
+}
+
+func (s *sessionStatusFailStore) SetSessionStatus(context.Context, string, api.SessionStatus) error {
+	return s.err
+}
+
+func TestFinishPromptExecutionPropagatesIdlePersistenceFailure(t *testing.T) {
+	ctx := context.Background()
+	wantErr := errors.New("status store unavailable")
+	st := &sessionStatusFailStore{Memory: store.NewMemory(), err: wantErr}
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark visible turn busy", st.Memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	mgr.beginPromptTurn(sess.ID, "")
+
+	testutil.FailErr(t, "finish prompt execution", mgr.finishPromptExecution(ctx, sess.ID, true, false, ""))
+	err = mgr.drainPendingLoopWakes(ctx, sess.ID)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("finish error = %v, want idle persistence failure", err)
+	}
+}
+
+func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
+	ctx := context.Background()
+	wantErr := errors.New("topology store unavailable")
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	view := &recordingWorkflowView{topologyErr: wantErr}
+	mgr.SetWorkflowSessionView(view)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	err = mgr.finishPromptExecution(ctx, sess.ID, false, false, "committed-closeout")
+	if view.closeoutID != "committed-closeout" {
+		t.Fatalf("delivery lost committed message: %q", view.closeoutID)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("finish error = %v, want topology report failure", err)
+	}
+}
+
+func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	view := &recordingWorkflowView{}
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr.SetWorkflowSessionView(view)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	testutil.FailErr(t, "finish prompt execution", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	if len(view.calls) == 0 || view.calls[0] != "ReconcileTurnCompletion" {
+		t.Fatalf("workflow turn-end calls = %v want completion reconciliation first", view.calls)
+	}
+}
+
+func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	hub := events.NewMemoryHub()
+	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	eventCh, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to session events", err)
+	t.Cleanup(unsubscribe)
+
+	mgr.beginPromptTurn(sess.ID, "")
+	mgr.ensureCoordinatorRuntime().CoordinatorLoop().MarkWaitCalled(sess.ID)
+	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, false, ""))
+	afterWait, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read session after wait", err)
+	if afterWait.Status != api.SessionStatusBusy {
+		t.Fatalf("status after wait = %q want busy until host continuation settles", afterWait.Status)
+	}
+	assertNoSessionIdleEvent(t, eventCh)
+
+	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
+	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	mgr.beginPromptTurn(sess.ID, "")
+	testutil.FailErr(t, "finish terminal host prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	deferred, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read session before queued wake drain", err)
+	if deferred.Status != api.SessionStatusBusy {
+		t.Fatalf("status before queued wake drain = %q want busy", deferred.Status)
+	}
+	assertNoSessionIdleEvent(t, eventCh)
+
+	finishExecution()
+	testutil.FailErr(t, "drain queued wake", mgr.drainPendingLoopWakes(ctx, sess.ID))
+	if disposition := awaitIdleDisposition(t, eventCh); disposition != api.SessionIdleDispositionCompleted {
+		t.Fatalf("terminal disposition = %q want completed", disposition)
+	}
+	settled, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read settled session after queued wake drain", err)
+	if settled.Status != api.SessionStatusIdle {
+		t.Fatalf("status after terminal host prompt = %q want idle", settled.Status)
+	}
+}
+
+func assertNoSessionIdleEvent(t *testing.T, eventCh <-chan api.EventEnvelope) {
+	t.Helper()
+	for {
+		select {
+		case envelope := <-eventCh:
+			if envelope.Topic != api.EventTopicSession {
+				continue
+			}
+			var event api.SessionEvent
+			testutil.FailErr(t, "decode session event", json.Unmarshal(envelope.Data, &event))
+			if event.Status == api.SessionStatusIdle {
+				t.Fatalf("intermediate continuation published terminal session event: %+v", event)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+
+	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop.EnterSleep(
+		ctx,
+		sess.ID,
+		time.Now().UTC().Add(time.Minute),
+		"process in flight",
+		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone},
+		[]string{"command-1"},
+		loopwake.SleepMoverHost,
+	)
+	loop.MarkWaitCalled(sess.ID)
+	mgr.beginPromptTurn(sess.ID, "")
+	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+
+	waiting, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read waiting session", err)
+	if waiting.Status != api.SessionStatusBusy {
+		t.Fatalf("status while wait armed = %q want busy", waiting.Status)
+	}
+}
+
+func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testing.T) {
+	ctx := t.Context()
+	wantErr := errors.New("workflow completion unavailable")
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr.SetWorkflowSessionView(&recordingWorkflowView{completionErr: wantErr})
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	err = mgr.finishPromptExecution(ctx, sess.ID, false, true, "")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("finish error = %v, want completion reconciliation failure", err)
+	}
+}
+
+func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	mgr.deferredTurnSettlement.put(sess.ID, api.SessionIdleDispositionCompleted)
+
+	lane := mgr.promptState.Prompt.Acquire(sess.ID)
+	lane.Lock()
+	testutil.FailErr(t, "settle occupied session lane", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	whileOccupied, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read occupied session", err)
+	if whileOccupied.Status != api.SessionStatusBusy {
+		t.Fatalf("status while session lane is occupied = %q, want busy", whileOccupied.Status)
+	}
+	lane.Unlock()
+
+	testutil.FailErr(t, "settle released session lane", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	settled, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read settled session", err)
+	if settled.Status != api.SessionStatusIdle {
+		t.Fatalf("status after session lane release = %q, want idle", settled.Status)
+	}
+}
+
+func TestSettleDeferredUserTurnDropsSettlementDuringStop(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	mgr.deferredTurnSettlement.put(sess.ID, api.SessionIdleDispositionCompleted)
+
+	flight, leader := mgr.stopState.Begin(sess.ID)
+	if !leader {
+		t.Fatal("expected to lead session stop")
+	}
+	testutil.FailErr(t, "settle stopping session", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	if _, ok := mgr.deferredTurnSettlement.take(sess.ID); ok {
+		t.Fatal("expected stop to discard deferred settlement")
+	}
+	mgr.stopState.Finish(sess.ID, flight, nil)
+}
+
+func TestTurnEndDispositionDistinguishesFailure(t *testing.T) {
+	mgr := &Manager{}
+	if got := mgr.turnEndDisposition(true); got != api.SessionIdleDispositionTurnError {
+		t.Fatalf("failed turn disposition = %q", got)
+	}
+	if got := mgr.turnEndDisposition(false); got != api.SessionIdleDispositionCompleted {
+		t.Fatalf("successful turn disposition = %q", got)
+	}
+}
+
+func TestTurnEndDispositionReportsShutdownAsInterrupted(t *testing.T) {
+	mgr := &Manager{}
+	mgr.BeginEngineShutdown()
+	if got := mgr.turnEndDisposition(true); got != api.SessionIdleDispositionInterrupted {
+		t.Fatalf("failed turn during shutdown = %q, want interrupted", got)
+	}
+	if got := mgr.turnEndDisposition(false); got != api.SessionIdleDispositionCompleted {
+		t.Fatalf("successful turn during shutdown = %q, want completed", got)
+	}
+}
+
+func TestPromptWithoutAssistantReturnsNoInvalidResponse(t *testing.T) {
+	ctx := context.Background()
+	st := store.NewMemory()
+	mgr := NewManager(st, alwaysWithholdPromptLLM{}, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr.SetDataDir(t.TempDir())
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	resp, err := mgr.Prompt(ctx, sess.ID, "continue without the credential")
+	testutil.FailErr(t, "prompt", err)
+	if resp != nil {
+		t.Fatalf("response = %+v, want nil when no assistant message exists", resp)
+	}
+	updated, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "get session", err)
+	if updated.Status != api.SessionStatusIdle {
+		t.Fatalf("session status = %q, want idle", updated.Status)
+	}
+}

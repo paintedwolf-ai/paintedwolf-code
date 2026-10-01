@@ -1,0 +1,39 @@
+# Mock LLM pattern responses.
+responses:
+  - pattern: "read.*readme"
+    tool_calls:
+      - id: call_1
+        name: read
+        args:
+          path: README.md
+    follow_up_text: "I've read README.md."
+
+  - pattern: "write.*file"
+    tool_calls:
+      - id: call_2
+        name: write
+        args:
+          path: hello.txt
+          content: hello world
+    follow_up_text: "I've written hello.txt."
+
+  - pattern: "infinite loop"
+    always_tool: true
+    tool_calls:
+      - id: call_loop
+        name: read
+        args:
+          path: loop.txt
+
+  # Upgrade-corpus seed recipe. Locked prompt text is "corpus seed";
+  # this entry must stay ahead of the catch-all so the seed yields a tool_result.
+  - pattern: "corpus seed"
+    tool_calls:
+      - id: call_corpus
+        name: read
+        args:
+          path: README.md
+    follow_up_text: "Corpus seed turn complete."
+
+  - pattern: ".*"
+    text: "I understand. How can I help you further?"

@@ -1,0 +1,109 @@
+.chat-list-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 4.5rem 5.5rem 5.5rem 26px;
+  column-gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--den-line);
+  cursor: pointer;
+}
+.chat-list-row:last-child {
+  border-bottom: none;
+}
+.chat-list-row:hover {
+  background: var(--den-selection-hover);
+}
+.chat-list-row--selected {
+  background: var(--den-selection);
+  box-shadow: inset 2px 0 0 var(--den-accent);
+}
+.chat-list-row--selected:hover {
+  background: var(--den-selection-hover);
+}
+.chat-list-row__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  text-align: left;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+.chat-list-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-list-row__pin {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--den-text-muted);
+}
+.chat-list-row__count,
+.chat-list-row__activity {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.chat-list-row__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  opacity: 0;
+  transition:
+    opacity var(--den-duration) var(--den-ease),
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+}
+.chat-list-row:is(:hover, :focus-within) .chat-list-row__menu-btn,
+.chat-list-row__menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+/* Inset separates the list from BrowseChrome's bottom rule. */
+.project-chats-wrap {
+  padding: 16px var(--den-stage-inset-x) var(--den-stage-inset-x);
+}
+.project-chats__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-chats__head-count {
+  color: var(--den-text-muted);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+.project-chats .den-list-head {
+  grid-template-columns: 28px minmax(0, 1fr) 4.5rem 5.5rem 5.5rem 26px;
+}
+.project-chats__empty {
+  margin: 0;
+  padding: 18px 14px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+/* The overflow card opens the complete projects table. */
+.home-grid-overflow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6.2857rem;
+  border: 1px dashed var(--den-border);
+  border-radius: 10px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+.home-grid-overflow:hover {
+  color: var(--den-text);
+  border-color: var(--den-line);
+  background: var(--den-selection-hover);
+}
+

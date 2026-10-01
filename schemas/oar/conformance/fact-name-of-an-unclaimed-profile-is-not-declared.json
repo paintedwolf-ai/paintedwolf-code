@@ -1,0 +1,53 @@
+{
+  "id": "fact-name-of-an-unclaimed-profile-is-not-declared",
+  "title": "A host that does not claim a profile declares none of its names, so a rule reaching for one is refused",
+  "covers": [
+    "OAR-FACT-17",
+    "OAR-FACT-19",
+    "OAR-CONF-20"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "WANTS_TOOL",
+      "effect": "block",
+      "requires": {
+        "facts": [
+          "tool"
+        ]
+      },
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 256,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "error": "tool"
+  }
+}

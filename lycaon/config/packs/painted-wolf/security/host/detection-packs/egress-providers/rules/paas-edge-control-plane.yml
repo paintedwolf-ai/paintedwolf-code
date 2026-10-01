@@ -1,0 +1,52 @@
+title: Reached a PaaS or edge hosting API
+id: fcb66f15-4101-4fe8-aa39-20f8cb62a180
+description: >-
+  Connected to a hosting, serverless, or edge platform control API. A hostname
+  cannot tell a read from a deploy or destroy, so this is a coarse signal for
+  scripts and SDKs. Matches provider APIs only — not every site behind a CDN.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - api.heroku.com
+      - api.vercel.com
+      - api.netlify.com
+      - api.render.com
+      - api.railway.app
+      - backboard.railway.app
+      - api.fly.io
+      - api.machines.dev
+      - api.cloudflare.com
+      - api.deno.com
+      - dash.cloudflare.com
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .heroku.com
+      - .herokuapp.com
+      - .vercel.com
+      - .vercel.app
+      - .netlify.com
+      - .netlify.app
+      - .render.com
+      - .railway.app
+      - .railway.internal
+      - .fly.io
+      - .fly.dev
+      - .workers.dev
+      - .pages.dev
+      - .deno.dev
+      - .deno.net
+      # Cloudflare control plane only — not *.cloudflare.com (CDN edge for arbitrary sites).
+      - .cloudflareapi.com
+  condition: selection_host or selection_suffix

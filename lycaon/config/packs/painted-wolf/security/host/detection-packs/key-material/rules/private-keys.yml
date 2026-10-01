@@ -1,0 +1,26 @@
+title: Write an SSH or OpenPGP private key
+id: 6f0b2c41-9a35-4d7e-8b16-3c5d0e7a2418
+description: >-
+  Rewrites a private key or the agent configuration that selects one. These
+  directories also carry authorized_keys, known_hosts and Match/IdentityFile
+  blocks, which redirect what every later connection authenticates as.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-12'
+modified: '2026-08-12'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.key-material
+level: high
+detection:
+  selection_target:
+    TargetFile|contains:
+      - '~/.ssh/'
+      - '~/.gnupg/'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_target and not filter_rehearsal

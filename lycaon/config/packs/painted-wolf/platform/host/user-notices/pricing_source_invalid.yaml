@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Pricing data rejected"
+message: "The pricing source returned data that did not pass validation, so prices were not updated."
+suggested_action: "Try again later, or choose another pricing source."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "did not pass validation"
+retryable: true

@@ -1,0 +1,27 @@
+description: "Query JSON, YAML, or TOML via sandboxed jq. Pass limit/offset for literal values[]. Replaces command: jq, yq."
+schema:
+  additionalProperties: false
+  properties:
+    format:
+      description: auto detects format from extension.
+      enum:
+        - auto
+        - json
+        - yaml
+        - toml
+      type: string
+    limit:
+      description: Max result values to return (1–2000).
+      type: integer
+    offset:
+      description: Skip this many result values before returning (use with next_offset).
+      type: integer
+    path:
+      description: Repo-relative path to the document.
+      type: string
+    query:
+      description: jq program (default "."). A narrower sub-path returns its values instead of a shape.
+      type: string
+  required:
+    - path
+  type: object

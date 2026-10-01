@@ -1,0 +1,7 @@
+rule_packs:
+  - name: Kingfisher secret definitions
+    version: v1.110.0
+    license: Apache-2.0
+    source_url: https://github.com/mongodb/kingfisher/tree/v1.110.0/crates/kingfisher-rules/data/rules
+    license_text_file: ../lycaon/config/runtime/scanners/secret-rules/vendor/kingfisher/LICENSE
+    notice_text_file: ../lycaon/config/runtime/scanners/secret-rules/vendor/kingfisher/NOTICE

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-app-exit"
+description = "Acknowledge this window’s durable preservation before application exit."
+commands.allow = ["pending_app_exit", "acknowledge_app_exit"]

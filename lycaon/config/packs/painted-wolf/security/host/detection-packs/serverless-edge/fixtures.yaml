@@ -1,0 +1,56 @@
+fixtures:
+- rule: stack-remove
+  positive:
+  - serverless remove --stage prod
+  - wrangler r2 bucket delete uploads
+  - sls remove --stage prod
+  - sam delete --stack-name prod
+  - wrangler d1 delete prod-db
+  - wrangler kv namespace delete --namespace-id abc123
+  - wrangler kv:namespace delete --namespace-id abc123
+  - wrangler delete my-worker
+  # Single-binding writes (secret delete, kv key delete) are filtered out here
+  # and belong to binding-secret-change; they are not negatives because that
+  # rule, in this same pack, matches them.
+  negative:
+  - serverless info --stage prod
+  - wrangler r2 bucket list
+  - sam delete --stack-name prod --help
+  - serverless remove --stage prod --dry-run
+  - sls info --stage prod
+- rule: binding-secret-change
+  positive:
+  - wrangler secret put STRIPE_KEY
+  - wrangler kv key delete --binding CACHE session:1
+  - wrangler secret delete STRIPE_KEY
+  - wrangler secret bulk secrets.json
+  - wrangler kv key put --binding CACHE session:1 value
+  - wrangler kv bulk delete --binding CACHE keys.json
+  - wrangler kv:key put --binding CACHE session:1 value
+  - wrangler kv:key delete --binding CACHE session:1
+  - wrangler kv:bulk delete --binding CACHE keys.json
+  - serverless secret put STRIPE_KEY
+  negative:
+  - wrangler secret list
+  - wrangler kv key list --binding CACHE
+  - wrangler secret put STRIPE_KEY --dry-run
+  - wrangler secret put --help
+  # kv namespace delete removes the whole namespace, not a key — that's
+  # stack-remove's job (kv namespace delete is listed there), not this rule's.
+  - wrangler kv namespace list
+- rule: publish-live
+  positive:
+  - wrangler deploy
+  - serverless deploy --stage prod
+  - sls deploy --stage prod
+  - sam deploy --stack-name prod
+  - func azure functionapp publish my-func-app
+  - wrangler rollback --message "revert bad deploy"
+  - wrangler publish
+  negative:
+  - wrangler dev
+  - serverless print --stage prod
+  - wrangler deploy --dry-run
+  - serverless deploy --stage prod --env dev
+  - sam deploy --help
+  - wrangler deploy --env dev

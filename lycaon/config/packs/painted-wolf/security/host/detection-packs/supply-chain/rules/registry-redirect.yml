@@ -1,0 +1,60 @@
+title: Point a package manager at another registry
+id: 689b60db-50ec-4a3b-8f22-1b0b355319b2
+description: Installs from or configures a package source other than the default registry.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_node:
+    Image:
+      - npm
+      - pnpm
+      - yarn
+      - bun
+    CommandLine|contains:
+      - ' --registry'
+      - ' config set registry'
+  selection_python:
+    Image:
+      - pip
+      - pip3
+      - uv
+    CommandLine|contains:
+      - ' --index-url'
+      - ' --extra-index-url'
+      - ' --find-links'
+  selection_other:
+    Image:
+      - gem
+      - go
+      - cargo
+    CommandLine|contains:
+      - ' --clear-sources'
+      - ' --source '
+      - ' GOPROXY='
+  # An ecosystem's own default index is not a redirect, and pinned CI spells it out.
+  filter_default_registry:
+    CommandLine|contains:
+      - 'registry.npmjs.org'
+      - 'pypi.org/simple'
+      - 'files.pythonhosted.org'
+      - 'rubygems.org'
+      - 'proxy.golang.org'
+      - 'crates.io'
+      - 'static.crates.io'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    (selection_node or selection_python or selection_other)
+    and not filter_default_registry and not filter_rehearsal and not filter_local

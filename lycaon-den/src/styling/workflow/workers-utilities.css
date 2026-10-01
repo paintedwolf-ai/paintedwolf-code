@@ -1,0 +1,92 @@
+/* Workflow chrome domain layout utilities. */
+
+@utility den-workers-tab {
+padding: 0.4rem 0.5rem;
+  font-size: var(--text-den-compact);
+}
+
+
+@utility den-workers-tab-agent {
+font-weight: 500;
+  flex-shrink: 0;
+}
+
+
+@utility den-workers-tab-cancel {
+flex-shrink: 0;
+  font-size: var(--text-den-micro);
+  min-height: max(24px, calc(0.7rem * 1.5 + 0.2rem));
+  padding: 0.2rem 0.45rem;
+  margin-right: 0.25rem;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-danger) 45%, var(--den-border));
+  color: var(--den-danger);
+  background: transparent;
+  cursor: pointer;
+}
+
+@utility den-workers-tab-list {
+margin: 0;
+  max-height: 15rem;
+}
+
+@utility den-workers-tab-list__content {
+list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+
+@utility den-workers-tab-row {
+display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: var(--den-radius);
+  transition: background var(--den-duration) var(--den-ease);
+  &:hover {
+    background: var(--den-tint-1);
+  }
+}
+
+
+@utility den-workers-tab-select {
+flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: 0;
+  padding: 0.3rem 0.4rem;
+  border-radius: inherit;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+
+@utility den-workers-tab-title {
+flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-text-muted);
+}
+
+@utility den-workers-tab-approval {
+flex-shrink: 0;
+  color: var(--den-accent-text);
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+}
+
+.den-workers-tab-row--approval .den-workers-tab-select {
+  background: color-mix(in srgb, var(--den-accent-signal) 8%, transparent);
+}
+
+

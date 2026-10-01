@@ -1,0 +1,119 @@
+.den-command-flow {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  overflow: hidden;
+}
+.den-command-flow__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--den-line);
+}
+.den-command-flow__title { font-weight: 600; }
+.den-command-flow__provider { color: var(--den-text-muted); font-size: var(--text-den-caption); }
+.den-command-flow__close { margin-left: auto; }
+.den-command-flow__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.den-command-flow__body {
+  flex: 1;
+}
+.den-command-flow__content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+.den-command-flow__field { display: flex; flex-direction: column; gap: 6px; }
+.den-command-flow__field small,
+.den-command-flow__step p,
+.den-command-flow__choices small { color: var(--den-text-muted); }
+.den-command-flow__field input:not([type="checkbox"]),
+.den-command-flow__field textarea {
+  width: 100%;
+  border: 1px solid var(--den-line);
+  border-radius: 6px;
+  background: var(--den-surface-inset);
+  color: var(--den-text);
+  padding: 8px 10px;
+}
+.den-command-flow__field textarea { min-height: 96px; resize: vertical; }
+.den-command-flow__step h3 { margin: 0; font-size: var(--text-den-section); }
+.den-command-flow__step p { margin: 6px 0 14px; }
+.den-command-flow__choices { display: flex; flex-direction: column; gap: 6px; }
+.den-command-flow__choices label { display: flex; gap: 10px; padding: 8px; border-radius: 6px; }
+.den-command-flow__choices label:hover { background: var(--den-tint-1); }
+.den-command-flow__choices label > span { display: flex; flex-direction: column; }
+.den-command-flow__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
+.den-command-flow__actions button,
+.den-command-flow__primary {
+  border: 1px solid var(--den-line);
+  border-radius: 6px;
+  background: var(--den-tint-1);
+  color: var(--den-text);
+  padding: 7px 12px;
+}
+.den-command-flow__primary { align-self: flex-end; background: var(--den-primary-bg); color: var(--den-primary-text); border-color: var(--den-primary-border); }
+.den-command-flow__primary:hover:not(:disabled) { background: var(--den-primary-bg-hover); border-color: var(--den-primary-border-hover); }
+.den-command-flow__primary:active:not(:disabled) { background: var(--den-primary-bg-active); }
+.den-command-flow__error { color: var(--den-danger-text); font-size: var(--text-den-body); }
+.den-command-flow__result pre {
+  flex: 1;
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--den-surface-inset);
+  color: var(--den-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The title aligns with the sidebar in the titlebar band. */
+.project-context-view__header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: calc(var(--den-tabs-top-gap) + var(--den-unified-chrome-row));
+  /* Trailing padding reserves the close control beside the shared stage inset. */
+  padding: var(--den-stage-inset-y) calc(var(--den-stage-inset-x) + 16px) 0
+    var(--den-stage-inset-x);
+}
+.project-context-view__title {
+  margin: 0;
+  font-size: var(--text-den-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--den-text);
+  min-width: 0;
+}
+
+.verify-editor__command-input {
+  font-family: var(--den-font-mono);
+}
+.verify-editor__path {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+}
+.verify-editor__detect-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--den-radius-sm);
+  background: color-mix(in srgb, var(--den-status-positive) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--den-status-positive) 28%, transparent);
+  font-size: var(--text-den-body);
+}
+.verify-editor__detect-banner code {
+  font-family: var(--den-font-mono);
+}
+

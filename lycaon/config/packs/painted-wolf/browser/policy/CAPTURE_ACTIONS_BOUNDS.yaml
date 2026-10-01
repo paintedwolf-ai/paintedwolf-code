@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CAPTURE_ACTIONS_BOUNDS
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_limit
+  - paintedwolf.count
+  - paintedwolf.max
+when: paintedwolf.rejection_code == "CAPTURE_ACTIONS_BOUNDS"
+effect: block
+copy:
+  what: '{{ tool }} received {{ paintedwolf.count }} actions; the current limit is {{ paintedwolf.max }}.'
+  cause: The actions list exceeds the per-call bound.
+  why: Bounded action scripts keep capture turns finite and reviewable.
+  fix: Shorten the actions list to at most {{ paintedwolf.max }} steps. On a held page, continue from its current
+    state using later action calls; do not replay steps already completed in earlier calls. A new capture starts
+    a new page.
+  instead: Branch on Code CAPTURE_ACTIONS_BOUNDS; shorten actions while retaining prior execution state
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: capture_page actions list exceeds the host bound
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: capture_page
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_ACTIONS_BOUNDS'

@@ -1,0 +1,13 @@
+diff --git a/obfuscation/php/php_obfuscation_declarations.yml b/obfuscation/php/php_obfuscation_declarations.yml
+index b5c915410..183685ffa 100644
+--- a/obfuscation/php/php_obfuscation_declarations.yml
++++ b/obfuscation/php/php_obfuscation_declarations.yml
+@@ -11,7 +11,7 @@ rules:
+                 - pattern-not: $X::$Y = (...)
+             - pattern: function $VAR(...) { ... }
+             - pattern: class $VAR { ... }
+-            - pattern: const $VAR = (...);
++            - pattern: const $VAR = $VALUE;
+             - patterns:
+                 - pattern: $OBJ->$VAR = (...)
+                 - pattern-not: $OBJ->{$X} = (...)

@@ -1,0 +1,84 @@
+{
+  "schema_version": "1",
+  "mode": "replay",
+  "capture_dir": "test/fixtures/eval/capture",
+  "runs": 1,
+  "model": "mock-model",
+  "provider_id": "mock",
+  "tool_calls": {
+    "find": 1,
+    "grep": 2,
+    "list_dir": 2,
+    "read": 3,
+    "task": 1
+  },
+  "tool_calls_by_agent_type": {
+    "command-verifier": {
+      "grep": 1
+    },
+    "coordinator": {
+      "find": 1,
+      "grep": 1,
+      "list_dir": 2,
+      "read": 3,
+      "task": 1
+    }
+  },
+  "tool_calls_by_surface": {
+    "implement_investigate": {
+      "find": 1,
+      "grep": 1,
+      "list_dir": 2,
+      "read": 3,
+      "task": 1
+    },
+    "implement_worker": {
+      "grep": 1
+    }
+  },
+  "read": {
+    "total_reads": 3,
+    "whole_file_reads": 2,
+    "scoped_reads": 1,
+    "whole_file_ratio": 0.6666666666666666,
+    "re_read_paths": 1,
+    "re_read_ratio": 0.5
+  },
+  "search": {
+    "grep_calls": 2,
+    "grep_match_cardinality": [
+      1,
+      2
+    ],
+    "find_calls": 1,
+    "glob_calls": 0,
+    "find_result_cardinality": [
+      4
+    ]
+  },
+  "survey": {
+    "summarize_calls": 0,
+    "summarize_batches": 0,
+    "max_summaries_in_batch": 0,
+    "mixed_survey_batches": 0,
+    "consecutive_summarize_calls": 0,
+    "repeated_summarize_scopes": 0,
+    "targeted_inspections_after_summary": 0
+  },
+  "token_spend": {
+    "prompt_tokens": 4700,
+    "completion_tokens": 98
+  },
+  "cache": {
+    "cache_read_input_tokens": 3580,
+    "cache_creation_input_tokens": 900,
+    "hit_rate": 0.7617021276595745
+  },
+  "task_success": {
+    "agents_total": 2,
+    "workers_complete": 1,
+    "workers_failed": 0,
+    "workers_partial": 0,
+    "coordinator_seen": true
+  }
+}

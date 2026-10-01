@@ -1,0 +1,83 @@
+.den-chat-stream-wrap::before,
+.den-chat-stream-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: var(--chat-fade-right-inset);
+  margin-right: calc(-1 * var(--chat-scrollbar-shift));
+  height: var(--chat-stream-edge-solid);
+  background: var(--den-background);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.den-chat-stream-wrap::before {
+  top: 0;
+}
+
+.den-chat-stream-wrap::after {
+  bottom: 0;
+}
+
+.den-chat-stream-wrap--scrolling .den-chat-stream-edge {
+  transition: none;
+}
+
+/* Hide edge fades until the initial layout settles. */
+.den-chat-stream-wrap[data-fade-quiet] .den-chat-stream-edge {
+  opacity: 0;
+  transition: none;
+}
+
+.den-chat-stream-edge {
+  position: absolute;
+  left: 0;
+  right: var(--chat-fade-right-inset);
+  margin-right: calc(-1 * var(--chat-scrollbar-shift));
+  height: var(--chat-stream-edge-fade);
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 200ms var(--den-ease);
+}
+
+.den-chat-stream-edge--top {
+  top: 0;
+  background: var(--chat-stream-fade-down);
+}
+
+.den-chat-stream-edge--bottom {
+  bottom: 0;
+  background: var(--chat-stream-fade-up);
+}
+
+.den-chat-stream-wrap[data-fade-top] .den-chat-stream-edge--top {
+  opacity: 1;
+}
+
+.den-chat-stream-wrap[data-fade-bottom] .den-chat-stream-edge--bottom {
+  opacity: 1;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.den-chat-stream
+  .transcript-viewport-row
+  :is(
+    [data-tool-call-id],
+    .den-activity-span,
+    .den-diff-group
+  ).den-walk-step-mark {
+  border-radius: var(--den-radius);
+  box-shadow: 0 0 0 2px var(--den-accent-signal);
+  background: color-mix(in srgb, var(--den-accent-signal) 14%, transparent);
+}

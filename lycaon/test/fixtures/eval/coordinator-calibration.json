@@ -1,0 +1,38 @@
+{
+  "id": "coordinator-application-calibration",
+  "cases": [
+    {
+      "id": "delegated-delivery",
+      "project": "coordinator-project",
+      "prompt": "Finish this dispatch-planner application according to contracts.md. Use separate worker agents to review validation and scheduling, reconcile their findings, implement the complete feature, preserve the existing tests, add useful regression coverage, and run the CLI and tests. Complete the work and give me the result, including anything still unresolved. Do not add dependencies.",
+      "outcomes": [
+        "CLI and scheduling satisfy every requirement in contracts.md.",
+        "Existing tests are preserved and passing, with meaningful added regression coverage.",
+        "Coordinator obtains both worker reviews, verifies the integrated result, and delivers an accurate final handoff."
+      ]
+    },
+    {
+      "id": "feature-delivery",
+      "project": "agent-project",
+      "prompt": "Make this service-report CLI useful for triage. Preserve its positional input-file invocation and default text layout. Rank highest score first with alphabetical name ties. Add --min-score (integer 0 through 100, default 0), --limit (positive integer, default 8), and --json (a JSON array of selected records). Filter before applying the limit. Bad options or input records must produce a helpful stderr message and nonzero exit without a traceback. Keep it dependency-free, preserve existing tests, add regression coverage, and verify the CLI and options. Complete the work and deliver a final handoff. The --help option must print usage and exit successfully.",
+      "outcomes": [
+        "All requested CLI behaviors work, including input validation and --help.",
+        "Existing tests are preserved and passing, and the coordinator delivers a final handoff."
+      ]
+    },
+    {
+      "id": "changed-requirements",
+      "project": "agent-project",
+      "prompt": "Make this service-report CLI useful for triage. Preserve its positional input-file invocation and default text layout. Rank highest score first with alphabetical name ties. Add --min-score (integer 0 through 100, default 0), --limit (positive integer, default 8), and --json (a JSON array of selected records). Filter before applying the limit. Bad options or input records must produce a helpful stderr message and nonzero exit without a traceback. Keep it dependency-free, preserve existing tests, add regression coverage, and verify the CLI and options. Complete the work and deliver a final handoff. The --help option must print usage and exit successfully.",
+      "follow_ups": [
+        {
+          "prompt": "Add --name-prefix, a case-sensitive string prefix filter (default empty string, which matches every name). Apply both filters before limiting, and preserve everything from the previous request, including JSON output, validation, ranking, and the text layout. Add tests, verify the integrated result, and deliver the finished update."
+        }
+      ],
+      "outcomes": [
+        "The follow-up prefix filter works without regressing earlier requirements.",
+        "Existing tests are preserved and passing, and the final handoff completes the follow-up."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+fixtures:
+- rule: security-control-disable
+  positive:
+  - powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true"
+  - netsh advfirewall set allprofiles state off
+  - 'manage-bde -off C:'
+  - 'manage-bde.exe -off D:'
+  - NETSH ADVFIREWALL SET ALLPROFILES STATE OFF
+  - powershell -Command "Uninstall-WindowsFeature Windows-Defender"
+  - powershell -Command "set-mppreference -disablerealtimemonitoring $true"
+  negative:
+  - powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $false"
+  - netsh advfirewall show allprofiles state
+  - 'manage-bde -status C:'
+  - powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true -WhatIf"
+  - netsh advfirewall set allprofiles state off /?
+- rule: disk-wipe
+  positive:
+  - powershell -Command "Format-Volume -DriveLetter D -FileSystem NTFS"
+  - diskpart /s clean.txt
+  - 'format D: /fs:ntfs /q'
+  - 'FORMAT D: /FS:NTFS /Q'
+  - powershell.exe -Command "Clear-Disk -Number 1 -RemoveData"
+  - pwsh -Command "Remove-Partition -DiskNumber 1 -PartitionNumber 2"
+  - sudo diskpart /s clean.txt
+  negative:
+  - powershell -Command "Get-Volume -DriveLetter D"
+  - powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
+  - diskpart /?
+  - 'format /?'
+  - powershell -Command "Format-Volume -DriveLetter D -FileSystem NTFS -WhatIf"
+- rule: audit-log-clear
+  positive:
+  - wevtutil cl Security
+  - powershell -Command "Clear-EventLog -LogName Application"
+  - wevtutil.exe cl System
+  - pwsh -Command "Clear-EventLog -LogName System"
+  - powershell -Command "clear-eventlog -logname Application"
+  negative:
+  - wevtutil qe Security /c:10
+  - powershell -Command "Get-EventLog -LogName Application"
+  - wevtutil cl Security /?
+  - powershell -Command "Clear-EventLog -LogName Application -WhatIf"
+- rule: service-registry-remove
+  positive:
+  - sc.exe delete UpdateAgent
+  - reg delete HKLM\SOFTWARE\Acme /f
+  - powershell -Command "Remove-Service -Name UpdateAgent"
+  - reg.exe delete HKCU\Software\Acme /f
+  - powershell -Command "Remove-Item -Path HKLM:\SOFTWARE\Acme -Recurse"
+  - powershell -Command "Remove-Item Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Acme"
+  - powershell -Command "remove-item -path hklm:\SOFTWARE\Acme -recurse"
+  negative:
+  - sc.exe query UpdateAgent
+  - reg query HKLM\SOFTWARE\Acme
+  - powershell -Command "Get-Service -Name UpdateAgent"
+  - sc.exe delete UpdateAgent /?
+  - reg delete HKLM\SOFTWARE\Acme /f -WhatIf

@@ -1,0 +1,26 @@
+name: Set up Bialy heads
+description: Download the pinned public heads and verify them against the host release manifest
+runs:
+  using: composite
+  steps:
+    - name: Download and verify Bialy heads
+      shell: bash
+      env:
+        BIALY_REVISION: 39012d0734fd72c1ff1f0abe4fae2e7bb647569b
+      run: |
+        set -euo pipefail
+        SOURCE_DIR="$(mktemp -d "${RUNNER_TEMP}/bialy-download.XXXXXX")"
+        trap 'rm -rf -- "${SOURCE_DIR}"' EXIT
+        HEADS_DIR="${RUNNER_TEMP}/bialy-heads"
+        for HEAD in turn-load unit-rank code-rank; do
+          curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --connect-timeout 30 --max-time 600 \
+            "https://huggingface.co/paintedwolfcode/bialy/resolve/${BIALY_REVISION}/${HEAD}.safetensors" \
+            --output "${SOURCE_DIR}/${HEAD}.safetensors"
+        done
+        python3 scripts/stage-decide-heads.py \
+          --manifest lycaon/config/packs/painted-wolf/platform/host/decision-release.json \
+          --source "${SOURCE_DIR}" \
+          --destination "${HEADS_DIR}"
+        printf 'BIALY_HEADS_DIR=%s\n' "${HEADS_DIR}" >> "${GITHUB_ENV}"

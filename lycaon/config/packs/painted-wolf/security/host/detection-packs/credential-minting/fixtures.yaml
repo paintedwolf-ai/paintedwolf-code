@@ -1,0 +1,78 @@
+fixtures:
+- rule: aws-sts-token
+  positive:
+  - aws sts get-session-token --duration-seconds 3600
+  - aws sts assume-role --role-arn arn:aws:iam::1:role/r --role-session-name s
+  - aws sts assume-role-with-web-identity --role-arn arn:aws:iam::1:role/r --role-session-name s --web-identity-token t
+  negative:
+  - aws sts get-caller-identity
+  - aws s3 ls
+  - aws sts get-session-token --help
+- rule: aws-iam-access-key
+  positive:
+  - aws iam create-access-key --user-name deploy
+  negative:
+  - aws iam list-access-keys --user-name deploy
+  - aws iam delete-access-key --access-key-id AKIA
+  - aws iam create-access-key --help
+- rule: gcloud-print-token
+  positive:
+  - gcloud auth print-access-token
+  - gcloud auth print-identity-token --audiences https://example.test
+  negative:
+  - gcloud auth login
+  - gcloud auth list
+  - gcloud auth print-access-token --help
+- rule: gcloud-sa-key
+  positive:
+  - gcloud iam service-accounts keys create key.json --iam-account sa@p.iam.gserviceaccount.com
+  negative:
+  - gcloud iam service-accounts keys list --iam-account sa@p.iam.gserviceaccount.com
+  - gcloud iam service-accounts list
+  - gcloud iam service-accounts keys create --help
+- rule: az-access-token
+  positive:
+  - az account get-access-token --resource https://management.azure.com/
+  - az ad sp create-for-rbac --name deploy
+  negative:
+  - az account show
+  - az ad sp list
+  - az account get-access-token --help
+- rule: kubectl-create-token
+  positive:
+  - kubectl create token deploy-sa
+  - kubectl create token deploy-sa --duration 1h
+  negative:
+  - kubectl create secret generic s
+  - kubectl get pods
+  - kubectl create token deploy-sa --help
+- rule: gh-auth-token
+  positive:
+  - gh auth token
+  - gh auth token --hostname github.example.test
+  negative:
+  - gh auth status
+  - gh auth login
+  - gh auth token --help
+- rule: vault-token-create
+  positive:
+  - vault token create -policy=deploy
+  negative:
+  - vault token lookup
+  - vault token revoke abc
+  - vault token create --help
+- rule: npm-token-create
+  positive:
+  - npm token create --read-only
+  negative:
+  - npm token list
+  - npm token revoke abc
+  - npm install
+  - npm token create --help
+- rule: gitea-access-token
+  positive:
+  - gitea admin user generate-access-token --username releasebot --token-name release-cli --scopes all
+  negative:
+  - gitea admin user create --username releasebot
+  - gitea admin user list
+  - gitea admin user generate-access-token --help

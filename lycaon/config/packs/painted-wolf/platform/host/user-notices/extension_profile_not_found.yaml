@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Profile not found"
+message: "That extension pack has no profile with this name."
+suggested_action: "Refresh the Extensions list and choose one of the pack's profiles."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "no profile"

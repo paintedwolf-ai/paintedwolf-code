@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Pricing source is off"
+message: "Cost tracking or this pricing source is turned off, so it was not refreshed."
+suggested_action: "Turn it on in Settings, then refresh."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "turned off"

@@ -1,0 +1,7 @@
+# Local worker execution plane.
+poller:
+  max_concurrency: 32
+  maintenance_interval_ms: 5000
+executor:
+  instance_id: auto
+  default_execution_target: local

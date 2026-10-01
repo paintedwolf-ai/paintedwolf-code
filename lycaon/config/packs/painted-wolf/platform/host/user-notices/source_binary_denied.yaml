@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Can't show that file as text
+message: >-
+  That cited file is binary (not UTF-8 text), so the in-app viewer can't
+  display it.
+suggested_action: Use Open in editor or Reveal in file manager to open it outside Den.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - binary
+      - in-app viewer

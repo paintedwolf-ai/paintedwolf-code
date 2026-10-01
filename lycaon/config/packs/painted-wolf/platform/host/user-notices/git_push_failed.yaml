@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not push commits
+message: >-
+  Git could not push to the upstream branch. Check remote access and whether the remote branch has new commits.
+suggested_action: >-
+  Review the upstream and local changes before retrying. Do not force push to resolve this error.

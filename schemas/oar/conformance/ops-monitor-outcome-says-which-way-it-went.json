@@ -1,0 +1,72 @@
+{
+  "id": "ops-monitor-outcome-says-which-way-it-went",
+  "title": "Monitor mode records whether the rule would have fired, which is the only question it exists to answer",
+  "covers": [
+    "OAR-OPS-9",
+    "OAR-EVAL-10"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "A_WOULD_FIRE",
+      "effect": "block",
+      "enforcement": "monitor"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "B_WOULD_NOT",
+      "effect": "block",
+      "enforcement": "monitor",
+      "when": "false"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "invariant",
+      "anchor": "tool.pre_invoke",
+      "id": "C_WOULD_RAISE",
+      "effect": "block",
+      "enforcement": "monitor",
+      "when": "1 / 0 == 0"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "oar.test/A_WOULD_FIRE:monitored_fired",
+      "oar.test/B_WOULD_NOT:monitored_passed",
+      "oar.test/C_WOULD_RAISE:monitored_errored"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+id: research_satisfied
+kind: research-progress
+purpose: |
+  Repo/web research facts must be gathered before expand. Leaving research stamps this gate.
+missing_signals:
+  - id: research_incomplete
+    when: "true"
+    detail: "Research is incomplete — research_satisfied is not stamped yet."
+    fix: "Dispatch `task(repo-researcher|path-explorer)` with focused scope from intake."
+satisfy_coordinator:
+  - "Dispatch `task(repo-researcher|path-explorer, …)` with focused scope from intake (or declare research_depth: none in the blueprint frontmatter when no research is needed)."
+  - "When facts are enough, follow Phase exit — the host stamps research_satisfied on leave."
+satisfy:
+  - "Gather research facts via repo-researcher or path-explorer, then leave per Phase exit."

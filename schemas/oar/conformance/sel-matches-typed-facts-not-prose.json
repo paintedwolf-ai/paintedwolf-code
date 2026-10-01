@@ -1,0 +1,73 @@
+{
+  "id": "sel-matches-typed-facts-not-prose",
+  "title": "A clause matches a fact value exactly; it is never a substring or keyword search",
+  "covers": [
+    "OAR-SEL-8"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "EXACT",
+      "effect": "block",
+      "requires": {
+        "profiles": [
+          "tool"
+        ]
+      },
+      "selector": {
+        "tool": [
+          "read"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read_file"
+    }
+  },
+  "expected": {
+    "decision": "none",
+    "applied": []
+  }
+}

@@ -1,0 +1,8 @@
+description: >-
+  Leave the current coordinator-controlled phase when gates pass. Returns phase_gate_unmet
+  with failed_leaves when blocked; already_advanced if host auto-advanced first.
+  Unavailable on host-auto phases.
+schema:
+  type: object
+  properties: {}
+  additionalProperties: false

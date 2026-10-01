@@ -1,0 +1,180 @@
+package secretcap
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/db"
+)
+
+// AgentUseDeadline replaces or clears the agent-use deadline.
+type AgentUseDeadline struct {
+	At string
+}
+
+// UpdateRequest administers one capability. A nil field is left as it stands.
+type UpdateRequest struct {
+	ProjectID        string
+	Reference        string
+	Name             *string
+	Purpose          *string
+	AgentUseDeadline *AgentUseDeadline
+	// Scope only widens from chat to project.
+	Scope *string
+}
+
+// Update applies metadata changes to a non-revoked capability.
+func (s *Service) Update(ctx context.Context, req UpdateRequest) (Metadata, error) {
+	defer s.invalidateScreening(ctx, req.ProjectID)
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	row, err := s.projectRow(ctx, req.ProjectID, req.Reference)
+	if err != nil {
+		return Metadata{}, err
+	}
+	if row.RevokedAt.Valid {
+		return Metadata{}, ErrRevoked
+	}
+	target, err := s.merge(row, req)
+	if err != nil {
+		return Metadata{}, err
+	}
+	changed, err := s.queries.UpdateManagedSecret(ctx, target)
+	if err != nil {
+		if row.Origin == OriginCookieJar && db.IsUniqueConstraint(err) {
+			return Metadata{}, fmt.Errorf("%w: a cookie jar with this name already exists in the target scope", ErrInvalidUpdate)
+		}
+		return Metadata{}, err
+	}
+	if changed == 0 {
+		// Revocation is the only guarded concurrent change.
+		return Metadata{}, ErrRevoked
+	}
+	updated, err := s.queries.GetManagedSecret(ctx, row.ID)
+	if err != nil {
+		return Metadata{}, err
+	}
+	return s.metadataRow(ctx, updated)
+}
+
+// merge produces one complete update from a partial request.
+func (s *Service) merge(row db.ManagedSecrets, req UpdateRequest) (db.UpdateManagedSecretParams, error) {
+	target := db.UpdateManagedSecretParams{
+		Name: row.Name, Purpose: row.Purpose, Scope: row.Scope,
+		ChatSessionID: row.ChatSessionID, AgentUseEndsAt: row.AgentUseEndsAt,
+		ID: row.ID, ProjectID: row.ProjectID,
+	}
+	if req.Name != nil {
+		target.Name = strings.TrimSpace(*req.Name)
+	}
+	if req.Purpose != nil {
+		target.Purpose = strings.TrimSpace(*req.Purpose)
+	}
+	if err := validateLabels(target.Name, target.Purpose, ErrInvalidUpdate); err != nil {
+		return db.UpdateManagedSecretParams{}, err
+	}
+	if row.Origin == OriginCookieJar && !validJarName(target.Name) {
+		return db.UpdateManagedSecretParams{}, ErrInvalidCookieJar
+	}
+	if req.AgentUseDeadline != nil {
+		stamp, err := parseAgentUseDeadline(req.AgentUseDeadline.At, s.now())
+		if err != nil {
+			return db.UpdateManagedSecretParams{}, fmt.Errorf("%w: %w", ErrInvalidUpdate, err)
+		}
+		target.AgentUseEndsAt = nullable(stamp)
+	}
+	if err := applyScope(&target, row, req.Scope); err != nil {
+		return db.UpdateManagedSecretParams{}, err
+	}
+	return target, nil
+}
+
+// applyScope requires a purpose when widening scope.
+func applyScope(target *db.UpdateManagedSecretParams, row db.ManagedSecrets, scope *string) error {
+	if scope == nil {
+		return nil
+	}
+	next := strings.TrimSpace(*scope)
+	if next == row.Scope {
+		return nil
+	}
+	if next == ScopeChat {
+		return fmt.Errorf("%w: a project capability cannot be narrowed to one chat", ErrInvalidUpdate)
+	}
+	if next != ScopeProject {
+		return fmt.Errorf("%w: unknown scope %q", ErrInvalidUpdate, next)
+	}
+	if target.Purpose == "" {
+		return fmt.Errorf("%w: purpose is required for project scope", ErrInvalidUpdate)
+	}
+	target.Scope = ScopeProject
+	target.ChatSessionID = nullable("")
+	return nil
+}
+
+// agentAuthoredOrigin uses immutable provenance to determine revocation authority.
+func agentAuthoredOrigin(origin string) bool {
+	return origin == OriginGenerated || origin == OriginDetected || origin == OriginCookieJar || origin == OriginTokenJar
+}
+
+// RevokeByAgent revokes visible capabilities with agent-authored origins.
+func (s *Service) RevokeByAgent(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
+	row, err := s.rowForReference(ctx, reference)
+	if err != nil {
+		return Metadata{}, err
+	}
+	if err := visible(row, projectID, chatSessionID); err != nil {
+		return Metadata{}, err
+	}
+	if !agentAuthoredOrigin(row.Origin) {
+		return Metadata{}, fmt.Errorf("%w: %s", ErrHumanAuthored, row.Origin)
+	}
+	return s.revokeRow(ctx, row, revoker{by: revokedByAgent})
+}
+
+// RevokeProject disables any capability in the project on a person's request.
+func (s *Service) RevokeProject(ctx context.Context, projectID, reference, personID string) (Metadata, error) {
+	personID = strings.TrimSpace(personID)
+	if personID == "" {
+		return Metadata{}, fmt.Errorf("revoke managed secret: the revoking person is required")
+	}
+	row, err := s.projectRow(ctx, projectID, reference)
+	if err != nil {
+		return Metadata{}, err
+	}
+	return s.revokeRow(ctx, row, revoker{by: revokedByPerson, personID: personID})
+}
+
+const (
+	revokedByPerson = "person"
+	revokedByAgent  = "agent"
+)
+
+// revoker is who ended a capability: a person, or the agent that authored it.
+type revoker struct {
+	by       string
+	personID string
+}
+
+// revokeRow serializes terminal state with other mutations.
+func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revoker) (Metadata, error) {
+	defer s.invalidateScreening(ctx, row.ProjectID)
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	when := db.FormatTime(s.now())
+	if !row.RevokedAt.Valid {
+		if _, err := s.queries.RevokeManagedSecret(ctx, db.RevokeManagedSecretParams{
+			RevokedAt: nullable(when), RevokedBy: nullable(by.by), RevokedByPersonID: nullable(by.personID),
+			ID: row.ID, ProjectID: row.ProjectID,
+		}); err != nil {
+			return Metadata{}, err
+		}
+		row.RevokedAt = nullable(when)
+		row.RevokedBy, row.RevokedByPersonID = nullable(by.by), nullable(by.personID)
+		s.retireDurable(func(_ string, owner secretIdentity) bool { return owner.id == row.ID })
+	}
+	return s.metadataRow(ctx, row)
+}

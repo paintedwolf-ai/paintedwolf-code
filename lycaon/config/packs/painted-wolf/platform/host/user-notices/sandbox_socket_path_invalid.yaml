@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - field
+title: "Socket path is not valid"
+message: "The socket path must be an absolute path."
+suggested_action: "Enter the full path to the socket."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "absolute path"

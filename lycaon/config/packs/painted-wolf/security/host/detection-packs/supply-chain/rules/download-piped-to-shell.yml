@@ -1,0 +1,32 @@
+title: Run a downloaded script without reading it
+id: f9709898-eb96-4952-968b-1cd4636b7b45
+description: Pipes a download straight into a shell, so the code runs before anyone sees it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_fetch:
+    Image:
+      - curl
+      - wget
+      - httpie
+      - http
+  # The fetch and the interpreter are separate processes; PipelineCommandLine
+  # carries the whole connected pipeline.
+  selection_piped_to_interpreter:
+    PipelineCommandLine|re: '(?i)\|\s*(sudo\s+(-\S+\s+)*)?(ba|z|k|da)?sh\b|\|\s*(sudo\s+(-\S+\s+)*)?(python3?|perl|ruby|node)\b'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_fetch and selection_piped_to_interpreter and not filter_rehearsal and not filter_local

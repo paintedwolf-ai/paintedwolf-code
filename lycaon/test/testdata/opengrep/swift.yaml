@@ -1,0 +1,949 @@
+language: swift
+comment:
+- //
+limits: >-
+  Intraprocedural Foundation and Vapor/SQLKit models with reviewed import facts, typed parameters, registered
+  Application callbacks, and if/guard optional bindings. Stored SQL builders, custom SQL expressions, explicit
+  closure captures, default or multiple-argument subscripts, custom request wrappers, and cross-file helper
+  flows require additional modeling. Framework package versions are not resolved dynamically.
+cases:
+- name: insecure-unarchiving-context-only
+  file: sample.swift
+  source: |
+    import Foundation
+    func load(data: Data) { NSKeyedUnarchiver.unarchiveObject(with: data) }
+  want: []
+  covers: []
+- name: insecure-unarchiving-safe
+  file: sample.swift
+  source: |
+    import Foundation
+    func load(data: Data) { NSKeyedUnarchiver.unarchivedObject(ofClass: NSString.self, from: data) }
+  want: []
+  covers: []
+- name: secure-coding-disabled-untyped-context-only
+  file: sample.swift
+  source: |
+    func load() { decoder.requiresSecureCoding = false }
+  want: []
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-coding-disabled-safe
+  file: sample.swift
+  source: |
+    func load() { decoder.requiresSecureCoding = true }
+  want: []
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: javascript-interpolation-context-only
+  file: sample.swift
+  source: |
+    func show(user: String) { webView.evaluateJavaScript("show(\(user))", completionHandler: nil) }
+  want: []
+  covers: []
+- name: javascript-interpolation-safe
+  file: sample.swift
+  source: |
+    func show(user: String) { webView.callAsyncJavaScript("show(value)", arguments: ["value":user], in:nil, in:.page) }
+  want: []
+  covers: []
+- name: weak-keychain-accessibility-context-only
+  file: sample.swift
+  source: |
+    let policy = kSecAttrAccessibleAlways
+  want: []
+  covers: []
+- name: weak-keychain-accessibility-safe
+  file: sample.swift
+  source: |
+    let policy = kSecAttrAccessibleWhenUnlocked
+  want: []
+  covers: []
+- name: precision-numeric-javascript
+  file: sample.swift
+  source: |
+    func f(count: Int) { view.evaluateJavaScript("show(\(count))", completionHandler: nil) }
+  want: []
+  covers: []
+- name: vapor-command-injection-flow
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-injection-constant
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", "date"])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-injection-safe-api
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/usr/bin/printf", arguments: ["%s", command])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-injection-unrelated-receiver
+  file: app.swift
+  source: |
+    struct Request { let query: Query }
+    struct Query { func get(_ type: String.Type, at key: String) throws -> String { "date" } }
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-local-request-with-import
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    struct Request { let query: LocalQuery }
+    struct LocalQuery { func get(_ type: String.Type, at key: String) throws -> String { "date" } }
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-unrelated-type-with-import
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    struct LocalRequest { let query: LocalQuery }
+    struct LocalQuery { func get(_ type: String.Type, at key: String) throws -> String { "date" } }
+    func handler(req: LocalRequest) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-request-alias
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let incoming = req
+     let command = try incoming.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-unrelated-request-field
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = req.version.description
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: secure-constructed
+  file: app.swift
+  source: |
+    import Foundation
+    func load(data: Data) throws {
+    let decoder = try NSKeyedUnarchiver(forReadingFrom: data)
+     decoder.requiresSecureCoding = false
+    }
+  want:
+  - lycaon.swift.secure-coding-disabled
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-alias
+  file: app.swift
+  source: |
+    import Foundation
+    func load(data: Data) throws {
+    let decoder = try NSKeyedUnarchiver(forReadingFrom: data)
+     let alias = decoder
+     alias.requiresSecureCoding = false
+    }
+  want:
+  - lycaon.swift.secure-coding-disabled
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-enabled
+  file: app.swift
+  source: |
+    import Foundation
+    func load(data: Data) throws {
+    let decoder = try NSKeyedUnarchiver(forReadingFrom: data)
+     decoder.requiresSecureCoding = true
+    }
+  want: []
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-unrelated
+  file: app.swift
+  source: |
+    import Foundation
+    func load(data: Data) throws {
+    let decoder = LocalDecoder()
+     decoder.requiresSecureCoding = false
+    }
+  want: []
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-typed
+  file: app.swift
+  source: |
+    import Foundation
+    func load(decoder: NSKeyedUnarchiver) { decoder.requiresSecureCoding = false }
+  want:
+  - lycaon.swift.secure-coding-disabled
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: secure-typed-qualified
+  file: app.swift
+  source: |
+    import Foundation
+    func load(decoder: Foundation.NSKeyedUnarchiver) { decoder.requiresSecureCoding = false }
+  want:
+  - lycaon.swift.secure-coding-disabled
+  covers:
+  - lycaon.swift.secure-coding-disabled
+- name: vapor-command-modern
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try Process.run(URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", input])
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-modern-arguments
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try Process.run(URL(fileURLWithPath: "/usr/bin/printf"), arguments: ["%s", input])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-shell-arguments
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", "printf %s \"$1\"", "sh", input])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-async
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-closure
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let action = { Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input]) }
+     _ = action()
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-command-overwrite
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     var command = input
+     command = "date"
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-path-stream
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = req.fileio.streamFile(at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-async-stream
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await req.fileio.asyncStreamFile(at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-collect
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await req.fileio.collectFile(at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-read
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await req.fileio.readFile(at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-write
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await req.fileio.writeFile(ByteBuffer(string: "hello"), at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-prefix-is-not-boundary
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = req.fileio.streamFile(at: "/srv/public/" + input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-constant
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = req.fileio.streamFile(at: "/srv/public/index.html")
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-alias
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let incoming = req
+     _ = incoming.fileio.streamFile(at: input)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-unrelated
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = local.fileio.streamFile(at: input)
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-content-not-path
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await req.fileio.writeFile(ByteBuffer(string: input), at: "/tmp/output")
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-unused
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let path = input
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-sql-raw-constructor
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw(SQLQueryString(input)).all()
+    }
+  want:
+  - lycaon.swift.vapor-sql-injection
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-raw-string-literal-init
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw(SQLQueryString(stringLiteral: input)).all()
+    }
+  want:
+  - lycaon.swift.vapor-sql-injection
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-unsafe-interpolation
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM users WHERE name = \(unsafeRaw: input)").all()
+    }
+  want:
+  - lycaon.swift.vapor-sql-injection
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-legacy-raw-interpolation
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM users WHERE name = \(raw: input)").all()
+    }
+  want:
+  - lycaon.swift.vapor-sql-injection
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-bound
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM users WHERE name = \(bind: input)").all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-quoted-literal
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM users WHERE name = \(literal: input)").all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-quoted-identifier
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT \(ident: input) FROM users").all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-raw-constant-bound-input
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM \(unsafeRaw: "users") WHERE name = \(bind: input)").all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-unused-builder
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let builder = db.raw(SQLQueryString(input))
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-constant
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await db.raw("SELECT * FROM users").all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-sql-unrelated-database
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     _ = try await local.raw(SQLQueryString(input)).all()
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-query-container-alias
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let query = req.query
+     let input = try query.get(String.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-content-container-alias
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let content = req.content
+     let input = try content.get(String.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-unrelated-container
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try local.get(String.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-registered-inline
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func routes(_ app: Application) {
+    app.get("run") { req in
+     let input = try req.query.get(String.self, at: "cmd")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     return "ok"
+    }
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-registered-safe
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func routes(_ app: Application) {
+    app.get("run") { req in
+     let input = try req.query.get(String.self, at: "cmd")
+     _ = Process.launchedProcess(launchPath: "/usr/bin/printf", arguments: ["%s", input])
+     return "ok"
+    }
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-registered-unrelated
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func routes(_ app: Application) {
+    local.get("run") { req in
+     let input = try req.query.get(String.self, at: "cmd")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     return "ok"
+    }
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-unregistered-contextual-closure
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func routes(_ app: Application) {
+    let handler: (Request) throws -> String = { req in
+     let input = try req.query.get(String.self, at: "cmd")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     return "ok"
+    }
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-registered-request-alias
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func routes(_ app: Application) {
+    app.get("run") { req in
+     let incoming = req
+     let input = try incoming.query.get(String.self, at: "cmd")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     return "ok"
+    }
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-path-allowlisted-path
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let allowed = ["help": "/srv/public/help.html", "about": "/srv/public/about.html"]
+     let path = allowed[input] ?? "/srv/public/index.html"
+     _ = req.fileio.streamFile(at: path)
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-path-tainted-dictionary-value
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(String.self, at: "input")
+     let paths = ["selected": input]
+     _ = req.fileio.streamFile(at: paths["selected"]!)
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-command-numeric-query
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = try req.query.get(Int.self, at: "input")
+     _ = Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", "printf \(input)"])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-foundation-reexport
+  file: app.swift
+  source: |
+    import Vapor
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-foundation-networking-import
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    import FoundationNetworking
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-unknown-import-ambiguous
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    import OtherFramework
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want: []
+  covers: []
+- name: vapor-selective-imports
+  file: app.swift
+  source: |
+    import class Vapor.Request
+    import class Foundation.Process
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-local-process-shadow
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+    struct Process { static func launchedProcess(launchPath: String, arguments: [String]) {} }
+  want: []
+  covers: []
+- name: vapor-local-module-shadow
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Vapor.Request) throws -> String {
+     let command = try req.query.get(String.self, at: "cmd")
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", command])
+     return "ok"
+    }
+    struct Vapor { struct Request { var query: LocalQuery } }
+    struct LocalQuery { func get(_ type: String.Type, at: String) -> String { "safe" } }
+  want: []
+  covers: []
+- name: vapor-if-let-command
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     if let input = try? req.query.get(String.self, at: "input") {
+      Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     }
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-guard-let-command
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     guard let input = try? req.query.get(String.self, at: "input") else { return }
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want:
+  - lycaon.swift.vapor-command-injection
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-if-let-command-outer-safe
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let input = "date"
+     if let input = try? req.query.get(String.self, at: "input") {
+      _ = input
+     } else {
+      Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+     }
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-guard-let-command-overwritten
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     guard var input = try? req.query.get(String.self, at: "input") else { return }
+     input = "date"
+     Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", input])
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-command-injection
+- name: vapor-if-let-path
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     if let input = try? req.query.get(String.self, at: "input") {
+      _ = req.fileio.streamFile(at: input)
+     }
+    }
+  want:
+  - lycaon.swift.vapor-path-traversal
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-guard-let-path-nil
+  file: app.swift
+  source: |
+    import Vapor
+    import Foundation
+    func handler(req: Request) async throws {
+     let absent: String? = nil
+     guard let input = absent else { return }
+     let path = try req.query.get(String.self, at: "input")
+     _ = req.fileio.streamFile(at: path)
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-path-traversal
+- name: vapor-guard-let-sql
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     guard let input = try? req.content.get(String.self, at: "input") else { return }
+     _ = try await db.raw("SELECT * FROM items WHERE name = \(unsafeRaw: input)").all()
+    }
+  want:
+  - lycaon.swift.vapor-sql-injection
+  covers:
+  - lycaon.swift.vapor-sql-injection
+- name: vapor-if-let-sql-bind
+  file: app.swift
+  source: |
+    import Vapor
+    import SQLKit
+    func handler(req: Request, db: any SQLDatabase) async throws {
+     if let input = try? req.content.get(String.self, at: "input") {
+      _ = try await db.raw("SELECT * FROM items WHERE name = \(bind: input)").all()
+     }
+    }
+  want: []
+  covers:
+  - lycaon.swift.vapor-sql-injection

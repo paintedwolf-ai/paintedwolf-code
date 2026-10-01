@@ -1,0 +1,37 @@
+oar: '1.0'
+id: READ_ARGS_CONFLICT
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - read
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.detail
+  - paintedwolf.conflict
+when: paintedwolf.rejection_code == "READ_ARGS_CONFLICT"
+effect: block
+copy:
+  what: 'read received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}.'
+  cause: read requires path with each shape. symbol cannot combine with offset, limit, ranges, or mode; ranges
+    cannot combine with offset, limit, or mode.
+  why: One addressing shape determines which content the read selects.
+  fix: Keep the intended path and choose symbol, ranges, or an ordinary read according to the schema. Remove
+    only the conflicting selectors reported above; preserve the intended coverage.
+  instead: Branch on Code; fix args and retry once
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: 'read arguments conflict: {{ paintedwolf.detail }}'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: conflict
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_ARGS_CONFLICT'

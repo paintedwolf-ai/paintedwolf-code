@@ -1,0 +1,558 @@
+# Ship entries define provider kinds. Local files define live instances.
+# Models are discovered unless an instance supplies overrides.
+# Thinking rules are ordered; the first match wins.
+model_thinking:
+  - match: ["glm-5.3-flash", "glm-5p3-flash"]
+    style: effort_levels
+    always_on: true
+    # Z.ai's template maps unrecognized levels (including medium) to max, so
+    # every host level is sent explicitly and rounds down: medium runs low.
+    effort_levels: {low: low, medium: low, high: high}
+    controls: {state: supported, efforts: [low, high, max], default_effort: max}
+  - match: ["kimi-k2p7-code", "kimi-k2.7-code"]
+    style: thinking_type
+    always_on: true
+    controls: {state: supported, can_enable: true}
+  - match: ["kimi-k2-instruct"]
+    style: none
+  - match: ["kimi"]
+    style: thinking_type
+    controls: {state: supported, can_enable: true, can_disable: true}
+  - match: ["gpt-oss"]
+    style: effort_levels
+    always_on: true
+    controls: {state: supported, efforts: [low, medium, high], default_effort: medium}
+  - match: ["claude-mythos-preview"]
+    style: adaptive
+    always_on: true
+    default_on: true
+    controls: {state: supported, efforts: [low, medium, high, max], default_effort: high}
+  - match: ["claude-fable", "claude-mythos"]
+    style: adaptive
+    always_on: true
+    default_on: true
+    controls: {state: supported, efforts: [low, medium, high, xhigh, max], default_effort: high}
+  - match: ["claude-sonnet-5"]
+    style: adaptive
+    default_on: true
+    controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
+  - match: ["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
+    style: adaptive
+    controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
+  - match: ["claude-opus-4-6", "claude-opus-4.6", "claude-sonnet-4-6", "claude-sonnet-4.6"]
+    style: adaptive
+    controls: {state: supported, efforts: [low, medium, high, max], can_disable: true, default_effort: high}
+  - match: ["claude-sonnet-4", "claude-opus-4", "claude-haiku-4-5", "claude-haiku-4.5", "claude-3-7"]
+    style: budget_tokens
+    controls: {state: supported, can_disable: true, budget: {min: 1024}}
+  - match: ["claude"]
+    style: budget_tokens
+  # These families' templates wrap reasoning in <think> tags. A serving stack
+  # that reports reasoning in its own field can still leave the open tag in
+  # the content, and one that reports none leaves the whole block there.
+  - match: ["deepseek-r1", "deepseek-reasoner"]
+    style: none
+    always_on: true
+    reasoning_markers: {open: "<think>", close: "</think>"}
+  - match: ["qwen3-235b-a22b-thinking", "qwen3-30b-a3b-thinking", "qwq"]
+    style: none
+    always_on: true
+    reasoning_markers: {open: "<think>", close: "</think>"}
+  - match: ["qwen3"]
+    style: boolean_think
+    controls: {state: supported, can_enable: true, can_disable: true}
+    reasoning_markers: {open: "<think>", close: "</think>"}
+  # Native control declarations, not a universal effort ladder.
+  # https://developers.openai.com/api/docs/models/gpt-6-astra
+  - match: ["gpt-6-astra"]
+    style: effort_levels
+    always_on: true
+    controls: {state: supported, efforts: [low, medium, high, xhigh, max], default_effort: medium}
+  - match: ["gpt-5.6-sol"]
+    style: effort_levels
+    controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: medium}
+  - match: ["gpt-5.5-pro"]
+    style: effort_levels
+  - match: ["gpt-5.5"]
+    style: effort_levels
+    controls: {state: supported, efforts: [low, medium, high, xhigh], can_disable: true, default_effort: medium}
+  # https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thinking
+  - match: ["gemini-2.5-flash-lite"]
+    style: budget_tokens
+    controls: {state: supported, efforts: [low, medium, high], can_disable: true, budget: {min: 512, max: 24576}}
+  - match: ["gemini-2.5-flash"]
+    style: budget_tokens
+    controls: {state: supported, efforts: [low, medium, high], can_disable: true, budget: {min: 1, max: 24576}}
+  - match: ["gemini-2.5-pro"]
+    style: budget_tokens
+    always_on: true
+    controls: {state: supported, efforts: [low, medium, high], budget: {min: 128, max: 32768}}
+  - match: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.1-pro"]
+    style: effort_levels
+    always_on: true
+    controls: {state: supported, efforts: [low, medium, high]}
+  - match: ["gemini-3.1-flash-lite-image", "gemini-3.1-flash-image"]
+    style: effort_levels
+    always_on: true
+    effort_levels: {low: minimal, medium: high, high: high}
+    controls: {state: supported, efforts: [minimal, high]}
+  - match: ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3-flash"]
+    style: effort_levels
+    always_on: true
+    controls: {state: supported, efforts: [minimal, low, medium, high]}
+  - match: ["gemini-3-pro-image"]
+    style: effort_levels
+    always_on: true
+    effort_levels: {low: high, medium: high, high: high}
+    controls: {state: supported, efforts: [high]}
+  - match: ["gemini-3-pro"]
+    style: effort_levels
+    always_on: true
+    effort_levels: {low: low, medium: high, high: high}
+    controls: {state: supported, efforts: [low, high]}
+  - match: ["gemini"]
+    style: effort_levels
+
+# Cutoff rules are ordered; the first match wins.
+model_cutoff: []
+
+# Hold and cooldown after a provider slot stops serving. A slot closes on an
+# overload, on silence, and on an unreachable host: all three mean the next
+# request to that slot is not worth sending yet.
+provider_capacity:
+  hold:
+    max_holds: 2
+    wait_ms: [20000, 20000]
+    max_wait_ms: 45000
+  cooldown:
+    overloaded_ms: 30000
+    # Silence costs the whole response-header bound before we learn anything,
+    # so the slot rests longer than it does after a 503.
+    silent_ms: 60000
+
+# Prompt-cache policy. Each provider kind names a profile, and the ordered
+# model_prompt_cache rules refine it per model family: the first rule that
+# names the profile and matches the model wins, and its fields replace the
+# profile's. mode is how the provider keeps a prefix. lifetime is what an
+# explicit-breakpoint request asks for on the standing prefix and on history;
+# each hit refreshes it. cold_after is how long an idle prefix probably
+# survives when the request sets no lifetime, from the provider's documents or
+# a measurement, and is left out when neither gives a figure. While the host
+# expects the prefix to be cached it keeps the standing prompt unchanged.
+prompt_cache_profiles:
+  none:
+    mode: none
+  # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+  # The standing prefix changes only when the host re-decides it, so it takes
+  # the 1h lifetime and survives a person's pause; writes cost 2x rather than
+  # 1.25x. History grows on every call and takes 5m.
+  anthropic:
+    mode: explicit_breakpoints
+    lifetime: {standing: 1h, history: 5m}
+  # Converse caches implicitly, best effort; the rules below give checkpoints
+  # to the model families that take them.
+  bedrock:
+    mode: automatic_prefix
+  # https://developers.openai.com/api/docs/guides/prompt-caching: in-memory
+  # entries last "around 5 to 10 minutes of inactivity".
+  openai:
+    mode: automatic_prefix
+    session_key: true
+    cold_after: 10m
+  azure:
+    mode: automatic_prefix
+    session_key: true
+    cold_after: 10m
+  # https://docs.fireworks.ai/guides/prompt-caching: each replica keeps its
+  # own cache, so the affinity header routes the session back to it. Measured:
+  # without the header nothing is read; with it a prefix survives 5 minutes
+  # idle, sometimes 6, never 12.
+  fireworks:
+    mode: automatic_prefix
+    session_key: true
+    affinity_header: x-session-affinity
+    cold_after: 6m
+  # https://developers.cloudflare.com/workers-ai/features/prompt-caching/
+  cloudflare:
+    mode: automatic_prefix
+    affinity_header: x-session-affinity
+  # https://openrouter.ai/docs/guides/best-practices/prompt-caching: the
+  # session id keeps a chat on the upstream that holds its prefix; that
+  # routing lapses after 10 minutes idle.
+  openrouter:
+    mode: automatic_prefix
+    session_key: true
+    affinity_header: x-session-id
+    cold_after: 10m
+  # The proxy reports prompt caching per model and translates cache_control
+  # for its upstream; OpenAI-direct controls would reach upstreams that
+  # reject them.
+  litellm:
+    mode: automatic_prefix
+    marker: catalog
+  # Gemini 2.5 and later, Together, and Vertex cache prefixes on their own and
+  # take no request control or documented lifetime.
+  implicit:
+    mode: automatic_prefix
+  # Ollama keeps a runner's KV state while the model stays loaded; /api/ps
+  # says whether it still is.
+  ollama:
+    mode: local_kv
+    keep_alive: 24h
+    residency: ollama
+  # LM Studio, oMLX, llama.cpp, and vLLM reuse a resident prefix and expose no
+  # residency the host reads.
+  local:
+    mode: local_kv
+
+model_prompt_cache:
+  # OpenAI's explicit-breakpoint line, from gpt-5.6; entries stay at least 30
+  # minutes after their last use.
+  - profiles: [openai]
+    match: ["gpt-5.6", "gpt-5.7", "gpt-5.8", "gpt-5.9", "gpt-6", "gpt-7"]
+    marker: prompt_cache_breakpoint
+    cold_after: 30m
+  # Extended retention keeps entries "around 30 minutes", up to 24 hours.
+  - profiles: [openai, azure]
+    match: ["gpt-4.1", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.4", "gpt-5.5", "gpt-5-codex", "gpt-5-chat"]
+    exact: ["gpt-5"]
+    retention: 24h
+    cold_after: 30m
+  # OpenRouter ids are vendor/model; the vendor decides the marker spelling.
+  - profiles: [openrouter]
+    match: ["openai/gpt-5.6", "openai/gpt-5.7", "openai/gpt-5.8", "openai/gpt-5.9", "openai/gpt-6", "openai/gpt-7"]
+    marker: prompt_cache_breakpoint
+  - profiles: [openrouter]
+    match: ["anthropic/"]
+    marker: cache_control
+    request_marker: true
+    cold_after: 5m
+  - profiles: [openrouter]
+    match: ["google/gemini", "qwen/"]
+    marker: cache_control
+  # https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+  # Claude releases before 3.5 Sonnet v2 reject cache checkpoints.
+  - profiles: [bedrock]
+    match:
+      - anthropic.claude-instant
+      - anthropic.claude-v2
+      - anthropic.claude-3-haiku
+      - anthropic.claude-3-sonnet
+      - anthropic.claude-3-opus
+      - anthropic.claude-3-5-haiku
+      - anthropic.claude-3-5-sonnet-20240620
+    mode: automatic_prefix
+  # These take checkpoints with the 5m lifetime only.
+  - profiles: [bedrock]
+    match: ["anthropic.claude-3-7-sonnet", "anthropic.claude-3-5-sonnet-20241022"]
+    mode: explicit_breakpoints
+    lifetime: {standing: 5m, history: 5m}
+  - profiles: [bedrock]
+    match: ["anthropic.claude-"]
+    mode: explicit_breakpoints
+    lifetime: {standing: 1h, history: 5m}
+  # Nova caches only at explicit checkpoints, fixes their lifetime itself, and
+  # rejects a checkpoint that names one; Converse does not cache Nova prefixes
+  # on its own. Probed 2026-09-30: a bare cachePoint wrote and then read the
+  # prefix on Nova 2 Lite, and a ttl of 5m was refused.
+  - profiles: [bedrock]
+    match: ["amazon.nova-"]
+    mode: explicit_breakpoints
+    cold_after: 5m
+
+# Retry profiles are service-class policy. Every hosted profile retries the
+# bounded transient set; a provider selects a longer schedule or extra statuses
+# only where its service contract documents them.
+http_retry_profiles:
+  hosted-standard:
+    service_class: hosted
+    http_retry:
+      rate_limit: &rate_observation
+        adaptive: false
+        scope: provider
+        initial_ms: 5000
+        max_backoff_ms: 300000
+        recovery_successes: 4
+      max_retries: 2
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000]
+      statuses: [429, 500, 502, 504]
+      wait_headers: [Retry-After, retry-after-ms]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503]
+        wait_headers: [Retry-After, retry-after-ms]
+  hosted-gateway:
+    service_class: hosted
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 3
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000, 4000]
+      statuses: [429, 500, 502, 504]
+      wait_headers: [x-ratelimit-reset, Retry-After, retry-after-ms]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503]
+        wait_headers: [x-ratelimit-reset, Retry-After, retry-after-ms]
+  hosted-adaptive-model:
+    service_class: hosted
+    http_retry:
+      rate_limit:
+        <<: *rate_observation
+        adaptive: true
+        scope: model
+      max_retries: 3
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000, 4000]
+      statuses: [429, 500, 502, 504]
+      wait_headers: [x-ratelimit-reset, Retry-After, retry-after-ms]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503]
+        wait_headers: [Retry-After]
+  hosted-patient:
+    service_class: hosted
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 4
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000, 4000, 8000]
+      statuses: [429, 500, 502, 504]
+      wait_headers: [Retry-After, retry-after-ms]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503]
+        wait_headers: [Retry-After, retry-after-ms]
+  hosted-anthropic:
+    service_class: hosted
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 2
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000]
+      statuses: [429, 500, 502, 504]
+      wait_headers: [Retry-After]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503, 529]
+        wait_headers: [Retry-After]
+  hosted-request-timeout:
+    service_class: hosted
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 2
+      max_wait_ms: 60000
+      backoff_ms: [1000, 2000]
+      statuses: [429, 408, 500, 502, 504]
+      wait_headers: [retry-after-ms, Retry-After]
+      capacity:
+        max_retries: 2
+        max_wait_ms: 60000
+        backoff_ms: [2000, 8000]
+        statuses: [503]
+        wait_headers: [retry-after-ms, Retry-After]
+  local-runtime:
+    service_class: local
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 1
+      max_wait_ms: 5000
+      backoff_ms: [500]
+      statuses: [429]
+      wait_headers: [Retry-After]
+      capacity:
+        max_retries: 1
+        max_wait_ms: 5000
+        backoff_ms: [2000]
+        statuses: [503]
+        wait_headers: [Retry-After]
+      # Retry startup failures and terminal responses with no usable output;
+      # silence may be model loading.
+      transport:
+        max_retries: 1
+        max_wait_ms: 5000
+        backoff_ms: [500]
+        faults: [unreachable, empty_completion]
+  sdk-managed:
+    service_class: sdk_managed
+    http_retry:
+      rate_limit: *rate_observation
+      max_retries: 0
+      max_wait_ms: 30000
+      backoff_ms: []
+      statuses: [429]
+      wait_headers: [Retry-After]
+      capacity:
+        max_retries: 0
+        statuses: [503]
+
+providers:
+  - id: openai
+    kind: openai
+    label: OpenAI
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: openai
+
+  - id: anthropic
+    kind: anthropic
+    label: Anthropic
+    base_url: https://api.anthropic.com/v1
+    api_key_env: ANTHROPIC_API_KEY
+    models: []
+    http_retry_profile: hosted-anthropic
+    prompt_cache_profile: anthropic
+
+  - id: together
+    kind: together
+    label: Together AI
+    base_url: https://api.together.xyz/v1
+    api_key_env: TOGETHER_API_KEY
+    models: []
+    http_retry_profile: hosted-adaptive-model
+    prompt_cache_profile: implicit
+
+  - id: openai-compatible
+    kind: openai-compatible
+    label: OpenAI-compatible
+    base_url: http://127.0.0.1:8080/v1
+    api_key_env: ""
+    models: []
+    http_retry_profile: local-runtime
+    prompt_cache_profile: local
+
+  - id: azure
+    kind: azure
+    label: Azure OpenAI
+    base_url: https://YOUR_RESOURCE.openai.azure.com
+    api_key_env: AZURE_OPENAI_API_KEY
+    models: []
+    http_retry_profile: hosted-request-timeout
+    prompt_cache_profile: azure
+
+  - id: ollama
+    kind: ollama
+    label: Ollama
+    base_url: http://localhost:11434/v1
+    api_key_env: ""
+    local_free: true
+    models: []
+    http_retry_profile: local-runtime
+    prompt_cache_profile: ollama
+
+  - id: lmstudio
+    kind: lmstudio
+    label: LM Studio
+    base_url: http://localhost:1234/v1
+    api_key_env: ""
+    local_free: true
+    models: []
+    http_retry_profile: local-runtime
+    prompt_cache_profile: local
+
+  - id: omlx
+    kind: omlx
+    label: oMLX
+    base_url: http://localhost:8000/v1
+    api_key_env: ""
+    local_free: true
+    platforms: [macos]
+    models: []
+    http_retry_profile: local-runtime
+    prompt_cache_profile: local
+
+  - id: litellm-proxy
+    kind: litellm-proxy
+    label: LiteLLM
+    base_url: http://localhost:4000/v1
+    api_key_env: LITELLM_MASTER_KEY
+    models: []
+    http_retry_profile: local-runtime
+    prompt_cache_profile: litellm
+
+  - id: gemini
+    kind: gemini
+    label: Google Gemini
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    api_key_env: GEMINI_API_KEY
+    models: []
+    http_retry_profile: hosted-patient
+    prompt_cache_profile: implicit
+
+  - id: fireworks
+    kind: fireworks
+    label: Fireworks
+    base_url: https://api.fireworks.ai/inference/v1
+    api_key_env: FIREWORKS_API_KEY
+    models: []
+    http_retry_profile: hosted-patient
+    prompt_cache_profile: fireworks
+
+  - id: bedrock
+    kind: bedrock
+    label: Amazon Bedrock
+    base_url: us-east-1
+    endpoint_style: region
+    api_key_env: AWS_BEARER_TOKEN_BEDROCK
+    ambient_auth: aws-sdk-chain
+    models: []
+    http_retry_profile: sdk-managed
+    prompt_cache_profile: bedrock
+
+  - id: vertex
+    kind: vertex
+    label: Google Vertex AI
+    base_url: ""
+    endpoint_style: derived
+    api_key_env: ""
+    ambient_auth: google-adc
+    models: []
+    http_retry_profile: hosted-patient
+    prompt_cache_profile: implicit
+
+  - id: vertex-express
+    kind: vertex-express
+    label: Google Vertex AI (express mode)
+    base_url: https://aiplatform.googleapis.com/v1
+    api_key_env: GOOGLE_API_KEY
+    models: []
+    http_retry_profile: hosted-patient
+    prompt_cache_profile: implicit
+
+  - id: openrouter
+    reasoning_wire: reasoning_details
+    kind: openrouter
+    label: OpenRouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    models: []
+    http_retry_profile: hosted-gateway
+    prompt_cache_profile: openrouter
+
+  - id: cloudflare-workers-ai
+    reasoning_wire: reasoning_content
+    kind: cloudflare-workers-ai
+    label: Cloudflare Workers AI
+    base_url: https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1
+    api_key_env: CLOUDFLARE_API_TOKEN
+    rejection_reasons:
+      - status: 403
+        code_path: errors.0.code
+        code: "5035"
+        reason: cloudflare_workers_paid_required
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: cloudflare

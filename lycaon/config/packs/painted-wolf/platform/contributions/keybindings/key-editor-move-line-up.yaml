@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-move-line-up
+command: painted-wolf/platform:editor-move-line-up
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+ArrowUp"
+  windows:
+    - "Alt+ArrowUp"
+  linux:
+    - "Alt+ArrowUp"

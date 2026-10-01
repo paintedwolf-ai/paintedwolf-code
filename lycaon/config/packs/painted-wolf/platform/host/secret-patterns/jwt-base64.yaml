@@ -1,0 +1,3 @@
+id: jwt-base64
+upstream_id: jwt-base64
+enabled: false

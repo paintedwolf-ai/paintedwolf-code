@@ -1,0 +1,107 @@
+tags: [visual, design]
+description: >
+  Rasterize SVG or HTML into an authored visual: UI/product mockups (especially before
+  building), diagrams, comparisons, timelines, or charts. Use when spatial layout improves
+  clarity; never as runtime evidence — use capture_page for observed UI. Host injects an
+  offline design kit (OFL fonts, Lucide-adapted icons, theme tokens, spacing/type scales,
+  media placeholders). No CDN links, scripts, or external https assets — use kit font-family
+  names, #kit-* icons, and --kit-* CSS variables. Project images/CSS load offline via
+  http://lycaon.asset/<root-relative-path>. Presets establish width and a minimum height floor
+  (desktop: 1280×720); under fit: content, the canvas expands for taller documents. For full-screen
+  mockups (games, pages), make root markup fill 100% width and match theme ('dark' for dark visuals)
+  to avoid unused light margins. Result reports the canvas it laid out plus the kit catalog.
+schema:
+  type: object
+  properties:
+    markup:
+      type: string
+      description: >
+        SVG or HTML markup (offline). Prefer kit tokens (--kit-bg, --kit-text-*, --kit-space-*),
+        catalog fonts via style="font-family:'Inter'" (single-quoted names), and
+        <svg class="kit-icon"><use href="#kit-NAME"/></svg>.
+        Project assets (png/jpeg/webp/gif/svg/css): src / url() / <link rel="stylesheet"> /
+        @import with http://lycaon.asset/<root-relative-path>.
+        No <script>, other <link>/@import, or https url()/src/href.
+    mime:
+      type: string
+      enum: [svg, html]
+      description: Markup kind.
+    caption:
+      type: string
+      description: Artifact card label.
+    dest:
+      type: string
+      description: >-
+        Optional repo-relative file path to write the rasterized image (PNG). The host writes the
+        image using standard mutation, recording it in the ledger and workspace.
+    handle:
+      type: string
+      description: >-
+        Optional named session handle (e.g. "login-dialog", "hero-banner"). When specified, the host
+        retains the rendered markup in session memory for iterative refinement via old_string/new_string
+        patches or parameter updates without resending full markup.
+    old_string:
+      type: string
+      description: >-
+        Exact substring in the handle's stored markup to replace. Used for surgical iteration
+        without resending full markup. Requires handle.
+    new_string:
+      type: string
+      description: >-
+        Replacement string for old_string. Requires old_string and handle.
+    replace_all:
+      type: boolean
+      description: >-
+        When true, replaces all occurrences of old_string in the handle's stored markup instead of
+        requiring a unique match.
+    theme:
+      type: string
+      enum: [light, dark, transparent]
+      description: Host-injected color scheme (default light). transparent sets a clear canvas background for standalone assets/icons.
+    fonts:
+      type: array
+      items:
+        type: string
+      description: Optional catalog font names to validate (all kit fonts are always available).
+    viewport:
+      type: object
+      description: >-
+        Optional raster canvas — named preset and/or explicit CSS-pixel edges. Defaults to
+        desktop width fitted to the document height.
+      properties:
+        width:
+          description: "Canvas width in CSS pixels; overrides the preset width."
+          type: integer
+          minimum: 1
+        height:
+          description: >-
+            Canvas height in CSS pixels; overrides the preset height. Under fit "content" this
+            is a floor the document may grow past, so a short page still fills it. Under fit
+            "viewport" it is the exact frame.
+          type: integer
+          minimum: 1
+        preset:
+          type: string
+          enum: [phone, phone-landscape, tablet, tablet-landscape, desktop, desktop-wide]
+          description: Named canvas size; width/height override it.
+        scale:
+          type: number
+          minimum: 0.1
+          maximum: 4.0
+          description: >-
+            Optional raster scale factor (device pixel ratio). Defaults to 1.0 when dest is specified
+            for crisp 1:1 pixel rendering, or auto-scaled (up to 2.0) for transcript display.
+        fit:
+          type: string
+          enum: [content, viewport]
+          description: >-
+            content (default) captures the whole document — use it for one-pagers, comparisons,
+            timelines, and any layout taller than a screen; the returned image is never cropped,
+            and a document past the height cap rejects RENDER_CANVAS_OVERFLOW rather than coming
+            back short. vh units and viewport media queries still resolve against the requested
+            height (reported as frame_height), so min-height:100vh stays one screen inside a
+            taller image. viewport pins the exact preset/width/height frame and crops what falls
+            below — use it only when the fold is the point (above-the-fold, one phone screen).
+            Either way the result reports content_height, complete, and below_fold.
+      additionalProperties: false
+  additionalProperties: false

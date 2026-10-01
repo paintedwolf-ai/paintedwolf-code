@@ -1,0 +1,40 @@
+rules:
+  - name: Deno Account Token
+    id: kingfisher.deno.1
+    pattern: |
+      (?x)
+      \b
+      (
+        ddp_[A-Za-z0-9]{36}
+      )
+      \b
+    pattern_requirements:
+      min_digits: 4
+      min_uppercase: 4
+      min_lowercase: 4
+    min_entropy: 3.6
+    confidence: medium
+    examples:
+      - DENO_DEPLOY_TOKEN=ddp_A7h3Lm9Qw2Rt6Yu8Ks4Vz1Np5Cx0Bd7EfGhJ
+      - 'deno_token = "ddp_M4nT7pQs8Vx1Zc3Df5Gh7Jk9Lm2Np4Qr6StU"'
+    references:
+      - https://docs.deno.com/
+      - https://api.deno.com/v1
+      - https://docs.deno.com/subhosting/api/authentication/
+      - https://docs.deno.com/subhosting/api/
+    validation:
+      type: Http
+      content:
+        request:
+          method: GET
+          url: https://api.deno.com/v1/user
+          headers:
+            Authorization: "Bearer {{ TOKEN }}"
+            Accept: application/json
+          response_matcher:
+            - report_response: true
+            - type: StatusMatch
+              status: [200]
+            - type: WordMatch
+              words:
+                - '"id"'

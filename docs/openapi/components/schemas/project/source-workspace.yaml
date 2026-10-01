@@ -1,0 +1,77 @@
+components:
+  schemas:
+    SourceWorkspaceKind:
+      $ref: ../source-workspace-kind.generated.yaml#/components/schemas/SourceWorkspaceKind
+    SourceWatchState:
+      type: string
+      description: >
+        Whether edits made outside the app under a root reach the host as they
+        happen. `live` observes every directory; `partial` misses some, and
+        changes there surface on the next inventory pass; `faulted` means the
+        platform stream reported an error and events since then may be
+        missing; `unwatched` means no watcher is bound.
+      enum: [live, partial, faulted, unwatched]
+    SourceWatchCoverage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [state, recursive, unwatched_directories]
+      properties:
+        state:
+          $ref: '#/components/schemas/SourceWatchState'
+        recursive:
+          type: boolean
+          description: One root registration observes every descendant.
+        unwatched_directories:
+          type: integer
+          minimum: 0
+          description: Directories a per-directory watcher could not register.
+    SourceWorkspaceRoot:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, path, watch]
+      properties:
+        branch_id:
+          type: string
+          pattern: '^[a-zA-Z0-9:._-]+$'
+          description: Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch.
+        id:
+          type: string
+          format: uuid
+          description: Stable attached-root identity.
+        path:
+          type: string
+          minLength: 1
+          description: Absolute physical path for this root in the resolved workspace.
+        watch:
+          $ref: '#/components/schemas/SourceWatchCoverage'
+    SourceWorkspace:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [workspace_id, session_scoped, roots, inventory]
+      properties:
+        workspace_id:
+          type: string
+          pattern: '^ws_[0-9a-f]{32}$'
+          minLength: 1
+          description: Identity derived from the project's resolved physical roots.
+        session_scoped:
+          type: boolean
+          description: >
+            True when the requested chat's worktree substitutes the project's
+            roots, so reads and retained views of this workspace must carry
+            that chat's id. False when the project's own checkout answers, and
+            every chat resolving to this workspace_id shares it without one.
+        roots:
+          type: array
+          description: Ordered physical roots used by every Files read and path action.
+          items:
+            $ref: '#/components/schemas/SourceWorkspaceRoot'
+        inventory:
+          $ref: 'source-storage.yaml#/components/schemas/SourceInventoryState'
+          description: >
+            The ledger's pass over the tree. Outside edits to tracked files reach
+            history by path before it completes; untracked files enter history
+            when the pass, or an open command window, admits them.

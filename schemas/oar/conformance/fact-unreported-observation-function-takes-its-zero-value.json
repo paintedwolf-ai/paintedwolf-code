@@ -1,0 +1,68 @@
+{
+  "id": "fact-unreported-observation-function-takes-its-zero-value",
+  "title": "An observation function the fixture did not supply returns the zero value of its declared return type",
+  "covers": [
+    "OAR-FACT-25",
+    "OAR-CONF-26"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "NO_SCOPE_DATA",
+      "effect": "warn",
+      "requires": {
+        "profiles": [
+          "tool",
+          "filesystem"
+        ]
+      },
+      "when": "!path_outside_scope(tool) && tool_arg_string(\"path\") == \"\" && tool_arg_int(\"depth\") == 0"
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "NO_SCOPE_DATA"
+  }
+}

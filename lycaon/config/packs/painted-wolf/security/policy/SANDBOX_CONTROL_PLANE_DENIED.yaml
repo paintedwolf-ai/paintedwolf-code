@@ -1,0 +1,53 @@
+oar: '1.0'
+id: SANDBOX_CONTROL_PLANE_DENIED
+kind: policy
+anchor: tool.rejected
+# No tool selector: any tool that names a path can reach this code.
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "SANDBOX_CONTROL_PLANE_DENIED"
+effect: block
+copy:
+  what: '{{ paintedwolf.path }} is part of the agent host''s control plane.'
+  cause: Agents cannot read or rewrite the configuration that defines their own tools, policy, credentials, and authority. No approval covers this path, so none was asked for.
+  why: An approval cannot make self-inspection or self-modification of the active control plane coherent.
+  fix: >-
+    Continue without that path and tell the user plainly that the app's own state
+    folder is not reachable by tools. If they need something from it, ask them to
+    copy or export it into an attached folder. If the host configuration needs to
+    change, ask the user to change it in Settings.
+  instead: Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution
+x-paintedwolf-category: control-plane
+x-paintedwolf-emit: guard:sandbox_control_plane
+x-paintedwolf-message: host control-plane access is unavailable to agents
+x-paintedwolf-scenarios:
+  - id: read_path
+    vars:
+      capability: read_path
+      path: ${config_dir}/approvals.yaml
+      tool: command
+    expect_contains:
+      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
+      - control plane
+      - ${config_dir}/approvals.yaml
+  - id: survey
+    vars:
+      mode: read
+      path: ${config_dir}/debug/sessions
+      tool: list_dir
+    expect_contains:
+      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
+      - control plane
+      - ${config_dir}/debug/sessions
+  - id: write
+    vars:
+      mode: write
+      path: ${config_dir}/packs/stock/skills/verify-a-change/SKILL.md
+      tool: write
+    expect_contains:
+      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
+      - Settings

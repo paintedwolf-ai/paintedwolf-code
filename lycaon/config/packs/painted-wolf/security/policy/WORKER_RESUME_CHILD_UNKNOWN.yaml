@@ -1,0 +1,32 @@
+oar: '1.0'
+id: WORKER_RESUME_CHILD_UNKNOWN
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - task
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.child_session_id
+when: paintedwolf.rejection_code == "WORKER_RESUME_CHILD_UNKNOWN"
+effect: block
+copy:
+  what: No worker job has run in child session {{ paintedwolf.child_session_id }}.
+  cause: A resume continues a child that an earlier task dispatched; this id names none.
+  why: The host resumes a child from its recorded job, which carries its agent, scope, and ceiling.
+  fix: Copy child_session_id from the worker's task receipt or finish wake, or dispatch a fresh task without
+    child_session_id.
+  instead: Use a recorded child_session_id, or start a new task
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: No worker job has run in child session {{ paintedwolf.child_session_id }}
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    child_session_id: 00000000
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_RESUME_CHILD_UNKNOWN'

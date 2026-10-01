@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-move-tab-right
+command: painted-wolf/platform:files-move-tab-right
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+ArrowRight"
+  windows:
+    - "Mod+Alt+Shift+ArrowRight"
+  linux:
+    - "Mod+Alt+Shift+ArrowRight"

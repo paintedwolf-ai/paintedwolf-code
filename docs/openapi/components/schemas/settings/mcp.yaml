@@ -1,0 +1,452 @@
+components:
+  schemas:
+    McpCheckRowStatus:
+      $ref: ../mcp-check-row-status.generated.yaml#/components/schemas/McpCheckRowStatus
+    McpCheckRow:
+      x-go-generate: true
+      type: object
+      required:
+      - status
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+          description: The provider the row checks; absent for a refused overlay row that named no id.
+        status:
+          $ref: "#/components/schemas/McpCheckRowStatus"
+        code:
+          x-go-type: "string"
+          $ref: ../api-error-code.generated.yaml#/components/schemas/ApiErrorCode
+          description: Catalog code when the row failed a trust gate or sync.
+        notice:
+          x-go-pointer: true
+          $ref: ../common.yaml#/components/schemas/NoticeCopy
+    McpCheckResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - providers
+      additionalProperties: false
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpCheckRow"
+    McpToolInfo:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Host-qualified tool name (mcp_<provider>_<tool>).
+        description:
+          type: string
+    McpProviderStatus:
+      type: string
+      enum:
+      - disabled
+      - needs_auth
+      - connecting
+      - ready
+      - error
+      - rejected
+    McpProviderClass:
+      type: string
+      description: >
+        Host-derived deployment class. local is stdio or loopback HTTP;
+        web is remote HTTPS. Never authored in overlay YAML.
+      enum:
+      - local
+      - web
+    McpToolLoading:
+      $ref: ../mcp-tool-loading.generated.yaml#/components/schemas/McpToolLoading
+    McpRecipeEnvKey:
+      x-go-generate: true
+      type: object
+      required:
+      - key
+      - label
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    McpProvider:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - enabled
+      - class
+      - tool_loading
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        enabled:
+          type: boolean
+        class:
+          $ref: "#/components/schemas/McpProviderClass"
+        tool_loading:
+          $ref: "#/components/schemas/McpToolLoading"
+        transport:
+          type: string
+          enum:
+          - stdio
+          - http
+        connection_source:
+          type: string
+          enum:
+          - distro
+          - user
+          - project
+          description: >
+            Catalog layer that last set url or command. Rejected trust rows use the
+            layer that attempted the bad overlay; last_error holds the reason code.
+        status:
+          $ref: "#/components/schemas/McpProviderStatus"
+        last_error:
+          x-go-type: "string"
+          $ref: ../api-error-code.generated.yaml#/components/schemas/ApiErrorCode
+          description: Catalog code for the most recent sync failure or RejectedRow reason.
+        notice:
+          x-go-pointer: true
+          $ref: ../common.yaml#/components/schemas/NoticeCopy
+          description: Rendered copy for `last_error`.
+        tool_count:
+          x-go-pointer: true
+          type: integer
+          minimum: 0
+        profiles:
+          type: array
+          items:
+            type: string
+          description: Distro workflow profile names referencing this provider (display only).
+        source:
+          type: string
+          enum:
+          - default
+          - override
+          description: >
+            Present when listing with project_id. default inherits device enablement;
+            override is set in the project overlay.
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+          description: >
+            Canonical HTTP URL after host inference. A host:port without a
+            scheme is stored as http:// on loopback and https:// otherwise.
+        token_present:
+          type: boolean
+          description: True when a static token is stored (value never returned).
+        headers_present:
+          type: boolean
+          description: True when static HTTP headers are stored (values never returned).
+        env_present:
+          type: boolean
+          description: True when stdio env map has keys (values never returned).
+        signed_in:
+          type: boolean
+          description: True when MCP OAuth tokens are present.
+        recipe:
+          type: string
+          description: Bundled recipe id this row was added from. Empty for Custom.
+        auth:
+          $ref: "#/components/schemas/McpRecipeAuth"
+        credential_label:
+          type: string
+          description: Recipe-supplied label for the static token field.
+        credential_hint:
+          type: string
+        docs_url:
+          type: string
+        credential_wire:
+          $ref: "#/components/schemas/McpCredentialWire"
+        credential_header:
+          type: string
+          description: Header name when credential_wire is header.
+    McpRecipeAuth:
+      type: string
+      enum:
+      - static_token
+      - oauth
+      - none
+    McpCredentialWire:
+      type: string
+      enum:
+      - bearer
+      - token_token
+      - header
+      description: >
+        How a stored static token is placed on the HTTP request. bearer is
+        Authorization: Bearer. token_token is Authorization: Token token=.
+        header uses credential_header as the name and the token as the value.
+    McpRecipe:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - label
+      - auth
+      - added
+      - project_ok
+      - class
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        label:
+          type: string
+        hint:
+          type: string
+        docs_url:
+          type: string
+        url:
+          type: string
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        auth:
+          $ref: "#/components/schemas/McpRecipeAuth"
+        credential_label:
+          type: string
+        credential_hint:
+          type: string
+        credential_wire:
+          $ref: "#/components/schemas/McpCredentialWire"
+        credential_header:
+          type: string
+        env_keys:
+          type: array
+          description: >
+            Optional stdio env key names the recipe expects the operator to fill
+            after add (labels only; values are never shipped).
+          items:
+            $ref: "#/components/schemas/McpRecipeEnvKey"
+        class:
+          $ref: "#/components/schemas/McpProviderClass"
+        added:
+          type: boolean
+          description: Already present in this catalog scope.
+        project_ok:
+          x-go-name: "ProjectOK"
+          type: boolean
+          description: >
+            True when a project overlay could declare this recipe (loopback HTTP,
+            no credentials). Remote and stdio recipes are device-only.
+    McpRecipeCatalogResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - recipes
+      additionalProperties: false
+      properties:
+        recipes:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpRecipe"
+    McpOAuthStartResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - authorize_url
+      - state
+      additionalProperties: false
+      properties:
+        authorize_url:
+          type: string
+          description: Authorization endpoint URL (open in system browser).
+        state:
+          type: string
+          description: >-
+            Opaque CSRF value bound to this authorization. Echoed back on the redirect
+            and required by the manual completion path.
+        redirect_uri:
+          type: string
+          description: >-
+            Loopback URL the host is listening on for this authorization (RFC 8252
+            §7.3, ephemeral port). The redirect completes the exchange on its own;
+            oauth/complete is the fallback for an authorization server that will not
+            redirect to loopback.
+    McpOAuthCancelRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - state
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          minLength: 1
+          description: Pending authorization to cancel; newer attempts and saved credentials are unaffected.
+    McpOAuthCompleteRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - code
+      - state
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          writeOnly: true
+          description: Single-use, PKCE-bound authorization code from the provider redirect.
+        state:
+          type: string
+          description: >-
+            Opaque CSRF value from the authorization request, echoed by the
+            provider.
+    CreateMcpProviderRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        Create overlay row. Default enabled=false. Provide source=recipe with recipe_id,
+        or source=custom with id and url or command.
+      required: [source]
+      properties:
+        source:
+          type: string
+          enum:
+            - recipe
+            - custom
+        recipe_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        enabled:
+          x-go-pointer: true
+          type: boolean
+        tool_loading:
+          $ref: "#/components/schemas/McpToolLoading"
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+          description: >
+            HTTP MCP URL. A host:port without a scheme is accepted: loopback
+            becomes http://, any other host becomes https://. Remote http://
+            is refused.
+        env:
+          type: object
+          writeOnly: true
+          additionalProperties:
+            type: string
+          description: Stdio env map (write-only; values never returned on GET).
+        headers:
+          type: object
+          writeOnly: true
+          additionalProperties:
+            type: string
+          description: Static HTTP headers (write-only).
+        token:
+          type: string
+          writeOnly: true
+          description: >
+            Write-only static token. Placement follows credential_wire
+            (default Authorization: Bearer).
+        credential_wire:
+          $ref: "#/components/schemas/McpCredentialWire"
+        credential_header:
+          type: string
+          description: Header name when credential_wire is header.
+    UpdateMcpProviderRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        Patch enablement and/or mutable connection fields.
+      minProperties: 1
+      properties:
+        enabled:
+          x-go-pointer: true
+          type: boolean
+        tool_loading:
+          x-go-pointer: true
+          $ref: "#/components/schemas/McpToolLoading"
+        command:
+          x-go-pointer: true
+          type: string
+        args:
+          x-go-pointer: true
+          type: array
+          items:
+            type: string
+        url:
+          x-go-pointer: true
+          type: string
+          description: >
+            HTTP MCP URL. A host:port without a scheme is accepted: loopback
+            becomes http://, any other host becomes https://. Remote http://
+            is refused.
+        env:
+          x-go-pointer: true
+          type: object
+          writeOnly: true
+          additionalProperties:
+            type: string
+          description: Stdio env map (write-only; omit to leave unchanged).
+        headers:
+          x-go-pointer: true
+          type: object
+          writeOnly: true
+          additionalProperties:
+            type: string
+          description: Static HTTP headers (write-only; omit to leave unchanged).
+        token:
+          x-go-pointer: true
+          type: string
+          writeOnly: true
+          description: >
+            Write-only static token. Placement follows credential_wire
+            (default Authorization: Bearer).
+        credential_wire:
+          x-go-pointer: true
+          $ref: "#/components/schemas/McpCredentialWire"
+        credential_header:
+          x-go-pointer: true
+          type: string
+          description: Header name when credential_wire is header.
+    McpProviderListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - providers
+      additionalProperties: false
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpProvider"
+    McpToolListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - tools
+      additionalProperties: false
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpToolInfo"

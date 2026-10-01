@@ -1,0 +1,5 @@
+code: forbidden_predicate
+message: |
+  Forbidden predicate {{leaf}}.
+replacement: |
+  {{replacement_hint}}

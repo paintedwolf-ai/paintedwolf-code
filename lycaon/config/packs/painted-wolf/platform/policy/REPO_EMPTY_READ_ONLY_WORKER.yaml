@@ -1,0 +1,34 @@
+oar: '1.0'
+id: REPO_EMPTY_READ_ONLY_WORKER
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  facts:
+    - paintedwolf.agent_type
+    - paintedwolf.repo_known_empty
+    - paintedwolf.profile_mutation_capable
+    - paintedwolf.profile_surveys_project_tree
+    - paintedwolf.tool_is_task
+when: paintedwolf.tool_is_task && paintedwolf.repo_known_empty && !paintedwolf.profile_mutation_capable && paintedwolf.profile_surveys_project_tree
+effect: block
+copy:
+  what: '{{ paintedwolf.agent_type }} surveys the project tree, but the host has measured no indexed files in the current workspace.'
+  cause: The current source index reports a measured empty scope, so this tree-survey assignment has no indexed material to inspect.
+  why: An empty indexed scope is not evidence about unattached or excluded paths and does not establish that new files should be created.
+  fix: 'Use the measured scope and the current task to choose the next step. If content creation is required, select an offered mutation-capable profile and the current task scope schema. For external research, use an offered profile with the required source capability. Resolve an unclear target with the user.'
+  instead: 'Do not redispatch the same tree survey against the unchanged empty scope or invent a fixed worker role; preserve current profile and scope constraints.'
+
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: read-only project-tree survey workers cannot run on a measured-empty workspace
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      agent_type: path-explorer
+      detail: empty workspace
+      path: .
+      profile: coordinator
+      tool: task
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: REPO_EMPTY_READ_ONLY_WORKER'

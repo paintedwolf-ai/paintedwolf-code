@@ -1,0 +1,21 @@
+language: scheme
+comment:
+- ;
+limits: No default security model; target selection and silent context-only examples are regression-tested.
+cases:
+- name: eval-reader-context-only
+  file: sample.scm
+  source: |
+    (define (run port env) (eval (read port) env))
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.scheme
+- name: eval-reader-safe
+  file: sample.scm
+  source: |
+    (define (read-data port) (read port))
+  want: []
+  covers: []
+  coverage:
+  - lycaon.coverage.scheme

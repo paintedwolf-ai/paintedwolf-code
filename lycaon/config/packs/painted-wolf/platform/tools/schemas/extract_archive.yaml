@@ -1,0 +1,13 @@
+tags: [filesystem]
+description: "Unpack .zip or .tar.gz into a write-scoped directory (replaces unzip/tar xzf; HITL ask by default). Replaces command: unzip."
+schema:
+  type: object
+  properties:
+    path:
+      type: string
+      description: Repo-relative archive path (.zip or .tar.gz only)
+    dest:
+      type: string
+      description: Repo-relative destination directory (created when missing; must be under write scope)
+  required: [path, dest]
+  additionalProperties: false

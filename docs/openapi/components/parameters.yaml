@@ -1,0 +1,165 @@
+components:
+  parameters:
+    SessionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RootId:
+      name: root_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BlueprintId:
+      name: blueprint_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DelegationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkerId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DraftSlotId:
+      name: slot_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Stable coordinator draft message id for the turn
+    ProjectIDQuery:
+      name: project_id
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Canonical project UUID from the project registry
+    EventsProjectIDQuery:
+      name: project_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Canonical project UUID from the project registry. Omit it to subscribe device-wide.
+    EventsAfterQuery:
+      name: after
+      in: query
+      required: false
+      description: Opaque cursor; replay continues after it before live delivery
+      schema:
+        type: string
+    EventsClientIDQuery:
+      name: client_id
+      in: query
+      required: false
+      description: The client this stream belongs to, as supplied to editor document
+        requests. Editing leases follow it — the host releases the leases a client
+        holds once its last stream has been gone for the lease grace, so a closed
+        or crashed window stops holding a document. Omit it for a stream that holds
+        no leases.
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9:._-]+$'
+    ExtensionUnitId:
+      name: unit_id
+      in: path
+      required: true
+      description: |
+        URL-encoded unit id. Unit ids contain slashes (workflows/plan,
+        workflows/_templates/hotfix), so each id is sent as one encoded segment:
+        workflows%2F_templates%2Fhotfix.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_./%:-]+$"
+    ExtensionPackId:
+      name: pack_id
+      in: path
+      required: true
+      description: |
+        URL-encoded pack id. Pack ids are namespace/name, so they are sent as one
+        encoded segment: painted-wolf%2Fplatform.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+    ExtensionProfileName:
+      name: profile_name
+      in: path
+      required: true
+      description: Profile name declared by the pack manifest
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$"
+    ExtensionMetaPackId:
+      name: meta_pack_id
+      in: path
+      required: true
+      description: |
+        URL-encoded meta-pack id. Meta-pack ids are namespace/name, so they are sent as one
+        encoded segment.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$"
+    ExtensionsProjectIdQuery:
+      name: project_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Project UUID for project desired state; omit for device-only view/mutations
+    ExtensionsScopeQuery:
+      name: scope
+      in: query
+      required: false
+      schema:
+        $ref: schemas/extensions.yaml#/components/schemas/ExtensionsDesiredScope
+        default: project
+      description: Desired-state file to write; the project scope requires project_id
+    SourceRootIdQuery:
+      name: root_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Attached root to browse; defaults to the primary root when omitted
+    SourceDirQuery:
+      name: dir
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Root-relative, slash-separated directory; "." or omitted means the root folder
+    SourceSessionIdQuery:
+      name: session_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Optional session whose bound checkout supplies the project roots

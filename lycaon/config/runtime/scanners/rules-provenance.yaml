@@ -1,0 +1,161 @@
+# First-party rules are CC-BY-4.0; vendored catalogs are MIT.
+# tree_sha256 covers upstream bytes; vendored_sha256 covers patched bytes.
+
+vendors:
+  - id: patched-codes
+    upstream: https://github.com/patched-codes/semgrep-rules
+    ref: main
+    commit: "1118d79823ae756534678378a4aac0cbfa5d3041"
+    tree_sha256: "3796c496f9a4d5497dd74b26408b0ee08c834a31c83018eb5a8a19d2bd1af8bd"
+    patch_sha256: "de9a22a964523dbd8e06156b121a0dd0ee2640dfb04002f4fb177d8137ba8c53"
+    vendored_sha256: "19f81cb403e57b05b2cffb36c4cb51ca6e790c54e615008bb22e05006e4c1ec6"
+    license: MIT
+    include:
+      - LICENSE
+      - csharp
+      - go
+      - java
+      - javascript
+      - python
+      - scala
+    paths:
+      - vendor/patched-codes/
+  - id: dgryski-go
+    upstream: https://github.com/dgryski/semgrep-go
+    ref: master
+    commit: "db0227c03f4b3c4e71d900188d51db4c81d66932"
+    tree_sha256: "7bd1848eed1dec756398eefb5fb965acc96202aab62330457edde41d3dc7297b"
+    license: MIT
+    include:
+      - .
+    paths:
+      - vendor/dgryski-go/
+  - id: elttam
+    upstream: https://github.com/elttam/semgrep-rules
+    ref: main
+    commit: "33331369c2b1a5ddb30c64b886e539e7224afaf7"
+    tree_sha256: "dcbebd9317539331f108158c2d89ffb6df26e0084f3cd67748a68491848fb751"
+    patch_sha256: "dc1a4eea939b45ac91347a285623408c1f33c7d4933c18169b6ccef27916e821"
+    vendored_sha256: "f9933bc5fec1de1854bcfc813528b2f4e2e38395cfaf99a93e6537e95bfae4bb"
+    license: MIT
+    include:
+      - LICENSE
+      - rules
+    paths:
+      - vendor/elttam/rules/
+  - id: 0xdea
+    upstream: https://github.com/0xdea/semgrep-rules
+    ref: main
+    commit: "9a366a0ed516e4d86cef13d786afc49c128886bf"
+    tree_sha256: "7082663b78bec055fcf0b5caa25c3fbb9e50686ed3a94fef3672a11c4b422f31"
+    license: MIT
+    include:
+      - LICENSE
+      - rules
+    paths:
+      - vendor/0xdea/rules/
+  - id: dotta
+    upstream: https://github.com/federicodotta/semgrep-rules
+    ref: main
+    commit: "51b9b69f4e74a857526a4b3d277a38d15a47853b"
+    tree_sha256: "376d5d51403fe307f9f72499f929f23a590c84d81c66d439299787aec56a732a"
+    license: MIT
+    include:
+      - .
+    paths:
+      - vendor/dotta/
+  - id: apiiro-malicious
+    upstream: https://github.com/apiiro/malicious-code-ruleset
+    ref: main
+    commit: "a21246b666f34db899f0e33add7237ed70fab790"
+    tree_sha256: "52658a0660341272052b2650e9455f763642f69b14f41ca7f9dc2eacd1338c71"
+    patch_sha256: "29ccd91ff18401564da4a46734f9d81c1b8b3ea3bcb80b8b7d15ef1edeff80ea"
+    vendored_sha256: "f12a1955cb749681dc6997d11b98868c290e5cc59e9374e2b1d2ab51bd320d9c"
+    license: MIT
+    include:
+      - .
+    paths:
+      - vendor/apiiro-malicious/
+
+lycaon:
+  license: CC-BY-4.0
+  origin: bundled-in-repo
+  authorship: in-repo
+  files:
+  - path: config/runtime/scanners/rules/lycaon/apex/security.yaml
+    test: test/testdata/opengrep/apex.yaml
+  - path: config/runtime/scanners/rules/lycaon/c/security.yaml
+    test: test/testdata/opengrep/c.yaml
+  - path: config/runtime/scanners/rules/lycaon/cairo/security.yaml
+    test: test/testdata/opengrep/cairo.yaml
+    parser_mode: generic
+  - path: config/runtime/scanners/rules/lycaon/clojure/security.yaml
+    test: test/testdata/opengrep/clojure.yaml
+  - path: config/runtime/scanners/rules/lycaon/circom/security.yaml
+    test: test/testdata/opengrep/circom.yaml
+  - path: config/runtime/scanners/rules/lycaon/coverage/security.yaml
+    test: test/testdata/opengrep/ql.yaml
+  - path: config/runtime/scanners/rules/lycaon/csharp/security.yaml
+    test: test/testdata/opengrep/c_sharp.yaml
+  - path: config/runtime/scanners/rules/lycaon/dart/security.yaml
+    test: test/testdata/opengrep/dart.yaml
+  - path: config/runtime/scanners/rules/lycaon/dockerfile/security.yaml
+    test: test/testdata/opengrep/dockerfile.yaml
+  - path: config/runtime/scanners/rules/lycaon/elixir/security.yaml
+    test: test/testdata/opengrep/elixir.yaml
+  - path: config/runtime/scanners/rules/lycaon/go/security.yaml
+    test: test/testdata/opengrep/go.yaml
+  - path: config/runtime/scanners/rules/lycaon/groovy/security.yaml
+    test: test/testdata/opengrep/groovy.yaml
+  - path: config/runtime/scanners/rules/lycaon/hack/security.yaml
+    test: test/testdata/opengrep/hack.yaml
+  - path: config/runtime/scanners/rules/lycaon/java/security.yaml
+    test: test/testdata/opengrep/java.yaml
+  - path: config/runtime/scanners/rules/lycaon/javascript/security.yaml
+    test: test/testdata/opengrep/javascript.yaml
+  - path: config/runtime/scanners/rules/lycaon/json/security.yaml
+    test: test/testdata/opengrep/json.yaml
+  - path: config/runtime/scanners/rules/lycaon/jsonnet/security.yaml
+    test: test/testdata/opengrep/jsonnet.yaml
+  - path: config/runtime/scanners/rules/lycaon/jsp/security.yaml
+    test: test/testdata/opengrep/jsp.yaml
+    parser_mode: generic
+  - path: config/runtime/scanners/rules/lycaon/julia/security.yaml
+    test: test/testdata/opengrep/julia.yaml
+  - path: config/runtime/scanners/rules/lycaon/kotlin/security.yaml
+    test: test/testdata/opengrep/kotlin.yaml
+  - path: config/runtime/scanners/rules/lycaon/move/security.yaml
+    test: test/testdata/opengrep/move.yaml
+  - path: config/runtime/scanners/rules/lycaon/perl/security.yaml
+    test: test/testdata/opengrep/perl.yaml
+    parser_mode: generic
+  - path: config/runtime/scanners/rules/lycaon/php/security.yaml
+    test: test/testdata/opengrep/php.yaml
+  - path: config/runtime/scanners/rules/lycaon/powershell/security.yaml
+    test: test/testdata/opengrep/powershell.yaml
+    parser_mode: generic
+  - path: config/runtime/scanners/rules/lycaon/python/security.yaml
+    test: test/testdata/opengrep/python.yaml
+  - path: config/runtime/scanners/rules/lycaon/r/security.yaml
+    test: test/testdata/opengrep/r.yaml
+  - path: config/runtime/scanners/rules/lycaon/ruby/security.yaml
+    test: test/testdata/opengrep/ruby.yaml
+  - path: config/runtime/scanners/rules/lycaon/rust/security.yaml
+    test: test/testdata/opengrep/rust.yaml
+  - path: config/runtime/scanners/rules/lycaon/scala/security.yaml
+    test: test/testdata/opengrep/scala.yaml
+  - path: config/runtime/scanners/rules/lycaon/shell/security.yaml
+    test: test/testdata/opengrep/bash.yaml
+  - path: config/runtime/scanners/rules/lycaon/solidity/security.yaml
+    test: test/testdata/opengrep/solidity.yaml
+  - path: config/runtime/scanners/rules/lycaon/swift/security.yaml
+    test: test/testdata/opengrep/swift.yaml
+  - path: config/runtime/scanners/rules/lycaon/terraform/security.yaml
+    test: test/testdata/opengrep/hcl.yaml
+  - path: config/runtime/scanners/rules/lycaon/vue/security.yaml
+    test: test/testdata/opengrep/vue.yaml
+    parser_mode: generic
+  - path: config/runtime/scanners/rules/lycaon/xml/security.yaml
+    test: test/testdata/opengrep/xml.yaml
+  - path: config/runtime/scanners/rules/lycaon/yaml/security.yaml
+    test: test/testdata/opengrep/yaml.yaml

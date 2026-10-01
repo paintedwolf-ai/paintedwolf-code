@@ -1,0 +1,767 @@
+.focused-project-nav {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding-top: 2px;
+  gap: 8px;
+}
+.focused-project-nav__empty {
+  margin: 0;
+  padding: 8px 4px;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+
+.focused-project-nav > .project-cluster,
+.focused-project-nav > .focused-project-nav__status,
+.focused-project-nav > .new-chat-btn,
+.focused-project-nav > .project-context-zone {
+  flex-shrink: 0;
+}
+
+/* Reserve both status rows before content arrives. */
+.focused-project-nav__status {
+  min-height: calc(2 * var(--den-status-chip-row-h) + 1px);
+}
+
+/* Chips prepare in place and paint with the workspace. */
+.focused-project-nav__status[data-presentation="preparing"] {
+  visibility: hidden;
+}
+
+/* Group the project header and folders on one raised plane. */
+.project-cluster {
+  --project-cluster-action-size: max(1.8571rem, 1.75em);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: none;
+  border-radius: var(--den-radius);
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel);
+  overflow: hidden;
+}
+.project-cluster__header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px 4px 3px 6px;
+}
+/* Splits the block without competing with its fill. */
+.project-cluster__rule {
+  height: 1px;
+  margin: 0 8px;
+  background: var(--den-line-quiet);
+  flex-shrink: 0;
+}
+.project-cluster__icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--project-cluster-action-size);
+  height: var(--project-cluster-action-size);
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+/* An open panel holds its trigger in the pressed look. */
+.project-cluster__icon-btn--active {
+  background: var(--den-surface-offset);
+  box-shadow: var(--den-bevel-inset);
+  color: var(--den-text);
+}
+.project-cluster__header > .project-switcher {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Name control — leading chevron, flat inside the cluster header. */
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 4px 0 2px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.project-switcher:hover {
+  background: var(--den-tint-1);
+}
+.project-switcher__glyph {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--den-text-muted);
+  opacity: 0.85;
+}
+.project-switcher:hover .project-switcher__glyph {
+  color: var(--den-text);
+  opacity: 1;
+}
+.project-switcher__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.project-folders {
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.project-folders--empty {
+  gap: 2px;
+  padding: 6px;
+}
+.project-folders__add-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--den-primary-border);
+  border-radius: var(--den-radius);
+  background: var(--den-primary-bg);
+  color: var(--den-primary-text);
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+}
+.project-folders__add-primary:hover {
+  background: var(--den-primary-bg-hover);
+  border-color: var(--den-primary-border-hover);
+}
+.project-folders__add-primary:active {
+  background: var(--den-primary-bg-active);
+}
+.project-folders__hint {
+  margin: 6px 4px 0;
+  font-size: var(--text-den-compact);
+  line-height: 1.4;
+  color: var(--den-text-muted);
+}
+.project-folders__promotion-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+}
+.project-folders__promotion-actions button {
+  flex: 1;
+  min-height: 30px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-surface-elevated);
+  color: var(--den-text);
+  cursor: pointer;
+}
+.project-folders__promotion-actions button:hover {
+  border-color: var(--den-line);
+}
+.project-folders__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.project-folders__list[hidden] {
+  display: none;
+}
+
+/* Facepile summary — one row at any root count. */
+.project-folders__summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--project-cluster-action-size);
+  align-items: center;
+  gap: 2px;
+}
+.project-folders__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.project-folders__summary:hover {
+  background: var(--den-tint-1);
+}
+.project-folders__pile {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+.project-folders__tile {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 1.3571rem;
+  height: 1.3571rem;
+  /* Plane-colored borders separate overlapping tiles. */
+  border: 1.5px solid var(--den-plane);
+  border-radius: 5px;
+  margin-right: -5px;
+  background: color-mix(in srgb, var(--den-accent) 20%, var(--den-plane));
+  color: var(--den-accent-text);
+  font-size: var(--text-den-micro);
+  font-weight: 650;
+  line-height: 1;
+}
+.project-folders__tile:nth-child(2) {
+  background: color-mix(
+    in srgb,
+    var(--den-status-positive) 24%,
+    var(--den-plane)
+  );
+  color: color-mix(in srgb, var(--den-status-positive) 70%, var(--den-text));
+}
+.project-folders__tile:nth-child(3) {
+  background: color-mix(
+    in srgb,
+    var(--den-status-running) 20%,
+    var(--den-plane)
+  );
+  color: color-mix(in srgb, var(--den-status-running) 78%, var(--den-text));
+}
+.project-folders__tile--more {
+  width: auto;
+  min-width: 1.3571rem;
+  margin-right: 0;
+  padding: 0 3px;
+  background: var(--den-tint-2);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-variant-numeric: tabular-nums;
+}
+.project-folders__summary .project-folders__path {
+  grid-column: auto;
+}
+.project-folders__row.den-list-row {
+  --project-folder-action-width: max(24px, 1.5em);
+  display: grid;
+  grid-template-columns:
+    14px minmax(0, 1fr) minmax(0, var(--project-folder-action-width));
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  min-width: 0;
+  border-radius: var(--den-radius-sm);
+  position: relative;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.project-folders__row:hover,
+.project-folders__row:focus-within {
+  background: var(--den-tint-1);
+}
+.project-folders__row > .den-list-row__actions {
+  position: static;
+  grid-column: 3;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+}
+.project-folders__icon {
+  grid-column: 1;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--den-text-muted);
+}
+.project-folders__path {
+  grid-column: 2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-compact);
+  color: var(--den-text-muted);
+}
+.project-folders__add-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--project-cluster-action-size);
+  height: var(--project-cluster-action-size);
+  margin: 0;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+}
+
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  /* Separate the action from the brand cluster. */
+  margin-top: 6px;
+  padding: 7px 11px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  /* Shares the project cluster's block recipe. */
+  background: var(--den-surface-offset);
+  --den-plane: var(--den-surface-offset);
+  box-shadow: var(--den-bevel);
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.new-chat-btn:hover {
+  background: var(--den-tint-2);
+}
+/* No folder yet — the control sits on the rail plane, not its own block. */
+.new-chat-btn--muted {
+  background: transparent;
+  --den-plane: var(--den-surface-chrome);
+  box-shadow: none;
+  color: var(--den-text-muted);
+}
+.new-chat-btn--muted:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+/* The current blank chat uses the active fill at full contrast. */
+.new-chat-btn--current,
+.new-chat-btn--current:hover {
+  background: var(--den-selection);
+  /* The active fill carries selection without an inset seam. */
+  box-shadow: none;
+  color: var(--den-text);
+  cursor: default;
+}
+
+.project-context-zone {
+  flex-shrink: 0;
+  margin: 2px 0 6px;
+  /* Reserve space for the selection marker's left overhang. */
+  padding: 0 0 0 8px;
+  border: none;
+  background: transparent;
+}
+.project-context-zone__header {
+  /* Flush with the pill's left edge, like the sessions heading. */
+  margin: 0 0 6px;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.project-context-zone__heading {
+  margin: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+.project-context-zone__views {
+  margin: 0 4px 0 0;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-micro);
+  line-height: 1.1429rem;
+  cursor: pointer;
+}
+.project-context-zone__views:hover,
+.project-context-zone__views:focus-visible {
+  background: var(--den-nav-hover-bg);
+  color: var(--den-text);
+}
+.project-context-zone__list {
+  list-style: none;
+  margin: 0;
+  /* Section padding preserves marker alignment. */
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.project-context-zone__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.project-context-zone__row--sorting {
+  transition: transform 150ms var(--den-ease);
+}
+.project-context-zone__row-main {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.project-context-zone__row--dragging {
+  opacity: 0.55;
+  z-index: 1;
+  transition: none;
+  position: relative;
+}
+.project-context-zone__grip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  cursor: grab;
+  opacity: 0.7;
+  touch-action: none;
+}
+.project-context-zone__grip:hover {
+  color: var(--den-text);
+  background: var(--den-tint-1);
+  opacity: 1;
+}
+.project-context-zone__grip:active {
+  cursor: grabbing;
+}
+.project-context-zone__entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text);
+  font-size: var(--text-den-label);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+}
+.project-context-zone--customizing .project-context-zone__entry {
+  cursor: default;
+}
+.project-context-zone__entry:hover:not(:disabled) {
+  background: var(--den-nav-hover-bg);
+}
+.project-context-zone__entry--active {
+  /* Uses the shared navigation selection wash. */
+  background: var(--den-nav-selection-bg);
+  color: var(--den-text);
+  font-weight: 500;
+}
+.project-context-zone__entry--active:hover:not(:disabled) {
+  background: var(--den-nav-selection-bg);
+}
+.project-context-zone__entry--active .project-context-zone__entry-label {
+  color: var(--den-text);
+}
+.project-context-zone__entry:disabled,
+.project-context-zone__entry--feature-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.project-context-zone__entry--add {
+  color: var(--den-text-muted);
+}
+.project-context-zone__action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5714rem;
+  height: 1.5714rem;
+  margin-right: 2px;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-subhead);
+  line-height: 1;
+  cursor: pointer;
+}
+.project-context-zone__action--add {
+  color: var(--den-accent-text);
+}
+.project-context-zone__off-badge {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--text-den-micro);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+.project-context-zone__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--den-text-muted);
+}
+.project-context-zone__entry--active .project-context-zone__icon {
+  color: var(--den-accent-signal);
+}
+.project-context-zone__entry-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.project-context-zone__window-glyph {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 1px;
+  opacity: 0.7;
+}
+.project-context-zone__entry--detached .project-context-zone__window-glyph {
+  color: var(--den-text-muted);
+}
+/* Same row rhythm as Context entries — label-aligned under icons. */
+.project-context-zone__more {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  /* Lines up with the entry labels, which sit past the marker inset + icon. */
+  padding: 5px 8px 5px 37px;
+  border: none;
+  border-radius: var(--den-radius-sm);
+  background: transparent;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-label);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.project-context-zone__more:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+/* Shares the collapsed list’s footer slot. */
+.project-context-zone__done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--den-radius-sm);
+  background: var(--den-tint-1);
+  color: var(--den-text);
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.project-context-zone__done:hover {
+  background: var(--den-tint-2);
+}
+.project-context-zone__add {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--den-border);
+}
+.project-context-zone__add-heading {
+  margin: 0 0 6px;
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+.project-context-zone__add-empty {
+  margin: 4px 4px 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+
+.den-shell-aside-main {
+  /* Shared by the dock wash and the list tail that keeps rows clear of it. */
+  --den-nav-wash-height: 28px;
+}
+.den-shell-aside-main > .den-shell-nav-dock {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px var(--den-nav-rail-gutter) 10px
+    calc(var(--den-nav-rail-gutter) + var(--den-nav-edge-pad));
+  transition:
+    margin-top var(--den-duration) var(--den-ease),
+    padding-top var(--den-duration) var(--den-ease);
+}
+
+.den-shell--orientation-mirrored .den-shell-aside-main > .den-shell-nav-dock {
+  padding-right: calc(var(--den-nav-rail-gutter) + var(--den-nav-edge-pad));
+  padding-left: var(--den-nav-rail-gutter);
+}
+/* Render an open tray as an elevated rail surface. */
+.den-shell-nav-fold :is(.den-settings-sidebar, .den-layout-tray) {
+  margin: var(--den-nav-tray-lead) 1px 10px 1px;
+  background: var(--den-background);
+  --den-plane: var(--den-background);
+  border: 1px solid var(--den-line);
+  border-radius: calc(var(--den-radius) + 2px);
+  box-shadow: var(--den-shadow-sm);
+}
+.den-shell-nav-fold .den-settings-sidebar {
+  padding: 4px 4px 6px;
+}
+.den-shell-nav-fold-inner {
+  transform: translateY(7px);
+  transition: transform var(--den-duration) var(--den-ease);
+}
+.den-shell-nav-fold-open .den-shell-nav-fold-inner {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .den-shell-nav-fold-inner {
+    transform: none;
+    transition: none;
+  }
+}
+/* Fade rows beneath the dock without covering the resize strip. */
+.den-shell-aside-main > .den-shell-nav-dock::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--den-nav-wash-height);
+  pointer-events: none;
+  background: linear-gradient(to top, var(--den-plane), transparent);
+  transition: bottom var(--den-duration) var(--den-ease);
+}
+/* The card's margin is the whole lead, so the rail meets its top edge. */
+.den-shell-aside-main > .den-shell-nav-dock:has(.den-shell-nav-fold-open) {
+  padding-top: 0;
+  margin-top: calc(-1 * var(--den-nav-tray-lead));
+}
+.den-shell-aside-main > .den-shell-nav-dock:has(.den-shell-nav-fold-open)::after {
+  bottom: calc(100% - var(--den-nav-tray-lead));
+}
+.den-shell-nav-dock-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.den-shell-dock-link__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-shell-dock-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: max(24px, calc(var(--text-den-label) * 1.25 + 0.75em));
+  padding: 0.375em 0.55em;
+  border: none;
+  border-radius: var(--den-radius);
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease),
+    color var(--den-duration) var(--den-ease);
+}
+.den-shell-dock-link:hover {
+  background: var(--den-tint-1);
+  color: var(--den-text);
+}
+.den-shell-dock-link:focus-visible {
+  outline: none;
+  /* The halo settles toward the plane it is drawn on. */
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--den-accent-text) 85%, var(--den-plane));
+  border-radius: var(--den-radius);
+}
+.den-shell-dock-link__icon {
+  flex-shrink: 0;
+  color: var(--den-text-muted);
+}
+/* Whichever tray is folded up, its trigger stays pressed. */
+.den-shell-dock-link-active,
+.den-shell-dock-link-active:hover {
+  background: var(--den-selection-hover);
+  box-shadow: var(--den-bevel-inset);
+  color: var(--den-text);
+}
+.den-shell-dock-link-active:focus-visible {
+  box-shadow:
+    var(--den-bevel-inset),
+    0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-plane));
+}
+.den-shell-dock-link-active .den-shell-dock-link__icon {
+  color: var(--den-accent-text);
+}
+
+/* Layout tray and placement glyph. */
+.den-shell-nav-fold .den-layout-tray {
+  padding: 8px 8px 9px;
+  color: var(--den-text);
+}

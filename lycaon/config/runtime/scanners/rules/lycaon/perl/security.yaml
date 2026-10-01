@@ -1,0 +1,93 @@
+rules:
+- id: lycaon.perl.eval-string
+  languages:
+  - generic
+  severity: ERROR
+  message: CGI request input reaches Perl code evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - perl
+    parser_mode: generic
+  options:
+    generic_comment_style: shell
+  pattern-either:
+  - pattern: 'eval ( CGI :: param ( ... ) )'
+  - pattern: eval $ ENV { QUERY_STRING }
+  paths: &id001
+    include:
+    - '*.pl'
+    - '*.PL'
+    - '*.pm'
+    - '*.psgi'
+    - '*.t'
+    - '*.plx'
+    - '*.perl'
+    - '*.ph'
+    - '*.al'
+    - '*.cgi'
+    - '*.fcgi'
+    - '**/cpanfile'
+    - '**/Rexfile'
+    - '**/ack'
+    - '**/latexmkrc'
+    - '**/.latexmkrc'
+    exclude:
+    - '**/vendor/**'
+    - '**/local/lib/**'
+- id: lycaon.perl.shell-command
+  languages:
+  - generic
+  severity: ERROR
+  message: CGI request input reaches a shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - perl
+    parser_mode: generic
+  options:
+    generic_comment_style: shell
+  pattern-either:
+  - pattern: 'system ( CGI :: param ( ... ) )'
+  - pattern: system ( $ ENV { QUERY_STRING } )
+  paths: *id001
+- id: lycaon.perl.two-argument-open
+  languages:
+  - generic
+  severity: ERROR
+  message: CGI request input reaches two-argument open, which can execute a command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - perl
+    parser_mode: generic
+  options:
+    generic_comment_style: shell
+  pattern-either:
+  - pattern: 'open ( my $$HANDLE , CGI :: param ( ... ) )'
+  - pattern: 'open ( $$HANDLE , CGI :: param ( ... ) )'
+  paths: *id001
+- id: lycaon.perl.sql-interpolation
+  languages:
+  - generic
+  severity: ERROR
+  message: CGI request input reaches SQL text without parameter binding
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - perl
+    parser_mode: generic
+  options:
+    generic_comment_style: shell
+  pattern-either:
+  - pattern: '$$DB -> prepare ( CGI :: param ( ... ) )'
+  - pattern: '$$DB -> do ( CGI :: param ( ... ) )'
+  paths: *id001

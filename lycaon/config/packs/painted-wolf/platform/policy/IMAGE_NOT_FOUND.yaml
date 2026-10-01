@@ -1,0 +1,33 @@
+oar: '1.0'
+id: IMAGE_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_image
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "IMAGE_NOT_FOUND"
+effect: block
+copy:
+  what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
+  cause: The path resolved inside the read scope, but nothing exists there.
+  why: An image is inspected from its bytes; a missing file has none.
+  fix: Locate the image with find or list_dir, then pass its exact path.
+  instead: Branch on Code IMAGE_NOT_FOUND; correct the path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
+x-paintedwolf-message: view_image found no file at the path
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: assets/missing.png
+    profile: coordinator
+    tool: view_image
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: IMAGE_NOT_FOUND'

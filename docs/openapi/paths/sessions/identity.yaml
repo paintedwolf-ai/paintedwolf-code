@@ -1,0 +1,176 @@
+paths:
+  /v1/sessions:
+    post:
+      tags:
+      - sessions
+      operationId: createSession
+      x-person-action: record
+      summary: Create a coordinator session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/session/identity.yaml#/components/schemas/CreateSessionRequest
+      responses:
+        '202':
+          description: Durable session accepted; workspace preparation completes asynchronously
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/identity.yaml#/components/schemas/Session
+        '503':
+          description: Provider discovery failed while validating the model assignment; provider_catalog_unavailable is retryable and no assignment is applied
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/sessions/{id}:
+    get:
+      tags:
+      - sessions
+      operationId: getSession
+      summary: Get session by ID
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/identity.yaml#/components/schemas/Session
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+    patch:
+      tags:
+      - sessions
+      operationId: updateSession
+      x-person-action: record
+      summary: Mutate session lifecycle state (title, archived, pinned, pin position)
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/session/identity.yaml#/components/schemas/UpdateSessionRequest
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/identity.yaml#/components/schemas/Session
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - sessions
+      operationId: deleteSession
+      x-person-action: record
+      summary: Permanently delete a chat session and its history
+      description: >
+        Removes the session, its transcript, and its session-keyed projections.
+        Refused with session_not_idle while a turn is in flight; worker child
+        sessions are never deletable through this surface.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '204':
+          description: Session deleted
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/sessions/{id}/bootstrap:
+    get:
+      tags: [sessions]
+      operationId: getSessionBootstrap
+      summary: Read the authoritative first-paint session snapshot
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Session and first-paint state in one response
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/session/identity.yaml#/components/schemas/SessionBootstrap}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/sessions/{id}/seen:
+    post:
+      tags:
+      - sessions
+      operationId: markSessionSeen
+      x-person-action: none
+      summary: Record that the person has read this session
+      description: >-
+        Stamps `seen_at` with the host clock. Clients call this while the
+        conversation is readable on screen in a focused window, not merely
+        loaded. The stamp clears the attention view's `finished` class and
+        opens the session's project for the recents order (`last_opened_at`).
+        The host supplies the time, so no client can mark a turn read before
+        it lands. Idempotent: the newest call wins, and a turn completing
+        after the stamp makes the session unread again.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      responses:
+        '200':
+          description: Session carrying the new seen_at
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/identity.yaml#/components/schemas/Session
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

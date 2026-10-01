@@ -1,0 +1,10 @@
+id: together-api-key
+title: Together AI API key
+regex: '(?i)\btogether_api_key\b[''" ]*[:=][ ''"]*([A-Za-z0-9._~+/-]{28,})'
+keywords:
+  - together_api_key
+severity: critical
+secret_group: 1
+entropy: 3.5
+allowlist_stopwords:
+  - your_api_key

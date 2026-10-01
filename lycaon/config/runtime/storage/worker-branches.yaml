@@ -1,0 +1,9 @@
+# Worker branch retention: a completed write worker keeps its branch tree so a
+# stacked worker can clone it and a review can read it, but the tree is a
+# cache once the overlay is sealed. A tree nobody has used for idle_days, or
+# the least recently used trees once the device total passes budget_bytes,
+# are reclaimed and rebuilt from the job's baseline and overlay on demand.
+worker_branches:
+  idle_days: 7
+  budget_bytes: 4294967296 # 4 GiB, allocated blocks across every project
+  sweep_interval_ms: 3600000

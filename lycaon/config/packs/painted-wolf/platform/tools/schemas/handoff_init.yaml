@@ -1,0 +1,11 @@
+description: Bind the parent session handoff plane for sibling worker coordination.
+schema:
+  type: object
+  properties:
+    session_id:
+      type: string
+      description: Parent session id (defaults to caller session)
+    agent:
+      type: string
+      description: Worker job id or agent id (defaults to caller binding)
+  additionalProperties: false

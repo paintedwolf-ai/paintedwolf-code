@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Source inventory is preparing
+message: The current project folders are still being indexed.
+suggested_action: Wait for indexing to finish, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [still being indexed, Wait]

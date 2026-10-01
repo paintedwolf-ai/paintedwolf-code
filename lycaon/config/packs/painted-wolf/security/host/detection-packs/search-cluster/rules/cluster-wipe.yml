@@ -1,0 +1,38 @@
+title: Delete every index in a search cluster
+id: 4557129d-e501-476b-ad05-c5cba2614105
+description: Deletes every index at once, using a wildcard or the _all alias.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_curl:
+    Image: curl
+    CommandLine|re: '(?i)-X\s*DELETE|--request\s+DELETE'
+  selection_port:
+    CommandLine|re: ':92(00|50)\b'
+  # Managed clusters serve on 443; the provider endpoint suffix does the same
+  # scoping job the default port does for a self-hosted cluster.
+  selection_managed_endpoint:
+    CommandLine|contains:
+      - '.elastic-cloud.com'
+      - '.found.io'
+      - '.cloud.es.io'
+      - '.es.amazonaws.com'
+      - '.aoss.amazonaws.com'
+  selection_all:
+    CommandLine|re: '/_all\b|/\*(\s|$|["'']?)'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_curl and (selection_port or selection_managed_endpoint) and selection_all and not filter_rehearsal and not filter_local

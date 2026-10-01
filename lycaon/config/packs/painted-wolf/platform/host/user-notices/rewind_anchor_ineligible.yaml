@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Cannot rewind to that message
+message: >-
+  Only your own messages can be rewound to. Replies and status rows are not
+  starting points, because rewinding means undoing everything a message set off.
+suggested_action: Pick one of your messages instead.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - Only your own messages

@@ -1,0 +1,8 @@
+emit: inject:active_workflow
+category: expected_behavior
+severity: info
+message: Phase gate blocked — failed_leaves present; do not mark phase complete in chat
+what: The current phase gate has unmet leaves listed in failed_leaves.
+fix: Read failed_leaves from host context; satisfy gates with evidence or delegate work
+instead: Never claim phase done in prose when phase_gate_unmet or failed_leaves is set
+id: WORKFLOW_GATE_UNMET

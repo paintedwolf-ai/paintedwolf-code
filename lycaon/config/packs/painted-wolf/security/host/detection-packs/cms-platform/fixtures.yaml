@@ -1,0 +1,25 @@
+fixtures:
+- rule: dataset-delete
+  positive:
+  - sanity datasets delete staging --force
+  - sanity datasets delete staging -p myproj --force
+  - sanity datasets delete production --force -p myproj
+  - sudo sanity datasets delete staging --force
+  negative:
+  - sanity datasets delete staging
+  - sanity datasets delete staging -p myproj
+  - sanity datasets list
+  - sanity datasets create staging
+  - sanity datasets delete staging --force --help
+  - sanity datasets delete --help
+- rule: documents-delete
+  positive:
+  - sanity documents delete doc1
+  - sanity documents delete doc1 doc2 --dataset=blog
+  - sanity documents delete doc1 -d production -p myproj
+  - sudo sanity documents delete doc1
+  negative:
+  - sanity documents get doc1
+  - sanity documents query "*[_type == \"post\"]"
+  - sanity documents delete doc1 --help
+  - sanity documents delete --help

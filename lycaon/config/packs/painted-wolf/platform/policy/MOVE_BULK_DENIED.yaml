@@ -1,0 +1,37 @@
+oar: '1.0'
+id: MOVE_BULK_DENIED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - move
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bulk_denied
+  - paintedwolf.requested
+  - paintedwolf.max_pairs
+when: paintedwolf.rejection_code == "MOVE_BULK_DENIED"
+effect: block
+copy:
+  cause: The explicit move set exceeds the per-call pair bound.
+  why: Each source/destination pairing and its order must retain the intended mutation.
+  fix: Split the intended pairs into batches of at most {{ paintedwolf.max_pairs }}. Preserve completed move
+    receipts and do not replay already-moved sources.
+  instead: Keep each batch bounded and account for prior moves
+  what: move received {{ paintedwolf.requested }} pairs; the current bound is {{ paintedwolf.max_pairs }}.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
+x-paintedwolf-message: move:move batch exceeds max pairs
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: move
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MOVE_BULK_DENIED'

@@ -1,0 +1,21 @@
+# Golden MCP schema binding — fake server id "fixture", no real MCP spawn.
+id: fixture_widget
+provider_id: fixture
+tool_name: widget
+schema:
+  type: object
+  required: [status, count]
+  properties:
+    status: { type: string }
+    count: { type: integer }
+fields:
+  - key: widget_status
+    type: string
+    path: /status
+  - key: widget_count
+    type: int
+    path: /count
+  - key: is_ready
+    type: bool
+    path: /status
+    equals: ready

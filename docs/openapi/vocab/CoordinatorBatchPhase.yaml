@@ -1,0 +1,29 @@
+# CoordinatorBatchPhase contains phases emitted by batch.ToWirePhase.
+# Host pre_dispatch maps to an empty value and stays off the wire.
+name: CoordinatorBatchPhase
+go_const_prefix: CoordinatorBatchPhase
+description: >-
+  Phase of the coordinator batch, as projected onto the wire by ToWirePhase.
+ts_labels:
+  path: lycaon-den/src/chat/progress/batch-phase-copy.generated.ts
+  const: BATCH_PHASE_LABELS
+  type_import: ../../api/types.ts
+  doc: >-
+    Human labels for the coordinator's batch phases. The Progress strip chip
+    and the composer activity lane both read this table.
+values:
+  - id: dispatch
+    label: Starting workers
+    comment: fires when a writer task has been enqueued and workers are starting.
+  - id: integrate
+    label: Combining results
+    comment: >-
+      fires when worker overlays are pending promotion and the coordinator is idle.
+  - id: synthesize
+    label: Putting it together
+    comment: fires when the run's synthesis is ready to be written.
+  - id: closed
+    label: Working on your request
+    comment: >-
+      fires when a grounded synthesis was accepted. Terminal, and filtered before
+      display — a closed batch is not activity.

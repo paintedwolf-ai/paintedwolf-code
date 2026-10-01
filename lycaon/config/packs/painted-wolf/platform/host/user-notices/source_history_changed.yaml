@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: File history changed
+message: >-
+  The files or available undo history changed after this action was shown, so
+  the older action was not applied.
+suggested_action: Review the current file tree, then try the available undo or redo action again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - history changed
+      - not applied

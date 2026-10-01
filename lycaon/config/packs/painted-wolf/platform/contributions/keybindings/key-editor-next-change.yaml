@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-next-change
+command: painted-wolf/platform:editor-next-change
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+F8"
+  windows:
+    - "Alt+F8"
+  linux:
+    - "Alt+F8"

@@ -1,0 +1,18 @@
+# terminal_send — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    terminal_send:
+        tool: terminal_send
+        tier_hint: recoverable
+        what_changes: Types into an already-open pty handle (never secrets).
+        who_affected: This session's held process and resources it can reach with granted capabilities.
+        if_wrong: Ctrl-C or terminal_close can stop further work, but cannot undo effects already performed.
+        allow_line: sending input to a held terminal
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - terminal
+                - session

@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "Ignore file changed"
+message: "The project's ignore file changed since it was loaded, so your edit was not saved."
+suggested_action: "Reload it and make the change again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "changed since it was loaded"

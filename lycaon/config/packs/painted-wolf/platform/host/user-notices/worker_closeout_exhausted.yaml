@@ -1,0 +1,15 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker could not finish
+message: >-
+  The worker used every tool turn and both closing attempts, but the model
+  did not finish its summary before the time limit.
+suggested_action: >-
+  Retry with a narrower task() brief, fewer max_tool_loops, or split the work across workers.
+scenarios:
+  - id: generic
+    vars: {}
+    expect_contains:
+      - closing attempts
+      - time limit

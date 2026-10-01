@@ -1,0 +1,5 @@
+id: dns-cdn
+label: DNS and CDN
+description: >-
+  DNS and CDN operations (Cloudflare, Route 53, Fastly) that delete a zone or
+  purge everything a CDN has cached.

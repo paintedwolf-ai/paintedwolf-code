@@ -1,0 +1,5 @@
+code: required_phase_missing
+message: |
+  extends {{extends}} requires phase {{phase}} in the effective manifest.
+replacement: |
+  Add the required phase id.

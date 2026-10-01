@@ -1,0 +1,10 @@
+id: azure-search-admin-key
+title: Azure AI Search admin key
+regex: '(?i)\bazure_search_(?:primary_|secondary_)?admin_key\b[''" ]*[:=][ ''"]*([A-Za-z0-9]{52})\b'
+keywords:
+  - azure_search_admin_key
+  - azure_search_primary_admin_key
+  - azure_search_secondary_admin_key
+severity: critical
+secret_group: 1
+entropy: 3.3

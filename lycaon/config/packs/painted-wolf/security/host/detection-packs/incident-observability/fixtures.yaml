@@ -1,0 +1,63 @@
+fixtures:
+- rule: index-data-erase
+  positive:
+  - splunk clean eventdata -index main -f
+  - splunk clean eventdata -f
+  - splunk remove index legacy_index
+  - sudo splunk clean eventdata -index main -f
+  negative:
+  - splunk list index
+  - splunk clean eventdata --help
+  - splunk remove index legacy_index --help
+  - splunk list eventdata
+  # Without -f this sits on a confirmation prompt and erases nothing.
+  - splunk clean eventdata -index main
+  # `--force` is not a Splunk spelling; only -f skips the prompt.
+  - splunk clean eventdata -index main --force
+- rule: paging-disable
+  positive:
+  - pd service disable -i PXXXXX
+  - amtool silence add alertname=HighErrorRate --duration=24h
+  - dog monitor mute 12345
+  - dog monitor mute_all
+  - dog downtime post 'host:web-1' 3600
+  - sudo pd service disable -i PXXXXX
+  negative:
+  - pd service enable -i PXXXXX
+  - amtool silence query
+  - amtool alert list
+  - dog monitor show 12345
+  - dog monitor unmute 12345
+  - pd service list
+  - pd service disable -i PXXXXX --help
+- rule: sentry-release-delete
+  positive:
+  - sentry-cli releases delete acme/1.4.0
+  - sentry-cli releases delete acme/1.4.0 --org acme
+  - sudo sentry-cli releases delete acme/1.4.0
+  negative:
+  - sentry-cli releases list
+  - sentry-cli releases delete acme/1.4.0 --help
+  - sentry-cli releases delete acme/1.4.0 --dry-run
+  - sentry-cli releases finalize acme/1.4.0
+  - sentry-cli releases archive acme/1.4.0
+- rule: detection-control-delete
+  positive:
+  - dog monitor delete 12345
+  - sudo dog monitor delete 12345
+  negative:
+  - dog monitor show 12345
+  - dog monitor show_all
+  - dog monitor can_delete 12345
+  - dog monitor delete 12345 --help
+- rule: dashboard-resource-delete
+  positive:
+  - grafanactl resources delete dashboards/service-overview
+  - grafanactl resources delete dashboards --force
+  - sudo grafanactl resources delete folders/team-a
+  negative:
+  - grafanactl resources list dashboards
+  - grafanactl resources get dashboards/service-overview
+  - grafanactl resources pull -p ./resources
+  - grafanactl resources delete dashboards --dry-run
+  - grafanactl resources delete dashboards --help

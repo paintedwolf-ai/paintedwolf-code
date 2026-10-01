@@ -1,0 +1,13 @@
+emit: banner
+category: worker_dispatch
+severity: info
+message: Worker accepted; completion is pending.
+what: Worker queued
+cause: This receipt confirms acceptance, not completion.
+why: Accepted workers keep running if another dispatch is rejected. Retry only rejected calls.
+fix: Continue coordinating ready work or dispatch companion workers within the {{ paintedwolf.max_in_flight }} worker cap; use wait when the next action requires a result.
+instead: Read the completion envelope before claiming that leg is done.
+context_schema:
+  required:
+  - max_in_flight
+id: BANNER_TASK_QUEUED

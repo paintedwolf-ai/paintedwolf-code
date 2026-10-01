@@ -1,0 +1,41 @@
+oar: '1.0'
+id: CAPTURE_ACTION_FIELDS_UNUSED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.index
+  - paintedwolf.type
+  - paintedwolf.unused_fields
+  - paintedwolf.step_fields
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "CAPTURE_ACTION_FIELDS_UNUSED"
+effect: block
+copy:
+  what: '{{ tool }} received a {{ paintedwolf.type }} step{% if paintedwolf.index %} (actions[{{ paintedwolf.index }}]){% endif
+    %} with fields it does not read: {{ paintedwolf.unused_fields }}.'
+  cause: Each step type reads its own fields{% if paintedwolf.step_fields %}; a {{ paintedwolf.type }} step reads {{ paintedwolf.step_fields
+    }}{% endif %}.
+  why: The step would run as if the ignored fields were absent, so the result would describe a different step than the
+    one requested.
+  fix: Remove the unused fields, or use the step type that reads them. `by` offsets a drag without a drop target or a
+    scroll; `to` names a drag's drop target. To reach a position inside an element, target a child element with its own
+    selector.
+  instead: Branch on Code CAPTURE_ACTION_FIELDS_UNUSED; correct the step and retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: A browser step carries fields it does not read
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: page_act
+    index: '0'
+    type: click
+    unused_fields: by
+    step_fields: testid, selector, role, label, text, button, count, modifiers, timeout_ms, wait
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_ACTION_FIELDS_UNUSED'
+  - by

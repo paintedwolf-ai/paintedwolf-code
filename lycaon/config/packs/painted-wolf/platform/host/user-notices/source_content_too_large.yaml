@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: "File is too large for the editor"
+message: "This file is larger than Painted Wolf Code can open or save in the editor."
+suggested_action: "Make the file smaller, or edit it with another tool."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "larger than Painted Wolf Code can open or save"

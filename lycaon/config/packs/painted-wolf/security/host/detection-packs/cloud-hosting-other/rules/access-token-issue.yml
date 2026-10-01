@@ -1,0 +1,46 @@
+title: Issue provider access credentials
+id: f2b5e359-64e6-4d4b-9143-6dc669749d87
+description: Creates an API token, registry credential, or cluster kubeconfig.
+references:
+  - https://attack.mitre.org/
+  - https://upcloud.com/docs/guides/upcloud-command-line-interface/
+  - https://techdocs.akamai.com/linode-api/reference/post-personal-access-token
+  - https://docs.digitalocean.com/reference/doctl/reference/registry/login/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # Coarse cross-vendor verb match, same reasoning as resource-destroy — one
+  # band below where a precise per-provider credential-mint rule would sit.
+  selection_image:
+    Image:
+      - doctl
+      - hcloud
+      - linode-cli
+      - scw
+      - vultr-cli
+      - exo
+      - civo
+      - upctl
+  # linode-cli groups mirror API tags, so the token lives under `profile` and
+  # the verb is hyphenated. vultr-cli mints no keys at all — Vultr issues them
+  # in the portal — and civo has no registry group, so neither has a verb here.
+  verbs_token_issue:
+    CommandLine|contains:
+      - ' profile token-create'
+      - ' registry login'
+      - ' ssh-key create'
+      - ' iam api-key create'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|list)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_token_issue and not filter_rehearsal and not filter_local

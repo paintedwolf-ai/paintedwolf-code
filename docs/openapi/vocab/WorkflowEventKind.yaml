@@ -1,0 +1,16 @@
+# WorkflowEventKind — workflow run event kinds emitted over SSE.
+name: WorkflowEventKind
+go_const_prefix: WorkflowEventKind
+values:
+  - id: run_started
+    comment: Workflow run started.
+  - id: run_updated
+    comment: Workflow run updated.
+  - id: run_canceled
+    comment: Workflow run was canceled.
+  - id: phase_advanced
+    comment: Workflow phase advanced.
+  - id: workflow_persisted
+    comment: Workflow state persisted.
+  - id: gate_pending
+    comment: Workflow gate is pending.

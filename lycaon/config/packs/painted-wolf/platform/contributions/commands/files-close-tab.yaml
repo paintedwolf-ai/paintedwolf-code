@@ -1,0 +1,11 @@
+id: painted-wolf/platform:files-close-tab
+title: "Close files tab"
+scope: "files"
+keywords:
+  - "close tab"
+category: "buffers"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.closeTab"

@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-previous-finding
+title: "Go to previous finding"
+scope: "files"
+keywords:
+  - "previous finding"
+  - "previous problem"
+  - "previous diagnostic"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.previousFinding"

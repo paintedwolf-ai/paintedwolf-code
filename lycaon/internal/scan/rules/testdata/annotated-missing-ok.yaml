@@ -1,0 +1,4 @@
+rules:
+  - id: lycaon.shell.test-annotated
+    languages: [bash]
+    severity: ERROR

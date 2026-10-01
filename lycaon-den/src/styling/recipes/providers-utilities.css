@@ -1,0 +1,218 @@
+@utility den-settings-providers-detail {
+  padding: 0;
+  max-width: none;
+}
+
+/** Instance row — unboxed inside the group; a hairline splits sibling rows. */
+@utility den-settings-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-5);
+  padding: var(--spacing-den-6) var(--spacing-den-7);
+
+  & + & {
+    border-top: 1px solid var(--den-line-quiet);
+  }
+}
+
+@utility den-settings-provider-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-4);
+  align-items: center;
+  margin-bottom: 0;
+}
+
+@utility den-settings-provider-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+@utility den-settings-provider-rename-trigger {
+  margin: 0;
+  padding: 0.1rem 0.2rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: text;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--den-text-muted) 14%, transparent);
+    outline: none;
+  }
+}
+
+@utility den-settings-provider-rename-input {
+  width: min(20rem, 100%);
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--den-line);
+  border-radius: 4px;
+  background: var(--den-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+}
+
+@utility den-settings-provider-id {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-overline);
+  color: var(--den-text-muted);
+  user-select: all;
+}
+
+@utility den-settings-provider-label-hint {
+  margin: -0.5rem 0 0;
+  font-size: var(--text-den-caption);
+  line-height: 1.35;
+  color: var(--den-text-muted);
+}
+
+@utility den-settings-provider-remove {
+  margin-left: auto;
+}
+
+/* Ready status uses the positive color. */
+@utility den-settings-provider-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--den-text-muted);
+  background: color-mix(in srgb, var(--den-text-muted) 12%, transparent);
+
+  &[data-configured="true"] {
+    color: var(--den-status-positive-text);
+    background: color-mix(in srgb, var(--den-status-positive) 14%, transparent);
+  }
+}
+
+@utility den-settings-provider-key-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-den-4);
+}
+
+/** API key field — stored vs missing via outline only (fill matches den-input). */
+@utility den-settings-api-key-input {
+  &[data-credential="stored"] {
+    border-color: var(--den-status-positive-text);
+  }
+
+  &[data-credential="stored"]:placeholder-shown::placeholder {
+    color: var(--den-status-positive-text);
+    letter-spacing: 0.18em;
+    opacity: 0.9;
+  }
+
+  &[data-credential="stored"]:focus {
+    border-color: var(--den-status-positive-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-status-positive) 22%, transparent);
+  }
+
+  &[data-credential="missing"][data-required="true"] {
+    border-color: var(--den-danger-text);
+  }
+
+  &[data-credential="missing"][data-required="true"]::placeholder {
+    color: color-mix(in srgb, var(--den-danger) 55%, var(--den-text-muted));
+  }
+
+  &[data-credential="missing"][data-required="true"]:focus {
+    border-color: var(--den-danger-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--den-danger) 22%, transparent);
+  }
+}
+
+@utility den-settings-provider-models {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--spacing-den-4);
+  font-size: var(--text-den-hint);
+
+  & li {
+    display: flex;
+    gap: var(--spacing-den-4);
+    padding: var(--spacing-den-2) 0;
+  }
+}
+
+@utility den-settings-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-den-4);
+  align-items: center;
+
+  & .den-select {
+    min-width: 160px;
+    max-width: 100%;
+    height: 30px;
+    font-size: var(--text-den-label);
+  }
+}
+
+/* Keep stale results above refresh errors. */
+@utility den-settings-provider-refresh-failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-den-2);
+  margin-top: var(--spacing-den-2);
+
+  & p {
+    margin: 0;
+  }
+}
+
+/* Controls governed by the switch above; locked and dimmed while it is off. */
+@utility den-settings-governed {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+
+  &[data-inset="true"] {
+    padding-inline-start: var(--spacing-den-6);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+  }
+
+  /* Keep the row separator when more rows follow the group. */
+  &:not(:last-child) > .den-settings-pref-row:last-child {
+    border-bottom: 1px solid var(--den-line-quiet);
+  }
+}
+
+@utility den-settings-web-research-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+}
+
+@utility den-settings-web-research-index {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-den-6);
+}
+
+/** Dense paginated read-only list (settings activity logs, etc.). */

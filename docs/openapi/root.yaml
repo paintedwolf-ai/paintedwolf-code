@@ -1,0 +1,1521 @@
+openapi: 3.1.0
+info:
+  title: Painted Wolf Code Host API
+  version: 1.0.0
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
+  description: 'REST + SSE contract for the Painted Wolf Code local service.
+
+
+    - JSON field names use snake_case on the wire.
+
+    - Resource IDs are UUID strings unless noted.
+
+    - Timestamps are RFC 3339 date-time strings.
+
+    - SSE EventHub payloads use the envelope in `docs/schemas/events/envelope.json`.
+
+    '
+servers:
+- url: http://127.0.0.1:8787
+  description: Default local sidecar
+security:
+- bearerAuth: []
+tags:
+- name: sessions
+  description: Chat sessions, transcripts, prompts, context, and session artifacts.
+- name: workflows
+  description: Workflow catalogs, session composition, execution, and human transitions.
+- name: projects
+  description: Project identity, roots, source access, and project-scoped history.
+- name: blueprints
+  description: Reusable project and workflow launch configurations.
+- name: delegations
+  description: Coordinator work delegation and leg lifecycle.
+- name: workers
+  description: Background worker tasks and cancellation.
+- name: board
+  description: Session planning and execution board snapshots.
+- name: events
+  description: Authenticated server-sent event subscriptions.
+- name: cost
+  description: Session and project model-usage accounting.
+- name: scan
+  description: Security scan execution, findings, and scanner configuration.
+- name: mcp
+  description: MCP provider configuration, discovery, OAuth, and health.
+- name: providers
+  description: Language-model providers, credentials, models, and policy.
+- name: web-research
+  description: Web-research provider configuration, credentials, and index status.
+- name: rules
+  description: Effective project guidance and rule surfaces.
+- name: settings
+  description: Device and project preferences, approvals, and model policy.
+- name: git
+  description: >-
+    Command endpoints for the active project's git working tree (status,
+    checkout, discard, commit, push, pull, stash). These are RPC-style verbs,
+    not REST resources — each POST performs a named git action
+    against the session's roots rather than mutating an addressable object.
+- name: search
+  description: Cross-source search, replacement, and export.
+- name: debug
+  description: Local diagnostics and performance telemetry.
+- name: health
+  description: Sidecar readiness, compatibility recovery, and host preflight facts.
+- name: host
+  description: Host identity, contract version, and the authenticated caller.
+- name: local-data
+  description: >-
+    Command endpoint for clearing rebuildable ephemeral local buckets. Like the
+    git routes, `clear` is a deliberate RPC-style action verb, not a REST
+    resource; it never touches the durable store or credentials.
+- name: backup
+  description: >-
+    Local durable-install backup and staged restore. Distinct from the scrubbed
+    diagnostics bundle and from rebuildable Cache clears.
+- name: extensions
+  description: Extension packs, installed units, suggestions, and desired state.
+- name: contributions
+  description: >-
+    Runtime projection of the captured contribution frame and the two
+    invocation routes for host-executed contribution commands.
+- name: host-resources
+  description: Host capability inventory and user-granted access policy.
+- name: attention
+  description: >-
+    Cross-project view of the sessions asking something of the human. Read as a
+    snapshot here; kept live on the device-scoped `attention` SSE topic.
+paths:
+  /health:
+    $ref: paths/health.yaml#/paths/~1health
+  /v1/preflight:
+    $ref: paths/preflight.yaml#/paths/~1v1~1preflight
+  /v1/diagnostics/export:
+    $ref: paths/diagnostics.yaml#/paths/~1v1~1diagnostics~1export
+  /v1/sessions:
+    $ref: paths/sessions/identity.yaml#/paths/~1v1~1sessions
+  /v1/sessions/{id}:
+    $ref: paths/sessions/identity.yaml#/paths/~1v1~1sessions~1{id}
+  /v1/sessions/{id}/bootstrap:
+    $ref: paths/sessions/identity.yaml#/paths/~1v1~1sessions~1{id}~1bootstrap
+  /v1/sessions/{id}/navigation:
+    $ref: paths/sessions/transcript.yaml#/paths/~1v1~1sessions~1{id}~1navigation
+  /v1/sessions/{id}/messages:
+    $ref: paths/sessions/transcript.yaml#/paths/~1v1~1sessions~1{id}~1messages
+  /v1/sessions/{id}/messages/{message_id}/content:
+    $ref: paths/chat-content.yaml#/paths/~1v1~1sessions~1{id}~1messages~1{message_id}~1content
+  /v1/sessions/{id}/messages/{message_id}/content/search:
+    $ref: paths/chat-content.yaml#/paths/~1v1~1sessions~1{id}~1messages~1{message_id}~1content~1search
+  /v1/sessions/{id}/invocations:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1invocations
+  /v1/sessions/{id}/export:
+    $ref: paths/sessions/transcript.yaml#/paths/~1v1~1sessions~1{id}~1export
+  /v1/sessions/{id}/prompts:
+    $ref: paths/sessions/prompts.yaml#/paths/~1v1~1sessions~1{id}~1prompts
+  /v1/sessions/{id}/abort:
+    $ref: paths/sessions/prompts.yaml#/paths/~1v1~1sessions~1{id}~1abort
+  /v1/sessions/{id}/rewind/preview:
+    $ref: paths/sessions/rewind.yaml#/paths/~1v1~1sessions~1{id}~1rewind~1preview
+  /v1/sessions/{id}/rewind:
+    $ref: paths/sessions/rewind.yaml#/paths/~1v1~1sessions~1{id}~1rewind
+  /v1/sessions/{id}/seen:
+    $ref: paths/sessions/identity.yaml#/paths/~1v1~1sessions~1{id}~1seen
+  /v1/sessions/{id}/background/{process_id}/stop:
+    $ref: paths/sessions/background.yaml#/paths/~1v1~1sessions~1{id}~1background~1{process_id}~1stop
+  /v1/sessions/{id}/background:
+    $ref: paths/sessions/background.yaml#/paths/~1v1~1sessions~1{id}~1background
+  /v1/sessions/{id}/background/{process_id}/output:
+    $ref: paths/sessions/background.yaml#/paths/~1v1~1sessions~1{id}~1background~1{process_id}~1output
+  /v1/sessions/{id}/previews:
+    $ref: paths/sessions/preview.yaml#/paths/~1v1~1sessions~1{id}~1previews
+  /v1/sessions/{id}/previews/watch:
+    $ref: paths/sessions/preview.yaml#/paths/~1v1~1sessions~1{id}~1previews~1watch
+  /v1/sessions/{id}/stream:
+    $ref: paths/sessions/transcript.yaml#/paths/~1v1~1sessions~1{id}~1stream
+  /v1/sessions/{id}/compact:
+    $ref: paths/sessions/context.yaml#/paths/~1v1~1sessions~1{id}~1compact
+  /v1/sessions/{id}/elevated-access:
+    $ref: paths/sessions/elevated-access.yaml#/paths/~1v1~1sessions~1{id}~1elevated-access
+  /v1/sessions/{id}/elevated-access/revoke:
+    $ref: paths/sessions/elevated-access.yaml#/paths/~1v1~1sessions~1{id}~1elevated-access~1revoke
+  /v1/sessions/{id}/context:
+    $ref: paths/sessions/context.yaml#/paths/~1v1~1sessions~1{id}~1context
+  /v1/sessions/{id}/composer-secrets:
+    $ref: paths/sessions/prompts.yaml#/paths/~1v1~1sessions~1{id}~1composer-secrets
+  /v1/sessions/{id}/findings:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1findings
+  /v1/sessions/{id}/drafts/{slot_id}/versions:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1drafts~1{slot_id}~1versions
+  /v1/sessions/{id}/progress:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1progress
+  /v1/sessions/{id}/artifacts:
+    $ref: paths/sessions/artifacts.yaml#/paths/~1v1~1sessions~1{id}~1artifacts
+  /v1/sessions/{id}/artifacts/{artifact_id}:
+    $ref: paths/sessions/artifacts.yaml#/paths/~1v1~1sessions~1{id}~1artifacts~1{artifact_id}
+  /v1/sessions/{id}/queue:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1queue
+  /v1/sessions/{id}/coordinator-context:
+    $ref: paths/sessions/context.yaml#/paths/~1v1~1sessions~1{id}~1coordinator-context
+  /v1/sessions/{id}/checkpoints:
+    $ref: paths/sessions/checkpoints.yaml#/paths/~1v1~1sessions~1{id}~1checkpoints
+  /v1/sessions/{id}/checkpoints/{checkpoint_id}:
+    $ref: paths/sessions/checkpoints.yaml#/paths/~1v1~1sessions~1{id}~1checkpoints~1{checkpoint_id}
+  /v1/projects:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects
+  /v1/projects/clone:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects~1clone
+  /v1/projects/detect:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects~1detect
+  /v1/projects/{id}:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects~1{id}
+  /v1/projects/{id}/removal-assessment:
+    $ref: paths/projects/removal.yaml#/paths/~1v1~1projects~1{id}~1removal-assessment
+  /v1/projects/{id}/removals:
+    $ref: paths/projects/removal.yaml#/paths/~1v1~1projects~1{id}~1removals
+  /v1/projects/{id}/removals/{operation_id}:
+    $ref: paths/projects/removal.yaml#/paths/~1v1~1projects~1{id}~1removals~1{operation_id}
+  /v1/projects/{id}/sessions:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects~1{id}~1sessions
+  /v1/projects/{id}/trust:
+    $ref: paths/projects/trust.yaml#/paths/~1v1~1projects~1{id}~1trust
+  /v1/projects/{id}/trust/review:
+    $ref: paths/projects/trust.yaml#/paths/~1v1~1projects~1{id}~1trust~1review
+  /v1/projects/{id}/agent-context:
+    $ref: paths/projects/context.yaml#/paths/~1v1~1projects~1{id}~1agent-context
+  /v1/projects/{id}/artifacts:
+    $ref: paths/projects/artifacts.yaml#/paths/~1v1~1projects~1{id}~1artifacts
+  /v1/projects/{id}/artifacts/{artifact_id}:
+    $ref: paths/projects/artifacts.yaml#/paths/~1v1~1projects~1{id}~1artifacts~1{artifact_id}
+  /v1/projects/{id}/secrets:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets
+  /v1/projects/{id}/secrets/{secret_id}:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}
+  /v1/projects/{id}/secrets/{secret_id}/value:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1value
+  /v1/projects/{id}/secrets/{secret_id}/uses:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1uses
+  /v1/projects/{id}/secrets/{secret_id}/reveal-challenges:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1reveal-challenges
+  /v1/projects/{id}/secrets/{secret_id}/reveal-challenges/{challenge_id}/complete:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1reveal-challenges~1{challenge_id}~1complete
+  /v1/projects/{id}/promotion:
+    $ref: paths/projects/identity.yaml#/paths/~1v1~1projects~1{id}~1promotion
+  /v1/projects/{id}/roots:
+    $ref: paths/projects/roots.yaml#/paths/~1v1~1projects~1{id}~1roots
+  /v1/projects/{id}/roots/{root_id}:
+    $ref: paths/projects/roots.yaml#/paths/~1v1~1projects~1{id}~1roots~1{root_id}
+  /v1/projects/{id}/source/operations:
+    $ref: paths/projects/source-operations.yaml#/paths/~1v1~1projects~1{id}~1source~1operations
+  /v1/projects/{id}/source/operations/{operation_id}/cancel:
+    $ref: paths/projects/source-operations.yaml#/paths/~1v1~1projects~1{id}~1source~1operations~1{operation_id}~1cancel
+  /v1/projects/{id}/source/operations/{operation_id}/retry:
+    $ref: paths/projects/source-operations.yaml#/paths/~1v1~1projects~1{id}~1source~1operations~1{operation_id}~1retry
+  /v1/projects/{id}/source/operations/{operation_id}:
+    $ref: paths/projects/source-operations.yaml#/paths/~1v1~1projects~1{id}~1source~1operations~1{operation_id}
+  /v1/projects/{id}/source:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source
+  /v1/projects/{id}/source/workspace:
+    $ref: paths/projects/source-workspace.yaml#/paths/~1v1~1projects~1{id}~1source~1workspace
+  /v1/projects/{id}/agent-presence:
+    $ref: paths/projects/source-workspace.yaml#/paths/~1v1~1projects~1{id}~1agent-presence
+  /v1/projects/{id}/editor-documents:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents
+  /v1/projects/{id}/secret-ignores:
+    $ref: paths/projects/secret-ignores.yaml#/paths/~1v1~1projects~1{id}~1secret-ignores
+  /v1/projects/{id}/secret-ignores/{entry_id}:
+    $ref: paths/projects/secret-ignores.yaml#/paths/~1v1~1projects~1{id}~1secret-ignores~1{entry_id}
+  /v1/projects/{id}/secret-ignore-candidates/{candidate_id}:
+    $ref: paths/projects/secret-ignores.yaml#/paths/~1v1~1projects~1{id}~1secret-ignore-candidates~1{candidate_id}
+  /v1/projects/{id}/editor-documents/retention:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1retention
+  /v1/projects/{id}/editor-documents/status:
+    $ref: 'paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1status'
+  /v1/projects/{id}/editor-documents/{document_id}:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}
+  /v1/projects/{id}/editor-documents/{document_id}/changes:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1changes
+  /v1/projects/{id}/editor-documents/{document_id}/changes/{change_id}/revert:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1changes~1{change_id}~1revert
+  /v1/projects/{id}/editor-documents/{document_id}/snapshots:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1snapshots
+  /v1/projects/{id}/editor-documents/{document_id}/resolve:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1resolve
+  /v1/projects/{id}/editor-documents/{document_id}/sync:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1sync
+  /v1/projects/{id}/editor-documents/{document_id}/updates:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1updates
+  /v1/projects/{id}/editor-documents/{document_id}/leave:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1leave
+  /v1/projects/{id}/editor-documents/{document_id}/presence:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1presence
+  /v1/projects/{id}/editor-documents/{document_id}/discard:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1discard
+  /v1/projects/{id}/editor-documents/{document_id}/reload:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1reload
+  /v1/projects/{id}/editor-documents/{document_id}/observe:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1observe
+  /v1/projects/{id}/editor-documents/{document_id}/save:
+    $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1save
+  /v1/projects/{id}/editor-documents/{document_id}/secret-spans/preview:
+    $ref: paths/projects/editor-secrets.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1secret-spans~1preview
+  /v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark:
+    $ref: paths/projects/editor-secrets.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1{document_id}~1secret-spans~1mark
+  /v1/projects/{id}/attachments:
+    $ref: paths/projects/attachments.yaml#/paths/~1v1~1projects~1{id}~1attachments
+  /v1/projects/{id}/source/raw:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1raw
+  /v1/projects/{id}/source/editorconfig:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1editorconfig
+  /v1/projects/{id}/source/editable:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1editable
+  /v1/projects/{id}/source/browse:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1browse
+  /v1/projects/{id}/source/history:
+    $ref: paths/projects/source-history.yaml#/paths/~1v1~1projects~1{id}~1source~1history
+  /v1/projects/{id}/source/history/undo:
+    $ref: paths/projects/source-history.yaml#/paths/~1v1~1projects~1{id}~1source~1history~1undo
+  /v1/projects/{id}/source/history/redo:
+    $ref: paths/projects/source-history.yaml#/paths/~1v1~1projects~1{id}~1source~1history~1redo
+  /v1/projects/{id}/source/rename:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1rename
+  /v1/projects/{id}/source/copy:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1copy
+  /v1/projects/{id}/source/index:
+    $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1index
+  /v1/projects/{id}/source/search:
+    $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1search
+  /v1/projects/{id}/source/definition:
+    $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1definition
+  /v1/projects/{id}/source/symbols:
+    $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1symbols
+  /v1/projects/{id}/source/walk-summary:
+    $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1walk-summary
+  /v1/projects/{id}/source/git-changes/{git_change_id}/review:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1git-changes~1{git_change_id}~1review
+  /v1/projects/{id}/source/revisions:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1revisions
+  /v1/projects/{id}/source/revisions/review:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1revisions~1review
+  /v1/projects/{id}/source/walk:
+    $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1walk
+  /v1/projects/{id}/source/versions:
+    $ref: paths/projects/source-versions.yaml#/paths/~1v1~1projects~1{id}~1source~1versions
+  /v1/projects/{id}/source/versions/{version_id}/restore:
+    $ref: paths/projects/source-versions.yaml#/paths/~1v1~1projects~1{id}~1source~1versions~1{version_id}~1restore
+  /v1/projects/{id}/source/commits/{commit_sha}/restore:
+    $ref: paths/projects/source-versions.yaml#/paths/~1v1~1projects~1{id}~1source~1commits~1{commit_sha}~1restore
+  /v1/projects/{id}/source/file-briefings:
+    $ref: paths/projects/file-briefings.yaml#/paths/~1v1~1projects~1{id}~1source~1file-briefings
+  /v1/projects/{id}/source/seen:
+    $ref: paths/projects/source-presentation.yaml#/paths/~1v1~1projects~1{id}~1source~1seen
+  /v1/projects/{id}/source/seen/{file_id}:
+    $ref: paths/projects/source-presentation.yaml#/paths/~1v1~1projects~1{id}~1source~1seen~1{file_id}
+  /v1/projects/{id}/source/storage:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1storage
+  /v1/projects/{id}/security:
+    $ref: paths/projects/security.yaml#/paths/~1v1~1projects~1{id}~1security
+  /v1/projects/{id}/findings/query:
+    $ref: paths/projects/security.yaml#/paths/~1v1~1projects~1{id}~1findings~1query
+  /v1/projects/{id}/findings/ignores:
+    $ref: paths/projects/security.yaml#/paths/~1v1~1projects~1{id}~1findings~1ignores
+  /v1/projects/{id}/findings/ignores/{entry_id}:
+    $ref: paths/projects/security.yaml#/paths/~1v1~1projects~1{id}~1findings~1ignores~1{entry_id}
+  /v1/projects/{id}/findings/export:
+    $ref: paths/projects/security.yaml#/paths/~1v1~1projects~1{id}~1findings~1export
+  /v1/projects/{id}/source/pins:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1pins
+  /v1/projects/{id}/source/pins/{pin_id}:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1pins~1{pin_id}
+  /v1/projects/{id}/source/comparison:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1comparison
+  /v1/projects/{id}/source/attribution:
+    $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1attribution
+  /v1/workers/{id}/changes:
+    $ref: paths/workers.yaml#/paths/~1v1~1workers~1{id}~1changes
+  /v1/projects/{id}/blueprints:
+    $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints
+  /v1/projects/{id}/blueprints/{blueprint_id}:
+    $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints~1{blueprint_id}
+  /v1/projects/{id}/blueprints/{blueprint_id}/approve:
+    $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints~1{blueprint_id}~1approve
+  /v1/projects/{id}/blueprints/{blueprint_id}/launch:
+    $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints~1{blueprint_id}~1launch
+  /v1/delegations:
+    $ref: paths/delegations.yaml#/paths/~1v1~1delegations
+  /v1/delegations/{id}:
+    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}
+  /v1/delegations/{id}/legs:
+    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1legs
+  /v1/delegations/{id}/dispatch:
+    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1dispatch
+  /v1/delegations/{id}/abort:
+    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1abort
+  /v1/workflows:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflows
+  /v1/sessions/{id}/workflows/compose:
+    $ref: paths/workflows.yaml#/paths/~1v1~1sessions~1{id}~1workflows~1compose
+  /v1/workflow-templates:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-templates
+  /v1/sessions/{id}/workflows/compose-from-template:
+    $ref: paths/workflows.yaml#/paths/~1v1~1sessions~1{id}~1workflows~1compose-from-template
+  /v1/sessions/{id}/workflows/{workflow_id}/persist:
+    $ref: paths/workflows.yaml#/paths/~1v1~1sessions~1{id}~1workflows~1{workflow_id}~1persist
+  /v1/sessions/{id}/workflow-runs:
+    $ref: paths/workflows.yaml#/paths/~1v1~1sessions~1{id}~1workflow-runs
+  /v1/sessions/{id}/workflow-runs/active:
+    $ref: paths/workflows.yaml#/paths/~1v1~1sessions~1{id}~1workflow-runs~1active
+  /v1/workflow-runs/{id}:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}
+  /v1/workflow-runs/{id}/report:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1report
+  /v1/workflow-runs/{id}/pause:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1pause
+  /v1/workflow-runs/{id}/resume:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1resume
+  /v1/workflow-runs/{id}/cancel:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1cancel
+  /v1/workflow-runs/{id}/exit:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1exit
+  /v1/workflow-runs/{id}/advance:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1advance
+  /v1/workflow-runs/{id}/transitions/{transition_id}:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1transitions~1{transition_id}
+  /v1/workflow-runs/{id}/decisions/{phase_id}:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1decisions~1{phase_id}
+  /v1/workflow-runs/{id}/feedback/{phase_id}:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1feedback~1{phase_id}
+  /v1/workflow-runs/{id}/feedback/{phase_id}/secret:
+    $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1feedback~1{phase_id}~1secret
+  /v1/workers:
+    $ref: paths/workers.yaml#/paths/~1v1~1workers
+  /v1/workers/{id}/cancel:
+    $ref: paths/workers.yaml#/paths/~1v1~1workers~1{id}~1cancel
+  /v1/projects/{id}/board:
+    $ref: paths/board.yaml#/paths/~1v1~1projects~1{id}~1board
+  /v1/search:
+    $ref: paths/search.yaml#/paths/~1v1~1search
+  /v1/search/replace/preview:
+    $ref: paths/search.yaml#/paths/~1v1~1search~1replace~1preview
+  /v1/search/replace/apply:
+    $ref: paths/search.yaml#/paths/~1v1~1search~1replace~1apply
+  /v1/search/export:
+    $ref: paths/search.yaml#/paths/~1v1~1search~1export
+  /v1/events:
+    $ref: paths/events.yaml#/paths/~1v1~1events
+  /v1/attention:
+    $ref: paths/attention.yaml#/paths/~1v1~1attention
+  /v1/cost/summary:
+    $ref: paths/cost.yaml#/paths/~1v1~1cost~1summary
+  /v1/projects/{id}/cost-report:
+    $ref: paths/cost.yaml#/paths/~1v1~1projects~1{id}~1cost-report
+  /v1/projects/{id}/scans:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scans
+  /v1/projects/{id}/scans/{scan_id}:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scans~1{scan_id}
+  /v1/projects/{id}/scans/{scan_id}/query:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scans~1{scan_id}~1query
+  /v1/projects/{id}/scans/{scan_id}/sarif:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scans~1{scan_id}~1sarif
+  /v1/scanners:
+    $ref: paths/scan.yaml#/paths/~1v1~1scanners
+  /v1/scanners/catalog:
+    $ref: paths/scan.yaml#/paths/~1v1~1scanners~1catalog
+  /v1/scanners/check:
+    $ref: paths/scan.yaml#/paths/~1v1~1scanners~1check
+  /v1/scanners/slots/{category}:
+    $ref: paths/scan.yaml#/paths/~1v1~1scanners~1slots~1{category}
+  /v1/scanners/{scanner_id}:
+    $ref: paths/scan.yaml#/paths/~1v1~1scanners~1{scanner_id}
+  /v1/projects/{id}/scanners:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scanners
+  /v1/projects/{id}/scanners/{scanner_id}:
+    $ref: paths/scan.yaml#/paths/~1v1~1projects~1{id}~1scanners~1{scanner_id}
+  /v1/mcp/recipes:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1recipes
+  /v1/mcp/providers:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers
+  /v1/mcp/providers/{provider_id}:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}
+  /v1/mcp/providers/{provider_id}/tools:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1tools
+  /v1/mcp/providers/{provider_id}/refresh:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1refresh
+  /v1/mcp/providers/{provider_id}/oauth/start:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1oauth~1start
+  /v1/mcp/providers/{provider_id}/oauth/cancel:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1oauth~1cancel
+  /v1/mcp/providers/{provider_id}/oauth/complete:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1oauth~1complete
+  /v1/mcp/providers/{provider_id}/oauth:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1{provider_id}~1oauth
+  /v1/mcp/providers/check:
+    $ref: paths/mcp.yaml#/paths/~1v1~1mcp~1providers~1check
+  /v1/providers:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers
+  /v1/provider-kinds:
+    $ref: paths/providers.yaml#/paths/~1v1~1provider-kinds
+  /v1/providers/{provider_id}:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}
+  /v1/providers/{provider_id}/credential:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1credential
+  /v1/providers/{provider_id}/test:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1test
+  /v1/providers/{provider_id}/refresh:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1refresh
+  /v1/settings/web-research:
+    $ref: paths/web-research.yaml#/paths/~1v1~1settings~1web-research
+  /v1/web-research/providers:
+    $ref: paths/web-research.yaml#/paths/~1v1~1web-research~1providers
+  /v1/web-research/index:
+    $ref: paths/web-research.yaml#/paths/~1v1~1web-research~1index
+  /v1/web-research/providers/{provider_id}:
+    $ref: paths/web-research.yaml#/paths/~1v1~1web-research~1providers~1{provider_id}
+  /v1/web-research/providers/{provider_id}/credential:
+    $ref: paths/web-research.yaml#/paths/~1v1~1web-research~1providers~1{provider_id}~1credential
+  /v1/web-research/providers/{provider_id}/test:
+    $ref: paths/web-research.yaml#/paths/~1v1~1web-research~1providers~1{provider_id}~1test
+  /v1/settings/model-policy:
+    $ref: paths/settings/model-policy.yaml#/paths/~1v1~1settings~1model-policy
+  /v1/settings/approvals:
+    $ref: paths/settings/approvals.yaml#/paths/~1v1~1settings~1approvals
+  /v1/approval-grants:
+    $ref: paths/settings/approvals.yaml#/paths/~1v1~1approval-grants
+  /v1/approval-grants/resolve-socket:
+    $ref: paths/settings/approvals.yaml#/paths/~1v1~1approval-grants~1resolve-socket
+  /v1/approval-grants/revoke:
+    $ref: paths/settings/approvals.yaml#/paths/~1v1~1approval-grants~1revoke
+  /v1/approval-asks:
+    $ref: paths/settings/approvals.yaml#/paths/~1v1~1approval-asks
+  /v1/detection-packs:
+    $ref: paths/settings/detections.yaml#/paths/~1v1~1detection-packs
+  /v1/detection-packs/{pack_id}:
+    $ref: paths/settings/detections.yaml#/paths/~1v1~1detection-packs~1{pack_id}
+  /v1/settings/limits:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1limits
+  /v1/settings/review:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1review
+  /v1/settings/file-summaries:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1file-summaries
+  /v1/settings/power:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1power
+  /v1/settings/verify:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1verify
+  /v1/settings/verify/dismiss:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1verify~1dismiss
+  /v1/settings/security-scanners:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1security-scanners
+  /v1/settings/pricing:
+    $ref: paths/settings/pricing.yaml#/paths/~1v1~1settings~1pricing
+  /v1/settings/pricing/sources/{source_id}/refresh:
+    $ref: paths/settings/pricing.yaml#/paths/~1v1~1settings~1pricing~1sources~1{source_id}~1refresh
+  /v1/settings/project-trust:
+    $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1project-trust
+  /v1/projects/{id}/git/repos:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos
+  /v1/projects/{id}/git/repos/{repo_id}/status:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1status
+  /v1/projects/{id}/git/repos/{repo_id}/changes:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1changes
+  /v1/projects/{id}/git/repos/{repo_id}/branches:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1branches
+  /v1/projects/{id}/git/repos/{repo_id}/checkout:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1checkout
+  /v1/projects/{id}/git/repos/{repo_id}/discard:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1discard
+  /v1/projects/{id}/git/repos/{repo_id}/push:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1push
+  /v1/projects/{id}/git/repos/{repo_id}/pull:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1pull
+  /v1/projects/{id}/git/repos/{repo_id}/commit:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1commit
+  /v1/projects/{id}/git/repos/{repo_id}/stash:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1stash
+  /v1/projects/{id}/git/repos/{repo_id}/commit-message:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1commit-message
+  /v1/sessions/{id}/git-worktree:
+    $ref: paths/git.yaml#/paths/~1v1~1sessions~1{id}~1git-worktree
+  /v1/sessions/{id}/git-worktree/land:
+    $ref: paths/git.yaml#/paths/~1v1~1sessions~1{id}~1git-worktree~1land
+  /v1/local-data:
+    $ref: paths/local-data.yaml#/paths/~1v1~1local-data
+  /v1/history-storage:
+    $ref: paths/local-data.yaml#/paths/~1v1~1history-storage
+  /v1/history-storage/preview:
+    $ref: paths/local-data.yaml#/paths/~1v1~1history-storage~1preview
+  /v1/history-storage/prune:
+    $ref: paths/local-data.yaml#/paths/~1v1~1history-storage~1prune
+  /v1/history-storage/protections:
+    $ref: paths/local-data.yaml#/paths/~1v1~1history-storage~1protections
+  /v1/history-storage/protections/{protection_id}:
+    $ref: paths/local-data.yaml#/paths/~1v1~1history-storage~1protections~1{protection_id}
+  /v1/local-data/clear:
+    $ref: paths/local-data.yaml#/paths/~1v1~1local-data~1clear
+  /v1/backup:
+    $ref: paths/backup.yaml#/paths/~1v1~1backup
+  /v1/host:
+    $ref: paths/host.yaml#/paths/~1v1~1host
+  /v1/backup/capabilities:
+    $ref: paths/backup.yaml#/paths/~1v1~1backup~1capabilities
+  /v1/backup/restore:
+    $ref: paths/backup.yaml#/paths/~1v1~1backup~1restore
+  /v1/backup/restore/recovery-snapshot:
+    $ref: paths/backup.yaml#/paths/~1v1~1backup~1restore~1recovery-snapshot
+  /v1/store/reset:
+    $ref: paths/backup.yaml#/paths/~1v1~1store~1reset
+  /v1/contributions:
+    $ref: paths/contributions.yaml#/paths/~1v1~1contributions
+  /v1/projects/{id}/commands/{command_id}/invoke:
+    $ref: paths/contributions.yaml#/paths/~1v1~1projects~1{id}~1commands~1{command_id}~1invoke
+  /v1/sessions/{id}/commands/{command_id}/invoke:
+    $ref: paths/contributions.yaml#/paths/~1v1~1sessions~1{id}~1commands~1{command_id}~1invoke
+  /v1/projects/{id}/commands/{command_id}/choices/{step_id}:
+    $ref: paths/contributions.yaml#/paths/~1v1~1projects~1{id}~1commands~1{command_id}~1choices~1{step_id}
+  /v1/projects/{id}/contribution-search/{source_id}:
+    $ref: paths/contributions.yaml#/paths/~1v1~1projects~1{id}~1contribution-search~1{source_id}
+  /v1/extensions:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions
+  /v1/extensions/units/{unit_id}:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1units~1{unit_id}
+  /v1/extensions/packs:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1packs
+  /v1/extensions/packs/{pack_id}:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1packs~1{pack_id}
+  /v1/extensions/configuration:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1configuration
+  /v1/extensions/packs/{pack_id}/update:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1packs~1{pack_id}~1update
+  /v1/extensions/packs/{pack_id}/reload:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1packs~1{pack_id}~1reload
+  /v1/extensions/packs/{pack_id}/profiles/{profile_name}/apply:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1packs~1{pack_id}~1profiles~1{profile_name}~1apply
+  /v1/extensions/meta-packs:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1meta-packs
+  /v1/extensions/meta-packs/{meta_pack_id}:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1meta-packs~1{meta_pack_id}
+  /v1/extensions/meta-packs/{meta_pack_id}/apply:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1meta-packs~1{meta_pack_id}~1apply
+  /v1/extensions/suggestions:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1suggestions
+  /v1/extensions/suggestions/accept:
+    $ref: paths/extensions.yaml#/paths/~1v1~1extensions~1suggestions~1accept
+  /v1/host-resources:
+    $ref: paths/host-resources.yaml#/paths/~1v1~1host-resources
+  /v1/host-resources/refresh:
+    $ref: paths/host-resources.yaml#/paths/~1v1~1host-resources~1refresh
+  /v1/host-resources/{resource_id}:
+    $ref: paths/host-resources.yaml#/paths/~1v1~1host-resources~1{resource_id}
+  /v1/debug/den-perf:
+    $ref: paths/debug.yaml#/paths/~1v1~1debug~1den-perf
+  /v1/projects/{id}/source/views:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views
+  /v1/projects/{id}/source/comparison-digests:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1comparison-digests
+  /v1/projects/{id}/source/views/{view_id}:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}
+  /v1/projects/{id}/source/views/{view_id}/apply:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1apply
+  /v1/projects/{id}/source/views/{view_id}/interests/{interest_id}:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1interests~1{interest_id}
+  /v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/rows:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations~1{presentation_id}~1rows
+  /v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/locate:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations~1{presentation_id}~1locate
+  /v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations~1{presentation_id}~1search
+  /v1/projects/{id}/source/views/{view_id}/presentations:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations
+  /v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}:
+    $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations~1{presentation_id}
+components:
+  parameters:
+    $ref: components/parameters.yaml#/components/parameters
+  responses:
+    $ref: components/responses.yaml#/components/responses
+  securitySchemes:
+    $ref: components/securitySchemes.yaml#/components/securitySchemes
+  schemas:
+    Person:
+      $ref: components/schemas/host.yaml#/components/schemas/Person
+    PersonRole:
+      $ref: components/schemas/host.yaml#/components/schemas/PersonRole
+    HostInfo:
+      $ref: components/schemas/host.yaml#/components/schemas/HostInfo
+    HostCapability:
+      $ref: components/schemas/host.yaml#/components/schemas/HostCapability
+    HealthResponse:
+      $ref: components/schemas/health.yaml#/components/schemas/HealthResponse
+    HostResourceStatus:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceStatus
+    HostResourceHostSupport:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceHostSupport
+    HostResourceExecutionSurface:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceExecutionSurface
+    HostResourceConnectionMode:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceConnectionMode
+    HostResourceLocalServiceTransport:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceLocalServiceTransport
+    HostResourceConnection:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceConnection
+    HostResource:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResource
+    HostResourceDiagnostic:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceDiagnostic
+    HostResourcesResponse:
+      $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourcesResponse
+    BoardDelegationEntry:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardDelegationEntry
+    BoardDetailLevel:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardDetailLevel
+    BoardForensicWorkers:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardForensicWorkers
+    BoardGitRepoLine:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardGitRepoLine
+    BoardGitSlice:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardGitSlice
+    BoardGitWorktree:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardGitWorktree
+    BoardScansSlice:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardScansSlice
+    BoardScanCompareSlice:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardScanCompareSlice
+    BoardScanCompareStub:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardScanCompareStub
+    BoardScanSummary:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardScanSummary
+    BoardView:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardView
+    BoardWorkerRosterEntry:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardWorkerRosterEntry
+    RepoBrief:
+      $ref: components/schemas/board.yaml#/components/schemas/RepoBrief
+    RepoLayout:
+      $ref: components/schemas/board.yaml#/components/schemas/RepoLayout
+    ReadOutlineResponse:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/ReadOutlineResponse
+    Error:
+      $ref: components/schemas/common.yaml#/components/schemas/Error
+    NoticeCopy:
+      $ref: components/schemas/common.yaml#/components/schemas/NoticeCopy
+    EventTopic:
+      $ref: components/schemas/events.yaml#/components/schemas/EventTopic
+    EventEnvelope:
+      $ref: components/schemas/events.yaml#/components/schemas/EventEnvelope
+    MessageEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/MessageEvent
+    WorkerEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/WorkerEvent
+    BoardEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/BoardEvent
+    DelegationEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/DelegationEvent
+    LLMTokenCounts:
+      $ref: components/schemas/events.yaml#/components/schemas/LLMTokenCounts
+    CoordinatorLoopProgress:
+      $ref: components/schemas/events.yaml#/components/schemas/CoordinatorLoopProgress
+    LLMCallEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/LLMCallEvent
+    ActivityEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/ActivityEvent
+    BackgroundProcessEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessEvent
+    BackgroundProcess:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcess
+    BackgroundProcessStage:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessStage
+    BackgroundProcessChunk:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessChunk
+    BackgroundProcessOutput:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessOutput
+    PreviewEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/PreviewEvent
+    PreviewWatchRequest:
+      $ref: components/schemas/events.yaml#/components/schemas/PreviewWatchRequest
+    PreviewWatchResult:
+      $ref: components/schemas/events.yaml#/components/schemas/PreviewWatchResult
+    BackgroundProcessStopResult:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessStopResult
+    ProviderEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/ProviderEvent
+    ModelPolicyEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/ModelPolicyEvent
+    SettingsEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/SettingsEvent
+    ArtifactEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/ArtifactEvent
+    ArtifactChangeOp:
+      $ref: components/schemas/events.yaml#/components/schemas/ArtifactChangeOp
+    SourceChange:
+      $ref: components/schemas/events.yaml#/components/schemas/SourceChange
+    SourceChangesEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/SourceChangesEvent
+    EditorDocumentEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/EditorDocumentEvent
+    CLIOpenEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/CLIOpenEvent
+    PreflightEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/PreflightEvent
+    CLIOpenAction:
+      $ref: components/schemas/events.yaml#/components/schemas/CLIOpenAction
+    SourceChangeOp:
+      $ref: components/schemas/events.yaml#/components/schemas/SourceChangeOp
+    SourceChangeOrigin:
+      $ref: components/schemas/events.yaml#/components/schemas/SourceChangeOrigin
+    SourceWorkspaceKind:
+      $ref: components/schemas/events.yaml#/components/schemas/SourceWorkspaceKind
+    CostBreakdown:
+      $ref: components/schemas/cost.yaml#/components/schemas/CostBreakdown
+    CostEvent:
+      $ref: components/schemas/cost.yaml#/components/schemas/CostEvent
+    CostScope:
+      $ref: components/schemas/cost.yaml#/components/schemas/CostScope
+    CostSummary:
+      $ref: components/schemas/cost.yaml#/components/schemas/CostSummary
+    ProjectCostReport:
+      $ref: components/schemas/cost.yaml#/components/schemas/ProjectCostReport
+    ProjectCostSession:
+      $ref: components/schemas/cost.yaml#/components/schemas/ProjectCostSession
+    DenPerfEvent:
+      $ref: components/schemas/debug.yaml#/components/schemas/DenPerfEvent
+    DenPerfEventsRequest:
+      $ref: components/schemas/debug.yaml#/components/schemas/DenPerfEventsRequest
+    SummarizeAnchor:
+      $ref: components/schemas/summarize.yaml#/components/schemas/SummarizeAnchor
+    SummarizeNextAction:
+      $ref: components/schemas/summarize.yaml#/components/schemas/SummarizeNextAction
+    SummarizeResponse:
+      $ref: components/schemas/summarize.yaml#/components/schemas/SummarizeResponse
+    TokenTotals:
+      $ref: components/schemas/cost.yaml#/components/schemas/TokenTotals
+    AbortDelegationRequest:
+      $ref: components/schemas/delegation.yaml#/components/schemas/AbortDelegationRequest
+    CreateDelegationRequest:
+      $ref: components/schemas/delegation.yaml#/components/schemas/CreateDelegationRequest
+    Delegation:
+      $ref: components/schemas/delegation.yaml#/components/schemas/Delegation
+    DelegationPhase:
+      $ref: components/schemas/delegation.yaml#/components/schemas/DelegationPhase
+    DispatchRequest:
+      $ref: components/schemas/delegation.yaml#/components/schemas/DispatchRequest
+    HuntStrategy:
+      $ref: components/schemas/delegation.yaml#/components/schemas/HuntStrategy
+    InspectMode:
+      $ref: components/schemas/delegation.yaml#/components/schemas/InspectMode
+    Leg:
+      $ref: components/schemas/delegation.yaml#/components/schemas/Leg
+    LegStatus:
+      $ref: components/schemas/delegation.yaml#/components/schemas/LegStatus
+    DelegationStatus:
+      $ref: components/schemas/delegation.yaml#/components/schemas/DelegationStatus
+    LogDigest:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigest
+    LogDigestCluster:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigestCluster
+    LogDigestFacet:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigestFacet
+    LogDigestFacetValue:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigestFacetValue
+    LogDigestFieldStat:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigestFieldStat
+    LogDigestTimeSpan:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigestTimeSpan
+    LogFormat:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/LogFormat
+    LLMCallStatus:
+      $ref: components/schemas/events.yaml#/components/schemas/LLMCallStatus
+    LLMRetryReason:
+      $ref: components/schemas/events.yaml#/components/schemas/LLMRetryReason
+    MessageChangeOp:
+      $ref: components/schemas/events.yaml#/components/schemas/MessageChangeOp
+    AgentPool:
+      $ref: components/schemas/orchestration.yaml#/components/schemas/AgentPool
+    PoolSelection:
+      $ref: components/schemas/orchestration.yaml#/components/schemas/PoolSelection
+    CreateBlueprintRequest:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/CreateBlueprintRequest
+    Blueprint:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/Blueprint
+    BlueprintApproveRequest:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/BlueprintApproveRequest
+    LaunchBlueprintRequest:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/LaunchBlueprintRequest
+    LaunchBlueprintResponse:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/LaunchBlueprintResponse
+    BlueprintStatus:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/BlueprintStatus
+    BlueprintSummary:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/BlueprintSummary
+    UpdateBlueprintRequest:
+      $ref: components/schemas/blueprint.yaml#/components/schemas/UpdateBlueprintRequest
+    ProjectRoot:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/ProjectRoot
+    CreateProjectRootInput:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/CreateProjectRootInput
+    CreateProjectRequest:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/CreateProjectRequest
+    UpdateProjectRequest:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/UpdateProjectRequest
+    AttachProjectRootRequest:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/AttachProjectRootRequest
+    ProjectEvent:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/ProjectEvent
+    ProjectEventAction:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/ProjectEventAction
+    OutlineKind:
+      $ref: components/schemas/log_outline.yaml#/components/schemas/OutlineKind
+    Project:
+      $ref: components/schemas/project/identity.yaml#/components/schemas/Project
+    FileBriefingRequest:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingRequest
+    FileBriefingPreview:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingPreview
+    FileBriefingLocation:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingLocation
+    FileBriefingSection:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingSection
+    FileBriefingResponse:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingResponse
+    FileBriefingEvent:
+      $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingEvent
+    SourcePin:
+      $ref: components/schemas/project/source-comparison.yaml#/components/schemas/SourcePin
+    SourcePinList:
+      $ref: components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinList
+    SourcePinCreate:
+      $ref: components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinCreate
+    SourcePinUpdate:
+      $ref: components/schemas/project/source-comparison.yaml#/components/schemas/SourcePinUpdate
+    CheckpointEvent:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/CheckpointEvent
+    CheckpointKind:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/CheckpointKind
+    CheckpointResponse:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/CheckpointResponse
+    CheckpointStatus:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/CheckpointStatus
+    ContentApplyDecision:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ContentApplyDecision
+    ApprovalDecisionAction:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ApprovalDecisionAction
+    ContentApplyHunk:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ContentApplyHunk
+    ContentApplyPayload:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ContentApplyPayload
+    ContentApplyResolveBody:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ContentApplyResolveBody
+    CodeScan:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/CodeScan
+    CodeScanEvent:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/CodeScanEvent
+    CodeScanStatus:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/CodeScanStatus
+    ScanCategory:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/ScanCategory
+    FindingLevel:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/FindingLevel
+    FindingKind:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/FindingKind
+    FindingDisposition:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/FindingDisposition
+    SecurityFinding:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFinding
+    SecurityFindingLocation:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFindingLocation
+    SecurityFindingFingerprints:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFindingFingerprints
+    ToolDescriptor:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/ToolDescriptor
+    AdvisoryKind:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/AdvisoryKind
+    AdvisoryRef:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/AdvisoryRef
+    AdvisoryCVSS:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/AdvisoryCVSS
+    AdvisoryPackageRef:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/AdvisoryPackageRef
+    SecurityFindingLycaonProperties:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFindingLycaonProperties
+    SecurityFindingProperties:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFindingProperties
+    ScanAgentBudget:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanAgentBudget
+    BoardScanTopLocation:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardScanTopLocation
+    ScanWarning:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanWarning
+    ScanWarningKind:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanWarningKind
+    ScanGuidanceSummary:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanGuidanceSummary
+    ScanQueryRequest:
+      $ref: components/schemas/scan/queries.yaml#/components/schemas/ScanQueryRequest
+    ScanQueryResponse:
+      $ref: components/schemas/scan/queries.yaml#/components/schemas/ScanQueryResponse
+    ScanDelta:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanDelta
+    ScanDeltaCounts:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanDeltaCounts
+    SecurityFindingHistory:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/SecurityFindingHistory
+    FullScanRequest:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/FullScanRequest
+    FullScanResponse:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/FullScanResponse
+    SecurityBaseline:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/SecurityBaseline
+    SecurityFullPass:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/SecurityFullPass
+    SecurityScannerState:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/SecurityScannerState
+    SecurityOverview:
+      $ref: components/schemas/scan/overview.yaml#/components/schemas/SecurityOverview
+    SearchRequest:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchRequest
+    SearchResponse:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchResponse
+    SearchHit:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchHit
+    SearchFacet:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchFacet
+    SearchFacetValue:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchFacetValue
+    SearchHistogramBucket:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchHistogramBucket
+    SearchResultStatus:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchResultStatus
+    SearchCountRelation:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchCountRelation
+    SearchIssueReason:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchIssueReason
+    SearchIssue:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchIssue
+    SearchInterpretation:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchInterpretation
+    SearchScopeMode:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchScopeMode
+    SearchExportFormat:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchExportFormat
+    SearchExportRequest:
+      $ref: components/schemas/search.yaml#/components/schemas/SearchExportRequest
+    ScanIgnoredFinding:
+      $ref: components/schemas/scan/findings.yaml#/components/schemas/ScanIgnoredFinding
+    ScanTrigger:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScanTrigger
+    ScannerSummary:
+      $ref: components/schemas/scan/execution.yaml#/components/schemas/ScannerSummary
+    SelectScannerSlotRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/SelectScannerSlotRequest
+    ScannerCatalogEntry:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerCatalogEntry
+    ScannerCatalogResponse:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerCatalogResponse
+    ScannerCheckRow:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerCheckRow
+    ScannerCheckResponse:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerCheckResponse
+    ScannerListResponse:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerListResponse
+    ScannerRejectedRow:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/ScannerRejectedRow
+    CreateCatalogScannerRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/CreateCatalogScannerRequest
+    CreateCustomScannerRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/CreateCustomScannerRequest
+    CreateScannerRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/CreateScannerRequest
+    UpdateScannerRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/UpdateScannerRequest
+    UpdateProjectScannerRequest:
+      $ref: components/schemas/scan/scanners.yaml#/components/schemas/UpdateProjectScannerRequest
+    CompactedChunkMeta:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/CompactedChunkMeta
+    CreateSessionRequest:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/CreateSessionRequest
+    Message:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/Message
+    MessageKind:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/MessageKind
+    MessageRole:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/MessageRole
+    MessageLiveStatus:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/MessageLiveStatus
+    DraftStatus:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/DraftStatus
+    DraftVersion:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/DraftVersion
+    DraftVersionsResponse:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/DraftVersionsResponse
+    PromptRequest:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptRequest
+    PromptAttachmentPart:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptAttachmentPart
+    PromptSecretReferencePart:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptSecretReferencePart
+    CreateComposerSecretRequest:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/CreateComposerSecretRequest
+    AttachmentUploadResponse:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/AttachmentUploadResponse
+    AttachmentKind:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/AttachmentKind
+    PromptReferenceKind:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptReferenceKind
+    PromptReferencePart:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptReferencePart
+    PromptAcceptedResponse:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptAcceptedResponse
+    PromptStreamChunk:
+      $ref: components/schemas/session/prompts.yaml#/components/schemas/PromptStreamChunk
+    SessionHostError:
+      $ref: components/schemas/session/events.yaml#/components/schemas/SessionHostError
+    SessionEvent:
+      $ref: components/schemas/session/events.yaml#/components/schemas/SessionEvent
+    Session:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/Session
+    SessionBootstrap:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionBootstrap
+    SessionCompactResponse:
+      $ref: components/schemas/session/context.yaml#/components/schemas/SessionCompactResponse
+    ElevatedAccessEffect:
+      $ref: components/schemas/session/elevated-access.yaml#/components/schemas/ElevatedAccessEffect
+    ElevatedAccessRecord:
+      $ref: components/schemas/session/elevated-access.yaml#/components/schemas/ElevatedAccessRecord
+    ElevatedAccessSummary:
+      $ref: components/schemas/session/elevated-access.yaml#/components/schemas/ElevatedAccessSummary
+    ElevatedAccessRevokeResult:
+      $ref: components/schemas/session/elevated-access.yaml#/components/schemas/ElevatedAccessRevokeResult
+    RevokeElevatedAccessResponse:
+      $ref: components/schemas/session/elevated-access.yaml#/components/schemas/RevokeElevatedAccessResponse
+    SessionContextResponse:
+      $ref: components/schemas/session/context.yaml#/components/schemas/SessionContextResponse
+    SessionPosture:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionPosture
+    SessionStatus:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionStatus
+    SessionListSort:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionListSort
+    SessionListOrder:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionListOrder
+    SessionSummary:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionSummary
+    SessionListPage:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionListPage
+    ToolCall:
+      $ref: components/schemas/session/tool-results.yaml#/components/schemas/ToolCall
+    ToolApprovalPayload:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalPayload
+    ToolApprovalResolveBody:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalResolveBody
+    ToolApprovalApproveBody:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalApproveBody
+    ToolApprovalRejectBody:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalRejectBody
+    ToolResult:
+      $ref: components/schemas/session/tool-results.yaml#/components/schemas/ToolResult
+    ExternalAccess:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccess
+    ExternalAccessVisibility:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessVisibility
+    ExternalAccessVisibilitySummary:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessVisibilitySummary
+    ExternalAccessMode:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessMode
+    ExternalAccessTransport:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessTransport
+    ExternalAccessDecision:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessDecision
+    ExternalAccessEndpoint:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessEndpoint
+    ExternalAccessSocket:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessSocket
+    ExternalAccessSocketAuthority:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessSocketAuthority
+    ExternalAccessDirect:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessDirect
+    ExternalAccessDirectScope:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessDirectScope
+    ExternalAccessDetection:
+      $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessDetection
+    ArtifactListItem:
+      $ref: components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListItem
+    ArtifactListResponse:
+      $ref: components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListResponse
+    WorkerSummaryStatus:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/WorkerSummaryStatus
+    WorkerBlockerClass:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/WorkerBlockerClass
+    WorkerDecisionRequest:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/WorkerDecisionRequest
+    CitationVerdict:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/CitationVerdict
+    WorkerSummaryMeta:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/WorkerSummaryMeta
+    CitationGrounding:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/CitationGrounding
+    CitationGroundingCheck:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/CitationGroundingCheck
+    CitationGroundingEvidenceRecord:
+      $ref: components/schemas/session/worker-reports.yaml#/components/schemas/CitationGroundingEvidenceRecord
+    WorkflowBoundaryMeta:
+      $ref: components/schemas/session/workflow-feedback.yaml#/components/schemas/WorkflowBoundaryMeta
+    WorkflowBoundaryKind:
+      $ref: components/schemas/session/workflow-feedback.yaml#/components/schemas/WorkflowBoundaryKind
+    Finding:
+      $ref: components/schemas/findings.yaml#/components/schemas/Finding
+    FindingsDigest:
+      $ref: components/schemas/findings.yaml#/components/schemas/FindingsDigest
+    FindingsEvent:
+      $ref: components/schemas/findings.yaml#/components/schemas/FindingsEvent
+    ProgressStep:
+      $ref: components/schemas/progress.yaml#/components/schemas/ProgressStep
+    ProgressDigest:
+      $ref: components/schemas/progress.yaml#/components/schemas/ProgressDigest
+    ProgressEvent:
+      $ref: components/schemas/progress.yaml#/components/schemas/ProgressEvent
+    TurnClock:
+      $ref: components/schemas/progress.yaml#/components/schemas/TurnClock
+    TurnLoad:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoad
+    TurnLoadTrigger:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadTrigger
+    TurnLoadMatchBy:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadMatchBy
+    TurnLoadEngine:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadEngine
+    TurnLoadKind:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadKind
+    TurnLoadToolSource:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadToolSource
+    TurnLoadTool:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadTool
+    TurnLoadCacheState:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadCacheState
+    TurnLoadColdReason:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadColdReason
+    TurnLoadBoundary:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadBoundary
+    TurnLoadGuides:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadGuides
+    TurnLoadMatch:
+      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadMatch
+    QueueItem:
+      $ref: components/schemas/queue.yaml#/components/schemas/QueueItem
+    QueueDraft:
+      $ref: components/schemas/queue.yaml#/components/schemas/QueueDraft
+    QueueEvent:
+      $ref: components/schemas/queue.yaml#/components/schemas/QueueEvent
+    QueueMutateRequest:
+      $ref: components/schemas/queue.yaml#/components/schemas/QueueMutateRequest
+    GitFileEntry:
+      $ref: components/schemas/git.yaml#/components/schemas/GitFileEntry
+    GitStatusSummary:
+      $ref: components/schemas/git.yaml#/components/schemas/GitStatusSummary
+    GitChangesPage:
+      $ref: components/schemas/git.yaml#/components/schemas/GitChangesPage
+    GitMutationResult:
+      $ref: components/schemas/git.yaml#/components/schemas/GitMutationResult
+    GitRepoEntry:
+      $ref: components/schemas/git.yaml#/components/schemas/GitRepoEntry
+    GitReposView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitReposView
+    GitBranchEntry:
+      $ref: components/schemas/git.yaml#/components/schemas/GitBranchEntry
+    GitBranchesView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitBranchesView
+    GitCheckoutRequest:
+      $ref: components/schemas/git.yaml#/components/schemas/GitCheckoutRequest
+    GitInitRequest:
+      $ref: components/schemas/git.yaml#/components/schemas/GitInitRequest
+    GitCommitRequest:
+      $ref: components/schemas/git.yaml#/components/schemas/GitCommitRequest
+    GitStashRequest:
+      $ref: components/schemas/git.yaml#/components/schemas/GitStashRequest
+    GitCommitMessageResponse:
+      $ref: components/schemas/git.yaml#/components/schemas/GitCommitMessageResponse
+    GitWorktreeView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeView
+    GitWorktreeLandResult:
+      $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeLandResult
+    GitWorktreeBindRequest:
+      $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeBindRequest
+    GroundingEvent:
+      $ref: components/schemas/settings/verification.yaml#/components/schemas/GroundingEvent
+    McpCheckRow:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpCheckRow
+    McpCheckRowStatus:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpCheckRowStatus
+    McpCheckResponse:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpCheckResponse
+    McpToolInfo:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpToolInfo
+    McpProviderStatus:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpProviderStatus
+    McpProviderClass:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpProviderClass
+    McpToolLoading:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpToolLoading
+    McpRecipeEnvKey:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpRecipeEnvKey
+    McpProvider:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpProvider
+    McpOAuthStartResponse:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthStartResponse
+    McpOAuthCancelRequest:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthCancelRequest
+    McpOAuthCompleteRequest:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpOAuthCompleteRequest
+    CreateMcpProviderRequest:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/CreateMcpProviderRequest
+    McpRecipeAuth:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpRecipeAuth
+    McpCredentialWire:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpCredentialWire
+    McpRecipe:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpRecipe
+    McpRecipeCatalogResponse:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/McpRecipeCatalogResponse
+    ModelPolicy:
+      $ref: components/schemas/settings/models.yaml#/components/schemas/ModelPolicy
+    ModelPolicyPatch:
+      $ref: components/schemas/settings/models.yaml#/components/schemas/ModelPolicyPatch
+    ModelRef:
+      $ref: components/schemas/settings/models.yaml#/components/schemas/ModelRef
+    ApprovalCategory:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalCategory
+    ApprovalConfigResponse:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalConfigResponse
+    DetectionPackList:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionPackList
+    DetectionPack:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionPack
+    DetectionRuleSummary:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionRuleSummary
+    DetectionMatch:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionMatch
+    DetectionPackImportRequest:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionPackImportRequest
+    DetectionPackImportResult:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/DetectionPackImportResult
+    UpdateDetectionPackRequest:
+      $ref: components/schemas/settings/detections.yaml#/components/schemas/UpdateDetectionPackRequest
+    ApprovalFieldSources:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalFieldSources
+    ApprovalFieldSource:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalFieldSource
+    ApprovalDefaults:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalDefaults
+    ApprovalEffect:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalEffect
+    ApprovalPosture:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalPosture
+    LandedChangeScope:
+      $ref: components/schemas/settings/verification.yaml#/components/schemas/LandedChangeScope
+    ApprovalRule:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalRule
+    ApprovalGrant:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalGrant
+    ApprovalGrantScope:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalGrantScope
+    ApprovalGrantCategory:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalGrantCategory
+    ApprovalGrantsResponse:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ApprovalGrantsResponse
+    CreateApprovalGrantRequest:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/CreateApprovalGrantRequest
+    ResolveSocketGrantRequest:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ResolveSocketGrantRequest
+    ResolveSocketGrantResponse:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/ResolveSocketGrantResponse
+    ProviderMeta:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/ProviderMeta
+    ProviderModelMeta:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/ProviderModelMeta
+    ProviderProbeResult:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/ProviderProbeResult
+    UpdateApprovalsSettingsRequest:
+      $ref: components/schemas/settings/approvals.yaml#/components/schemas/UpdateApprovalsSettingsRequest
+    ResolveCheckpointRequest:
+      $ref: components/schemas/checkpoint.yaml#/components/schemas/ResolveCheckpointRequest
+    SetProviderCredentialRequest:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/SetProviderCredentialRequest
+    SettingsLimitsPatch:
+      $ref: components/schemas/settings/preferences.yaml#/components/schemas/SettingsLimitsPatch
+    SettingsLimitsResponse:
+      $ref: components/schemas/settings/preferences.yaml#/components/schemas/SettingsLimitsResponse
+    ContentReviewRule:
+      $ref: components/schemas/settings/review.yaml#/components/schemas/ContentReviewRule
+    ReviewSettingsResponse:
+      $ref: components/schemas/settings/review.yaml#/components/schemas/ReviewSettingsResponse
+    UpdateReviewSettingsRequest:
+      $ref: components/schemas/settings/review.yaml#/components/schemas/UpdateReviewSettingsRequest
+    VerifySettingsResponse:
+      $ref: components/schemas/settings/verification.yaml#/components/schemas/VerifySettingsResponse
+    UpdateVerifySettingsRequest:
+      $ref: components/schemas/settings/verification.yaml#/components/schemas/UpdateVerifySettingsRequest
+    SecurityScannersSettingsResponse:
+      $ref: components/schemas/settings/preferences.yaml#/components/schemas/SecurityScannersSettingsResponse
+    UpdateSecurityScannersSettingsRequest:
+      $ref: components/schemas/settings/preferences.yaml#/components/schemas/UpdateSecurityScannersSettingsRequest
+    SettingsPricing:
+      $ref: components/schemas/settings/pricing.yaml#/components/schemas/SettingsPricing
+    SettingsPricingSource:
+      $ref: components/schemas/settings/pricing.yaml#/components/schemas/SettingsPricingSource
+    PricingSourceMeta:
+      $ref: components/schemas/settings/pricing.yaml#/components/schemas/PricingSourceMeta
+    PricingSourceStatus:
+      $ref: components/schemas/settings/pricing.yaml#/components/schemas/PricingSourceStatus
+    SettingsPricingResponse:
+      $ref: components/schemas/settings/pricing.yaml#/components/schemas/SettingsPricingResponse
+    TrustSurfaceId:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustSurfaceId
+    TrustSurfaceGroup:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustSurfaceGroup
+    TrustSurfaceSetting:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustSurfaceSetting
+    TrustSettingsResponse:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustSettingsResponse
+    UpdateTrustSettingsRequest:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/UpdateTrustSettingsRequest
+    TrustSurfaceItem:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustSurfaceItem
+    ProjectTrustSurface:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/ProjectTrustSurface
+    ProjectTrust:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/ProjectTrust
+    ProjectTrustReview:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/ProjectTrustReview
+    TrustFileChange:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/TrustFileChange
+    UpdateProjectTrustRequest:
+      $ref: components/schemas/settings/trust.yaml#/components/schemas/UpdateProjectTrustRequest
+    SettingsScope:
+      $ref: components/schemas/settings/preferences.yaml#/components/schemas/SettingsScope
+    UpdateMcpProviderRequest:
+      $ref: components/schemas/settings/mcp.yaml#/components/schemas/UpdateMcpProviderRequest
+    CreateProviderRequest:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/CreateProviderRequest
+    UpdateProviderRequest:
+      $ref: components/schemas/settings/providers.yaml#/components/schemas/UpdateProviderRequest
+    WebSearchProvider:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebSearchProvider
+    WebResearchProviderKind:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchProviderKind
+    WebResearchDirectCardContent:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchDirectCardContent
+    WebResearchDirectStatus:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchDirectStatus
+    WebResearchProviderMeta:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchProviderMeta
+    WebResearchProvidersResponse:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchProvidersResponse
+    WebResearchSettings:
+      $ref: components/schemas/web-research.yaml#/components/schemas/WebResearchSettings
+    UpdateWebResearchSettingsRequest:
+      $ref: components/schemas/web-research.yaml#/components/schemas/UpdateWebResearchSettingsRequest
+    UpdateWebResearchProviderRequest:
+      $ref: components/schemas/web-research.yaml#/components/schemas/UpdateWebResearchProviderRequest
+    WorkerPolicyFeedback:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPolicyFeedback
+    WorkerResult:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerResult
+    ExecutionTarget:
+      $ref: components/schemas/worker.yaml#/components/schemas/ExecutionTarget
+    SpawnReason:
+      $ref: components/schemas/worker.yaml#/components/schemas/SpawnReason
+    WorkerStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerStatus
+    WorkerMergeStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeStatus
+    WorkerPromotePathOutcome:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromotePathOutcome
+    WorkerPromoteOrderKind:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteOrderKind
+    WorkerPromoteConflictTier:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteConflictTier
+    WorkerPromoteResolutionAction:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteResolutionAction
+    WorkerPromoteHunkResolution:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteHunkResolution
+    WorkerReadyResolution:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerReadyResolution
+    WorkerMergeHunk:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeHunk
+    WorkerMergeConflict:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeConflict
+    WorkerPromoteConflictDigest:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteConflictDigest
+    WorkerOverlayIntent:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerOverlayIntent
+    OverlayRebaseOutcome:
+      $ref: components/schemas/worker.yaml#/components/schemas/OverlayRebaseOutcome
+    WorkerMergeResult:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeResult
+    WorkerSourceEvidence:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerSourceEvidence
+    WorkerPromotePathStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromotePathStatus
+    WorkerPromoteJobPathStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteJobPathStatus
+    WorkerTask:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerTask
+    ComposeDecisionPhase:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeDecisionPhase
+    ComposeEffectiveSummary:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeEffectiveSummary
+    ComposeFeedbackPhase:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeFeedbackPhase
+    ComposeFromTemplateRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeFromTemplateRequest
+    ComposePhaseOnEnter:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposePhaseOnEnter
+    ComposePhaseSummary:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposePhaseSummary
+    ComposePostureTransition:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposePostureTransition
+    ComposeValidationError:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeValidationError
+    ComposeValidationDetails:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeValidationDetails
+    ComposeWorkflowResponse:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ComposeWorkflowResponse
+    CoordinatorRunContext:
+      $ref: components/schemas/workflow.yaml#/components/schemas/CoordinatorRunContext
+    ActiveWorkflowRunResponse:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ActiveWorkflowRunResponse
+    AdvanceWorkflowRunRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/AdvanceWorkflowRunRequest
+    FireWorkflowTransitionRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/FireWorkflowTransitionRequest
+    PendingFeedback:
+      $ref: components/schemas/workflow.yaml#/components/schemas/PendingFeedback
+    PersistWorkflowRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/PersistWorkflowRequest
+    PersistWorkflowResponse:
+      $ref: components/schemas/workflow.yaml#/components/schemas/PersistWorkflowResponse
+    ResolveUserFeedbackRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ResolveUserFeedbackRequest
+    ResolveUserSecretRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ResolveUserSecretRequest
+    SecretInputMeta:
+      $ref: components/schemas/workflow.yaml#/components/schemas/SecretInputMeta
+    ResolveWorkflowDecisionRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/ResolveWorkflowDecisionRequest
+    StartWorkflowRunRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/StartWorkflowRunRequest
+    WorkflowControlRequest:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowControlRequest
+    WorkflowEvent:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowEvent
+    WorkflowRun:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowRun
+    WorkflowRunStatus:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowRunStatus
+    WorkflowScope:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowScope
+    WorkflowSummary:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowSummary
+    WorkflowTemplateParameter:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowTemplateParameter
+    WorkflowTemplateSummary:
+      $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowTemplateSummary

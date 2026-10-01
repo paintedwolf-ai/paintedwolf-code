@@ -1,0 +1,31 @@
+version: "2"
+# Lint rules run by `sqlc vet` (./task db:sqlc:vet). CEL expressions evaluate
+# against each query; a true result reports the message and fails. These use
+# only query.sql, so no database connection is required.
+rules:
+  - name: no-select-star
+    message: "Select explicit columns instead of SELECT * so generated row types stay stable across schema edits."
+    rule: |
+      query.sql.matches("(?i)select\\s+\\*")
+  - name: delete-requires-where
+    message: "DELETE must have a WHERE clause; a full-table delete is almost never intended."
+    rule: |
+      query.sql.matches("(?i)^\\s*delete\\b") && !query.sql.matches("(?i)\\bwhere\\b")
+  - name: update-requires-where
+    message: "UPDATE must have a WHERE clause; a full-table update is almost never intended."
+    rule: |
+      query.sql.matches("(?i)^\\s*update\\b") && !query.sql.matches("(?i)\\bwhere\\b")
+sql:
+  - engine: "sqlite"
+    schema: "schema.sql"
+    queries: "queries"
+    rules:
+      - no-select-star
+      - delete-requires-where
+      - update-requires-where
+    gen:
+      go:
+        package: "db"
+        out: "."
+        emit_json_tags: true
+        emit_exact_table_names: true

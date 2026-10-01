@@ -1,0 +1,19 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.task.finished
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-worker-task-finished
+tier: builtin
+invariants:
+  trigger_class: manifest_on_reenter
+  fires_in:
+  - implement work→work re-enter (manifest on_reenter.inject_kick)
+  required:
+  - host digest
+  - task(
+  forbidden:
+  - Call `workflow_advance`
+  optional_vars:
+  - evidence_digest
+  - last_worker_decision_request

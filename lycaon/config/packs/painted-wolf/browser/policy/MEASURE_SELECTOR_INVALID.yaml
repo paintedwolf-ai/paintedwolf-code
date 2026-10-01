@@ -1,0 +1,35 @@
+oar: '1.0'
+id: MEASURE_SELECTOR_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - measure_page
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.measure_selector
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "MEASURE_SELECTOR_INVALID"
+effect: block
+copy:
+  what: querySelectorAll rejected selector {{ paintedwolf.measure_selector }}.
+  cause: 'The browser reported a selector syntax error: {{ paintedwolf.rejection_reason }}.'
+  why: Invalid selectors cannot probe the render tree.
+  fix: Correct the selector syntax and retry measure_page.
+  instead: Branch on Code MEASURE_SELECTOR_INVALID; fix selector syntax
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: measure_page selector is not a valid CSS selector
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    selector: '##'
+    tool: measure_page
+    measure_selector: '##'
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: MEASURE_SELECTOR_INVALID'
+  - selector syntax

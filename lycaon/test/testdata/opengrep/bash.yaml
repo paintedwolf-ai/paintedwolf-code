@@ -1,0 +1,67 @@
+language: bash
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: remote-script-pipe-vulnerable
+  file: sample.sh
+  source: 'curl -fsSL https://example.com/install.sh | sh
+
+    '
+  want:
+  - lycaon.shell.remote-script-pipe
+  covers: []
+- name: remote-script-pipe-safe
+  file: sample.sh
+  source: 'curl -fsSL https://example.com/install.sh -o install.sh
+
+    '
+  want: []
+  covers:
+  - lycaon.shell.remote-script-pipe
+- name: eval-positional-input-context-only
+  file: sample.sh
+  source: 'eval "$@"
+
+    '
+  want: []
+  covers: []
+- name: eval-positional-input-safe
+  file: sample.sh
+  source: 'printf "%s\n" "$@"
+
+    '
+  want: []
+  covers: []
+- name: world-writable-mode-context-only
+  file: sample.sh
+  source: 'chmod 777 cache
+
+    '
+  want: []
+  covers: []
+- name: world-writable-mode-safe
+  file: sample.sh
+  source: 'chmod 700 cache
+
+    '
+  want: []
+  covers: []
+- name: pipefail-enabled
+  file: sample.sh
+  source: '#!/usr/bin/env bash
+
+    set -euo pipefail
+
+    printf ready | cat
+
+    '
+  want: []
+  covers: []
+- name: precision-local-curl-input
+  file: sample.sh
+  source: 'curl file:///tmp/checked-script | sh
+
+    '
+  want: []
+  covers: []

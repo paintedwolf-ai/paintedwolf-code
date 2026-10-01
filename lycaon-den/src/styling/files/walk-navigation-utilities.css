@@ -1,0 +1,193 @@
+@utility den-step-bar__read {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The total reserves the widest counter before any step is selected. */
+@utility den-step-bar__count {
+  display: inline-grid;
+  text-align: start;
+}
+
+@utility den-step-bar__count-size {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+
+@utility den-step-bar__count-value {
+  grid-area: 1 / 1;
+}
+
+/* Preserves bar width while the rail is unavailable. */
+@utility den-step-bar__note {
+  grid-column: 1 / -1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-step-bar__viewport {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: end;
+  min-width: 0;
+}
+
+@utility den-walk-navigator {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@utility den-walk-navigator__list {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The end padding keeps rows clear of the scrollbar. */
+@utility den-walk-navigator__rows {
+  padding-right: var(--den-scrollbar-size);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@utility den-walk-navigator__row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.75rem;
+
+  & > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  & > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Native horizontal gestures browse the history without selecting a step. */
+@utility den-step-bar__rail {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(1.3rem + 28px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: none;
+  touch-action: pan-x pan-y;
+  cursor: pointer;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility den-step-bar__track {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+}
+
+@utility den-step-bar__line {
+  position: absolute;
+  top: calc(1.3rem + 14px);
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+@utility den-step-bar__dot {
+  position: absolute;
+  top: 1.3rem;
+  width: 24px;
+  height: 28px;
+  margin-left: -12px;
+  padding: 0;
+  cursor: pointer;
+}
+
+@utility den-step-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+@utility den-walk-chapter__excerpt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-step-tooltip {
+  animation: den-enter-reveal 90ms var(--den-ease) both;
+}
+
+@utility den-step-tooltip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility den-step-tooltip__file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-step-tooltip__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-step-tooltip__rename {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-step-tooltip__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 2px;
+
+  & span + span::before {
+    margin: 0 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-step-tooltip {
+    animation: none;
+  }
+}

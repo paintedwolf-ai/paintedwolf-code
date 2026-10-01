@@ -1,0 +1,6 @@
+Gate blocked — read `failed_leaves` in host context; do not mark the phase complete in chat. Fix evidence or delegate until gates pass.
+
+### Phase obligations
+- `gate.evidence`: prove
+  - missing: x
+  1. x

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-overlay-dismiss
+command: painted-wolf/platform:overlay-dismiss
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Escape"
+  windows:
+    - "Escape"
+  linux:
+    - "Escape"

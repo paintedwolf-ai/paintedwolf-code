@@ -1,0 +1,10 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+title: "Removal not found"
+message: "That project removal is not recorded."
+suggested_action: "Refresh the project list."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "not recorded"

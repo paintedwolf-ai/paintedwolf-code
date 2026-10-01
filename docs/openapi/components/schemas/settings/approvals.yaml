@@ -1,0 +1,629 @@
+components:
+  schemas:
+    ApprovalPosture:
+      type: string
+      description: >
+        Ask-line. light asks only for actions that remove recovery (substrate
+        boundary requests, outbound secret screen, critical detections); balanced
+        adds high-confidence high-severity signals and new destinations after
+        external-content ingest; strict adds MCP and all new-host confirmation.
+        Disabling approvals entirely is never_ask, not a posture.
+      enum:
+      - light
+      - balanced
+      - strict
+    ApprovalCategory:
+      type: string
+      enum:
+      - tool
+      - command
+      - mcp
+      - path
+      - host
+      - write_root
+      - host_resource
+    ApprovalConfigResponse:
+      x-go-generate: true
+      x-go-field-order: ["scope", "rules", "merged_from", "managed_rules", "approval_posture", "ai_rationale_enabled", "never_ask", "field_sources", "defaults"]
+      type: object
+      required:
+      - scope
+      - rules
+      - managed_rules
+      - merged_from
+      - ai_rationale_enabled
+      - never_ask
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: preferences.yaml#/components/schemas/SettingsScope
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRule"
+        managed_rules:
+          type: array
+          description: >-
+            Read-only effective approval rules contributed by extension packs.
+            Project entries are additive and can never replace device entries.
+          items:
+            $ref: "#/components/schemas/ManagedApprovalRule"
+        merged_from:
+          type: array
+          items:
+            type: string
+        approval_posture:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ApprovalPosture"
+          description: Effective ask-line (light|balanced|strict), after project overlay merge.
+        ai_rationale_enabled:
+          x-go-name: "AIRationaleEnabled"
+          type: boolean
+          description: >
+            Effective AI rationale toggle after merge. Default true.
+        never_ask:
+          type: boolean
+          description: >
+            Effective never-ask override after merge. True means the approval layer
+            is disabled outright — no discretionary, substrate, secret-screen, or
+            detection asks. Global-only: a project overlay may restore asking but
+            can never set this true. Default false.
+        field_sources:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ApprovalFieldSources"
+          description: >
+            Present on project scope. default = inherit Settings; override = project set.
+        defaults:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ApprovalDefaults"
+          description: >
+            Present on project scope. Device-global effective values for the
+            following-Settings summary when the project override is disabled.
+    ApprovalFieldSources:
+      x-go-generate: true
+      type: object
+      required:
+      - approval_posture
+      - ai_rationale_enabled
+      - never_ask
+      additionalProperties: false
+      properties:
+        approval_posture:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ApprovalFieldSource"
+        ai_rationale_enabled:
+          x-go-type: "string"
+          x-go-name: "AIRationaleEnabled"
+          $ref: "#/components/schemas/ApprovalFieldSource"
+        never_ask:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ApprovalFieldSource"
+    ApprovalFieldSource:
+      type: string
+      enum:
+      - default
+      - override
+    ApprovalDefaults:
+      x-go-generate: true
+      type: object
+      required:
+      - approval_posture
+      - ai_rationale_enabled
+      - never_ask
+      additionalProperties: false
+      properties:
+        approval_posture:
+          x-go-type: "string"
+          $ref: "#/components/schemas/ApprovalPosture"
+        ai_rationale_enabled:
+          x-go-name: "AIRationaleEnabled"
+          type: boolean
+        never_ask:
+          type: boolean
+          description: Device-global disable state before a project restoration override.
+    ApprovalEffect:
+      type: string
+      enum:
+      - deny
+      - ask
+    ApprovalRule:
+      x-go-generate: true
+      type: object
+      required:
+      - category
+      - pattern
+      - effect
+      additionalProperties: false
+      properties:
+        category:
+          $ref: "#/components/schemas/ApprovalCategory"
+        pattern:
+          type: string
+        effect:
+          $ref: "#/components/schemas/ApprovalEffect"
+    ApprovalRuleScope:
+      type: string
+      enum: [device, project]
+    ManagedApprovalRule:
+      x-go-generate: true
+      type: object
+      required: [category, pattern, effect, unit_id, pack_id, scope]
+      additionalProperties: false
+      properties:
+        category:
+          $ref: "#/components/schemas/ApprovalCategory"
+        pattern: {type: string}
+        effect:
+          $ref: "#/components/schemas/ApprovalEffect"
+        unit_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        pack_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        scope:
+          $ref: "#/components/schemas/ApprovalRuleScope"
+    SocketCapabilityAuthority:
+      type: string
+      enum:
+      - outside_sandbox_daemon
+    ApprovalGrant:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - scope
+      - category
+      - pattern
+      - title
+      - coverage
+      - granted_at
+      - expires_when
+      - reask_when
+      additionalProperties: false
+      description: >
+        One revocable host-minted approval lease. Listed by GET
+        /v1/approval-grants and removed by POST /v1/approval-grants/revoke.
+        Unix socket leases use category socket_path with approved_path and
+        resolved_path. Managed-secret leases name their secrets and recipients;
+        local connection leases remain separately revocable.
+      properties:
+        elevated_effects:
+          description: Host-classified elevated authority; empty for ordinary approvals.
+          type: array
+          items:
+            $ref: ../session/elevated-access.yaml#/components/schemas/ElevatedAccessEffect
+        secret_names:
+          type: array
+          description: Display names of the protected values covered by this lease.
+          items: {type: string}
+        secret_recipients:
+          type: array
+          description: Reviewed receivers, without secret values or fingerprints.
+          items:
+            $ref: ../checkpoint.yaml#/components/schemas/ApprovalSecretRecipient
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Opaque id bound to the complete authority and security witness.
+        scope:
+          $ref: "#/components/schemas/ApprovalGrantScope"
+        category:
+          $ref: "#/components/schemas/ApprovalGrantCategory"
+        pattern:
+          type: string
+          description: >
+            Searchable host label. For socket_path this mirrors approved_path;
+            authority matching uses approved_path and resolved_path. Secret
+            releases expose only a count label; their fingerprints stay host-only.
+        title:
+          type: string
+          description: Host-rendered bounded-lease label.
+        granted_at:
+          type: string
+          format: date-time
+          description: When the host minted the lease.
+        expires_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        coverage:
+          type: string
+          description: Reviewed host copy describing exactly what the lease covers.
+        expires_when:
+          type: string
+        reask_when:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+          description: >
+            Canonical identity of the project a project-scoped lease binds to.
+            Grants group by this, not by folder: attaching, detaching or moving
+            a project's folders never moves or invalidates its saved approvals.
+        project_dir:
+          type: string
+          description: >
+            A folder the lease was granted from, for display only. Absent for a
+            project with no folders attached.
+        unavailable:
+          type: boolean
+          description: >
+            True when the granted target no longer exists on this host — a
+            write_root whose path fails Lstat, or a socket_path whose approved
+            path no longer resolves to a usable socket. Display and bulk-clear
+            only; never auto-revoked.
+        action_count:
+          type: integer
+          minimum: 1
+          description: >
+            Number of exact actions an action_set lease covers. Exact action
+            identities are host-only opaque digests and never cross the wire.
+        resource_ids:
+          x-go-name: ResourceIDs
+          type: array
+          items:
+            type: string
+          description: >
+            Host resource ids for host_resource leases. Coverage composes per
+            id.
+        approved_path:
+          type: string
+          description: Exact AF_UNIX path the human approved (socket_path grants).
+        resolved_path:
+          type: string
+          description: Current host-resolved target for the approved path.
+        repointed:
+          type: boolean
+          description: >
+            True when re-resolution succeeds but the target differs from the
+            stored resolved_path (grant is not applied until renewed).
+        expired:
+          type: boolean
+          description: True when expires_at is in the past (display; list may still return it briefly).
+        effective_authority:
+          $ref: "#/components/schemas/SocketCapabilityAuthority"
+        authority_warning:
+          type: string
+          description: >
+            Host copy stating the service runs outside the sandbox and may act on
+            files, processes, devices, and network.
+        source:
+          type: string
+          description: Origin of the lease (settings, checkpoint, recovery).
+        chat_session_id:
+          type: string
+          format: uuid
+          description: The chat's root session id when scope is chat.
+        session_title:
+          type: string
+          description: Chat title on chat-scoped rows, for grouping in Settings.
+        revoke_applies_to:
+          type: string
+          description: >
+            Host copy for revoke consequences. Socket grants use
+            "Applies to the next command or terminal. Already-running processes retain access."
+    ApprovalGrantScope:
+      type: string
+      enum:
+      - chat
+      - project
+      - device
+    ApprovalGrantCategory:
+      type: string
+      description: Categories that can carry reusable lease authority.
+      enum:
+      - tool
+      - mcp
+      - path
+      - host
+      - write_root
+      - action_set
+      - socket_path
+      - host_resource
+      # Project lease for exact host-keyed secret identities. The fingerprints
+      # are never exposed on this wire shape.
+      - secret
+      # Standing redaction for the same identities: the credential is stripped
+      # and the send proceeds. The one category that reduces what leaves the
+      # machine, so it may carry device scope where release stops at project.
+      - secret_redact
+      # Exact-action direct-IP lease. Chat-scoped only: it is never created from
+      # Settings and never persists to a project or device grant.
+      - direct_ip
+      # Chat-scoped local listener authority (bind + accept), optionally
+      # port-narrowed. The egress mode of granted commands is unchanged. Never
+      # created from Settings and never outlives the chat.
+      - local_listen
+      # Chat-scoped local TCP and UDP connections with mediated egress.
+      - loopback_connect
+      # Chat lease over one command's mediated network: every host that exact
+      # command reaches, still observed and recorded, until the chat is deleted.
+      - egress_command
+      # Explicit chat-scoped process and host execution authority.
+      - execution_capability
+      # Chat lease over changes to project files that steer or authorize
+      # agents: whole trust surfaces below Strict, exact files at Strict. Never
+      # created from Settings and never outlives the chat.
+      - agent_policy
+      # Reusable lease over execution of verified remote package coordinates.
+      - package_coordinate
+    CreateApprovalGrantRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - category
+      - scope
+      additionalProperties: false
+      description: >
+        Deliberate Settings creation of one durable grant with scope project or
+        device. Category socket_path takes socket_path; category host takes
+        host_pattern. Execution cards and model tools cannot call this.
+      properties:
+        category:
+          $ref: "#/components/schemas/ApprovalGrantCategory"
+        scope:
+          $ref: "#/components/schemas/ApprovalGrantScope"
+        socket_path:
+          type: string
+          description: Absolute path to an existing AF_UNIX socket on this device.
+        host_pattern:
+          type: string
+          description: >
+            A host or registrable-site pattern the host derived (for example
+            `*.github.com`), optionally bound to one tunnel port
+            (`*.github.com:443`). The host normalizes it through the same
+            derivation an approval card uses; a pattern it would not mint is
+            refused.
+        project_id:
+          type: string
+          format: uuid
+          description: Required for project scope.
+        expires_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Optional expiry. Omitted, a project-scope grant expires 7 days after creation and a device-scope grant 30 days after.
+    ResolveSocketGrantRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - socket_path
+      additionalProperties: false
+      description: >
+        Resolve one absolute socket path for the deliberate Settings create flow
+        before confirmation. No grant is written.
+      properties:
+        socket_path:
+          type: string
+    ResolveSocketGrantResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - approved_path
+      - resolved_path
+      - effective_authority
+      - authority_warning
+      additionalProperties: false
+      properties:
+        approved_path:
+          type: string
+        resolved_path:
+          type: string
+        effective_authority:
+          $ref: "#/components/schemas/SocketCapabilityAuthority"
+        authority_warning:
+          type: string
+    AskQuiet:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - chat_session_id
+      - key
+      - label
+      - suppressed
+      - created_at
+      additionalProperties: false
+      description: >
+        One chat-keyed ask suppression (not authority). Listed beside grants by
+        GET /v1/approval-grants; revoked via the same bulk revoke
+        endpoint using quiet_ ids.
+      properties:
+        elevated_effects:
+          description: Host-classified elevated authority; empty for ordinary approvals.
+          type: array
+          items:
+            $ref: ../session/elevated-access.yaml#/components/schemas/ElevatedAccessEffect
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+          description: Opaque id with quiet_ prefix.
+        chat_session_id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: Host quiet key (reason segment, plus seam/host for secrets).
+        label:
+          type: string
+        expires_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+          description: Absent for the chat rung (until the chat is deleted or the quiet is revoked).
+        suppressed:
+          type: integer
+          minimum: 0
+          description: Asks skipped while this quiet was live.
+        created_at:
+          type: string
+          format: date-time
+        session_title:
+          type: string
+          description: Root chat title when known, for Saved approvals grouping.
+    ApprovalGrantsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - grants
+      additionalProperties: false
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalGrant"
+        quiets:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AskQuiet"
+          description: Live ask quiets for the listed chats (suppression, not authority).
+    ApprovalRecentAskRow:
+      x-go-generate: true
+      type: object
+      required:
+      - gate
+      - asks
+      - allowed
+      - denied
+      additionalProperties: false
+      properties:
+        gate:
+          $ref: '../approval-gate.generated.yaml#/components/schemas/ApprovalGate'
+        asks:
+          type: integer
+          minimum: 1
+          description: Cards raised for this reason in the window.
+        allowed:
+          type: integer
+          minimum: 0
+        denied:
+          type: integer
+          minimum: 0
+          description: Denied, expired, or canceled.
+        last_ask_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        subjects:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+          description: Redaction-safe subject titles, most recent first.
+        host_pattern:
+          type: string
+          description: >
+            When every subject in the row was a tunnel or request to hosts
+            under one registrable site, the family pattern a Settings grant
+            could lease. Absent otherwise.
+    ApprovalRecentAsksResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - window_days
+      - since_at
+      - asks
+      additionalProperties: false
+      properties:
+        window_days:
+          type: integer
+          minimum: 1
+        since_at:
+          type: string
+          format: date-time
+        asks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRecentAskRow"
+    RevokeApprovalGrantsRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - ids
+      additionalProperties: false
+      description: >
+        One bulk revoke for the Saved approvals group actions (revoke all,
+        clear expired, revoke missing). Each id resolves independently.
+        Accepts grant_ lease ids and quiet_ ask-quiet ids.
+      properties:
+        ids:
+          x-go-name: "IDs"
+          type: array
+          minItems: 1
+          maxItems: 256
+          items:
+            type: string
+    ApprovalGrantRevokeResult:
+      x-go-generate: true
+      type: object
+      required:
+      - id
+      - revoked
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        revoked:
+          type: boolean
+          description: True only when a grant with this id existed and was removed.
+        code:
+          $ref: "../api-error-code.generated.yaml#/components/schemas/ApiErrorCode"
+        message:
+          type: string
+          description: Host copy when not revoked; absent on success. Branch on code.
+    RevokeApprovalGrantsResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - results
+      additionalProperties: false
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalGrantRevokeResult"
+    UpdateApprovalsSettingsRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        Settings patch for approvals. Omit rules to preserve the global
+        overlay. When rules is present, only deny/ask entries are accepted
+        (any effect:allow → 400); overlay allow grants are kept. Durable
+        allows mutate only via checkpoint resolve + POST …/grants/revoke.
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRule"
+          description: >
+            Optional. Omit to preserve overlay rules. Present = replace
+            overlay deny/ask only (allows rejected).
+        approval_posture:
+          x-go-type: "*string"
+          oneOf:
+          - $ref: "#/components/schemas/ApprovalPosture"
+          - type: "null"
+          description: >
+            When present, sets posture for the request scope (global or project).
+            Omitted preserves the current overlay value (project inherits global when unset).
+            Null resets to inherit from global (project scope only).
+        ai_rationale_enabled:
+          x-go-pointer: true
+          x-go-name: "AIRationaleEnabled"
+          type: [boolean, "null"]
+          description: >
+            When present, toggles AI rationale on approval cards for the request scope.
+            Omitted preserves the current value (project inherits global when unset).
+            Null resets to inherit from global (project scope only).
+        never_ask:
+          x-go-pointer: true
+          type: [boolean, "null"]
+          description: >
+            Global scope: true disables the approval layer outright and false turns it
+            back on. Project scope: false may restore asking for that project; true is
+            rejected because repo content must never be able to disable approvals.
+            Omitted preserves the current overlay value. Default false.
+            Null resets to inherit from global (project scope only).

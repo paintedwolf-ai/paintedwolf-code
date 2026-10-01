@@ -1,0 +1,48 @@
+title: Delete a directory user or group
+id: 239d0ed8-d98d-4cf9-9940-b6d7b91f0d80
+description: Deletes a user or group object from a directory.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_powershell:
+    Image:
+      - powershell
+      - powershell.exe
+      - pwsh
+      - pwsh.exe
+    CommandLine|contains:
+      - 'Remove-ADUser'
+      - 'Remove-ADGroup'
+      - 'Remove-MgUser'
+      - 'Remove-MgGroup'
+  selection_ldap:
+    Image: ldapdelete
+  selection_gam:
+    Image: gam
+    CommandLine|contains:
+      - ' delete user'
+      - ' delete group'
+  # Entra ID objects through the Azure CLI. azure-cli's group-delete covers
+  # resource groups and excludes this path explicitly.
+  selection_az_ad:
+    Image: az
+    CommandLine|contains:
+      - ' ad user delete'
+      - ' ad group delete'
+      - ' ad sp delete'
+  filter_rehearsal:
+    CommandLine|re: '(?i)\s(--help|-whatif)(?:["\x27]|\s)'
+  filter_local:
+    EffectReach: local
+  condition: (selection_powershell or selection_ldap or selection_gam or selection_az_ad) and not filter_rehearsal and not filter_local

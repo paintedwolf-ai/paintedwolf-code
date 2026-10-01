@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Video cannot be decoded
+message: >-
+  This video cannot be decoded. Attach an MP4 (H.264) or WebM recording.
+suggested_action: Re-encode the video or pick a supported format.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - cannot be decoded

@@ -1,0 +1,11 @@
+# A command window attributes changes until process exit. Restart interruption
+# ends attribution without claiming that the process exited.
+name: SourceCommandWindowState
+go_const_prefix: SourceCommandWindow
+values:
+  - id: running
+    comment: The command is still running; the window keeps attributing what passes observe.
+  - id: ended
+    comment: The process exited and a final pass ran with the window open.
+  - id: interrupted
+    comment: The app stopped before the command's exit was observed.

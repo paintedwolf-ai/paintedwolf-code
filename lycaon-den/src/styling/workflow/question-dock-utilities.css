@@ -1,0 +1,283 @@
+/* Open ask strip above Composer — sibling inside .den-chat-composer-dock. */
+@utility den-ask-user-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border-radius: var(--den-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 22%, var(--den-line));
+  background: var(--den-surface);
+  box-shadow: var(--den-shadow-sm);
+}
+
+
+/* Minimized: the dock retracts to just its head strip above the composer. */
+.den-ask-user-dock[data-minimized] {
+  gap: 0;
+  padding: 6px 10px;
+}
+
+
+/* Strip layout the shared primitive leaves to the host surface. */
+.den-ask-user-dock-head {
+  gap: 8px;
+  margin: 0;
+}
+
+
+.den-ask-user-dock .den-dock-collapse-body-inner {
+  gap: 10px;
+}
+
+
+@utility den-ask-user-dock-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-accent-text);
+}
+
+
+@utility den-ask-user-dock-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--den-accent-signal);
+  flex-shrink: 0;
+}
+
+
+@utility den-ask-user-dock-prompt {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.5;
+  color: var(--den-text);
+}
+
+
+@utility den-ask-user-dock-options {
+  margin: 0;
+  /* Long or wrapped option lists scroll within the card. */
+  max-height: 18.5rem;
+  flex-shrink: 0;
+}
+
+
+@utility den-ask-user-dock-options__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-ask-user-dock-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  background: var(--den-background);
+  cursor: pointer;
+  font-size: var(--text-den-body);
+  color: var(--den-text);
+}
+
+
+.den-ask-user-dock-opt:focus-within,
+.den-ask-user-dock-opt:has(:checked) {
+  border-color: var(--den-accent-signal);
+  background: color-mix(in srgb, var(--den-accent-signal) 10%, var(--den-background));
+}
+
+
+@utility den-ask-user-dock-opt-label {
+  flex: 1;
+  min-width: 0;
+}
+
+
+@utility den-ask-user-dock-hint {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+}
+
+@utility den-ask-user-dock-secret {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@utility den-ask-user-dock-secret-label {
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-ask-user-dock-secret-row {
+  display: flex;
+  gap: 8px;
+}
+
+@utility den-ask-user-dock-secret-input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  padding: 8px 10px;
+  font: inherit;
+
+  &:focus {
+    border-color: var(--den-accent-signal);
+    outline: 2px solid color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+/* Same primary recipe as btn-primary, at the secret row's geometry. */
+@utility den-ask-user-dock-secret-submit {
+  border: 1px solid var(--den-primary-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-primary-bg);
+  color: var(--den-primary-text);
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--den-primary-bg-hover);
+    border-color: var(--den-primary-border-hover);
+  }
+  &:active:not(:disabled) {
+    background: var(--den-primary-bg-active);
+  }
+  &:disabled {
+    background: var(--den-tint-3);
+    border-color: var(--den-border);
+    color: var(--den-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility den-ask-user-dock-secret-visibility {
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
+    color: var(--den-text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--den-accent-signal) 22%, transparent);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+@utility den-ask-user-dock-secret-purpose {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+}
+
+
+/* Options a composer draft overrides. Typed text wins on Send even if one is
+   later picked. */
+@utility den-ask-user-dock-superseded {
+  opacity: 0.55;
+  transition: opacity var(--den-duration) var(--den-ease);
+}
+
+
+/* Pointer at the composer; tints once a draft exists. */
+@utility den-ask-user-dock-rail {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 9px;
+  /* Bleeds to the dock edge — matches its 14px/12px padding. */
+  width: calc(100% + 28px);
+  margin: 10px -14px -12px;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 82%, transparent);
+  border-radius: 0 0 var(--den-radius-lg) var(--den-radius-lg);
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-label);
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+
+  &:hover {
+    background: color-mix(in srgb, var(--den-accent-signal) 5%, transparent);
+  }
+}
+
+
+/* The rail lives outside the collapsible body, so retracting hides it here. */
+.den-ask-user-dock[data-minimized] .den-ask-user-dock-rail {
+  display: none;
+}
+
+
+@utility den-ask-user-dock-rail--armed {
+  background: color-mix(in srgb, var(--den-accent-signal) 7%, transparent);
+  color: var(--den-text);
+}
+
+
+@utility den-ask-user-dock-rail-icon {
+  flex: none;
+  color: var(--den-accent-text);
+}
+
+
+@utility den-ask-user-dock-rail-link {
+  color: var(--den-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+
+@utility den-ask-user-dock-error {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-danger);
+}
+
+
+@utility den-ask-user-open-marker {
+  margin: 12px 0;
+  padding: 8px 10px;
+  border-radius: var(--den-radius-sm);
+  border: 1px dashed var(--den-line);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  background: transparent;
+}

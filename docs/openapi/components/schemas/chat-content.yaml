@@ -1,0 +1,80 @@
+components:
+  schemas:
+    ChatContentReference:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [field, sha256, total_runes, size_bytes, rows]
+      description: Retained screened content; the inline field is a bounded preview, never a replacement for this revision.
+      properties:
+        field:
+          type: string
+          enum: [content, tool_output, tool_args]
+        tool_call_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        total_runes:
+          type: integer
+        size_bytes:
+          type: integer
+        rows:
+          type: integer
+          description: Number of display rows in this revision.
+        preview_rows:
+          type: array
+          items: {$ref: '#/components/schemas/ChatContentRow'}
+    ChatContentRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [index, offset, text, spans]
+      properties:
+        index: {type: integer}
+        offset: {type: integer}
+        text: {type: string}
+        spans:
+          type: array
+          items: {$ref: 'session/messages.yaml#/components/schemas/RedactedSpan'}
+    ChatContentPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [reference, text, offset, end_offset, complete, spans]
+      description: >-
+        A positional window into one retained revision. offset and end_offset are
+        rune coordinates; reading continues by requesting offset=end_offset.
+      properties:
+        reference:
+          $ref: '#/components/schemas/ChatContentReference'
+        text: {type: string}
+        offset: {type: integer, minimum: 0, description: Rune offset where this window starts.}
+        end_offset: {type: integer, minimum: 0, description: Rune offset just past this window; reference.total_runes at the end of the content.}
+        complete: {type: boolean, description: True when this window reaches the end of the content.}
+        spans:
+          type: array
+          description: Screened provenance with rune offsets relative to this page.
+          items: {$ref: 'session/messages.yaml#/components/schemas/RedactedSpan'}
+        rows:
+          type: array
+          items: {$ref: '#/components/schemas/ChatContentRow'}
+    ChatContentMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [offset, length]
+      properties:
+        offset: {type: integer}
+        length: {type: integer}
+    ChatContentSearchPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items: {$ref: '#/components/schemas/ChatContentMatch'}
+        next_cursor: {type: string, description: Opaque cursor for the next search page; absent when the search reached the end of the content.}

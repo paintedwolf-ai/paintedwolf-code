@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-nav-toggle
+command: painted-wolf/platform:nav-toggle
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+B"
+  windows:
+    - "Mod+B"
+  linux:
+    - "Mod+B"

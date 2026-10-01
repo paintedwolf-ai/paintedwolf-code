@@ -1,0 +1,43 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - provider_id
+    - model
+    - attempts
+    - silence_seconds
+title: Model host went quiet
+message: >-
+  {% if provider_id -%}
+  {{ provider_id }} accepted the request and sent nothing back
+  {%- if silence_seconds %} for {{ silence_seconds }} seconds{% endif %}.
+  {%- else -%}
+  The model host accepted the request and sent nothing back
+  {%- if silence_seconds %} for {{ silence_seconds }} seconds{% endif %}.
+  {%- endif %}
+  {% if attempts and attempts > 1 %}Painted Wolf tried {{ attempts }} times.{% endif %}
+  The request did arrive, so the host may have run it and billed for it — this is
+  not the same as a request that never got through.
+suggested_action: >-
+  Send it again, or switch to a different model in Settings → AI providers. If one
+  host keeps going quiet, its capacity is the likeliest cause.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_provider
+    vars:
+      provider_id: together-ai-1
+      attempts: 2
+      silence_seconds: 60
+    expect_contains:
+      - together-ai-1
+      - accepted the request
+      - 60 seconds
+      - tried 2 times
+  - id: generic
+    vars: {}
+    expect_contains:
+      - accepted the request

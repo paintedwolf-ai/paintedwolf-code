@@ -1,0 +1,362 @@
+@utility den-worker-budget {
+flex-shrink: 0;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--den-text-muted);
+  letter-spacing: 0.01em;
+}
+
+
+@utility den-worker-budget--low {
+color: var(--den-status-running);
+}
+
+
+/* Lighter text separates tool usage from the turn budget. */
+@utility den-worker-tool-calls {
+flex-shrink: 0;
+  font-size: var(--text-den-overline);
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+
+@utility den-worker-msg {
+display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-worker-msg-header {
+display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-den-overline);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-worker-part {
+font-size: var(--text-den-body);
+  line-height: 1.5;
+  margin: 0;
+}
+
+
+@utility den-worker-part--text {
+word-wrap: break-word;
+  color: var(--den-text);
+  &:not(:has(.markdown-body)) {
+    white-space: pre-wrap;
+  }
+}
+
+
+@utility den-worker-part--tool-card {
+align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+
+/* Rows carry their own seams, so the list spaces nothing and both of
+   VirtualCardList's layouts read the same. */
+@utility den-worker-transcript {
+list-style: none;
+  margin: 0;
+  padding: 8px 14px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+
+@utility den-worker-transcript-coordination-agent {
+flex-shrink: 0;
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-worker-transcript-coordination-finding {
+display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+
+@utility den-worker-transcript-coordination-heading {
+margin: 0 0 6px;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+}
+
+
+@utility den-worker-transcript-coordination-list {
+list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+
+@utility den-worker-transcript-coordination-meta {
+display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+
+@utility den-worker-transcript-coordination-summary {
+margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+
+@utility den-worker-transcript-empty {
+padding: 24px 16px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+  text-align: center;
+}
+
+
+@utility den-worker-transcript-empty--inline {
+padding: 8px 0 4px;
+  text-align: left;
+}
+
+
+@utility den-worker-transcript-activity-preview {
+padding: 4px 0 8px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-body);
+}
+
+
+@utility den-worker-transcript-evidence {
+scroll-margin-bottom: 12px;
+  transition: background var(--den-duration) var(--den-ease);
+}
+
+
+@utility den-worker-transcript-evidence--highlight {
+background: color-mix(in srgb, var(--den-status-positive) 8%, transparent);
+}
+
+
+@utility den-worker-transcript-evidence-headline {
+margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+  line-height: 1.45;
+}
+
+
+@utility den-worker-transcript-evidence-lines {
+margin: 8px 0 0;
+  padding-left: 1.1em;
+  font-size: var(--text-den-label);
+  color: var(--den-text-muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+@utility den-worker-transcript-pane {
+  --worker-header-h: 32px;
+  min-width: 0;
+  min-height: 0;
+}
+
+
+@utility den-worker-transcript-params {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) 1fr;
+  gap: 4px 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  font-size: var(--text-den-hint);
+}
+
+
+@utility den-worker-transcript-section {
+display: contents;
+}
+
+
+@utility den-worker-transcript-section-body {
+min-height: 0;
+  padding: 8px 14px 16px;
+}
+
+
+@utility den-worker-transcript-section-status {
+display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  color: var(--den-text-muted);
+  flex-shrink: 0;
+}
+
+
+@utility den-worker-transcript-section-summary {
+display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--worker-header-h);
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 14px;
+  border: none;
+  /* Opaque headers cover scrolling content. */
+  background: var(--den-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: sticky;
+  /* Pinned headers stay above transcript content. */
+  z-index: 20;
+  border-top: 1px solid var(--den-line);
+  border-bottom: 1px solid var(--den-line);
+  transition:
+    background var(--den-duration) var(--den-ease),
+    box-shadow var(--den-duration) var(--den-ease);
+  &:hover {
+    background-color: var(--den-surface);
+    background-image: linear-gradient(var(--den-tint-1), var(--den-tint-1));
+  }
+}
+
+
+@utility den-worker-working-indicator {
+display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 0 2px;
+  flex-shrink: 0;
+}
+
+
+@utility den-worker-working-indicator-spinner {
+width: 16px;
+  height: 16px;
+  border: 2px solid var(--den-line);
+  border-top-color: var(--den-text-muted);
+  border-radius: 50%;
+  transform: translateZ(0);
+  will-change: transform;
+  animation: worker-working-spin 0.75s linear infinite;
+}
+
+
+@utility den-worker-working-indicator-generating {
+margin-left: 8px;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+
+@media (prefers-reduced-motion: no-preference) {
+  .den-worker-budget--low {
+    transition: color var(--den-duration) var(--den-ease);
+  }
+}
+
+.den-worker-msg--user .den-worker-msg-role { color: var(--den-text); }
+
+.den-worker-msg--user .den-worker-part--text {
+  background: var(--den-user-prompt-fill);
+  padding: 8px 10px;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-user-prompt-border);
+}
+
+.den-worker-part--tool-card .den-task-card {
+  width: 100%;
+  max-width: 100%;
+}
+
+.den-worker-part--tool-card
+  .den-tool-part:not([open]):not([data-accordion-row]) {
+  align-self: flex-start;
+  width: auto;
+}
+
+.den-worker-transcript-activity .den-worker-transcript {
+  padding: 0;
+}
+
+.den-worker-transcript-coordination-group + .den-worker-transcript-coordination-group {
+  margin-top: 12px;
+}
+
+.den-worker-transcript-coordination-ref,
+.den-worker-transcript-coordination-path {
+  margin: 0;
+  min-width: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-overline);
+  word-break: break-all;
+}
+
+.den-worker-transcript-evidence--failed .den-worker-transcript-evidence-headline {
+  color: var(--den-danger-text);
+}
+
+.den-worker-transcript-evidence--partial .den-worker-transcript-evidence-headline {
+  color: var(--den-status-running);
+}
+
+.den-worker-transcript-evidence--traced .den-worker-transcript-evidence-headline {
+  color: var(--den-status-positive-text);
+}
+
+.den-worker-transcript-evidence-lines li + li {
+  margin-top: 4px;
+}
+
+.den-worker-transcript-params dt {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-weight: 500;
+}
+
+.den-worker-transcript-params dd {
+  margin: 0;
+  color: var(--den-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.den-worker-transcript-section-status svg {
+  display: block;
+}
+
+.den-worker-transcript-section-summary .transcript-pane__subhead {
+  margin: 0;
+}
+
+.den-worker-transcript-task .markdown-body,
+.den-worker-transcript-task .markdown-body p:last-child {
+  margin-bottom: 0;
+}

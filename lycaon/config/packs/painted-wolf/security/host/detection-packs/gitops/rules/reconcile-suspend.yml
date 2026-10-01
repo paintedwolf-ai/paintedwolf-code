@@ -1,0 +1,30 @@
+title: Stop reconciling a cluster
+id: c2eac338-193d-4f4a-8bc4-1dd334dae578
+description: Pauses reconciliation or drops a cluster's registration, so the repository stops being applied.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # `flux resume` and `argocd cluster add` put both of these back.
+  selection_flux:
+    Image: flux
+    CommandLine|contains: ' suspend '
+  selection_argocd:
+    Image: argocd
+    CommandLine|contains: ' cluster rm'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: (selection_flux or selection_argocd) and not filter_rehearsal and not filter_local

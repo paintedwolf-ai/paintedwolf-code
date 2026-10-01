@@ -1,0 +1,25 @@
+title: Delete a Btrfs subvolume
+id: c56bc43c-f5f7-4827-916f-d4d3e6b4df86
+description: Removes a Btrfs subvolume and everything stored under it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: btrfs
+    CommandLine|contains: ' subvolume delete'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and not filter_rehearsal and not filter_local

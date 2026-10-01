@@ -1,0 +1,548 @@
+components:
+  schemas:
+    SearchScopeMode:
+      type: string
+      enum:
+        - global
+        - current
+        - slug
+    SearchBudget:
+      type: string
+      enum:
+        - complete
+        - interactive
+      description: |
+        Crawl budget. Empty is complete. `interactive` walks origin roots first
+        with small caps.
+    SearchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        origin_project_id:
+          type: string
+          format: uuid
+        cursor:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        budget:
+          $ref: '#/components/schemas/SearchBudget'
+        regex:
+          type: boolean
+          description: When true, treat the code pattern as a Go regexp
+        case_sensitive:
+          type: boolean
+        whole_word:
+          type: boolean
+        include:
+          type: array
+          items:
+            type: string
+          description: Root-relative globs that must match (`**/*.go`)
+        exclude:
+          type: array
+          items:
+            type: string
+          description: Root-relative globs that exclude a path (wins over include)
+    SearchHit:
+      x-go-generate: true
+      type: object
+      required:
+        - hit_id
+        - hit_kind
+        - source
+        - project_id
+        - title
+      properties:
+        hit_id:
+          type: string
+          format: uuid
+          description: Stable identity for the same indexed row or source coordinate across pages and refreshed generations.
+        hit_kind:
+          type: string
+        source:
+          type: string
+        score:
+          type: number
+        session_id:
+          type: string
+          format: uuid
+        source_ref:
+          type: string
+        leg_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        parent_session_id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root for live file and code hits, when known.
+        project_name:
+          type: string
+        snippet:
+          type: string
+        title:
+          type: string
+          minLength: 1
+          description: Scannable host-projected label.
+        context:
+          type: string
+          description: Host-projected location or source context.
+        path:
+          type: string
+          description: Repo-relative file path for file-anchored hits.
+        line:
+          type: integer
+          description: 1-based line within path, when known.
+        url:
+          type: string
+          format: uri
+          description: External URL for web hits.
+        trust:
+          type: string
+        verified:
+          x-go-pointer: true
+          type: boolean
+        hint_code:
+          type: string
+        symbol_kind:
+          $ref: './project/source-index.yaml#/components/schemas/SourceSymbolKind'
+        title_highlights:
+          type: array
+          description: Code point ranges of `title` the query matched; symbol hits carry them.
+          items:
+            $ref: './project/source-index.yaml#/components/schemas/SourceSearchHighlight'
+        created_at:
+          type: string
+          format: date-time
+    SearchFacetValue:
+      x-go-generate: true
+      type: object
+      required:
+        - value
+        - count
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    SearchFacet:
+      x-go-generate: true
+      type: object
+      required:
+        - key
+        - values
+      properties:
+        key:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchFacetValue
+    SearchHistogramBucket:
+      x-go-generate: true
+      type: object
+      required:
+        - key
+        - count
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+    SearchResultStatus:
+      type: string
+      enum: [complete, limited, partial]
+    SearchCountRelation:
+      type: string
+      enum: [exact, lower_bound]
+    SearchIssueReason:
+      type: string
+      description: |
+        Why a generation is not exhaustive. `time_budget`: the code leg's
+        wall-clock budget ended with files unscanned. `catalog_warming`: `count`
+        project roots had no source generation at all in time; their files
+        are absent and the build they started continues, so the same query
+        can include them when ready. `catalog_incomplete`: `count` project
+        roots answered from a generation whose discovery has not reached the
+        whole tree; the hits are real and more arrive as it continues.
+        `catalog_bounded`: a walk budget refused `count` directories, so their
+        files were never indexed and no query reaches them; unlike the warming
+        reasons this does not resolve by asking again. `index_warming`: a direct content scan
+        reached its time budget while the shared content index continues building.
+        `catalog_failed`: count directories could not be discovered.
+        `catalog_refresh_failed`: count readable roots failed to refresh.
+        `catalog_refreshing`: count roots serve an older generation while updating.
+        `symbol_budget`: declaration discovery in `count` projects stopped at
+        its line cap, clock, or file budget, so more declarations may match.
+      enum: [result_limit, executor_error, files_skipped, time_budget, catalog_warming, catalog_incomplete, catalog_bounded, catalog_failed, catalog_refresh_failed, catalog_refreshing, index_warming, symbol_budget]
+    SearchIssue:
+      x-go-generate: true
+      type: object
+      required:
+        - executor
+        - reason
+      properties:
+        executor:
+          type: string
+        reason:
+          $ref: '#/components/schemas/SearchIssueReason'
+        limit:
+          type: integer
+          minimum: 1
+        count:
+          type: integer
+          minimum: 1
+          description: Affected-item count for reasons that carry one (files_skipped, catalog_warming, catalog_incomplete, catalog_bounded, index_warming, symbol_budget, and result_limit from the symbol leg)
+        message:
+          type: string
+          description: Underlying failure for executor_error
+    SearchInterpretedFilter:
+      x-go-generate: true
+      type: object
+      required:
+        - field
+        - value
+      properties:
+        field:
+          type: string
+        value:
+          type: string
+        negated:
+          type: boolean
+      description: One recognized filter with its polarity preserved
+    SearchInterpretation:
+      x-go-generate: true
+      type: object
+      required:
+        - scope
+      properties:
+        scope:
+          $ref: search.yaml#/components/schemas/SearchScopeMode
+        slug:
+          type: string
+        fts_terms:
+          x-go-name: "FTSTerms"
+          type: array
+          items:
+            type: string
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchInterpretedFilter'
+        dependency_trees_excluded:
+          type: boolean
+          description: >-
+            The content scan skipped dependency and build trees; an explicit
+            path filter or include glob re-admits them.
+
+    SearchResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - hits
+        - status
+        - exhaustive
+        - total_hits
+        - count_relation
+        - facets_exhaustive
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchHit
+        status:
+          $ref: '#/components/schemas/SearchResultStatus'
+        exhaustive:
+          type: boolean
+          description: True only when every executor completed without a limit or error.
+        total_hits:
+          type: integer
+          minimum: 0
+          description: Hits available in this generation before transport paging.
+        count_relation:
+          $ref: '#/components/schemas/SearchCountRelation'
+        facets_exhaustive:
+          type: boolean
+          description: False when facets describe a limited or partial generation.
+        facets:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchFacet
+        histogram:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchHistogramBucket
+        next_cursor:
+          type: string
+        interpreted:
+          $ref: search.yaml#/components/schemas/SearchInterpretation
+        issues:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchIssue
+    SearchExportFormat:
+      type: string
+      enum:
+        - jsonl
+        - csv
+        - sarif
+    SearchExportRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - query
+        - format
+      description: >-
+        Carries the same match flags as SearchRequest so an export reproduces
+        exactly what the search view showed.
+      properties:
+        query:
+          type: string
+        origin_project_id:
+          type: string
+          format: uuid
+        format:
+          $ref: search.yaml#/components/schemas/SearchExportFormat
+        regex:
+          type: boolean
+        case_sensitive:
+          type: boolean
+        whole_word:
+          type: boolean
+        include:
+          type: array
+          items:
+            type: string
+        exclude:
+          type: array
+          items:
+            type: string
+    SearchReplaceHunkContext:
+      type: string
+      enum:
+        - code
+        - comment_or_string
+      description: >-
+        Syntactic context of a replace match start. comment_or_string when the
+        language grammar places it inside a comment or string literal; code
+        otherwise, including when no grammar is available.
+    SearchReplaceHunk:
+      x-go-generate: true
+      type: object
+      required:
+        - line
+        - end_line
+        - before
+        - after
+        - context
+      additionalProperties: false
+      properties:
+        line:
+          type: integer
+          minimum: 1
+          description: 1-based first line of the matched span
+        end_line:
+          type: integer
+          minimum: 1
+          description: 1-based last line of the matched span (equals line for single-line matches)
+        before:
+          type: string
+          description: Full text of the spanned lines before the replacement
+        after:
+          type: string
+          description: Full text of the spanned lines after the replacement
+        context:
+          $ref: search.yaml#/components/schemas/SearchReplaceHunkContext
+    SearchReplaceFilePreview:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - sha256
+        - hunks
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        sha256:
+          type: string
+        hunks:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchReplaceHunk
+    SearchReplacePreviewRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - query
+        - replacement
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+        replacement:
+          type: string
+        origin_project_id:
+          type: string
+          format: uuid
+        regex:
+          type: boolean
+        case_sensitive:
+          type: boolean
+        whole_word:
+          type: boolean
+        include:
+          type: array
+          items:
+            type: string
+        exclude:
+          type: array
+          items:
+            type: string
+    SearchReplacePreviewState:
+      type: string
+      description: Preparing returns no reviewable files while discovery or refresh is pending. Ready permits reviewing the full scoped preview. Limited exposes known gaps and permits only explicit per-file review in Den.
+      enum: [preparing, ready, limited]
+    SearchReplacePreviewResponse:
+      x-go-generate: true
+      type: object
+      required: [state, files, truncated, issues]
+      additionalProperties: false
+      properties:
+        state:
+          $ref: '#/components/schemas/SearchReplacePreviewState'
+        files:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchReplaceFilePreview
+        truncated:
+          type: boolean
+          description: A file or hunk limit bounded the preview.
+        issues:
+          type: array
+          items: {$ref: '#/components/schemas/SearchIssue'}
+    SearchReplaceApplyFile:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - sha256
+        - hunks
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        sha256:
+          type: string
+        hunks:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+          description: 0-based indices into the preview hunk list for this file
+    SearchReplaceApplyRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - operation_id
+        - query
+        - replacement
+        - origin_project_id
+        - files
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: Client-generated idempotency key for the complete multi-file replace command; an exact retry returns the original outcome and conflicting reuse returns 409 idempotency_conflict
+        query:
+          type: string
+        replacement:
+          type: string
+        origin_project_id:
+          type: string
+          format: uuid
+        regex:
+          type: boolean
+        case_sensitive:
+          type: boolean
+        whole_word:
+          type: boolean
+        include:
+          type: array
+          items:
+            type: string
+        exclude:
+          type: array
+          items:
+            type: string
+        files:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchReplaceApplyFile
+    SearchReplaceFileOutcome:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - applied
+        - skipped
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        applied:
+          type: boolean
+        skipped:
+          type: boolean
+        reason:
+          type: string
+        matches:
+          type: integer
+    SearchReplaceApplyResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - files
+        - batch_id
+      additionalProperties: false
+      properties:
+        files:
+          type: array
+          items:
+            $ref: search.yaml#/components/schemas/SearchReplaceFileOutcome
+        batch_id:
+          type: string
+          format: uuid
+          description: Source-ledger batch shared by every applied file; used for one-click revert

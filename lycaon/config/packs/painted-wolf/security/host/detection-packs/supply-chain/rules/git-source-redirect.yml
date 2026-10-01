@@ -1,0 +1,35 @@
+title: Point git at a different host
+id: 619a7c0b-b6ff-43ac-bdb9-15fb62252780
+description: Repoints a remote, or sends every future git request through a substituted URL or a proxy.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # The same shape as registry-redirect one file over: a source of code is
+  # silently moved. `insteadOf` is the wider one — it rewrites every repository
+  # on the machine, not just this checkout's remote. `remote add` is absent: a
+  # second named remote is routine after a fork and moves nothing.
+  selection_image:
+    Image: git
+  verbs_source_redirect:
+    CommandLine|re:
+      - '(?i)\sremote\s+set-url\b'
+      - '(?i)\sconfig\b.*\burl\..*\.insteadof\b'
+      - '(?i)\sconfig\b.*\bhttp\.proxy\b'
+  filter_rehearsal:
+    Argv|re: '^(--help|--get|--list)$'
+  filter_read_only:
+    CommandLine|contains:
+      - ' remote -v'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and verbs_source_redirect and not filter_rehearsal and not filter_read_only and not filter_local

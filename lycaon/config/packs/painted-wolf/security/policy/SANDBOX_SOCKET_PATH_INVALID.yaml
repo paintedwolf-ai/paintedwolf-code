@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_INVALID"
+effect: block
+copy:
+  what: 'The requested socket (`capability_request.socket_paths` or a tool''s socket argument) was rejected before
+    use because one or more paths failed host validation. Raw model paths never reach the sandbox profile.'
+  cause: 'The structured path failed validation: {{ paintedwolf.rejection_reason }}.'
+  why: AF_UNIX grants must name exact absolute paths the host can validate before any process starts.
+  fix: Use nonempty valid UTF-8 absolute paths without NUL, naming the intended service sockets. Correct the reported
+    input and retain the requested service scope; do not infer socket paths by parsing stderr.
+  instead: Branch on Code; correct structured args — never parse stderr
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: the structured socket path request is invalid
+x-paintedwolf-scenarios:
+- id: command_socket_path_invalid
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_INVALID'
+  - capability_request
+  - absolute

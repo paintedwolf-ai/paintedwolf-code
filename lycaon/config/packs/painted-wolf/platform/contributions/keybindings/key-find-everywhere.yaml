@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-everywhere
+command: painted-wolf/platform:find-everywhere
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+F"
+  windows:
+    - "Mod+Shift+F"
+  linux:
+    - "Mod+Shift+F"

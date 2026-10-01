@@ -1,0 +1,105 @@
+components:
+  schemas:
+    SessionHostError:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '../notice-code.generated.yaml#/components/schemas/NoticeCode'
+        title:
+          type: string
+        message:
+          type: string
+        suggested_action:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: '../notice-action.generated.yaml#/components/schemas/NoticeAction'
+        tier:
+          $ref: '../notice-tier.generated.yaml#/components/schemas/NoticeTier'
+          description: >-
+            Host-declared tier. Always `non_catastrophic` here: a condition that
+            blocks the app cannot be delivered on a session event, because that
+            needs a session the user cannot reach.
+        scope:
+          $ref: '../notice-scope.generated.yaml#/components/schemas/NoticeScope'
+          description: >-
+            Host-declared scope. Usually `session` — the enclosing event's `id`
+            names which one — but a condition wider than the chat that raised it
+            (an unconfigured provider, say) is declared at its true scope so it
+            renders once rather than in every chat.
+        resolution:
+          type: string
+          description: Which declared resolution produced `tier`/`scope`.
+    SessionEventAction:
+      type: string
+      enum: [created, updated, deleted]
+      description: Durable session lifecycle transition represented by an event.
+    SessionEvent:
+      x-go-generate: true
+      x-go-field-order: ["id", "project_id", "action", "title", "status", "last_message", "untrusted_content", "current_turn", "ui", "host_error", "idle_disposition", "prompt_pending"]
+      type: object
+      required:
+      - id
+      - project_id
+      - action
+      - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          description: Associated project; explicit so device-wide subscriptions never infer scope.
+        action:
+          $ref: '#/components/schemas/SessionEventAction'
+        status:
+          $ref: 'identity.yaml#/components/schemas/SessionStatus'
+        last_message:
+          type: string
+        title:
+          type: string
+          description: Display title (auto until the user renames); omitted until set
+        host_error:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionHostError'
+        untrusted_content:
+          type: boolean
+          description: >
+            Server-derived session untrusted-content fact (same semantics as Session.untrusted_content).
+        current_turn:
+          type: integer
+          minimum: 0
+          description: >
+            Session.current_turn, carried on the event so a client reading a
+            chat's current turn (`baseline=turn:{session_id}`) knows to read it
+            again when a new turn starts, without refetching the session.
+        ui:
+          x-go-pointer: true
+          $ref: 'identity.yaml#/components/schemas/SessionUiState'
+        idle_disposition:
+          $ref: '#/components/schemas/SessionIdleDisposition'
+        prompt_pending:
+          type: boolean
+          description: >-
+            Session.prompt_pending as of this event, omitted when false. Every
+            session event states it, so a client applying the newest event by
+            revision never shows a session at rest while an admitted prompt
+            waits to start.
+    SessionIdleDisposition:
+      type: string
+      description: >
+        Why a session went idle, stated so clients tell a stop from an error
+        without reading message text or error strings. `interrupted` is the engine
+        stopping under a live turn — a shutdown signal, or a session still busy
+        at boot after process death — and does not render as an error. It is the
+        session-level peer of the TOOL_OWNER_INTERRUPTED tool result.
+      enum:
+      - completed
+      - user_stopped
+      - turn_error
+      - interrupted

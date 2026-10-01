@@ -1,0 +1,418 @@
+fixtures:
+  - rule: financial-action
+    positive:
+      - tool: mcp_payments_create_charge
+        approval_category: mcp
+        approval_subject: payments.create_charge
+        args: {amount: 2500, customer_id: cus_123}
+    negative: &read_only
+      - tool: mcp_service_list
+        approval_category: mcp
+        approval_subject: service.list_items
+        args: {operation: list}
+
+  - rule: money-movement
+    positive:
+      - tool: mcp_payments_create_transfer
+        approval_category: mcp
+        approval_subject: payments.create_transfer
+        args: {amount: 2500, destination_id: acct_123}
+    negative: *read_only
+
+  - rule: subscription-cancel
+    positive:
+      - tool: mcp_payments_cancel_subscription
+        approval_category: mcp
+        approval_subject: payments.cancel_subscription
+        args: {subscription_id: sub_123}
+    negative: *read_only
+
+  - rule: external-message
+    positive:
+      - tool: mcp_mail_send_email
+        approval_category: mcp
+        approval_subject: mail.send_email
+        args: {to: person@example.test, subject: Hello}
+    negative: *read_only
+
+  - rule: publication
+    positive:
+      - tool: mcp_forge_create_comment
+        approval_category: mcp
+        approval_subject: forge.create_comment
+        args: {repository: acme/app, body: shipped}
+    negative: *read_only
+
+  - rule: bulk-export
+    positive:
+      - tool: mcp_crm_export
+        approval_category: mcp
+        approval_subject: crm.export
+        args: {dataset_id: customers}
+    negative: *read_only
+
+  - rule: public-share
+    positive:
+      - tool: mcp_drive_create_public_link
+        approval_category: mcp
+        approval_subject: drive.create_public_link
+        args: {file_id: file_123}
+    negative: *read_only
+
+  - rule: persistent-credential
+    positive:
+      - tool: mcp_cloud_create_access_key
+        approval_category: mcp
+        approval_subject: cloud.create_access_key
+        args: {user_id: user_123}
+    negative: *read_only
+
+  - rule: session-credentials
+    positive:
+      - tool: mcp_identity_get_access_token
+        approval_category: mcp
+        approval_subject: identity.get_access_token
+        args: {account_id: account_123}
+    negative: *read_only
+
+  - rule: account-lockout
+    positive:
+      - tool: mcp_identity_remove_mfa
+        approval_category: mcp
+        approval_subject: identity.remove_mfa
+        args: {user_id: user_123}
+    negative: *read_only
+
+  - rule: ownership-transfer
+    positive:
+      - tool: mcp_admin_transfer_organization
+        approval_category: mcp
+        approval_subject: admin.transfer_organization
+        args: {organization_id: org_123, new_owner: person@example.test}
+    negative: *read_only
+
+  - rule: bulk-destructive-impact
+    positive:
+      - tool: mcp_data_purge_dataset
+        approval_category: mcp
+        approval_subject: data.purge_dataset
+        args: {dataset_id: customers}
+    negative: *read_only
+
+  - rule: audit-disable
+    positive:
+      - tool: mcp_security_disable_audit
+        approval_category: mcp
+        approval_subject: security.disable_audit
+        args: {service_id: production}
+    negative: *read_only
+
+  - rule: costly-provision
+    positive:
+      - tool: mcp_cloud_create_gpu
+        approval_category: mcp
+        approval_subject: cloud.create_gpu
+        args: {project_id: prod, machine_type: h100, count: 8}
+    negative: *read_only
+
+  - rule: secret-access
+    positive:
+      - tool: mcp_vault_get_secret_value
+        approval_category: mcp
+        approval_subject: vault.get_secret_value
+        args: {secret_id: production-api-key}
+    negative: *read_only
+
+  - rule: secret-destroy
+    positive:
+      - tool: mcp_vault_delete_secret
+        approval_category: mcp
+        approval_subject: vault.delete_secret
+        args: {secret_id: retired-key}
+    negative: *read_only
+
+  - rule: secret-update
+    positive:
+      - tool: mcp_vault_update_secret
+        approval_category: mcp
+        approval_subject: vault.update_secret
+        args: {secret_id: production-api-key, value: replacement}
+    negative: *read_only
+
+  - rule: privileged-grant
+    positive:
+      - tool: mcp_identity_assign_owner
+        approval_category: mcp
+        approval_subject: identity.assign_owner
+        args: {user_id: user_123}
+      - tool: mcp_identity_assign_role
+        approval_category: mcp
+        approval_subject: identity.assign_role
+        args: {user_id: user_123, role: administrator}
+    negative: *read_only
+
+  - rule: identity-delete
+    positive:
+      - tool: mcp_identity_delete_user
+        approval_category: mcp
+        approval_subject: identity.delete_user
+        args: {user_id: user_123}
+    negative: *read_only
+
+  - rule: identity-disable
+    positive:
+      - tool: mcp_identity_suspend_user
+        approval_category: mcp
+        approval_subject: identity.suspend_user
+        args: {user_id: user_123}
+    negative: *read_only
+
+  - rule: access-revoke
+    positive:
+      - tool: mcp_identity_remove_member
+        approval_category: mcp
+        approval_subject: identity.remove_member
+        args: {member_id: user_123, group_id: engineering}
+    negative: *read_only
+
+  - rule: catastrophic-resource-delete
+    positive:
+      - tool: mcp_platform_delete_project
+        approval_category: mcp
+        approval_subject: platform.delete_project
+        args: {project_id: production}
+    negative: *read_only
+
+  - rule: stateful-resource-delete
+    positive:
+      - tool: mcp_data_delete_database
+        approval_category: mcp
+        approval_subject: data.delete_database
+        args: {database_id: primary}
+    negative: *read_only
+
+  - rule: recovery-delete
+    positive:
+      - tool: mcp_backup_delete_snapshot
+        approval_category: mcp
+        approval_subject: backup.delete_snapshot
+        args: {snapshot_id: snap_123}
+    negative: *read_only
+
+  - rule: backup-disable
+    positive:
+      - tool: mcp_backup_disable_backup
+        approval_category: mcp
+        approval_subject: backup.disable_backup
+        args: {database_id: primary}
+    negative: *read_only
+
+  - rule: service-stop
+    positive:
+      - tool: mcp_platform_stop_service
+        approval_category: mcp
+        approval_subject: platform.stop_service
+        args: {service_id: public-api}
+    negative: *read_only
+
+  - rule: production-deploy
+    positive:
+      - tool: mcp_deploy_deploy_production
+        approval_category: mcp
+        approval_subject: deploy.deploy_production
+        args: {application_id: app_123}
+      - tool: mcp_deploy_deploy
+        approval_category: mcp
+        approval_subject: deploy.deploy
+        args: {application_id: app_123, environment: production}
+    negative: *read_only
+
+  - rule: artifact-publish
+    positive:
+      - tool: mcp_registry_publish_package
+        approval_category: mcp
+        approval_subject: registry.publish_package
+        args: {package: example-sdk, version: 1.0.0}
+    negative: *read_only
+
+  - rule: app-submission
+    positive:
+      - tool: mcp_store_submit_app_store
+        approval_category: mcp
+        approval_subject: store.submit_app_store
+        args: {app_id: app_123, build_id: build_456}
+    negative: *read_only
+
+  - rule: artifact-withdraw
+    positive:
+      - tool: mcp_registry_unpublish_package
+        approval_category: mcp
+        approval_subject: registry.unpublish_package
+        args: {package: example-sdk, version: 1.0.0}
+    negative: *read_only
+
+  - rule: remote-git-rewrite
+    positive:
+      - tool: mcp_forge_force_push_branch
+        approval_category: mcp
+        approval_subject: forge.force_push_branch
+        args: {repository: acme/app, branch: main}
+    negative: *read_only
+
+  - rule: workflow-disable
+    positive:
+      - tool: mcp_forge_disable_workflow
+        approval_category: mcp
+        approval_subject: forge.disable_workflow
+        args: {repository: acme/app, workflow_id: release}
+    negative: *read_only
+
+  - rule: workflow-delete
+    positive:
+      - tool: mcp_forge_delete_workflow
+        approval_category: mcp
+        approval_subject: forge.delete_workflow
+        args: {repository: acme/app, workflow_id: release}
+    negative: *read_only
+
+  - rule: protection-removal
+    positive:
+      - tool: mcp_forge_remove_branch_protection
+        approval_category: mcp
+        approval_subject: forge.remove_branch_protection
+        args: {repository: acme/app, branch: main}
+    negative: *read_only
+
+  - rule: deploy-secret-change
+    positive:
+      - tool: mcp_forge_update_environment_secret
+        approval_category: mcp
+        approval_subject: forge.update_environment_secret
+        args: {repository: acme/app, environment: production, secret_name: deploy-token}
+    negative: *read_only
+
+  - rule: native-git-restore
+    positive:
+      - tool: git_restore
+        args: {paths: [src/main.go]}
+        target_files: [src/main.go]
+    negative: *read_only
+
+  - rule: native-ssh-access-file
+    positive:
+      - tool: write
+        args: {path: ~/.ssh/authorized_keys, content: ssh-ed25519 fixture}
+        target_files: [~/.ssh/authorized_keys]
+    negative: *read_only
+
+  - rule: native-shell-startup-file
+    positive:
+      - tool: edit
+        args: {path: ~/.zshrc, old_string: before, new_string: after}
+        target_files: [~/.zshrc]
+    negative: *read_only
+
+  - rule: native-service-definition
+    positive:
+      - tool: write
+        args: {path: ~/.config/systemd/user/fixture.service, content: fixture}
+        target_files: [~/.config/systemd/user/fixture.service]
+    negative: *read_only
+
+  - rule: native-security-config
+    positive:
+      - tool: edit
+        args: {path: /etc/ssh/sshd_config, old_string: before, new_string: after}
+        target_files: [/etc/ssh/sshd_config]
+    negative: *read_only
+
+  # Native rules require mutation and anchored paths.
+  - rule: native-git-hook-install
+    positive:
+      - tool: git_merge
+        args: {ref: feature}
+        target_files: [~/repos/mirror.git/hooks/post-receive]
+      - tool: write
+        args: {path: /usr/share/git-core/templates/hooks/pre-commit, content: '#!/bin/sh'}
+        target_files: [/usr/share/git-core/templates/hooks/pre-commit]
+      - tool: chmod
+        args: {path: ~/repos/mirror.git/hooks/post-receive, mode: '0755'}
+        target_files: [~/repos/mirror.git/hooks/post-receive]
+    negative: &native_path_safe
+      - tool: read
+        args: {path: ~/.gitconfig}
+        target_files: [~/.gitconfig]
+      - tool: read
+        args: {path: ~/.ssh/authorized_keys}
+        target_files: [~/.ssh/authorized_keys]
+      - tool: read
+        args: {path: /usr/local/bin/git}
+        target_files: [/usr/local/bin/git]
+      # Similar project paths remain inert.
+      - tool: write
+        args: {path: internal/gitconfig/gitconfig.go, content: package gitconfig}
+        target_files: [internal/gitconfig/gitconfig.go]
+      - tool: write
+        args: {path: docs/gitconfig.example, content: '[core]'}
+        target_files: [docs/gitconfig.example]
+      - tool: write
+        args: {path: scripts/hooks/pre-commit, content: '#!/bin/sh'}
+        target_files: [scripts/hooks/pre-commit]
+      - tool: write
+        args: {path: testdata/fixture.git/hooks/pre-commit.sample, content: '#!/bin/sh'}
+        target_files: [testdata/fixture.git/hooks/pre-commit.sample]
+      - tool: write
+        args: {path: tools/bin/git, content: '#!/bin/sh'}
+        target_files: [tools/bin/git]
+      # One directory or one file off from a named path.
+      - tool: write
+        args: {path: ~/.config/git/ignore, content: build/}
+        target_files: [~/.config/git/ignore]
+      - tool: write
+        args: {path: /usr/share/git-core/templates/info/exclude, content: build/}
+        target_files: [/usr/share/git-core/templates/info/exclude]
+      - tool: write
+        args: {path: ~/.local/share/bin/git, content: '#!/bin/sh'}
+        target_files: [~/.local/share/bin/git]
+      - tool: write
+        args: {path: ~/.local/bin/project-release, content: '#!/bin/sh'}
+        target_files: [~/.local/bin/project-release]
+      - tool: write
+        args: {path: /usr/local/bin/ripgrep, content: '#!/bin/sh'}
+        target_files: [/usr/local/bin/ripgrep]
+      # File tools reject work-tree metadata paths directly.
+      - tool: write
+        args: {path: .git/hooks/pre-commit, content: '#!/bin/sh'}
+        target_files: [.git/hooks/pre-commit]
+      - tool: write
+        args: {path: .git/config, content: '[core]'}
+        target_files: [.git/config]
+
+  - rule: native-git-config
+    positive:
+      - tool: git_checkout
+        args: {branch: feature}
+        target_files: [~/repos/mirror.git/config]
+      - tool: edit
+        args: {path: ~/.gitconfig, old_string: before, new_string: after}
+        target_files: [~/.gitconfig]
+      - tool: write
+        args: {path: ~/.config/git/config, content: '[core]'}
+        target_files: [~/.config/git/config]
+      - tool: write
+        args: {path: ~/repos/mirror.git/config, content: '[core]'}
+        target_files: [~/repos/mirror.git/config]
+    negative: *native_path_safe
+
+  - rule: native-path-binary-shadow
+    positive:
+      - tool: write
+        args: {path: /usr/local/bin/git, content: '#!/bin/sh'}
+        target_files: [/usr/local/bin/git]
+      - tool: copy
+        args: {from: build/payload, to: ~/.local/bin/sudo}
+        target_files: [build/payload, ~/.local/bin/sudo]
+      - tool: chmod
+        args: {path: /opt/homebrew/bin/curl, mode: '0755'}
+        target_files: [/opt/homebrew/bin/curl]
+    negative: *native_path_safe

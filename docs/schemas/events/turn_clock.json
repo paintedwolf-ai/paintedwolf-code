@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/turn_clock.json",
+  "$ref": "../../openapi/components/schemas/progress.yaml#/components/schemas/TurnClock",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TurnClock"
+}

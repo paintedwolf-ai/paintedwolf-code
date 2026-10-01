@@ -1,0 +1,26 @@
+# Agent-public retirement ledger. Recorded identifiers cannot be reused.
+#
+# After the first release, an agent-public id that disappears without an entry here
+# fails CI, and so does a recorded id that is live again. Not loaded at runtime.
+#
+# Entry shape, read by
+# lycaon/test/contract/sessions/agent_public_retirement_contract_test.go:
+#
+#   - id: SPEC_POSTURE_EXAMPLE      # the retired identifier, exactly as it shipped.
+#                                   # Required; must not be live.
+#     kind: hint_code               # hint_code | tool_name | rule_effect |
+#                                   # theme_token | virtual_root. Required.
+#     summary: One line saying what it meant and what replaced it.
+#     date: 2026-09-06              # ISO date the id left HEAD.
+#
+# id and kind are validated on parse; summary and date are the only record of
+# what a retired id meant.
+retired:
+  - id: FINDING_ALREADY_LOGGED
+    kind: hint_code
+    summary: Same-reference observations and corrections are accepted; exact repeated content is a no-op.
+    date: 2026-09-30
+  - id: FINDING_ECHOES_SIBLING
+    kind: hint_code
+    summary: Peer observations do not prevent another worker from recording independent evidence or corrections.
+    date: 2026-09-30

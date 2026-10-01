@@ -1,0 +1,102 @@
+{
+  "schema": "gts-semantic-phase-trace-contract/v5",
+  "event_contract": "gts-semantic-phase-trace/v5",
+  "scope": "Diagnostic production-Go full-parse action lookup, action execution, and convergence events. The contract, observers, collision keys, and ordinal reconstruction are absent from untagged builds.",
+  "retention": {
+    "maximum_events": 8192,
+    "event_policy": "retain_chronological_prefix",
+    "aggregate_policy": "count_the_whole_observed_parse_even_after_event_retention_fills",
+	"action_cell_collision_key_cap": 4096,
+	"coarse_boundary_collision_key_cap": 262144,
+    "overflow": "saturate uint64 counters and expose events_dropped plus arithmetic_overflow"
+  },
+  "event_kinds": {
+    "action_lookup": "One event per ordered action candidate in the actual table cell, or one empty-cell event. lookup_action_cell_fingerprint is populated; execution_action_cell_fingerprint is absent.",
+    "action_execution": "One event at a production dispatch seam. The table cell is re-read from the execution-time state and lookahead; execution_action_cell_fingerprint is populated and execution_cell_recomputed is true.",
+    "decision": "One convergence decision. Action-cell fingerprints and ordinals are absent because no last-writer action context is assigned to convergence."
+  },
+  "action_cell": {
+    "hash": "FNV-1a 64 over eight little-endian bytes per word",
+    "ordered_words": [
+      "action_count",
+      "for each ordered action: type",
+      "state",
+      "symbol",
+      "child_count",
+      "dynamic_precedence_as_uint16",
+      "production_id",
+      "flags(extra=1, extra_chain=2, repetition=4)"
+    ],
+    "collision_audit": "Observed hashes are joined to complete canonical word strings across retained and dropped events until 4096 distinct action-cell hashes have been retained. A new hash after that cap increments action_cell_keys_unaudited, sets action_cell_audit_truncated, and makes collision_audit.complete false. Equal retained hashes with unequal canonical keys increment action_cell_hash_collisions and also fail completeness."
+  },
+  "coarse_boundary": {
+    "purpose": "Production-only attribution hint; never a predecessor-spine identity.",
+    "ordered_words": [
+      "stack_byte_offset",
+      "logical_depth",
+      "top_state",
+      "top_symbol",
+      "top_start_byte<<32 | top_end_byte",
+      "top_child_count",
+      "top_production_id",
+      "top_dynamic_precedence_as_uint32",
+      "flags(extra=1, missing=2, has_error=4, dead=8, accepted=16, paused=32)"
+    ],
+    "collision_audit": "Observed hashes are joined to complete shallow keys across retained and dropped events until 262144 distinct boundary hashes have been retained. A new hash after that cap increments coarse_boundary_keys_unaudited, sets coarse_boundary_audit_truncated, and makes collision_audit.complete false. Equal retained hashes with unequal keys increment coarse_boundary_hash_collisions and also fail completeness.",
+    "not_proved": [
+      "full predecessor-spine equality",
+      "derivation equality",
+      "exact scanner-state equality",
+      "cross-engine boundary equality"
+    ]
+  },
+  "scanner_checkpoint": {
+    "states": ["exact", "exact_empty", "unavailable"],
+	"exact_identity": "event token start byte, event token end byte, start length, end length, and SHA-256 over domain gts-semantic-scanner-checkpoint/v2 followed by the token span and both length-delimited serialized byte strings",
+    "transport_rule": "The digest authenticates bytes but does not replace byte equality in a future in-process cross-engine admission.",
+	"span_binding_rule": "An exact checkpoint is emitted only when the parser's cached checkpoint start/end bytes equal the current event token span. Relex span drift emits unavailable/current_token_checkpoint_span_mismatch until the cache is refreshed.",
+	"unavailable_rule": "Missing or span-mismatched production current-token checkpoint data is emitted as unavailable with a reason, never coerced to empty."
+  },
+  "ordinal_policy": {
+    "direct": "Thread the parse-table ordinal from the dispatch call site.",
+    "unique_inference": "The deterministic-conflict seam may infer an ordinal only when exactly one execution-time cell entry equals the chosen action. The scan exists only in the tagged implementation.",
+    "unknown": "Synthetic actions and duplicate-equal candidates emit -1."
+  },
+  "dispatch_bypass_audit": {
+    "instrumented": [
+      "ordinary single action",
+      "conflict original and forks",
+      "deterministic conflict selection",
+      "reduce chains and conflict frontiers",
+      "extra-shift fast path",
+      "post-reduce terminal frontier",
+      "trailing-EOF prefix REDUCE and ACCEPT"
+    ],
+    "synthetic_without_table_ordinal": [
+      "no-action recovery found by stack search",
+      "retry recovery found by stack search",
+      "missing-token insertion",
+      "external no-action default reduction",
+      "eager default reduction",
+      "C-shaped error-state recovery"
+    ]
+  },
+  "comparability": {
+    "ordered_action_cell": "Production canonical fields are present, but compact and locked C do not yet emit the same event record.",
+    "exact_scanner_checkpoint": "Comparable only for events whose state is exact or exact_empty and only against an engine exposing the identical byte contract.",
+    "ordered_predecessor_spine": "Unavailable: no shared canonical spine contract exists across production, compact, and locked C.",
+    "static_c_semantic_events": "Unavailable: the locked static-C work-count patch exposes aggregate counters only."
+  },
+  "physical_identity_excluded": [
+    "Go pointer",
+    "stack version ID",
+    "GSS node ID",
+    "compact arena ID",
+    "subtree pointer"
+  ],
+  "paired_receipt": {
+    "contract": "gts-paired-semantic-trace-contract/v1",
+    "receipt": "gts-paired-semantic-trace-receipt/v1",
+	"claim_limit": "The paired receipt may select a routing or replay hypothesis from authenticated aggregate differences only when every collision audit used by that hypothesis is complete and untruncated. It cannot assert event equality, event-elision safety, or ratios of equivalent work until shared ordered cells, checkpoints, and predecessor spines exist."
+  }
+}

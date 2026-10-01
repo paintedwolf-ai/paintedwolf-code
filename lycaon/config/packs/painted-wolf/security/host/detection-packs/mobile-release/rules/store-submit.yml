@@ -1,0 +1,52 @@
+title: Submit or release a build to an app store
+id: 55fad0ce-f68c-4f69-b3ca-3b7265f21eff
+description: Uploads a build to a store or promotes it to real users.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_fastlane:
+    Image: fastlane
+    CommandLine|contains:
+      - ' deliver'
+      - ' supply'
+      - ' pilot'
+      - ' upload_to_app_store'
+      - ' upload_to_play_store'
+  selection_apple:
+    Image:
+      - altool
+      - xcrun
+    CommandLine|contains:
+      - ' --upload-app'
+      - ' --upload-package'
+  selection_notarize:
+    Image:
+      - notarytool
+      - xcrun
+    CommandLine|contains: ' submit '
+  selection_expo:
+    Image:
+      - eas
+      - expo
+    CommandLine|contains: ' submit'
+  # EAS Update's colon-namespaced siblings (update:configure, update:list,
+  # update:view, ...) are non-destructive; only the bare publish verb counts.
+  selection_eas_update:
+    Image: eas
+    CommandLine|re: '\supdate(\s|$)'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|--validate-app)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_fastlane or selection_apple or selection_notarize or selection_expo or selection_eas_update) and not filter_rehearsal and not filter_local

@@ -1,0 +1,22 @@
+# The rule matches the paths an action names, so fixtures carry target_files as
+# well as a command line. Paths are home-relative — the form the event
+# projection produces.
+fixtures:
+- rule: hardlink-classified-location
+  positive:
+  - command: ln ~/Documents/tax-return.pdf ./notes/return.pdf
+    target_files: ['~/Documents/tax-return.pdf', '~/code/app/notes/return.pdf']
+  - command: ln ~/.aws/credentials ./vendor/creds
+    target_files: ['~/.aws/credentials', '~/code/app/vendor/creds']
+  - command: link ~/Library/Messages/chat.db ./tmp/chat.db
+    target_files: ['~/Library/Messages/chat.db', '~/code/app/tmp/chat.db']
+  negative:
+  # A symbolic link keeps its classification: path resolution follows one, so
+  # the read that follows is judged as what it names.
+  - command: ln -s ~/Documents/tax-return.pdf ./notes/return.pdf
+    target_files: ['~/Documents/tax-return.pdf', '~/code/app/notes/return.pdf']
+  # Linking inside the workspace names nothing the catalogue classifies.
+  - command: ln ./build/out.bin ./dist/out.bin
+    target_files: ['~/code/app/build/out.bin', '~/code/app/dist/out.bin']
+  - command: ln ~/Documents/tax-return.pdf ./notes/return.pdf --help
+    target_files: ['~/Documents/tax-return.pdf', '~/code/app/notes/return.pdf']

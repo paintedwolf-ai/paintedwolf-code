@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-files-reopen-closed-tab
+command: painted-wolf/platform:files-reopen-closed-tab
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+T"
+  windows:
+    - "Mod+Shift+T"
+  linux:
+    - "Mod+Shift+T"

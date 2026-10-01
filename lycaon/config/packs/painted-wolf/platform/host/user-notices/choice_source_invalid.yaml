@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Choices could not be loaded
+message: The extension provider returned choices in a format this command cannot use.
+suggested_action: Check the extension and its MCP provider for compatible versions, then load the choices again.

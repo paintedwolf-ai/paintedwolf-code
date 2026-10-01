@@ -1,0 +1,26 @@
+title: Install a Git hook outside a work tree
+id: 2b78c570-e5fc-4caa-bacf-4d34baff1df6
+status: stable
+description: >-
+  Writes a file named after a documented Git hook into the default init template
+  directory or into a bare repository, where Git runs it on ordinary activity. A
+  hook under a work tree's own .git directory is refused outright by the file
+  tools, so this names only the hook directories that refusal leaves open. The
+  file name must be a live hook name; the .sample copies Git ships are inert and
+  do not match.
+references:
+  - https://git-scm.com/docs/githooks
+  - https://git-scm.com/docs/git-init
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-22'
+logsource: {product: lycaon, service: tool_exec}
+detection:
+  selection:
+    Tool: [write, edit, replace_lines, code_rewrite, jq_edit, copy, move, delete, chmod, chown, git_restore, git_checkout, git_merge, git_stash]
+    TargetFile|re:
+      - '^/usr/share/git-core/templates/hooks/(applypatch-msg|commit-msg|fsmonitor-watchman|p4-changelist|p4-post-changelist|p4-pre-submit|p4-prepare-changelist|post-applypatch|post-checkout|post-commit|post-index-change|post-merge|post-receive|post-rewrite|post-update|pre-applypatch|pre-auto-gc|pre-commit|pre-merge-commit|pre-push|pre-rebase|pre-receive|prepare-commit-msg|proc-receive|push-to-checkout|reference-transaction|sendemail-validate|update)$'
+      - '(^|/)[^/]+[.]git/hooks/(applypatch-msg|commit-msg|fsmonitor-watchman|p4-changelist|p4-post-changelist|p4-pre-submit|p4-prepare-changelist|post-applypatch|post-checkout|post-commit|post-index-change|post-merge|post-receive|post-rewrite|post-update|pre-applypatch|pre-auto-gc|pre-commit|pre-merge-commit|pre-push|pre-rebase|pre-receive|prepare-commit-msg|proc-receive|push-to-checkout|reference-transaction|sendemail-validate|update)$'
+  condition: selection
+level: high
+tags: [lycaon.effect.local, lycaon.effect.unrecoverable, attack.persistence]

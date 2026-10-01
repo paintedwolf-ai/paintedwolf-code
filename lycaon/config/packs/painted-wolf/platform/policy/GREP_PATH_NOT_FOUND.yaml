@@ -1,0 +1,34 @@
+oar: '1.0'
+id: GREP_PATH_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - grep
+requires:
+  profiles:
+    - filesystem
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+when: paintedwolf.rejection_code == "GREP_PATH_NOT_FOUND"
+effect: block
+copy:
+  what: grep search root {{ paintedwolf.path }} does not exist.
+  cause: The path argument must name an existing file or directory under the attached project roots.
+  why: Structured rejects let agents branch without parsing free-form stat errors.
+  fix: Verify the repo-relative path with list_dir or stat, then retry grep with a valid root.
+  instead: Branch on Code; pick an existing path before retrying grep
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: grep search root does not exist
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: missing/file.go
+      profile: explore_readonly
+      tool: grep
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: GREP_PATH_NOT_FOUND'

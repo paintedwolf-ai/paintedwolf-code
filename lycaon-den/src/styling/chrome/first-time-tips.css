@@ -1,0 +1,60 @@
+/* Den BEM component chrome with unlayered cascade priority. */
+
+/* Fixed portal layer for contextual first-time guidance. */
+.den-first-time-tip {
+  position: fixed;
+  z-index: 2147483646;
+  width: min(336px, calc(100vw - 16px));
+  box-sizing: border-box;
+  padding: 14px;
+  color: var(--den-text);
+  background: var(--den-surface-elevated);
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  /* Guidance sits above ordinary chrome. */
+  box-shadow: var(--den-shadow-guidance);
+}
+
+/* Portaled guidance waits offscreen until its anchor's scroll settles. */
+.den-first-time-tip--scroll-held {
+  visibility: hidden;
+}
+
+.den-first-time-tip__arrow {
+  position: absolute;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  background: var(--den-surface-elevated);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.den-first-time-tip__title,
+.den-first-time-tip__body,
+.den-first-time-tip__actions {
+  position: relative;
+}
+
+.den-first-time-tip__title {
+  display: block;
+  font-size: var(--text-den-body);
+}
+
+.den-first-time-tip__body {
+  margin: 6px 0 12px;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+}
+
+.den-first-time-tip__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.den-first-time-tip__disable {
+  margin-right: auto;
+}
+

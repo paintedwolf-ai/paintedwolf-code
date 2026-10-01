@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Need an absolute folder path
+message: >-
+  Project folders and write-root grants must be absolute directory paths.
+suggested_action: Choose a folder with the system picker, or enter a full absolute path.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - absolute
+      - folder

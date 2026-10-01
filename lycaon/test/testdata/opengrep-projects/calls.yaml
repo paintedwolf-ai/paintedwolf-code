@@ -1,0 +1,159 @@
+projects:
+  - name: python-helper-arguments
+    language: python
+    adjudication: Request text reaches the first system call through the identity helper. A separate constant call to the same helper remains safe.
+    files:
+      app.py: |
+        import flask
+        import os
+        def identity(value):
+            return value
+        def handler():
+            command = identity(flask.request.args.get("command"))
+            os.system(command)
+            os.system(identity("date"))
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 7
+  - name: python-overwrite-and-unrelated-field
+    language: python
+    adjudication: Reassignment removes input influence. The constant mapping entry and the unused tainted argument do not control shell text.
+    files:
+      app.py: |
+        import flask
+        import os
+        def fixed(unused):
+            return "date"
+        def handler():
+            command = flask.request.args.get("command")
+            command = "date"
+            os.system(command)
+            os.system(fixed(flask.request.args.get("ignored")))
+            values = {"safe": "date", "unsafe": flask.request.args.get("other")}
+            os.system(values["safe"])
+    findings: []
+  - name: python-shell-argument-safety
+    language: python
+    adjudication: Quoting one argument is safe in this fixed command; passing input as a separate argument never invokes a shell. Quoting does not authorize running an arbitrary executable selected by the request.
+    files:
+      app.py: |
+        import flask
+        import os
+        import shlex
+        import subprocess
+        def handler():
+            value = flask.request.args.get("value")
+            subprocess.run(["printf", "%s", value])
+            os.system("printf '%s' " + shlex.quote(value))
+            os.system(shlex.quote(value))
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 9
+  - name: python-guard-and-reassignment
+    language: python
+    adjudication: A failed allowlist check returns before the first shell use. A new request read after validation is a different value and remains unsafe.
+    files:
+      app.py: |
+        import flask
+        import os
+        def handler():
+            command = flask.request.args.get("command")
+            if command not in {"date", "uptime"}:
+                return
+            os.system(command)
+            command = flask.request.args.get("other")
+            os.system(command)
+    findings:
+      - file: app.py
+        rule: lycaon.python.command-injection
+        line: 9
+  - name: javascript-helper-calls
+    language: javascript
+    adjudication: The identity helper carries the request field into shell execution. The constant helper result and separate execFile argument are safe.
+    files:
+      app.js: |
+        import express from "express";
+        const app = express();
+        import * as child_process from "node:child_process";
+        function identity(value) { return value; }
+        function fixed(value) { return "date"; }
+        export function handler(req) {
+          child_process.exec(identity(req.query.command));
+          child_process.exec(fixed(req.query.command));
+          child_process.execFile("printf", ["%s", req.query.command]);
+        }
+        app.get("/fixture", handler);
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 7
+  - name: javascript-closure-and-recursion
+    language: javascript
+    adjudication: The closure captures request text and the recursive helper returns it unchanged. A constant invocation must remain safe.
+    files:
+      app.js: |
+        import express from "express";
+        const app = express();
+        import * as child_process from "node:child_process";
+        function repeat(value, count) { if (count <= 0) return value; return repeat(value, count - 1); }
+        export function handler(req) {
+          const captured = req.query.command;
+          const read = () => captured;
+          child_process.exec(read());
+          child_process.exec(repeat(req.query.command, 2));
+          child_process.exec(repeat("date", 2));
+        }
+        app.get("/fixture", handler);
+    findings:
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 8
+      - file: app.js
+        rule: lycaon.javascript.command-injection
+        line: 9
+    diagnostics:
+      intraprocedural:
+      - file: app.js
+        kind: file_partial_semantics
+        construct: closure_call_limit
+        line: 4
+        column: 70
+      intrafile: []
+  - name: javascript-cross-file-alias
+    language: javascript
+    adjudication: A route passes a request field to an imported helper under an alias. The helper invokes the shell; a same-named safe helper in another module must not replace its binding.
+    files:
+      app.js: |
+        import express from "express";
+        const app = express();
+        import { run as execute } from "./unsafe.js";
+        export function handler(req) { execute(req.query.command); }
+        app.get("/fixture", handler);
+      unsafe.js: |
+        import * as child_process from "node:child_process";
+        export function run(value) { child_process.exec(value); }
+      safe.js: |
+        export function run(value) { return value; }
+    findings:
+      - file: unsafe.js
+        rule: lycaon.javascript.command-injection
+        line: 2
+  - name: javascript-cross-file-safe-binding
+    language: javascript
+    adjudication: Only the safe helper receives request text. The unsafe helper receives a constant in a distinct module binding.
+    files:
+      app.js: |
+        import express from "express";
+        const app = express();
+        import { run as echo } from "./safe.js";
+        import { run as execute } from "./unsafe.js";
+        export function handler(req) { echo(req.query.command); execute("date"); }
+        app.get("/fixture", handler);
+      unsafe.js: |
+        import * as child_process from "node:child_process";
+        export function run(value) { child_process.exec(value); }
+      safe.js: |
+        export function run(value) { return value; }
+    findings: []

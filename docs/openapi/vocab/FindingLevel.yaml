@@ -1,0 +1,10 @@
+# FindingLevel — normalized SecurityFinding severity.
+name: FindingLevel
+go_const_prefix: FindingLevel
+values:
+  - id: critical
+  - id: high
+  - id: medium
+  - id: low
+  - id: info
+  - id: unknown

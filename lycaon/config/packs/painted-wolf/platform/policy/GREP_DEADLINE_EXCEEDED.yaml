@@ -1,0 +1,33 @@
+oar: '1.0'
+id: GREP_DEADLINE_EXCEEDED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - grep
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.timeout_ms
+when: paintedwolf.rejection_code == "GREP_DEADLINE_EXCEEDED"
+effect: block
+copy:
+  what: 'Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget; coverage is incomplete.'
+  cause: The selected content could not be searched within the execution budget.
+  why: Search execution is bounded to keep the host responsive; this is not evidence of absence.
+  fix: "Partition the same scope by path or path_glob and search each partition. Do not infer that the pattern is absent or exclude ignored files without task justification."
+  instead: Branch on Code; partition the search scope and retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
+x-paintedwolf-message: Search exceeded its execution budget
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: grep
+      timeout_ms: 60000
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: GREP_DEADLINE_EXCEEDED'

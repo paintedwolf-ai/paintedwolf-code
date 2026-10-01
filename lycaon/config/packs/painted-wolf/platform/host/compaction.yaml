@@ -1,0 +1,55 @@
+# Coordinator context compaction.
+enabled: true
+
+# Percentages use the live budget derived from the model window.
+# ApplyLiveBudget replaces model_context_window after load.
+window_source: auto
+live_budget_pct: 75
+model_context_window: 131072
+
+# Protected tail length.
+prune_protect_tail_messages: 8
+
+# Trigger percentage of the live budget.
+budget_trigger_pct: 60
+
+# Target percentage after compaction.
+target_tokens_pct: 35
+
+message_slice: 80
+keep_recent_messages: 16
+
+# Summary generation gets one smaller-input retry.
+summary_input_tokens: 8192
+summary_retry_input_tokens: 3072
+summary_message_tokens: 512
+summary_output_tokens: 1536
+
+# Chunk thresholds for tool results.
+# Smaller bounded reads remain inline.
+chunk_token_threshold: 1800
+chunk_protected_tool_token_threshold: 1800
+chunk_protected_tail_token_budget: 16000
+chunk_protected_min_savings_tokens: 300
+chunk_min_savings_tokens: 500
+chunk_target_tokens: 1000
+chunk_max_per_pass: 8
+chunk_strategy_default: summarize
+
+# Worker summary size is derived from the model window.
+max_citation_grounding_retries: 25
+
+# Shared grounding-rejection limits for one turn and closeout cycle.
+max_grounding_rejects_per_turn: 8
+max_grounding_rejects_per_cycle: 4
+
+# Tool-turn limit before the host assembles a rejected closeout.
+max_tool_turns_after_citation_reject: 6
+
+# Repairs a run report may make to its document fields; separate from citation
+# friction, since a document repair adds conclusions rather than references.
+max_report_document_retries: 3
+
+# Require useful reductions, including fully rendered continuation overhead.
+session_min_savings_tokens: 256
+min_savings_pct: 10

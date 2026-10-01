@@ -1,0 +1,5 @@
+@import "./styling/search/stage-domain.css";
+@import "./styling/search/filters-domain.css";
+@import "./styling/search/results-domain.css";
+@import "./styling/search/detail-domain.css";
+@import "./styling/search/replace-domain.css";

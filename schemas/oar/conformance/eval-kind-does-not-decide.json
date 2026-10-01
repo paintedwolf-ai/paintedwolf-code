@@ -1,0 +1,66 @@
+{
+  "id": "eval-kind-does-not-decide",
+  "title": "kind carries no meaning beyond order: a later-ordered rule's effect still wins on precedence",
+  "covers": [
+    "OAR-EVAL-2",
+    "OAR-EVAL-6"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "FIRST",
+      "effect": "warn"
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "detector",
+      "anchor": "tool.pre_invoke",
+      "id": "SECOND",
+      "effect": "nudge",
+      "detector": {
+        "ref": "detector://noop"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "SECOND",
+    "applied": [
+      "oar.test/FIRST:fired",
+      "oar.test/SECOND:fired"
+    ]
+  }
+}

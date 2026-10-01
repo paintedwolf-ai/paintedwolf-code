@@ -1,0 +1,5 @@
+id: serverless-data
+label: Serverless data stores
+description: >-
+  Upstash operations that delete a serverless Redis database and everything
+  stored in it.

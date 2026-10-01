@@ -1,0 +1,16 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+context_schema:
+  optional:
+    - provider_id
+title: This project cannot enable that MCP provider
+message: >-
+  A project may enable only a credential-free loopback provider. Enabling a
+  remote, stdio, or credentialed provider is a device action.
+suggested_action: Enable the provider under Settings → MCP providers.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - loopback
+      - device

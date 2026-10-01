@@ -1,0 +1,30 @@
+oar: '1.0'
+id: SPEC_POSTURE_PHASE_SKIPPED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SPEC_POSTURE_PHASE_SKIPPED"
+effect: block
+copy:
+  cause: Tier skipped this phase — do not spawn agents for skipped work
+  why: Advance per tier path without dispatching skipped phase agents
+  fix: Advance per tier path without dispatching skipped phase agents
+  instead: Respect phase_skipped.* host vars
+  what: Tier skipped this phase — do not spawn agents for skipped work
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
+x-paintedwolf-message: Tier skipped this phase — do not spawn agents for skipped work
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SPEC_POSTURE_PHASE_SKIPPED'
+x-paintedwolf-audience:
+- coordinator

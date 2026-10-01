@@ -1,0 +1,27 @@
+[
+  {
+    "id": "e1",
+    "account": "amber",
+    "cents": 120
+  },
+  {
+    "id": "e2",
+    "account": "blue",
+    "cents": -50
+  },
+  {
+    "id": "e3",
+    "account": "amber",
+    "cents": -20
+  },
+  {
+    "id": "e2",
+    "account": "blue",
+    "cents": -50
+  },
+  {
+    "id": "e4",
+    "account": "cedar",
+    "cents": 100
+  }
+]

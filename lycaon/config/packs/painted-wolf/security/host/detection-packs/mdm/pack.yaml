@@ -1,0 +1,5 @@
+id: mdm
+label: Device management
+description: >-
+  Mobile device management operations that wipe a device, remove it from
+  management, or push a new policy to a fleet.

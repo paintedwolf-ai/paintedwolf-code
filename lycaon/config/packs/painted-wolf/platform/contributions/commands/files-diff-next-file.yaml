@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-diff-next-file
+title: "Next changed file"
+scope: files
+keywords:
+  - "next file"
+  - "next diff"
+  - "next changed file"
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "files.diffNextFile"

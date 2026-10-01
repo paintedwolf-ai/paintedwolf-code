@@ -1,0 +1,64 @@
+# Scan hint registry — maps scanner rule ids to agent-safe guidance codes.
+# Layers: this file → {configdir}/scan-hints.yaml → {project}/${overlay_dir}/scan-hints.yaml.
+# Overlay format and merge semantics: docs/project-overlay.md § Scan overlays.
+#
+# Keys ending in ":" are namespace prefixes (longest match wins); every other key
+# is an exact rule id.
+
+hints:
+  SCAN_SQL_INJECTION:
+    message: "Potential SQL injection — use parameterized queries"
+    fix: "Replace string-built SQL with bound parameters or an ORM query API"
+    severity: error
+  SCAN_DEPENDENCY_VULN:
+    message: "Dependency with known vulnerability"
+    fix: "Upgrade the affected package to a patched version"
+    severity: error
+  SCAN_HARDCODED_SECRET:
+    message: "Hardcoded secret detected"
+    fix: "Remove the secret from source and load it from environment or a secret manager"
+    severity: error
+  SCAN_SAST_FINDING:
+    message: "Static analysis security finding"
+    fix: "Review the flagged code path and remediate per rule guidance"
+    severity: warning
+  SCAN_FINDING_UNMAPPED:
+    message: "Security finding (unmapped rule)"
+    fix: "Review the finding and add a scan-hints rule_map entry if recurring"
+    severity: warning
+
+rule_hints:
+  lycaon.ruby.sql-string-concat: SCAN_SQL_INJECTION
+  lycaon.rust.sql-format-macro: SCAN_SQL_INJECTION
+  gitleaks:github-pat: SCAN_HARDCODED_SECRET
+  gitleaks:generic-api-key: SCAN_HARDCODED_SECRET
+  "osv:": SCAN_DEPENDENCY_VULN
+  "trivy:": SCAN_DEPENDENCY_VULN
+  "snyk:": SCAN_DEPENDENCY_VULN
+  "opengrep:": SCAN_SAST_FINDING
+  "kind:sast": SCAN_SAST_FINDING
+  "kind:secret": SCAN_HARDCODED_SECRET
+  "kind:sca": SCAN_DEPENDENCY_VULN
+  "kind:container": SCAN_DEPENDENCY_VULN
+
+default_hint: SCAN_FINDING_UNMAPPED
+
+scenarios:
+  - id: scan_hint_sql_ruby
+    finding:
+      rule_id: lycaon.ruby.sql-string-concat
+      severity: ERROR
+    expect:
+      hint_code: SCAN_SQL_INJECTION
+  - id: scan_hint_secret_gitleaks
+    finding:
+      rule_id: gitleaks:github-pat
+      severity: ERROR
+    expect:
+      hint_code: SCAN_HARDCODED_SECRET
+  - id: scan_hint_unmapped_fallback
+    finding:
+      rule_id: vendor.unknown.rule
+      severity: INFO
+    expect:
+      hint_code: SCAN_FINDING_UNMAPPED

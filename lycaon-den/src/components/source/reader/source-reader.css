@@ -1,0 +1,25 @@
+.den-source-reader { display: flex; flex-direction: column; min-height: 0; height: 100%; position: relative; }
+.den-source-reader__actions { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 5px; padding: 4px 12px; border-bottom: 1px solid var(--den-line); color: var(--den-text-muted); font-size: var(--text-den-caption); }
+.den-source-reader__actions > :first-child { margin-right: auto; }
+.den-source-reader__editors { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.den-source-reader__editors[hidden] { display: none; }
+.den-source-reader__state { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 24px; color: var(--den-text-muted); text-align: center; }
+.den-source-reader__editor { flex: 1; min-width: 0; min-height: 0; }
+.den-source-reader__editor > .cm-editor { height: 100%; }
+.den-source-reader[data-split=true] .den-source-reader__editor + .den-source-reader__editor { border-left: 1px solid var(--den-line); }
+.cm-den-reader .cm-den-reader-gap-row { padding: 2px 6px; }
+/* Blocks span the scroller, not unwrapped content, and hold still under horizontal scroll. */
+.cm-den-block { position: sticky; left: var(--den-editor-block-left, 0px); box-sizing: border-box; width: var(--den-editor-block-w, 100%); white-space: normal; }
+/* Chrome blocks omit text selection. */
+.cm-den-block,
+.cm-den-reader .cm-den-reader-gap-row,
+.cm-den-reader .cm-den-reader-unloaded {
+  user-select: none;
+}
+.cm-den-reader .cm-den-reader-gap { display: block; cursor: pointer; }
+.cm-den-reader .cm-line.cm-den-reader-add { background: var(--den-diff-add-line); }
+.cm-den-reader .cm-line.cm-den-reader-delete { background: var(--den-diff-delete-line); }
+.cm-den-reader .cm-line.cm-den-reader-reloading { opacity: 0.55; transition: opacity 0.15s ease; }
+.cm-den-reader-add .cm-changedText { background: var(--den-diff-add-word); border-radius: 2px; }
+.cm-den-reader-delete .cm-deletedText { background: var(--den-diff-delete-word); border-radius: 2px; }
+.cm-den-reader .den-source-reader__find-active { background: var(--den-diff-selection); outline: 1px solid currentColor; }

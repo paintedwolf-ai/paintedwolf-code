@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-skip-and-select-next-occurrence
+command: painted-wolf/platform:editor-skip-and-select-next-occurrence
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader X"
+  windows:
+    - "Leader X"
+  linux:
+    - "Leader X"

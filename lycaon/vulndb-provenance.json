@@ -1,0 +1,9 @@
+{
+ "covered_modules": 82,
+ "database_modified": "2026-09-28T16:43:40Z",
+ "entries": 486,
+ "module_count": 826,
+ "module_digest": "f8da4f405eef7b24221a3f42049475a2a63258cb2dfdfd91d6287492ca07ea1e",
+ "source": "https://vuln.go.dev",
+ "tree_sha256": "344de08d42ae4598af666f8196deabce60d62ed9f8bb0f2b7f3212c25d0412c9"
+}

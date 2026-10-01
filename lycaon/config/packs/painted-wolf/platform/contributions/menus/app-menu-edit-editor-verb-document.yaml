@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-edit-editor-verb-document
+slot: "app_menu.edit"
+command: painted-wolf/platform:editor-verb-document
+group: "1"
+order: 10
+label: "Document selection"

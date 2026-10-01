@@ -1,0 +1,29 @@
+# This binding projects a structured MCP result field.
+#
+# provider_id is the CATALOG provider id (Settings → MCP providers), not the qualified
+# mcp_<provider>_<tool> name. Field keys are global across every loaded binding,
+# so namespace them — a duplicate key fails the whole load closed.
+id: example_issue
+provider_id: example-tracker
+tool_name: get_issue
+schema:
+  type: object
+  required: [id, state]
+  properties:
+    id: { type: string }
+    priority: { type: integer }
+    state:
+      type: object
+      properties:
+        type: { type: string }
+fields:
+  - key: example_issue_id
+    type: string
+    path: /id
+  - key: example_issue_priority
+    type: int
+    path: /priority
+  - key: example_issue_closed
+    type: bool
+    path: /state/type
+    equals: completed

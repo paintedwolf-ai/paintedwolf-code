@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: File could not be made editable
+message: >-
+  The host filesystem refused the permission change, so this file remains
+  read-only.
+suggested_action: Check the file's ownership or filesystem permissions, then try again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - permission
+      - read-only

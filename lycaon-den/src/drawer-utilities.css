@@ -1,0 +1,287 @@
+@utility den-context-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100%);
+  max-width: 100%;
+  /* Keeps the pane's scrollbar inside the stage. */
+  min-height: 0;
+  background: var(--den-background);
+  border-left: 1px solid var(--den-line);
+  display: flex;
+  flex-direction: column;
+  z-index: var(--den-z-context-drawer);
+  box-shadow: var(--den-shadow-drawer);
+  animation: den-drawer-in var(--den-duration-drawer) var(--den-ease) both;
+}
+
+.den-shell--orientation-mirrored .den-context-drawer {
+  left: 0;
+  right: auto;
+  border-left: none;
+  border-right: 1px solid var(--den-line);
+  animation-name: den-drawer-in-mirrored;
+}
+
+@utility den-context-drawer-close {
+height: 1.8571rem;
+  width: 1.8571rem;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-display);
+  line-height: 1;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+
+/* Default clears the titlebar traffic-light corner. */
+.den-shell {
+  --den-context-drawer-header-pad-top: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap)
+  );
+}
+
+/* Only a mirrored workspace puts the drawer under the traffic lights. */
+.den-custom-chrome:not(.den-tauri-macos) .den-shell,
+.den-tauri-macos.den-custom-chrome
+  .den-shell:not(.den-shell--orientation-mirrored) {
+  --den-context-drawer-header-pad-top: var(--den-tabs-top-gap);
+}
+
+@utility den-context-drawer-header {
+position: relative;
+  z-index: 22;
+  flex-shrink: 0;
+  background: var(--den-background);
+  /* The title fill overlaps the clipped scroll edge. */
+  box-shadow: 0 1px 0 var(--den-background);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--den-context-drawer-header-pad-top) 12px var(--den-tabs-top-gap);
+  border-bottom: 1px solid var(--den-line);
+}
+
+/* Header controls sit above the drag surface. */
+.den-context-drawer-header > *:not(.den-context-drawer__chrome-drag) {
+  position: relative;
+  z-index: 1;
+}
+
+.den-context-drawer__chrome-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.den-context-drawer__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+
+@utility den-context-drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+
+.den-blueprint-workspace-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--den-background);
+  box-shadow:
+    0 0 0 1px var(--den-line),
+    var(--den-shadow-drawer-edge);
+  animation: den-drawer-in var(--den-duration-drawer) var(--den-ease) both;
+}
+
+.den-blueprint-workspace-modal-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.den-blueprint-review-footer {
+  min-height: 0;
+  max-height: 50%;
+}
+
+.den-blueprint-review-footer > .den-scrollport__viewport {
+  scroll-padding-block: 12px;
+}
+
+.den-blueprint-review-footer__content {
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.den-blueprint-review-footer__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.den-blueprint-review-footer__lead {
+  flex: 1 1 8rem;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+  min-width: 0;
+}
+
+.den-blueprint-review-footer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.den-blueprint-review-footer__actions > button {
+  max-width: 100%;
+}
+
+.den-blueprint-review-footer__changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.den-blueprint-review-footer__changes-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-family: inherit;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.den-blueprint-review-footer__changes-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.den-blueprint-workspace-modal-path-inline {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+}
+
+.den-blueprint-workspace-modal-alert {
+  margin: 12px 20px 0;
+  padding: 10px 12px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-body);
+}
+
+.den-blueprint-workspace-modal-alert--error {
+  color: var(--den-danger-text);
+  background: color-mix(in srgb, var(--den-danger) 10%, transparent);
+}
+
+.den-blueprint-workspace-modal-alert--warn {
+  color: var(--den-status-running);
+  background: color-mix(in srgb, var(--den-status-running) 10%, transparent);
+}
+
+.den-blueprint-workspace-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* The embedded document controls the scroll. */
+  overflow: hidden;
+  padding: 0;
+}
+
+.den-blueprint-workspace-modal-close {
+  flex-shrink: 0;
+  height: 2.2857rem;
+  width: 2.2857rem;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-hero);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The fixed footer holds three controls at large text scales. */
+.den-blueprint-workspace-modal-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--den-line);
+  background: var(--den-surface);
+}
+
+.den-blueprint-workspace-modal-header {
+  display: flex;
+  min-height: 0;
+  max-height: 40%;
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--den-line);
+  flex-shrink: 0;
+  background: var(--den-surface);
+}
+
+.den-blueprint-workspace-modal-header-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.den-blueprint-workspace-modal-header-text h2 {
+  margin: 0 0 4px;
+  font-size: var(--text-den-title);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.den-blueprint-workspace-modal-loading {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--den-text-muted);
+}
+
+.den-blueprint-workspace-modal-status {
+  margin: 0;
+  font-size: var(--text-den-body);
+  color: var(--den-text-muted);
+}
+
+.den-context-drawer-header h2 {
+  margin: 0;
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text-muted);
+  /* The title remains draggable above the drag surface. */
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-context-drawer,
+  .den-blueprint-workspace-modal {
+    animation: none !important;
+    transition: none !important;
+  }
+}

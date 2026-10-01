@@ -1,0 +1,15 @@
+{
+  "revision": 3,
+  "benchmark_paths": [
+    "scripts/coordinator-benchmark/",
+    "scripts/eval-agent-live.sh",
+    "lycaon/internal/eval/",
+    "lycaon/cmd/lycaon-debug/",
+    "lycaon/test/fixtures/eval/"
+  ],
+  "harness_paths": [
+    "lycaon/internal/harnessfixture/",
+    "lycaon/internal/api/harness_*.go",
+    "lycaon/internal/session/harness_*.go"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "directory": "document-outbox",
+  "header": "header.json",
+  "log_prefix": "records-",
+  "log_suffix": ".log",
+  "lock": "locks/document-outbox.lock",
+  "max_document_bytes": 268435456,
+  "max_record_bytes": 134217728,
+  "max_header_bytes": 4194304,
+  "compaction_bytes": 4194304,
+  "cache_bytes": 536870912,
+  "cache_documents": 512,
+  "cache_max_age_seconds": 2592000
+}

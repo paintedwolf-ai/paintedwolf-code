@@ -1,0 +1,46 @@
+title: Delete a repository or its protections through the API
+id: 2a55efd5-c729-4ac4-b975-f186157c756a
+description: Sends a raw API write that removes a repository, a branch protection rule, or someone's membership.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  # `gh api` is the documented way to reach anything the porcelain does not
+  # expose, so every rule in this pack that names a subcommand is reachable
+  # through it. These three paths carry the same effect as repo-delete and the
+  # protection settings that decide who may write, so they band the same.
+  selection_image:
+    Image:
+      - gh
+      - glab
+      - tea
+  selection_api:
+    CommandLine|contains: ' api '
+  selection_write_method:
+    CommandLine|re: '(?i)\s(-X|--method)\s+(DELETE|PUT|PATCH)\b'
+  # The path may be written with or without a leading slash. A repository root
+  # with nothing after it is the repo itself; anything deeper is a sub-resource
+  # and belongs to the coarse rule.
+  selection_destructive_path:
+    CommandLine|re:
+      - '(?i)[\s/]repos/[^/\s]+/[^/\s]+\s*$'
+      - '(?i)[\s/]projects/[^/\s]+\s*$'
+      - '(?i)/branches/[^/\s]+/protection'
+      - '(?i)[\s/]orgs/[^/\s]+/(members|teams)/'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_api and selection_write_method and selection_destructive_path and not filter_rehearsal and not filter_local

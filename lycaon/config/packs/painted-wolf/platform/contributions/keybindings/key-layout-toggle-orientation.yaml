@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-toggle-orientation
+command: painted-wolf/platform:layout-toggle-orientation
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+S"
+  windows:
+    - "Mod+Shift+S"
+  linux:
+    - "Mod+Shift+S"

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-security
+command: painted-wolf/platform:go-context-security
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader S"
+  windows:
+    - "Leader S"
+  linux:
+    - "Leader S"

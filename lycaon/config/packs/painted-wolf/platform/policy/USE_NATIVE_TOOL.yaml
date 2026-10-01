@@ -1,0 +1,35 @@
+oar: '1.0'
+id: USE_NATIVE_TOOL
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.habit_redirect_match
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "USE_NATIVE_TOOL"
+effect: block
+copy:
+  what: The host constructed a native replacement for this supported command shape.
+  cause: The parsed operation and representable runner options passed active-schema validation.
+  why: The native tool keeps its own output shape and bounds; the replacement does not promise identical stdout
+    or unlimited coverage.
+  fix: Retry using `replacement_calls` from the rejection data exactly.
+  instead: Use the supplied native replacement call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use the supplied native replacement call
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: exact replacement
+    profile: implement
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_NATIVE_TOOL'

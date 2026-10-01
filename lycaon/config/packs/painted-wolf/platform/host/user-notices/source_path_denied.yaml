@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "File outside the attached folder"
+retryable: false
+message: "The selected path is outside this project\u2019s attached folders."
+suggested_action: "Check the selected folder and file path, then try again."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "The selected path is outside this project\u2019s attached folders"

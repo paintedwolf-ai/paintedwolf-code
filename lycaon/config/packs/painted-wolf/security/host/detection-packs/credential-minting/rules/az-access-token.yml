@@ -1,0 +1,24 @@
+title: Mint an Azure access token
+id: 4f8e6f65-7b12-4e5e-9a06-4b5c6d7e8f94
+description: Prints an Azure AD access token, or creates a service principal whose password is returned once.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: az
+    CommandLine|contains:
+      - ' account get-access-token'
+      - ' ad sp create-for-rbac'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

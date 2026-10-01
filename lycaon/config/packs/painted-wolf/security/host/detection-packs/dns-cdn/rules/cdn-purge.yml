@@ -1,0 +1,41 @@
+title: Purge everything a CDN has cached
+id: 82aa0d39-593b-46c5-94fc-20be8602548b
+description: Purges a zone's entire cache, so every request goes to origin until it refills.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  # flarectl's purge also takes --files/--tags for a targeted purge, which is
+  # not what this rule is about — --everything is the zone-wide form, the same
+  # scope fastly's --all names.
+  selection_flarectl_verb:
+    Image: flarectl
+    CommandLine|contains: ' zone purge'
+  selection_flarectl_all:
+    Image: flarectl
+    CommandLine|contains: ' --everything'
+  selection_fastly_verb:
+    Image: fastly
+    CommandLine|contains: ' purge'
+  selection_fastly_all:
+    CommandLine|contains: ' --all'
+  selection_fastly_confirm:
+    CommandLine|contains:
+      - ' --non-interactive'
+      - ' --auto-yes'
+  filter_rehearsal:
+    Argv:
+      - '--help'
+      - '-h'
+  filter_local:
+    EffectReach: local
+  condition: ((selection_flarectl_verb and selection_flarectl_all) or (selection_fastly_verb and selection_fastly_all and selection_fastly_confirm)) and not filter_rehearsal and not filter_local

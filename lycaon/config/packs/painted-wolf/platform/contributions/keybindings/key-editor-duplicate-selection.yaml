@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-duplicate-selection
+command: painted-wolf/platform:editor-duplicate-selection
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Shift+D"
+  windows:
+    - "Mod+Shift+D"
+  linux:
+    - "Mod+Shift+D"

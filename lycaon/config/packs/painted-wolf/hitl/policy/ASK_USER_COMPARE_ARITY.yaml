@@ -1,0 +1,38 @@
+oar: '1.0'
+id: ASK_USER_COMPARE_ARITY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - ask_user
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.ask_artifact_count
+  - paintedwolf.ask_artifact_limit
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "ASK_USER_COMPARE_ARITY"
+effect: block
+copy:
+  what: The comparison includes {{ paintedwolf.ask_artifact_count }} distinct artifacts; the current limit
+    is {{ paintedwolf.ask_artifact_limit }}.
+  cause: The cleaned artifact list exceeds the decision card’s comparison bound.
+  why: Each compared variant needs a visible, selectable preview.
+  fix: Narrow this comparison to between two and {{ paintedwolf.ask_artifact_limit }} relevant variants. One
+    artifact requests review; no artifacts requests clarification. Preserve alternatives material to the user’s
+    decision.
+  instead: Branch on Code ASK_USER_COMPARE_ARITY; narrow the comparison without discarding a material alternative
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
+x-paintedwolf-message: compare requires 2 to 4 artifacts
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: stub
+    path: src/main.go
+    profile: coordinator
+    tool: ask_user
+  expect_contains:
+  - 'Code: ASK_USER_COMPARE_ARITY'
+  - artifact

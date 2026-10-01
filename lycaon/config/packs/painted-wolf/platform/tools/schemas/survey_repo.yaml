@@ -1,0 +1,12 @@
+description: "One catalog map (Tier 1 digest, selected=0), not a briefing. Call when you still cannot name a destination and the ask is unknown layout (layout_overview), duplicated env/config/stores (ssot_drift), or where HTTP routes/handlers live (api_routes). Then summarize the destination. For how/what on a named file/package/dir, use summarize(path=…) — never survey_repo for depth on a path you can already say."
+schema:
+  type: object
+  properties:
+    bundle:
+      type: string
+      description: "Which catalog map to run: layout_overview, ssot_drift, or api_routes."
+    path:
+      type: string
+      description: Repo-relative root for probes (default .)
+  required: [bundle]
+  additionalProperties: false

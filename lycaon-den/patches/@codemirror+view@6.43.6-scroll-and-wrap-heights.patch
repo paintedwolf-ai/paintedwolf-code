@@ -1,0 +1,1355 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 0b15b00..98fe1ed 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1317,6 +1317,8 @@ const dragMovesSelection$1 = state.Facet.define();
+ const mouseSelectionStyle = state.Facet.define();
+ const exceptionSink = state.Facet.define();
+ const updateListener = state.Facet.define();
++// Receives each measure cycle's duration and whether it replaced the viewport.
++const measureTiming = state.Facet.define();
+ const inputHandler = state.Facet.define();
+ const focusChangeEffect = state.Facet.define();
+ const clipboardInputFilter = state.Facet.define();
+@@ -3353,14 +3355,15 @@ class DocView {
+                     return {
+                         lineHeight: tile.dom.getBoundingClientRect().height,
+                         charWidth: totalWidth / tile.length,
+-                        textHeight
++                        textHeight,
++                        linePadding: horizontalPadding(tile.dom)
+                     };
+             }
+         });
+         if (lineMeasure)
+             return lineMeasure;
+         // If no workable line exists, force a layout of a measurable element
+-        let dummy = document.createElement("div"), lineHeight, charWidth, textHeight;
++        let dummy = document.createElement("div"), lineHeight, charWidth, textHeight, linePadding = 0;
+         dummy.className = "cm-line";
+         dummy.style.width = "99999px";
+         dummy.style.position = "absolute";
+@@ -3371,9 +3374,10 @@ class DocView {
+             lineHeight = dummy.getBoundingClientRect().height;
+             charWidth = rect && rect.width ? rect.width / 27 : 7;
+             textHeight = rect && rect.height ? rect.height : lineHeight;
++            linePadding = horizontalPadding(dummy);
+             dummy.remove();
+         });
+-        return { lineHeight, charWidth, textHeight };
++        return { lineHeight, charWidth, textHeight, linePadding };
+     }
+     computeBlockGapDeco() {
+         let deco = [], vs = this.view.viewState;
+@@ -5364,18 +5368,51 @@ class HeightOracle {
+         this.charWidth = 7;
+         this.textHeight = 14; // The height of the actual font (font-size)
+         this.lineLength = 30;
++        this.wrapRows = null;
++        this.wrapRowWidth = 0;
++        this.wrapRowDoc = null;
+     }
+     heightForGap(from, to) {
+-        let lines = this.doc.lineAt(to).number - this.doc.lineAt(from).number + 1;
+-        if (this.lineWrapping)
+-            lines += Math.max(0, Math.ceil(((to - from) - (lines * this.lineLength * 0.5)) / this.lineLength));
+-        return this.lineHeight * lines;
++        let firstLine = this.doc.lineAt(from).number, lastLine = this.doc.lineAt(to).number;
++        if (!this.lineWrapping)
++            return this.lineHeight * (lastLine - firstLine + 1);
++        let rows = this.wrappedRowIndex();
++        return this.lineHeight * (rows[lastLine] - rows[firstLine - 1]);
+     }
+     heightForLine(length) {
+         if (!this.lineWrapping)
+             return this.lineHeight;
+-        let lines = 1 + Math.max(0, Math.ceil((length - this.lineLength) / Math.max(1, this.lineLength - 5)));
+-        return lines * this.lineHeight;
++        return this.lineHeight * this.rowsForLength(length);
++    }
++    // Wrapping breaks anywhere, so a line fills each row before it wraps.
++    rowsForLength(length) {
++        let width = Math.max(1, Math.floor(this.lineLength));
++        return length > width ? Math.ceil(length / width) : 1;
++    }
++    // Prefix sums map each line to its wrapped row count.
++    wrappedRowIndex() {
++        let width = Math.max(1, Math.floor(this.lineLength));
++        // Immutable document identity invalidates cached row estimates.
++        if (this.wrapRows && this.wrapRowWidth == width && this.wrapRowDoc == this.doc)
++            return this.wrapRows;
++        let rows = new Int32Array(this.doc.lines + 1);
++        let line = 0, length = 0, total = 0;
++        for (let iter = this.doc.iter(); !iter.next().done;) {
++            if (iter.lineBreak) {
++                total += this.rowsForLength(length);
++                rows[++line] = total;
++                length = 0;
++            }
++            else {
++                length += iter.value.length;
++            }
++        }
++        total += this.rowsForLength(length);
++        rows[++line] = total;
++        this.wrapRows = rows;
++        this.wrapRowWidth = width;
++        this.wrapRowDoc = this.doc;
++        return rows;
+     }
+     setDoc(doc) { this.doc = doc; return this; }
+     mustRefreshForWrapping(whiteSpace) {
+@@ -5416,6 +5453,11 @@ class HeightOracle {
+         return changed;
+     }
+ }
++// Padding inside a line box, which its text cannot use.
++function horizontalPadding(dom) {
++    let style = dom.ownerDocument.defaultView.getComputedStyle(dom);
++    return (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
++}
+ // This object is used by `updateHeight` to make DOM measurements
+ // arrive at the right nodes. The `heights` array is a sequence of
+ // block heights, starting from position `from`.
+@@ -5725,14 +5767,28 @@ class HeightMapGap extends HeightMap {
+         }
+         return { firstLine, lastLine, perLine, perChar };
+     }
++    // Wrapped rows determine each line's position within the gap.
++    wrappedBlock(oracle, top, firstLine, line) {
++        let rows = oracle.wrappedRowIndex(), base = rows[firstLine - 1];
++        let height = oracle.lineHeight * (rows[line.number] - rows[line.number - 1]);
++        let lineTop = top + oracle.lineHeight * (rows[line.number - 1] - base);
++        return new BlockInfo(line.from, line.length, Math.max(top, Math.min(lineTop, top + this.height - height)), height, 0);
++    }
+     blockAt(height, oracle, top, offset) {
+-        let { firstLine, lastLine, perLine, perChar } = this.heightMetrics(oracle, offset);
++        let { firstLine, lastLine, perLine } = this.heightMetrics(oracle, offset);
+         if (oracle.lineWrapping) {
+-            let guess = offset + (height < oracle.lineHeight ? 0
+-                : Math.round(Math.max(0, Math.min(1, (height - top) / this.height)) * this.length));
+-            let line = oracle.doc.lineAt(guess), lineHeight = perLine + line.length * perChar;
+-            let lineTop = Math.max(top, height - lineHeight / 2);
+-            return new BlockInfo(line.from, line.length, lineTop, lineHeight, 0);
++            // The first line whose rows reach this height.
++            let rows = oracle.wrappedRowIndex(), base = rows[firstLine - 1];
++            let want = Math.max(0, (height - top) / oracle.lineHeight);
++            let lo = firstLine, hi = lastLine;
++            while (lo < hi) {
++                let mid = (lo + hi) >> 1;
++                if (rows[mid] - base <= want)
++                    lo = mid + 1;
++                else
++                    hi = mid;
++            }
++            return this.wrappedBlock(oracle, top, firstLine, oracle.doc.line(lo));
+         }
+         else {
+             let line = Math.max(0, Math.min(lastLine - firstLine, Math.floor((height - top) / perLine)));
+@@ -5748,7 +5804,10 @@ class HeightMapGap extends HeightMap {
+             return new BlockInfo(from, to - from, 0, 0, 0);
+         }
+         let { firstLine, perLine, perChar } = this.heightMetrics(oracle, offset);
+-        let line = oracle.doc.lineAt(value), lineHeight = perLine + line.length * perChar;
++        let line = oracle.doc.lineAt(value);
++        if (oracle.lineWrapping)
++            return this.wrappedBlock(oracle, top, firstLine, line);
++        let lineHeight = perLine + line.length * perChar;
+         let linesAbove = line.number - firstLine;
+         let lineTop = top + perLine * linesAbove + perChar * (line.from - offset - linesAbove);
+         return new BlockInfo(line.from, line.length, Math.max(top, Math.min(lineTop, top + this.height - lineHeight)), lineHeight, 0);
+@@ -5759,6 +5818,11 @@ class HeightMapGap extends HeightMap {
+         let { firstLine, perLine, perChar } = this.heightMetrics(oracle, offset);
+         for (let pos = from, lineTop = top; pos <= to;) {
+             let line = oracle.doc.lineAt(pos);
++            if (oracle.lineWrapping) {
++                f(this.wrappedBlock(oracle, top, firstLine, line));
++                pos = line.to + 1;
++                continue;
++            }
+             if (pos == from) {
+                 let linesAbove = line.number - firstLine;
+                 lineTop += perLine * linesAbove + perChar * (from - offset - linesAbove);
+@@ -6108,16 +6172,16 @@ function visiblePixelRange(dom, paddingTop) {
+     for (let parent = dom.parentNode; parent && parent != doc.body;) {
+         if (parent.nodeType == 1) {
+             let elt = parent;
+-            let style = window.getComputedStyle(elt);
+-            if ((elt.scrollHeight > elt.clientHeight || elt.scrollWidth > elt.clientWidth) &&
+-                style.overflow != "visible") {
++            let hasScroll = elt.scrollHeight > elt.clientHeight || elt.scrollWidth > elt.clientWidth;
++            let style = hasScroll ? window.getComputedStyle(elt) : null;
++            if (style && style.overflow != "visible") {
+                 let parentRect = elt.getBoundingClientRect();
+                 left = Math.max(left, parentRect.left);
+                 right = Math.min(right, parentRect.right);
+                 top = Math.max(top, parentRect.top);
+                 bottom = Math.min(parent == dom.parentNode ? win.innerHeight : bottom, parentRect.bottom);
+             }
+-            parent = style.position == "absolute" || style.position == "fixed" ? elt.offsetParent : elt.parentNode;
++            parent = (style ? (style.position == "absolute" || style.position == "fixed") : false) ? elt.offsetParent : elt.parentNode;
+         }
+         else if (parent.nodeType == 11) { // Shadow root
+             parent = parent.host;
+@@ -6216,12 +6280,21 @@ class ViewState {
+         // See VP.MaxDOMHeight
+         this.scaler = IdScaler;
+         this.scrollTarget = null;
++        // How far the visible area moved since the previous measure.
++        this.scrollDelta = 0;
++        // Set by the embedder when the next measured scroll is a scrollbar jump.
++        this.scrollJump = false;
++        // Set by the embedder when scrolling settles, so the next measure fills both directions.
++        this.scrollSettled = false;
+         // Briefly set to true when printing, to disable viewport limiting
+         this.printing = false;
+         // Flag set when editor content was redrawn, so that the next
+         // measure stage knows it must read DOM layout
+         this.mustMeasureContent = true;
+         this.defaultTextDirection = exports.Direction.LTR;
++        this.cachedWhiteSpace = null;
++        this.cachedPaddingTop = 0;
++        this.cachedPaddingBottom = 0;
+         this.visibleRanges = [];
+         // Cursor 'assoc' is only significant when the cursor is on a line
+         // wrap point, where it must stick to the character that it is
+@@ -6309,12 +6382,20 @@ class ViewState {
+             update.state.selection.main.empty && update.state.selection.main.assoc &&
+             !update.state.facet(nativeSelectionHidden))
+             this.mustEnforceCursorAssoc = true;
++        if (update.themeChanged || update.geometryChanged)
++            this.cachedWhiteSpace = null;
+     }
+     measure() {
+-        let { view } = this, dom = view.contentDOM, style = window.getComputedStyle(dom);
++        let { view } = this, dom = view.contentDOM;
++        if (this.mustMeasureContent || !this.cachedWhiteSpace) {
++            let style = window.getComputedStyle(dom);
++            this.cachedWhiteSpace = style.whiteSpace;
++            this.defaultTextDirection = style.direction == "rtl" ? exports.Direction.RTL : exports.Direction.LTR;
++            this.cachedPaddingTop = parseInt(style.paddingTop) || 0;
++            this.cachedPaddingBottom = parseInt(style.paddingBottom) || 0;
++        }
+         let oracle = this.heightOracle;
+-        let whiteSpace = style.whiteSpace;
+-        this.defaultTextDirection = style.direction == "rtl" ? exports.Direction.RTL : exports.Direction.LTR;
++        let whiteSpace = this.cachedWhiteSpace;
+         let refresh = this.heightOracle.mustRefreshForWrapping(whiteSpace) || this.mustMeasureContent === "refresh";
+         let domRect = dom.getBoundingClientRect();
+         let measureContent = refresh || this.mustMeasureContent || this.contentDOMHeight != domRect.height;
+@@ -6332,8 +6413,8 @@ class ViewState {
+             }
+         }
+         // Vertical padding
+-        let paddingTop = (parseInt(style.paddingTop) || 0) * this.scaleY;
+-        let paddingBottom = (parseInt(style.paddingBottom) || 0) * this.scaleY;
++        let paddingTop = this.cachedPaddingTop * this.scaleY;
++        let paddingBottom = this.cachedPaddingBottom * this.scaleY;
+         if (this.paddingTop != paddingTop || this.paddingBottom != paddingBottom) {
+             this.paddingTop = paddingTop;
+             this.paddingBottom = paddingBottom;
+@@ -6360,6 +6441,7 @@ class ViewState {
+         // Pixel viewport
+         let pixelViewport = (this.printing ? fullPixelRange : visiblePixelRange)(dom, this.paddingTop);
+         let dTop = pixelViewport.top - this.pixelViewport.top, dBottom = pixelViewport.bottom - this.pixelViewport.bottom;
++        this.scrollDelta = dTop;
+         this.pixelViewport = pixelViewport;
+         let inView = this.pixelViewport.bottom > this.pixelViewport.top && this.pixelViewport.right > this.pixelViewport.left;
+         if (inView != this.inView) {
+@@ -6367,8 +6449,13 @@ class ViewState {
+             if (inView)
+                 measureContent = true;
+         }
+-        if (!this.inView && !this.scrollTarget && !inWindow(view.dom))
++        if (!this.inView && !this.scrollTarget && !inWindow(view.dom)) {
++            // This pass consumes the movement and its marks.
++            this.scrollDelta = 0;
++            this.scrollJump = false;
++            this.scrollSettled = false;
+             return 0;
++        }
+         let contentWidth = domRect.width;
+         if (this.contentDOMWidth != contentWidth || this.editorHeight != view.scrollDOM.clientHeight) {
+             this.contentDOMWidth = domRect.width;
+@@ -6380,8 +6467,10 @@ class ViewState {
+             if (oracle.mustRefreshForHeights(lineHeights))
+                 refresh = true;
+             if (refresh || oracle.lineWrapping && Math.abs(contentWidth - this.contentDOMWidth) > oracle.charWidth) {
+-                let { lineHeight, charWidth, textHeight } = view.docView.measureTextSize();
+-                refresh = lineHeight > 0 && oracle.refresh(whiteSpace, lineHeight, charWidth, textHeight, Math.max(5, contentWidth / charWidth), lineHeights);
++                let { lineHeight, charWidth, textHeight, linePadding } = view.docView.measureTextSize();
++                // Line padding reduces the available text width.
++                let rowWidth = Math.max(charWidth, contentWidth - (linePadding || 0));
++                refresh = lineHeight > 0 && oracle.refresh(whiteSpace, lineHeight, charWidth, textHeight, Math.max(5, rowWidth / charWidth), lineHeights);
+                 if (refresh) {
+                     view.docView.minWidth = 0;
+                     result |= 16 /* UpdateFlag.Geometry */;
+@@ -6399,15 +6488,26 @@ class ViewState {
+             if (heightChangeFlag)
+                 result |= 2 /* UpdateFlag.Height */;
+         }
+-        let viewportChange = !this.viewportIsAppropriate(this.viewport, bias) ||
++        // Cover is a time budget: the rendered lead must outlast the frames the scrolling
++        // thread can travel before the next rendering update lands.
++        let lead = (bias || this.scrollDelta) * 3 /* VP.CoverFrames */;
++        // A settled scroll rests with the base margin on both sides, so the next gesture
++        // starts covered whichever way it goes.
++        let settled = this.scrollSettled && !this.scrollTarget;
++        this.scrollSettled = false;
++        let appropriate = this.viewportIsAppropriate(this.viewport, lead);
++        let viewportChange = !appropriate || settled && !this.viewportRests(this.viewport) ||
+             this.scrollTarget && (this.scrollTarget.range.head < this.viewport.from ||
+                 this.scrollTarget.range.head > this.viewport.to);
+         if (viewportChange) {
+             if (result & 2 /* UpdateFlag.Height */)
+                 result |= this.updateScaler();
+-            this.viewport = this.getViewport(bias, this.scrollTarget);
++            this.viewport = settled ? this.restingViewport(appropriate ? this.viewport : this.getViewport(bias, null))
++                : this.getViewport(bias, this.scrollTarget);
+             result |= this.updateForViewport();
+         }
++        this.scrollDelta = 0;
++        this.scrollJump = false;
+         if ((result & 2 /* UpdateFlag.Height */) || viewportChange)
+             this.updateViewportLines();
+         if (this.lineGaps.length || this.viewport.to - this.viewport.from > (2000 /* LG.Margin */ << 1))
+@@ -6429,10 +6529,19 @@ class ViewState {
+         // This will divide VP.Margin between the top and the
+         // bottom, depending on the bias (the change in viewport position
+         // since the last update). It'll hold a number between 0 and 1
+-        let marginTop = 0.5 - Math.max(-0.5, Math.min(0.5, bias / 1000 /* VP.Margin */ / 2));
+         let map = this.heightMap, oracle = this.heightOracle;
+         let { visibleTop, visibleBottom } = this;
+-        let viewport = new Viewport(map.lineAt(visibleTop - marginTop * 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).to);
++        // How far the visible area moved since the last measure (0 outside measuring).
++        let delta = this.scrollDelta;
++        // A scrollbar jump past half the visible area renders a narrow lookahead, since the
++        // gesture's next frame replaces it. Continuous motion renders further ahead the
++        // faster it moves, however long its frames take.
++        let margin = this.scrollJump && Math.abs(delta) > (visibleBottom - visibleTop) / 2 ? 100 /* VP.JumpMargin */
++            : Math.min(2000 /* VP.MaxMargin */, Math.max(1000 /* VP.Margin */, Math.abs(delta) * 9 /* VP.MarginFrames */));
++        // Lean the margin toward the direction of motion, keeping a cover strip behind so
++        // a reversal stays covered until its swap lands.
++        let marginTop = 0.5 - Math.max(-0.35, Math.min(0.35, (bias || delta) / margin));
++        let viewport = new Viewport(map.lineAt(visibleTop - marginTop * margin, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * margin, QueryType.ByHeight, oracle, 0, 0).to);
+         // If scrollTarget is given, make sure the viewport includes that position
+         if (scrollTarget) {
+             let { head } = scrollTarget.range;
+@@ -6454,6 +6563,24 @@ class ViewState {
+         let from = changes.mapPos(viewport.from, -1), to = changes.mapPos(viewport.to, 1);
+         return new Viewport(this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0).from, this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0).to);
+     }
++    // Whether a viewport holds the base margin on both sides of the visible area.
++    viewportRests({ from, to }) {
++        let { top } = this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0);
++        let { bottom } = this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0);
++        return (from == 0 || top <= this.visibleTop - 1000 /* VP.Margin */) &&
++            (to == this.state.doc.length || bottom >= this.visibleBottom + 1000 /* VP.Margin */);
++    }
++    // An appropriate viewport widened to the base margin on each side; a lead the last
++    // motion left beyond that stays.
++    restingViewport(base) {
++        let map = this.heightMap, oracle = this.heightOracle, { visibleTop, visibleBottom } = this;
++        let { from, to } = base;
++        if (from > 0 && map.lineAt(from, QueryType.ByPos, oracle, 0, 0).top > visibleTop - 1000 /* VP.Margin */)
++            from = map.lineAt(visibleTop - 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).from;
++        if (to < this.state.doc.length && map.lineAt(to, QueryType.ByPos, oracle, 0, 0).bottom < visibleBottom + 1000 /* VP.Margin */)
++            to = map.lineAt(visibleBottom + 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).to;
++        return new Viewport(from, to);
++    }
+     // Checks if a given viewport covers the visible part of the
+     // document and not too much beyond that.
+     viewportIsAppropriate({ from, to }, bias = 0) {
+@@ -6462,9 +6589,9 @@ class ViewState {
+         let { top } = this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0);
+         let { bottom } = this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0);
+         let { visibleTop, visibleBottom } = this;
+-        return (from == 0 || top <= visibleTop - Math.max(10 /* VP.MinCoverMargin */, Math.min(-bias, 250 /* VP.MaxCoverMargin */))) &&
++        return (from == 0 || top <= visibleTop - Math.max(10 /* VP.MinCoverMargin */, Math.min(-bias, 600 /* VP.MaxCoverMargin */))) &&
+             (to == this.state.doc.length ||
+-                bottom >= visibleBottom + Math.max(10 /* VP.MinCoverMargin */, Math.min(bias, 250 /* VP.MaxCoverMargin */))) &&
++                bottom >= visibleBottom + Math.max(10 /* VP.MinCoverMargin */, Math.min(bias, 600 /* VP.MaxCoverMargin */))) &&
+             (top > visibleTop - 2 * 1000 /* VP.Margin */ && bottom < visibleBottom + 2 * 1000 /* VP.Margin */);
+     }
+     mapLineGaps(gaps, changes) {
+@@ -7152,6 +7279,10 @@ class DOMObserver {
+         this.onResize = this.onResize.bind(this);
+         this.onPrint = this.onPrint.bind(this);
+         this.onScroll = this.onScroll.bind(this);
++        this.measuredScrollTop = -1;
++        this.measuredScrollLeft = -1;
++        this.measuredScrollState = null;
++        this.syncMeasureFrame = false;
+         if (window.matchMedia)
+             this.printQuery = window.matchMedia("print");
+         if (typeof ResizeObserver == "function") {
+@@ -7185,8 +7316,42 @@ class DOMObserver {
+     }
+     onScrollChanged(e) {
+         this.view.inputState.runHandlers("scroll", e);
+-        if (this.intersecting)
+-            this.view.measure();
++        if (!this.intersecting)
++            return;
++        // Unchanged offsets need no measurement when geometry is settled.
++        let scrollDOM = this.view.scrollDOM;
++        if (e.target == scrollDOM && this.measuredScrollTop == scrollDOM.scrollTop &&
++            this.measuredScrollLeft == scrollDOM.scrollLeft &&
++            this.measuredScrollState == this.view.state && this.view.measureScheduled < 0 &&
++            !this.view.viewState.mustMeasureContent)
++            return;
++        // Covered scrolls share the next frame's measurement.
++        // Jumps require immediate painting.
++        let vs = this.view.viewState, lines = vs.viewportLines;
++        let delta = scrollDOM.scrollTop - vs.scrollOffset;
++        if (e.target == scrollDOM && vs.scrollParent == scrollDOM &&
++            this.measuredScrollState == this.view.state && !vs.mustMeasureContent &&
++            this.measuredScrollLeft == scrollDOM.scrollLeft && !vs.lineGaps.length &&
++            vs.scaleY == 1 && vs.scaler == IdScaler && lines.length &&
++            vs.pixelViewport.bottom > vs.pixelViewport.top &&
++            lines[0].top <= Math.max(0, vs.pixelViewport.top + delta) &&
++            lines[lines.length - 1].bottom >= Math.min(vs.docHeight, vs.pixelViewport.bottom + delta)) {
++            this.view.requestMeasure();
++            return;
++        }
++        // Async scrolling delivers several scroll events per frame; one synchronous
++        // measure paints the jump and the rest of the frame's events share the
++        // next animation frame's measurement.
++        if (this.syncMeasureFrame) {
++            this.view.requestMeasure();
++            return;
++        }
++        this.syncMeasureFrame = true;
++        this.view.win.requestAnimationFrame(() => { this.syncMeasureFrame = false; });
++        this.measuredScrollTop = scrollDOM.scrollTop;
++        this.measuredScrollLeft = scrollDOM.scrollLeft;
++        this.view.measure();
++        this.measuredScrollState = this.view.state;
+     }
+     onScroll(e) {
+         if (this.intersecting)
+@@ -8126,6 +8291,7 @@ class EditorView {
+     measure(flush = true) {
+         if (this.destroyed)
+             return;
++        let timing = this.state.facet(measureTiming), started = timing.length ? performance.now() : 0;
+         if (this.measureScheduled > -1)
+             this.win.cancelAnimationFrame(this.measureScheduled);
+         if (this.observer.delayedAndroidKey) {
+@@ -8223,8 +8389,10 @@ class EditorView {
+                                 (scroll == this.scrollDOM || this.hasFocus ||
+                                     Math.max(this.inputState.lastWheelEvent, this.inputState.lastTouchTime) > Date.now() - 100)) {
+                                 scrollOffset = scrollOffset + diff;
++                                // A relative scroll keeps the distance an asynchronous scrolling
++                                // thread travelled after this measure read the offset.
+                                 if (scroll)
+-                                    scroll.scrollTop += diff;
++                                    scroll.scrollBy(0, diff);
+                                 else
+                                     this.win.scrollBy(0, diff);
+                                 scrollAnchorHeight = -1;
+@@ -8240,9 +8408,16 @@ class EditorView {
+             this.updateState = 0 /* UpdateState.Idle */;
+             this.measureScheduled = -1;
+         }
++        // Frame measurements also settle the state used by scroll batching.
++        this.observer.measuredScrollState = this.state;
+         if (updated && !updated.empty)
+             for (let listener of this.state.facet(updateListener))
+                 listener(updated);
++        if (timing.length) {
++            let ms = performance.now() - started;
++            for (let listener of timing)
++                listener(ms, !!updated && updated.viewportChanged);
++        }
+     }
+     /**
+     Get the CSS classes for the currently active editor themes.
+@@ -8304,6 +8479,21 @@ class EditorView {
+             this.measure(false);
+     }
+     /**
++    Mark the next measured scroll as a scrollbar jump: a thumb drag
++    step or a track click.
++    */
++    noteScrollJump() {
++        this.viewState.scrollJump = true;
++    }
++    /**
++    Mark scrolling as settled: the next measure renders the base
++    margin on both sides of the visible area.
++    */
++    noteScrollSettled() {
++        this.viewState.scrollSettled = true;
++        this.requestMeasure();
++    }
++    /**
+     Schedule a layout measurement, optionally providing callbacks to
+     do custom DOM measuring followed by a DOM write phase. Using
+     this is preferable reading DOM layout directly from, for
+@@ -8933,6 +9123,7 @@ example a horizontally fixed gutter). Not to be confused with
+ [`cursorScrollMargin`](https://codemirror.net/6/docs/ref/#view.EditorView^cursorScrollMargin).
+ */
+ EditorView.scrollMargins = scrollMargins;
++EditorView.measureTiming = measureTiming;
+ /**
+ This facet records whether a dark theme is active. The extension
+ returned by [`theme`](https://codemirror.net/6/docs/ref/#view.EditorView^theme) automatically
+@@ -9284,7 +9475,10 @@ class RectangleMarker {
+             if (!pos)
+                 return [];
+             let base = getBase(view);
+-            return [new RectangleMarker(className, pos.left - base.left, pos.top - base.top, null, pos.bottom - pos.top)];
++            let height = pos.bottom - pos.top;
++            if (view.defaultLineHeight && height > view.defaultLineHeight * 1.5)
++                height = view.defaultLineHeight;
++            return [new RectangleMarker(className, pos.left - base.left, pos.top - base.top, null, height)];
+         }
+         else {
+             return rectanglesForRange(view, className, range);
+@@ -9492,10 +9686,12 @@ const selectionConfig = state.Facet.define({
+         return state.combineConfig(configs, {
+             cursorBlinkRate: 1200,
+             drawRangeCursor: true,
++            drawCursor: true,
+             iosSelectionHandles: true
+         }, {
+             cursorBlinkRate: (a, b) => Math.min(a, b),
+-            drawRangeCursor: (a, b) => a || b
++            drawRangeCursor: (a, b) => a || b,
++            drawCursor: (a, b) => a && b
+         });
+     }
+ });
+@@ -9541,6 +9737,8 @@ const cursorLayer = layer({
+     above: true,
+     markers(view) {
+         let { state: state$1 } = view, conf = state$1.facet(selectionConfig);
++        if (conf.drawCursor === false)
++            return [];
+         let cursors = [];
+         for (let r of state$1.selection.ranges) {
+             let prim = r == state$1.selection.main;
+@@ -9554,8 +9752,13 @@ const cursorLayer = layer({
+         return cursors;
+     },
+     update(update, dom) {
+-        if (update.transactions.some(tr => tr.selection))
+-            dom.style.animationName = dom.style.animationName == "cm-blink" ? "cm-blink2" : "cm-blink";
++        if (update.transactions.some(tr => tr.selection)) {
++            let rate = update.state.facet(selectionConfig).cursorBlinkRate;
++            if (rate > 0)
++                dom.style.animationName = dom.style.animationName == "cm-blink" ? "cm-blink2" : "cm-blink";
++            else
++                dom.style.animationName = "none";
++        }
+         let confChange = configChanged(update);
+         if (confChange)
+             setBlinkRate(update.state, dom);
+@@ -9567,7 +9770,10 @@ const cursorLayer = layer({
+     class: "cm-cursorLayer"
+ });
+ function setBlinkRate(state, dom) {
+-    dom.style.animationDuration = state.facet(selectionConfig).cursorBlinkRate + "ms";
++    let rate = state.facet(selectionConfig).cursorBlinkRate;
++    dom.style.animationDuration = rate + "ms";
++    if (rate <= 0)
++        dom.style.animationName = "none";
+ }
+ const selectionLayer = layer({
+     above: false,
+@@ -11402,12 +11608,10 @@ const gutterView = ViewPlugin.fromClass(class {
+     }
+     update(update) {
+         if (this.updateGutters(update)) {
+-            // Detach during sync when the viewport changed significantly
+-            // (such as during scrolling), since for large updates that is
+-            // faster.
++            // Cells follow their lines, so only a viewport that shares no lines with the
++            // previous one rebuilds every cell, and that rebuild runs detached.
+             let vpA = this.prevViewport, vpB = update.view.viewport;
+-            let vpOverlap = Math.min(vpA.to, vpB.to) - Math.max(vpA.from, vpB.from);
+-            this.syncGutters(vpOverlap < (vpB.to - vpB.from) * 0.8);
++            this.syncGutters(Math.min(vpA.to, vpB.to) <= Math.max(vpA.from, vpB.from));
+         }
+         if (update.geometryChanged) {
+             let min = (this.view.contentHeight / this.view.scaleY) + "px";
+@@ -11539,15 +11743,27 @@ class UpdateContext {
+         this.i = 0;
+         this.cursor = state.RangeSet.iter(gutter.markers, viewport.from);
+     }
+-    addElement(view, block, markers) {
++    // A cell stays with the block it renders, so a scrolled viewport keeps the cells
++    // and marker DOM of every line it still shows.
++    addElement(view, block, markers, widget) {
+         let { gutter } = this, above = (block.top - this.height) / view.scaleY, height = block.height / view.scaleY;
+-        if (this.i == gutter.elements.length) {
+-            let newElt = new GutterElement(view, height, above, markers);
+-            gutter.elements.push(newElt);
+-            gutter.dom.appendChild(newElt.dom);
++        let elements = gutter.elements;
++        // Cells of earlier blocks left the viewport.
++        while (this.i < elements.length && elements[this.i].from < block.from) {
++            let gone = elements.splice(this.i, 1)[0];
++            gutter.dom.removeChild(gone.dom);
++            gone.destroy();
++        }
++        let cell = elements[this.i];
++        if (cell && cell.from == block.from && cell.widget == widget) {
++            cell.update(view, height, above, markers);
+         }
+         else {
+-            gutter.elements[this.i].update(view, height, above, markers);
++            let newElt = new GutterElement(view, height, above, markers);
++            newElt.from = block.from;
++            newElt.widget = widget;
++            elements.splice(this.i, 0, newElt);
++            gutter.dom.insertBefore(newElt.dom, cell ? cell.dom : null);
+         }
+         this.height = block.bottom;
+         this.i++;
+@@ -11563,7 +11779,7 @@ class UpdateContext {
+         let gutter = this.gutter;
+         if (localMarkers.length == 0 && !gutter.config.renderEmptyElements)
+             return;
+-        this.addElement(view, line, localMarkers);
++        this.addElement(view, line, localMarkers, false);
+     }
+     widget(view, block) {
+         let marker = this.gutter.config.widgetMarker(view, block.widget, block), markers = marker ? [marker] : null;
+@@ -11573,7 +11789,7 @@ class UpdateContext {
+                 (markers || (markers = [])).push(marker);
+         }
+         if (markers)
+-            this.addElement(view, block, markers);
++            this.addElement(view, block, markers, true);
+     }
+     finish() {
+         let gutter = this.gutter;
+@@ -11617,6 +11833,14 @@ class SingleGutterView {
+         }
+     }
+     update(update) {
++        // Cells keep their blocks through edits: a line cell follows the line that holds
++        // its first character, and a widget cell its position.
++        if (update.docChanged) {
++            let doc = update.state.doc;
++            for (let elt of this.elements)
++                elt.from = elt.widget ? update.changes.mapPos(elt.from, -1)
++                    : doc.lineAt(update.changes.mapPos(elt.from, 1)).from;
++        }
+         let prevMarkers = this.markers;
+         this.markers = asArray(this.config.markers(update.view));
+         if (this.spacer && this.config.updateSpacer) {
+@@ -11638,6 +11862,9 @@ class GutterElement {
+         this.height = -1;
+         this.above = 0;
+         this.markers = [];
++        // Start of the block this cell renders, and whether that block is a widget.
++        this.from = 0;
++        this.widget = false;
+         this.dom = document.createElement("div");
+         this.dom.className = "cm-gutterElement";
+         this.update(view, height, above, markers);
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 0f9bebe..2e42483 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -863,6 +863,20 @@ declare class EditorView {
+     private mountStyles;
+     private readMeasured;
+     /**
++    Mark the next measured scroll as a scrollbar jump: a thumb drag
++    step or a track click. A jump of more than half the visible area
++    renders a narrow lookahead, since the gesture's next frame
++    replaces it; every other scroll renders a lookahead that grows
++    with its speed.
++    */
++    noteScrollJump(): void;
++    /**
++    Mark scrolling as settled: the next measure renders the base
++    margin on both sides of the visible area, so the next gesture
++    starts covered in either direction.
++    */
++    noteScrollSettled(): void;
++    /**
+     Schedule a layout measurement, optionally providing callbacks to
+     do custom DOM measuring followed by a DOM write phase. Using
+     this is preferable reading DOM layout directly from, for
+@@ -1383,6 +1397,11 @@ declare class EditorView {
+     */
+     static scrollMargins: Facet<(view: EditorView) => Partial<Rect> | null, readonly ((view: EditorView) => Partial<Rect> | null)[]>;
+     /**
++    Receives the duration in milliseconds of each measure cycle and
++    whether that cycle replaced the viewport.
++    */
++    static measureTiming: Facet<(ms: number, viewportChanged: boolean) => void>;
++    /**
+     Create a theme extension. The first argument can be a
+     [`style-mod`](https://code.haverbeke.berlin/marijn/style-mod#documentation)
+     style spec providing the styles for the theme. These will be
+@@ -1593,6 +1612,11 @@ type SelectionConfig = {
+     */
+     drawRangeCursor?: boolean;
+     /**
++    Whether to draw empty cursor markers. Defaults to true. When
++    false, empty cursors are not rendered into the cursor layer.
++    */
++    drawCursor?: boolean;
++    /**
+     Because hiding the cursor also hides the selection handles in
+     the iOS browser, when this is enabled (the default), the
+     extension draws handles on the side of the selection in iOS.
+diff --git a/dist/index.js b/dist/index.js
+index 3ca4e26..44d07e7 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1313,6 +1313,8 @@ const dragMovesSelection$1 = /*@__PURE__*/Facet.define();
+ const mouseSelectionStyle = /*@__PURE__*/Facet.define();
+ const exceptionSink = /*@__PURE__*/Facet.define();
+ const updateListener = /*@__PURE__*/Facet.define();
++// Receives each measure cycle's duration and whether it replaced the viewport.
++const measureTiming = /*@__PURE__*/Facet.define();
+ const inputHandler = /*@__PURE__*/Facet.define();
+ const focusChangeEffect = /*@__PURE__*/Facet.define();
+ const clipboardInputFilter = /*@__PURE__*/Facet.define();
+@@ -3349,14 +3351,15 @@ class DocView {
+                     return {
+                         lineHeight: tile.dom.getBoundingClientRect().height,
+                         charWidth: totalWidth / tile.length,
+-                        textHeight
++                        textHeight,
++                        linePadding: horizontalPadding(tile.dom)
+                     };
+             }
+         });
+         if (lineMeasure)
+             return lineMeasure;
+         // If no workable line exists, force a layout of a measurable element
+-        let dummy = document.createElement("div"), lineHeight, charWidth, textHeight;
++        let dummy = document.createElement("div"), lineHeight, charWidth, textHeight, linePadding = 0;
+         dummy.className = "cm-line";
+         dummy.style.width = "99999px";
+         dummy.style.position = "absolute";
+@@ -3367,9 +3370,10 @@ class DocView {
+             lineHeight = dummy.getBoundingClientRect().height;
+             charWidth = rect && rect.width ? rect.width / 27 : 7;
+             textHeight = rect && rect.height ? rect.height : lineHeight;
++            linePadding = horizontalPadding(dummy);
+             dummy.remove();
+         });
+-        return { lineHeight, charWidth, textHeight };
++        return { lineHeight, charWidth, textHeight, linePadding };
+     }
+     computeBlockGapDeco() {
+         let deco = [], vs = this.view.viewState;
+@@ -5360,18 +5364,51 @@ class HeightOracle {
+         this.charWidth = 7;
+         this.textHeight = 14; // The height of the actual font (font-size)
+         this.lineLength = 30;
++        this.wrapRows = null;
++        this.wrapRowWidth = 0;
++        this.wrapRowDoc = null;
+     }
+     heightForGap(from, to) {
+-        let lines = this.doc.lineAt(to).number - this.doc.lineAt(from).number + 1;
+-        if (this.lineWrapping)
+-            lines += Math.max(0, Math.ceil(((to - from) - (lines * this.lineLength * 0.5)) / this.lineLength));
+-        return this.lineHeight * lines;
++        let firstLine = this.doc.lineAt(from).number, lastLine = this.doc.lineAt(to).number;
++        if (!this.lineWrapping)
++            return this.lineHeight * (lastLine - firstLine + 1);
++        let rows = this.wrappedRowIndex();
++        return this.lineHeight * (rows[lastLine] - rows[firstLine - 1]);
+     }
+     heightForLine(length) {
+         if (!this.lineWrapping)
+             return this.lineHeight;
+-        let lines = 1 + Math.max(0, Math.ceil((length - this.lineLength) / Math.max(1, this.lineLength - 5)));
+-        return lines * this.lineHeight;
++        return this.lineHeight * this.rowsForLength(length);
++    }
++    // Wrapping breaks anywhere, so a line fills each row before it wraps.
++    rowsForLength(length) {
++        let width = Math.max(1, Math.floor(this.lineLength));
++        return length > width ? Math.ceil(length / width) : 1;
++    }
++    // Prefix sums map each line to its wrapped row count.
++    wrappedRowIndex() {
++        let width = Math.max(1, Math.floor(this.lineLength));
++        // Immutable document identity invalidates cached row estimates.
++        if (this.wrapRows && this.wrapRowWidth == width && this.wrapRowDoc == this.doc)
++            return this.wrapRows;
++        let rows = new Int32Array(this.doc.lines + 1);
++        let line = 0, length = 0, total = 0;
++        for (let iter = this.doc.iter(); !iter.next().done;) {
++            if (iter.lineBreak) {
++                total += this.rowsForLength(length);
++                rows[++line] = total;
++                length = 0;
++            }
++            else {
++                length += iter.value.length;
++            }
++        }
++        total += this.rowsForLength(length);
++        rows[++line] = total;
++        this.wrapRows = rows;
++        this.wrapRowWidth = width;
++        this.wrapRowDoc = this.doc;
++        return rows;
+     }
+     setDoc(doc) { this.doc = doc; return this; }
+     mustRefreshForWrapping(whiteSpace) {
+@@ -5412,6 +5449,11 @@ class HeightOracle {
+         return changed;
+     }
+ }
++// Padding inside a line box, which its text cannot use.
++function horizontalPadding(dom) {
++    let style = dom.ownerDocument.defaultView.getComputedStyle(dom);
++    return (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
++}
+ // This object is used by `updateHeight` to make DOM measurements
+ // arrive at the right nodes. The `heights` array is a sequence of
+ // block heights, starting from position `from`.
+@@ -5720,14 +5762,28 @@ class HeightMapGap extends HeightMap {
+         }
+         return { firstLine, lastLine, perLine, perChar };
+     }
++    // Wrapped rows determine each line's position within the gap.
++    wrappedBlock(oracle, top, firstLine, line) {
++        let rows = oracle.wrappedRowIndex(), base = rows[firstLine - 1];
++        let height = oracle.lineHeight * (rows[line.number] - rows[line.number - 1]);
++        let lineTop = top + oracle.lineHeight * (rows[line.number - 1] - base);
++        return new BlockInfo(line.from, line.length, Math.max(top, Math.min(lineTop, top + this.height - height)), height, 0);
++    }
+     blockAt(height, oracle, top, offset) {
+-        let { firstLine, lastLine, perLine, perChar } = this.heightMetrics(oracle, offset);
++        let { firstLine, lastLine, perLine } = this.heightMetrics(oracle, offset);
+         if (oracle.lineWrapping) {
+-            let guess = offset + (height < oracle.lineHeight ? 0
+-                : Math.round(Math.max(0, Math.min(1, (height - top) / this.height)) * this.length));
+-            let line = oracle.doc.lineAt(guess), lineHeight = perLine + line.length * perChar;
+-            let lineTop = Math.max(top, height - lineHeight / 2);
+-            return new BlockInfo(line.from, line.length, lineTop, lineHeight, 0);
++            // The first line whose rows reach this height.
++            let rows = oracle.wrappedRowIndex(), base = rows[firstLine - 1];
++            let want = Math.max(0, (height - top) / oracle.lineHeight);
++            let lo = firstLine, hi = lastLine;
++            while (lo < hi) {
++                let mid = (lo + hi) >> 1;
++                if (rows[mid] - base <= want)
++                    lo = mid + 1;
++                else
++                    hi = mid;
++            }
++            return this.wrappedBlock(oracle, top, firstLine, oracle.doc.line(lo));
+         }
+         else {
+             let line = Math.max(0, Math.min(lastLine - firstLine, Math.floor((height - top) / perLine)));
+@@ -5743,7 +5799,10 @@ class HeightMapGap extends HeightMap {
+             return new BlockInfo(from, to - from, 0, 0, 0);
+         }
+         let { firstLine, perLine, perChar } = this.heightMetrics(oracle, offset);
+-        let line = oracle.doc.lineAt(value), lineHeight = perLine + line.length * perChar;
++        let line = oracle.doc.lineAt(value);
++        if (oracle.lineWrapping)
++            return this.wrappedBlock(oracle, top, firstLine, line);
++        let lineHeight = perLine + line.length * perChar;
+         let linesAbove = line.number - firstLine;
+         let lineTop = top + perLine * linesAbove + perChar * (line.from - offset - linesAbove);
+         return new BlockInfo(line.from, line.length, Math.max(top, Math.min(lineTop, top + this.height - lineHeight)), lineHeight, 0);
+@@ -5754,6 +5813,11 @@ class HeightMapGap extends HeightMap {
+         let { firstLine, perLine, perChar } = this.heightMetrics(oracle, offset);
+         for (let pos = from, lineTop = top; pos <= to;) {
+             let line = oracle.doc.lineAt(pos);
++            if (oracle.lineWrapping) {
++                f(this.wrappedBlock(oracle, top, firstLine, line));
++                pos = line.to + 1;
++                continue;
++            }
+             if (pos == from) {
+                 let linesAbove = line.number - firstLine;
+                 lineTop += perLine * linesAbove + perChar * (from - offset - linesAbove);
+@@ -6103,16 +6167,16 @@ function visiblePixelRange(dom, paddingTop) {
+     for (let parent = dom.parentNode; parent && parent != doc.body;) {
+         if (parent.nodeType == 1) {
+             let elt = parent;
+-            let style = window.getComputedStyle(elt);
+-            if ((elt.scrollHeight > elt.clientHeight || elt.scrollWidth > elt.clientWidth) &&
+-                style.overflow != "visible") {
++            let hasScroll = elt.scrollHeight > elt.clientHeight || elt.scrollWidth > elt.clientWidth;
++            let style = hasScroll ? window.getComputedStyle(elt) : null;
++            if (style && style.overflow != "visible") {
+                 let parentRect = elt.getBoundingClientRect();
+                 left = Math.max(left, parentRect.left);
+                 right = Math.min(right, parentRect.right);
+                 top = Math.max(top, parentRect.top);
+                 bottom = Math.min(parent == dom.parentNode ? win.innerHeight : bottom, parentRect.bottom);
+             }
+-            parent = style.position == "absolute" || style.position == "fixed" ? elt.offsetParent : elt.parentNode;
++            parent = (style ? (style.position == "absolute" || style.position == "fixed") : false) ? elt.offsetParent : elt.parentNode;
+         }
+         else if (parent.nodeType == 11) { // Shadow root
+             parent = parent.host;
+@@ -6211,12 +6275,21 @@ class ViewState {
+         // See VP.MaxDOMHeight
+         this.scaler = IdScaler;
+         this.scrollTarget = null;
++        // How far the visible area moved since the previous measure.
++        this.scrollDelta = 0;
++        // Set by the embedder when the next measured scroll is a scrollbar jump.
++        this.scrollJump = false;
++        // Set by the embedder when scrolling settles, so the next measure fills both directions.
++        this.scrollSettled = false;
+         // Briefly set to true when printing, to disable viewport limiting
+         this.printing = false;
+         // Flag set when editor content was redrawn, so that the next
+         // measure stage knows it must read DOM layout
+         this.mustMeasureContent = true;
+         this.defaultTextDirection = Direction.LTR;
++        this.cachedWhiteSpace = null;
++        this.cachedPaddingTop = 0;
++        this.cachedPaddingBottom = 0;
+         this.visibleRanges = [];
+         // Cursor 'assoc' is only significant when the cursor is on a line
+         // wrap point, where it must stick to the character that it is
+@@ -6304,12 +6377,20 @@ class ViewState {
+             update.state.selection.main.empty && update.state.selection.main.assoc &&
+             !update.state.facet(nativeSelectionHidden))
+             this.mustEnforceCursorAssoc = true;
++        if (update.themeChanged || update.geometryChanged)
++            this.cachedWhiteSpace = null;
+     }
+     measure() {
+-        let { view } = this, dom = view.contentDOM, style = window.getComputedStyle(dom);
++        let { view } = this, dom = view.contentDOM;
++        if (this.mustMeasureContent || !this.cachedWhiteSpace) {
++            let style = window.getComputedStyle(dom);
++            this.cachedWhiteSpace = style.whiteSpace;
++            this.defaultTextDirection = style.direction == "rtl" ? Direction.RTL : Direction.LTR;
++            this.cachedPaddingTop = parseInt(style.paddingTop) || 0;
++            this.cachedPaddingBottom = parseInt(style.paddingBottom) || 0;
++        }
+         let oracle = this.heightOracle;
+-        let whiteSpace = style.whiteSpace;
+-        this.defaultTextDirection = style.direction == "rtl" ? Direction.RTL : Direction.LTR;
++        let whiteSpace = this.cachedWhiteSpace;
+         let refresh = this.heightOracle.mustRefreshForWrapping(whiteSpace) || this.mustMeasureContent === "refresh";
+         let domRect = dom.getBoundingClientRect();
+         let measureContent = refresh || this.mustMeasureContent || this.contentDOMHeight != domRect.height;
+@@ -6327,8 +6408,8 @@ class ViewState {
+             }
+         }
+         // Vertical padding
+-        let paddingTop = (parseInt(style.paddingTop) || 0) * this.scaleY;
+-        let paddingBottom = (parseInt(style.paddingBottom) || 0) * this.scaleY;
++        let paddingTop = this.cachedPaddingTop * this.scaleY;
++        let paddingBottom = this.cachedPaddingBottom * this.scaleY;
+         if (this.paddingTop != paddingTop || this.paddingBottom != paddingBottom) {
+             this.paddingTop = paddingTop;
+             this.paddingBottom = paddingBottom;
+@@ -6355,6 +6436,7 @@ class ViewState {
+         // Pixel viewport
+         let pixelViewport = (this.printing ? fullPixelRange : visiblePixelRange)(dom, this.paddingTop);
+         let dTop = pixelViewport.top - this.pixelViewport.top, dBottom = pixelViewport.bottom - this.pixelViewport.bottom;
++        this.scrollDelta = dTop;
+         this.pixelViewport = pixelViewport;
+         let inView = this.pixelViewport.bottom > this.pixelViewport.top && this.pixelViewport.right > this.pixelViewport.left;
+         if (inView != this.inView) {
+@@ -6362,8 +6444,13 @@ class ViewState {
+             if (inView)
+                 measureContent = true;
+         }
+-        if (!this.inView && !this.scrollTarget && !inWindow(view.dom))
++        if (!this.inView && !this.scrollTarget && !inWindow(view.dom)) {
++            // This pass consumes the movement and its marks.
++            this.scrollDelta = 0;
++            this.scrollJump = false;
++            this.scrollSettled = false;
+             return 0;
++        }
+         let contentWidth = domRect.width;
+         if (this.contentDOMWidth != contentWidth || this.editorHeight != view.scrollDOM.clientHeight) {
+             this.contentDOMWidth = domRect.width;
+@@ -6375,8 +6462,10 @@ class ViewState {
+             if (oracle.mustRefreshForHeights(lineHeights))
+                 refresh = true;
+             if (refresh || oracle.lineWrapping && Math.abs(contentWidth - this.contentDOMWidth) > oracle.charWidth) {
+-                let { lineHeight, charWidth, textHeight } = view.docView.measureTextSize();
+-                refresh = lineHeight > 0 && oracle.refresh(whiteSpace, lineHeight, charWidth, textHeight, Math.max(5, contentWidth / charWidth), lineHeights);
++                let { lineHeight, charWidth, textHeight, linePadding } = view.docView.measureTextSize();
++                // Line padding reduces the available text width.
++                let rowWidth = Math.max(charWidth, contentWidth - (linePadding || 0));
++                refresh = lineHeight > 0 && oracle.refresh(whiteSpace, lineHeight, charWidth, textHeight, Math.max(5, rowWidth / charWidth), lineHeights);
+                 if (refresh) {
+                     view.docView.minWidth = 0;
+                     result |= 16 /* UpdateFlag.Geometry */;
+@@ -6394,15 +6483,26 @@ class ViewState {
+             if (heightChangeFlag)
+                 result |= 2 /* UpdateFlag.Height */;
+         }
+-        let viewportChange = !this.viewportIsAppropriate(this.viewport, bias) ||
++        // Cover is a time budget: the rendered lead must outlast the frames the scrolling
++        // thread can travel before the next rendering update lands.
++        let lead = (bias || this.scrollDelta) * 3 /* VP.CoverFrames */;
++        // A settled scroll rests with the base margin on both sides, so the next gesture
++        // starts covered whichever way it goes.
++        let settled = this.scrollSettled && !this.scrollTarget;
++        this.scrollSettled = false;
++        let appropriate = this.viewportIsAppropriate(this.viewport, lead);
++        let viewportChange = !appropriate || settled && !this.viewportRests(this.viewport) ||
+             this.scrollTarget && (this.scrollTarget.range.head < this.viewport.from ||
+                 this.scrollTarget.range.head > this.viewport.to);
+         if (viewportChange) {
+             if (result & 2 /* UpdateFlag.Height */)
+                 result |= this.updateScaler();
+-            this.viewport = this.getViewport(bias, this.scrollTarget);
++            this.viewport = settled ? this.restingViewport(appropriate ? this.viewport : this.getViewport(bias, null))
++                : this.getViewport(bias, this.scrollTarget);
+             result |= this.updateForViewport();
+         }
++        this.scrollDelta = 0;
++        this.scrollJump = false;
+         if ((result & 2 /* UpdateFlag.Height */) || viewportChange)
+             this.updateViewportLines();
+         if (this.lineGaps.length || this.viewport.to - this.viewport.from > (2000 /* LG.Margin */ << 1))
+@@ -6424,10 +6524,19 @@ class ViewState {
+         // This will divide VP.Margin between the top and the
+         // bottom, depending on the bias (the change in viewport position
+         // since the last update). It'll hold a number between 0 and 1
+-        let marginTop = 0.5 - Math.max(-0.5, Math.min(0.5, bias / 1000 /* VP.Margin */ / 2));
+         let map = this.heightMap, oracle = this.heightOracle;
+         let { visibleTop, visibleBottom } = this;
+-        let viewport = new Viewport(map.lineAt(visibleTop - marginTop * 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).to);
++        // How far the visible area moved since the last measure (0 outside measuring).
++        let delta = this.scrollDelta;
++        // A scrollbar jump past half the visible area renders a narrow lookahead, since the
++        // gesture's next frame replaces it. Continuous motion renders further ahead the
++        // faster it moves, however long its frames take.
++        let margin = this.scrollJump && Math.abs(delta) > (visibleBottom - visibleTop) / 2 ? 100 /* VP.JumpMargin */
++            : Math.min(2000 /* VP.MaxMargin */, Math.max(1000 /* VP.Margin */, Math.abs(delta) * 9 /* VP.MarginFrames */));
++        // Lean the margin toward the direction of motion, keeping a cover strip behind so
++        // a reversal stays covered until its swap lands.
++        let marginTop = 0.5 - Math.max(-0.35, Math.min(0.35, (bias || delta) / margin));
++        let viewport = new Viewport(map.lineAt(visibleTop - marginTop * margin, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * margin, QueryType.ByHeight, oracle, 0, 0).to);
+         // If scrollTarget is given, make sure the viewport includes that position
+         if (scrollTarget) {
+             let { head } = scrollTarget.range;
+@@ -6449,6 +6558,24 @@ class ViewState {
+         let from = changes.mapPos(viewport.from, -1), to = changes.mapPos(viewport.to, 1);
+         return new Viewport(this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0).from, this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0).to);
+     }
++    // Whether a viewport holds the base margin on both sides of the visible area.
++    viewportRests({ from, to }) {
++        let { top } = this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0);
++        let { bottom } = this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0);
++        return (from == 0 || top <= this.visibleTop - 1000 /* VP.Margin */) &&
++            (to == this.state.doc.length || bottom >= this.visibleBottom + 1000 /* VP.Margin */);
++    }
++    // An appropriate viewport widened to the base margin on each side; a lead the last
++    // motion left beyond that stays.
++    restingViewport(base) {
++        let map = this.heightMap, oracle = this.heightOracle, { visibleTop, visibleBottom } = this;
++        let { from, to } = base;
++        if (from > 0 && map.lineAt(from, QueryType.ByPos, oracle, 0, 0).top > visibleTop - 1000 /* VP.Margin */)
++            from = map.lineAt(visibleTop - 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).from;
++        if (to < this.state.doc.length && map.lineAt(to, QueryType.ByPos, oracle, 0, 0).bottom < visibleBottom + 1000 /* VP.Margin */)
++            to = map.lineAt(visibleBottom + 1000 /* VP.Margin */, QueryType.ByHeight, oracle, 0, 0).to;
++        return new Viewport(from, to);
++    }
+     // Checks if a given viewport covers the visible part of the
+     // document and not too much beyond that.
+     viewportIsAppropriate({ from, to }, bias = 0) {
+@@ -6457,9 +6584,9 @@ class ViewState {
+         let { top } = this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0);
+         let { bottom } = this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0);
+         let { visibleTop, visibleBottom } = this;
+-        return (from == 0 || top <= visibleTop - Math.max(10 /* VP.MinCoverMargin */, Math.min(-bias, 250 /* VP.MaxCoverMargin */))) &&
++        return (from == 0 || top <= visibleTop - Math.max(10 /* VP.MinCoverMargin */, Math.min(-bias, 600 /* VP.MaxCoverMargin */))) &&
+             (to == this.state.doc.length ||
+-                bottom >= visibleBottom + Math.max(10 /* VP.MinCoverMargin */, Math.min(bias, 250 /* VP.MaxCoverMargin */))) &&
++                bottom >= visibleBottom + Math.max(10 /* VP.MinCoverMargin */, Math.min(bias, 600 /* VP.MaxCoverMargin */))) &&
+             (top > visibleTop - 2 * 1000 /* VP.Margin */ && bottom < visibleBottom + 2 * 1000 /* VP.Margin */);
+     }
+     mapLineGaps(gaps, changes) {
+@@ -7147,6 +7274,10 @@ class DOMObserver {
+         this.onResize = this.onResize.bind(this);
+         this.onPrint = this.onPrint.bind(this);
+         this.onScroll = this.onScroll.bind(this);
++        this.measuredScrollTop = -1;
++        this.measuredScrollLeft = -1;
++        this.measuredScrollState = null;
++        this.syncMeasureFrame = false;
+         if (window.matchMedia)
+             this.printQuery = window.matchMedia("print");
+         if (typeof ResizeObserver == "function") {
+@@ -7180,8 +7311,42 @@ class DOMObserver {
+     }
+     onScrollChanged(e) {
+         this.view.inputState.runHandlers("scroll", e);
+-        if (this.intersecting)
+-            this.view.measure();
++        if (!this.intersecting)
++            return;
++        // Unchanged offsets need no measurement when geometry is settled.
++        let scrollDOM = this.view.scrollDOM;
++        if (e.target == scrollDOM && this.measuredScrollTop == scrollDOM.scrollTop &&
++            this.measuredScrollLeft == scrollDOM.scrollLeft &&
++            this.measuredScrollState == this.view.state && this.view.measureScheduled < 0 &&
++            !this.view.viewState.mustMeasureContent)
++            return;
++        // Covered scrolls share the next frame's measurement.
++        // Jumps require immediate painting.
++        let vs = this.view.viewState, lines = vs.viewportLines;
++        let delta = scrollDOM.scrollTop - vs.scrollOffset;
++        if (e.target == scrollDOM && vs.scrollParent == scrollDOM &&
++            this.measuredScrollState == this.view.state && !vs.mustMeasureContent &&
++            this.measuredScrollLeft == scrollDOM.scrollLeft && !vs.lineGaps.length &&
++            vs.scaleY == 1 && vs.scaler == IdScaler && lines.length &&
++            vs.pixelViewport.bottom > vs.pixelViewport.top &&
++            lines[0].top <= Math.max(0, vs.pixelViewport.top + delta) &&
++            lines[lines.length - 1].bottom >= Math.min(vs.docHeight, vs.pixelViewport.bottom + delta)) {
++            this.view.requestMeasure();
++            return;
++        }
++        // Async scrolling delivers several scroll events per frame; one synchronous
++        // measure paints the jump and the rest of the frame's events share the
++        // next animation frame's measurement.
++        if (this.syncMeasureFrame) {
++            this.view.requestMeasure();
++            return;
++        }
++        this.syncMeasureFrame = true;
++        this.view.win.requestAnimationFrame(() => { this.syncMeasureFrame = false; });
++        this.measuredScrollTop = scrollDOM.scrollTop;
++        this.measuredScrollLeft = scrollDOM.scrollLeft;
++        this.view.measure();
++        this.measuredScrollState = this.view.state;
+     }
+     onScroll(e) {
+         if (this.intersecting)
+@@ -8121,6 +8286,7 @@ class EditorView {
+     measure(flush = true) {
+         if (this.destroyed)
+             return;
++        let timing = this.state.facet(measureTiming), started = timing.length ? performance.now() : 0;
+         if (this.measureScheduled > -1)
+             this.win.cancelAnimationFrame(this.measureScheduled);
+         if (this.observer.delayedAndroidKey) {
+@@ -8218,8 +8384,10 @@ class EditorView {
+                                 (scroll == this.scrollDOM || this.hasFocus ||
+                                     Math.max(this.inputState.lastWheelEvent, this.inputState.lastTouchTime) > Date.now() - 100)) {
+                                 scrollOffset = scrollOffset + diff;
++                                // A relative scroll keeps the distance an asynchronous scrolling
++                                // thread travelled after this measure read the offset.
+                                 if (scroll)
+-                                    scroll.scrollTop += diff;
++                                    scroll.scrollBy(0, diff);
+                                 else
+                                     this.win.scrollBy(0, diff);
+                                 scrollAnchorHeight = -1;
+@@ -8235,9 +8403,16 @@ class EditorView {
+             this.updateState = 0 /* UpdateState.Idle */;
+             this.measureScheduled = -1;
+         }
++        // Frame measurements also settle the state used by scroll batching.
++        this.observer.measuredScrollState = this.state;
+         if (updated && !updated.empty)
+             for (let listener of this.state.facet(updateListener))
+                 listener(updated);
++        if (timing.length) {
++            let ms = performance.now() - started;
++            for (let listener of timing)
++                listener(ms, !!updated && updated.viewportChanged);
++        }
+     }
+     /**
+     Get the CSS classes for the currently active editor themes.
+@@ -8299,6 +8474,21 @@ class EditorView {
+             this.measure(false);
+     }
+     /**
++    Mark the next measured scroll as a scrollbar jump: a thumb drag
++    step or a track click.
++    */
++    noteScrollJump() {
++        this.viewState.scrollJump = true;
++    }
++    /**
++    Mark scrolling as settled: the next measure renders the base
++    margin on both sides of the visible area.
++    */
++    noteScrollSettled() {
++        this.viewState.scrollSettled = true;
++        this.requestMeasure();
++    }
++    /**
+     Schedule a layout measurement, optionally providing callbacks to
+     do custom DOM measuring followed by a DOM write phase. Using
+     this is preferable reading DOM layout directly from, for
+@@ -8928,6 +9118,7 @@ example a horizontally fixed gutter). Not to be confused with
+ [`cursorScrollMargin`](https://codemirror.net/6/docs/ref/#view.EditorView^cursorScrollMargin).
+ */
+ EditorView.scrollMargins = scrollMargins;
++EditorView.measureTiming = measureTiming;
+ /**
+ This facet records whether a dark theme is active. The extension
+ returned by [`theme`](https://codemirror.net/6/docs/ref/#view.EditorView^theme) automatically
+@@ -9279,7 +9470,10 @@ class RectangleMarker {
+             if (!pos)
+                 return [];
+             let base = getBase(view);
+-            return [new RectangleMarker(className, pos.left - base.left, pos.top - base.top, null, pos.bottom - pos.top)];
++            let height = pos.bottom - pos.top;
++            if (view.defaultLineHeight && height > view.defaultLineHeight * 1.5)
++                height = view.defaultLineHeight;
++            return [new RectangleMarker(className, pos.left - base.left, pos.top - base.top, null, height)];
+         }
+         else {
+             return rectanglesForRange(view, className, range);
+@@ -9487,10 +9681,12 @@ const selectionConfig = /*@__PURE__*/Facet.define({
+         return combineConfig(configs, {
+             cursorBlinkRate: 1200,
+             drawRangeCursor: true,
++            drawCursor: true,
+             iosSelectionHandles: true
+         }, {
+             cursorBlinkRate: (a, b) => Math.min(a, b),
+-            drawRangeCursor: (a, b) => a || b
++            drawRangeCursor: (a, b) => a || b,
++            drawCursor: (a, b) => a && b
+         });
+     }
+ });
+@@ -9536,6 +9732,8 @@ const cursorLayer = /*@__PURE__*/layer({
+     above: true,
+     markers(view) {
+         let { state } = view, conf = state.facet(selectionConfig);
++        if (conf.drawCursor === false)
++            return [];
+         let cursors = [];
+         for (let r of state.selection.ranges) {
+             let prim = r == state.selection.main;
+@@ -9549,8 +9747,13 @@ const cursorLayer = /*@__PURE__*/layer({
+         return cursors;
+     },
+     update(update, dom) {
+-        if (update.transactions.some(tr => tr.selection))
+-            dom.style.animationName = dom.style.animationName == "cm-blink" ? "cm-blink2" : "cm-blink";
++        if (update.transactions.some(tr => tr.selection)) {
++            let rate = update.state.facet(selectionConfig).cursorBlinkRate;
++            if (rate > 0)
++                dom.style.animationName = dom.style.animationName == "cm-blink" ? "cm-blink2" : "cm-blink";
++            else
++                dom.style.animationName = "none";
++        }
+         let confChange = configChanged(update);
+         if (confChange)
+             setBlinkRate(update.state, dom);
+@@ -9562,7 +9765,10 @@ const cursorLayer = /*@__PURE__*/layer({
+     class: "cm-cursorLayer"
+ });
+ function setBlinkRate(state, dom) {
+-    dom.style.animationDuration = state.facet(selectionConfig).cursorBlinkRate + "ms";
++    let rate = state.facet(selectionConfig).cursorBlinkRate;
++    dom.style.animationDuration = rate + "ms";
++    if (rate <= 0)
++        dom.style.animationName = "none";
+ }
+ const selectionLayer = /*@__PURE__*/layer({
+     above: false,
+@@ -11397,12 +11603,10 @@ const gutterView = /*@__PURE__*/ViewPlugin.fromClass(class {
+     }
+     update(update) {
+         if (this.updateGutters(update)) {
+-            // Detach during sync when the viewport changed significantly
+-            // (such as during scrolling), since for large updates that is
+-            // faster.
++            // Cells follow their lines, so only a viewport that shares no lines with the
++            // previous one rebuilds every cell, and that rebuild runs detached.
+             let vpA = this.prevViewport, vpB = update.view.viewport;
+-            let vpOverlap = Math.min(vpA.to, vpB.to) - Math.max(vpA.from, vpB.from);
+-            this.syncGutters(vpOverlap < (vpB.to - vpB.from) * 0.8);
++            this.syncGutters(Math.min(vpA.to, vpB.to) <= Math.max(vpA.from, vpB.from));
+         }
+         if (update.geometryChanged) {
+             let min = (this.view.contentHeight / this.view.scaleY) + "px";
+@@ -11534,15 +11738,27 @@ class UpdateContext {
+         this.i = 0;
+         this.cursor = RangeSet.iter(gutter.markers, viewport.from);
+     }
+-    addElement(view, block, markers) {
++    // A cell stays with the block it renders, so a scrolled viewport keeps the cells
++    // and marker DOM of every line it still shows.
++    addElement(view, block, markers, widget) {
+         let { gutter } = this, above = (block.top - this.height) / view.scaleY, height = block.height / view.scaleY;
+-        if (this.i == gutter.elements.length) {
+-            let newElt = new GutterElement(view, height, above, markers);
+-            gutter.elements.push(newElt);
+-            gutter.dom.appendChild(newElt.dom);
++        let elements = gutter.elements;
++        // Cells of earlier blocks left the viewport.
++        while (this.i < elements.length && elements[this.i].from < block.from) {
++            let gone = elements.splice(this.i, 1)[0];
++            gutter.dom.removeChild(gone.dom);
++            gone.destroy();
++        }
++        let cell = elements[this.i];
++        if (cell && cell.from == block.from && cell.widget == widget) {
++            cell.update(view, height, above, markers);
+         }
+         else {
+-            gutter.elements[this.i].update(view, height, above, markers);
++            let newElt = new GutterElement(view, height, above, markers);
++            newElt.from = block.from;
++            newElt.widget = widget;
++            elements.splice(this.i, 0, newElt);
++            gutter.dom.insertBefore(newElt.dom, cell ? cell.dom : null);
+         }
+         this.height = block.bottom;
+         this.i++;
+@@ -11558,7 +11774,7 @@ class UpdateContext {
+         let gutter = this.gutter;
+         if (localMarkers.length == 0 && !gutter.config.renderEmptyElements)
+             return;
+-        this.addElement(view, line, localMarkers);
++        this.addElement(view, line, localMarkers, false);
+     }
+     widget(view, block) {
+         let marker = this.gutter.config.widgetMarker(view, block.widget, block), markers = marker ? [marker] : null;
+@@ -11568,7 +11784,7 @@ class UpdateContext {
+                 (markers || (markers = [])).push(marker);
+         }
+         if (markers)
+-            this.addElement(view, block, markers);
++            this.addElement(view, block, markers, true);
+     }
+     finish() {
+         let gutter = this.gutter;
+@@ -11612,6 +11828,14 @@ class SingleGutterView {
+         }
+     }
+     update(update) {
++        // Cells keep their blocks through edits: a line cell follows the line that holds
++        // its first character, and a widget cell its position.
++        if (update.docChanged) {
++            let doc = update.state.doc;
++            for (let elt of this.elements)
++                elt.from = elt.widget ? update.changes.mapPos(elt.from, -1)
++                    : doc.lineAt(update.changes.mapPos(elt.from, 1)).from;
++        }
+         let prevMarkers = this.markers;
+         this.markers = asArray(this.config.markers(update.view));
+         if (this.spacer && this.config.updateSpacer) {
+@@ -11633,6 +11857,9 @@ class GutterElement {
+         this.height = -1;
+         this.above = 0;
+         this.markers = [];
++        // Start of the block this cell renders, and whether that block is a widget.
++        this.from = 0;
++        this.widget = false;
+         this.dom = document.createElement("div");
+         this.dom.className = "cm-gutterElement";
+         this.update(view, height, above, markers);

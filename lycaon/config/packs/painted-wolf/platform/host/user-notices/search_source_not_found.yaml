@@ -1,0 +1,5 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Search source unavailable
+message: This extension search source is no longer available.
+suggested_action: Reopen Crossbar and choose an available source.

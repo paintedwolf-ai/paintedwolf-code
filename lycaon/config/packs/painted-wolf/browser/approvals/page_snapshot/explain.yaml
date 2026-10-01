@@ -1,0 +1,18 @@
+# page_snapshot — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    page_snapshot:
+        tool: page_snapshot
+        tier_hint: recoverable
+        what_changes: Snapshot a held page (state, structure, console, screenshot).
+        who_affected: This session — read-only observe of a held page.
+        if_wrong: Observation only; no project files are mutated.
+        allow_line: snapshotting held browser pages
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+              expect_contains:
+                - Snapshot
+                - page

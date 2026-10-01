@@ -1,0 +1,8 @@
+id: painted-wolf/platform:action-rename-symbol
+title: "Rename symbol"
+target:
+  kind: "symbol"
+  required: true
+execution:
+  preset: "edit_file"
+  prompt_ref: "guidance/editor/rename-symbol"

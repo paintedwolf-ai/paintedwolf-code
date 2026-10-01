@@ -1,0 +1,37 @@
+title: Open a database to the internet or reset its password
+id: 871e21d0-db40-4b4f-8c85-5048edb6a34b
+description: >-
+  Authorizes every address to reach a Cloud SQL instance, or sets a database
+  user's password to a value the caller then holds.
+references:
+  - https://cloud.google.com/sdk/gcloud/reference
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-09-01'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image: gcloud
+  selection_sql_patch:
+    CommandLine|contains: ' sql instances patch'
+  selection_open_range:
+    CommandLine|contains:
+      - '0.0.0.0/0'
+      - ' --assign-ip'
+  verbs_database_password:
+    CommandLine|contains: ' sql users set-password'
+  filter_rehearsal:
+    Argv|re: '^(--help|-h|help)$'
+  filter_local:
+    EffectReach: local
+  condition: >-
+    selection_image and ((selection_sql_patch and selection_open_range) or verbs_database_password)
+    and not filter_rehearsal and not filter_local

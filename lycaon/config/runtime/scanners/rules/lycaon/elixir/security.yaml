@@ -1,0 +1,95 @@
+rules:
+- id: lycaon.elixir.shell-injection
+  languages:
+  - elixir
+  severity: ERROR
+  message: Request input reaches a shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - elixir
+  mode: taint
+  pattern-sources:
+  - pattern: conn.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: System.cmd("sh", ["-c", $CMD])
+    - focus-metavariable: $CMD
+  paths:
+    exclude:
+    - '**/deps/**'
+- id: lycaon.elixir.code-injection
+  languages:
+  - elixir
+  severity: ERROR
+  message: Request input reaches Elixir evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - elixir
+  mode: taint
+  pattern-sources:
+  - pattern: conn.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Code.eval_string($CODE)
+    - focus-metavariable: $CODE
+  - patterns:
+    - pattern: Code.compile_string($CODE)
+    - focus-metavariable: $CODE
+  paths:
+    exclude:
+    - '**/deps/**'
+- id: lycaon.elixir.sql-injection
+  languages:
+  - elixir
+  severity: ERROR
+  message: Request input reaches SQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - elixir
+  mode: taint
+  pattern-sources:
+  - pattern: conn.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Ecto.Adapters.SQL.query($REPO,$SQL,...)
+    - focus-metavariable: $SQL
+  paths:
+    exclude:
+    - '**/deps/**'
+- id: lycaon.elixir.path-traversal
+  languages:
+  - elixir
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - elixir
+  mode: taint
+  pattern-sources:
+  - pattern: conn.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: File.read($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: File.read!($PATH)
+    - focus-metavariable: $PATH
+  paths:
+    exclude:
+    - '**/deps/**'

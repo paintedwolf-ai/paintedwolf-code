@@ -1,0 +1,43 @@
+title: Remove a system package
+id: aca83fc0-c4dd-4636-9c46-6e738a92a050
+description: Uninstalls a package from the machine, in the form that also discards its configuration.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.local
+level: medium
+detection:
+  # Reinstalling is always possible, so this stays in the reversible band; what
+  # purge/zap/-Rns take with them is the configuration, not the package.
+  selection_apt:
+    Image:
+      - apt
+      - apt-get
+    CommandLine|contains: ' purge'
+  selection_rpm:
+    Image:
+      - dnf
+      - yum
+      - zypper
+    CommandLine|re: '(?i)\s(remove|erase)\b'
+  selection_pacman:
+    Image: pacman
+    CommandLine|re: '\s-R[a-z]*[ns][a-z]*\b'
+  selection_apk:
+    Image: apk
+    CommandLine|contains: ' del '
+  selection_brew:
+    Image: brew
+    CommandLine|contains: ' --zap'
+  filter_rehearsal:
+    Argv|re: '^(--help|--simulate|-s|list|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: (selection_apt or selection_rpm or selection_pacman or selection_apk or selection_brew) and not filter_rehearsal and not filter_local

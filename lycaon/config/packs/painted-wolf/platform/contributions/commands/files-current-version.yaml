@@ -1,0 +1,16 @@
+id: painted-wolf/platform:files-current-version
+title: "Return to current version"
+scope: "files"
+keywords:
+  - "current version"
+  - "back to current"
+  - "leave version history"
+  - "exit historical version"
+category: "navigation"
+when:
+  all:
+    - fact: "files_stage_active"
+    - fact: "files_version_historical"
+action:
+  kind: native_ui
+  handler: "files.currentVersion"

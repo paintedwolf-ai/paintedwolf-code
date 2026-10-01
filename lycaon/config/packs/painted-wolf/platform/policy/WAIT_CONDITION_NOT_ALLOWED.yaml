@@ -1,0 +1,36 @@
+oar: '1.0'
+id: WAIT_CONDITION_NOT_ALLOWED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - wait
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.condition
+  - paintedwolf.profile
+  - paintedwolf.wait_allowed_conditions
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "WAIT_CONDITION_NOT_ALLOWED"
+effect: block
+copy:
+  what: Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}.
+  cause: 'The active wait schema allows these condition kinds: {{ paintedwolf.wait_allowed_conditions }}.'
+  why: Wait subscriptions follow the same profile-specific capability contract as their event sources.
+  fix: Use an allowed condition only when it observes the dependency you need. If this surface cannot observe
+    that dependency, report it through the available task completion or user communication channel.
+  instead: Do not poll through an unrelated tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:wait
+x-paintedwolf-message: This wait condition is not available in the active tool profile
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    condition: process_done
+    profile: worker_readonly
+    tool: wait
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WAIT_CONDITION_NOT_ALLOWED'

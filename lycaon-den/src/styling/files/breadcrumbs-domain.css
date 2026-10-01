@@ -1,0 +1,97 @@
+.den-files-editor__crumb {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-compact);
+}
+
+.den-files-editor__crumb {
+  color: var(--den-text-muted);
+}
+
+/* Fades the path only when it overflows the toolbar edge. */
+.den-files-editor__crumb-sentinel {
+  flex: 0 0 1px;
+  width: 1px;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+.den-files-editor__crumb-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 1;
+  background: linear-gradient(
+    270deg,
+    var(--den-background) 15%,
+    color-mix(in srgb, var(--den-background) 55%, transparent) 55%,
+    transparent
+  );
+}
+
+.den-files-editor__crumb-fade--visible {
+  opacity: 1;
+}
+
+.den-files-editor__crumb-seg {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin: 0;
+  border-radius: var(--den-radius-sm);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.den-files-editor__crumb-seg:hover {
+  color: var(--den-text);
+  background: var(--den-tint-2);
+}
+
+.den-files-editor__crumb-seg:focus-visible {
+  outline: 1.5px solid var(--den-accent-signal);
+  outline-offset: -1.5px;
+}
+
+.den-files-editor__crumb-file {
+  color: var(--den-text);
+}
+
+.den-files-editor__host-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--den-background);
+  /* Size containment isolates line swaps without clipping editor widgets. */
+  contain: size layout style;
+}
+
+/* The fixed-height editor toolbar has no segment inset. */
+.den-browse-segmented.den-files-editor__seg {
+  --den-segment-thumb-inset: 0px;
+  height: var(--den-files-ctl-h);
+  flex-wrap: nowrap;
+}
+
+/* Segments and the thumb that measures them fill the shorter track. */
+.den-files-editor__seg .den-browse-segment {
+  padding-block: 0;
+  line-height: 1;
+}
+

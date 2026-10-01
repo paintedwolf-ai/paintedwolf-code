@@ -1,0 +1,34 @@
+oar: '1.0'
+id: WORKER_SCOUT_NO_SURVEY_EVIDENCE
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.agent_is_scout
+    - paintedwolf.profile
+    - paintedwolf.scout_survey_evidence_present
+when: paintedwolf.profile == "worker" && paintedwolf.agent_is_scout && !paintedwolf.scout_survey_evidence_present
+effect: block
+copy:
+  what: Read scout marked leg complete without any successful survey tool (read, grep, find, list_dir, etc.).
+  cause: explore_readonly-archetype legs must run at least one successful read-only survey tool before leg_status complete
+  why: No survey tool results in this child transcript
+  fix: 'Use an offered survey tool on the assigned scope, then call complete_leg with findings grounded in its result. If the scope cannot be observed, return partial with the limitation in remaining_risk.'
+  instead: 'Do not mark the leg complete without its required survey evidence; preserve any existing work and report the unresolved scope.'
+# agent_is_scout narrows this to the explore_readonly archetype.
+x-paintedwolf-audience:
+  - explore_readonly
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-evidence:
+  in_session_retry: true
+x-paintedwolf-message: Read scout marked leg complete without survey tool evidence
+x-paintedwolf-scenarios:
+  - id: no_tools
+    vars:
+      offender_count: 0
+      offenders_omitted: 0
+      offenders_sample: ''
+    expect_contains:
+      - 'Code: WORKER_SCOUT_NO_SURVEY_EVIDENCE'
+      - survey tool

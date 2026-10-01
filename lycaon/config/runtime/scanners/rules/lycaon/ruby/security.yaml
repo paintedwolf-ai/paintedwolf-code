@@ -1,0 +1,193 @@
+rules:
+- id: lycaon.ruby.shell-injection
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input reaches a shell command
+  metadata:
+    category: security
+    cwe: CWE-78
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: system($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: exec($CMD)
+    - focus-metavariable: $CMD
+  - patterns:
+    - pattern: IO.popen($CMD)
+    - focus-metavariable: $CMD
+  pattern-sanitizers:
+  - exact: true
+    patterns:
+    - pattern: Shellwords.escape(...)
+    - pattern-not-inside: Shellwords.escape(...).gsub("\\", "")
+  - exact: true
+    patterns:
+    - pattern: Shellwords.shellescape(...)
+    - pattern-not-inside: Shellwords.shellescape(...).gsub("\\", "")
+- id: lycaon.ruby.sql-injection
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input reaches SQL text; bind query parameters
+  metadata:
+    category: security
+    cwe: CWE-89
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $MODEL.where($SQL)
+    - metavariable-pattern:
+        metavariable: $SQL
+        patterns:
+        - pattern-not: '[$QUERY, ...]'
+        - pattern-not: '{...}'
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $MODEL.where([$SQL, ...])
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: find_by_sql($SQL)
+    - metavariable-pattern:
+        metavariable: $SQL
+        patterns:
+        - pattern-not: '[$QUERY, ...]'
+        - pattern-not: '{...}'
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: find_by_sql([$SQL, ...])
+    - focus-metavariable: $SQL
+  - patterns:
+    - pattern: $DB.execute($SQL)
+    - focus-metavariable: $SQL
+  pattern-sanitizers:
+  - pattern: $VALUE.to_i
+    exact: true
+  - pattern: $VALUE.to_f
+    exact: true
+- id: lycaon.ruby.code-injection
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input reaches dynamic Ruby evaluation
+  metadata:
+    category: security
+    cwe: CWE-95
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: eval($CODE)
+    - focus-metavariable: $CODE
+  - patterns:
+    - pattern: instance_eval($CODE)
+    - focus-metavariable: $CODE
+  - patterns:
+    - pattern: class_eval($CODE)
+    - focus-metavariable: $CODE
+- id: lycaon.ruby.unsafe-deserialization
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input reaches an executable deserializer
+  metadata:
+    category: security
+    cwe: CWE-502
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: Marshal.load($DATA)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: YAML.unsafe_load($DATA)
+    - focus-metavariable: $DATA
+- id: lycaon.ruby.path-traversal
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input selects a filesystem path
+  metadata:
+    category: security
+    cwe: CWE-22
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: File.read($PATH)
+    - focus-metavariable: $PATH
+  - patterns:
+    - pattern: File.open($PATH, ...)
+    - focus-metavariable: $PATH
+- id: lycaon.ruby.open-redirect
+  languages:
+  - ruby
+  severity: ERROR
+  message: Request input controls a redirect destination
+  metadata:
+    category: security
+    cwe: CWE-601
+    confidence: HIGH
+    technology:
+    - ruby
+  mode: taint
+  pattern-sources:
+  - pattern: params[...]
+    exact: true
+  - pattern: request.params[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: redirect_to $URL
+    - focus-metavariable: $URL
+- id: lycaon.ruby.tls-verification-disabled
+  languages:
+  - ruby
+  severity: ERROR
+  message: TLS certificate verification is disabled
+  metadata:
+    category: security
+    cwe: CWE-295
+    confidence: HIGH
+    technology:
+    - ruby
+  pattern: $CLIENT.verify_mode = OpenSSL::SSL::VERIFY_NONE

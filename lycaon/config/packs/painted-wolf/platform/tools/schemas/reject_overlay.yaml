@@ -1,0 +1,14 @@
+description: >-
+  Abort overlay without landing. overlay_id == job_id. Wrong/superseded only — not landable conflicts.
+  Example: {"overlay_id":"<job_id>","reason":"Superseded by corrected dispatch"}.
+schema:
+  type: object
+  properties:
+    overlay_id:
+      type: string
+      description: Worker job_id from task() or pack_board
+    reason:
+      type: string
+      description: Reject rationale (optional)
+  required: [overlay_id]
+  additionalProperties: false

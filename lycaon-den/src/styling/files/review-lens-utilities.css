@@ -1,0 +1,119 @@
+@utility den-review-detail__summary {
+  margin: 0;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+}
+
+@utility den-review-lens__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 8px;
+}
+
+
+@utility den-review-lens {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 12px;
+  min-height: 0;
+  user-select: none;
+}
+
+@utility den-review-walk-context {
+  gap: 10px;
+
+  & .den-review-row {
+    min-height: 2.5rem;
+    padding-block: 8px;
+    cursor: default;
+  }
+
+  & .den-review-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 10px;
+    padding-bottom: 16px;
+  }
+
+  & .den-files-info__meta {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  & .den-files-info__meta-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  & .den-files-info__meta dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  & .den-review-detail__meta {
+    min-width: 0;
+    flex-wrap: wrap;
+    line-height: 1.45;
+  }
+
+  & .den-review-steps {
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  & .den-review-row__stat {
+    min-width: 0;
+  }
+}
+
+
+@utility den-review-lens__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+/* Presents metadata without another panel edge. */
+@utility den-review-lens__footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 4px 8px 0;
+  user-select: none;
+}
+
+@utility den-review-file {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Uses the selected row as the detail container. */
+@utility den-review-detail {
+  padding: 3px 8px 8px 24px;
+  border: 0;
+  background: transparent;
+}
+
+/* Holds the action lane open with flex layout. */
+@utility den-review-file__line {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+
+@utility den-review-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+

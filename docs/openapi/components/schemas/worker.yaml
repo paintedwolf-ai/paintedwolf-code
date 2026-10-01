@@ -1,0 +1,830 @@
+components:
+  schemas:
+    ExecutionTarget:
+      type: string
+      enum:
+      - local
+      - runner
+    SpawnReason:
+      type: string
+      enum:
+      - initial
+      - retry
+      - human_request
+      - closeout
+    WorkerResult:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        summary:
+          type: string
+        completion_report:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerCompletionReport
+        change_report:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerChangeReport
+        grounding:
+          x-go-pointer: true
+          $ref: session/worker-reports.yaml#/components/schemas/CitationGrounding
+        response:
+          type: string
+        status:
+          type: string
+        hint_code:
+          type: string
+        policy_feedback:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerPolicyFeedback
+        host_assembled:
+          type: boolean
+    WorkerPolicyFeedback:
+      x-go-generate: true
+      description: Policy feedback frozen when the worker report was evaluated; retained through queue persistence and parent delivery.
+      type: object
+      additionalProperties: false
+      required: [code, effect, copy]
+      properties:
+        code:
+          type: string
+        effect:
+          type: string
+        copy:
+          type: object
+          additionalProperties:
+            type: string
+        details:
+          type: object
+          additionalProperties: true
+    WorkerCompletionReport:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [leg_status]
+      properties:
+        leg_status:
+          type: string
+        files_modified:
+          type: array
+          items: { type: string }
+        objectives_met:
+          type: array
+          items: { type: string }
+        remaining_risk:
+          type: array
+          items: { type: string }
+        suggested_next_task:
+          type: string
+        brief:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerCompletionFinding
+        cited_urls:
+          x-go-name: "CitedURLs"
+          type: array
+          items: { type: string }
+        evidence_obligations:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerEvidenceObligation
+    WorkerCompletionFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string }
+        evidence: { type: string }
+        line: { type: integer }
+        excerpt: { type: string }
+        note: { type: string }
+        claim: { type: string }
+        adversary: { type: string }
+        precondition: { type: string }
+        severity: { type: string }
+    WorkerEvidenceObligation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [kind, status]
+      properties:
+        kind: { type: string }
+        status: { type: string }
+        evidence_refs:
+          type: array
+          items: { type: string }
+        reason: { type: string }
+    WorkerChangeReport:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        changed_paths:
+          type: array
+          items:
+            type: string
+        workspace_dirty:
+          type: boolean
+        mutation_tools:
+          type: array
+          items:
+            type: string
+        survey_tools:
+          type: array
+          items:
+            type: string
+        receipt_count:
+          type: integer
+        diff_stat:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerDiffStat
+    WorkerDiffStat:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, insertions, deletions]
+      properties:
+        path:
+          type: string
+        insertions:
+          type: integer
+        deletions:
+          type: integer
+    WorkerStatus:
+      type: string
+      enum:
+      - pending
+      - running
+      - waiting
+      - complete
+      - failed
+      - canceled
+      - held
+    WorkerMergeStatus:
+      type: string
+      description: |
+        Lifecycle of a write overlay. Every transition is an explicit event
+        the coordinator can observe — there is no silent "skipped" state.
+      enum:
+      - pending
+      - applying
+      - merged
+      - rebasing
+      - orphaned
+      - rejected
+      - aborted
+    WorkerPromotePathOutcome:
+      type: string
+      description: |
+        Per-path merge status within one overlay promote. Every declared path
+        ends in one of clean, applied, or conflict — no skipped category.
+      enum:
+      - clean
+      - conflict
+      - applied
+    WorkerPromoteOrderKind:
+      type: string
+      description: |
+        How a clean overlay path relates to pending sibling overlays on shared
+        files. independent — 3-way clean; sibling order does not change outcome.
+        sequential — shares paths with siblings; promote one at a time and re-preview.
+        clean_if_first — clean now but conflicts if listed siblings land first.
+        clean_after — not clean now; becomes clean after listed siblings promote.
+      enum:
+      - independent
+      - sequential
+      - clean_if_first
+      - clean_after
+    WorkerPromoteConflictTier:
+      type: string
+      description: |
+        Language-agnostic conflict classification on preview_overlay /
+        promote_overlay path_status and conflict_digest. line_shift — high
+        hunk_count from offset drift after siblings landed. overlapping_edit —
+        few hunks with distinct primary vs branch bodies. artifact — binary or
+        opaque bytes; host proposes drop.
+      enum:
+      - line_shift
+      - overlapping_edit
+      - artifact
+    WorkerPromotePathStatus:
+      x-go-generate: true
+      type: object
+      required:
+      - path
+      - status
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerPromotePathOutcome
+        reason:
+          type: string
+        hunk_count:
+          type: integer
+          minimum: 0
+        promote_order:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
+        promote_after:
+          type: array
+          items:
+            type: string
+        blocked_by:
+          type: array
+          items:
+            type: string
+        promote_order_note:
+          type: string
+        conflict_tier:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteConflictTier
+    WorkerPromoteJobPathStatus:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        paths:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerPromotePathStatus
+    TaskScopeMode:
+      type: string
+      enum:
+      - read
+      - write
+    TaskScope:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: |
+        Job metadata describing one worker dispatch. Paths are optional focus
+        guidance and never an access, mutation, or promotion boundary.
+        BaseOverlayID, when set, declares this dispatch as a stacked overlay
+        based on another pending write overlay rather than primary. Stacked
+        overlays rebase when their parent is promoted, and are orphaned when
+        their parent is rejected.
+      properties:
+        mode:
+          $ref: worker.yaml#/components/schemas/TaskScopeMode
+        paths:
+          type: array
+          items:
+            type: string
+          description: Optional repo-relative focus globs
+        base_overlay_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: |
+            Optional. Names the parent write overlay this dispatch stacks on.
+            Empty means "based on primary." Must be a non-terminal overlay
+            (pending, applying, rebasing) on the same parent session, else
+            spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
+    WorkerFailure:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        Structured worker execute failure for Den (SSE worker topic and GET /v1/workers).
+        Copy templates live in config/packs/painted-wolf/platform/host/user-notices.
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        suggested_action:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: './notice-action.generated.yaml#/components/schemas/NoticeAction'
+        tier:
+          $ref: './notice-tier.generated.yaml#/components/schemas/NoticeTier'
+          description: Host-declared tier; always `non_catastrophic` on this surface.
+        scope:
+          $ref: './notice-scope.generated.yaml#/components/schemas/NoticeScope'
+          description: >-
+            Host-declared scope. A worker failure belongs to the session that
+            spawned it.
+        resolution:
+          type: string
+          description: Which declared resolution produced `tier`/`scope`.
+    WorkerContextUsage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >-
+        Per-worker context occupancy mirrored to the Den worker-card ring: prompt
+        tokens on the latest turn against the model window, plus the compaction
+        trigger point. Same shape the coordinator context ring uses.
+      properties:
+        prompt_tokens:
+          type: integer
+          minimum: 0
+          description: Prompt tokens on the worker's latest turn — current window occupancy
+        window:
+          type: integer
+          minimum: 0
+          description: Model context window in tokens; the ring's denominator
+        compaction_threshold:
+          type: integer
+          minimum: 0
+          description: Prompt-token level at which compaction fires for this worker
+    WorkspaceProvisionStrategy:
+      type: string
+      enum:
+      - direct_cow
+      - bridge_cow
+      - direct_copy
+    WorkspacePreparation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [stage, files, bytes]
+      properties:
+        strategy:
+          $ref: worker.yaml#/components/schemas/WorkspaceProvisionStrategy
+        stage:
+          type: string
+          enum: [probing, surveying_source, materializing_seed, snapshotting_branch]
+        files:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Logical regular-file bytes when a source survey has completed
+    WorkerBudgetRequest:
+      x-go-generate: true
+      type: object
+      description: A running worker's request that its coordinator raise its tool-round ceiling.
+      required:
+      - rounds
+      - requested_max
+      - remaining_work
+      - tool_loops_used
+      - requested_at
+      additionalProperties: false
+      properties:
+        rounds:
+          type: integer
+          minimum: 1
+          description: Additional tool rounds the worker asked for beyond its ceiling at request time
+        requested_max:
+          type: integer
+          minimum: 3
+          maximum: 120
+          description: Ceiling the worker asked for, bounded by the host maximum
+        remaining_work:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            type: string
+          description: Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
+        tool_loops_used:
+          type: integer
+          minimum: 0
+          description: Rounds the worker had completed when it asked
+        requested_at:
+          type: string
+          format: date-time
+    WorkerDependency:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [worker_id, state]
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [ready, waiting, blocked]
+    WorkerTask:
+      type: object
+      required:
+      - id
+      - status
+      - agent_type
+      - created_at
+      additionalProperties: false
+      properties:
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerDependency'
+        after_workers:
+          type: array
+          items:
+            type: string
+          description: Sibling jobs that must complete successfully and promote writes before this job starts.
+        id:
+          type: string
+          format: uuid
+        child_session_id:
+          type: string
+          format: uuid
+        delegation_id:
+          type: string
+          format: uuid
+        leg_id:
+          type: string
+          format: uuid
+        parent_session_id:
+          type: string
+          format: uuid
+        workflow_run_id:
+          type: string
+          format: uuid
+        workflow_phase:
+          type: string
+        workflow_work_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        project_id:
+          type: string
+          format: uuid
+        workspace_root_id:
+          type: string
+          format: uuid
+        workspace_path:
+          type: string
+        merge_status:
+          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
+          description: Lifecycle of this write overlay; every transition is an explicit event
+        overlay_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: |
+            Stable identifier for this write overlay; other dispatches may stack
+            on it by setting scope.base_overlay_id to this value. Empty for read
+            scopes.
+        max_tool_loops:
+          type: integer
+          minimum: 2
+          maximum: 120
+          description: Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only
+        budget_request:
+          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
+          description: The worker's unanswered request for more tool rounds; absent once granted or when none was made
+        tool_loops_used:
+          type: integer
+          minimum: 0
+          description: Completed tool rounds this worker run; omitted when zero and the job never started
+        tool_calls_used:
+          type: integer
+          minimum: 0
+          description: Tool calls this worker has settled over its lifetime; moves forward only
+        turn_tool_calls:
+          type: integer
+          minimum: 0
+          description: Size of the tool batch executing right now; zero between turns
+        turn_tools_done:
+          type: integer
+          minimum: 0
+          description: Calls already settled in that in-flight batch; never exceeds turn_tool_calls
+        context_usage:
+          $ref: worker.yaml#/components/schemas/WorkerContextUsage
+          description: Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes
+        workspace_preparation:
+          $ref: worker.yaml#/components/schemas/WorkspacePreparation
+          description: Ephemeral progress while an isolated write workspace is being prepared
+        touched_paths:
+          type: array
+          items:
+            type: string
+          description: Live repo-relative paths the worker has mutated (pulse roster)
+        execution_target:
+          $ref: worker.yaml#/components/schemas/ExecutionTarget
+        runner_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        claimed_by:
+          type: string
+        agent_type:
+          type: string
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerStatus
+        spawn_reason:
+          $ref: worker.yaml#/components/schemas/SpawnReason
+        brief:
+          type: string
+          description: Worker assignment goal used for card titles.
+        scope:
+          $ref: worker.yaml#/components/schemas/TaskScope
+        files:
+          type: array
+          items:
+            type: string
+        result:
+          $ref: worker.yaml#/components/schemas/WorkerResult
+        failure:
+          $ref: worker.yaml#/components/schemas/WorkerFailure
+        error:
+          type: string
+          description: Operator/debug detail; user-facing copy is in failure when present.
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    WorkerListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - workers
+      additionalProperties: false
+      properties:
+        next_cursor: {type: string}
+        workers:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerTask
+    WorkerPromoteResolutionAction:
+      type: string
+      description: |
+        Host-resolved merge intent for promote_overlay resolutions and
+        ready_resolutions entries.
+      enum:
+      - drop
+      - keep_theirs
+      - keep_ours
+      - keep_both
+    WorkerPromoteHunkResolution:
+      type: object
+      required:
+      - start_line
+      - end_line
+      - content
+      additionalProperties: false
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        content:
+          type: string
+    WorkerReadyResolution:
+      type: object
+      required:
+      - path
+      - status
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerPromotePathOutcome
+        path_class:
+          type: string
+        conflict_tier:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteConflictTier
+        action:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteResolutionAction
+        proposed_content:
+          type: string
+        proposed_reconciled:
+          type: boolean
+        suggested_hunks:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerPromoteHunkResolution
+        needs_review:
+          type: boolean
+        advisory:
+          type: string
+    WorkerMergeHunk:
+      type: object
+      required:
+      - start_line
+      - end_line
+      additionalProperties: false
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        base:
+          type: string
+        primary:
+          type: string
+        branch:
+          type: string
+    WorkerMergeConflict:
+      type: object
+      required:
+      - path
+      - reason
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        reason:
+          type: string
+        base:
+          type: string
+        primary:
+          type: string
+        branch:
+          type: string
+        branch_delta:
+          type: string
+        base_delta:
+          type: string
+        summary:
+          type: array
+          items:
+            type: string
+        hunks:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerMergeHunk
+        overlap_worker_ids:
+          type: array
+          items:
+            type: string
+        conflict_tier:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteConflictTier
+    WorkerPromoteConflictDigest:
+      type: object
+      required:
+      - path
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        summary:
+          type: array
+          items:
+            type: string
+        branch_delta:
+          type: string
+        base_delta:
+          type: string
+        conflict_tier:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteConflictTier
+    WorkerOverlayIntent:
+      type: object
+      additionalProperties: false
+      description: Compact worker goal excerpt returned by preview_overlay.
+      properties:
+        summary:
+          type: string
+        scope_paths:
+          description: Optional worker focus hints. They do not filter promotion.
+          type: array
+          items:
+            type: string
+    OverlayRebaseOutcome:
+      type: object
+      required:
+      - overlay_id
+      - status
+      additionalProperties: false
+      description: >-
+        Result of rebasing a stacked child overlay after its parent landed on
+        primary.
+      properties:
+        overlay_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
+        conflicts:
+          type: array
+          items:
+            type: string
+    WorkerMergeResult:
+      x-tool-output: [promote_overlay, preview_overlay]
+      description: The promote_overlay and preview_overlay tool result.
+      type: object
+      required:
+      - job_id
+      - mode
+      additionalProperties: false
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+        merge_status:
+          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
+        agent_type:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+        changed_paths:
+          type: array
+          items:
+            type: string
+        clean_paths:
+          type: array
+          items:
+            type: string
+        applied:
+          type: array
+          items:
+            type: string
+        path_status:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerPromotePathStatus
+        overlap_job_ids:
+          type: array
+          items:
+            type: string
+        promote_order:
+          $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
+        promote_after:
+          type: array
+          items:
+            type: string
+        blocked_by:
+          type: array
+          items:
+            type: string
+        conflict_digest:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerPromoteConflictDigest
+        conflicts:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerMergeConflict
+        overlay_intent:
+          $ref: worker.yaml#/components/schemas/WorkerOverlayIntent
+        spill_path:
+          type: string
+          description: >-
+            Host-data-relative path to the full promote spill body
+            (promote-spills/<overlay_id>.json). Page with read/grep; never an
+            absolute ~/.config/paintedwolf path.
+        ready_resolutions:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerReadyResolution
+        error:
+          type: string
+        rebased:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/OverlayRebaseOutcome
+        source_evidence:
+          $ref: worker.yaml#/components/schemas/WorkerSourceEvidence
+    WorkerSourceEvidence:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      - status
+      description: >-
+        Advisory source validation compiled from the worker's inspection
+        assessment or current settled check receipts. Inspection does not
+        assert a passing project test or waive a workflow evidence gate. Missing
+        validation does not block completion or promotion.
+      properties:
+        kind:
+          type: string
+        status:
+          type: string
+          enum:
+          - satisfied
+          - unmet
+        source_revision:
+          type: string
+        source_root_digest:
+          type: string
+        reason:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string

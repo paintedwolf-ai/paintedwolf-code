@@ -1,0 +1,35 @@
+oar: '1.0'
+id: WORKER_SUMMARY_NO_ARTIFACT
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+  - paintedwolf.agent_is_implementer
+  - paintedwolf.profile
+  - paintedwolf.worker_artifact_present
+  - paintedwolf.worker_summary_present
+when: paintedwolf.profile == "worker" && paintedwolf.agent_is_implementer && !paintedwolf.worker_artifact_present
+  && paintedwolf.worker_summary_present
+effect: block
+copy:
+  what: Worker finished without disk proof of implementation (no successful write, edit, replace_lines, restore_version,
+    or workspace change)
+  cause: The completion report has no observed artifact evidence; its prose alone does not establish an applied implementation.
+  why: An implementation claim must be supported by the worker's recorded changes or inspected workspace, not inferred from the report's wording.
+  fix: Inspect the worker outcome and any existing overlay first. If implementation work remains, call `task(agent_type="implementer", brief={…})` with the actual remaining scope and artifact-based `done_when`; use `task(agent_type="path-explorer", brief={…})` only when path discovery is still needed. If no change was necessary, preserve that outcome and report the evidence rather than inventing a mutation.
+  instead: Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-message: Worker finished without disk proof of implementation
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_SUMMARY_NO_ARTIFACT'
+x-paintedwolf-audience:
+- coordinator

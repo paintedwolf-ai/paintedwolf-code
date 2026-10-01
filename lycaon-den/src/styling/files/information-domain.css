@@ -1,0 +1,62 @@
+.den-files-info__center {
+  box-sizing: border-box;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24px var(--den-stage-inset-x);
+}
+
+.den-files-info__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  width: 100%;
+  /* Auto margins center without clipping the top when the card overflows. */
+  margin: auto;
+  padding: 28px 32px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-tint-1);
+  text-align: center;
+}
+
+.den-files-info__icon {
+  color: var(--den-text-muted);
+  flex-shrink: 0;
+}
+
+.den-files-info__name {
+  margin: 0;
+  font-size: var(--text-den-section);
+  font-weight: 600;
+  color: var(--den-text);
+  word-break: break-all;
+}
+
+.den-files-info__title {
+  margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+.den-files-info__meta dt {
+  margin: 0;
+  color: var(--den-text-muted);
+}
+
+.den-files-info__meta dd {
+  margin: 0;
+  color: var(--den-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.den-files-info__explain {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  line-height: 1.45;
+}
+

@@ -1,0 +1,120 @@
+components:
+  schemas:
+    SourceReaderSide:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, sha256, lines, availability]
+      properties:
+        path: {type: string}
+        sha256: {type: string, x-go-name: SHA256}
+        lines: {type: integer, minimum: 0}
+        availability: {type: string}
+    SourceReaderChangeArea:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [after_line, added, removed]
+      properties:
+        after_line: {type: integer, minimum: 1, description: One-based insertion point or first changed line in the after document.}
+        added: {type: integer, minimum: 0}
+        removed: {type: integer, minimum: 0}
+    SourceReaderSpan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: {type: integer, minimum: 0}
+        to: {type: integer, minimum: 0}
+    SourceReaderToken:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [from, to, kind]
+      properties:
+        from: {type: integer, minimum: 0}
+        to: {type: integer, minimum: 0}
+        kind: {type: string, enum: [keyword, string, number, comment, function, operator, property, constant, variable, type]}
+    SourceReaderRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [index, end, kind, text, before_line, after_line, changed]
+      properties:
+        index: {type: integer, minimum: 0}
+        end: {type: integer, minimum: 0}
+        kind: {type: string, enum: [equal, insert, delete, gap]}
+        text: {type: string}
+        peer: {$ref: '#/components/schemas/SourceReaderRow', x-go-pointer: true}
+        column: {type: integer, minimum: 0, description: UTF-16 offset within the original line for a bounded fragment.}
+        before_line: {type: integer, minimum: 0}
+        after_line: {type: integer, minimum: 0}
+        syntax: {type: array, items: {$ref: '#/components/schemas/SourceReaderToken'}}
+        changed: {type: array, items: {$ref: '#/components/schemas/SourceReaderSpan'}}
+        secret_screen: {$ref: 'project/editor-secrets.yaml#/components/schemas/SecretScreen', x-go-pointer: true}
+        contributors: {type: array, items: {$ref: 'project/source-walk.yaml#/components/schemas/SourceContributor'}}
+    SourceReaderMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [row, from, to]
+      properties:
+        row: {type: integer, minimum: 0}
+        from: {type: integer, minimum: 0}
+        to: {type: integer, minimum: 0}
+    FileEditReference:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [message_id, tool_call_id, index]
+      properties:
+        message_id: {type: string, format: uuid}
+        tool_call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        index: {type: integer, minimum: 0, description: 'Zero for file_edit; one-based index for a promotion file.'}
+    FileEditPreview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, reference, added, removed, before_sha256, after_sha256, created, deleted]
+      properties:
+        path: {type: string}
+        root_id: {type: string, format: uuid}
+        reference: {$ref: '#/components/schemas/FileEditReference'}
+        added: {type: integer, minimum: 0}
+        removed: {type: integer, minimum: 0}
+        before_sha256: {type: string, x-go-name: BeforeSHA256}
+        after_sha256: {type: string, x-go-name: AfterSHA256}
+        created: {type: boolean}
+        deleted: {type: boolean}
+    SourceReaderEndpoint:
+      x-go-generate: true
+      type: object
+      required: [state, size_bytes, availability]
+      additionalProperties: false
+      description: |
+        One exact immutable endpoint. Availability is explicit because version
+        identity and metadata remain explicit for metadata-only captures and
+        unexpectedly unavailable content.
+      properties:
+        version_id:
+          type: string
+          format: uuid
+          description: Absent for working-file, repository-object, and carried-start endpoints.
+        root_id: {type: string, format: uuid}
+        path: {type: string}
+        state:
+          type: string
+          enum: [content, directory, absent, unresolved]
+        sha256: { x-go-name: "Sha256", type: string}
+        size_bytes: {type: integer, format: int64, minimum: 0}
+        availability:
+          type: string
+          enum: [available, absent, directory, unavailable, not_captured, binary, unresolved]
+        reason: {type: string}
+        secret_screen:
+          x-go-type: "*SecretScreen"
+          allOf: [{$ref: 'project/editor-secrets.yaml#/components/schemas/SecretScreen'}]
+          description: >-
+            Screening summary for this endpoint. Exact spans arrive with requested rows.
+            Omitted when screening is unavailable or this side has no readable text.

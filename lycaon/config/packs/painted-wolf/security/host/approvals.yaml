@@ -1,0 +1,26 @@
+# Bundled approval defaults. The global posture (light | balanced | strict, default
+# balanced) is the single ask-line.
+# Merge order: bundled → ~/.config/paintedwolf/approvals.yaml → ${overlay_dir}/approvals.yaml
+# Project rules overlay global by (category, pattern); last write wins per key.
+#
+# Above every posture sits the containment substrate: command work stays inside attached
+# folders, and structured boundary requests cannot widen that box without authority.
+# Light keeps critical detections and the outbound secret screen. Balanced adds the high
+# detection band and the untrusted-egress gate. Strict adds the medium band, MCP tools,
+# and new-host confirmation. Detection matches are narrow and additive; ordinary
+# contained commands do not ask on their text alone, and this bundle ships no command rules.
+#
+# Balanced runs MCP tools like any other recoverable tool. Strict confirms each MCP tool
+# until a bounded approval lease covers it, and the first outbound contact with command
+# and fetched-content hosts; configured search-provider endpoints stay silent. Commands,
+# writes, edits, and in-project file operations run without a prompt.
+#
+# Per-command wildcards (category: command) and path/tool rules layer on top.
+# Example project overlay (${overlay_dir}/approvals.yaml):
+#   - category: command
+#     pattern: "rm *"
+#     effect: deny
+#   - category: command
+#     pattern: "git status *"
+#     effect: ask
+rules: []

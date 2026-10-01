@@ -1,0 +1,19 @@
+# The source runs only after explicit activation.
+id: example/editor-surface:issues
+label: Issues
+prefix: issues
+requirement: example/editor-surface:tracker
+tool: search_issues
+query:
+  min_length: 2
+  max_results: 25
+result:
+  id: issue_id
+  title: title
+  description: repository
+  detail: status
+  arguments: activation
+activation:
+  command: example/editor-surface:read-tracker-issue
+  input:
+    - {id: issue-id, type: string, required: true}

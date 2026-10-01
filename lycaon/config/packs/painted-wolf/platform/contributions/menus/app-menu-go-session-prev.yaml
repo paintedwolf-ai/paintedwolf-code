@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-go-session-prev
+slot: "app_menu.go"
+command: painted-wolf/platform:session-prev
+group: "5"
+order: 19
+label: "Previous session"

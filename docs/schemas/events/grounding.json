@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/grounding.json",
+  "$ref": "../../openapi/components/schemas/settings/verification.yaml#/components/schemas/GroundingEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroundingEvent"
+}

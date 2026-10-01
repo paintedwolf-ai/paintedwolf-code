@@ -1,0 +1,19 @@
+tags: [browser]
+description: Tear down a held page; optional final snapshot.
+schema:
+  type: object
+  properties:
+    id:
+      type: string
+      description: Page id from page_open.
+    snapshot:
+      type: boolean
+      description: Capture a final snapshot before teardown.
+    selector:
+      description: "Optional scroll-into-view selector for the final snapshot."
+      type: string
+    caption:
+      description: "Artifact card label when snapshot is true."
+      type: string
+  required: [id]
+  additionalProperties: false

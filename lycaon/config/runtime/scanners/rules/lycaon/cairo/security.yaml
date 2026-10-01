@@ -1,0 +1,23 @@
+rules:
+- id: lycaon.cairo.unconditional-account-validation
+  languages:
+  - generic
+  severity: ERROR
+  message: Account validation unconditionally accepts the transaction
+  metadata:
+    category: security
+    cwe: CWE-287
+    confidence: HIGH
+    technology:
+    - cairo
+    references:
+    - https://docs.starknet.io/learn/protocol/accounts
+    parser_mode: generic
+  pattern-either:
+  - pattern: 'fn __validate__ ( ... ) -> felt252 { starknet :: VALIDATED }'
+  - pattern: fn __validate__ ( ... ) -> felt252 { VALIDATED }
+  paths:
+    include:
+    - '*.cairo'
+  options:
+    generic_comment_style: cpp

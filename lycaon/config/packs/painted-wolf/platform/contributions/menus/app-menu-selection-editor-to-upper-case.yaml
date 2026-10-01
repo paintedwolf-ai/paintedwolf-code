@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-to-upper-case
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-to-upper-case
+group: "2"
+order: 11

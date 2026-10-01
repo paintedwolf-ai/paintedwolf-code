@@ -1,0 +1,11 @@
+manifest_version: 1
+id: painted-wolf/themes
+name: Themes
+description: >-
+  Ports of widely used cross-editor palettes. Themes only — this pack
+  contributes no commands, actions, or behavior, so enabling it can change
+  nothing but how the window looks.
+version: 1.0.0
+compatibility:
+  extension_api: "^1.0.0"
+feature: themes

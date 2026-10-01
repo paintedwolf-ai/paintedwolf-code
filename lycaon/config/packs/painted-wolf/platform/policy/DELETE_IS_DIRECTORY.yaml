@@ -1,0 +1,24 @@
+oar: '1.0'
+id: DELETE_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [delete]
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "DELETE_IS_DIRECTORY"
+effect: block
+copy:
+  what: This delete call is restricted to files, but the selected path is a directory.
+  cause: Exact rm translation preserves rm's default refusal to remove directories.
+  why: Removing even an empty directory is a distinct destructive action.
+  fix: If the user explicitly requested removal of the empty directory, call delete again without files_only.
+  instead: Do not broaden the target set or remove a non-empty directory
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
+x-paintedwolf-message: This delete call is restricted to files
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {path: tmp, profile: implement, tool: delete}
+    expect_contains: ['Rejected:', 'Code: DELETE_IS_DIRECTORY']

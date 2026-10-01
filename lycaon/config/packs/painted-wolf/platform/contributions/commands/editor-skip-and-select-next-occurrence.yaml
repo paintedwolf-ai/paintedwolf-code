@@ -1,0 +1,12 @@
+id: painted-wolf/platform:editor-skip-and-select-next-occurrence
+title: "Skip and select next"
+scope: "files"
+keywords:
+  - "skip occurrence"
+  - "next match"
+category: "editing"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "editor.skipAndSelectNextOccurrence"

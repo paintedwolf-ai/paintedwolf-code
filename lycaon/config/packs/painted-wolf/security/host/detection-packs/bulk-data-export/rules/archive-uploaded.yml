@@ -1,0 +1,34 @@
+title: Send an archive off this machine
+id: 74582e7e-2571-4431-920a-f628130e4c8e
+description: Pipes a freshly built archive directly into a transfer, so whatever it collected leaves without touching disk.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # Only an archive streamed to stdout is a transfer; one written to a file is a
+  # build artifact and is not matched.
+  selection_archive_to_stdout:
+    Image:
+      - tar
+      - zip
+      - 7z
+      - gzip
+      - zstd
+    CommandLine|re: '(?i)\s-?[a-z]*c[a-z]*f\s+-\s|\s--to-stdout\b'
+  selection_piped_to_transfer:
+    PipelineCommandLine|re: '(?i)\|\s*(sudo\s+(-\S+\s+)*)?(curl|wget|httpie|http|nc|ncat|socat|ssh|rclone|mc|s5cmd)\b'
+  filter_rehearsal:
+    Argv|re: '^(--help|--dry-run(=.*)?)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_archive_to_stdout and selection_piped_to_transfer and not filter_rehearsal and not filter_local

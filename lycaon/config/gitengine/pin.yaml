@@ -1,0 +1,25 @@
+# Pinned Git toolchain that ./task gitengine:fetch downloads and verifies.
+git_version: "2.53.0"
+lfs_version: "3.7.1"
+platforms:
+  darwin-arm64:
+    # The archive name uses git_version and build.
+    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-macOS-arm64.tar.gz"
+    build: "f49d009"
+    reported_version: "2.53.0"
+    sha256: "e561cfc80c755e6f3e938653e81efcd025c9827a5b76dd42778b1159b3fab437"
+  linux-amd64:
+    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-ubuntu-x64.tar.gz"
+    build: "f49d009"
+    reported_version: "2.53.0"
+    sha256: "b3a85433c8dfde76d21b90938ad2f971653deff4340b1b4d347258c63250eafc"
+  linux-arm64:
+    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-ubuntu-arm64.tar.gz"
+    build: "f49d009"
+    reported_version: "2.53.0"
+    sha256: "d562ad433ed0dc1907f44a92fc701597bc577c48d07fe69ee7adddfee836ef4c"
+  windows-amd64:
+    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-windows-x64.tar.gz"
+    build: "f49d009"
+    reported_version: "2.53.0.windows.3"
+    sha256: "f843a87a693bfdabed83b8492bca59db6f64d1168c74d23e2c8dfb7388a97142"

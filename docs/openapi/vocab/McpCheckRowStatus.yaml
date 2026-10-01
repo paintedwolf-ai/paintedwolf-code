@@ -1,0 +1,10 @@
+name: McpCheckRowStatus
+description: Status of an MCP provider during health checks.
+go_const_prefix: McpCheckRowStatus
+values:
+  - id: healthy
+    comment: Provider responded successfully.
+  - id: disabled
+    comment: Provider is disabled.
+  - id: error
+    comment: Provider check failed.

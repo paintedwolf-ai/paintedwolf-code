@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "cmd/cgo"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "toolchain"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.24.13"
+      },
+      {
+       "introduced": "1.25.0-0"
+      },
+      {
+       "fixed": "1.25.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-61732"
+ ],
+ "credits": [
+  {
+   "name": "RyotaK (https://ryotak.net) of GMO Flatt Security Inc."
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4433"
+ },
+ "details": "A discrepancy between how Go and C/C++ comments were parsed allowed for code smuggling into the resulting cgo binary.",
+ "id": "GO-2026-4433",
+ "modified": "2026-02-05T03:10:52Z",
+ "published": "2026-02-05T03:10:52Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/734220"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/76697"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/K09ubi9FQFk"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Potential code smuggling via doc comments in cmd/cgo"
+}

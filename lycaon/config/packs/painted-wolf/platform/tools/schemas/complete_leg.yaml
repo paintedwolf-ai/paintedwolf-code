@@ -1,0 +1,88 @@
+description: Finish this worker leg. Call once when the assignment is done or blocked. The host builds the parent report from these fields plus disk proof.
+schema:
+  type: object
+  properties:
+    verification:
+      type: object
+      description: Validation chosen for this assignment. The host derives outcomes from receipts; this never waives a workflow gate.
+      properties:
+        method:
+          type: string
+          enum: [inspection, targeted, project, blocked]
+          description: inspection=read-back without executable checks; targeted=a narrower check; project=the selected or documented project check; blocked=required validation could not execute or finish, even if narrower checks passed. Report actual outcomes in reason.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Why this scope is sufficient, or what prevented validation. Name checks and limitations; never claim broader coverage.
+      required: [method, reason]
+      additionalProperties: false
+    leg_status:
+      type: string
+      enum: [complete, partial, blocked]
+      description: complete=assigned work delivered; partial=work remains; blocked=work cannot proceed. Validation limits alone do not make delivered work incomplete.
+    brief:
+      type: string
+      description: Short narrative for the user. No file dumps. Host-capped.
+    findings:
+      type: array
+      maxItems: 12
+      description: Strongest path/line/excerpt triples — not an inventory.
+      items:
+        type: object
+        properties:
+          path:
+            type: string
+            description: Repo-relative path you read or grepped.
+          line:
+            type: integer
+            description: 1-based line when citing file content.
+          excerpt:
+            type: string
+            description: Verbatim content at path/line.
+          note:
+            type: string
+            description: Optional narrative (not a substitute for excerpt).
+          claim:
+            type: string
+            enum: [vulnerability, hardening, accepted_residual, model]
+            description: >-
+              Security claim class. vulnerability = exploitable by an in-scope
+              adversary. hardening = a real improvement, not exploitable under the
+              stated threat model. accepted_residual = a risk this repo documented
+              and accepted. model = a fact about the threat model itself (assets,
+              entry points, trust boundaries), not an issue.
+          adversary:
+            type: string
+            description: Threat capability.
+          precondition:
+            type: string
+            description: Required state.
+          severity:
+            type: string
+            enum: [high, medium, low]
+            description: Claim severity.
+        additionalProperties: false
+    cited_urls:
+      type: array
+      maxItems: 12
+      items:
+        type: string
+      description: Exact URLs your web tools returned.
+    objectives_met:
+      type: array
+      maxItems: 12
+      items:
+        type: string
+      description: Short narrative bullets — no path:line or URLs.
+    remaining_risk:
+      type: array
+      maxItems: 12
+      items:
+        type: string
+      description: Residual risk or proof gap.
+    suggested_next_task:
+      type: string
+      description: Useful follow-up assignment.
+  required: [leg_status]
+  additionalProperties: false

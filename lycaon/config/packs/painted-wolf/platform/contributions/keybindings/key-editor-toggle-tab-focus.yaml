@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-toggle-tab-focus
+command: painted-wolf/platform:editor-toggle-tab-focus
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader Y"
+  windows:
+    - "Leader Y"
+  linux:
+    - "Leader Y"

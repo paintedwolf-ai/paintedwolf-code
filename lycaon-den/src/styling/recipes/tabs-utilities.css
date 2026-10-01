@@ -1,0 +1,63 @@
+@utility den-underline-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  margin: var(--spacing-den-6) 0 var(--spacing-den-7);
+  border-bottom: 1px solid var(--den-line);
+}
+
+@utility den-underline-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  margin: 0 0 -1px;
+  padding: 0 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--den-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--den-duration) var(--den-ease),
+    border-color var(--den-duration) var(--den-ease);
+
+  &:hover {
+    color: var(--den-text);
+  }
+
+  &[data-active="true"],
+  &[aria-selected="true"] {
+    color: var(--den-text);
+    font-weight: 600;
+    border-bottom-color: var(--den-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--den-accent);
+    outline-offset: 2px;
+    border-radius: var(--den-radius-sm);
+  }
+}
+
+/* Compact row (draft versions, dense chrome) — same underline language. */
+@utility den-underline-tabs-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--den-line);
+}
+

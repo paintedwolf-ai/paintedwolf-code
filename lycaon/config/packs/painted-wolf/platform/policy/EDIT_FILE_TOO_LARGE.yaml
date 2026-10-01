@@ -1,0 +1,61 @@
+oar: '1.0'
+id: EDIT_FILE_TOO_LARGE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - edit
+    - replace_lines
+    - code_rewrite
+    - jq_edit
+    - write
+    - restore_version
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.max_file_bytes
+    - paintedwolf.path
+    - paintedwolf.size
+    - paintedwolf.resource_limit
+    - paintedwolf.can_command
+when: paintedwolf.rejection_code == "EDIT_FILE_TOO_LARGE"
+effect: block
+copy:
+  what: '{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte native edit limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}'
+  cause: Native edits replace whole-file states, and every replaced state must fit this limit.
+  why: Version history and pre-turn checkpoints retain complete file states up to this limit, so a native edit above it could not be reviewed, restored, or rewound.
+  fix: >-
+    {% if paintedwolf.can_command %}Use command with a streaming tool such as sed, awk, python, or jq to inspect or change bounded parts of the file.{% else %}Split the file into smaller files, or reduce its size, before editing it natively.{% endif %}
+    Preserve the original file and any completed work; repeating a native edit does not change the limit.
+  instead: >-
+    {% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:write
+x-paintedwolf-message: mutation target exceeds max_file_bytes
+x-paintedwolf-scenarios:
+  - id: with_command
+    vars:
+      can_command: true
+      max_file_bytes: 4194304
+      path: internal/huge.go
+      profile: implement
+      size: 5242880
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EDIT_FILE_TOO_LARGE'
+      - 'Use command'
+  - id: without_command
+    vars:
+      can_command: false
+      max_file_bytes: 4194304
+      path: internal/huge.go
+      profile: implement
+      size: 5242880
+      tool: edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: EDIT_FILE_TOO_LARGE'
+      - 'Split the file'

@@ -1,0 +1,54 @@
+title: Reached a CI or CD SaaS API
+id: 48f061d8-c8f2-4d5c-9512-93cd12d2c7e5
+description: >-
+  Connected to a hosted CI/CD or mobile build API. A hostname cannot tell a
+  read-only status poll from a pipeline cancel or secret change. GitHub Actions
+  and Bitbucket Pipelines ride the forge API hosts covered elsewhere.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: egress_observed
+tags:
+  - lycaon.effect.external
+level: medium
+detection:
+  selection_host:
+    DestinationHostname:
+      - circleci.com
+      - api.circleci.com
+      - app.circleci.com
+      - api.buildkite.com
+      - agent.buildkite.com
+      - api.travis-ci.com
+      - api.travis-ci.org
+      - ci.appveyor.com
+      - api.appveyor.com
+      - api.semaphoreci.com
+      - api.bitrise.io
+      - api.codemagic.io
+      - api.buddy.works
+      - api.drone.io
+      - cloud.drone.io
+      - api.earthly.dev
+      - api.depot.dev
+  selection_suffix:
+    DestinationHostname|endswith:
+      - .circleci.com
+      - .buildkite.com
+      - .travis-ci.com
+      - .travis-ci.org
+      - .appveyor.com
+      - .semaphoreci.com
+      - .bitrise.io
+      - .codemagic.io
+      - .buddy.works
+      - .drone.io
+      - .earthly.dev
+      - .depot.dev
+      - .actions.githubusercontent.com
+  condition: selection_host or selection_suffix

@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CHOWN_UNSUPPORTED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - chown
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.unsupported
+when: paintedwolf.rejection_code == "CHOWN_UNSUPPORTED"
+effect: block
+copy:
+  cause: The current platform has no supported native ownership operation.
+  why: Argument changes cannot add an unavailable platform capability.
+  fix: Report the ownership requirement as unresolved and use the appropriate host or user workflow if it is
+    necessary. Do not retry changed arguments or substitute an unreviewed command.
+  instead: Branch on Code CHOWN_UNSUPPORTED; retain the platform limitation
+  what: This host does not implement ownership changes.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
+x-paintedwolf-message: chown:chown not supported on this platform
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: scripts/run.sh
+    profile: implement
+    tool: chown
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CHOWN_UNSUPPORTED'

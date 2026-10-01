@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-reopen-closed-tab
+slot: "app_menu.file"
+command: painted-wolf/platform:files-reopen-closed-tab
+group: "2"
+order: 7
+label: "Reopen closed tab"

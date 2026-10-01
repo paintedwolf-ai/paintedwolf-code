@@ -1,0 +1,9 @@
+'on': inject.skill_pointer
+effect: inform
+render: skill-pointer
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - each provider request of a turn whose first loadable tool call fitted a skill the host did not read

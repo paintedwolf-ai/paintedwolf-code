@@ -1,0 +1,31 @@
+oar: '1.0'
+id: REPORT_DOCUMENT_INVALID
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.reject_observation
+    - paintedwolf.rejection_reason
+when: paintedwolf.reject_observation == "report_document_invalid"
+effect: block
+copy:
+  what: 'The run report cannot be built from this closeout: {{ paintedwolf.rejection_reason }}.'
+  cause: The report's first page is decided from the closeout's structured fields, so each finding needs a disposition, rated findings need answers to the declared questions, and work to do needs an ask.
+  why: A reader decides from the first page alone; a field the host cannot read leaves that page stating less than the review found.
+  fix: 'Return the report fence with the field corrected. Dispositions are act (needs work), accept (a risk kept on purpose), or held (examined and sound). The ask is {do, effort: small|medium|large, why}, written for someone who has never seen the code.'
+  instead: Keep the Markdown answer, findings, and citations as they were; correct only the named field.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Report fields
+  ui_check_id: report_document
+  in_session_retry: true
+x-paintedwolf-message: The run report closeout is missing a structured field
+x-paintedwolf-scenarios:
+  - id: missing_disposition
+    vars:
+      rejection_reason: 'finding "goldmark-xss" has no disposition (want act, accept, or held)'
+    expect_contains:
+      - 'Code: REPORT_DOCUMENT_INVALID'
+      - disposition
+      - act

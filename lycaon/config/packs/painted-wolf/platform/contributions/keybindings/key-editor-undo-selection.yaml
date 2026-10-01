@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-undo-selection
+command: painted-wolf/platform:editor-undo-selection
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+U"
+  windows:
+    - "Mod+U"
+  linux:
+    - "Mod+U"

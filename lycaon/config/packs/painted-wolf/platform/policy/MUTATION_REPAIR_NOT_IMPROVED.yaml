@@ -1,0 +1,28 @@
+oar: '1.0'
+id: MUTATION_REPAIR_NOT_IMPROVED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [write, edit, replace_lines, code_rewrite]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.path, paintedwolf.rejection_code, paintedwolf.parse_errors, paintedwolf.python_indent_lines, paintedwolf.syntax_diagnostics_truncated]
+when: paintedwolf.rejection_code == "MUTATION_REPAIR_NOT_IMPROVED"
+effect: block
+copy:
+  what: '{{ tool }} on {{ paintedwolf.path }} was not applied because the file already has syntax errors and the proposed edit does not reduce them.'
+  cause: >-
+    {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}.
+    {% if paintedwolf.syntax_diagnostics_truncated %}Additional syntax faults were omitted.{% endif %}
+    {% else %}The completed parser found a syntax regression.{% endif %}
+    {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
+  why: 'Unrelated edits and lateral syntax changes hide the repair target and can turn a recoverable file into an unbounded patch loop.'
+  fix: 'Read the reported lines and surrounding code and make one atomic repair. Use `replace_lines.operations` when several coupled ranges or an indentation shift must land together.'
+  instead: 'Branch on Code; reduce syntax burden with one atomic repair'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:edit
+x-paintedwolf-message: mutation did not improve broken source
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {path: pipeline.py, profile: implement, tool: replace_lines}
+    expect_contains: ['Code: MUTATION_REPAIR_NOT_IMPROVED', syntax, atomic]

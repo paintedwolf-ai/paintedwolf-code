@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-find-next
+command: painted-wolf/platform:find-next
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+G"
+  windows:
+    - "Mod+G"
+  linux:
+    - "Mod+G"

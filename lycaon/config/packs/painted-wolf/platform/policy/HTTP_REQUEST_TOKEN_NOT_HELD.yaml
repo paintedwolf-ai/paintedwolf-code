@@ -1,0 +1,26 @@
+oar: '1.0'
+id: HTTP_REQUEST_TOKEN_NOT_HELD
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [http_request]
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_NOT_HELD"
+effect: block
+copy:
+  what: The request named a token reference that the token jar does not carry, so nothing was sent.
+  cause: A token reference resolves only against tokens the jar already holds. The named one was never captured by a prior response. The rejection data lists the jar, the missing name, and the ones actually held.
+  why: A token value is a credential the host keeps in the protected store, so a reference is substituted privately and never guessed. Sending the request without the token would fail authentication.
+  fix: Make the request that captures the token first using capture_tokens, so the jar holds it; then reference it by name. Read held in the rejection data to see which names are available.
+  instead: Branch on Code HTTP_REQUEST_TOKEN_NOT_HELD; issue the auth request first, or reference a held token
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+x-paintedwolf-message: http_request token not held in token jar
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {jar: api, missing: auth, held: [session], profile: implement, tool: http_request}
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: HTTP_REQUEST_TOKEN_NOT_HELD'

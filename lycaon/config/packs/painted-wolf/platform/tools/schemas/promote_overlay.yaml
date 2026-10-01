@@ -1,0 +1,58 @@
+description: >-
+  Atomically promote a worker overlay (overlay_id=job_id), considering all observed changes. Conflicts return a menu without writes; resolve all via resolutions/drop.
+schema:
+  type: object
+  properties:
+    overlay_id:
+      type: string
+      description: Worker job_id from task() or pack_board
+    resolutions:
+      type: array
+      description: One choice per conflicting path from the returned menu
+      items:
+        type: object
+        properties:
+          path:
+            description: "Repo-relative conflicting path from the promote menu."
+            type: string
+          action:
+            type: string
+            enum: [keep_both, keep_theirs, keep_ours, drop]
+            description: keep_both=union · keep_theirs=worker · keep_ours=primary · drop=skip
+          content:
+            type: string
+            description: Optional — your own merged file (overrides action)
+          hunks:
+            type: array
+            description: Line-range patches on primary — overlapping_edit with low hunk_count; apply highest start_line first
+            items:
+              type: object
+              properties:
+                start_line:
+                  description: "1-based start line of the hunk on primary."
+                  type: integer
+                end_line:
+                  description: "Optional 1-based end line of the hunk span."
+                  type: integer
+                content:
+                  description: "Replacement text for the hunk range."
+                  type: string
+              required: [start_line, content]
+        required: [path]
+    drop:
+      type: array
+      items:
+        type: string
+      description: Paths or folders to not land; a folder path drops its whole subtree
+    detail:
+      type: string
+      enum: [hunks, full]
+      description: Conflict payload shape — hunks (default) omits full base/primary/branch bodies; full includes them inline
+    syntax_override_reason:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      pattern: '\S'
+      description: Recorded reason to override final syntax validation for this call. Other mutation checks still apply.
+  required: [overlay_id]
+  additionalProperties: false

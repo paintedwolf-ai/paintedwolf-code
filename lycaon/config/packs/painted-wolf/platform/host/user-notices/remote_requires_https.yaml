@@ -1,0 +1,18 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: app }
+context_schema:
+  optional:
+    - provider_id
+title: Remote MCP must use HTTPS
+message: >-
+  A remote MCP provider can only be reached over HTTPS. Plain HTTP is allowed
+  only for loopback addresses on this computer.
+suggested_action: >-
+  Use an https:// URL, or point at 127.0.0.1 / localhost if the provider is
+  running locally — including a Docker port published on this machine.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - HTTPS
+      - loopback

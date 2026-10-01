@@ -1,0 +1,19 @@
+id: skeptic
+name: Skeptic
+description: Read-only neutral skeptic that argues the strongest evidence-backed case against a proposition under review.
+tool_profile: explore_readonly
+exec_mode: none
+skills:
+  - evolve-a-system
+  - trace-a-system-invariant
+  - challenge-a-security-claim
+capabilities:
+  - review
+topology_roles:
+  - worker
+  - gate
+dispatch_lanes:
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/skeptic.md

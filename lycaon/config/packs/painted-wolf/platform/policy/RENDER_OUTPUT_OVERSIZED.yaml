@@ -1,0 +1,37 @@
+oar: '1.0'
+id: RENDER_OUTPUT_OVERSIZED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - render_view
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.bytes
+  - paintedwolf.max_bytes
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "RENDER_OUTPUT_OVERSIZED"
+effect: block
+copy:
+  what: The screenshot was {{ paintedwolf.bytes }} bytes and could not normalize into the {{ paintedwolf.max_bytes
+    }}-byte artifact bound.
+  cause: Viewport or markup complexity produced an oversized PNG even after normalization.
+  why: Visual artifacts must fit store and multimodal transport limits.
+  fix: Reduce intended output dimensions or complexity, then retry. If showing only part of the design, report
+    the limited coverage rather than claiming a complete render.
+  instead: Branch on Code RENDER_OUTPUT_OVERSIZED; shrink viewport or simplify markup
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
+x-paintedwolf-message: Rasterized mockup PNG exceeds artifact byte cap
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: coordinator
+    tool: render_view
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: RENDER_OUTPUT_OVERSIZED'

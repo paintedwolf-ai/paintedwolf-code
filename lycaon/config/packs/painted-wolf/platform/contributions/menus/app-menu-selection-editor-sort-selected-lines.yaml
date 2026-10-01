@@ -1,0 +1,5 @@
+id: painted-wolf/platform:app-menu-selection-editor-sort-selected-lines
+slot: "app_menu.selection"
+command: painted-wolf/platform:editor-sort-selected-lines
+group: "2"
+order: 10

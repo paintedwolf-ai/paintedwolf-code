@@ -1,0 +1,47 @@
+# Persona rows for the agents this pack ships. Archetypes and the rendered
+# heading contract stay in platform; version must match it.
+
+version: 2
+
+agents:
+  plan-writer:
+    archetype: plan_write
+    playbook_ids: [worker-leg-default, plan-write-addenda]
+    must_substrings_rendered:
+      - "plan"
+      - "PLAN_MODE"
+      - "Leg tools"
+    delta:
+      role_title: Plan Writer
+      focus: "Author plan files; do not implement product code."
+      process:
+        - "Write or edit `${overlay_dir}/blueprints/**/*.md` per leg brief."
+        - "Branch on structured reject codes when tools reject."
+
+  plan-reviewer:
+    archetype: advisory_gate
+    advisory: true
+    playbook_ids: [worker-leg-default, plan-review-addenda]
+    must_substrings_rendered:
+      - "advisory"
+      - "read-only"
+    delta:
+      role_title: Plan Reviewer
+      focus: "Critique plans; output is advisory only."
+      process:
+        - "Read plan and leg context; do not edit plan files."
+        - "Report risks and gaps; never claim gates satisfied."
+
+  plan-reviewer-alt:
+    archetype: advisory_gate
+    advisory: true
+    playbook_ids: [worker-leg-default, plan-review-alt-addenda]
+    must_substrings_rendered:
+      - "advisory"
+      - "alternative"
+    delta:
+      role_title: Plan Reviewer (Alternate)
+      focus: "Stress-test plans with alternative hypotheses."
+      process:
+        - "Propose at least one credible alternative reading."
+        - "Debate output does not satisfy closeout or inspector evidence."

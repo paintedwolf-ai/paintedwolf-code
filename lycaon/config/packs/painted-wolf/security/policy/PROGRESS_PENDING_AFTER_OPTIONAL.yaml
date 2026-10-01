@@ -1,0 +1,33 @@
+oar: '1.0'
+id: PROGRESS_PENDING_AFTER_OPTIONAL
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - update_progress
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.label
+when: paintedwolf.rejection_code == "PROGRESS_PENDING_AFTER_OPTIONAL"
+effect: block
+copy:
+  what: Pending checklist label "{{ paintedwolf.label }}" appears after a `- [>]` optional line.
+  cause: Optional closeout lines must be last — a `- [ ]` row after `- [>]` would block completion incorrectly
+  why: '`- [>]` marks non-blocking notes; any still-open work must come before them'
+  fix: Move required open - [ ] rows above optional - [>] rows. Mark an item optional only when it is actually
+    outside required completion; do not relabel required work to clear this rejection.
+  instead: Branch on Code; reorder so optional `- [>]` lines are last and retry update_progress
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Pending plan line follows an optional line
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    label: Verify rollout
+    tool: update_progress
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROGRESS_PENDING_AFTER_OPTIONAL'

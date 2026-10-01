@@ -1,0 +1,20 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Command-line tools may be unavailable
+message: >-
+  The app could not read the command path from your account's login shell, so
+  tools installed by Homebrew or a version manager may not be available.
+suggested_action: >-
+  Open diagnostics and save a diagnostics bundle. Check that your login shell
+  starts without errors, then reopen the app.
+scenarios:
+  - id: shell_unavailable
+    vars: { source: inherited, reason: shell_unavailable }
+    expect_contains:
+      - command path
+      - login shell
+  - id: probe_failed
+    vars: { source: fallback, reason: probe_failed }
+    expect_contains:
+      - Homebrew
+      - diagnostics

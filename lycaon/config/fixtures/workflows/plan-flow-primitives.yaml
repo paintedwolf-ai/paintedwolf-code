@@ -1,0 +1,49 @@
+id: plan-flow-primitives
+version: 1.0.0
+trigger: /plan-flow-primitives
+request:
+  question: What would you like to plan?
+initial_posture: spec
+parameters:
+  review_depth:
+    type: depth
+    default: light
+blueprint:
+  id: spec
+  file: spec.md
+  frontmatter:
+    - scope
+    - breaking
+phases:
+  - id: intake
+    activity_label: Sizing the change
+    intake: [change_size]
+    complete_when: gates_satisfied
+    gates: [user_decision_received:change_size]
+    next: review
+  - id: review
+    activity_label: Reviewing the plan
+    depth_param: review_depth
+    review_loop:
+      evidence_key: peer_review
+      iteration_cap: 2
+      verdict_schema:
+        verdict: APPROVED|NEEDS_REVISION
+        bullets: string
+    complete_when: gates_satisfied
+    gates: [evidence_passed:peer_review]
+    next: approve
+  - id: approve
+    activity_label: Waiting for your approval
+    human_approval:
+      blueprint: spec.md
+      readiness: gate_passed:evidence_passed:peer_review
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    next: done
+  - id: done
+    activity_label: Wrapping up
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host

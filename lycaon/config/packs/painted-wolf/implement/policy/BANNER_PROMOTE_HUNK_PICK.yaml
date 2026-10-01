@@ -1,0 +1,26 @@
+emit: banner
+category: informational
+severity: info
+message: Overlay {{ paintedwolf.overlay_id }} — {{ paintedwolf.hunk_count }} overlapping hunks on {{ paintedwolf.conflict_paths
+  }}
+what: Low hunk_count with distinct primary vs branch bodies — cherry-pick per hunk instead of rejecting the
+  whole overlay
+cause: True same-region edits, not line-shift noise
+why: Per-hunk resolutions land partial intent without a full-file rewrite
+fix: '`promote_overlay(job_id="{{ paintedwolf.overlay_id }}", resolutions=[{path, hunks:[{start_line, end_line,
+  content}]}])` — use the current primary line span from preview and apply hunks **back-to-front** (highest
+  start_line first). Content must reflect the intended merge of both versions.'
+instead: One resolutions entry per path; never mix hunks and content on the same path. A small path-level conflict
+  does not require discarding the whole overlay.
+scenarios:
+- id: default
+  vars:
+    conflict_paths:
+    - shellsim/state.py
+    hunk_count: 3
+    overlay_id: job-523
+    threshold: 10
+  expect_contains:
+  - BANNER_PROMOTE_HUNK_PICK
+  - back-to-front
+id: BANNER_PROMOTE_HUNK_PICK

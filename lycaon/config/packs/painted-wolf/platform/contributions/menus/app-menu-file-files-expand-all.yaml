@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-file-files-expand-all
+slot: "app_menu.file"
+command: painted-wolf/platform:files-expand-all
+group: "3"
+order: 11
+label: "Expand all folders in tree"

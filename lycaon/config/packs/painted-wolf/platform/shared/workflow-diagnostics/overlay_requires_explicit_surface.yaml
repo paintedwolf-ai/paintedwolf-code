@@ -1,0 +1,5 @@
+code: overlay_requires_explicit_surface
+message: |
+  Custom overlay phase {{phase}} must set coordinator_surface, surface_template, and mode_refs.
+replacement: |
+  Declare all three fields on the phase; do not rely on shipped surface_profile alone.

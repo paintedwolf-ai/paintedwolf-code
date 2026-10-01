@@ -1,0 +1,303 @@
+/* === First-run onboarding gate ===================================== */
+/* Layout recipes live in onboarding-utilities.css. */
+/* Pending first run paints only the splash stage. */
+.onboarding-first-run-pending {
+  position: absolute;
+  inset: 0;
+  background: var(--den-background);
+}
+/* Nothing to click while prefs load: the whole surface drags. */
+.onboarding-first-run-pending__chrome-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.onboarding-first-run-pending__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.onboarding-gate {
+  --onboarding-gate-inset-top: 56px;
+  --onboarding-gate-col: 480px;
+  /* Matches .onboarding-gate__brand glyph; reserved so progress cannot collide. */
+  --onboarding-gate-brand-band: 28px;
+  --onboarding-gate-brand-gap: 20px;
+  background: var(--den-background);
+}
+/* The attribute outranks the scrollport frame's base position. */
+.onboarding-gate[data-den-scrollport] {
+  position: absolute;
+  inset: 0;
+}
+/* Top anchoring keeps late layout stable below draggable chrome. */
+.onboarding-gate__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: var(--onboarding-gate-inset-top) 24px 56px;
+}
+.den-custom-chrome .onboarding-gate {
+  --onboarding-gate-inset-top: 52px;
+}
+/* Two layout previews sit side by side, so that page takes a wider column. */
+.onboarding-gate--layout {
+  --onboarding-gate-col: 640px;
+}
+/* The welcome wash uses a slower, stronger stage reveal. */
+.onboarding-gate__wash {
+  --den-stage-wash: radial-gradient(
+    120% 80% at 50% 0%,
+    color-mix(in srgb, var(--den-accent-signal) 14%, transparent),
+    transparent 58%
+  );
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  animation: den-enter-reveal 1.35s cubic-bezier(0.33, 0, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-gate__wash {
+    animation: none;
+    opacity: 1;
+  }
+}
+:root[data-den-appearance="dark"] .onboarding-gate__wash {
+  --den-stage-wash: radial-gradient(
+    180% 170% at 50% -70% in oklab,
+    color-mix(in oklab, var(--den-lift) 2%, transparent) 0%,
+    color-mix(in oklab, var(--den-lift) 0.7%, transparent) 42%,
+    transparent 75%
+  );
+}
+
+.onboarding-gate__chrome-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--onboarding-gate-inset-top);
+  z-index: 1;
+}
+.onboarding-gate__chrome-drag[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+/* Brand is out of flow; pad so the stack centers in the band below it and
+   short windows cannot slide the progress cue over the wordmark. */
+.onboarding-gate__inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--onboarding-gate-col);
+  margin: 0 auto;
+  /* Fill the gate so the step stack has leftover height to center in. */
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: calc(
+    var(--onboarding-gate-brand-band) + var(--onboarding-gate-brand-gap)
+  );
+  box-sizing: border-box;
+}
+.onboarding-gate__progress {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--den-text-muted);
+  opacity: 0;
+  transition: opacity 480ms cubic-bezier(0.33, 0, 0.2, 1);
+}
+.onboarding-gate:has(.onboarding-gate__page--open) .onboarding-gate__progress {
+  opacity: 1;
+}
+/* Soft opacity open — longer than stage crossfade so page swaps read gently. */
+.onboarding-gate__page {
+  opacity: 0;
+  transition: opacity 480ms cubic-bezier(0.33, 0, 0.2, 1);
+}
+.onboarding-gate__page--open {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-gate__page {
+    transition: none;
+    opacity: 1;
+  }
+  .onboarding-gate__progress {
+    transition: none;
+    opacity: 1;
+  }
+}
+.onboarding-gate__brand {
+  --den-brand-glyph-size: var(--onboarding-gate-brand-band);
+  --den-brand-label-size: var(--text-den-title);
+  gap: 9px;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.onboarding-gate__title {
+  margin: 0;
+  font-size: var(--text-den-banner);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--den-text);
+}
+.onboarding-gate__lede {
+  margin: 0;
+  max-width: 36rem;
+  font-size: var(--text-den-subhead);
+  line-height: 1.5;
+  color: var(--den-text-muted);
+}
+.onboarding-gate__optional {
+  display: inline;
+  margin-left: 2px;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.onboarding-gate__tip {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--den-radius);
+  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 24%, var(--den-border));
+  background: color-mix(in srgb, var(--den-accent-signal) 6%, var(--den-background));
+}
+.onboarding-gate__tip p {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text);
+}
+.onboarding-gate__provider-embed {
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  padding: 12px;
+}
+/* Spacing comes from the class it is paired with. */
+.onboarding-gate__field-hint {
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+.onboarding-gate__footnote {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  color: var(--den-text-muted);
+}
+.onboarding-gate__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+/* Welcome teaching uses inert Settings chrome. */
+.onboarding-gate__teach {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  padding: 8px 12px 8px 8px;
+  overflow: hidden;
+}
+.onboarding-gate__teach-rail {
+  border-right: 1px solid var(--den-border);
+  padding-right: 4px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Let the teach card size to its content. */
+.onboarding-gate__teach-aside {
+  flex: 1;
+  min-height: 0;
+  box-shadow: none;
+}
+/* No rail list above the teach dock: nothing to pull under its card, nothing
+   to wash. */
+.den-shell-aside-main.onboarding-gate__teach-aside > .den-shell-nav-dock {
+  min-height: 0;
+  margin-top: 0;
+}
+.den-shell-aside-main.onboarding-gate__teach-aside
+  > .den-shell-nav-dock::after {
+  content: none;
+}
+/* Keep the open teach dock static on mount. */
+.onboarding-gate__teach-aside .den-shell-nav-fold {
+  transition: none;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: none;
+}
+.onboarding-gate__teach-aside .den-shell-nav-fold-inner {
+  overflow-x: visible;
+  overflow-y: clip;
+}
+.onboarding-gate__teach-copy-lead {
+  margin: 0;
+  font-size: var(--text-den-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--den-accent-text);
+}
+.onboarding-gate__teach-copy-sub {
+  margin: 0;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--den-text-muted);
+}
+.onboarding-gate__teach-arrow {
+  flex-shrink: 0;
+  width: 36px;
+  height: 14px;
+  color: var(--den-accent-signal);
+  overflow: visible;
+  animation: onboarding-teach-fade 480ms var(--den-ease) both;
+}
+@keyframes onboarding-teach-fade {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.onboarding-gate__teach-arrow-shaft,
+.onboarding-gate__teach-arrow-head {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-gate__teach-arrow {
+    animation: none;
+  }
+}

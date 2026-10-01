@@ -1,0 +1,12 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - param
+title: Results changed
+message: This result page belongs to an older snapshot.
+suggested_action: Refresh the results and continue from the first page.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains: [older snapshot, Refresh]

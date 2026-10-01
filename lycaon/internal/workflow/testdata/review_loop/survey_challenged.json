@@ -1,0 +1,5 @@
+{
+  "verdict": "CHALLENGED",
+  "challenges": "[{\"id\":\"app-1\",\"title\":\"Session comparison leaks timing\",\"status\":\"survives\",\"statement\":\"The comparison short-circuits on every authenticated request, so the timing signal is measurable under the stamped threat model.\",\"cited_evidence\":[{\"path\":\"internal/auth/session.go\",\"line\":88}]},{\"id\":\"app-3\",\"title\":\"Exposed counters disclose tenant data\",\"status\":\"refuted\",\"statement\":\"The exposed counters carry no tenant identifiers, so this is hardening rather than disclosure.\",\"cited_evidence\":[{\"path\":\"internal/api/server.go\",\"line\":64}]}]",
+  "set_asides": "[{\"scanner\":\"lycaon-secrets\",\"paths\":[\"**/testdata/**\"],\"reason\":\"Test fixtures carry placeholder credentials that cannot reach a shipped build.\"}]"
+}

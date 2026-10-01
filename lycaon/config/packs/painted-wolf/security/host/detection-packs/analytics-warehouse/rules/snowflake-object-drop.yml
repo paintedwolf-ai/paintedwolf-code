@@ -1,0 +1,30 @@
+title: Drop a Snowflake database, schema, or table
+id: aa498df1-6f71-4e61-9e64-f37700a9dbe7
+description: Drops a database, schema, or table, recoverable only within the account's Time Travel retention window.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  selection_verb:
+    Image: snow
+    CommandLine|contains: ' object drop'
+  selection_scope:
+    CommandLine|contains:
+      - ' database '
+      - ' schema '
+      - ' table '
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_verb and selection_scope and not filter_rehearsal and not filter_local

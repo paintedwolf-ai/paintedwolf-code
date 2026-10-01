@@ -1,0 +1,13 @@
+id: painted-wolf/platform:editor-verb-fix-finding
+title: "Fix this finding"
+scope: "files"
+keywords:
+  - "fix"
+  - "finding"
+  - "resolve finding"
+category: "ai"
+when:
+  fact: "files_stage_active"
+action:
+  kind: editor_action
+  ref: painted-wolf/platform:action-fix-finding

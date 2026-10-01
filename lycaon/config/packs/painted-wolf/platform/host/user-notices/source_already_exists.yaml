@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: That path is taken
+message: >-
+  A file or folder already exists at that path, so it was left alone rather
+  than overwritten.
+suggested_action: Pick a different name, or open the existing file to edit it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - already exists
+      - overwritten

@@ -1,0 +1,24 @@
+emit: banner
+category: informational
+severity: info
+message: 'Only the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes were retained.'
+what: 'The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap.'
+cause: Opaque output exceeded the on-disk spill budget; the omitted suffix was not retained.
+why: The original operation may already have completed. Truncated evidence does not authorize replaying it.
+fix: '{% if paintedwolf.spill_readable %}Use `read(path="{{ paintedwolf.spill_path }}")` with offset/limit to inspect the retained prefix.{% else %}The retained prefix also exceeds the {{ paintedwolf.max_file_bytes }}-byte file input budget; read pagination cannot load it.{% endif %} For missing evidence, inspect current state or an existing bounded artifact. Repeat only a demonstrably repeatable read; do not repeat a mutation to recover its output.'
+instead: Preserve the operation outcome and distinguish retained evidence from the omitted suffix
+scenarios:
+- id: default
+  vars:
+    max_file_bytes: 8388608
+    spill_readable: false
+    cap: 67108864
+    original_bytes: 70000000
+    profile: coordinator
+    spill_bytes: 67108864
+    spill_path: tool-output/example.txt
+    tool: run_terminal_cmd
+  expect_contains:
+  - 'Code: TOOL_OUTPUT_SPILL_CAPPED'
+  - '8388608'
+id: TOOL_OUTPUT_SPILL_CAPPED

@@ -1,0 +1,38 @@
+fixtures:
+- rule: remote-object-delete
+  positive:
+  - rclone purge prod:backups
+  - rclone delete prod:backups/2026
+  - rclone deletefile prod:backups/manifest.json
+  - rclone rmdirs prod:backups
+  - mc rm --recursive --force prod/backups
+  - mc rb prod/backups
+  - s5cmd rm 's3://prod-backups/*'
+  - s5cmd rb s3://prod-backups
+  - sudo rclone purge prod:backups
+  negative:
+  - rclone ls prod:backups
+  - 'rclone lsd prod:'
+  - rclone size prod:backups
+  - rclone purge prod:backups --dry-run
+  - mc ls prod/backups
+  - mc rm prod/backups/one-object.txt
+  - s5cmd ls s3://prod-backups
+  - rclone delete prod:backups --help
+- rule: destination-overwrite-sync
+  positive:
+  - rclone sync ./build prod:site
+  - rclone move ./staging prod:archive
+  - rclone moveto ./a.txt prod:site/a.txt
+  - rclone bisync ./notes prod:notes
+  - mc mirror --remove ./build prod/site
+  - s5cmd sync --delete ./build 's3://prod-site/'
+  - sudo rclone sync ./build prod:site
+  negative:
+  - rclone copy ./build prod:site
+  - rclone copyto ./a.txt prod:site/a.txt
+  - rclone sync ./build prod:site --dry-run
+  - rclone check ./build prod:site
+  - mc mirror ./build prod/site
+  - s5cmd cp ./build 's3://prod-site/'
+  - rclone sync --help

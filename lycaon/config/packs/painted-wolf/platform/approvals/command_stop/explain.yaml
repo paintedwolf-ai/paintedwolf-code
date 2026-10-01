@@ -1,0 +1,19 @@
+# command_stop — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    command_stop:
+        tool: command_stop
+        tier_hint: recoverable
+        what_changes: '{% if command %}Stop the background command: {{ command }}.{% else %}Stop the selected background command.{% endif %}'
+        who_affected: The running command and any work it has not finished.
+        if_wrong: Stopping it interrupts the process tree; partial work may need review.
+        allow_line: '{% if command %}stopping `{{ command }}`{% else %}stopping the selected background command{% endif %}'
+        scenarios:
+            - id: default
+              vars:
+                command: npm run dev
+                project: my-app
+              expect_contains:
+                - Stop the background command
+                - npm run dev

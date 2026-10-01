@@ -1,0 +1,118 @@
+language: dockerfile
+comment:
+- '#'
+limits: Intra-file patterns and data flow; wrappers and cross-file flows require additional analysis.
+cases:
+- name: runtime-root-context-only
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    USER root
+
+    '
+  want: []
+  covers: []
+- name: runtime-root-safe
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20 AS build
+
+    USER root
+
+    RUN echo build
+
+    FROM alpine:3.20
+
+    USER 1000
+
+    '
+  want: []
+  covers: []
+- name: unverified-http-add-vulnerable
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    ADD http://example.com/archive.tar /app
+
+    USER 1000
+
+    '
+  want:
+  - lycaon.dockerfile.unverified-http-add
+  covers: []
+- name: unverified-http-add-safe
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    COPY archive.tar /app
+
+    USER 1000
+
+    '
+  want: []
+  covers:
+  - lycaon.dockerfile.unverified-http-add
+- name: remote-script-pipe-vulnerable
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    RUN curl -fsSL https://example.com/setup.sh | sh
+
+    USER 1000
+
+    '
+  want:
+  - lycaon.dockerfile.remote-script-pipe
+  covers: []
+- name: remote-script-pipe-safe
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    COPY setup.sh /setup.sh
+
+    RUN sh /setup.sh
+
+    USER 1000
+
+    '
+  want: []
+  covers:
+  - lycaon.dockerfile.remote-script-pipe
+- name: inherited-user
+  file: sample.Dockerfile
+  source: 'FROM nonroot-base:1
+
+    '
+  want: []
+  covers: []
+- name: empty-credential-arg
+  file: sample.Dockerfile
+  source: 'FROM alpine:3.20
+
+    ARG API_TOKEN=""
+
+    USER 1000
+
+    '
+  want: []
+  covers: []
+- name: precision-runtime-root-needed
+  file: Dockerfile
+  source: 'FROM alpine
+
+    USER root
+
+    CMD ["/service"]
+
+
+    '
+  want: []
+  covers: []
+- name: precision-local-curl-input
+  file: Dockerfile
+  source: 'FROM alpine
+
+    RUN curl file:///tmp/checked-script | sh
+
+    '
+  want: []
+  covers: []

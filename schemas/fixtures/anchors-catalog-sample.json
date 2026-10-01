@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "anchors": [
+    {
+      "id": "leg.finished",
+      "title": "Leg finished",
+      "description": "Worker leg reaches terminal state.",
+      "trigger_class": "manifest_on_reenter",
+      "surface": "coordinator",
+      "planes": ["inform"],
+      "envelope": {
+        "vars": {
+          "worker_digest": { "type": "string" },
+          "completed_ago": { "type": "string" }
+        }
+      },
+      "dedup": {
+        "key": "leg_finished",
+        "omit_inform_when": ["board_reinjected"]
+      }
+    },
+    {
+      "id": "tool.pre_invoke",
+      "title": "Tool pre-invoke",
+      "trigger_class": "pre_invoke",
+      "surface": "coordinator",
+      "planes": ["block"],
+      "envelope": {
+        "vars": {
+          "tool": { "type": "string", "required": true }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+code: obligation_wake_unreachable
+message: |
+  Phase {{phase}} hands its wait to a host observer, but settling it reaches {{target}}, which never wakes the coordinator.
+replacement: |
+  The host parks the session with no timer while a host obligation holds a phase, so the settle must be the wake. Set phases[{{target}}].on_enter.prompt_coordinator: true, mark it terminal, or let it declare its own on_enter.obligations to chain the wait.

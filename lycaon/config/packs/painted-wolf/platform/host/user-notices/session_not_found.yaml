@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Chat not found
+message: >-
+  This chat no longer exists. It was deleted, or this app's local data was reset.
+suggested_action: >-
+  Pick another chat from the sidebar, or start a new one.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - no longer exists
+      - sidebar

@@ -1,0 +1,184 @@
+/* The stack keeps its divider while the selected thumbnail fades in. */
+.project-thumb-stack {
+  position: relative;
+  height: 116px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--den-border);
+}
+.project-thumb {
+  height: 116px;
+  padding: 10px;
+  opacity: 0;
+  transition: opacity 220ms var(--den-ease);
+}
+.project-thumb--ready {
+  opacity: 1;
+}
+.project-thumb--live {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 116px;
+  padding: 0;
+  object-fit: cover;
+  object-position: top left;
+  background: var(--den-surface);
+  opacity: 0;
+  transition: opacity 220ms var(--den-ease);
+}
+.project-thumb--live-ready {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-thumb,
+  .project-thumb--live {
+    transition: none;
+  }
+}
+.project-thumb__dots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.project-thumb__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--thumb-soft);
+}
+.project-thumb__dots span:first-child {
+  background: var(--thumb-dot);
+}
+.project-thumb__bar {
+  height: 8px;
+  width: 58%;
+  border-radius: 3px;
+  margin-bottom: 6px;
+  background: var(--thumb-bar);
+}
+.project-thumb__line {
+  height: 6px;
+  border-radius: 3px;
+  margin-bottom: 5px;
+  background: var(--thumb-soft);
+}
+
+/* Placeholder identity hues mix with the active theme surface. */
+.project-thumb--placeholder {
+  --thumb-hue: var(--den-identity-1);
+  --thumb-bg: color-mix(in srgb, var(--thumb-hue) 12%, var(--den-surface));
+  --thumb-dot: color-mix(in srgb, var(--thumb-hue) 62%, var(--den-surface));
+  --thumb-bar: color-mix(in srgb, var(--thumb-hue) 38%, var(--den-surface));
+  --thumb-soft: color-mix(in srgb, var(--thumb-hue) 22%, var(--den-surface));
+  background: var(--thumb-bg);
+}
+.project-thumb--placeholder[data-tint="1"] {
+  --thumb-hue: var(--den-identity-2);
+}
+.project-thumb--placeholder[data-tint="2"] {
+  --thumb-hue: var(--den-identity-3);
+}
+.project-thumb--placeholder[data-tint="3"] {
+  --thumb-hue: var(--den-identity-4);
+}
+.project-thumb--placeholder[data-tint="4"] {
+  --thumb-hue: var(--den-identity-5);
+}
+
+/* Home cards use the elevated surface in dark appearance. */
+:root[data-den-appearance="dark"] .home-view__idea,
+.home-view__door,
+.home-view__notices .system-nudge,
+.den-list-panel,
+.project-card {
+  background: var(--den-surface);
+}
+
+:root[data-den-appearance="dark"] .home-view__door:hover {
+  background: var(--den-surface-elevated);
+}
+
+:root[data-den-appearance="dark"] .home-view__doors-line {
+  background: var(--den-line);
+}
+
+/* Compact icon sends stay filled, but use a slightly lifted warm fill. */
+:root[data-den-appearance="dark"] .home-view__idea-send:not(:disabled) {
+  background: color-mix(in srgb, var(--den-accent-signal) 72%, var(--den-text) 28%);
+}
+
+/* Pinned to the fence frame's corner while the code scrolls beneath it. */
+.den-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text-muted);
+  font-size: var(--text-den-caption);
+  line-height: 1.6;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.markdown-body .markdown-code-scroll:hover > .den-code-copy,
+.den-code-copy:focus-visible {
+  opacity: 1;
+}
+
+/* Quiet turn-tail status (including Stopped). */
+.den-turn-outcome {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: var(--text-den-hint);
+}
+
+.den-turn-outcome--stopped {
+  color: var(--den-text-muted);
+}
+
+/* Muted: an interruption is not a failure. */
+.den-turn-outcome--interrupted {
+  color: var(--den-text-muted);
+}
+
+.den-turn-outcome--error {
+  color: var(--den-danger-text);
+}
+
+.den-turn-outcome__retry {
+  padding: 2px 8px;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+}
+
+
+.den-resize-handle {
+  touch-action: none;
+}
+
+/* Auto-axis handles set their cursor with the layout query. */
+.den-resize-handle--width {
+  cursor: col-resize;
+}
+
+.den-resize-handle--height {
+  cursor: row-resize;
+}
+
+.den-resize-handle:focus-visible {
+  outline: none;
+}
+
+/* Resolved checkpoints and blueprints share one decision row. */

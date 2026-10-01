@@ -1,0 +1,10 @@
+tags: [terminal]
+description: Tear down a held pty (graceful then kill). It returns lifecycle acknowledgement only; use terminal_read or terminal_snapshot before closing when output matters.
+schema:
+  type: object
+  properties:
+    id:
+      type: string
+      description: Handle from terminal_open.
+  required: [id]
+  additionalProperties: false

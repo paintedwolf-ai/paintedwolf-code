@@ -1,0 +1,45 @@
+<div style="font-family:'Inter',system-ui,sans-serif; padding:20px; background:var(--kit-bg); display:flex; justify-content:center;">
+  <div style="width:320px; background:var(--kit-bg); border:1px solid var(--kit-border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px;">
+    <header style="display:flex; align-items:center; justify-content:space-between; padding:2px 4px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#60a5fa;" aria-hidden="true"></span>
+        <h4 style="margin:0; font-size:13px; font-weight:600; color:var(--kit-fg);">In Progress</h4>
+        <span style="font-size:11px; font-weight:600; padding:1px 6px; border-radius:9999px; background:var(--kit-surface); color:var(--kit-muted); border:1px solid var(--kit-border);">4</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:4px;">
+        <button style="width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:4px; color:var(--kit-muted); cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button style="width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:4px; color:var(--kit-muted); cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <article style="background:var(--kit-surface); border:1px solid var(--kit-border); border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.06); display:flex; flex-direction:column; gap:10px; cursor:grab;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:9999px; background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.24); font-size:10px; font-weight:600;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          High
+        </span>
+        <span style="color:var(--kit-muted); cursor:grab;" aria-label="Drag handle">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+        </span>
+      </div>
+
+      <div style="font-size:13px; font-weight:500; color:var(--kit-fg); line-height:1.4;">
+        Implement persistent SQLite source ledger with transaction locks
+      </div>
+
+      <footer style="display:flex; align-items:center; justify-content:space-between; padding-top:6px; border-top:1px solid var(--kit-border); font-size:11px; color:var(--kit-muted);">
+        <div style="display:flex; align-items:center; gap:4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Tomorrow</span>
+        </div>
+        <div style="width:20px; height:20px; border-radius:50%; background:var(--kit-accent); color:var(--kit-accent-fg); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">
+          CB
+        </div>
+      </footer>
+    </article>
+  </div>
+</div>

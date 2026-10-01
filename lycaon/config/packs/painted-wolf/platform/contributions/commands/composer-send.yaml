@@ -1,0 +1,7 @@
+id: painted-wolf/platform:composer-send
+title: "Send message"
+palette: false
+scope: "composer"
+action:
+  kind: native_ui
+  handler: "composer.send"

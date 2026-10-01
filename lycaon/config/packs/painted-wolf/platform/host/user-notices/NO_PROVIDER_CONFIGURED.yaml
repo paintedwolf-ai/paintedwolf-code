@@ -1,0 +1,13 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: No AI provider configured
+message: >-
+  No model provider is set up yet, so the assistant cannot answer.
+suggested_action: Add a provider in Settings → AI providers.
+action: open_ai_providers
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - No model provider
+      - AI providers

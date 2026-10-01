@@ -1,0 +1,11 @@
+# Deny filesystem and shell tools when the project has no attached folder roots.
+
+rules:
+  - id: no_folder_filesystem_denied
+    when:
+      project_has_no_roots: true
+      tool_requires_project_roots: true
+    then:
+      deny:
+        code: PROJECT_HAS_NO_ROOTS
+        message: attach a folder to use file and shell tools

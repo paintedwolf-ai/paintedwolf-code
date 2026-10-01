@@ -1,0 +1,7 @@
+id: painted-wolf/platform:chat-first-message
+title: "Go to first message"
+scope: global
+category: navigation
+action:
+  kind: native_ui
+  handler: "chat.firstMessage"

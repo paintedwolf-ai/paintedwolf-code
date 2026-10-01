@@ -1,0 +1,30 @@
+fixtures:
+- rule: vm-destroy
+  positive:
+  - virsh undefine builder --remove-all-storage
+  - vagrant destroy -f
+  - vagrant destroy --force
+  - multipass delete builder --purge
+  - VBoxManage unregistervm builder --delete
+  - sudo virsh undefine builder --remove-all-storage
+  negative:
+  - virsh list --all
+  - virsh dominfo builder
+  - vagrant status
+  - vagrant destroy
+  - multipass list
+  - multipass delete builder
+  - VBoxManage list vms
+  - VBoxManage unregistervm builder
+  - vagrant destroy -f --help
+- rule: vm-force-stop
+  positive:
+  - virsh destroy builder
+  - VBoxManage controlvm builder poweroff
+  - sudo virsh destroy builder
+  negative:
+  - virsh shutdown builder
+  - virsh start builder
+  - virsh list
+  - VBoxManage controlvm builder acpipowerbutton
+  - virsh destroy builder --help

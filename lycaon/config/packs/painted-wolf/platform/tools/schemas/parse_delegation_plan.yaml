@@ -1,0 +1,9 @@
+description: Validate delegation plan.
+schema:
+  type: object
+  properties:
+    raw:
+      type: string
+      description: Serialized plan input.
+  required: [raw]
+  additionalProperties: false

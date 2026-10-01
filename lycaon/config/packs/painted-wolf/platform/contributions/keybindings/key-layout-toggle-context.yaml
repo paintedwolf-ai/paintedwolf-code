@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-layout-toggle-context
+command: painted-wolf/platform:layout-toggle-context
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Alt+Shift+B"
+  windows:
+    - "Mod+Shift+."
+  linux:
+    - "Mod+Shift+."

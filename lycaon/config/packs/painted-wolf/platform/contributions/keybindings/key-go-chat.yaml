@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-chat
+command: painted-wolf/platform:go-chat
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader C"
+  windows:
+    - "Leader C"
+  linux:
+    - "Leader C"

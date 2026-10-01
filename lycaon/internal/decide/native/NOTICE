@@ -1,0 +1,19 @@
+bialy
+Copyright 2026 Painted Wolf Code
+
+The inference core under src/ (sequence format, decision head, calibration,
+checkpoint loading, Python-compatible JSON rendering) is derived from
+laya-candle (https://github.com/Trystan-SA/laya-candle, commit
+0f771e4a26451f1ea04985c0a13a1816daa128b3), Copyright 2026 the laya-candle
+authors, licensed under the Apache License, Version 2.0.
+
+laya-candle is itself a Rust port of Laya (https://github.com/NandhaKishorM/laya),
+Copyright the Laya authors, licensed under the Apache License, Version 2.0.
+The model checkpoints this engine loads (convaiinnovations/laya and
+convaiinnovations/laya-multilingual on the Hugging Face Hub) are published by
+the Laya authors under the same licence. The desktop app bundles
+laya-multilingual; THIRD-PARTY-NOTICES.md carries its notices.
+
+The ModernBERT backbone implementation comes from candle-transformers
+(https://github.com/huggingface/candle), licensed under the Apache License,
+Version 2.0 / MIT.

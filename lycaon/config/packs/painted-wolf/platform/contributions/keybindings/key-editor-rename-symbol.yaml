@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-rename-symbol
+command: painted-wolf/platform:editor-rename-symbol
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "F2"
+  windows:
+    - "F2"
+  linux:
+    - "F2"

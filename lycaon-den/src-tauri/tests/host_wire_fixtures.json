@@ -1,0 +1,167 @@
+{
+  "generated": "Generated from Go host types by lycaon/test/contract/wire/rust_host_wire_fixtures_contract_test.go. Do not edit; refresh with UPDATE_RUST_HOST_WIRE_FIXTURES=1 ./task test:contract -- ./test/contract/wire/...",
+  "fixtures": {
+    "attachment_upload_response": {
+      "source": "pkg/api.AttachmentUploadResponse",
+      "examples": [
+        {
+          "blob_id": "blob_id",
+          "bytes": 1,
+          "filename": "filename",
+          "kind": "kind",
+          "mime": "mime",
+          "video": {
+            "duration_ms": 1,
+            "height": 1,
+            "width": 1
+          }
+        }
+      ]
+    },
+    "attachment_video_facts": {
+      "source": "pkg/api.AttachmentVideoFacts",
+      "examples": [
+        {
+          "duration_ms": 1,
+          "height": 1,
+          "width": 1
+        }
+      ]
+    },
+    "daemon_manifest": {
+      "source": "internal/api.DaemonManifest",
+      "examples": [
+        {
+          "host": "host",
+          "pid": 1,
+          "port": 1,
+          "started_at": "2026-01-02T03:04:05Z"
+        }
+      ]
+    },
+    "error_response": {
+      "source": "pkg/api.ErrorResponse",
+      "examples": [
+        {
+          "actions": [
+            "actions"
+          ],
+          "code": "code",
+          "details": {
+            "details": "details"
+          },
+          "message": "message",
+          "resolution": "resolution",
+          "retryable": true,
+          "scope": "scope",
+          "suggested_action": "suggested_action",
+          "tier": "tier",
+          "title": "title"
+        }
+      ]
+    },
+    "managed_secret_reveal_challenge": {
+      "source": "pkg/api.ManagedSecretRevealChallenge",
+      "examples": [
+        {
+          "challenge_id": "challenge_id",
+          "expires_at": "expires_at",
+          "prompt": "prompt",
+          "proof_payload": "proof_payload",
+          "version": 1
+        }
+      ]
+    },
+    "managed_secret_reveal_response": {
+      "source": "pkg/api.ManagedSecretRevealResponse",
+      "examples": [
+        {
+          "remask_after_ms": 1,
+          "revealed_at": "revealed_at",
+          "secret_value": "secret_value",
+          "version": 1
+        }
+      ]
+    },
+    "startup_record": {
+      "source": "internal/startupprotocol.Reporter output",
+      "examples": [
+        {
+          "elapsed_ms": 0,
+          "kind": "phase",
+          "phase": "launch",
+          "pid": 4242,
+          "protocol": 1,
+          "sequence": 1
+        },
+        {
+          "elapsed_ms": 0,
+          "kind": "phase",
+          "phase": "store",
+          "pid": 4242,
+          "protocol": 1,
+          "sequence": 2
+        },
+        {
+          "elapsed_ms": 0,
+          "kind": "ready",
+          "phase": "ready",
+          "pid": 4242,
+          "port": 8787,
+          "protocol": 1,
+          "sequence": 3
+        },
+        {
+          "elapsed_ms": 0,
+          "kind": "phase",
+          "phase": "launch",
+          "pid": 4242,
+          "protocol": 1,
+          "sequence": 4
+        },
+        {
+          "code": "store_locked",
+          "elapsed_ms": 0,
+          "kind": "failed",
+          "phase": "launch",
+          "pid": 4242,
+          "protocol": 1,
+          "sequence": 5
+        }
+      ]
+    }
+  },
+  "vocabularies": {
+    "startup_phase": [
+      "launch",
+      "observability",
+      "store",
+      "upgrade_snapshot",
+      "schema_upgrade",
+      "upgrade_validation",
+      "configuration",
+      "user_path",
+      "credentials",
+      "host_resources",
+      "providers",
+      "pricing",
+      "tools",
+      "agents",
+      "sessions",
+      "policy",
+      "events",
+      "workflows",
+      "workers",
+      "scan",
+      "research",
+      "grounding",
+      "coordinator",
+      "server",
+      "services",
+      "recovery",
+      "background_work",
+      "binding",
+      "ready"
+    ]
+  }
+}

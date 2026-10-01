@@ -1,0 +1,7 @@
+description: Query active workflow run and scaffold vars
+schema:
+  type: object
+  properties:
+    path:
+      description: "Optional dotted scaffold path to read (omit for whole run summary)."
+      type: string

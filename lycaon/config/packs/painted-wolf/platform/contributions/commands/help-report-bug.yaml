@@ -1,0 +1,10 @@
+id: painted-wolf/platform:help-report-bug
+title: "Report a bug…"
+scope: "global"
+keywords:
+  - "bug"
+  - "issue"
+  - "feedback"
+action:
+  kind: native_ui
+  handler: "help.reportBug"

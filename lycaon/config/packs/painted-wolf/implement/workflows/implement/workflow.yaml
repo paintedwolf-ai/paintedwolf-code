@@ -1,0 +1,54 @@
+id: implement
+version: 1.0.0
+surface_profile: implement
+attach:
+  policy: session_create
+request:
+  cadence: each_turn
+  question: What would you like to work on?
+initial_posture: build
+agents:
+  - { id: coordinator, tools: all }
+  - { id: implementer, tools: all }
+  - { id: repo-researcher, tools: profile }
+  - { id: path-explorer, tools: profile }
+  - { id: web-researcher, tools: profile }
+  - { id: code-reviewer, tools: profile }
+  - { id: security-reviewer, tools: profile }
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/build.yaml
+phases:
+  - id: boot
+    activity_label: Looking around
+    on_enter:
+      set_posture: build
+    parallel_task:
+      max_workers: 32
+      max_read_workers: 32
+      max_write_workers: 32
+    complete_when: gates_satisfied
+    gates: [recon_or_board_ready]
+    next: work
+  - id: work
+    activity_label: Diving in
+    parallel_task:
+      max_workers: 32
+      max_read_workers: 32
+      max_write_workers: 32
+    on_reenter:
+      inject_kick: worker.task.finished
+      reenter_leg: "implement-work:{session_id}"
+    complete_when: gates_satisfied
+    gates: [worker_cycle_ready]
+    next: work
+    child_complete_when: delivery_gates_passed
+    child_next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host
+  content_review:
+    tools: [write, edit, replace_lines, restore_version]
+    paths: ["**"]

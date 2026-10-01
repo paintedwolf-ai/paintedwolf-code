@@ -1,0 +1,31 @@
+oar: '1.0'
+id: SURFACE_NOTE_UNGROUNDED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - surface_note
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "SURFACE_NOTE_UNGROUNDED"
+effect: block
+copy:
+  what: That note cited nothing. Add one citation and send it again.
+  cause: surface_note carried no cited_evidence and no cited_urls. At least one is required even though the wire schema marks both optional.
+  why: A mid-turn note is a grounded claim — the citation is what lets the user check it.
+  fix: 'Cite a handle exactly as printed in a [kind#ordinal] tag you have already seen (read#3, command#11), or path:line with a single line number (src/a.go:42). If no tool has observed anything yet, observe first. Do not retry the same summary uncited.'
+  instead: Branch on Code SURFACE_NOTE_UNGROUNDED; cite evidence or observe first — do not retry the same summary uncited
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:surface_note
+x-paintedwolf-message: That note cited nothing.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: surface_note
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: SURFACE_NOTE_UNGROUNDED'
+      - That note cited nothing

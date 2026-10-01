@@ -1,0 +1,74 @@
+{
+  "id": "mcp-error-code-is-a-machine-code",
+  "title": "A failed bridged call reports a machine error code, never free text, and the rule matches it exactly",
+  "covers": [
+    "OAR-SEL-8"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.post_invoke",
+      "id": "MCP_ERROR",
+      "effect": "nudge",
+      "requires": {
+        "profiles": [
+          "mcp"
+        ]
+      },
+      "selector": {
+        "mcp_error_code": [
+          "ETIMEDOUT",
+          "ECONNREFUSED"
+        ]
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.post_invoke",
+    "facts": {
+      "mcp_error_code": "ETIMEDOUT"
+    }
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "MCP_ERROR"
+  }
+}

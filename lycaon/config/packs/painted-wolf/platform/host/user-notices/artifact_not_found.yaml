@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Artifact not found
+message: >-
+  That artifact is not stored under this chat.
+suggested_action: >-
+  Re-run whatever produced it.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not stored
+      - Re-run

@@ -1,0 +1,30 @@
+# SettingsArea — facets of host and project settings published on EventTopicSettings.
+name: SettingsArea
+go_const_prefix: SettingsArea
+description: >-
+  Facets of host and project settings published on EventTopicSettings.
+values:
+  - id: approvals
+    comment: Human-in-the-loop approval thresholds, review modes, and auto-approval policies.
+  - id: extensions
+    comment: Installed platform extensions, skills, and rule packages.
+  - id: file_summaries
+    comment: Automatic file summary generation settings and preferences.
+  - id: limits
+    comment: Session spend limits, turn token budgets, and spend warning thresholds.
+  - id: mcp
+    comment: Model Context Protocol server registrations and configuration.
+  - id: power
+    comment: Power-management policies and energy settings.
+  - id: pricing
+    comment: Model pricing tables and token cost calculation settings.
+  - id: project_trust
+    comment: Trust state and execution permissions for a project workspace.
+  - id: review
+    comment: Code review and mutation review policies.
+  - id: security_scanners
+    comment: Bundled and external security scanner configurations.
+  - id: verify
+    comment: Test and verification automation configuration.
+  - id: web_research
+    comment: Web research search providers and search index credentials.

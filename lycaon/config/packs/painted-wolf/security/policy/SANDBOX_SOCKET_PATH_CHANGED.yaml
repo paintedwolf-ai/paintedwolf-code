@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_CHANGED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_CHANGED"
+effect: block
+copy:
+  what: A host-approved socket grant could not be revalidated before use.
+  cause: The approved canonical path/socket type or current-call permit could not be revalidated. This check
+    does not establish continuity of a particular socket inode.
+  why: The socket used must match the approved boundary at the moment of use.
+  fix: Request the socket again, with a fresh `capability_request` or the same socket argument, after confirming
+    the service socket path is stable.
+  instead: Branch on Code; re-request after the socket path is stable
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: socket grant changed before use
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_CHANGED'
+  - socket grant

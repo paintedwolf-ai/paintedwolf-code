@@ -1,0 +1,134 @@
+.den-blueprints-list-panel.den-list-panel .den-list-head,
+.den-blueprints-list-panel .den-blueprints-row {
+  grid-template-columns: 28px minmax(0, 1fr) 5.5rem 5.5rem minmax(4.5rem, auto) 26px;
+}
+.den-blueprints-list-panel .den-blueprints-row--picking {
+  grid-template-columns: 28px minmax(0, 1fr) 5.5rem 5.5rem minmax(12rem, 1fr) 26px;
+}
+.den-blueprints-list-head-kind {
+  text-align: left;
+}
+.den-blueprints-list-head-actions {
+  grid-column: span 2;
+}
+.den-blueprints-row {
+  display: grid;
+  column-gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--den-line);
+}
+.den-blueprints-row:last-child {
+  border-bottom: none;
+}
+.den-blueprints-row:hover {
+  background: var(--den-selection-hover);
+}
+.den-blueprints-row--selected {
+  background: var(--den-selection);
+  box-shadow: inset 2px 0 0 var(--den-accent);
+}
+.den-blueprints-row--selected:hover {
+  background: var(--den-selection-hover);
+}
+/* Queued behind an in-flight delete. */
+.den-blueprints-row--pending {
+  opacity: 0.55;
+}
+/* Ordered after --selected so the danger rail wins on a row that stays selected. */
+.den-blueprints-row--failed {
+  box-shadow: inset 2px 0 0 var(--den-danger);
+}
+.den-blueprints-row__failure {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-danger-text);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+}
+.den-blueprints-row__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.den-blueprints-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.den-blueprints-row__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--den-text-muted);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+}
+.den-blueprints-row__kind {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-blueprints-row__when {
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.den-blueprints-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.den-blueprints-row__rename {
+  width: 100%;
+  max-width: 24rem;
+  border: 1px solid var(--den-accent-warm);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  padding: 2px 6px;
+  outline: none;
+}
+.den-blueprints-row__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+.den-blueprints-row:hover .den-blueprints-row__menu-btn,
+.den-blueprints-row:focus-within .den-blueprints-row__menu-btn,
+.den-blueprints-row--selected .den-blueprints-row__menu-btn,
+.den-blueprints-row__menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+.den-blueprints-row__menu-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+@media (hover: none) {
+  .den-blueprints-row__menu-btn {
+    opacity: 1;
+  }
+}
+

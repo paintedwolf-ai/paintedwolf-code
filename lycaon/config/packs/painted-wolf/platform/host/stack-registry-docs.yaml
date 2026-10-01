@@ -1,0 +1,13 @@
+# Registry documentation URL templates per manifest ecosystem. The scheduled
+# stack warm derives one page per manifest dependency from these — a
+# deterministic, keyless crawl target that works even when LLM seed warming
+# is off. "{name}" is the dependency name exactly as the manifest declares it
+# (Go module paths keep their slashes).
+ecosystems:
+  go: https://pkg.go.dev/{name}
+  npm: https://www.npmjs.com/package/{name}
+  cargo: https://docs.rs/{name}
+  pypi: https://pypi.org/project/{name}/
+  rubygems: https://rubygems.org/gems/{name}
+  composer: https://packagist.org/packages/{name}
+  metacpan: https://metacpan.org/pod/{name}

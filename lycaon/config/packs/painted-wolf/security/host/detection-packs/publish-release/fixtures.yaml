@@ -1,0 +1,173 @@
+fixtures:
+- rule: cargo-publish
+  positive:
+  - cargo publish
+  - cargo publish --token abc123
+  - cargo publish -p my-crate
+  - sudo cargo publish
+  # A registry named "local" is not proof of loopback, so it still asks.
+  - cargo publish --registry local-registry
+  negative:
+  - cargo build --release
+  - cargo test
+  - cargo publish --registry local --dry-run
+  - cargo publish --help
+  - cargo publish -h
+- rule: gh-release-create
+  positive:
+  - gh release create v1.0.0
+  - glab release create v2.0.0
+  # A draft is unpublished but still creates the remote release and its tag.
+  - gh release create v1.0.0 --draft
+  negative:
+  - gh release list
+  - gh repo view
+  - gh release create --help
+- rule: git-force-push
+  positive:
+  - git push --force origin main
+  - git push -f origin feature
+  - git push origin +main
+  negative:
+  - git push origin main
+  - git fetch origin
+  - git push --dry-run --force origin main
+  - git push -n -f origin feature
+- rule: git-push-tag-delete
+  positive:
+  - git push origin --delete v1.0.0
+  - git push --delete origin bad-branch
+  negative:
+  - git push origin v1.0.0
+  - git tag -l
+  - git push --dry-run origin --delete v1.0.0
+- rule: npm-publish
+  positive:
+  - npm publish
+  - pnpm publish --access public
+  - cd pkg && yarn publish
+  # These resolve to real remote hosts without any effect_reach override — the
+  # --registry flag is parsed and classified by the actual resolver, not a
+  # host-field stub.
+  - npm publish --registry https://registry.internal.example.test
+  - pnpm publish --registry https://registry.acme.test
+  negative:
+  - npm install lodash
+  - pnpm list
+  - npm publish --dry-run
+  - pnpm publish --access public --dry-run
+  # No override needed: --registry with a literal loopback URL resolves to
+  # local through the real resolver, not a fixture stub.
+  - npm publish --registry http://localhost:4873
+  - npm publish --registry http://127.0.0.1:4873
+- rule: pypi-upload
+  positive:
+  - twine upload dist/*
+  - poetry publish
+  - uv publish
+  - twine upload --repository-url https://upload.pypi.org/legacy/ dist/*
+  # poetry's --repository takes a named alias resolved from poetry's own
+  # config, which this resolver does not read — it always falls back to the
+  # hardcoded remote default, so a locally-aliased repository still fires.
+  - poetry publish --repository local-repo
+  negative:
+  - pip install requests
+  - poetry build
+  - poetry publish --dry-run
+  - twine upload dist/* --help
+  - twine upload --repository-url http://localhost:8080/ dist/*
+- rule: repo-delete
+  positive:
+  - gh repo delete acme/legacy-api --yes
+  - gh repo delete acme/legacy-api
+  - glab repo delete acme/legacy-api --yes
+  - tea repo delete acme/legacy-api
+  - sudo gh repo delete acme/legacy-api --yes
+  negative:
+  - gh repo view acme/legacy-api
+  - gh repo list acme
+  - gh repo clone acme/legacy-api
+  - gh repo delete acme/legacy-api --help
+- rule: package-unpublish
+  positive:
+  - npm unpublish acme-sdk@1.2.3
+  - cargo yank --version 1.2.3
+  - gh release delete v1.0.0 --yes
+  - npm unpublish acme-sdk@1.2.3 --registry https://registry.acme.test
+  negative:
+  - npm view acme-sdk versions
+  - cargo search acme-sdk
+  - npm unpublish acme-sdk@1.2.3 --registry http://127.0.0.1:4873
+  - npm unpublish acme-sdk@1.2.3 --registry http://localhost:4873
+- rule: ci-secret-set
+  positive:
+  - gh secret set NPM_TOKEN
+  - gh variable set DEPLOY_ENV
+  negative:
+  - gh secret list
+  - gh variable list
+- rule: npm-owner-grant
+  positive:
+  - npm owner add jdoe acme-sdk
+  - pnpm owner add jdoe acme-sdk
+  - yarn owner add jdoe acme-sdk
+  - bun owner add jdoe acme-sdk
+  - sudo npm owner add jdoe acme-sdk
+  - npm owner add jdoe acme-sdk --registry https://registry.acme.test
+  negative:
+  - npm owner ls acme-sdk
+  - npm owner rm jdoe acme-sdk
+  # --registry falls through to the generic redirect-reach resolver for any
+  # npm/pnpm/yarn/bun command, not just publish — a loopback registry here
+  # resolves local and filter_local suppresses the owner grant too.
+  - npm owner add jdoe acme-sdk --registry http://localhost:4873
+  - npm owner add jdoe acme-sdk --help
+- rule: api-passthrough-destroy
+  positive:
+  - gh api -X DELETE /repos/acme/api
+  - gh api --method DELETE repos/acme/api
+  - gh api -X DELETE /repos/acme/api/branches/main/protection
+  - gh api -X PUT /repos/acme/api/branches/main/protection --input rules.json
+  - gh api -X DELETE /orgs/acme/members/jdoe
+  - glab api --method DELETE /projects/42
+  - sudo gh api -X DELETE /repos/acme/api
+  negative:
+  - gh api /repos/acme/api
+  - gh api repos/acme/api/releases
+  - gh api -X GET /repos/acme/api
+  - gh api -X DELETE /repos/acme/api --help
+  - gh repo view acme/api
+- rule: api-passthrough-write
+  positive:
+  - gh api -X POST /repos/acme/api/issues
+  - gh api repos/acme/api/issues/1/comments -f body=hello
+  - gh api -X PATCH /repos/acme/api/issues/1 -f state=closed
+  - glab api --method POST /projects/42/issues
+  - sudo gh api -X POST /repos/acme/api/issues
+  negative:
+  - gh api /repos/acme/api
+  - gh api repos/acme/api/releases
+  - gh api -X GET search/issues -f q=test
+  - gh api -X POST /repos/acme/api/issues --help
+  - gh api graphql --paginate
+- rule: workflow-run-delete
+  positive:
+  - gh run delete 12345
+  - gh run delete 12345 --repo acme/api
+  - sudo gh run delete 12345
+  negative:
+  - gh run list
+  - gh run view 12345
+  - gh run rerun 12345
+  - gh run delete 12345 --help
+- rule: repo-automation-disable
+  positive:
+  - gh workflow disable deploy.yml
+  - gh repo archive acme/api --yes
+  - sudo gh workflow disable deploy.yml
+  negative:
+  - gh workflow enable deploy.yml
+  - gh workflow list
+  - gh workflow view deploy.yml
+  - gh repo view acme/api
+  - gh workflow disable deploy.yml --help

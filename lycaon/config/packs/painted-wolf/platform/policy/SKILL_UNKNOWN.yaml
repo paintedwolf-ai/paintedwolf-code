@@ -1,0 +1,33 @@
+oar: '1.0'
+id: SKILL_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - skills_read
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.need
+when: paintedwolf.rejection_code == "SKILL_UNKNOWN"
+effect: block
+copy:
+  what: No confident skill match was selected for {{ paintedwolf.need }}.
+  cause: The lookup did not establish a confident match, and the need did not name one exact identifier.
+  why: Skill lookup is optional; an empty result does not block the task or prove no relevant skill exists.
+  fix: Continue the task with available tools and context, without a skill. Retry only if you have a more specific need or a known exact skill identifier.
+  instead: Branch on Code SKILL_UNKNOWN; do not infer that the catalog has no relevant skill
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:skills_read
+x-paintedwolf-message: 'No confident skill match was selected for {{ paintedwolf.need }}.'
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    need: missing-skill
+    profile: implement
+    tool: skills_read
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: SKILL_UNKNOWN'

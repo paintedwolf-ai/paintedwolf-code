@@ -1,0 +1,37 @@
+title: Delete a namespace and everything in it
+id: 5553cfa4-fb9d-4776-ac34-9df77fa97a2a
+description: >-
+  Deletes a Kubernetes namespace and every resource inside it. OpenShift spells
+  the same object a project, and both accept the resource/name form.
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-07'
+modified: '2026-09-01'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: critical
+detection:
+  selection_image:
+    Image:
+      - kubectl
+      - oc
+      - kubecolor
+  selection_delete:
+    CommandLine|contains: ' delete '
+  # The word must end where the resource name ends, or the match reads the front
+  # of an unrelated name. A trailing space or slash carries the plural and the
+  # resource/name form.
+  verbs_namespace_target:
+    CommandLine|re: '(?i)\s(namespaces?|ns|projects?)(\s|/)'
+  filter_rehearsal:
+    Argv|re: '^(--dry-run(=.*)?|--help|-h)$'
+  filter_local:
+    EffectReach: local
+  condition: selection_image and selection_delete and verbs_namespace_target and not filter_rehearsal and not filter_local

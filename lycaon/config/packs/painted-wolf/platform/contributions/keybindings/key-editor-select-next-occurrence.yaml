@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-select-next-occurrence
+command: painted-wolf/platform:editor-select-next-occurrence
+scope: "files"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+D"
+  windows:
+    - "Mod+D"
+  linux:
+    - "Mod+D"

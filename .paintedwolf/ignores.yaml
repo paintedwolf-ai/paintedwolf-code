@@ -1,0 +1,27 @@
+# Finding ignores for this repository's scanner test fixtures.
+#
+# Everything under these trees is deliberate vulnerability material used by
+# the bundled scanner E2E and calibration tests (see
+# lycaon/test/testdata/scan/README.md). Findings there are expected signals,
+# not defects in shipped code, so they are ignored at the ledger. The engine
+# still runs and the E2E tests still assert the findings exist.
+version: 1
+findings:
+  - id: repo-fixture-scan-secret
+    path: lycaon/test/testdata/scan/
+    kind: secret
+    reason: deliberate gitleaks E2E fixture in the scan testdata tree
+  - id: repo-fixture-scan-sast
+    path: lycaon/test/testdata/scan/
+    kind: sast
+    reason: deliberate TLS-bypass OpenGrep E2E fixture (scan/vuln.go)
+  - id: repo-fixture-scan-sca
+    path: lycaon/test/testdata/scan/
+    kind: sca
+    reason: known-vulnerable lodash@4.17.4 fixture required by bundled scanner E2E
+  - id: repo-fixture-opengrep-calibration
+    path: lycaon/test/testdata/opengrep-projects/
+    reason: calibration/held-out project trees used to validate OpenGrep rule matching
+  - id: repo-fixture-opengrep-rule-fixtures
+    path: lycaon/test/testdata/opengrep/
+    reason: bundled OpenGrep rule fixture trees (self-matching during rule validation)

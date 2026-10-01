@@ -1,0 +1,32 @@
+oar: '1.0'
+id: WORKER_BUDGET_DECLINE_NO_REQUEST
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.job_id
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "WORKER_BUDGET_DECLINE_NO_REQUEST"
+effect: block
+copy:
+  what: '`decline_worker_budget(job_id)` answers an open budget request on a pending or running worker job'
+  cause: Job {{ paintedwolf.job_id }} has no open request, is unknown, or has already finished
+  why: A request closes when it is granted or declined, and a finished job's ceiling no longer changes
+  fix: Use the job_id of a running worker whose board row shows an open request; a finished job's request
+    reaches you on its finish wake for a resume decision
+  instead: Branch on Code; nothing is left to decline for this job
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:decline_worker_budget
+x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} has no open budget request to decline
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    job_id: job-done
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKER_BUDGET_DECLINE_NO_REQUEST'
+selector:
+  tool:
+  - decline_worker_budget

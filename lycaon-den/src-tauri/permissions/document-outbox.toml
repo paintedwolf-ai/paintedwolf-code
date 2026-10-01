@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-document-outbox"
+description = "Preserve and recover this device's pending collaborative editor work."
+commands.allow = ["list_document_outbox", "inspect_document_outbox", "read_document_outbox", "commit_document_outbox"]

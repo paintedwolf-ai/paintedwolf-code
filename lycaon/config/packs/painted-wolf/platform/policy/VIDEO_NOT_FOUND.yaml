@@ -1,0 +1,32 @@
+oar: '1.0'
+id: VIDEO_NOT_FOUND
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - view_video
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "VIDEO_NOT_FOUND"
+effect: block
+copy:
+  what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
+  cause: The path resolved inside the read scope, but nothing exists there.
+  why: Frames are drawn from the video's bytes; a missing file has none.
+  fix: Use the path from the attachment's fence, or locate the recording with find or list_dir.
+  instead: Branch on Code VIDEO_NOT_FOUND; correct the path
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
+x-paintedwolf-message: view_video found no file at the path
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: recordings/missing.mp4
+    tool: view_video
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: VIDEO_NOT_FOUND'

@@ -1,0 +1,36 @@
+oar: '1.0'
+id: JQ_EDIT_STREAM_CAP
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq_edit
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path
+    - paintedwolf.cap
+    - paintedwolf.resource_limit
+when: paintedwolf.rejection_code == "JQ_EDIT_STREAM_CAP"
+effect: block
+copy:
+  what: The jq program produced more than {{ paintedwolf.cap }} documents for {{ paintedwolf.path }}; nothing was written.
+  cause: The result stream exceeded the host's result cap.
+  why: Writing only the documents that fit would silently drop the rest of the file.
+  fix: Make the change with a tool that streams the whole file, or ask the owner for a smaller document.
+  instead: Branch on Code; do not retry the same program on this file
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq_edit
+x-paintedwolf-message: jq_edit result stream exceeded the cap
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      cap: '20000'
+      path: events.jsonl
+      profile: implement
+      tool: jq_edit
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_EDIT_STREAM_CAP'

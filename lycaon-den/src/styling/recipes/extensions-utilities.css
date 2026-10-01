@@ -1,0 +1,156 @@
+@utility den-browse-overflow__icon-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  line-height: 0;
+}
+
+@utility den-ext-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--den-border);
+  color: var(--den-text-muted);
+  background: var(--den-background);
+}
+
+@utility den-ext-chip-stock {
+  color: var(--den-text);
+}
+
+@utility den-ext-chip-add {
+  color: var(--den-status-positive-text);
+  border-color: color-mix(in srgb, var(--den-status-positive) 35%, var(--den-border));
+}
+
+@utility den-ext-chip-selected {
+  color: var(--den-accent-text);
+  border-color: color-mix(in srgb, var(--den-accent-signal) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-disabled {
+  color: var(--den-text-muted);
+  opacity: 0.9;
+}
+
+@utility den-ext-chip-conflict {
+  color: var(--den-danger-text);
+  border-color: color-mix(in srgb, var(--den-danger) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-profile {
+  color: var(--den-status-positive-text);
+}
+
+@utility den-ext-chip-feature {
+  color: var(--den-text);
+}
+
+@utility den-ext-chip-platform {
+  color: var(--den-text);
+}
+
+@utility den-ext-chip-security {
+  color: var(--den-warning-text);
+}
+
+
+@utility den-ext-chip-scanner {
+  color: var(--den-warning-text);
+  border-color: color-mix(in srgb, var(--den-warning) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-invalid {
+  color: var(--den-danger-text);
+  border-color: color-mix(in srgb, var(--den-danger) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-integrity {
+  color: var(--den-danger-text);
+  border-color: color-mix(in srgb, var(--den-danger) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-reload {
+  color: var(--den-warning-text);
+  border-color: color-mix(in srgb, var(--den-warning) 40%, var(--den-border));
+}
+
+@utility den-ext-chip-warning {
+  color: var(--den-warning-text);
+  border-color: color-mix(in srgb, var(--den-warning) 40%, var(--den-border));
+}
+
+@utility den-ext-diagnostic-severity {
+  font-weight: 600;
+  font-size: var(--text-den-overline);
+}
+
+@utility den-ext-diagnostic-severity-error {
+  color: var(--den-danger-text);
+}
+
+@utility den-ext-diagnostic-severity-warning {
+  color: var(--den-warning-text);
+}
+
+@utility den-ext-diagnostic-severity-info {
+  color: var(--den-text-muted);
+}
+
+@utility den-ext-search {
+  min-width: 140px;
+  width: 11rem;
+  max-width: 16rem;
+}
+
+@utility den-ext-desired {
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-shell);
+  overflow: hidden;
+  background: var(--den-background);
+}
+
+@utility den-ext-desired-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--den-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+
+  & h3 {
+    margin: 0;
+    font-size: var(--text-den-body);
+    font-weight: 600;
+  }
+}
+
+@utility den-ext-desired-yaml {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-caption);
+  line-height: 1.5;
+  background: var(--den-background);
+  white-space: pre-wrap;
+}
+
+/* Stack approval rows when fixed columns no longer fit. */
+@container den-settings-col (max-width: 440px) {
+  .den-settings-rules > li,
+  .den-settings-rules-pairs > li {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-den-3);
+  }
+  .den-settings-rules-head {
+    display: none;
+  }
+}

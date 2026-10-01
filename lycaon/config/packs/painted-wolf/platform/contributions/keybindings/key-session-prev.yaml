@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-session-prev
+command: painted-wolf/platform:session-prev
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+ArrowUp"
+  windows:
+    - "Alt+ArrowUp"
+  linux:
+    - "Alt+ArrowUp"

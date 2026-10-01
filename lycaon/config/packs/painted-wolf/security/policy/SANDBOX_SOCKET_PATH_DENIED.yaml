@@ -1,0 +1,28 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PATH_DENIED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.user_guidance
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_DENIED"
+effect: block
+copy:
+  what: Local-service socket authority was declined for this action.
+  cause: The person answered the host approval request without granting the requested socket paths.
+  why: Retrying the same request would disregard that decision.
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue
+    without those local services, or wait for new user direction before requesting them again.'
+  instead: Branch on Code; do not retry the declined socket request
+x-paintedwolf-category: user-decision
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: local-service socket authority declined
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}
+  expect_contains:
+  - 'Code: SANDBOX_SOCKET_PATH_DENIED'
+  - declined

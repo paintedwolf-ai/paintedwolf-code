@@ -1,0 +1,32 @@
+oar: '1.0'
+id: JQ_PATH_REQUIRED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - jq
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.path_required
+when: paintedwolf.rejection_code == "JQ_PATH_REQUIRED"
+effect: block
+copy:
+  what: jq was called without a path to a structured document.
+  cause: The path argument names the repo-relative JSON, YAML, or TOML file to query.
+  why: Structured rejects let agents branch without parsing free-form errors.
+  fix: Retry jq with path set to the file to query.
+  instead: Branch on Code; supply a path before retrying jq
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
+x-paintedwolf-message: jq requires a path to the document
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: explore_readonly
+      tool: jq
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: JQ_PATH_REQUIRED'

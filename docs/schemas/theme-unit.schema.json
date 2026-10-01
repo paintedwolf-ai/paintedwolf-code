@@ -1,0 +1,2512 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A theme assigns literal colors to host-defined token ids.",
+  "properties": {
+    "agent_colors": {
+      "additionalProperties": false,
+      "description": "Muted OKLCH family for agent chats: one hue, with each chat a lightness step from main. The client enforces display contrast.",
+      "properties": {
+        "chroma": {
+          "default": 0.03,
+          "description": "OKLCH saturation of every agent color.",
+          "maximum": 0.12,
+          "minimum": 0,
+          "type": "number"
+        },
+        "lightness_step": {
+          "default": 0.1,
+          "description": "OKLCH lightness between neighboring chats.",
+          "maximum": 0.25,
+          "minimum": 0.02,
+          "type": "number"
+        },
+        "main": {
+          "description": "Center of the agent family; defaults to text-muted.",
+          "pattern": "^#[0-9a-fA-F]{6}([fF]{2})?$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "appearance": {
+      "description": "Which scheme this theme implements.",
+      "enum": [
+        "dark",
+        "light"
+      ],
+      "type": "string"
+    },
+    "bevel": {
+      "additionalProperties": false,
+      "description": "How strongly raised and recessed controls show their edges. The host derives every edge's color; a theme sets only their strength.",
+      "properties": {
+        "strength": {
+          "description": "Multiplier on every edge's alpha. 1 keeps the product's edges, 0 flattens every control, 2 doubles them.",
+          "maximum": 2,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "brand": {
+      "additionalProperties": false,
+      "description": "What a theme may say about product identity. One key, and it carries a visibility rather than artwork: a theme may quiet the product logomark and can never substitute one.",
+      "properties": {
+        "logomark": {
+          "description": "Whether the product logomark paints. Hiding reserves its box, so a theme swap never relayouts the window.",
+          "enum": [
+            "hidden",
+            "shown"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "icons": {
+      "additionalProperties": false,
+      "description": "The glyph surface: a theme-wide stroke treatment plus per-slot geometry. The frame — grid, size, paint, and each slot's base weight — stays the host's.",
+      "properties": {
+        "geometry": {
+          "additionalProperties": false,
+          "description": "Per-slot glyph replacement. Partial: an unset slot keeps the host glyph.",
+          "properties": {
+            "all-projects": {
+              "description": "The full project list. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "arrow-down": {
+              "description": "Move to the next item. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "arrow-up": {
+              "description": "Move to the previous item. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "artifact": {
+              "description": "A produced artifact. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "back": {
+              "description": "Return to the previous list. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "bug": {
+              "description": "Bug-hunting workflow. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "busy": {
+              "description": "Work in flight. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "chain": {
+              "description": "Bind two items so they travel together. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "check": {
+              "description": "Confirmation and completion. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "chevron-down": {
+              "description": "Open downward. (disclosure group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "chevron-up": {
+              "description": "Open upward. (disclosure group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "claim": {
+              "description": "An assertion the agent made. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "clone-repo": {
+              "description": "Clone a repository. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "code": {
+              "description": "A code hit. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "copy": {
+              "description": "Copy to clipboard. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "delete": {
+              "description": "Delete. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "diff": {
+              "description": "A comparison of what changed. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "dismiss": {
+              "description": "Dismiss or close. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "drafts": {
+              "description": "Draft sessions. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "edit": {
+              "description": "Edit or rename. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-deleted": {
+              "description": "A deleted current document. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-editing": {
+              "description": "The current document is editable here. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-editing-elsewhere": {
+              "description": "A document edited in another window. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-open-current": {
+              "description": "Open the current project file from a draft or version. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-preview": {
+              "description": "Rendered document preview. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-read-only": {
+              "description": "A file without owner-write permission. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-restore": {
+              "description": "Restore the selected historical version. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-takeover": {
+              "description": "Move the editing lease to this window. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-unlock": {
+              "description": "Make a read-only file editable. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-version": {
+              "description": "A historical document version. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-view-only": {
+              "description": "A document available only for viewing. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "editor-worker-draft": {
+              "description": "A worker's isolated draft. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "elevated-access": {
+              "description": "Revoke saved elevated access for the current chat. (security group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "escalate": {
+              "description": "Escalate to the coordinator. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "evidence": {
+              "description": "A gathered document. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "expand": {
+              "description": "Fill the window. (disclosure group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "external-content": {
+              "description": "Content from outside the project. (trust group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "file": {
+              "description": "A file in the tree. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "file-group": {
+              "description": "A summary of grouped file changes. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "find": {
+              "description": "Search within the open document. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "folder": {
+              "description": "A folder in the tree. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "folder-open": {
+              "description": "An expanded folder in the tree. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "git": {
+              "description": "Source control. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "goto-line": {
+              "description": "Jump to a line number. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "grip": {
+              "description": "Drag handle. (shell group, fill). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "high-risk": {
+              "description": "A high-risk action. (trust group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "impact": {
+              "description": "What an action will touch. (trust group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "launcher": {
+              "description": "Jump to anything. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "link": {
+              "description": "An external link. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "more": {
+              "description": "Overflow menu. (action group, fill). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "network": {
+              "description": "An observed connection. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "new-file": {
+              "description": "Create a file. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "new-folder": {
+              "description": "Create a folder. (editor group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "new-project": {
+              "description": "Add a project. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "new-session": {
+              "description": "Start a chat. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "new-window": {
+              "description": "Open in a new window. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "open-folder": {
+              "description": "Open an existing folder. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "outcome": {
+              "description": "A settled result. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "pause": {
+              "description": "Pause the queue. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "pending": {
+              "description": "Not started yet. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "pin": {
+              "description": "Pin. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "play": {
+              "description": "Resume the queue. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "plus": {
+              "description": "Add. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "progress": {
+              "description": "Progress checklist. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "project-folder": {
+              "description": "A project's folder. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "project-switcher": {
+              "description": "Switch project. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "queue": {
+              "description": "Queued prompts. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "radar": {
+              "description": "Reconnaissance workflow. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "recents": {
+              "description": "Recently opened. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "redo": {
+              "description": "Redo the undone change. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "rewind": {
+              "description": "Rewind to an earlier turn. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "route": {
+              "description": "Planning workflow. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "scope": {
+              "description": "The sidebar scope picker. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "scope-off": {
+              "description": "The scope picker with scoping off. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "search": {
+              "description": "Search. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "send-next": {
+              "description": "Send the next queued prompt. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "session": {
+              "description": "A chat session. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings": {
+              "description": "Settings. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-advanced": {
+              "description": "Advanced section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-approvals": {
+              "description": "Approvals section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-budgets": {
+              "description": "Budgets section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-general": {
+              "description": "General section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-host-resources": {
+              "description": "Host resources section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-mcp": {
+              "description": "MCP section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-providers": {
+              "description": "Model providers section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-scanners": {
+              "description": "Scanners section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-secrets": {
+              "description": "Secrets section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-tests": {
+              "description": "Provider tests section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-trust": {
+              "description": "Trust section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "settings-web-research": {
+              "description": "Web research section. (settings group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "shield": {
+              "description": "A capability boundary. (trust group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "shortcuts": {
+              "description": "Keyboard shortcuts. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "sidebar-collapse": {
+              "description": "Collapse the nav rail. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "sidebar-expand": {
+              "description": "Expand the nav rail. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "sparkle": {
+              "description": "New from an idea. (shell group, fill). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stage-artifacts": {
+              "description": "Artifacts stage. (stage group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stage-blueprints": {
+              "description": "Blueprints stage. (stage group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stage-cost": {
+              "description": "Cost stage. (stage group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stage-extensions": {
+              "description": "Extensions stage. (stage group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stage-files": {
+              "description": "Files stage. (stage group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "starred": {
+              "description": "Starred projects. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "stop": {
+              "description": "Stop the run. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "surface": {
+              "description": "A panel or stage. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "terminal": {
+              "description": "A shell prompt. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "tool": {
+              "description": "A tool call. (result group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "undo": {
+              "description": "Undo the last change. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "unfold": {
+              "description": "Show folded content in place. (disclosure group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "upload": {
+              "description": "Send or submit. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk": {
+              "description": "Walk file history in time order. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk-first": {
+              "description": "Move to the first Walk step. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk-latest": {
+              "description": "Move to the latest Walk step. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk-next": {
+              "description": "Move to the next Walk step. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk-previous": {
+              "description": "Move to the previous Walk step. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "walk-refresh": {
+              "description": "Show newly arrived walk steps. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "workers": {
+              "description": "Workers in flight. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "workflows": {
+              "description": "Workflow runs. (chat group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "stroke": {
+          "additionalProperties": false,
+          "description": "The theme's handwriting, applied to every stroked glyph — including the ones it never redraws. This is how a family gets one hand across the whole product without authoring every slot.",
+          "properties": {
+            "cap": {
+              "enum": [
+                "butt",
+                "round",
+                "square"
+              ],
+              "type": "string"
+            },
+            "join": {
+              "enum": [
+                "bevel",
+                "miter",
+                "round"
+              ],
+              "type": "string"
+            },
+            "weight": {
+              "description": "Multiplier on each slot's host-defined width. 1 leaves the product's drawing alone.",
+              "maximum": 2,
+              "minimum": 0.5,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "id": {
+      "description": "Contribution id: provider:name.",
+      "type": "string"
+    },
+    "name": {
+      "description": "Display name in Settings.",
+      "type": "string"
+    },
+    "syntax": {
+      "additionalProperties": false,
+      "properties": {
+        "comment": {
+          "description": "Comments of every form.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "comment.doc": {
+          "description": "Documentation comments. Folds to comment when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "constant": {
+          "description": "Language constants and atoms.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "constant.boolean": {
+          "description": "Boolean literals. Folds to constant when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "constant.null": {
+          "description": "Null and nil literals. Folds to constant when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "constant.variable": {
+          "description": "Constant-valued identifiers. Folds to constant when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "deleted": {
+          "description": "Removed lines in embedded diffs.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "emphasis": {
+          "description": "Emphasized markup text.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "function": {
+          "description": "Function and method names.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "function.definition": {
+          "description": "Function names at their definition site. Folds to function when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "function.macro": {
+          "description": "Macros and labels. Folds to function when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "function.method": {
+          "description": "Method calls on a receiver. Folds to function when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "heading": {
+          "description": "Markup headings.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "inserted": {
+          "description": "Added lines in embedded diffs.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "invalid": {
+          "description": "Malformed or rejected source.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword": {
+          "description": "Language keywords.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword.control": {
+          "description": "Control flow (if, for, return). Folds to keyword when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword.definition": {
+          "description": "Definition keywords (func, class, let). Folds to keyword when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword.module": {
+          "description": "Import and export keywords. Folds to keyword when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword.operator": {
+          "description": "Word-shaped operators (in, is, typeof). Folds to keyword when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "keyword.self": {
+          "description": "Self and this references. Folds to keyword when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "link": {
+          "description": "Links and URLs.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "meta": {
+          "description": "Directives, annotations, and pragmas.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "meta.annotation": {
+          "description": "Annotations and decorators. Folds to meta when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "meta.processing": {
+          "description": "Processing instructions. Folds to meta when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "number": {
+          "description": "Numeric literals.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "number.float": {
+          "description": "Floating-point literals. Folds to number when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "number.integer": {
+          "description": "Integer literals. Folds to number when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "operator": {
+          "description": "Operators.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "operator.definition": {
+          "description": "Assignment and definition operators. Folds to operator when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "property": {
+          "description": "Object and record properties.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "property.attribute": {
+          "description": "Markup attribute names. Folds to property when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "property.definition": {
+          "description": "Properties at their definition site. Folds to property when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "punctuation": {
+          "description": "Separators, brackets, and delimiters.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "punctuation.bracket": {
+          "description": "Brackets, braces, and parentheses. Folds to punctuation when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "punctuation.separator": {
+          "description": "Commas and semicolons. Folds to punctuation when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "quote": {
+          "description": "Block quotes.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "strikethrough": {
+          "description": "Struck-through markup text.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string": {
+          "description": "String literals.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string.character": {
+          "description": "Character literals. Folds to string when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string.doc": {
+          "description": "Docstrings. Folds to string when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string.escape": {
+          "description": "Escape sequences inside strings. Folds to string when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string.regexp": {
+          "description": "Regular expression literals. Folds to string when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "string.special": {
+          "description": "Template and interpolated strings. Folds to string when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "strong": {
+          "description": "Strong markup text.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "tag": {
+          "description": "Markup tag names.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "type": {
+          "description": "Type names.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "type.class": {
+          "description": "Class names. Folds to type when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "type.namespace": {
+          "description": "Namespaces and packages. Folds to type when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "variable": {
+          "description": "Variable names.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "variable.definition": {
+          "description": "Identifiers at their definition site. Folds to variable when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "variable.parameter": {
+          "description": "Function parameters. Folds to variable when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "variable.special": {
+          "description": "Language-special identifiers. Folds to variable when unset.",
+          "oneOf": [
+            {
+              "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bold": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                  "type": "string"
+                },
+                "italic": {
+                  "type": "boolean"
+                },
+                "underline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "color"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "tokens": {
+      "additionalProperties": false,
+      "properties": {
+        "accent": {
+          "description": "Accent fill behind on-accent labels (primary buttons).",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "accent-hover": {
+          "description": "The accent fill under the pointer. Deepens toward `shadow` when unset, in both schemes: `on-accent` is a light ink, so a hover that lifts the fill takes the label with it. Gated against `on-accent`. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "accent-signal": {
+          "description": "Accent indicators, icons, and links. Also the product lockup bars, which must stay visible on `brand-field`. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "accent-text": {
+          "description": "Accent-colored copy on a surface, not a fill. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "accent-warm": {
+          "description": "Secondary accent fill for call-to-action surfaces. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "accent-warm-hover": {
+          "description": "`accent-warm` under the pointer, on the same terms as `accent-hover`. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "background": {
+          "description": "Page backdrop behind every surface. Must be opaque.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "border": {
+          "description": "Hairline rules and control outlines. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "brand-field": {
+          "description": "The plate behind the product lockup bars. The product black when unset. A palette that wants the bars on the chrome sets this to that plane, or transparent. Gated against `accent-signal` so the bars cannot vanish into it. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "caret": {
+          "description": "Text insertion caret in the editor and inputs. Body ink when unset, which is what a browser does on its own; a theme that wants the caret to read as its own mark sets it. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "cost-coordinator": {
+          "description": "Cost series: coordinator share. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "cost-summarizer": {
+          "description": "Cost series: summarizer share. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "cost-workers": {
+          "description": "Cost series: worker share. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "danger": {
+          "description": "Destructive and error states.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "danger-text": {
+          "description": "Destructive and error copy on a surface, as opposed to the fill. Derived from `danger`, darkened or lightened only as far as the legibility floor requires. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "diff-add-hue": {
+          "description": "Hue for added lines. Separate from status-positive so a theme can make diffs colorblind-safe without changing success. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "diff-delete-hue": {
+          "description": "Hue for removed lines. Separate from danger, same reason. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "draft-accent": {
+          "description": "Coordinator draft and orchestration rail. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "draft-accent-text": {
+          "description": "Draft-rail copy, quieter than the rail itself. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "identity-1": {
+          "description": "Project identity hue 1. The identity set exists to make projects distinguishable at a glance, so the hues stay far apart. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "identity-2": {
+          "description": "Project identity hue 2. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "identity-3": {
+          "description": "Project identity hue 3. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "identity-4": {
+          "description": "Project identity hue 4. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "identity-5": {
+          "description": "Project identity hue 5. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "on-accent": {
+          "description": "Label ink on an accent fill. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "on-accent-warm": {
+          "description": "Label ink on a warm accent fill. Its own decision rather than `on-accent`'s: a palette is free to put the two accents on opposite sides of the luminance line, and then no single ink is readable on both. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "selection": {
+          "description": "Fill behind a selected row, rail item, or segment. Opaque: it sits on the page or a track, so a theme names the color it wants rather than a strength of the accent. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "selection-strong": {
+          "description": "Fill behind a selected text range. Heavier than a row selection, which reads from its whole band; a text range has to show its extent character by character. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "shadow": {
+          "description": "The ink elevation shadows are cast in. Body ink on light; true black on dark. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "status-positive": {
+          "description": "Success and completion states.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "status-positive-text": {
+          "description": "Success copy on a surface, as opposed to the fill. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "status-running": {
+          "description": "In-flight work; distinct from both accent and success. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface": {
+          "description": "Panel and card fill. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface-chrome": {
+          "description": "The plane window chrome sits on: the nav rail, its title bar, and the resize seam that carries the divider. Recessed or lifted relative to the page is the theme's choice — what matters is that chrome reads as frame rather than content. Flat with the page when unset. Setting it moves every mark on the rail with it, not just the fill: see [Planes](#planes). Must be opaque. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface-elevated": {
+          "description": "Raised surface (menus, popovers). Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface-inset": {
+          "description": "The track a control is recessed into: a segmented picker or an editor tab strip. The opposite direction from `surface-elevated`. The chosen segment paints `selection` on this track; unchosen labels sit on the track itself. Not a plane: a track's contents keep their own color rather than blending into it, so nothing here follows `--den-plane`. Flat with the page when unset. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface-offset": {
+          "description": "Wash a seated block sits on — the project cluster, a segmented track. One step off the page: down on light, up on dark. Must be opaque. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "surface-raised": {
+          "description": "Plane of something lifted out of a well — the chosen segment in a track. Must read above surface-offset, not below it. Must be opaque. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "text": {
+          "description": "Body ink on background and surface.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "text-muted": {
+          "description": "Secondary ink: captions, metadata, placeholders. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "tint-hue": {
+          "description": "Neutral hover hue; the tint ramp derives from it. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "warning": {
+          "description": "Caution states, distinct from danger.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        },
+        "warning-text": {
+          "description": "Caution copy on a surface, as opposed to the fill. Optional: derived from other tokens when unset.",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accent",
+        "background",
+        "danger",
+        "status-positive",
+        "text",
+        "warning"
+      ],
+      "type": "object"
+    },
+    "window_colors": {
+      "additionalProperties": false,
+      "description": "Generative OKLCH family for window cursors, selections, and labels. Omitted anchors derive from the theme; the client enforces display contrast.",
+      "properties": {
+        "anchors": {
+          "items": {
+            "pattern": "^#[0-9a-fA-F]{6}([fF]{2})?$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "type": "array"
+        },
+        "chroma_max": {
+          "default": 0.16,
+          "description": "Upper OKLCH chroma bound; gamut and contrast may reduce it.",
+          "maximum": 0.4,
+          "minimum": 0,
+          "type": "number"
+        },
+        "chroma_min": {
+          "default": 0.04,
+          "description": "Lower OKLCH chroma bound; must not exceed chroma_max.",
+          "maximum": 0.4,
+          "minimum": 0,
+          "type": "number"
+        },
+        "hue_spread": {
+          "default": 24,
+          "description": "Maximum hue excursion from each anchor, in degrees.",
+          "maximum": 180,
+          "minimum": 0,
+          "type": "number"
+        },
+        "main": {
+          "description": "Main window identity color; defaults to accent-signal. Display contrast is enforced.",
+          "pattern": "^#[0-9a-fA-F]{6}([fF]{2})?$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "appearance",
+    "tokens"
+  ],
+  "title": "Painted Wolf Code theme unit",
+  "type": "object"
+}

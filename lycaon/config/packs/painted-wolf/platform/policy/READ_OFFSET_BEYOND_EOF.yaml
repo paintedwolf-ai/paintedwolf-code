@@ -1,0 +1,43 @@
+oar: '1.0'
+id: READ_OFFSET_BEYOND_EOF
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - read
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.offset
+  - paintedwolf.path
+  - paintedwolf.total_lines
+  - paintedwolf.beyond_eof
+  - paintedwolf.read_empty_file
+when: paintedwolf.rejection_code == "READ_OFFSET_BEYOND_EOF"
+effect: block
+copy:
+  what: read offset {{ paintedwolf.offset }} exceeds file length ({{ paintedwolf.total_lines }} lines) for
+    {{ paintedwolf.path }}.
+  cause: Pagination offset must fall within the file; offset 1 is the first line.
+  why: "Empty content with truncated false is ambiguous \u2014 structured rejects distinguish past-EOF from\
+    \ empty files."
+  fix: '{% if paintedwolf.read_empty_file %}The file is empty. Use offset 1 to read its empty result; there
+    is no valid nonempty line range.{% else %}Use a 1-based offset no greater than {{ paintedwolf.total_lines
+    }} for the intended range.{% endif %} Re-read current bounds if the file has changed.'
+  instead: Branch on Code; lower offset or read from the start
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
+x-paintedwolf-message: read offset past end of file
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    offset: 9999
+    path: lycaon/internal/tools.go
+    profile: explore_readonly
+    tool: read
+    total_lines: 498
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: READ_OFFSET_BEYOND_EOF'

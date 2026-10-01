@@ -1,0 +1,5 @@
+code: obligation_not_declared
+message: |
+  Phase {{phase}} gates on obligation_settled:{{kind}} without declaring that obligation on enter.
+replacement: |
+  Add {kind: {{kind}}} to phases[{{phase}}].on_enter.obligations; re-declaring is safe — enqueue adopts existing run-bound work.

@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COPY_IS_DIRECTORY
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - copy
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  profiles:
+  - filesystem
+  - tool
+when: paintedwolf.rejection_code == "COPY_IS_DIRECTORY"
+effect: block
+copy:
+  cause: copy accepts regular files as sources.
+  why: A directory copy would introduce recursive selection that this request does not express.
+  fix: Discover the intended files and supply explicit source–destination pairs only if that matches the task.
+    Do not replace this request with recursive command copying.
+  instead: Identify the intended regular-file sources
+  what: The copy source {{ paintedwolf.path }} is a directory.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
+x-paintedwolf-message: copy:copy source is a directory
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: bad args
+    path: src/main.go
+    profile: implement
+    tool: copy
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COPY_IS_DIRECTORY'

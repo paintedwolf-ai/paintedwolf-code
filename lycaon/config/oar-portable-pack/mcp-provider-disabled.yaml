@@ -1,0 +1,15 @@
+# Uses a profile many hosts do not provide; `requires` makes that a load-time
+# refusal.
+oar: "1.0"
+id: MCP_PROVIDER_DISABLED
+namespace: example.security
+kind: policy
+anchor: tool.pre_invoke
+requires:
+  profiles: [mcp]
+when: 'mcp_provider_id != "" && !mcp_provider_enabled'
+effect: block
+status: stable
+copy:
+  what: The call targets a bridged MCP provider that is configured but not enabled.
+  fix: Enable the provider in the catalogue, or route the call elsewhere.

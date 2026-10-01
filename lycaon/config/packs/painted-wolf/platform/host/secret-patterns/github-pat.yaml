@@ -1,0 +1,4 @@
+id: github-pat
+upstream_id: github-pat
+title: GitHub token
+severity: critical

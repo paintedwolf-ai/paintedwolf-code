@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the signed & notarized macOS bundle.
+  Intentionally minimal: no App Sandbox, no JIT / unsigned-executable-memory
+  grants. The webview's JIT runs in system-provided WebKit processes, not this
+  binary, so the app itself needs no code-signing exceptions today.
+
+  Binaries that DO need JIT grants get their own entitlements file at their own
+  codesign step, never additions here: the bundled chrome-headless-shell uses
+  browser-entitlements.plist, and the future local inference engine
+  (llama.cpp / Metal) should follow the same pattern. Keep this file minimal so
+  the app's attack surface stays small.
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

@@ -1,0 +1,15 @@
+id: prompt-guidance-smoke
+tasks:
+  - id: terminal-report
+    prompt: >-
+      Build a dependency-free Python CLI at tools/status_report.py that reads a
+      JSON file of service names and healthy/unhealthy states and prints a readable
+      aligned terminal report with totals. Add a small sample input and unit tests,
+      including mixed states and an invalid input case. Run it and the tests.
+      Keep the existing application unchanged. Do not delegate to workers.
+  - id: cross-file-search
+    prompt: >-
+      Explain how configuration reaches the HTTP service and how invalid configuration prevents startup. Use file evidence. Do not change files or delegate to workers.
+  - id: sandbox-command
+    prompt: >-
+      Run the project's existing tests and report the result. Do not edit files, install dependencies, or delegate to workers. If the sandbox or an approval prevents the run, explain exactly what remains blocked without working around it.

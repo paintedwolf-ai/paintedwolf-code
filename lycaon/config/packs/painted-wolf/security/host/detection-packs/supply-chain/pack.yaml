@@ -1,0 +1,6 @@
+id: supply-chain
+label: Supply chain
+description: >-
+  Ways unreviewed code or an unexpected registry enters the build: a download
+  piped straight into a shell, a redirected package source, or a stored
+  registry credential.

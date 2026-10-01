@@ -1,0 +1,9 @@
+id: painted-wolf/platform:go-files-tree
+title: "Focus file tree"
+scope: files
+category: navigation
+when:
+  fact: files_stage_active
+action:
+  kind: native_ui
+  handler: "go.filesTree"

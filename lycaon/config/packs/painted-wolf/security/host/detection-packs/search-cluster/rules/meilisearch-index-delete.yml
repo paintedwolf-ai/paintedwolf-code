@@ -1,0 +1,42 @@
+title: Delete a Meilisearch index
+id: f0da5c38-9720-495c-a758-e79e913445ed
+description: Deletes a named index and every document in it.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-08'
+modified: '2026-08-11'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.external
+  - lycaon.effect.unrecoverable
+level: high
+detection:
+  # There is no official Meilisearch CLI for index management; the REST API
+  # is reached directly over curl. Scoping to the default port (7700) keeps
+  # this from matching an unrelated DELETE to some other API.
+  selection_curl:
+    Image: curl
+    CommandLine|re: '(?i)-X\s*DELETE|--request\s+DELETE'
+  selection_port:
+    CommandLine|re: ':7700\b'
+  # Meilisearch Cloud serves on 443 under its own endpoint suffix.
+  selection_managed_endpoint:
+    CommandLine|contains: '.meilisearch.io'
+  selection_indexes:
+    CommandLine|contains: '/indexes/'
+  # DELETE also reaches documents, settings, and keys sub-resources under the
+  # same path prefix; only the bare /indexes/{uid} route deletes the index.
+  filter_subresource:
+    CommandLine|contains:
+      - '/documents'
+      - '/settings'
+      - '/keys'
+  filter_rehearsal:
+    Argv: '--help'
+  filter_local:
+    EffectReach: local
+  condition: selection_curl and (selection_port or selection_managed_endpoint) and selection_indexes and not filter_subresource and not filter_rehearsal and not filter_local

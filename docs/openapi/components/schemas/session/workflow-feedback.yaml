@@ -1,0 +1,184 @@
+components:
+  schemas:
+    WorkflowBoundaryMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - event
+      additionalProperties: false
+      properties:
+        event:
+          x-go-type: "string"
+          $ref: "#/components/schemas/WorkflowBoundaryKind"
+        workflow_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        workflow_version:
+          type: string
+        phase:
+          type: string
+        reason:
+          type: string
+    WorkflowBoundaryKind:
+      type: string
+      enum:
+      - started
+      - exited
+      - canceled
+      - completed
+      - failed
+      - paused
+      - resumed
+      - paused_on_child
+      - interrupted
+    FeedbackResponseType:
+      type: string
+      enum:
+      - text
+      - single_choice
+      - multi_choice
+      - secret
+    WorkflowExplainMeta:
+      x-go-generate: true
+      type: object
+      description: A host-written note that says what a phase the host holds is doing. The text is the manifest's; progress names the live record the phase waits on.
+      required:
+      - phase_id
+      - summary
+      - body
+      additionalProperties: false
+      properties:
+        phase_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        summary:
+          type: string
+          description: One line, shown as the chicklet title.
+        body:
+          type: string
+        progress:
+          x-go-pointer: true
+          $ref: "#/components/schemas/WorkflowExplainProgress"
+    WorkflowExplainProgress:
+      x-go-generate: true
+      type: object
+      description: The records whose progress the note shows. Absent when the phase waits on nothing with progress to show.
+      additionalProperties: false
+      properties:
+        full_pass:
+          x-go-pointer: true
+          $ref: "#/components/schemas/WorkflowExplainFullPass"
+        topology:
+          x-go-pointer: true
+          $ref: "#/components/schemas/WorkflowExplainTopology"
+    WorkflowExplainTopology:
+      x-go-generate: true
+      type: object
+      description: The topology stages the phase binds; their legs are read from the run's `ui.topology_legs`.
+      required:
+      - stages
+      additionalProperties: false
+      properties:
+        stages:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    WorkflowExplainFullPass:
+      x-go-generate: true
+      type: object
+      description: The full scan pass the phase requested or joined, read from the project's security overview.
+      required:
+      - assessment_id
+      - project_id
+      additionalProperties: false
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        root_id:
+          type: string
+          format: uuid
+          description: The attached folder the pass scans; absent for the project's primary folder.
+    IndexWarmingMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - trigger
+      additionalProperties: false
+      properties:
+        trigger:
+          type: string
+        tier:
+          type: string
+        topic:
+          type: string
+        hosts:
+          type: array
+          items:
+            type: string
+        pages:
+          type: integer
+        duration_ms:
+          type: integer
+          format: int64
+        skip_reason:
+          type: string
+    WorkflowFeedbackMeta:
+      x-go-generate: true
+      type: object
+      required:
+      - phase_id
+      - prompt
+      - response_type
+      additionalProperties: false
+      properties:
+        phase_id:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        prompt:
+          type: string
+          description: >-
+            Card question shown to the user. ask_user: one decision (prefer choice options);
+            markdown OK for brief context; host-capped at 800 Unicode code points so the
+            prompt fits the 12rem composer-dock prompt area without scrolling.
+        response_type:
+          $ref: "#/components/schemas/FeedbackResponseType"
+        options:
+          type: array
+          items:
+            type: string
+        allow_other:
+          type: boolean
+        answer:
+          type: string
+        resolved_by:
+          type: string
+          description: user when a person closes the card
+        resolved_by_person_id:
+          type: string
+          format: uuid
+          description: The person who closed the card; present when resolved_by is user
+        artifact_id:
+          type: string
+          format: uuid
+          description: Optional session-tree VisualArtifact shown on the feedback card (single review/clarify)
+        artifact_ids:
+          x-go-name: "ArtifactIDs"
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: string
+            format: uuid
+          description: Compare preference — 2–4 session-tree visuals labeled A… by order
+        purpose:
+          type: string
+          enum: [clarify, review, compare, secret]
+          description: clarify = scope; review = judge one visual; compare = preference among artifact_ids
+        secret:
+          x-go-pointer: true
+          $ref: ../workflow.yaml#/components/schemas/SecretInputMeta

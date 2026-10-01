@@ -1,0 +1,365 @@
+paths:
+  /v1/projects:
+    get:
+      tags:
+      - projects
+      operationId: listProjects
+      summary: List projects (recent-first)
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+      - name: cursor
+        in: query
+        description: Opaque cursor returned as next_cursor by the previous page.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Projects ordered by last_opened_at descending
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/ProjectListResponse
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+    post:
+      tags:
+      - projects
+      operationId: createProject
+      x-person-action: record
+      summary: Create a project (lazy materialization)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/CreateProjectRequest
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        '400':
+          description: >
+            Root path refused as a write jail (write_root_is_filesystem_root,
+            write_root_is_home, write_root_not_absolute, write_root_under_secret_store)
+            or otherwise invalid.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/clone:
+    post:
+      tags:
+      - projects
+      operationId: cloneProject
+      x-person-action: record
+      summary: Clone a remote into a new folder and open it as a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/CloneProjectRequest
+      responses:
+        '201':
+          description: Project created from the clone
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        '409':
+          description: A folder with that name already exists at the destination (FOLDER_EXISTS)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '502':
+          $ref: ../../components/responses.yaml#/components/responses/BadGateway
+  /v1/projects/detect:
+    get:
+      tags:
+      - projects
+      operationId: detectFolder
+      summary: Project identity and extension suggestions for a folder
+      description: >
+        Returns path, project_id when the folder is already a root, and project
+        extension suggestions allowed by its trust settings.
+      parameters:
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Absolute path of the folder to preview.
+      responses:
+        '200':
+          description: Folder identity and extension suggestion preview
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/FolderDetect
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+  /v1/projects/{id}:
+    get:
+      tags:
+      - projects
+      operationId: getProject
+      summary: Get a project with embedded roots
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '200':
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+    patch:
+      tags:
+      - projects
+      operationId: updateProject
+      x-person-action: record
+      summary: Rename a project workspace
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/UpdateProjectRequest
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+  /v1/projects/{id}/sessions:
+    get:
+      tags:
+      - projects
+      operationId: listProjectSessions
+      summary: Page a project's chat sessions
+      description: >
+        Metadata-only chat browsing for one project. Worker child sessions are
+        never listed. The default view is the active set; archived=true selects
+        the archived set instead. pinned narrows either set to pinned or
+        unpinned chats.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      - name: archived
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: pinned
+        in: query
+        description: true lists only pinned chats, false only unpinned ones; omitted lists both
+        schema:
+          type: boolean
+      - name: q
+        in: query
+        description: Case-insensitive title substring filter
+        schema:
+          type: string
+      - name: sort
+        in: query
+        description: pin requires pinned=true
+        schema:
+          $ref: ../../components/schemas/session/identity.yaml#/components/schemas/SessionListSort
+          default: activity
+      - name: order
+        in: query
+        description: Defaults per sort key — activity and created sort desc, title and pin asc
+        schema:
+          $ref: ../../components/schemas/session/identity.yaml#/components/schemas/SessionListOrder
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        description: Opaque next_cursor from the preceding page
+        schema:
+          type: string
+      responses:
+        '200':
+          description: One seek page of session summaries plus total under the same filter
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/identity.yaml#/components/schemas/SessionListPage
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/projects/{id}/promotion:
+    post:
+      tags:
+      - projects
+      operationId: promoteProject
+      x-person-action: record
+      summary: Save a draft into a folder through a restart-safe transition
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/project/identity.yaml#/components/schemas/PromoteProjectRequest
+      responses:
+        '201':
+          description: Promoted project tracking the folder
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        '202':
+          description: Promote queued until the project finishes its current turn
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
+        '409':
+          description: The chosen folder is not empty (FOLDER_NOT_EMPTY)
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+    delete:
+      tags:
+      - projects
+      operationId: cancelProjectPromotion
+      x-person-action: record
+      summary: Cancel an uncommitted draft save and restore the chosen empty folder
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
+      responses:
+        '204':
+          description: Draft project promotion canceled
+        '409':
+          description: Installed content changed or the promotion already committed
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

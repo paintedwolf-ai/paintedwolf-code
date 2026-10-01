@@ -1,0 +1,8 @@
+id: painted-wolf/platform:action-fix-finding
+title: "Fix finding"
+target:
+  kind: "finding"
+  required: true
+execution:
+  preset: "fix_finding"
+  prompt_ref: "guidance/editor/fix-finding"

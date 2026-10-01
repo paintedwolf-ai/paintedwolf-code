@@ -1,0 +1,21 @@
+{
+  "name": "triage-lite-write-blocked",
+  "rule": {
+    "oar": "1.0",
+    "id": "TRIAGE_LITE_WRITE_FORBIDDEN",
+    "kind": "policy",
+    "anchor": "tool.pre_invoke",
+    "selector": { "tool": ["write", "edit"] },
+    "requires": { "profiles": ["session", "tool"] },
+    "when": "session_posture == \"spec\"",
+    "effect": "block",
+    "enforcement": "enforce",
+    "on_error": "fail_closed",
+    "x-paintedwolf-emit": "rule:triage_lite"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": { "tool": "write", "session_posture": "spec" }
+  },
+  "expected": { "decision": "block", "code": "TRIAGE_LITE_WRITE_FORBIDDEN" }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "eval-suppression-withdraws-side-effects-too",
+  "title": "A suppressed rule contributes no decision and applies no side-effect",
+  "covers": [
+    "OAR-EVAL-14",
+    "OAR-CONF-12",
+    "OAR-EVAL-12"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "tool.pre_invoke",
+      "id": "A_GENERAL",
+      "effect": "nudge",
+      "on_fire": [
+        "increment_counter"
+      ]
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "policy",
+      "anchor": "tool.pre_invoke",
+      "id": "B_SPECIFIC",
+      "effect": "warn",
+      "overrides": [
+        "A_GENERAL"
+      ],
+      "on_fire": [
+        "increment_breaker"
+      ]
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [],
+      "activity_window": 0,
+      "detectors": [],
+      "expression_nodes_max": 1024,
+      "supports_transform": false
+    },
+    "anchor": "tool.pre_invoke",
+    "session_id": "s1"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "B_SPECIFIC",
+    "applied": [
+      "oar.test/B_SPECIFIC:fired",
+      "oar.test/A_GENERAL:suppressed"
+    ],
+    "on_fire": [
+      "increment_breaker"
+    ],
+    "counters": {
+      "oar.test/A_GENERAL": {
+        "fire_count": 0
+      },
+      "oar.test/B_SPECIFIC": {
+        "breaker_count": 1
+      }
+    }
+  }
+}

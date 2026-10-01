@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Artifact content unavailable
+message: >-
+  This artifact's content is unavailable.
+suggested_action: >-
+  Run the action that produced it again.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - content is unavailable
+      - produced it again

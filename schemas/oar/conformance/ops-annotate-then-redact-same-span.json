@@ -1,0 +1,112 @@
+{
+  "id": "ops-annotate-then-redact-same-span",
+  "title": "Annotating and then redacting the same span yields the redaction followed by the annotation, not the redaction alone",
+  "covers": [
+    "OAR-OPS-21",
+    "OAR-OPS-16"
+  ],
+  "rules": [
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "A_ANNOTATE",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "transform": {
+        "action": "annotate",
+        "target": "pii_entities",
+        "replacement": "<A>"
+      }
+    },
+    {
+      "oar": "1.0",
+      "namespace": "oar.test",
+      "kind": "schema",
+      "anchor": "model.output",
+      "id": "B_REDACT",
+      "effect": "transform",
+      "requires": {
+        "profiles": [
+          "content",
+          "secrets",
+          "pii",
+          "prompt-injection",
+          "jailbreak"
+        ]
+      },
+      "transform": {
+        "action": "redact",
+        "target": "secret_matches"
+      }
+    }
+  ],
+  "input": {
+    "capability": {
+      "oar_capability_version": "1.0",
+      "host": "oar.testhost",
+      "anchors": {
+        "core": {
+          "tool.pre_invoke": "tool.pre_invoke",
+          "tool.handler": "tool.handler",
+          "tool.post_invoke": "tool.post_invoke",
+          "agent.post_turn": "agent.post_turn",
+          "agent.finalize": "agent.finalize",
+          "model.input": "model.input",
+          "model.output": "model.output",
+          "model.tool_result": "model.tool_result"
+        },
+        "unsupported": []
+      },
+      "profiles": [
+        "tool",
+        "session",
+        "filesystem",
+        "content",
+        "secrets",
+        "pii",
+        "prompt-injection",
+        "jailbreak",
+        "mcp"
+      ],
+      "activity_window": 0,
+      "detectors": [
+        "detector://noop",
+        "detector://error",
+        "detector://fixture"
+      ],
+      "expression_nodes_max": 1024,
+      "supports_transform": true
+    },
+    "anchor": "model.output",
+    "content": "abcd",
+    "facts": {
+      "pii_entities": [
+        {
+          "start": 0,
+          "end": 2
+        }
+      ],
+      "secret_matches": [
+        {
+          "start": 0,
+          "end": 2
+        }
+      ]
+    }
+  },
+  "expected": {
+    "decision": "transform",
+    "code": "A_ANNOTATE",
+    "content": "[REDACTED]<A>cd"
+  }
+}

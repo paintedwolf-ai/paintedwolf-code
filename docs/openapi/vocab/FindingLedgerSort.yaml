@@ -1,0 +1,13 @@
+# FindingLedgerSort orders the full selected ledger before pagination.
+name: FindingLedgerSort
+go_const_prefix: FindingLedgerSort
+description: >-
+  Which ledger column orders the page. Severity orders by normalized rank, not
+  by label.
+values:
+  - id: severity
+  - id: finding
+  - id: location
+  - id: state
+  - id: first_seen
+  - id: last_seen

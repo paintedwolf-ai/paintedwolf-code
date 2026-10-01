@@ -1,0 +1,50 @@
+fixtures:
+- rule: device-wipe
+  positive:
+  - gam update mobile abc123 action wipe
+  - gam update mobile abc123 action admin_remote_wipe
+  - gam update mobile ~resourceId action admin_account_wipe matchusers user user@example.test
+  - gam update mobile abc123 action accountwipe
+  - gam update mobile abc123 action wipeaccount
+  - powershell -Command "Clear-MgDeviceManagementManagedDevice -ManagedDeviceId $id"
+  - pwsh -Command "Clear-MgDeviceManagementManagedDevice -ManagedDeviceId $id"
+  - powershell.exe -Command "Clear-MgDeviceManagementManagedDevice -ManagedDeviceId $id -KeepUserData"
+  - sudo -u svc gam update mobile abc123 action wipe
+  negative:
+  - gam info mobile abc123
+  - gam print mobile
+  - powershell -Command "Get-MgDeviceManagementManagedDevice -ManagedDeviceId $id"
+  - gam update mobile abc123 action wipe --help
+  - powershell -Command "Clear-MgDeviceManagementManagedDevice -ManagedDeviceId $id -WhatIf"
+  - gam update mobile abc123 action lock
+  # Not in GAM's action vocabulary.
+  - gam update mobile abc123 action account_wipe
+  # No such cmdlet; the Graph wipe is Clear-MgDeviceManagementManagedDevice.
+  - powershell -Command "Invoke-MgDeviceManagementManagedDeviceWipe -ManagedDeviceId $id"
+- rule: enrollment-remove
+  positive:
+  - jamf removeMdmProfile
+  - jamf removeFramework
+  - gam delete mobile abc123
+  - pwsh -Command "Invoke-MgRetireDeviceManagementManagedDevice -ManagedDeviceId $id"
+  - powershell.exe -Command "Invoke-MgRetireDeviceManagementManagedDevice -ManagedDeviceId $id"
+  negative:
+  - jamf policy
+  - jamf recon
+  - gam info mobile abc123
+  - jamf removeMdmProfile --help
+  - powershell -Command "Get-MgDeviceManagementManagedDevice -ManagedDeviceId $id"
+  - powershell -Command "Invoke-MgRetireDeviceManagementManagedDevice -ManagedDeviceId $id -WhatIf"
+  - jamf removeFramework --help
+- rule: device-restrict
+  positive:
+  - gam update mobile abc123 action block
+  - gam update mobile ~resourceId action block matchusers user user@example.test
+  - sudo -u svc gam update mobile abc123 action block
+  negative:
+  - gam update mobile abc123 action approve
+  - gam info mobile abc123
+  - gam update mobile abc123 action block --help
+  - gam update mobile abc123 action lock
+  # Canceling a wipe is neither a block nor a wipe.
+  - gam update mobile abc123 action cancel_remote_wipe_then_activate

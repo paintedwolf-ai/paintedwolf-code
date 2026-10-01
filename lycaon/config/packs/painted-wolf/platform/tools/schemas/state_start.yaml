@@ -1,0 +1,17 @@
+description: Propose a workflow run on the current session. The host records the proposal; an explicit human action starts it.
+schema:
+  type: object
+  properties:
+    workflow_id:
+      description: "Workflow id to propose on this session."
+      type: string
+    workflow_version:
+      description: "Workflow version to propose."
+      type: string
+    blueprint_path:
+      description: "Optional blueprint path for the proposed run."
+      type: string
+    blueprint_title:
+      description: "Optional blueprint title for the proposal."
+      type: string
+  required: [workflow_id, workflow_version]

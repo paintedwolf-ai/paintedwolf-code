@@ -1,0 +1,18 @@
+# ProgressState is derived from update_progress markers. Optional markers do
+# not reach the wire; only these three states can be emitted.
+name: ProgressState
+go_const_prefix: ProgressState
+description: >-
+  State of one checklist row. Derived by the host from the coordinator's markdown
+  markers; the coordinator never writes these strings directly.
+values:
+  - id: pending
+    comment: >-
+      fires for `- [ ]` — authored and not yet checked off. Rows are ordered by the
+      coordinator's document, which is a plan, not a claim about what is executing:
+      the first pending row is not necessarily the one being worked.
+  - id: done
+    comment: fires for `- [x]` — checked off.
+  - id: na
+    comment: >-
+      fires for `- [~]` or `- [-]` — dropped from the run without being done.

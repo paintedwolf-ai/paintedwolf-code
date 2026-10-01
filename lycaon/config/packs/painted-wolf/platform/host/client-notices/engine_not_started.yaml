@@ -1,0 +1,15 @@
+# Attach-only development mode waits for an externally started engine.
+# Retry attaches once that engine is available.
+scope: app
+title: No engine running
+message: >-
+  This build attaches to an engine you start yourself, and none is running yet.
+  Start one, then try again.
+suggested_action: Still nothing to attach to. An engine has to be running first.
+scenarios:
+  - id: default
+    expect_contains:
+      - none is running
+  - id: retry-failed
+    expect_contains:
+      - has to be running

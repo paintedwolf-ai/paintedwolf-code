@@ -1,0 +1,46 @@
+oar: '1.0'
+id: WORKER_URL_NOT_OBSERVED
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts:
+    - paintedwolf.observed_urls_sample
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.profile
+    - paintedwolf.profile_fetches_urls
+    - paintedwolf.unobserved_cited_urls
+when: paintedwolf.profile == "worker" && size(paintedwolf.unobserved_cited_urls) > 0
+effect: block
+copy:
+  what: Worker cited {{ paintedwolf.offender_count }} URL(s) not observed in web tool results.
+  cause: cited_urls must match URLs returned by web_search or fetch_url this leg
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: >-
+    Drop the unobserved URLs from cited_urls and state the claim without them —
+    a leg may report what it could not verify, and this is the exit every worker
+    can take.{% if paintedwolf.observed_urls_sample %} URLs you did observe this leg:
+    {{ paintedwolf.observed_urls_sample }}.{% endif %}{% if paintedwolf.profile_fetches_urls %}
+    If the URL matters to the finding, call `fetch_url` or `web_search` first and
+    copy it verbatim from the result.{% endif %}
+  instead: >-
+    Cite only observed URLs, or drop the citation and name the gap in
+    remaining_risk — do not re-emit the same unobserved URL.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-evidence:
+  ui_label: URL citations
+  ui_check_id: url_citations
+  in_session_retry: true
+x-paintedwolf-message: cited_urls entry not observed in web tool evidence
+x-paintedwolf-scenarios:
+  - id: ungrounded_url
+    vars:
+      observed_urls_sample: https://example.com/seen
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: https://example.com/missing
+    expect_contains:
+      - 'Code: WORKER_URL_NOT_OBSERVED'
+      - 'URLs you did observe this leg: https://example.com/seen'

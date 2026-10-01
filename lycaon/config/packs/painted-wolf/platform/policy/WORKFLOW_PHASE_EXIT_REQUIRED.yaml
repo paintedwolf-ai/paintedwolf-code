@@ -1,0 +1,22 @@
+emit: banner
+category: recoverable
+severity: error
+message: 'Phase `{{ paintedwolf.phase }}` gates passed — call `workflow_advance` now'
+what: 'Workflow `{{ paintedwolf.workflow_id }}` phase `{{ paintedwolf.phase }}` is satisfied but still active.'
+cause: The phase uses coordinator-controlled advancement; satisfying its gates does not leave it automatically.
+why: Starting later-phase work or returning prose before the declared leave strands the workflow on an already-satisfied phase.
+fix: Call `workflow_advance` now. Do not inspect, mutate, dispatch, or summarize work for the next phase first.
+instead: Stop the current tool arc and call `workflow_advance`.
+context_schema:
+  required:
+    - workflow_id
+    - phase
+scenarios:
+  - id: default
+    vars:
+      workflow_id: example
+      phase: intake
+    expect_contains:
+      - 'Code: WORKFLOW_PHASE_EXIT_REQUIRED'
+      - workflow_advance
+id: WORKFLOW_PHASE_EXIT_REQUIRED

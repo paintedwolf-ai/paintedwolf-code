@@ -1,0 +1,23 @@
+title: Mint an AWS IAM access key
+id: 1c5b3c32-4e8f-4b2b-8d73-1e2f3a4b5c61
+description: Creates a long-lived IAM access key; the secret access key is returned once, in the output.
+references:
+  - https://attack.mitre.org/
+author: Painted Wolf Code
+date: '2026-08-20'
+modified: '2026-08-20'
+status: stable
+logsource:
+  product: lycaon
+  service: tool_exec
+tags:
+  - lycaon.effect.mints_credential
+level: informational
+detection:
+  selection_verb:
+    Image: aws
+    CommandLine|contains:
+      - ' iam create-access-key'
+  filter_rehearsal:
+    Argv: '--help'
+  condition: selection_verb and not filter_rehearsal

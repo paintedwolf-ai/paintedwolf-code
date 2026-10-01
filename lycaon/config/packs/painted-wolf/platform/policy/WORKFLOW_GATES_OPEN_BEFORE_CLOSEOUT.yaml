@@ -1,0 +1,32 @@
+oar: '1.0'
+id: WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.closeout_gates_open
+    - paintedwolf.closeout_gate_open_leaves
+    - paintedwolf.closeout_gate_delay_count
+    - paintedwolf.workers_idle
+    - paintedwolf.phase
+when: paintedwolf.workers_idle && paintedwolf.closeout_gates_open && paintedwolf.closeout_gate_delay_count < 2
+effect: block
+copy:
+  what: 'Ended the turn with prose while phase `{{ paintedwolf.phase }}` runs to completion and its gates are still open: {{ paintedwolf.closeout_gate_open_leaves }}.'
+  cause: This phase declares a gated closeout — assistant prose neither satisfies a gate nor parks the run, so nothing would be left to wake the workflow.
+  why: 'A prose stop here strands the run: no gate advances, no ask is pending, and workers are idle.'
+  fix: "Use the current open gates ({{ paintedwolf.closeout_gate_open_leaves }}) to identify remaining structured work. Preserve accepted evidence and already running work. If a human decision is needed and ask_user is offered, use it once and let the host park the run. Use a declared workflow_transition or workflow_advance only when the current phase makes that action available and its requirements are satisfied."
+  instead: "Resolve actual unmet requirements or raise the specific decision through the offered channel. Do not invent a verdict, duplicate pending work, or change the task merely to close the phase."
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Close out blocked — this phase runs to completion and its gates are still open
+x-paintedwolf-scenarios:
+  - id: gates_open
+    vars:
+      phase: execute
+      closeout_gate_open_leaves: worker_cycle_ready
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT'
+      - ask_user
+      - worker_cycle_ready

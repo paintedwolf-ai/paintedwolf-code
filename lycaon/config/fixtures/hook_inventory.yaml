@@ -1,0 +1,127 @@
+# Host callback triggers, targets, scheduling, and re-entry constraints.
+
+hooks:
+  - manager: workflow.RunManager
+    field: OnRequestAccepted
+    fires_on: "a human workflow request commits after admission"
+    binds_to: mgr.CurateAcceptedWorkflowRequest
+    posture: async
+    reentrant: true
+    notes: |
+      Reads the accepted session, then schedules tracked prompt curation for chat
+      and draft-project naming. Request rejection never invokes this callback.
+
+  - manager: workflow.RunManager
+    field: PhaseEnterHook
+    fires_on: "cross-phase entry (boot→work, plan stub→research, workflow start)"
+    binds_to: "mgr.EmitMatch(phase.entered) via workflow-tier injects"
+    posture: async
+    reentrant: false
+    notes: |
+      Resolves phase.entered bindings. Same-phase entry uses PhaseReenterHook.
+
+  - manager: workflow.RunManager
+    field: PhaseReenterHook
+    fires_on: "same-phase host auto-advance re-enter (implement work→work)"
+    binds_to: mgr.Emit (manifest on_reenter.inject_kick → Binding.render)
+    posture: async
+    reentrant: false
+    notes: |
+      Queues on_reenter.inject_kick. OnPhaseAutoAdvanced schedules
+      on_reenter.reenter_leg.
+
+  - manager: workflow.RunManager
+    field: OnPhaseAutoAdvanced
+    fires_on: "advanceToNextPhase publishPhaseAdvanced after auto advance"
+    binds_to: mgr.NudgeCoordinatorLoop(phase.advanced)
+    posture: async
+    reentrant: true
+    notes: |
+      Runtime releases depsMu before engine calls, so the loop wake can re-enter
+      Runtime safely.
+
+  - manager: workflow.RunManager
+    field: OnRunResumed
+    fires_on: "resume commits and convergence leaves the same running phase"
+    binds_to: mgr.NudgeCoordinatorLoop(phase.advanced)
+    posture: async
+    reentrant: true
+    notes: |
+      Resume releases the run-vars lock before convergence and this callback.
+      The wake checks the current phase before scheduling coordinator work.
+
+  - manager: workflow.RunManager
+    field: OnRunCompleted
+    fires_on: "terminal completion commits and any parent reconciliation returns"
+    binds_to: mgr.SettleCompletedWorkflow
+    posture: synchronous
+    reentrant: true
+    notes: |
+      May run with a workflow lock held. Settlement uses nonblocking execution
+      admission and defers while execution or independent work remains active;
+      it reads workflow state without advancing or taking the run-vars lock.
+
+  - manager: workflow.RunManager
+    field: OnHumanApprovalAdvanced
+    fires_on: "SyncPlanApproved / ApprovePlan detect a phase or status change after durable human approval"
+    binds_to: mgr.CancelInFlightPrompt then NudgeCoordinatorLoop(phase.advanced)
+    posture: async
+    reentrant: true
+    notes: |
+      The run-vars lock is released before the callback. Runtime also releases
+      depsMu before engine calls.
+
+  - manager: workflow.RunManager
+    field: OnFeedbackPending
+    fires_on: "phase on_enter declares request_user_feedback (text or choice response_type)"
+    binds_to: mgr.Emit(feedback.pending)
+    posture: async
+    reentrant: false
+    notes: |
+      Emit queues the binding without retaining workflow locks.
+
+  - manager: workflow.RunManager
+    field: OnToolAskOpened
+    fires_on: "RequestUserInput commits a coordinator-tool ask_user (park-on-ask)"
+    binds_to: LoopEngine.ParkForPendingUserInput
+    posture: synchronous
+    reentrant: false
+    notes: |
+      Arms the pending-input sleep without re-entering RunManager.
+
+  - manager: workflow.RunManager
+    field: OnFeedbackResolved
+    fires_on: "pending user feedback/decision clears (user submit)"
+    binds_to: mgr.Emit(feedback.received) + mgr.NudgeCoordinatorLoop
+    posture: async
+    reentrant: false
+    notes: |
+      Queues feedback.received and wakes the pending-input sleep.
+
+  - manager: workflow.RunManager
+    field: OnReviewLoopHeld
+    fires_on: "review_loop phase held on a non-terminal verdict (RecordReviewLoopVerdict); decisionRequired at iteration_cap"
+    binds_to: mgr.Emit(review_loop.*) + mgr.NudgeCoordinatorLoop
+    posture: async
+    reentrant: false
+    notes: |
+      Queues the next review action within the manifest iteration cap.
+
+  - manager: workflow.RunManager
+    field: OnGateEvidencePersisted
+    fires_on: "schema-valid review_loop verdict persisted as evidence.Record (RecordReviewLoopVerdict)"
+    binds_to: search.ProjectGateEvidenceComplete
+    posture: synchronous
+    reentrant: false
+    notes: |
+      Writes the search projection without re-entering RunManager.
+
+  - manager: delegation.Manager
+    field: OnCloseout
+    fires_on: "delegation finishes via closeout"
+    binds_to: workflowMgr.TryAutoAdvance
+    posture: synchronous
+    reentrant: true
+    notes: |
+      TryAutoAdvance may synchronously fire workflow hooks. Phase transitions
+      are idempotent.

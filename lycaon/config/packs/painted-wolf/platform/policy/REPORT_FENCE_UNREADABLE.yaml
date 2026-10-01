@@ -1,0 +1,35 @@
+oar: '1.0'
+id: REPORT_FENCE_UNREADABLE
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.reject_observation
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_sample
+    - paintedwolf.offenders_omitted
+when: paintedwolf.reject_observation == "report_fence_unreadable"
+effect: block
+copy:
+  what: 'The report fence has {{ paintedwolf.offender_count }} member(s) the host did not read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
+  cause: The host reads the fence against the report's declared fields; a member it does not declare, or one of the wrong type, carries nothing into the report.
+  why: A report built without those members states less than the closeout wrote, so the host asks for them in the declared shape.
+  fix: Return the fence with each listed member removed or moved to where the report declares it. A top-level report field such as `ask` or `set_asides` appears once at the top of the fence, never inside a finding.
+  instead: Keep the Markdown answer and every member the host already read; change only the listed ones.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-evidence:
+  ui_label: Report fields read
+  ui_check_id: report_fence
+  in_session_retry: true
+x-paintedwolf-message: The report fence has members the host did not read
+x-paintedwolf-scenarios:
+  - id: ask_inside_findings
+    vars:
+      offender_count: 1
+      offenders_sample: '`findings[].ask` (13): `ask` is a top-level report field'
+      offenders_omitted: 0
+    expect_contains:
+      - 'Code: REPORT_FENCE_UNREADABLE'
+      - findings[].ask
+      - top-level

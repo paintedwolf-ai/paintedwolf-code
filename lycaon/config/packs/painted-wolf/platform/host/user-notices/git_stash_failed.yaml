@@ -1,0 +1,7 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Could not stash changes
+message: >-
+  Git could not save the working changes in a stash. Check for unresolved conflicts and repository access.
+suggested_action: >-
+  Review the files and resolve repository errors before retrying.

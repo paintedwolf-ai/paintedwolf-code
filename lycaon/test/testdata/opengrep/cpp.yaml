@@ -1,0 +1,189 @@
+language: cpp
+comment:
+- //
+limits: Allocation lifetime, repeated-delete, and allocation/deallocation-pair checks are not enabled for C++ because references can replace a pointer without a visible address escape. Remaining patterns are intra-file; wrappers and cross-file flows require additional analysis.
+cases:
+- name: raptor-double-free-vulnerable-context-only
+  file: sample.cpp
+  source: 'void f(void *p) { free(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: raptor-double-free-safe
+  file: sample.cpp
+  source: 'void f(void *p) { free(p); p=0; }
+
+    '
+  want: []
+  covers: []
+- name: use-after-free-vulnerable-context-only
+  file: sample.cpp
+  source: 'int f(int *p) { free(p); return *p; }
+
+    '
+  want: []
+  covers: []
+- name: use-after-free-safe
+  file: sample.cpp
+  source: 'int f(int *p) { int n=*p; free(p); return n; }
+
+    '
+  want: []
+  covers: []
+- name: raptor-ret-stack-address-vulnerable
+  file: sample.cpp
+  source: 'int *f(void) { int value=1; return &value; }
+
+    '
+  want:
+  - lycaon.c.return-stack-address
+  covers: []
+- name: raptor-ret-stack-address-safe
+  file: sample.cpp
+  source: 'int f(void) { int value=1; return value; }
+
+    '
+  want: []
+  covers:
+  - lycaon.c.return-stack-address
+- name: double-delete-vulnerable-context-only
+  file: sample.cpp
+  source: 'void f(int *p) { delete p; delete p; }
+
+    '
+  want: []
+  covers: []
+- name: double-delete-safe
+  file: sample.cpp
+  source: 'void f(int *p) { delete p; p=nullptr; }
+
+    '
+  want: []
+  covers: []
+- name: array-delete-mismatch-vulnerable-context-only
+  file: sample.cpp
+  source: 'void f() { int *p = new int[10]; delete p; }
+
+    '
+  want: []
+  covers: []
+- name: array-delete-mismatch-safe
+  file: sample.cpp
+  source: 'void f() { int *p = new int[10]; delete[] p; }
+
+    '
+  want: []
+  covers: []
+- name: unbounded-input
+  file: sample.cpp
+  source: 'void read_input() { char buffer[20]; gets(buffer); }
+
+    '
+  want:
+  - raptor-insecure-api-gets
+  covers: []
+- name: bounded-input
+  file: sample.cpp
+  source: 'void read_input() { char buffer[20]; fgets(buffer,sizeof(buffer),stdin); }
+
+    '
+  want: []
+  covers:
+  - raptor-insecure-api-gets
+- name: precision-array-pointer-reassigned
+  file: sample.cpp
+  source: 'void f(){ int *p = new int[4]; delete[] p; p = new int; delete p; }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-delete
+  file: sample.cpp
+  source: 'void f(){ int *p = nullptr; delete p; delete p; }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-reassigned-double-delete-context-only
+  file: sample.cpp
+  source: 'void f(){ int *p = nullptr; p = new int; delete p; delete p; }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-return-after-free
+  file: sample.cpp
+  source: 'void *f(){ void *p = 0; free(p); return p; }
+
+    '
+  want: []
+  covers: []
+- name: precision-null-argument-after-free
+  file: sample.cpp
+  source: 'void f(){ void *p=0; free(p); accept_optional(p); }
+
+    '
+  want: []
+  covers: []
+- name: precision-read-after-reassignment
+  file: sample.cpp
+  source: 'int f(){ int *p=malloc(4); free(p); p=malloc(4); return p[0]; }
+
+    '
+  want: []
+  covers: []
+- name: precision-dereference-after-free-context-only
+  file: sample.cpp
+  source: 'int f(int *p){ free(p); return p[0]; }
+
+    '
+  want: []
+  covers: []
+- name: precision-memcpy-after-free-context-only
+  file: sample.cpp
+  source: 'void f(void *dst, void *p){ free(p); memcpy(dst,p,4); }
+
+    '
+  want: []
+  covers: []
+- name: reference-replaced-allocation
+  file: sample.cpp
+  source: '#include <cstdlib>
+
+    static void replace(int *&p) { p = static_cast<int *>(std::calloc(1, sizeof *p)); }
+
+    void f(int *p) { free(p); replace(p); free(p); }
+
+    '
+  want: []
+  covers: []
+- name: reference-replaced-allocation-read
+  file: sample.cpp
+  source: '#include <cstdlib>
+
+    static void replace(int *&p) { p = static_cast<int *>(std::calloc(1, sizeof *p)); }
+
+    int f(int *p) { free(p); replace(p); if (!p) return 0; int value = *p; free(p); return value; }
+
+    '
+  want: []
+  covers: []
+- name: reference-replaced-delete
+  file: sample.cpp
+  source: 'static void replace(int *&p) { p = new int(0); }
+
+    void f(int *p) { delete p; replace(p); delete p; }
+
+    '
+  want: []
+  covers: []
+- name: reference-replaced-array-allocation
+  file: sample.cpp
+  source: 'static void replace(int *&p) { delete[] p; p = new int(0); }
+
+    void f() { int *p = new int[10]; replace(p); delete p; }
+
+    '
+  want: []
+  covers: []

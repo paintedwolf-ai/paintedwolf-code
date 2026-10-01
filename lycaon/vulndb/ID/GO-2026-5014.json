@@ -1,0 +1,66 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "golang.org/x/crypto/ssh",
+      "symbols": [
+       "NewServerConn",
+       "connection.serverAuthenticate"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "golang.org/x/crypto"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.52.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-39828"
+ ],
+ "credits": [
+  {
+   "name": "NCC Group Cryptography Services, sponsored by Teleport"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5014"
+ },
+ "details": "When an SSH server authentication callback returned PartialSuccessError with non-nil Permissions, those permissions were silently discarded, potentially dropping certificate restrictions such as force-command after a second factor succeeded. Returning non-nil Permissions with PartialSuccessError now results in a connection error.",
+ "id": "GO-2026-5014",
+ "modified": "2026-05-22T02:08:34Z",
+ "published": "2026-05-22T02:08:34Z",
+ "references": [
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/79562"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+  },
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/781621"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Invoking bypass of certificate restrictions in golang.org/x/crypto/ssh"
+}

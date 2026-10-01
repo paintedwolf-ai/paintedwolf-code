@@ -1,0 +1,323 @@
+tags: [process, terminal]
+description: >-
+  Needs `command` or `pipeline` (not both). Runs as argv without a shell:
+  `&&`/`||`/`;` sequence commands, `pipeline` carries `|`, `>`/`>>`/`2>` redirect,
+  globs and `@scratch/<path>` expand, `$()`/backticks reject. Leading `NAME=value` assignments scope to
+  their command; shared variables belong in `env`. Pass cwd; `cd` is rejected.
+  Omit output paths to return output tails.
+schema:
+  type: object
+  properties:
+    secret_use:
+      type: object
+      additionalProperties: false
+      required: [services]
+      description: >-
+        Request one reusable permission for the managed secrets used by this
+        process and their later use with the named HTTP services. The person
+        reviews both process access and these declared service addresses.
+        This does not claim the process or a daemon sends only to those services.
+        Put connection and socket requirements in capability_request as usual.
+      properties:
+        services:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 1024
+          description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
+    verification:
+      type: boolean
+      default: false
+      description: Marks this invocation as validation evidence. It does not change execution or permissions.
+    command:
+      type: string
+      description: >-
+        One argv line, optionally prefixed with stage `NAME=value` assignments.
+        Unquoted globs and `@scratch/<path>` arguments expand; `<`/`>`/`>>`/`2>` redirect per stage. Shell substitutions
+        reject; read the returned stage exit codes. `&&`, `||`, and `;` create
+        gated processes. Use background for long-lived commands.
+    pipeline:
+      type: array
+      description: >-
+        Multi-stage runs: the complete list of argv lines from producer through
+        consumer, Go-wired stdout to stdin. Omit command when using pipeline.
+      items:
+        type: string
+    cwd:
+      type: string
+      description: >-
+        Repo-relative working directory for this call. Use `@label` or
+        `@label/sub/path` for a non-primary project root, or `@scratch` (and
+        `@scratch/sub/path`) for session scratch. On a write worker,
+        workspace paths resolve under the private branch. Empty = branch root
+        (or active root when not on a worker). Must be a directory inside a
+        project root or `@scratch`. `cd` is rejected — pass the directory here.
+    stdin:
+      type: string
+      description: >-
+        Bytes on the process stdin — not flags or operands. Put those on
+        command. One program only; rejected on a sequence.
+    stdin_from:
+      type: string
+      description: Read-scope stdin path (supports `@scratch/` paths).
+    env:
+      type: object
+      default: {}
+      additionalProperties:
+        type: string
+      description: >-
+        Environment variables for all stages. Stage-specific prefix assignments
+        on command override these keys. The child also receives `SCRATCH_DIR`.
+    stdout_to:
+      type: string
+      description: Optional write-scope path for stdout (supports `@scratch/` paths). Omit to keep stdout in the tool result tail.
+    stderr_to:
+      type: string
+      description: Optional write-scope path for stderr (supports `@scratch/` paths). Omit to keep stderr in the tool result tail.
+    append:
+      type: boolean
+      default: false
+      description: Append redirects
+    background:
+      type: boolean
+      default: false
+      description: Explicit concurrent job; returns its command handle immediately.
+    wait_ms:
+      type: integer
+      minimum: 1
+      maximum: 30000
+      description: Inline response window before returning a live handle (default/max 30s); not a kill. Ignored with background:true.
+    timeout_ms:
+      type: integer
+      minimum: 1000
+      maximum: 7200000
+      description: Optional execution deadline. Unlike wait_ms, expiry stops the command tree.
+    allow_concurrent:
+      type: boolean
+      default: false
+      description: Admit this awaited command beside an existing one. Exact live duplicates are still rejected.
+    terminal_capture:
+      type: object
+      description: >-
+        Capture one non-interactive command in a sealed one-shot PTY. Chains,
+        pipelines, stdin, redirects, and background are invalid. Returns the
+        settled VT screen without a terminal id, so terminal_send cannot alter
+        it. Keep any capability_request on this call. Omit for exit-code or
+        output-tail checks and interactive sessions.
+      properties:
+        winsize:
+          type: object
+          properties:
+            cols:
+              type: integer
+              minimum: 1
+              maximum: 240
+              description: Terminal columns.
+            rows:
+              type: integer
+              minimum: 1
+              maximum: 120
+              description: Terminal rows.
+          required: [cols, rows]
+          additionalProperties: false
+          description: Optional terminal size; default 80x24.
+        caption:
+          type: string
+          maxLength: 240
+          description: Optional user-facing caption for the captured screen.
+      additionalProperties: false
+    snapshot_capture:
+      type: object
+      additionalProperties: false
+      description: >-
+        Capture one native application offscreen snapshot. Injects APP_SNAPSHOT
+        with an allocated scratch image path into the process environment. On zero exit,
+        attaches the rendered image as a visual perception artifact directly to the
+        tool result, without requiring a separate view_image call.
+      properties:
+        env_var:
+          type: string
+          default: APP_SNAPSHOT
+          description: Environment variable passed to the process pointing to the snapshot target.
+        view:
+          type: string
+          description: Optional view or route identifier passed as APP_SNAPSHOT_VIEW.
+        scale:
+          type: number
+          default: 2.0
+          description: Scale factor passed as APP_SNAPSHOT_SCALE (default 2.0 for retina).
+        caption:
+          type: string
+          maxLength: 240
+          description: Optional user-facing caption for the resulting visual artifact.
+    socks_proxy:
+      type: boolean
+      default: false
+      description: >-
+        Inject ALL_PROXY for mediated non-HTTP TCP (SOCKS5h). HTTP(S) already uses
+        HTTP_PROXY under default confinement — omit this unless the client needs
+        SOCKS. Does not widen the sandbox. Incompatible
+        with capability_request.direct_ip.
+    capability_request:
+      type: object
+      description: >-
+        Declares confinement this invocation needs. UDP, a resolver miss, or a
+        raw socket: {"direct_ip": true} or
+        {"direct_ip": {"declared_destinations": ["udp://time.nist.gov:123"]}}.
+        Other fields: host_resources, socket_paths, local_listen,
+        loopback_connect, write_root, read_path, process_control, host_execution. Do not put listen or connect
+        ids in host_resources. Omit for ordinary execution.
+      properties:
+        host_resources:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: string
+          description: Available host-resource ids; the host resolves their connection routes.
+        socket_paths:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: string
+          description: Absolute AF_UNIX socket paths (exact, not globs).
+        process_control:
+          description: >-
+            `true` requests, for this invocation,signaling outside the command sandbox.
+            Filesystem and network confinement stay applied. Actual signal
+            targets will be unobserved. Prefer process_signal for exact targets.
+          oneOf:
+            - type: boolean
+              enum: [true]
+            - type: object
+              additionalProperties: false
+        host_execution:
+          description: >-
+            `true` requests, for this invocation,execution outside the command sandbox,
+            including setuid programs and passwordless sudo. Filesystem,
+            network, and process effects will be unobserved. Use sudo -n;
+            password entry is not supported. Cannot combine with other
+            capability_request fields or socks_proxy.
+          oneOf:
+            - type: boolean
+              enum: [true]
+            - type: object
+              additionalProperties: false
+        direct_ip:
+          description: >-
+            `true` requests, for this invocation,direct outbound IP when HTTP mediation
+            or SOCKS is incompatible — UDP (NTP, QUIC), a portless bind, or a
+            client that ignores proxy variables. A destination list or
+            {"declared_destinations": ["udp://time.nist.gov:123"]} narrows
+            protocol and port. Actual destinations will be unobserved.
+          oneOf:
+            - type: boolean
+            - type: array
+              maxItems: 16
+              items:
+                type: string
+                maxLength: 256
+            - type: object
+              additionalProperties: false
+              properties:
+                declared_destinations:
+                  type: array
+                  description: >-
+                    Destinations this action will reach, as host:port with an optional
+                    tcp:// or udp:// scheme, for example udp://time.nist.gov:123.
+                    Declaring narrows the sandbox to those transports: udp://host:123
+                    permits UDP port 123 and refuses every other protocol and port.
+                    Declaring nothing leaves the action able to use any of them, so
+                    declare whenever you know them. Parsing is all-or-nothing - one entry
+                    without a port, or a scheme such as https:// that only implies one,
+                    drops the narrowing for the whole request. Narrowing bounds protocol
+                    and port only; the host cannot restrict which peer you reach.
+                  maxItems: 16
+                  items:
+                    type: string
+                    maxLength: 256
+        local_listen:
+          type: object
+          description: >-
+            Local listener authority (bind + accept) so this command can run a
+            dev server or test harness. Put it on the invocation that binds a
+            named port — a traceback is not the errno line, and a bind that
+            names no port is not a server (use direct_ip). Egress stays
+            mediated - this never widens outbound access. Declare ports to
+            narrow the profile; {} requests any local port. The sandbox cannot
+            bound the bind address, so a server told to bind 0.0.0.0 will; this
+            is "a local server", not "loopback only". Listen and
+            loopback-connect are separate fields.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact local ports to narrow the profile to.
+          additionalProperties: false
+        loopback_connect:
+          type: object
+          description: >-
+            Authority to connect to TCP or UDP services on this machine without
+            widening external egress. Put it on the invocation that connects —
+            a traceback is not the errno line. Use together with local_listen
+            when one command starts a server and then exercises it. Declare
+            ports only when known before spawn; {} requests any local port.
+            For an OS-assigned port, omit ports rather than guessing or using []. Permission
+            to bind a server does not imply permission for its client connection.
+          properties:
+            ports:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: integer
+                minimum: 1
+                maximum: 65535
+              description: Exact destination ports on this machine.
+          additionalProperties: false
+        write_root:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute path this invocation must write where the sandbox
+            refuses by default: outside its project and default cache roots, a
+            credential store, or a file agents load as instructions or settings
+            (AGENTS.md at any depth, project skills, `.paintedwolf` settings).
+            It is reviewed before spawn; command output can never grant it. A
+            refused write can fail silently, so declare it up front. A
+            recognized credential-store path grants exactly that file, not
+            temporary, lock, backup, or other sibling names.
+        read_path:
+          type: string
+          maxLength: 1024
+          description: >-
+            One absolute protected path this invocation must read — key
+            material such as an SSH or signing key. It is reviewed before
+            spawn; command output can never grant it. The grant covers exactly
+            the declared file.
+      additionalProperties: false
+      minProperties: 1
+  oneOf:
+    - required: [command]
+    - required: [pipeline]
+  allOf:
+    - if:
+        required: [terminal_capture]
+      then:
+        properties:
+          background:
+            const: false
+          pipeline: false
+          stdin: false
+          stdin_from: false
+          stdout_to: false
+          stderr_to: false
+  additionalProperties: false

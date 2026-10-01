@@ -1,0 +1,3 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+use_defaults: true

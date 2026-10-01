@@ -1,0 +1,5 @@
+code: rules_path_missing
+message: |
+  Rules path {{path}} was not found under bundled or project config.
+replacement: |
+  Fix the rules: entry to a real relative path.
