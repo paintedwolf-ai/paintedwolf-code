@@ -50,6 +50,11 @@ const (
 	GrantContainingDirectory FloorGrant = "containing_directory"
 	// GrantExactPath asks for the path itself.
 	GrantExactPath FloorGrant = "exact_path"
+	// GrantRepositoryTree asks for the nearest enclosing repository work tree,
+	// never the home directory or a top-level directory, and otherwise for the
+	// containing directory, so a build writing across one checkout takes one
+	// approval.
+	GrantRepositoryTree FloorGrant = "repository_tree"
 	// GrantLoaderTree asks for the path when its directory exists, and
 	// otherwise for the nearest existing directory of the tree holding it, so
 	// creating a whole skill or workflow takes one approval.
@@ -78,7 +83,9 @@ func FloorLayers() []FloorLayer {
 // Recovery returns the route from this layer's deny to an ask.
 func (l FloorLayer) Recovery() FloorRecovery {
 	switch l {
-	case FloorOutsideWriteRoots, FloorBaseline:
+	case FloorOutsideWriteRoots:
+		return FloorRecovery{Capability: "write_root", Grant: GrantRepositoryTree}
+	case FloorBaseline:
 		return FloorRecovery{Capability: "write_root", Grant: GrantContainingDirectory}
 	case FloorProtected:
 		return FloorRecovery{Capability: "write_root", Grant: GrantExactPath}
@@ -96,6 +103,8 @@ func (r FloorRecovery) GrantPath(path string, roots ...string) string {
 	switch r.Grant {
 	case GrantContainingDirectory:
 		return filepath.Dir(path)
+	case GrantRepositoryTree:
+		return repositoryTreeGrant(path)
 	case GrantLoaderTree:
 		return loaderTreeGrant(path, roots)
 	default:

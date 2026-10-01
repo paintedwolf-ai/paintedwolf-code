@@ -185,6 +185,15 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 
 Approving access does not edit the person's project definition. Native tools do not extend past attached project folders without an explicit path grant. Filesystem resolution checks attached roots, explicit grants, and the shared default temporary, cache, and tool data boundary. Ordinary scratch access needs no additional outside-folders grant, except that Strict reviews a native write there. Sensitive-location and protected-path rules still apply.
 
+Reaching a folder outside the attached folders always has a route to a card, at every posture; only the control plane is refused without one. The `outside_roots_read` and `outside_roots_write` gates are live at Light, Balanced, and Strict, and the path resolver admits an outside path only through an approved grant, so a posture that left the crossing silent would strand the call. The grant shapes are:
+
+| Crossing | Card subject |
+|---|---|
+| Native read of a folder outside the attached folders | That folder and everything under it |
+| Native read of a file outside the attached folders | The containing folder, or the exact file in the home directory or a sensitive location |
+| Command write refused outside its write roots | The enclosing repository work tree, otherwise the containing folder ([Security](security.md#credentials-the-agent-drives)) |
+| Native write outside the attached folders | The exact path |
+
 Sensitive and protected targets stay exact even under a broader tree grant. A symlink alias matches only after canonical descriptor-relative resolution proves the same location. Write-root authority expands the subprocess write profile; it does not become an attached root, project label, or evidence path namespace.
 
 Every rung on a write-root card continues the held write through this chat's runtime write root, the same way a local-service lease carries its permit. The Day rung bounds that runtime root to its 24 hours as well as the durable lease; the Chat, Project, and Device rungs keep the runtime root for the chat, the widest scope they name, and add their durable lease for other chats. Like every chat lease, a bounded runtime root stops carrying authority at its deadline and stays listed in Saved approvals with that deadline until it is revoked.
