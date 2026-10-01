@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
@@ -74,5 +75,18 @@ func TestResolveCapabilitySurfaceSearchDisabled(t *testing.T) {
 		if tool == webresearch.SearchToolName || tool == webresearch.FetchURLToolName {
 			t.Fatalf("resolved tools still include web research tool %q: %v", tool, surf.ResolvedTools)
 		}
+	}
+}
+
+func TestMergeForTurnInvestigateAsksForPageCapture(t *testing.T) {
+	vars := map[string]any{}
+	profile := surface.TurnProfile{SurfaceID: "implement_investigate"}
+	if err := capability.MergeForTurn(vars, profile, 1, spawn.AmbientAllowedAgents(), true); err != nil {
+		testutil.FailErr(t, "merge investigate turn", err)
+	}
+	if vars["visual_show_page"] != false || vars["visual_show_needs_request"] != true {
+		surf, _ := capability.Resolve(capability.ResolveInput{Profile: profile, RootCount: 1})
+		t.Fatalf("investigate floor must ask to load page capture: page=%v needs_request=%v resolved=%v deferred=%v",
+			vars["visual_show_page"], vars["visual_show_needs_request"], surf.ResolvedTools, surf.DeferredTools)
 	}
 }
