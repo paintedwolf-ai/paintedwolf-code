@@ -58,6 +58,11 @@ runs:
       if: runner.os == 'macOS'
       uses: ./.github/actions/setup-opengrep
 
+    # Git integration tests resolve the pinned engine from engine-root.
+    - name: Fetch pinned git engine
+      shell: bash
+      run: ./task gitengine:fetch
+
     - name: Install frontend dependencies
       shell: bash
       working-directory: lycaon-den
