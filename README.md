@@ -64,7 +64,7 @@ Notable changes are tracked in [`CHANGELOG.md`](CHANGELOG.md), following [Keep a
 
 ## Community
 
-Painted Wolf Code is free, and we don't take donations. If it has been useful to you, tell a colleague who would use it, or star this repository.
+If it has been useful to you, tell a colleague who would use it, or star this repository.
 
 Reports are welcome. There is no support contract — no guaranteed reply, fix, or timeline.
 
