@@ -8,7 +8,7 @@ import (
 
 func TestHostExecutionBelongsOnlyToAgentCommandLaunch(t *testing.T) {
 	boundary := &confine.Confinement{HostExecution: true, Network: confine.NetworkDirectIP}
-	for _, kind := range []LaunchKind{LaunchAgentCommand, LaunchHostInternal, LaunchBundledScanner, LaunchExternalScanner, LaunchLocalMCP, LaunchManagedBrowser} {
+	for _, kind := range []LaunchKind{LaunchAgentCommand, LaunchHostInternal, LaunchBundledScanner, LaunchExternalScanner, LaunchLocalMCP, LaunchManagedBrowser, LaunchDocumentCore} {
 		plan := AgentLaunch(kind, "reviewed execution", boundary)
 		err := plan.validate()
 		if (err == nil) != (kind == LaunchAgentCommand) {

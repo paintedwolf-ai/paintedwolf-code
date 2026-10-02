@@ -17,6 +17,7 @@ const (
 	LaunchExternalScanner LaunchKind = "external_scanner"
 	LaunchManagedBrowser  LaunchKind = "managed_browser"
 	LaunchLocalMCP        LaunchKind = "local_mcp"
+	LaunchDocumentCore    LaunchKind = "document_core"
 )
 
 // LaunchPlan carries mandatory process authority and attribution.
@@ -63,6 +64,11 @@ func BundledScannerLaunch(subject string, confinement *confine.Confinement) Laun
 	return LaunchPlan{Kind: LaunchBundledScanner, Subject: strings.TrimSpace(subject), Confinement: confinement}
 }
 
+// DocumentCoreLaunch starts the confined text CRDT process.
+func DocumentCoreLaunch(confinement *confine.Confinement) LaunchPlan {
+	return LaunchPlan{Kind: LaunchDocumentCore, Subject: "document_core", Confinement: confinement}
+}
+
 // ScratchDirEnv names the session scratch folder in an agent process's environment.
 const ScratchDirEnv = "SCRATCH_DIR"
 
@@ -99,7 +105,7 @@ func (p LaunchPlan) validate() error {
 			return fmt.Errorf("external scanner launch cannot carry confinement")
 		}
 		return nil
-	case LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP:
+	case LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore:
 		if p.Confinement == nil && confine.Enforcing() {
 			return confine.ErrNotConfined
 		}

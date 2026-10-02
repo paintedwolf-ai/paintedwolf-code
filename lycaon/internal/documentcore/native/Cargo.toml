@@ -5,7 +5,12 @@ edition = "2021"
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+name = "document_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pw-document-core"
+path = "src/main.rs"
 
 [dependencies]
 yrs = "=0.27.4"
@@ -15,7 +20,8 @@ base64 = "0.22"
 
 [profile.release]
 lto = true
-opt-level = "s"
+codegen-units = 1
+opt-level = 3
 panic = "abort"
 overflow-checks = true
 debug-assertions = true
