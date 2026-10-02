@@ -246,7 +246,9 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                     accepted = {key: receipt[key] for key in expected}
                 validate_website_receipt(receipt, accepted)
                 no_store(response.headers)
-            request = urllib.request.Request(base.rstrip("/") + "/download/", headers=PUBLIC_READ_HEADERS)
+            # Preview builds are offered only on the unlisted preview page.
+            page = "/download/" if expected["channel"] == "stable" else "/download/preview/"
+            request = urllib.request.Request(base.rstrip("/") + page, headers=PUBLIC_READ_HEADERS)
             with urllib.request.urlopen(request, timeout=20) as response:
                 no_store(response.headers)
                 raw = response.read(2 * 1024 * 1024 + 1)

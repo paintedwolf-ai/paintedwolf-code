@@ -25,6 +25,14 @@ class WebsitePublicationTests(unittest.TestCase):
         self.assertEqual(get.call_count, 2)
         self.assertEqual(get.call_args_list[1].args[0].full_url, "https://paintedwolf.ai/download/")
 
+    def test_preview_waits_on_the_unlisted_preview_page(self):
+        expected = {**self.expected, "channel": "preview", "version": "1.0.0-rc.3"}
+        receipt = json.dumps({"schema_version": 1, **expected}).encode()
+        page = self.page.replace(b"stable", b"preview").replace(b"1.0.0", b"1.0.0-rc.3")
+        with patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(receipt), Response(page)]) as get:
+            distribution.wait_for_website("https://paintedwolf.ai", expected, seconds=0)
+        self.assertEqual(get.call_args_list[1].args[0].full_url, "https://paintedwolf.ai/download/preview/")
+
     def test_stale_page_or_cache_headers_cannot_confirm_a_release(self):
         for page, headers in [(self.page.replace(b"1.0.0", b"0.9.0"), "no-store"), (self.page, "public, max-age=3600")]:
             with self.subTest(headers=headers), patch.object(distribution.urllib.request, "urlopen", side_effect=[Response(self.receipt), Response(page, headers)]):
@@ -122,7 +130,8 @@ class ReleaseControlTests(unittest.TestCase):
     def test_first_stable_checks_the_published_preview_and_bootstrap_has_no_prior(self):
         from release_control import prior_versions
         self.assertEqual(prior_versions({"stable": None, "preview": None}, "1.0.0"), [])
-        self.assertEqual(prior_versions({"stable": None, "preview": {"version": "1.0.0-rc.2"}}, "1.0.0"), ["1.0.0-rc.2"])
+        self.assertEqual(prior_versions({"stable": None, "preview": {"version": "1.0.0-rc.2"}}, "1.0.0"), [])
+        self.assertEqual(prior_versions({"stable": None, "preview": {"version": "1.0.0-rc.2", "withdrawn": True}}, "1.0.0-rc.3"), [])
         self.assertEqual(prior_versions({"stable": {"version": "1.0.0"}, "preview": {"version": "1.1.0-rc.1", "withdrawn": True}}, "1.1.0"), ["1.0.0", "1.1.0-rc.1"])
 
     def test_activation_preserves_start_time_and_binds_original_manifest(self):
