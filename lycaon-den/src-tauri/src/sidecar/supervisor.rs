@@ -66,7 +66,7 @@ pub struct EngineExit {
 }
 
 /// One launched engine's end of output, which closes when the process exits.
-pub(super) struct ExitWatch {
+pub(crate) struct ExitWatch {
     pub(super) generation: u64,
     pub(super) closed: Receiver<()>,
 }
