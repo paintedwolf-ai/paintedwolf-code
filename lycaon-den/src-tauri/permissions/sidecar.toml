@@ -32,3 +32,8 @@ commands.allow = ["attach_existing_daemon"]
 identifier = "allow-sidecar-info"
 description = "Read the cached engine port and bearer without spawning."
 commands.allow = ["sidecar_info"]
+
+[[permission]]
+identifier = "allow-engine-state"
+description = "Read whether the shell's engine is running, restarting, or stopped."
+commands.allow = ["engine_state"]

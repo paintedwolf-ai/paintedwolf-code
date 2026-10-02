@@ -75,6 +75,7 @@ pub(super) fn attach_existing_daemon_in(dir: &Path) -> Result<Option<SidecarInfo
                 return Ok(Some(SidecarInfo {
                     port: manifest.port,
                     api_token,
+                    generation: 0,
                 }));
             }
         }
@@ -93,6 +94,7 @@ pub(super) fn attach_existing_daemon_in(dir: &Path) -> Result<Option<SidecarInfo
     Ok(Some(SidecarInfo {
         port: manifest.port,
         api_token,
+        generation: 0,
     }))
 }
 

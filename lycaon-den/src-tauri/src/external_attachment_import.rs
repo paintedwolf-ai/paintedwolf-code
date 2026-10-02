@@ -258,6 +258,7 @@ mod tests {
             &SidecarInfo {
                 port: 8123,
                 api_token: "not-in-url".to_string(),
+                generation: 1,
             },
             "project-1",
             "brief report.txt",

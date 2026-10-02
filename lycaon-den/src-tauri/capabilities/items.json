@@ -28,6 +28,8 @@
     "allow-open-local-path",
     "allow-detect-editors",
     "allow-sidecar-info",
+    "allow-resolve-checkpoint-with-presence",
+    "allow-engine-state",
     "allow-open-item-window",
     "allow-drag-item-window",
     "allow-list-item-window-views",

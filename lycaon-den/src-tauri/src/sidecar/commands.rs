@@ -1,5 +1,6 @@
 use super::daemon::attach_existing_daemon;
 use super::diagnostics::export_startup_diagnostics;
+use super::supervisor::EngineState;
 use super::{
     cancel_sidecar_start, reset_credential_vault, restart_sidecar_with_progress,
     start_sidecar_with_progress, SidecarInfo, SidecarStartError, SidecarState,
@@ -78,4 +79,10 @@ pub async fn ipc_sidecar_info(
     tauri::async_runtime::spawn_blocking(|| attach_existing_daemon().ok().flatten())
         .await
         .map_err(|e| e.to_string())
+}
+
+/// The engine this shell owns, for windows that open after a change was published.
+#[tauri::command(rename = "engine_state")]
+pub fn ipc_engine_state(state: tauri::State<'_, SidecarState>) -> EngineState {
+    state.engine_state()
 }
