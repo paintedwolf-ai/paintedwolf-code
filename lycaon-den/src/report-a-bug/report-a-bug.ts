@@ -1,6 +1,6 @@
 import { ISSUES_URL } from "../../shared/brand.ts";
 import type { BackendConnection } from "../platform/connection/backend.ts";
-import { confirmAndOpenExternalLink } from "../platform/desktop/external-link.ts";
+import { openAppLink } from "../platform/desktop/external-link.ts";
 import {
   saveDiagnosticsBundle,
   type SaveBundleResult,
@@ -46,7 +46,7 @@ export async function saveReportBundle(
 }
 
 export async function openIssuesPage(
-  open: ReportBugOpenIssues = (url) => confirmAndOpenExternalLink(url),
+  open: ReportBugOpenIssues = (url) => openAppLink(url),
 ): Promise<boolean> {
   return open(ISSUES_URL);
 }

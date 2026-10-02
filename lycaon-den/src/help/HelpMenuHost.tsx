@@ -6,7 +6,7 @@ import { WhatsNewDialog } from "../components/home/WhatsNewDialog.tsx";
 import { ReportBugDialog } from "../components/report-a-bug/ReportBugDialog.tsx";
 import { APP_SCOPE } from "../notices/notice-scope.ts";
 import { getRegisteredNoticeStore } from "../platform/connection/app-connection.ts";
-import { confirmAndOpenExternalLink } from "../platform/desktop/external-link.ts";
+import { openAppLink } from "../platform/desktop/external-link.ts";
 import { lastSeenHealth } from "../platform/connection/health.ts";
 import { openThirdPartyNotices } from "../platform/desktop/open-third-party-notices.ts";
 import { saveLastSeenVersion } from "../settings/system/whats-new-prefs.ts";
@@ -36,7 +36,7 @@ export function HelpMenuHost(): JSX.Element {
         setReportOpen(true);
       }),
       registerCommandHandler("help.website", () => {
-        void confirmAndOpenExternalLink(WEBSITE_URL);
+        void openAppLink(WEBSITE_URL);
       }),
       registerCommandHandler("help.thirdPartyNotices", () => {
         void openThirdPartyNotices().catch((err: unknown) => {

@@ -5,9 +5,11 @@ import {
   externalLinkConfirmMessage,
   externalLinkOkLabel,
   isExternalLinkHref,
+  openAppLink,
   openInBrowser,
   setupWebviewNavigationGuards,
 } from "./external-link.ts";
+import { REPOSITORY_URL, WEBSITE_URL } from "../../../shared/brand.ts";
 import { resetExternalOpenPrefsForTests } from "../../settings/editor/external-open-prefs.ts";
 
 describe("external-link", () => {
@@ -112,6 +114,23 @@ describe("external-link", () => {
       },
     });
     expect(order).toEqual(["confirm", "open"]);
+  });
+
+  it("opens app-owned links without confirmation, in the preferred browser", async () => {
+    resetExternalOpenPrefsForTests({ browser: "chrome" });
+    const confirmSpy = vi.spyOn(window, "confirm");
+    const open = vi.fn().mockResolvedValue(undefined);
+    expect(await openAppLink(REPOSITORY_URL, { openInBrowser: open })).toBe(true);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith(REPOSITORY_URL, { browser: "chrome" });
+  });
+
+  it("refuses to open anything but app-owned links without confirmation", async () => {
+    const open = vi.fn();
+    for (const url of ["https://example.com", `${REPOSITORY_URL}/../evil`, `${WEBSITE_URL}.evil.test`, ` ${WEBSITE_URL}`]) {
+      expect(await openAppLink(url, { openInBrowser: open })).toBe(false);
+    }
+    expect(open).not.toHaveBeenCalled();
   });
 
   describe("navigation guards", () => {

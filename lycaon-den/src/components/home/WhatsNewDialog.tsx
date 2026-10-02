@@ -12,7 +12,7 @@ import { ChromeCloseButton } from "../shell/ChromeCloseButton.tsx";
 import { MarkdownBody } from "../transcript/MarkdownBody.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
-import { confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
+import { openAppLink } from "../../platform/desktop/external-link.ts";
 import { REPOSITORY_URL, releasePageUrl } from "../../../shared/brand.ts";
 
 export type WhatsNewDialogProps = {
@@ -102,7 +102,7 @@ export function WhatsNewDialog(props: WhatsNewDialogProps): JSX.Element {
                 <DenButton
                   variant="ghost"
                   data-testid="whats-new-dialog-star"
-                  onClick={() => void confirmAndOpenExternalLink(REPOSITORY_URL)}
+                  onClick={() => void openAppLink(REPOSITORY_URL)}
                 >
                   Star on GitHub
                 </DenButton>
