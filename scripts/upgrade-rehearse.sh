@@ -219,6 +219,13 @@ rehearse() {
     return 1
   fi
 
+  # A release keeps its vault identity in the Keychain and the development
+  # HEAD keeps it in a file, so a vault the prior release created here is
+  # unreadable to HEAD by design. The fixture carries no vault to preserve.
+  if [[ -z "$(find "${fixture}" -name 'credential-vault*.age' -print -quit)" ]]; then
+    rm -f "${config_dir}/credential-vault.age" "${config_dir}/credential-vault-identity.age"
+  fi
+
   local baseline
   baseline="$(upgrade_store_baseline "${HEAD_SIDECAR}" "${config_dir}/store.db")" || return 1
 
