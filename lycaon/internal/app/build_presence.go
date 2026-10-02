@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/credentialstore"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/version"
 )
 
-// wirePresence installs presence verification and the vault release ledger.
+// wirePresence installs presence verification and the chats' unlocks.
 // A key from an unverified launcher leaves presence unavailable rather than
 // failing boot: everything else works, and held values stay in the vault.
 func (b *serveBuilder) wirePresence() error {
@@ -27,28 +28,27 @@ func (b *serveBuilder) wirePresence() error {
 	if err := broker.Configure(key); err != nil {
 		return fmt.Errorf("configure presence verification: %w", err)
 	}
-	ledger, err := presence.OpenReleaseLedger()
-	if err != nil {
-		return fmt.Errorf("presence release ledger: %w", err)
-	}
-	b.presenceBroker, b.releaseLedger = broker, ledger
-	b.toolRuntime.SetReleaseLedger(ledger)
+	unlocks := presence.NewUnlocks()
+	// The audit and event sinks are built later; each change reads them then.
+	unlocks.SetObserver(presence.UnlockObserver{
+		Ended: func(unlock presence.Unlock, reason presence.EndReason, at time.Time) {
+			if b.secretCaps != nil {
+				b.secretCaps.RecordUnlockEnd(b.ctx, unlock, reason, at)
+			}
+		},
+		Changed: func(chatSessionID string) {
+			b.eventPub.PublishChatVault(b.ctx, capabilityadmin.ChatVaultState(chatSessionID, unlocks))
+		},
+	})
+	b.presenceBroker, b.vaultUnlocks = broker, unlocks
+	b.toolRuntime.Executor.SetVaultUnlocks(unlocks)
 	return nil
 }
 
-// heldReleaseRecorder writes an attested release's audit rows in the
-// approval's commit.
-type heldReleaseRecorder struct{}
+// unlockRecorder audits an unlock in the commit of the approval that
+// opened it.
+type unlockRecorder struct{}
 
-func (heldReleaseRecorder) RecordReleaseTx(ctx context.Context, tx *sql.Tx, release hitl.AttestedRelease) error {
-	held := make([]secretcap.HeldValue, 0, len(release.Held.Secrets))
-	for _, secret := range release.Held.Secrets {
-		held = append(held, secretcap.HeldValue{SecretID: secret.SecretID, Version: secret.Version, Name: secret.Name})
-	}
-	return secretcap.RecordRelease(ctx, tx, secretcap.ReleaseRecord{
-		AttestationID: release.Attestation.ID, CheckpointID: release.CheckpointID,
-		Scope: secretcap.ReleaseScope(release.Scope), Recipients: release.Recipients, Held: held,
-		Authenticator: release.Attestation.Authenticator, WindowLabel: release.WindowLabel,
-		PersonID: release.Attestation.PersonID, AttestedAt: release.Attestation.AttestedAt,
-	})
+func (unlockRecorder) RecordUnlockTx(ctx context.Context, tx *sql.Tx, projectID string, unlock presence.Unlock) error {
+	return secretcap.RecordUnlock(ctx, tx, projectID, unlock)
 }

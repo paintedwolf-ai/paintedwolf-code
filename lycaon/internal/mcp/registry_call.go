@@ -126,7 +126,7 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 	// A refused handoff is the host's decision, not a provider failure, so it
 	// stays outside the breaker.
 	if err := secretcap.ResolutionFrom(ctx).HandOff(ctx, mcpOutboundArgument); err != nil {
-		return "", tools.HeldHandOffReject("mcp")
+		return "", tools.HeldHandOffReject("mcp", err)
 	}
 	br := r.breakerFor(providerID)
 	raw, err := br.Execute(func() (any, error) {

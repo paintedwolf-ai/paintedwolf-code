@@ -18,12 +18,20 @@ export const APPROVALS_COPY = {
     refreshFailed: "Could not check elevated-access approvals.",
     unavailable: "Elevated-access approvals are unavailable. Reconnect to review them.",
   },
+  /** The composer chip for a chat unlocked for values the person stored. */
+  vault: {
+    label: (until: string) => `Values you stored are unlocked for this chat until ${until}. Lock now`,
+    tooltip: (until: string) =>
+      `Values you stored are unlocked for this chat until ${until}, or until this computer locks or sleeps. Select to lock now.`,
+    lockFailed: "This chat could not be locked. Try again.",
+  },
   revokeButton: "Revoke",
   card: {
-    /** A card that would hand over values a person gave Painted Wolf Code. */
+    /** A card that would hand over values a person stored. */
     held: {
-      title: "Values you gave Painted Wolf Code",
-      confirm: "Approving asks you to confirm with Touch ID, Windows Hello, or your device password.",
+      title: "Values you stored",
+      confirm: "Approving asks you to confirm, which unlocks this chat.",
+      unlocked: "This chat is unlocked, so approving won't ask you to confirm.",
       needsDesktop: "Only the installed desktop app can confirm you, so approve this there.",
       reader: {
         file: "Anything that can read this project's files can read it.",

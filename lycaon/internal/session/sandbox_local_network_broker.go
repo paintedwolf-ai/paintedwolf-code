@@ -108,8 +108,8 @@ func (b *LocalNetworkCheckpointBroker) raise(ctx context.Context, in tools.Local
 	}
 	return tools.LocalNetworkResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
-		SecretApproved: resolved.Authorized && in.SecretPermission != nil, SecretAttestationID: resolved.AttestationID,
-		UserGuidance: resolved.UserGuidance,
+		SecretApproved: resolved.Authorized && in.SecretPermission != nil,
+		UserGuidance:   resolved.UserGuidance,
 	}, nil
 }
 

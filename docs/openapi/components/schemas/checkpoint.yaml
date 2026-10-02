@@ -152,7 +152,7 @@ components:
       type: object
       required: [reference, name, version]
       additionalProperties: false
-      description: One value a person gave Painted Wolf Code that this approval would release.
+      description: One value a person stored that this approval would send.
       properties:
         reference:
           type: string
@@ -166,15 +166,25 @@ components:
     ApprovalHeldRelease:
       x-go-generate: true
       type: object
-      required: [secrets, recipients]
+      required: [chat_session_id, secrets, recipients]
       additionalProperties: false
       description: >-
-        Values a person gave Painted Wolf Code that an approving option would
-        hand to the listed recipients. Every option whose decision_action is
-        approve needs the person's verified presence on this device; the API
-        bearer alone cannot answer it. A redacted send releases nothing and
-        needs none.
+        Values a person stored that an approving option would hand to the
+        listed recipients. They leave only while the person's chat is
+        unlocked: while it is locked, every option whose decision_action is
+        approve needs the person's verified presence on this device, which
+        also unlocks the chat, and the API bearer alone cannot answer it. A
+        redacted send hands over nothing and needs none.
       properties:
+        chat_session_id:
+          type: string
+          format: uuid
+          description: The chat whose unlock these values leave under.
+        unlock_only:
+          type: boolean
+          description: >-
+            The recipients are already approved; the card exists to unlock the
+            chat, and its one option needs presence.
         secrets:
           type: array
           minItems: 1

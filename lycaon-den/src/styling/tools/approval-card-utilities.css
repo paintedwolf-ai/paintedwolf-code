@@ -403,7 +403,7 @@
 }
 
 
-/* A card that would hand over values a person gave the app. */
+/* A card that would hand over values a person stored. */
 @utility den-approval-held {
   display: flex;
   flex-direction: column;
@@ -412,6 +412,15 @@
   padding: 8px 10px;
   border: 1px solid var(--den-border);
   border-radius: 6px;
+}
+
+/* One line beside the actions; long copy truncates rather than grow the card. */
+@utility den-approval-held-confirm {
+  flex: none;
+  margin: 8px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @utility den-approval-held-title {

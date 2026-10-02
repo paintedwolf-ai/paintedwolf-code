@@ -101,7 +101,7 @@ func TestRevealCompletesOnlyForThePersonWhoBeganIt(t *testing.T) {
 	var count int
 	var person string
 	testutil.FailErr(t, "read reveal audit", service.handle.QueryRowContext(t.Context(),
-		`SELECT COUNT(*), MAX(person_id) FROM managed_secret_attestations WHERE secret_id = ? AND purpose = 'reveal'`, id).Scan(&count, &person))
+		`SELECT COUNT(*), MAX(person_id) FROM managed_secret_reveals WHERE secret_id = ?`, id).Scan(&count, &person))
 	if count != 1 || person != owner {
 		t.Fatalf("reveal audit = %d rows by %q, want 1 by %q", count, person, owner)
 	}

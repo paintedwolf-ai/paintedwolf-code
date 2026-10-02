@@ -127,7 +127,7 @@ The kernel never defines “active.” Each domain applies its own cardinality a
 
 [`internal/credentialstore`](../lycaon/internal/credentialstore) is the companion persistence leaf for private API-key maps: validation hooks, atomic replacement, rollback on write failure, and `0600` files. It does not resolve environment variables or ambient authentication; those decisions remain in each domain.
 
-[`internal/presence`](../lycaon/internal/presence) is the leaf that verifies a person is present before a value they hold leaves the vault: the challenge broker, the vault-held release ledger, and launcher trust. `secretcap` (reveal), `hitl` (release approvals), and `settings` (grant coverage) all need it and none may import another, so it sits below them and imports only `credentialstore` and `configdir`.
+[`internal/presence`](../lycaon/internal/presence) is the leaf that verifies a person is present before a value they hold leaves the vault: the challenge broker, each chat's in-memory unlock, and launcher trust. `secretcap` (reveal and handoff), `hitl` (unlocking approvals), and `tools` (the unlock card) all need it and none may import another, so it sits below them and imports nothing else from the engine.
 
 Do not add a universal provider interface or a cross-domain `capabilities` bag. A domain joins the kernel by translating its typed definitions into `catalogruntime.Item[T]` and by keeping its adapter contract local.
 

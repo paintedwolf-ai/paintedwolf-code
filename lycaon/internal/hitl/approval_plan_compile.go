@@ -143,7 +143,7 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 	if err != nil || req.SecretScreen == nil {
 		return plan, err
 	}
-	return plan.RequirePresence(req.SecretScreen.Held)
+	return plan.WithHeld(req.SecretScreen.Held)
 }
 
 // leadFactKeys orders the facts shown on the approval card.
@@ -338,26 +338,26 @@ func approvalOptionsFromOffers(offers []ApprovalGrantOffer, includeCurrent bool)
 	return options
 }
 
+// secretRedactedOption is the redacted send this surface allows. Contested
+// cards keep it disabled, in place.
+func secretRedactedOption(secret *SecretScreen) ApprovalOption {
+	switch {
+	case secret.CanRedact && !secret.Contested && secret.RedactionBreaks:
+		return BreakingSendRedactedOption()
+	case secret.CanRedact && !secret.Contested:
+		return SendRedactedOption()
+	case secret.Contested:
+		return UnavailableSendRedactedOption(NoteContestedRedaction)
+	}
+	return UnavailableSendRedactedOption(strings.TrimSpace(secret.RedactionNote))
+}
+
 func secretApprovalOptions(secret *SecretScreen, offers []ApprovalGrantOffer) []ApprovalOption {
 	options := make([]ApprovalOption, 0, len(offers)+2)
 	if secret.CanTrack && !secret.Contested {
 		options = append(options, TrackAndReplaceOption())
 	}
-	// Contested cards keep the redacted send disabled, in place.
-	if secret.CanRedact && !secret.Contested {
-		if secret.RedactionBreaks {
-			options = append(options, BreakingSendRedactedOption())
-		} else {
-			options = append(options, SendRedactedOption())
-		}
-	} else {
-		note := strings.TrimSpace(secret.RedactionNote)
-		if secret.Contested {
-			note = NoteContestedRedaction
-		}
-		options = append(options, UnavailableSendRedactedOption(note))
-	}
-	options = append(options, secretSendOption(secret.Managed))
+	options = append(options, secretRedactedOption(secret), secretSendOption(secret.Managed))
 	for _, offer := range offers {
 		options = append(options, GrantOption(offer))
 	}

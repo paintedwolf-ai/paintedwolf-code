@@ -77,8 +77,7 @@ func Metadata(item secretcap.Metadata) wire.ManagedSecret {
 		EntropyBits: item.EntropyBits, CreatedAt: item.CreatedAt,
 		AgentUseEndsAt: item.AgentUseEndsAt, State: item.State, Version: item.Version,
 		ValueReplacedAt: item.ValueReplacedAt, LastUsedAt: item.LastUsedAt, UseCount: item.UseCount,
-		LastRevealedAt: item.LastRevealedAt, RevealCount: item.RevealCount,
-		LastReleasedAt: item.LastReleasedAt, ReleaseCount: item.ReleaseCount, Custody: string(item.Custody),
+		LastRevealedAt: item.LastRevealedAt, RevealCount: item.RevealCount, Custody: string(item.Custody),
 	}
 }
 

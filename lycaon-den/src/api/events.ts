@@ -18,6 +18,7 @@ import {
 } from "./event-frame-queue.ts";
 import { applyBackgroundProcessEvent } from "../chat/tool/background-process-store.ts";
 import { applyPreviewEvent } from "../chat/visual/preview-store.ts";
+import { applyChatVault } from "../chat/vault/chat-vault-store.ts";
 import { invalidateInvocationRecordings } from "../chat/visual/invocation-recording-store.ts";
 import { normalizeWorkerEvent } from "../chat/worker/workers-model.ts";
 import type { AppStore, SidecarStatus } from "../store/app-state-model.ts";
@@ -109,6 +110,7 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   editor_document: [],
   // Clients tick locally between clock edges.
   turn_clock: [],
+  chat_vault: [],
   // The handler folds the receipt into the transcript's turn loads.
   turn_load: [],
   preflight: ["readiness"],
@@ -257,6 +259,9 @@ function dispatchTopic(
     // Runs apply before coalesced message references.
     case "workflow":
       storeActions.applyWorkflowRunEvent(envelope.data);
+      break;
+    case "chat_vault":
+      applyChatVault(envelope.data);
       break;
     case "turn_clock":
       storeActions.setTurnClock(envelope.data);

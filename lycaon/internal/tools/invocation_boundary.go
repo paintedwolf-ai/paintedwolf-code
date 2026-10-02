@@ -143,8 +143,8 @@ func (e *DefaultToolExecutor) applyPreInvokeBoundary(
 	if err := e.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
 		return nil, tc, err
 	}
-	if reviewed, ok := ctx.Value(capabilityReviewSecretKey{}).(reviewedSecretPermission); ok {
-		approveSecretPermission(tc.Secrets, reviewed.permission, reviewed.attestation)
+	if permission, ok := ctx.Value(capabilityReviewSecretKey{}).(*hitl.SecretPermission); ok {
+		approveSecretPermission(tc.Secrets, permission)
 	}
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.actionConfineRequest(ctx, tc)

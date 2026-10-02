@@ -75,10 +75,10 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 	if secretInvocationCovered(tc.Secrets, finding.Fingerprints, recipients) {
 		return nil, nil
 	}
-	if e.approvalGate != nil {
-		if covered, _ := e.secretRecipientsCovered(finding, recipients, secretFingerprintValues(finding.Fingerprints), custody.HeldFingerprints()); covered {
-			return nil, nil
-		}
+	// A covered held value still needs its chat unlocked; the final payload
+	// screen asks for that.
+	if e.approvalGate != nil && e.secretRecipientsCovered(finding, recipients, secretFingerprintValues(finding.Fingerprints)) {
+		return nil, nil
 	}
 	// Standing redaction is applied by the final payload screen.
 	if e.approvalGate != nil && e.approvalGate.SecretRedactionStanding(tc.ProjectID, secretFingerprintValues(finding.Fingerprints)) {
@@ -105,7 +105,7 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 			DestinationID: destination, DestinationLabel: label, DestinationKind: surface.DestinationKind(),
 			Recipients: recipients, SecretNames: finding.SecretNames,
 			SourcePath: "arguments", OriginKind: secretmatch.OriginField, ToolCallID: tc.ToolCallID,
-			Held: heldRelease(custody, recipients),
+			Held: heldRelease(finding, custody, recipients),
 		},
 		Offers: offers, Fingerprints: finding.Fingerprints,
 		ConnectPorts: append([]uint16(nil), secretUseConnectPorts(ctx)...),
@@ -126,17 +126,10 @@ func secretInvocationCovered(resolution *secretcap.Resolution, fingerprints []se
 	return true
 }
 
-// approveSecretPermission records a composed card's release; attestation
-// names the presence that released held values, when any.
-func approveSecretPermission(resolution *secretcap.Resolution, permission *hitl.SecretPermission, attestation string) {
+// approveSecretPermission records a composed card's release.
+func approveSecretPermission(resolution *secretcap.Resolution, permission *hitl.SecretPermission) {
 	if permission != nil {
-		attestations := map[string]string{}
-		if permission.Screen.Held != nil && attestation != "" {
-			for _, fingerprint := range permission.Screen.Held.Fingerprints {
-				attestations[fingerprint] = attestation
-			}
-		}
-		resolution.ApproveAttested(permission.Fingerprints, permission.Screen.Recipients, attestations)
+		resolution.ApproveRelease(secretcap.Release{Fingerprints: permission.Fingerprints, Recipients: permission.Screen.Recipients})
 		resolution.ApproveLocalConnections(permission.ConnectPorts)
 	}
 }

@@ -233,7 +233,7 @@ func runCommandBackground(
 		tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
 	), Action: egressLease, Network: egressLease.ObservedHosts}
 	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return "", tools.HeldHandOffReject(toolName)
+		return "", tools.HeldHandOffReject(toolName, err)
 	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string

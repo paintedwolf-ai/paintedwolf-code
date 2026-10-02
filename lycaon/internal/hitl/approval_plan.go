@@ -264,8 +264,9 @@ type ApprovalPlan struct {
 	Reasons             []api.ApprovalGate   `json:"reasons"`
 	Options             []ApprovalOption     `json:"options"`
 	RecommendedOptionID string               `json:"recommended_option_id"`
-	// Held names person-held values an approving option would release; each
-	// such answer needs the person's verified presence.
+	// Held names person-held values an approving option would send; while
+	// their chat is locked, each such answer needs the person's verified
+	// presence, which unlocks it.
 	Held *HeldRelease `json:"held,omitempty"`
 }
 

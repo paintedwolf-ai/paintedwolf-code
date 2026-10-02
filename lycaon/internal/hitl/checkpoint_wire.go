@@ -161,13 +161,14 @@ func wireApprovalPlan(plan *ApprovalPlan) api.ApprovalPlan {
 	return out
 }
 
-// wireHeldRelease names the held values and recipients; fingerprints stay
-// host-only.
+// wireHeldRelease names the held values and recipients.
 func wireHeldRelease(held *HeldRelease) *api.ApprovalHeldRelease {
 	if held.empty() {
 		return nil
 	}
-	out := &api.ApprovalHeldRelease{Recipients: WireSecretRecipients(held.Recipients)}
+	out := &api.ApprovalHeldRelease{
+		ChatSessionID: held.ChatSessionID, Recipients: WireSecretRecipients(held.Recipients), UnlockOnly: held.UnlockOnly,
+	}
 	for _, secret := range held.Secrets {
 		out.Secrets = append(out.Secrets, api.ApprovalHeldSecret{
 			Reference: secretmatch.ReferenceToken(secret.SecretID), Name: secret.Name, Version: secret.Version,

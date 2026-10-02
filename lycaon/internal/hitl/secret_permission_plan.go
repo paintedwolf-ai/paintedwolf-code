@@ -113,5 +113,5 @@ func ComposeSecretPermission(plan *ApprovalPlan, action ProposedAction, permissi
 	if err != nil {
 		return nil, err
 	}
-	return composed.RequirePresence(plan.Held.merged(permission.Screen.Held))
+	return composed.WithHeld(plan.Held.merged(permission.Screen.Held))
 }

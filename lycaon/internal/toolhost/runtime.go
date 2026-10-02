@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
-	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/repomap"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
@@ -187,13 +186,6 @@ func (r *Runtime) SetApprovalRuleSource(src settings.ApprovalRuleCatalogSource) 
 	r.approvalRules = src
 	if r.gateBuilder != nil {
 		r.gateBuilder.WithApprovalRules(src)
-	}
-}
-
-// SetReleaseLedger lets attested release grants cover person-held values.
-func (r *Runtime) SetReleaseLedger(ledger *presence.ReleaseLedger) {
-	if r != nil && r.gateBuilder != nil {
-		r.gateBuilder.WithReleaseLedger(ledger)
 	}
 }
 

@@ -4,7 +4,7 @@ Painted Wolf Code separates protected credential bytes from the references an ag
 
 **See also:** [Security](security.md) · [Authorization](authorization.md) · [Tools](tools.md#managed-secret-references) · [Files stage](files-stage.md#secret-spans) · [Prompt assembly](prompt-assembly.md#secret-hygiene-boundary) · [Privacy](privacy.md)
 
-**Machine truth:** [`secretcap`](../lycaon/internal/secretcap) (capabilities, custody, jars, reveal, release audit) · [`presence`](../lycaon/internal/presence) (presence broker, release ledger, launcher trust) · [`secretmatch`](../lycaon/internal/secretmatch) (reference grammar, catalogs, screening) · [`secretharvest`](../lycaon/internal/secretharvest) (exact-match evidence) · [`secretspan`](../lycaon/internal/secretspan) (value-free ranges) · [`secretmint`](../lycaon/internal/secretmint) (credential-slot recognition) · [`credentialstore`](../lycaon/internal/credentialstore) (vault) · [`credential_capture.go`](../lycaon/internal/api/credential_capture.go) · managed-secret and message schemas under [`docs/openapi/components/schemas/`](openapi/components/schemas)
+**Machine truth:** [`secretcap`](../lycaon/internal/secretcap) (capabilities, custody, jars, reveal, unlock audit) · [`presence`](../lycaon/internal/presence) (presence broker, chat unlocks, launcher trust) · [`secretmatch`](../lycaon/internal/secretmatch) (reference grammar, catalogs, screening) · [`secretharvest`](../lycaon/internal/secretharvest) (exact-match evidence) · [`secretspan`](../lycaon/internal/secretspan) (value-free ranges) · [`secretmint`](../lycaon/internal/secretmint) (credential-slot recognition) · [`credentialstore`](../lycaon/internal/credentialstore) (vault) · [`credential_capture.go`](../lycaon/internal/api/credential_capture.go) · managed-secret and message schemas under [`docs/openapi/components/schemas/`](openapi/components/schemas)
 
 ## Scope and vocabulary
 
@@ -87,7 +87,7 @@ Custody says who supplied a value's current bytes, and so what releasing them re
 
 | Custody | Bytes come from | Releasing them |
 |---|---|---|
-| `person` | `ask_user_response`, `composer_marked`, `settings_entered`, `detected`, and any value a person replaces | Needs that person's [verified presence](#presence-verified-reveal-and-release) for every recipient, at every posture, with approvals enabled or not |
+| `person` | `ask_user_response`, `composer_marked`, `settings_entered`, `detected`, and any value a person replaces | A reviewed release to each recipient, and the chat [unlocked](#unlocking-a-chat-and-revealing-a-value) by that person's verified presence, at every posture, with approvals enabled or not |
 | `file` | `file_marked`: bytes already in a project file, which governs them | Ordinary outbound screen and approval |
 | `chat` | `generated` with chat scope; the entry names the chat | Released without a card to local recipients of that chat at Light and Balanced ([Secrets the chat generated](#secrets-the-chat-generated)); promotion rewrites the entry as `host` |
 | `host` | `generated` with project scope, `cookie_jar`, `token_jar` | Ordinary outbound screen and approval |
@@ -141,7 +141,7 @@ Resolution is closed to outbound tools that screen after substitution. `secret_r
 
 The canonical call, transcript, approval action, receipt, result envelope, and run evidence keep the reference-bearing form; only the executing subsystem and outbound screen receive resolved bytes. For file writes, the host writes the value when the file is saved; custody and the approval posture decide whether the person is asked first.
 
-Every consumer hands resolved values off immediately before its transport: a process start, terminal input, an HTTP send, an MCP call, or a screened file save. Handoff is the vault's way out. It refuses with `OUTBOUND_SECRET_SCREEN_FAILED` at `held_unreleased` while any person-held value the invocation resolved lacks an attested release, so no approval path that forgets presence can let one leave.
+Every consumer hands resolved values off immediately before its transport: a process start, terminal input, an HTTP send, an MCP call, or a screened file save. Handoff is the vault's way out. For any person-held value the invocation resolved, it refuses with `OUTBOUND_SECRET_SCREEN_FAILED` at `held_unreleased` while no reviewed release covers it, and at `vault_locked` while its chat is locked. No approval path that forgets the unlock can let one leave.
 
 A consumer that echoes what it received does not hand the value back. For a declared tool, the executor rewrites each value the invocation resolved before the result, its reject data, or its error text leaves it: plain, percent-escaped, JSON-escaped, and base64 in either alphabet each become the reference, including inside a serialized JSON result, and a base64 span that decodes to the value among other bytes (a Basic credential) becomes a placeholder. This covers only the values that invocation resolved; a later read of the same terminal or background output relies on durable screening.
 
@@ -155,7 +155,7 @@ The host parses command and pipeline structure from the canonical arguments, the
 
 HTTP request construction carries known secret identity through Basic authentication, query encoding, JSON serialization, and multipart construction, and combines that evidence with ordinary scanning in one disclosure decision, deduplicated by fingerprint. Only consumed protocol fields contribute known-disclosure evidence. Redaction rewrites structured fields before serialization and screens the resulting wire copy. Upload bytes are captured once per invocation and reused during redaction, so a file changed while approval is pending cannot replace the reviewed upload.
 
-The bounded use history records resolution attempts, including refusals, with the capability version, tool, session, tool-call identity, and time; a handoff also records the reviewed recipients and, for a person-held value, the attestation that released it. Delivery is tracked per resolved secret: pending, not handed off, withheld, handed to an executor or transport, or redacted before handoff. A handoff does not prove process startup, network delivery, or authentication; pending means no terminal observation was recorded. Tool-call identity correlates the record with authorization history, which is where observed network destinations live. History writes are best-effort with value-free diagnostics, and never store plaintext, fingerprints, or argument locations.
+The bounded use history records resolution attempts, including refusals, with the capability version, tool, session, tool-call identity, and time; a handoff also records the reviewed recipients and, for a person-held value, the unlock it left under. Delivery is tracked per resolved secret: pending, not handed off, withheld, handed to an executor or transport, or redacted before handoff. A handoff does not prove process startup, network delivery, or authentication; pending means no terminal observation was recorded. Tool-call identity correlates the record with authorization history, which is where observed network destinations live. History writes are best-effort with value-free diagnostics, and never store plaintext, fingerprints, or argument locations.
 
 ## Credential files
 
@@ -202,7 +202,7 @@ Every secret card names its destination and what kind of receiver that is. The k
 | Card | Face | Why |
 |------|------|-----|
 | Managed value (exact `managed-secret` evidence) | **Send for this chat** at Light/Balanced; **Send** once at Strict. No card at Light/Balanced for a [chat-generated value to local recipients](#secrets-the-chat-generated) | The vault resolving a reference is the system working. Protecting it again is a no-op; redacting it fails the call. |
-| Person-held value | The same face, but every approving option needs the person's [verified presence](#presence-verified-reveal-and-release); quiet and day rungs leave the ladder | Only the person who gave the value can let it leave. |
+| Person-held value | The same face without quiet rungs. While the chat is locked, every approving option needs the person's [verified presence](#unlocking-a-chat-and-revealing-a-value), which unlocks the chat; while it is unlocked, approving is an ordinary choice | Only the person who stored the value can let it leave. |
 | Raw detection to a model provider | **Protect** | The only choice that leaves the request working and the value off the wire. |
 | Raw detection to a service or process | Chat release at Light/Balanced when available; once at Strict | Nothing can track it there, and redaction usually breaks it. The card names the destination and the person judges. |
 
@@ -237,7 +237,7 @@ A value from `secret_generate` with chat scope exists only because this chat ask
 - every matched value is exact evidence for a chat-scoped `generated` capability that this invocation resolved, with no other finding in the same send; and
 - every recipient is a process the chat runs (either network plane), a file a file-writing tool saves, or an HTTP service reached over loopback. For `http_request`, loopback is the address the first hop dials: an applicable `resolve` mapping decides, otherwise the host must name loopback, and a unix socket never counts. For command and terminal tools, each declared `secret_use` service must name loopback.
 
-Anything else raises a card: a file-marked, jar-held, or project-scoped generated value; a remote recipient; and every case at Strict, whose card cites that the value was generated for this chat. A person-held value always asks and needs presence. Chat custody comes from the vault entry, which names its chat, and the invocation's resolution reports it; the gate predicate is the one place the rule is honored.
+Anything else raises a card: a file-marked, jar-held, or project-scoped generated value; a remote recipient; and every case at Strict, whose card cites that the value was generated for this chat. A person-held value always asks, and leaves only while its chat is unlocked. Chat custody comes from the vault entry, which names its chat, and the invocation's resolution reports it; the gate predicate is the one place the rule is honored.
 
 A release records `secret_chat_local_release` in the authorization ledger, resolved by policy. It is not a reviewed handoff and grants no connection consent: a first-party HTTP request still needs its own [loopback-connect grant](security.md#loopback-connect-grant), and a process still needs its own capability grants.
 
@@ -332,32 +332,36 @@ Scope decides which chats may spend a capability, never how long it lives, becau
 
 Revocation is asymmetric by origin. The agent may revoke a capability that arose from its own work (`generated`, `detected`, and the jars); a capability a person authored is theirs to end, from project settings. Immutable origin is what makes the distinction enforceable.
 
-## Presence-verified reveal and release
+## Unlocking a chat and revealing a value
 
 Presence is the only authority over a person-held value's plaintext. The API bearer, a policy, a quiet, a saved approval, and the agent cannot supply it. One broker serves two purposes:
 
 | Purpose | Subject the challenge binds | Outcome |
 |---|---|---|
 | `reveal` | Project, capability, current value version, window | The value shows in the person's own view |
-| `release` | Session, checkpoint, option, the exact plan, held values and versions, recipient set | The approval's option takes effect for the values and recipients it names |
+| `unlock` | Session, checkpoint, option, the exact plan, and the chat | The approval's option takes effect and the chat is unlocked |
 
 1. The engine creates a short-lived, single-use challenge whose signed payload names its purpose and subject, bound to the deciding person.
 2. The desktop shell decodes the payload and refuses to sign unless its purpose and subject match the command that asked. It shows the host-authored reason through the operating system's user-presence prompt (Touch ID or the device password on macOS, Windows Hello on Windows) and signs with its ephemeral launch key.
-3. The engine consumes the challenge on the first completion attempt, verifies the signature, the purpose, the person, and the subject, rechecks lifecycle and version, records the attestation, and only then returns plaintext or installs the release. A proof for one purpose never verifies for the other.
+3. The engine consumes the challenge on the first completion attempt and verifies the signature, the purpose, the person, and the subject. A reveal rechecks lifecycle and version, records the reveal, and only then returns plaintext. An unlock records itself in the approval's own commit and opens once that commit lands. A proof for one purpose never verifies for the other.
 
 The API bearer can begin a challenge but cannot complete one without fresh native proof.
 
-**Release.** A plan that would hand over person-held values carries a held release naming them and their recipients. Every option whose decision sends them needs presence; a redacted send releases nothing and needs none. The plan's ladder keeps once, chat, and project rungs and drops quiet and day rungs, so no choice can answer without the person. The shell's `resolve_checkpoint_with_presence` command begins the challenge, confirms the person, signs, and resolves the checkpoint itself; the webview never handles a payload or a signature. A device without presence refuses the send before any card, with `OUTBOUND_SECRET_SCREEN_FAILED` at `presence_unavailable`.
+**Approval and unlock are separate.** Approval answers where a value may go: the ordinary per-chat card for each recipient. The unlock answers whether the vault may hand the person's values out right now, and covers one chat and its workers. A held send needs both. Splitting them keeps the person confirming once per sitting rather than once per recipient, while a value still never reaches a recipient nobody reviewed.
 
-**Reuse.** A chat or project release installs a grant stamped with the attestation. Grants live in ordinary storage that any same-user process can write, so a grant covers a person-held value only while the vault's release ledger lists it with the exact coverage it was attested for: fingerprints, recipient set, scope, chat or project, expiry, and the attestation. Revoking the grant removes the ledger entry, so a stored copy restored later covers nothing. A covered later send records the attestation of the release that covered each value.
+**Unlocking.** A plan that would send person-held values names them, their recipients, and their chat, and offers no quiet, since a quiet would answer for recipients nobody reviewed. While the chat is locked, every approving option needs presence, and that presence also unlocks the chat; while it is unlocked, approving a new recipient is an ordinary choice. A redacted send hands over nothing and needs neither. When the recipients are already approved but the chat is locked, the screen raises a card that only unlocks it. The person is never asked the same thing twice: a send that needs only the unlock waits behind a card already open in its chat and follows its answer, and an unlock-only card still showing when another card unlocks the chat is answered with it. The desktop shell begins the challenge, confirms the person, signs, and resolves the checkpoint itself, so the webview never handles a payload or a signature. A device without presence refuses the send before any card, with `OUTBOUND_SECRET_SCREEN_FAILED` at `presence_unavailable`.
+
+**How an unlock ends.** After 15 minutes without a held value leaving, after 4 hours however busy the chat is, when the person locks it from the composer, or when they step away: the screen locks or sleeps, another user session takes over, the computer sleeps, or the app quits. The desktop shell reports stepping away through `POST /v1/vault/lock`; locking only removes authority, so any authenticated caller may ask. Windows lock events are not observed yet, so there the idle period and the ceiling end an unlock. Unlocks live only in the engine's memory, so a restarted engine starts with every chat locked.
+
+**Audit.** Each unlock is a `vault_unlocks` row naming the chat, person, and authenticator, when it opened, and when and why it ended; a held handoff records the unlock it left under. Reveals are `managed_secret_reveals` rows. Neither holds the value or the proof.
 
 **Launcher trust.** The engine accepts the shell's key from its launch environment. Where the vault opens without a human secret (the macOS Keychain identity), any process able to start the signed engine could supply its own key, so the engine accepts one only after verifying that its parent process carries the desktop app's identifier and is signed by the engine's own team, checking again that it was not reparented meanwhile. Where the vault is wrapped by the app password, starting the engine gains nothing without that password, so the key is accepted as given. An unverified launcher leaves presence unavailable rather than failing boot.
 
 Development attach mode, browser sessions, and platforms without a supported user-presence verifier report presence as unavailable.
 
-The reveal response carries a 30-second remask window; Den remasks on that deadline and on blur or visibility loss. Delayed responses are accepted only for the current request, project, selected secret, and active panel in a visible, focused document; dismissal, navigation, hiding, or destruction invalidates the request. Native authentication may take focus but can finish only when the originating window is visible, focused, and not minimized, checked again before returning plaintext. Remasking clears the displayed value only: a copied value stays on the clipboard until the person replaces it, and Den says so beside the countdown. A passed agent-use deadline does not block reveal; revoked and unavailable capabilities cannot be revealed. Attestation records retain purpose, version, recipients, release scope, authenticator, native window, person, and time, never the value or proof.
+The reveal response carries a 30-second remask window; Den remasks on that deadline and on blur or visibility loss. Delayed responses are accepted only for the current request, project, selected secret, and active panel in a visible, focused document; dismissal, navigation, hiding, or destruction invalidates the request. Native authentication may take focus but can finish only when the originating window is visible, focused, and not minimized, checked again before returning plaintext. Remasking clears the displayed value only: a copied value stays on the clipboard until the person replaces it, and Den says so beside the countdown. A passed agent-use deadline does not block reveal; revoked and unavailable capabilities cannot be revealed. Every reveal asks fresh; an unlock never reveals a value.
 
-Once a value is in a file, it is governed by whoever can read that file: reveal and release protect Painted Wolf Code's copy.
+Once a value is in a file, it is governed by whoever can read that file: reveal and unlock protect Painted Wolf Code's copy.
 
 ## Scanner findings and protection
 
@@ -404,8 +408,9 @@ New credentials should come from `secret_generate`; existing credentials should 
 - Process and browser owners publish captures from protected render environments with matched text screened in place; pixels outside matched rune spans are unchanged, and the host never substitutes a fabricated surface.
 - Den renders host-stamped redaction metadata, never infers it from marker text, and neutralizes redaction markup that arrived in model-authored content before painting the host's own.
 - Replacing a value preserves the reference; retired bytes remain screening evidence and never resolve.
-- Plaintext of a person-held value reaches a file, process, service, MCP server, or screen only through a release or reveal attested by fresh native presence on the host that holds the vault. The bearer can begin attestation but never complete it, and the attestation lands before plaintext leaves.
-- Custody lives in the vault entry beside the bytes and a held grant covers only while the vault's release ledger lists it; neither derives from metadata or grant storage a same-user process can rewrite.
+- Plaintext of a person-held value reaches a file, process, service, or MCP server only under a reviewed release to that recipient while its chat is unlocked, and reaches a screen only through a reveal. Both rest on fresh native presence on the host that holds the vault: the bearer can begin a challenge but never complete it, and the unlock or reveal is recorded before plaintext leaves.
+- An unlock lives only in the engine's memory and never in storage a same-user process can rewrite; an engine restart locks every chat.
+- Custody lives in the vault entry beside the bytes; it never derives from metadata a same-user process can rewrite.
 - Vault contents and custody never leave this host. References may travel; they resolve only where the vault that holds them is.
 - Revocation permanently disables resolution and reveal.
 

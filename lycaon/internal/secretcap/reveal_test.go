@@ -41,14 +41,14 @@ func TestRevealRequiresNativeProofAndRecordsDisclosure(t *testing.T) {
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "list after reveal", err)
 	if len(listed) != 1 || listed[0].RevealCount != 1 || listed[0].LastRevealedAt == nil ||
-		*listed[0].LastRevealedAt != result.RevealedAt || listed[0].ReleaseCount != 0 {
+		*listed[0].LastRevealedAt != result.RevealedAt {
 		t.Fatalf("reveal metadata = %+v", listed)
 	}
-	attestations, err := service.Attestations(t.Context(), testdbseed.DefaultProjectID, secret.Reference, 0)
-	testutil.FailErr(t, "list attestations", err)
-	if len(attestations) != 1 || attestations[0].Purpose != string(presence.PurposeReveal) ||
-		attestations[0].AttestationID != challenge.ID || attestations[0].Authenticator != presence.AuthenticatorMacOS {
-		t.Fatalf("reveal attestation = %+v", attestations)
+	var authenticator string
+	testutil.FailErr(t, "read reveal audit", service.handle.QueryRowContext(t.Context(),
+		`SELECT authenticator FROM managed_secret_reveals WHERE id = ?`, challenge.ID).Scan(&authenticator))
+	if authenticator != presence.AuthenticatorMacOS {
+		t.Fatalf("reveal authenticator = %q", authenticator)
 	}
 	if _, err := service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, testOwner(t, service), proof); !errors.Is(err, presence.ErrChallengeNotFound) {
 		t.Fatalf("replayed proof error = %v", err)

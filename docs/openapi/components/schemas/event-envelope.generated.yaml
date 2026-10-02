@@ -38,6 +38,7 @@ components:
       - $ref: '#/components/schemas/EventEnvelopePreflight'
       - $ref: '#/components/schemas/EventEnvelopeTurnClock'
       - $ref: '#/components/schemas/EventEnvelopeTurnLoad'
+      - $ref: '#/components/schemas/EventEnvelopeChatVault'
       - $ref: '#/components/schemas/EventEnvelopeSourceView'
       discriminator:
         propertyName: topic
@@ -75,6 +76,7 @@ components:
           preflight: '#/components/schemas/EventEnvelopePreflight'
           turn_clock: '#/components/schemas/EventEnvelopeTurnClock'
           turn_load: '#/components/schemas/EventEnvelopeTurnLoad'
+          chat_vault: '#/components/schemas/EventEnvelopeChatVault'
           source_view: '#/components/schemas/EventEnvelopeSourceView'
     EventEnvelopeSession:
       allOf:
@@ -472,6 +474,18 @@ components:
             const: turn_load
           data:
             $ref: 'turn-load.yaml#/components/schemas/TurnLoad'
+    EventEnvelopeChatVault:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: chat_vault
+          data:
+            $ref: 'presence.yaml#/components/schemas/ChatVault'
     EventEnvelopeSourceView:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'

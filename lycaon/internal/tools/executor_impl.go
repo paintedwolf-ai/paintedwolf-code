@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/pkgregistry"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -57,6 +58,10 @@ type DefaultToolExecutor struct {
 	approvalsDisabled  func(projectDir string) bool
 	// presenceAvailableFn reports whether held values can be released at all.
 	presenceAvailableFn func() bool
+	// vaultUnlocks holds each chat's unlock for values a person holds.
+	vaultUnlocks        *presence.Unlocks
+	// heldAsks counts each chat's open cards whose approval can unlock it.
+	heldAsks            heldAskCounter
 	secretMatcher       *secretmatch.Matcher
 	secretIgnores       *projectignore.SecretService
 	secretResolver      func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
@@ -182,7 +187,7 @@ func (e *DefaultToolExecutor) Invoke(ctx context.Context, qualifiedName string, 
 	// The screened save is a file tool's transport.
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
 		if err := tc.Secrets.HandOff(ctx, nil); err != nil {
-			return "", e.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, HeldHandOffReject(string(secretmatch.SurfaceFile)))
+			return "", e.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, HeldHandOffReject(string(secretmatch.SurfaceFile), err))
 		}
 	}
 	tc.ProcessReview = e.processReviewer(qualifiedName, canonicalArgs, tc)

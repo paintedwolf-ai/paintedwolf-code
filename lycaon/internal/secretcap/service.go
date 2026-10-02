@@ -69,8 +69,8 @@ var (
 	ErrAlreadyProtected = fmt.Errorf("%w: that selection is already protected by a managed secret", ErrInvalidPut)
 	// ErrHumanAuthored refuses agent revocation of a person's own capability.
 	ErrHumanAuthored = errors.New("secret capability was authored by a person")
-	// ErrValueChanged: the value an attestation named was replaced before the
-	// attestation completed.
+	// ErrValueChanged: the value a reveal challenge named was replaced before
+	// the reveal completed.
 	ErrValueChanged = errors.New("managed secret changed during presence verification")
 )
 
@@ -88,6 +88,7 @@ type Service struct {
 	remember               RememberFunc
 	now                    func() time.Time
 	presence               *presence.Broker
+	unlocks                *presence.Unlocks
 	fingerprint            func(string) secretmatch.SecretFingerprint
 	onScreeningInvalidated []func(context.Context, string)
 }
@@ -139,6 +140,9 @@ func NewWithStore(database db.Handle, values *credentialstore.Store, remember Re
 // SetPresence installs the broker that verifies reveals.
 func (s *Service) SetPresence(broker *presence.Broker) { s.presence = broker }
 
+// SetUnlocks installs the chats' unlocks a held value's handoff needs.
+func (s *Service) SetUnlocks(unlocks *presence.Unlocks) { s.unlocks = unlocks }
+
 // SetFingerprinter installs the screen's identity for exact bytes, so a
 // resolution can name which screened values a person holds.
 func (s *Service) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
@@ -184,9 +188,6 @@ type Metadata struct {
 	UseCount       int64   `json:"use_count"`
 	LastRevealedAt *string `json:"last_revealed_at,omitempty"`
 	RevealCount    int64   `json:"reveal_count"`
-	// LastReleasedAt and ReleaseCount count presence-verified releases.
-	LastReleasedAt *string `json:"last_released_at,omitempty"`
-	ReleaseCount   int64   `json:"release_count"`
 }
 
 type facts struct {
@@ -200,8 +201,6 @@ type facts struct {
 	lastUsedAt      string
 	revealCount     int64
 	lastRevealedAt  string
-	releaseCount    int64
-	lastReleasedAt  string
 }
 
 // List returns value-free capabilities visible from a chat.
@@ -285,14 +284,13 @@ func (s *Service) projectFacts(ctx context.Context, projectID string) (map[strin
 		entry.useCount, entry.lastUsedAt = summary.UseCount, summary.LastUsedAt
 		out[summary.SecretID] = entry
 	}
-	attestations, err := s.queries.ListProjectManagedSecretAttestationSummaries(ctx, projectID)
+	reveals, err := s.queries.ListProjectManagedSecretRevealSummaries(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	for _, summary := range attestations {
+	for _, summary := range reveals {
 		entry := out[summary.SecretID]
 		entry.revealCount, entry.lastRevealedAt = summary.RevealCount, summary.LastRevealedAt
-		entry.releaseCount, entry.lastReleasedAt = summary.ReleaseCount, summary.LastReleasedAt
 		out[summary.SecretID] = entry
 	}
 	chats, err := s.queries.ListProjectManagedSecretChats(ctx, projectID)
@@ -324,12 +322,11 @@ func (s *Service) secretFacts(ctx context.Context, secretID string) (facts, erro
 		return facts{}, err
 	}
 	out.useCount, out.lastUsedAt = usage.UseCount, usage.LastUsedAt
-	attestations, err := s.queries.GetManagedSecretAttestationSummary(ctx, secretID)
+	reveals, err := s.queries.GetManagedSecretRevealSummary(ctx, secretID)
 	if err != nil {
 		return facts{}, err
 	}
-	out.revealCount, out.lastRevealedAt = attestations.RevealCount, attestations.LastRevealedAt
-	out.releaseCount, out.lastReleasedAt = attestations.ReleaseCount, attestations.LastReleasedAt
+	out.revealCount, out.lastRevealedAt = reveals.RevealCount, reveals.LastRevealedAt
 	title, err := s.queries.GetManagedSecretChat(ctx, secretID)
 	switch {
 	case err == nil:
@@ -346,7 +343,7 @@ func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
 		Reference: secretmatch.ReferenceToken(row.ID), Name: row.Name, Purpose: row.Purpose,
 		Scope: row.Scope, Origin: row.Origin, CreatedAt: row.CreatedAt,
 		State: s.state(row, f), Version: f.version, UseCount: f.useCount,
-		RevealCount: f.revealCount, ReleaseCount: f.releaseCount,
+		RevealCount: f.revealCount,
 	}
 	if entry, ok := s.values.get(f.valueID); ok && f.valueID != "" {
 		meta.Custody = entry.Custody
@@ -377,10 +374,6 @@ func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
 	if f.lastRevealedAt != "" {
 		value := f.lastRevealedAt
 		meta.LastRevealedAt = &value
-	}
-	if f.lastReleasedAt != "" {
-		value := f.lastReleasedAt
-		meta.LastReleasedAt = &value
 	}
 	return meta
 }

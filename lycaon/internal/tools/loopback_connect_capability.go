@@ -79,7 +79,7 @@ func (e *DefaultToolExecutor) preflightLoopbackConnectCapability(
 		})
 	}
 	if result.SecretApproved {
-		approveCapabilitySecretPermission(ctx, tc, permission, result.SecretAttestationID)
+		approveCapabilitySecretPermission(ctx, tc, permission)
 	}
 	result.Ports = spawnPortNarrowing(result.Ports, ports)
 	return &result, nil

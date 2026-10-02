@@ -20,8 +20,8 @@ type CustodySummary struct {
 	// ChatGenerated: every screened identity is a value the host generated for
 	// this chat, so nothing outside the chat has held it.
 	ChatGenerated bool
-	// Held lists the values a person handed to the vault; releasing them
-	// needs that person's presence.
+	// Held lists the values a person handed to the vault; they leave only
+	// while that person has unlocked the chat.
 	Held []HeldValue
 }
 
@@ -55,44 +55,33 @@ func (r *Resolution) Custody(fingerprints []secretmatch.SecretFingerprint) Custo
 	return summary
 }
 
-// HeldFingerprints returns the screen identities of the person-held values
-// among fingerprints.
-func (summary CustodySummary) HeldFingerprints() []string {
-	out := make([]string, 0, len(summary.Held))
-	for _, held := range summary.Held {
-		out = append(out, string(held.Fingerprint))
+// HoldsPersonValues reports whether this invocation resolved any value a
+// person holds, wherever it appears.
+func (r *Resolution) HoldsPersonValues() bool {
+	if r == nil {
+		return false
 	}
-	return out
+	for _, value := range r.values {
+		if value.custody.Held() {
+			return true
+		}
+	}
+	return false
 }
 
-// UnreleasedHeld names the person-held values this invocation resolved that
-// no attested release covers and no redaction removed. A consumer refuses to
-// hand off while any remain.
-func (r *Resolution) UnreleasedHeld(included func(string) bool) []string {
-	if r == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var names []string
+// heldWithoutRelease names the selected person-held values that no reviewed
+// handoff covers and no redaction removed. Callers hold r.mu.
+func (r *Resolution) heldWithoutRelease(included func(string) bool) (names []string, held bool) {
 	for id := range r.selectedIDs(included) {
 		value := r.values[id]
-		if !value.custody.Held() || r.delivery[id].redacted || r.attestedLocked(value.fingerprint) != "" {
+		if !value.custody.Held() || r.delivery[id].redacted {
 			continue
 		}
-		names = append(names, value.name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// attestedLocked returns the attestation that released fingerprint. Callers
-// hold r.mu.
-func (r *Resolution) attestedLocked(fingerprint secretmatch.SecretFingerprint) string {
-	for _, release := range r.permissions {
-		if release.AttestationID != "" && slices.Contains(release.Fingerprints, fingerprint) {
-			return release.AttestationID
+		held = true
+		if _, released := r.releasedToLocked(value.fingerprint); !released {
+			names = append(names, value.name)
 		}
 	}
-	return ""
+	sort.Strings(names)
+	return names, held
 }

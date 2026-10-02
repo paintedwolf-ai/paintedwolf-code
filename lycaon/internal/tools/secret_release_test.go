@@ -231,13 +231,13 @@ type secretReleaseGateStub struct {
 	fingerprints   []string
 }
 
-func (g *secretReleaseGateStub) SecretReleaseCovered(chatSessionID, projectID, destinationID, surface string, fingerprints, _ []string) (bool, map[string]string) {
+func (g *secretReleaseGateStub) SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface string, fingerprints []string) bool {
 	g.chatSessionID = chatSessionID
 	g.projectID = projectID
 	g.destinationID = destinationID
 	g.surface = surface
 	g.fingerprints = append([]string(nil), fingerprints...)
-	return g.covered, nil
+	return g.covered
 }
 
 func (g *secretReleaseGateStub) SecretRedactionStanding(string, []string) bool {

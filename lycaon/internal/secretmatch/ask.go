@@ -139,8 +139,11 @@ const (
 	// holds and this device cannot verify their presence to release it.
 	FaultStagePresenceUnavailable = "presence_unavailable"
 	// FaultStageHeldUnreleased means a consumer was about to receive a value
-	// a person holds without their attested release.
+	// a person holds without a reviewed release to it.
 	FaultStageHeldUnreleased = "held_unreleased"
+	// FaultStageVaultLocked means a consumer was about to receive a value a
+	// person holds while its chat was locked and nobody unlocked it.
+	FaultStageVaultLocked = "vault_locked"
 )
 
 // AskFault reports a failure before a card reaches a human.

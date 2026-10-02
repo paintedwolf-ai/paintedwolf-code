@@ -399,6 +399,15 @@ func (p *Publisher) PublishProgress(ctx context.Context, sessionID string, revis
 	}))
 }
 
+// PublishChatVault announces a chat's complete unlock state.
+func (p *Publisher) PublishChatVault(ctx context.Context, ev api.ChatVault) {
+	if p == nil || p.Hub == nil {
+		return
+	}
+	key := p.sessionKey(ctx, ev.ChatSessionID)
+	logPublishFailure(ctx, "PublishChatVault", api.EventTopicChatVault, p.Hub.Publish(ctx, api.EventTopicChatVault, key, ev))
+}
+
 // PublishTurnClock emits clock transitions; clients advance time between events.
 func (p *Publisher) PublishTurnClock(ctx context.Context, ev api.TurnClock) {
 	if p == nil {

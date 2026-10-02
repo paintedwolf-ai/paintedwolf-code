@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/presence"
@@ -24,7 +23,7 @@ type RevealChallenge struct {
 	ExpiresAt    string
 }
 
-// RevealResult carries an attested disclosure to the person's own view.
+// RevealResult carries a presence-verified disclosure to the person's own view.
 type RevealResult struct {
 	Value              credentialstore.SecretValue
 	Version            int64
@@ -80,7 +79,7 @@ func (s *Service) BeginReveal(
 	}, nil
 }
 
-// CompleteReveal consumes one challenge and records the attestation before
+// CompleteReveal consumes one challenge and records the reveal before
 // returning the value to the person who began it.
 func (s *Service) CompleteReveal(
 	ctx context.Context, projectID, reference, personID string, proof presence.Proof,
@@ -116,11 +115,10 @@ func (s *Service) CompleteReveal(
 		return RevealResult{}, ErrValueMissing
 	}
 	revealedAt := db.FormatTime(s.now())
-	if err := s.queries.CreateManagedSecretAttestation(ctx, db.CreateManagedSecretAttestationParams{
-		ID: uuid.NewString(), AttestationID: verified.ChallengeID, SecretID: row.ID, Version: current.Version,
-		Purpose: string(presence.PurposeReveal), RecipientsJson: "[]",
+	if err := s.queries.CreateManagedSecretReveal(ctx, db.CreateManagedSecretRevealParams{
+		ID: verified.ChallengeID, SecretID: row.ID, Version: current.Version,
 		Authenticator: verified.Authenticator, WindowLabel: verified.WindowLabel, PersonID: verified.PersonID,
-		AttestedAt: revealedAt,
+		RevealedAt: revealedAt,
 	}); err != nil {
 		return RevealResult{}, fmt.Errorf("record managed secret reveal: %w", err)
 	}

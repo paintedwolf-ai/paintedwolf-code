@@ -56,44 +56,33 @@ func (q *Queries) CreateManagedSecret(ctx context.Context, arg CreateManagedSecr
 	return err
 }
 
-const createManagedSecretAttestation = `-- name: CreateManagedSecretAttestation :exec
+const createManagedSecretReveal = `-- name: CreateManagedSecretReveal :exec
 
-INSERT INTO managed_secret_attestations (
-    id, attestation_id, secret_id, version, purpose, checkpoint_id, recipients_json, release_scope,
-    authenticator, window_label, person_id, attested_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO managed_secret_reveals (
+    id, secret_id, version, authenticator, window_label, person_id, revealed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
-type CreateManagedSecretAttestationParams struct {
-	ID             string         `json:"id"`
-	AttestationID  string         `json:"attestation_id"`
-	SecretID       string         `json:"secret_id"`
-	Version        int64          `json:"version"`
-	Purpose        string         `json:"purpose"`
-	CheckpointID   sql.NullString `json:"checkpoint_id"`
-	RecipientsJson string         `json:"recipients_json"`
-	ReleaseScope   sql.NullString `json:"release_scope"`
-	Authenticator  string         `json:"authenticator"`
-	WindowLabel    string         `json:"window_label"`
-	PersonID       string         `json:"person_id"`
-	AttestedAt     string         `json:"attested_at"`
+type CreateManagedSecretRevealParams struct {
+	ID            string `json:"id"`
+	SecretID      string `json:"secret_id"`
+	Version       int64  `json:"version"`
+	Authenticator string `json:"authenticator"`
+	WindowLabel   string `json:"window_label"`
+	PersonID      string `json:"person_id"`
+	RevealedAt    string `json:"revealed_at"`
 }
 
-// Presence-verified disclosures of held values.
-func (q *Queries) CreateManagedSecretAttestation(ctx context.Context, arg CreateManagedSecretAttestationParams) error {
-	_, err := q.db.ExecContext(ctx, createManagedSecretAttestation,
+// Presence-verified reveals to a person's own view.
+func (q *Queries) CreateManagedSecretReveal(ctx context.Context, arg CreateManagedSecretRevealParams) error {
+	_, err := q.db.ExecContext(ctx, createManagedSecretReveal,
 		arg.ID,
-		arg.AttestationID,
 		arg.SecretID,
 		arg.Version,
-		arg.Purpose,
-		arg.CheckpointID,
-		arg.RecipientsJson,
-		arg.ReleaseScope,
 		arg.Authenticator,
 		arg.WindowLabel,
 		arg.PersonID,
-		arg.AttestedAt,
+		arg.RevealedAt,
 	)
 	return err
 }
@@ -159,6 +148,37 @@ func (q *Queries) CreateManagedSecretVersion(ctx context.Context, arg CreateMana
 	return err
 }
 
+const createVaultUnlock = `-- name: CreateVaultUnlock :exec
+
+INSERT INTO vault_unlocks (
+    id, project_id, chat_session_id, person_id, authenticator, window_label, unlocked_at
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateVaultUnlockParams struct {
+	ID            string `json:"id"`
+	ProjectID     string `json:"project_id"`
+	ChatSessionID string `json:"chat_session_id"`
+	PersonID      string `json:"person_id"`
+	Authenticator string `json:"authenticator"`
+	WindowLabel   string `json:"window_label"`
+	UnlockedAt    string `json:"unlocked_at"`
+}
+
+// Unlocks verified presence opened for a chat's use of held values.
+func (q *Queries) CreateVaultUnlock(ctx context.Context, arg CreateVaultUnlockParams) error {
+	_, err := q.db.ExecContext(ctx, createVaultUnlock,
+		arg.ID,
+		arg.ProjectID,
+		arg.ChatSessionID,
+		arg.PersonID,
+		arg.Authenticator,
+		arg.WindowLabel,
+		arg.UnlockedAt,
+	)
+	return err
+}
+
 const deleteManagedSecret = `-- name: DeleteManagedSecret :execrows
 DELETE FROM managed_secrets WHERE id = ?1 AND project_id = ?2
 `
@@ -174,6 +194,39 @@ func (q *Queries) DeleteManagedSecret(ctx context.Context, arg DeleteManagedSecr
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const endOpenVaultUnlocks = `-- name: EndOpenVaultUnlocks :execrows
+UPDATE vault_unlocks
+SET ended_at = ?1, end_reason = 'restart'
+WHERE ended_at IS NULL
+`
+
+// Closes unlocks a stopped engine left open.
+func (q *Queries) EndOpenVaultUnlocks(ctx context.Context, endedAt sql.NullString) (int64, error) {
+	result, err := q.db.ExecContext(ctx, endOpenVaultUnlocks, endedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const endVaultUnlock = `-- name: EndVaultUnlock :exec
+UPDATE vault_unlocks
+SET ended_at = ?1, end_reason = ?2
+WHERE id = ?3 AND ended_at IS NULL
+`
+
+type EndVaultUnlockParams struct {
+	EndedAt   sql.NullString `json:"ended_at"`
+	EndReason sql.NullString `json:"end_reason"`
+	ID        string         `json:"id"`
+}
+
+// The first end is kept.
+func (q *Queries) EndVaultUnlock(ctx context.Context, arg EndVaultUnlockParams) error {
+	_, err := q.db.ExecContext(ctx, endVaultUnlock, arg.EndedAt, arg.EndReason, arg.ID)
+	return err
 }
 
 const getCurrentManagedSecretVersion = `-- name: GetCurrentManagedSecretVersion :one
@@ -224,34 +277,6 @@ func (q *Queries) GetManagedSecret(ctx context.Context, id string) (ManagedSecre
 		&i.RevokedAt,
 		&i.RevokedBy,
 		&i.RevokedByPersonID,
-	)
-	return i, err
-}
-
-const getManagedSecretAttestationSummary = `-- name: GetManagedSecretAttestationSummary :one
-SELECT CAST(COALESCE(SUM(purpose = 'reveal'), 0) AS INTEGER) AS reveal_count,
-       CAST(COALESCE(MAX(CASE WHEN purpose = 'reveal' THEN attested_at END), '') AS TEXT) AS last_revealed_at,
-       CAST(COALESCE(SUM(purpose = 'release'), 0) AS INTEGER) AS release_count,
-       CAST(COALESCE(MAX(CASE WHEN purpose = 'release' THEN attested_at END), '') AS TEXT) AS last_released_at
-FROM managed_secret_attestations
-WHERE secret_id = ?
-`
-
-type GetManagedSecretAttestationSummaryRow struct {
-	RevealCount    int64  `json:"reveal_count"`
-	LastRevealedAt string `json:"last_revealed_at"`
-	ReleaseCount   int64  `json:"release_count"`
-	LastReleasedAt string `json:"last_released_at"`
-}
-
-func (q *Queries) GetManagedSecretAttestationSummary(ctx context.Context, secretID string) (GetManagedSecretAttestationSummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, getManagedSecretAttestationSummary, secretID)
-	var i GetManagedSecretAttestationSummaryRow
-	err := row.Scan(
-		&i.RevealCount,
-		&i.LastRevealedAt,
-		&i.ReleaseCount,
-		&i.LastReleasedAt,
 	)
 	return i, err
 }
@@ -309,6 +334,25 @@ func (q *Queries) GetManagedSecretChat(ctx context.Context, id string) (sql.Null
 	var title sql.NullString
 	err := row.Scan(&title)
 	return title, err
+}
+
+const getManagedSecretRevealSummary = `-- name: GetManagedSecretRevealSummary :one
+SELECT COUNT(*) AS reveal_count,
+       CAST(COALESCE(MAX(revealed_at), '') AS TEXT) AS last_revealed_at
+FROM managed_secret_reveals
+WHERE secret_id = ?
+`
+
+type GetManagedSecretRevealSummaryRow struct {
+	RevealCount    int64  `json:"reveal_count"`
+	LastRevealedAt string `json:"last_revealed_at"`
+}
+
+func (q *Queries) GetManagedSecretRevealSummary(ctx context.Context, secretID string) (GetManagedSecretRevealSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getManagedSecretRevealSummary, secretID)
+	var i GetManagedSecretRevealSummaryRow
+	err := row.Scan(&i.RevealCount, &i.LastRevealedAt)
+	return i, err
 }
 
 const getManagedSecretUsage = `-- name: GetManagedSecretUsage :one
@@ -439,59 +483,9 @@ func (q *Queries) ListCredentialAuthoredValues(ctx context.Context, arg ListCred
 	return items, nil
 }
 
-const listManagedSecretAttestations = `-- name: ListManagedSecretAttestations :many
-SELECT id, attestation_id, secret_id, version, purpose, checkpoint_id, recipients_json, release_scope,
-       authenticator, window_label, person_id, attested_at
-FROM managed_secret_attestations
-WHERE secret_id = ?1
-ORDER BY attested_at DESC, id DESC
-LIMIT ?2
-`
-
-type ListManagedSecretAttestationsParams struct {
-	SecretID   string `json:"secret_id"`
-	LimitCount int64  `json:"limit_count"`
-}
-
-func (q *Queries) ListManagedSecretAttestations(ctx context.Context, arg ListManagedSecretAttestationsParams) ([]ManagedSecretAttestations, error) {
-	rows, err := q.db.QueryContext(ctx, listManagedSecretAttestations, arg.SecretID, arg.LimitCount)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ManagedSecretAttestations
-	for rows.Next() {
-		var i ManagedSecretAttestations
-		if err := rows.Scan(
-			&i.ID,
-			&i.AttestationID,
-			&i.SecretID,
-			&i.Version,
-			&i.Purpose,
-			&i.CheckpointID,
-			&i.RecipientsJson,
-			&i.ReleaseScope,
-			&i.Authenticator,
-			&i.WindowLabel,
-			&i.PersonID,
-			&i.AttestedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listManagedSecretUses = `-- name: ListManagedSecretUses :many
 SELECT id, secret_id, version, tool_name, session_id, chat_session_id, outcome, tool_call_id, delivery,
-       recipients_json, attestation_id, used_at
+       recipients_json, unlock_id, used_at
 FROM managed_secret_uses
 WHERE secret_id = ?1
 ORDER BY used_at DESC, rowid DESC
@@ -523,7 +517,7 @@ func (q *Queries) ListManagedSecretUses(ctx context.Context, arg ListManagedSecr
 			&i.ToolCallID,
 			&i.Delivery,
 			&i.RecipientsJson,
-			&i.AttestationID,
+			&i.UnlockID,
 			&i.UsedAt,
 		); err != nil {
 			return nil, err
@@ -624,55 +618,6 @@ func (q *Queries) ListManagedSecretVersionIDsForSecret(ctx context.Context, secr
 	return items, nil
 }
 
-const listProjectManagedSecretAttestationSummaries = `-- name: ListProjectManagedSecretAttestationSummaries :many
-SELECT a.secret_id,
-       CAST(COALESCE(SUM(a.purpose = 'reveal'), 0) AS INTEGER) AS reveal_count,
-       CAST(COALESCE(MAX(CASE WHEN a.purpose = 'reveal' THEN a.attested_at END), '') AS TEXT) AS last_revealed_at,
-       CAST(COALESCE(SUM(a.purpose = 'release'), 0) AS INTEGER) AS release_count,
-       CAST(COALESCE(MAX(CASE WHEN a.purpose = 'release' THEN a.attested_at END), '') AS TEXT) AS last_released_at
-FROM managed_secret_attestations a
-JOIN managed_secrets s ON s.id = a.secret_id
-WHERE s.project_id = ?
-GROUP BY a.secret_id
-`
-
-type ListProjectManagedSecretAttestationSummariesRow struct {
-	SecretID       string `json:"secret_id"`
-	RevealCount    int64  `json:"reveal_count"`
-	LastRevealedAt string `json:"last_revealed_at"`
-	ReleaseCount   int64  `json:"release_count"`
-	LastReleasedAt string `json:"last_released_at"`
-}
-
-func (q *Queries) ListProjectManagedSecretAttestationSummaries(ctx context.Context, projectID string) ([]ListProjectManagedSecretAttestationSummariesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectManagedSecretAttestationSummaries, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListProjectManagedSecretAttestationSummariesRow
-	for rows.Next() {
-		var i ListProjectManagedSecretAttestationSummariesRow
-		if err := rows.Scan(
-			&i.SecretID,
-			&i.RevealCount,
-			&i.LastRevealedAt,
-			&i.ReleaseCount,
-			&i.LastReleasedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listProjectManagedSecretChats = `-- name: ListProjectManagedSecretChats :many
 SELECT m.id AS secret_id, s.title
 FROM managed_secrets m
@@ -697,6 +642,44 @@ func (q *Queries) ListProjectManagedSecretChats(ctx context.Context, projectID s
 	for rows.Next() {
 		var i ListProjectManagedSecretChatsRow
 		if err := rows.Scan(&i.SecretID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectManagedSecretRevealSummaries = `-- name: ListProjectManagedSecretRevealSummaries :many
+SELECT r.secret_id, COUNT(*) AS reveal_count,
+       CAST(COALESCE(MAX(r.revealed_at), '') AS TEXT) AS last_revealed_at
+FROM managed_secret_reveals r
+JOIN managed_secrets s ON s.id = r.secret_id
+WHERE s.project_id = ?
+GROUP BY r.secret_id
+`
+
+type ListProjectManagedSecretRevealSummariesRow struct {
+	SecretID       string `json:"secret_id"`
+	RevealCount    int64  `json:"reveal_count"`
+	LastRevealedAt string `json:"last_revealed_at"`
+}
+
+func (q *Queries) ListProjectManagedSecretRevealSummaries(ctx context.Context, projectID string) ([]ListProjectManagedSecretRevealSummariesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectManagedSecretRevealSummaries, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectManagedSecretRevealSummariesRow
+	for rows.Next() {
+		var i ListProjectManagedSecretRevealSummariesRow
+		if err := rows.Scan(&i.SecretID, &i.RevealCount, &i.LastRevealedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1011,14 +994,14 @@ func (q *Queries) UpdateManagedSecret(ctx context.Context, arg UpdateManagedSecr
 
 const updateManagedSecretDelivery = `-- name: UpdateManagedSecretDelivery :exec
 UPDATE managed_secret_uses
-SET delivery = ?, recipients_json = ?, attestation_id = ?
+SET delivery = ?, recipients_json = ?, unlock_id = ?
 WHERE id = ?
 `
 
 type UpdateManagedSecretDeliveryParams struct {
 	Delivery       string         `json:"delivery"`
 	RecipientsJson string         `json:"recipients_json"`
-	AttestationID  sql.NullString `json:"attestation_id"`
+	UnlockID       sql.NullString `json:"unlock_id"`
 	ID             string         `json:"id"`
 }
 
@@ -1026,7 +1009,7 @@ func (q *Queries) UpdateManagedSecretDelivery(ctx context.Context, arg UpdateMan
 	_, err := q.db.ExecContext(ctx, updateManagedSecretDelivery,
 		arg.Delivery,
 		arg.RecipientsJson,
-		arg.AttestationID,
+		arg.UnlockID,
 		arg.ID,
 	)
 	return err

@@ -501,7 +501,7 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 		cited = append(cited, fact("secret.origin", "generated for this chat", "managed_secret"))
 	}
 	if f.Payload.Held {
-		cited = append(cited, fact("secret.custody", "a value you gave to Painted Wolf Code", "managed_secret"))
+		cited = append(cited, fact("secret.custody", "a value you stored", "managed_secret"))
 	}
 	return true, cited, f.Payload.RuleID
 }
