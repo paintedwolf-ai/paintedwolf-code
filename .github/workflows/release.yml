@@ -336,13 +336,19 @@ jobs:
           bash scripts/release-validate-bridge.sh aggregate/latest.json
           sha="$(cat release-artifacts/painted-wolf-code_v${VERSION}_darwin-aarch64.dmg.sha256)"
           render_cask() {
-            local token="$1" channel="$2"
+            local token="$1" channel="$2" conflicts=painted-wolf-code
+            # Both casks install the same app, so each names the other.
+            [[ "${token}" == painted-wolf-code ]] && conflicts=painted-wolf-code@preview
             sed -e "s|@@TOKEN@@|${token}|g" \
               -e "s|@@VERSION@@|${VERSION}|g" -e "s|@@SHA_ARM@@|${sha}|g" \
               -e "s|@@BASE_URL@@|${DOWNLOAD_BASE_URL}|g" \
               -e "s|@@CHANNEL@@|${channel}|g" \
+              -e "s|@@CONFLICTS@@|${conflicts}|g" \
               packaging/homebrew/painted-wolf-code.rb.tmpl > "aggregate/${token}.rb"
             grep -Fq "release_channel\\\":\\\"${channel}" "aggregate/${token}.rb"
+            if grep -n "@@" "aggregate/${token}.rb"; then
+              echo "::error::unrendered placeholder in ${token}.rb"; exit 1
+            fi
           }
           render_cask "${CASK_TOKEN}" "${CHANNEL}"
           if [[ "${CHANNEL}" == stable ]]; then

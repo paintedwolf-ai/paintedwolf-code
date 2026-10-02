@@ -260,6 +260,7 @@ sed -e "s|@@VERSION@@|${VERSIONS[0]}|g" \
     -e "s|@@BASE_URL@@|${DOWNLOAD_BASE_URL}|g" \
     -e "s|@@TOKEN@@|painted-wolf-code|g" \
     -e "s|@@CHANNEL@@|stable|g" \
+    -e "s|@@CONFLICTS@@|painted-wolf-code@preview|g" \
     "${ROOT}/packaging/homebrew/painted-wolf-code.rb.tmpl" > "${WORKDIR}/cask.rb"
 ruby -c "${WORKDIR}/cask.rb" >/dev/null
 CASK_REL="release-metadata/${VERSIONS[0]}/painted-wolf-code.rb"

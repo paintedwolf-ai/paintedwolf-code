@@ -7,6 +7,7 @@ cask "@@TOKEN@@" do
   desc "Local-first AI coding agent"
   homepage "https://paintedwolf.ai"
 
+  conflicts_with cask: "@@CONFLICTS@@"
   depends_on arch: :arm64
   depends_on macos: ">= :sonoma"
 
