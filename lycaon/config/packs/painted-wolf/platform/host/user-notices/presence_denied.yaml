@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Confirmation was not authorized
+message: >-
+  The operating-system check was canceled or rejected. No secret was stored or
+  released.
+suggested_action: >-
+  Try again and complete the operating-system authentication prompt.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - No secret was stored or released
+      - Try again
