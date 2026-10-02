@@ -9,6 +9,7 @@ ENGINE_ROOT="${TAURI_DIR}/engine-root"
 SIDECAR_NAME="pw"
 LOGS_NAME="pw-logs"
 DECIDE_NAME="bialy"
+DOCUMENT_CORE_NAME="pw-document-core"
 
 MODE="full"
 RELEASE_BUILD=0
@@ -50,6 +51,7 @@ esac
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOGS_BIN="${BINARIES_DIR}/${LOGS_NAME}-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/${DECIDE_NAME}-${TARGET}${EXE_SUFFIX}"
+DOCUMENT_CORE_BIN="${BINARIES_DIR}/${DOCUMENT_CORE_NAME}-${TARGET}${EXE_SUFFIX}"
 
 OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only)"
 OPENGREP_IDENTITY="$(cd "${GO_DIR}" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact -mode identity -artifact-directory "${OPENGREP_ARTIFACT}")"
@@ -103,6 +105,9 @@ echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version
   go build "${BUILD_ARGS[@]}" -o "${LOGS_BIN}" ./cmd/pw-logs
 )
 chmod +x "${SIDECAR_BIN}" "${LOGS_BIN}"
+
+echo "stage-engine — building the document core for ${TARGET}" >&2
+bash "${ROOT}/scripts/build-document-core.sh" --output "${DOCUMENT_CORE_BIN}" >/dev/null
 
 echo "stage-engine — building the decision engine for ${TARGET}" >&2
 bash "${ROOT}/scripts/build-decide.sh" "${DECIDE_BIN}"
@@ -159,4 +164,4 @@ if [[ "${MODE}" == "full" ]]; then
   chmod -R u+rwX,go+rX "${ENGINE_ROOT}/decide/models"
 fi
 
-echo "stage-engine — staged ${SIDECAR_BIN#${ROOT}/}, ${LOGS_BIN#${ROOT}/}, ${DECIDE_BIN#${ROOT}/}, and ${ENGINE_ROOT#${ROOT}/} (${MODE})" >&2
+echo "stage-engine — staged ${SIDECAR_BIN#${ROOT}/}, ${LOGS_BIN#${ROOT}/}, ${DOCUMENT_CORE_BIN#${ROOT}/}, ${DECIDE_BIN#${ROOT}/}, and ${ENGINE_ROOT#${ROOT}/} (${MODE})" >&2

@@ -23,6 +23,7 @@
   "bundle": {
     "externalBin": [
       "binaries/pw-logs",
+      "binaries/pw-document-core",
       "binaries/bialy"
     ],
     "macOS": {

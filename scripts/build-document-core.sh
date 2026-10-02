@@ -1,45 +1,83 @@
 #!/usr/bin/env bash
-# Build the sandboxed text CRDT used by the host.
+# Builds the native text CRDT process for this host and prints its path.
+# Builds are addressed by their inputs in the user cache, so every checkout
+# and verification slot reuses one binary per source state. --output also
+# stages a copy there.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if ! bash "${ROOT}/scripts/repo-snapshot-lock.sh" holding; then
-  exec bash "${ROOT}/scripts/repo-snapshot-lock.sh" generate -- bash "$0" "$@"
-fi
-# shellcheck source=artifact-paths.sh
-source "$(dirname "$0")/artifact-paths.sh"
-CORE="${ROOT}/lycaon/internal/documentcore"
-RUST_VERSION="1.97.1"
-TARGET="wasm32-wasip1"
-SYSROOT="${PW_BIN_DIR}/document-core-sysroot"
-export CARGO_TARGET_DIR="${PW_BUILD_DIR}/document-core-target"
-export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="--sysroot=${SYSROOT}"
+CACHE_ROOT="$(python3 "${ROOT}/scripts/artifact_paths.py" cache)/document-core"
+CRATE="${ROOT}/lycaon/internal/documentcore/native"
+NAME="pw-document-core"
 
-if [[ "${1:-}" == "--setup" && ( ! -x "${SYSROOT}/bin/rustc" || ! -d "${SYSROOT}/lib/rustlib/${TARGET}" ) ]]; then
-  scratch="$(mktemp -d "${TMPDIR:-/tmp}/document-core-toolchain.XXXXXX")"
-  trap 'rm -rf "$scratch"' EXIT
-  host="$(rustc -vV | sed -n 's/^host: //p')"
-  for component in "rustc-${RUST_VERSION}-${host}" "rust-std-${RUST_VERSION}-${host}" "rust-std-${RUST_VERSION}-${TARGET}"; do
-    if [[ "$component" == rustc-* && -x "${SYSROOT}/bin/rustc" ]]; then continue; fi
-    if [[ "$component" == "rust-std-${RUST_VERSION}-${host}" && -d "${SYSROOT}/lib/rustlib/${host}" ]]; then continue; fi
-    archive="${component}.tar.xz"
-    curl --fail --location --silent --show-error "https://static.rust-lang.org/dist/${archive}" -o "${scratch}/${archive}"
-    curl --fail --location --silent --show-error "https://static.rust-lang.org/dist/${archive}.sha256" -o "${scratch}/${archive}.sha256"
-    (cd "$scratch" && shasum -a 256 -c "${archive}.sha256")
-    tar -xJf "${scratch}/${archive}" -C "$scratch"
-    bash "${scratch}/${component}/install.sh" --prefix="$SYSROOT" --disable-ldconfig
-  done
-fi
-export RUSTC="${SYSROOT}/bin/rustc"
-export RUSTDOC="${SYSROOT}/bin/rustdoc"
+OUTPUT=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output) OUTPUT="${2:?--output requires a path}"; shift 2 ;;
+    *) echo "usage: build-document-core.sh [--output PATH]" >&2; exit 2 ;;
+  esac
+done
 
-cargo build --locked --manifest-path "${CORE}/native/Cargo.toml" --target "$TARGET" --release
-source "${ROOT}/scripts/snapshot-publish.sh"
-staged="$(mktemp "${TMPDIR:-/tmp}/document-core.XXXXXX")"
-cp "${CARGO_TARGET_DIR}/${TARGET}/release/document_core.wasm" "$staged"
-chmod 0644 "$staged"
-manifest="$(mktemp "${TMPDIR:-/tmp}/document-core-manifest.XXXXXX")"
-python3 "${ROOT}/scripts/document-core-manifest.py" generate --binary "$staged" --output "$manifest"
-chmod 0644 "$manifest"
-snapshot_publish_file "$staged" "${CORE}/core.wasm"
-snapshot_publish_file "$manifest" "${CORE}/core.manifest.json"
-snapshot_publish_finish
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "error: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version" >&2
+  exit 1
+fi
+
+EXE_SUFFIX=""
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) EXE_SUFFIX=".exe" ;;
+esac
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < "${ROOT}/lycaon/internal/platformfloor/macos_floor.txt")"
+fi
+
+identity() {
+  {
+    printf 'target %s\n' "$(rustc --print host-tuple)"
+    printf 'macos-floor %s\n' "${MACOSX_DEPLOYMENT_TARGET:-}"
+    (cd "${ROOT}" && LC_ALL=C find rust-toolchain.toml scripts/build-document-core.sh \
+      lycaon/internal/documentcore/native/Cargo.toml lycaon/internal/documentcore/native/Cargo.lock \
+      lycaon/internal/documentcore/native/src -type f -print | LC_ALL=C sort | while IFS= read -r file; do
+        printf '%s %s\n' "$(shasum -a 256 "${file}" | cut -d' ' -f1)" "${file}"
+      done)
+  } | shasum -a 256 | cut -c1-24
+}
+
+DIGEST="$(identity)"
+IDENTITY_DIR="${CACHE_ROOT}/${DIGEST}"
+BUILT="${IDENTITY_DIR}/${NAME}${EXE_SUFFIX}"
+build() {
+  # One target per identity: builds of other sources never overwrite the
+  # artifact between cargo finishing and the copy below.
+  export CARGO_TARGET_DIR="${IDENTITY_DIR}/target"
+  echo "build-document-core — cargo build → ${BUILT}" >&2
+  cargo build --locked --release --manifest-path "${CRATE}/Cargo.toml" --bin "${NAME}" >&2
+  # Publish by rename so concurrent builds of one identity never expose a partial file.
+  local staged
+  staged="$(mktemp "${IDENTITY_DIR}/.${NAME}.XXXXXX")"
+  cp "${CARGO_TARGET_DIR}/release/${NAME}${EXE_SUFFIX}" "${staged}"
+  chmod 0755 "${staged}"
+  mv -f "${staged}" "${BUILT}"
+  rm -rf "${CARGO_TARGET_DIR}"
+}
+
+if [[ ! -x "${BUILT}" ]]; then
+  mkdir -p "${IDENTITY_DIR}"
+  # A concurrent build of the same identity may publish first and remove the
+  # shared target under this one; its binary comes from the same sources.
+  if ! (build) && [[ ! -x "${BUILT}" ]]; then
+    exit 1
+  fi
+fi
+
+if [[ -n "${OUTPUT}" ]]; then
+  mkdir -p "$(dirname "${OUTPUT}")"
+  # A new inode: overwriting a signed Mach-O in place leaves the kernel's cached signature stale.
+  STAGED="$(mktemp "$(dirname "${OUTPUT}")/.${NAME}.XXXXXX")"
+  cp "${BUILT}" "${STAGED}"
+  chmod 0755 "${STAGED}"
+  mv -f "${STAGED}" "${OUTPUT}"
+  printf '%s\n' "${OUTPUT}"
+else
+  printf '%s\n' "${BUILT}"
+fi

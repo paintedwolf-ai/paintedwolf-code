@@ -123,6 +123,13 @@ case "${GOOS}" in
       exit 1
     }
     assert_native_arch "bundled log viewer" "${LOG_VIEWER}"
+    DOCUMENT_CORE="$(find "${EXTRACT}/squashfs-root" -type f -name pw-document-core -perm -u+x -print -quit)"
+    [[ -n "${DOCUMENT_CORE}" && "$(dirname "${DOCUMENT_CORE}")" == "$(dirname "${ENGINE}")" ]] || {
+      echo "error: ${PLATFORM} AppImage has no document core beside its engine" >&2
+      exit 1
+    }
+    assert_native_arch "bundled document core" "${DOCUMENT_CORE}"
+    "${ENGINE}" diagnostics document-core
     DECIDE_ENGINE="$(find "${EXTRACT}/squashfs-root" -type f -name bialy -perm -u+x -print -quit)"
     [[ -n "${DECIDE_ENGINE}" ]] || {
       echo "error: ${PLATFORM} AppImage has no bundled decision engine" >&2
@@ -183,20 +190,24 @@ case "${GOOS}" in
     }
     SIDECAR="${ROOT}/lycaon-den/src-tauri/binaries/pw-x86_64-pc-windows-msvc.exe"
     LOG_VIEWER="${ROOT}/lycaon-den/src-tauri/binaries/pw-logs-x86_64-pc-windows-msvc.exe"
+    DOCUMENT_CORE="${ROOT}/lycaon-den/src-tauri/binaries/pw-document-core-x86_64-pc-windows-msvc.exe"
     DECIDE_ENGINE="${ROOT}/lycaon-den/src-tauri/binaries/bialy-x86_64-pc-windows-msvc.exe"
     GIT_ENGINE="${ROOT}/lycaon-den/src-tauri/engine-root/gitengine/cmd/git.exe"
     GIT_LFS="${ROOT}/lycaon-den/src-tauri/engine-root/gitengine/mingw64/libexec/git-core/git-lfs.exe"
     OPENGREP="$(verify_opengrep "${ROOT}/lycaon-den/src-tauri/engine-root")"
     BROWSER="${ROOT}/lycaon-den/src-tauri/engine-root/browser/chrome-headless-shell.exe"
     DECIDE_MODEL="$(find "${ROOT}/lycaon-den/src-tauri/engine-root/decide/models" -type f -name .complete -print -quit 2>/dev/null || true)"
-    [[ -f "${SIDECAR}" && -f "${LOG_VIEWER}" && -f "${DECIDE_ENGINE}" && -f "${GIT_ENGINE}" && -f "${GIT_LFS}" && -f "${OPENGREP}" && -f "${BROWSER}" && -n "${DECIDE_MODEL}" ]] || {
+    [[ -f "${SIDECAR}" && -f "${LOG_VIEWER}" && -f "${DOCUMENT_CORE}" && -f "${DECIDE_ENGINE}" && -f "${GIT_ENGINE}" && -f "${GIT_LFS}" && -f "${OPENGREP}" && -f "${BROWSER}" && -n "${DECIDE_MODEL}" ]] || {
       echo "error: ${PLATFORM} build has incomplete sidecar or bundled tool payloads" >&2
       exit 1
     }
     assert_native_arch "application" "${APPLICATION}"
     assert_native_arch "bundled engine" "${SIDECAR}"
     assert_native_arch "bundled log viewer" "${LOG_VIEWER}"
+    assert_native_arch "bundled document core" "${DOCUMENT_CORE}"
     assert_native_arch "bundled decision engine" "${DECIDE_ENGINE}"
+    # Staged binaries carry the target triple; the installed layout drops it.
+    LYCAON_DOCUMENT_CORE_BINARY="${DOCUMENT_CORE}" "${SIDECAR}" diagnostics document-core
     assert_native_arch "bundled Git" "${GIT_ENGINE}"
     assert_native_arch "bundled Git LFS" "${GIT_LFS}"
     assert_native_arch "bundled OpenGrep" "${OPENGREP}"
@@ -207,6 +218,7 @@ case "${GOOS}" in
     pwsh -NoProfile -File "${ROOT}/scripts/release-verify-windows-signature.ps1" \
       -Path "${PACKAGE}" -UpdaterArchive "${UPDATER}" -ApplicationPath "${APPLICATION}" \
       -SidecarPath "${SIDECAR}" -LogViewerPath "${LOG_VIEWER}" \
+      -DocumentCorePath "${DOCUMENT_CORE}" -DecisionEnginePath "${DECIDE_ENGINE}" \
       -GitPath "${GIT_ENGINE}" -GitLFSPath "${GIT_LFS}" -OpenGrepPath "${OPENGREP}" -BrowserPath "${BROWSER}" \
       -EngineRootPath "${ROOT}/lycaon-den/src-tauri/engine-root" \
       -ExpectedVersion "${WINDOWS_PACKAGE_VERSION}"

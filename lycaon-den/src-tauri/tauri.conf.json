@@ -49,6 +49,7 @@
     "externalBin": [
       "binaries/pw",
       "binaries/pw-logs",
+      "binaries/pw-document-core",
       "binaries/bialy"
     ],
     "resources": {
