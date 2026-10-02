@@ -104,12 +104,8 @@ func (p *ApprovalPlan) RequirePresence(held *HeldRelease) (*ApprovalPlan, error)
 		}
 		candidate.Options = append(candidate.Options, option)
 	}
-	if _, ok := candidate.Option(candidate.RecommendedOptionID); !ok {
-		face, err := computeRecommendedOptionID(candidate.Subject.Kind, candidate.Reasons, candidate.Options, FaceContext{SecretManaged: true})
-		if err != nil {
-			return nil, err
-		}
-		candidate.RecommendedOptionID = face
+	if err := candidate.refaceAfterFilter(FaceContext{SecretManaged: true}); err != nil {
+		return nil, err
 	}
 	id, err := candidate.canonicalID()
 	if err != nil {
