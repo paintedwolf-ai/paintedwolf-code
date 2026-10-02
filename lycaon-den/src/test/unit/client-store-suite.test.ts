@@ -28,6 +28,7 @@ describe("client + store suite", () => {
         topic === "turn_clock" ||
         topic === "turn_load" ||
         topic === "agent_presence" ||
+        topic === "chat_vault" ||
         // Settings invalidates by facet.
         topic === "settings"
       ) {

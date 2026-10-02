@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -14,6 +15,6 @@ func evaluationWorkerAlive(pid int) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fields := strings.Fields(string(raw)[strings.LastIndexByte(string(raw), ')')+1:])
+	fields := strings.Fields(string(raw[bytes.LastIndexByte(raw, ')')+1:]))
 	return len(fields) > 0 && fields[0] != "Z", nil
 }
