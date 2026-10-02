@@ -137,6 +137,10 @@ func (e *Engine) Call(ctx context.Context, request Request) (Snapshot, error) {
 	output, err := e.proc.exchange(ctx, input)
 	if err != nil {
 		e.proc.stop(0)
+		// Names the request a crash or hang interrupted, so an input that
+		// ends the core every time can be found.
+		log.Warn("document core request did not complete", "action", request.Action,
+			"handle", request.Handle, "request_bytes", len(input), "error", err)
 		return response, err
 	}
 	if err = json.Unmarshal(output, &response); err != nil {
