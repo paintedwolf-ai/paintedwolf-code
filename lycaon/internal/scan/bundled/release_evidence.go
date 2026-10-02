@@ -45,6 +45,27 @@ type releaseSelectionEvidence struct {
 	ReleaseState       json.RawMessage          `json:"release_state"`
 }
 
+// stableReleaseState drops counters GitHub changes after publication, so
+// selecting the same release again reproduces the evidence digest.
+func stableReleaseState(raw []byte) (json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var release map[string]any
+	if err := decoder.Decode(&release); err != nil {
+		return nil, fmt.Errorf("decode release state: %w", err)
+	}
+	delete(release, "reactions")
+	delete(release, "mentions_count")
+	if assets, ok := release["assets"].([]any); ok {
+		for _, asset := range assets {
+			if fields, ok := asset.(map[string]any); ok {
+				delete(fields, "download_count")
+			}
+		}
+	}
+	return json.Marshal(release)
+}
+
 // Evidence storage precedes publication of its manifest digest.
 func persistReleaseEvidence(destination string, evidence releaseSelectionEvidence) (*ReleaseSelectionReference, error) {
 	raw, err := json.MarshalIndent(evidence, "", "  ")

@@ -80,7 +80,11 @@ func selectAttestedRelease(ctx context.Context, selection AttestedReleaseSelecti
 	if selection.Tag != "v"+source.OpenGrep.Version {
 		return fmt.Errorf("authenticated descriptor version differs from selected tag")
 	}
-	receipt := releaseSelectionEvidence{Tag: selection.Tag, Commit: selection.ExpectedCommit, Descriptor: raw, DescriptorEvidence: evidence, ReleaseState: state}
+	stable, err := stableReleaseState(state)
+	if err != nil {
+		return err
+	}
+	receipt := releaseSelectionEvidence{Tag: selection.Tag, Commit: selection.ExpectedCommit, Descriptor: raw, DescriptorEvidence: evidence, ReleaseState: stable}
 	for _, pin := range source.OpenGrep.Artifacts {
 		proof, err := authenticateReleaseArchive(ctx, selection, run, pin)
 		if err != nil {
