@@ -139,6 +139,7 @@ var confinementProducerInventory = map[string]string{
 	"internal/confine/confine.go":                    "DefaultConfinement / BuildProfile themselves",
 	"internal/hitl/contained.go":                     "ContainedForRequest projection — reads the same union the executor applies",
 	"internal/tools/command_operand_expansion.go":    "globReadable(confReq) — pre-grant read boundaries for glob expansion",
+	"internal/documentcore/process.go":               "DefaultConfinement(host MkdirTemp scratch) — native document core: only its own scratch root, network denied, mandatory application",
 }
 
 // The producer inventory matches the syntax tree.
