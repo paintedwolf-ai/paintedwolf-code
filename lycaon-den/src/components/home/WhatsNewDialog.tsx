@@ -13,11 +13,7 @@ import { MarkdownBody } from "../transcript/MarkdownBody.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
-import {
-  PRODUCT_NAME,
-  REPOSITORY_URL,
-  releasePageUrl,
-} from "../../../shared/brand.ts";
+import { REPOSITORY_URL, releasePageUrl } from "../../../shared/brand.ts";
 
 export type WhatsNewDialogProps = {
   open: boolean;
@@ -84,9 +80,8 @@ export function WhatsNewDialog(props: WhatsNewDialogProps): JSX.Element {
             >
               <MarkdownBody untrusted source={props.notes} />
               <p class="whats-new-dialog__share" data-testid="whats-new-dialog-share">
-                {PRODUCT_NAME} is free and open source. If this release helps
-                you, the best thanks is telling a colleague who would use it, or
-                starring the project on GitHub.
+                If this release helps you, the best thanks is telling a colleague
+                who would use it, or starring the project on GitHub.
               </p>
             </Scrollport>
 
