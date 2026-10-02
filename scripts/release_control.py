@@ -13,6 +13,8 @@ import urllib.request
 from release_distribution import PUBLIC_READ_HEADERS
 from release_semver import compare, parse
 
+FIRST_RELEASE = parse("1.0.0")
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -48,7 +50,8 @@ def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
         parsed = parse(version)
         if channel == "stable" and parsed.channel != "stable":
             raise ValueError("Stable feed contains a prerelease")
-        if compare(parsed, target) < 0:
+        # Pre-v1 stores were never released baselines, so they are not upgrade sources.
+        if compare(parsed, target) < 0 and compare(parsed, FIRST_RELEASE) >= 0:
             versions.add(version)
     # Withdrawn releases remain upgrade sources for existing installations.
     return sorted(versions)
