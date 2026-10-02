@@ -5,7 +5,7 @@ import { REPOSITORY_URL, WEBSITE_URL } from "../../../../shared/brand.ts";
 
 const mocks = vi.hoisted(() => ({
   writeClipboardText: vi.fn(async (_text: string) => undefined),
-  confirmAndOpenExternalLink: vi.fn(async (_href: string) => true),
+  openAppLink: vi.fn(async (_href: string) => true),
 }));
 
 vi.mock("../../../utils/clipboard.ts", async (importOriginal) => ({
@@ -15,7 +15,7 @@ vi.mock("../../../utils/clipboard.ts", async (importOriginal) => ({
 
 vi.mock("../../../platform/desktop/external-link.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../platform/desktop/external-link.ts")>()),
-  confirmAndOpenExternalLink: mocks.confirmAndOpenExternalLink,
+  openAppLink: mocks.openAppLink,
 }));
 
 describe("AboutSettingsPanel", () => {
@@ -38,7 +38,7 @@ describe("AboutSettingsPanel", () => {
 
     fireEvent.click(getByTestId("about-star"));
     fireEvent.click(getByTestId("about-website"));
-    expect(mocks.confirmAndOpenExternalLink.mock.calls.map((c) => c[0])).toEqual([
+    expect(mocks.openAppLink.mock.calls.map((c) => c[0])).toEqual([
       REPOSITORY_URL,
       WEBSITE_URL,
     ]);

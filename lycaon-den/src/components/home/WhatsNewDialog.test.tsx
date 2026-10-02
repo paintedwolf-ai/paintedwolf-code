@@ -3,9 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { WhatsNewDialog } from "./WhatsNewDialog.tsx";
 import { REPOSITORY_URL } from "../../../shared/brand.ts";
 
-const { writeClipboardText, confirmAndOpenExternalLink } = vi.hoisted(() => ({
+const { writeClipboardText, openAppLink } = vi.hoisted(() => ({
   writeClipboardText: vi.fn(async (_text: string) => undefined),
-  confirmAndOpenExternalLink: vi.fn(async (_href: string) => true),
+  openAppLink: vi.fn(async (_href: string) => true),
 }));
 
 vi.mock("../../utils/clipboard.ts", async (importOriginal) => ({
@@ -15,7 +15,7 @@ vi.mock("../../utils/clipboard.ts", async (importOriginal) => ({
 
 vi.mock("../../platform/desktop/external-link.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../platform/desktop/external-link.ts")>()),
-  confirmAndOpenExternalLink,
+  openAppLink,
 }));
 
 describe("WhatsNewDialog", () => {
@@ -102,6 +102,6 @@ describe("WhatsNewDialog", () => {
     });
 
     fireEvent.click(screen.getByTestId("whats-new-dialog-star"));
-    expect(confirmAndOpenExternalLink).toHaveBeenCalledWith(REPOSITORY_URL);
+    expect(openAppLink).toHaveBeenCalledWith(REPOSITORY_URL);
   });
 });

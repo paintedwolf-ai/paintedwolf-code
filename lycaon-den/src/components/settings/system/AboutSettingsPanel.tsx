@@ -3,7 +3,7 @@ import type { JSX } from "solid-js";
 import { ReportBugDialog } from "../../report-a-bug/ReportBugDialog.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { openThirdPartyNotices } from "../../../platform/desktop/open-third-party-notices.ts";
-import { confirmAndOpenExternalLink } from "../../../platform/desktop/external-link.ts";
+import { openAppLink } from "../../../platform/desktop/external-link.ts";
 import { writeClipboardText } from "../../../utils/clipboard.ts";
 import { settingAnchor, settingLabel } from "../../../settings/settings-registry.ts";
 import {
@@ -66,14 +66,14 @@ export function AboutSettingsPanel(props: AboutPanelProps): JSX.Element {
           <DenButton
             variant="secondary"
             data-testid="about-star"
-            onClick={() => void confirmAndOpenExternalLink(REPOSITORY_URL)}
+            onClick={() => void openAppLink(REPOSITORY_URL)}
           >
             Star on GitHub
           </DenButton>
           <DenButton
             variant="ghost"
             data-testid="about-website"
-            onClick={() => void confirmAndOpenExternalLink(WEBSITE_URL)}
+            onClick={() => void openAppLink(WEBSITE_URL)}
           >
             Visit website
           </DenButton>
