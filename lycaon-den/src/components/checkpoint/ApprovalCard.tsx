@@ -43,6 +43,7 @@ import { ApprovalFileChanges } from "./ApprovalFileChanges.tsx";
 import { checkpointRowLabel } from "./checkpoint-row-label.ts";
 import { approvalWaitLabel } from "../../chat/checkpoint/approval-wait.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { presenceAvailable } from "../../platform/presence.ts";
 
 type ContentResolveBody = {
   decision: "approve" | "reject" | "approve_partial";
@@ -235,7 +236,15 @@ function ToolApprovalBody(props: Props) {
     const id = plan()?.recommended_option_id;
     return id ? options().find((option) => option.id === id) : undefined;
   });
-  const recommendedDisabled = () => recommended()?.disabled === true;
+  const held = () => plan()?.held_release;
+  // Approving a held release needs the desktop shell to confirm the person.
+  const heldBlocked = (option?: { decision_action: string }) =>
+    !!held() && option?.decision_action === "approve" && !presenceAvailable();
+  const heldReaders = createMemo(() => {
+    const kinds = new Set((held()?.recipients ?? []).map((recipient) => recipient.kind));
+    return [...kinds].map((kind) => copy.held.reader[kind]);
+  });
+  const recommendedDisabled = () => recommended()?.disabled === true || heldBlocked(recommended());
   const alternatives = createMemo(() =>
     options().filter((option) => option.id !== recommended()?.id),
   );
@@ -339,7 +348,7 @@ function ToolApprovalBody(props: Props) {
   });
   const selectOption = (id: string) => {
     const option = options().find((candidate) => candidate.id === id);
-    if (!option || option.disabled) return;
+    if (!option || option.disabled || heldBlocked(option)) return;
     props.onToolApproval("approve", { optionId: option.id });
   };
 
@@ -598,6 +607,15 @@ function ToolApprovalBody(props: Props) {
           </Show>
         </Show>
       )}</Show>
+      <Show when={held()} keyed>{(release) => (
+        <section class="den-approval-held" data-testid="approval-held-release" aria-label={copy.held.title}>
+          <p class="den-approval-held-title">{copy.held.title}: {release.secrets.map((secret) => secret.name).join(", ")}</p>
+          <For each={heldReaders()}>{(line) => <p class="den-settings-hint">{line}</p>}</For>
+          <p class="den-settings-hint" data-testid="approval-held-confirm">
+            {presenceAvailable() ? copy.held.confirm : copy.held.needsDesktop}
+          </p>
+        </section>
+      )}</Show>
       <ActionsZone
         sessionId={props.sessionId}
         resolving={props.resolving}
@@ -617,8 +635,8 @@ function ToolApprovalBody(props: Props) {
                 meta: option.coverage,
                 group: option.group,
                 slot: approvalSlot(option),
-                disabled: option.disabled,
-                note: option.note,
+                disabled: option.disabled || heldBlocked(option),
+                note: heldBlocked(option) ? copy.held.needsDesktop : option.note,
               }))}
               note={grantMenuNote()}
               disabled={props.resolving}
@@ -636,7 +654,7 @@ function ToolApprovalBody(props: Props) {
           },
           disabled: !recommended() || recommendedDisabled(),
           title: recommendedDisabled()
-            ? recommended()?.note || presentation()?.option_note
+            ? (heldBlocked(recommended()) ? copy.held.needsDesktop : recommended()?.note || presentation()?.option_note)
             : undefined,
           meta: faceMeta(),
           testid: "approval-approve-primary",

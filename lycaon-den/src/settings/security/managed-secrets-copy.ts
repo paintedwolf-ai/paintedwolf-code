@@ -1,4 +1,4 @@
-import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
+import type { ManagedSecret, ManagedSecretAttestation, ManagedSecretUse } from "../../api/types.ts";
 import type {
   AgentUseDeadlineChoice,
   DraftProblem,
@@ -151,6 +151,18 @@ export const MANAGED_SECRETS_COPY = {
   neverRevealed: "Never",
   revealCountLabel: (total: number) =>
     total === 0 ? "Never revealed" : `${total} reveal${total === 1 ? "" : "s"}`,
+  factCustody: "Who holds it",
+  factLastReleased: "Last released",
+  releaseCountLabel: (total: number) =>
+    total === 0 ? "Never released" : `${total} release${total === 1 ? "" : "s"}`,
+  useRecipients: (labels: string) => `To ${labels}`,
+  useConfirmed: "Released with your confirmation",
+
+  confirmationsHeading: "Confirmations",
+  confirmationsHint:
+    "Each time you confirmed with Touch ID, Windows Hello, or your device password, to see this value or to hand it to a recipient.",
+  confirmationsEmpty: "You have not confirmed any use of this value.",
+  confirmationsError: "Confirmations could not be loaded.",
 
   revoke: "Revoke",
   revoking: "Revoking…",
@@ -186,6 +198,19 @@ const ORIGIN_LABEL: Record<ManagedSecret["origin"], string> = {
   settings_entered: "Entered in settings",
   cookie_jar: "HTTP cookie jar",
   token_jar: "HTTP token jar",
+};
+
+const CUSTODY_LABEL: Record<NonNullable<ManagedSecret["custody"]>, string> = {
+  person: "You gave it to Painted Wolf Code. Each use asks you to confirm.",
+  file: "A project file holds it. Anything that can read that file can read it.",
+  chat: "Generated for one chat. Its programs may use it without asking at Light and Balanced.",
+  host: "Generated or captured for the agent's work.",
+};
+
+const RELEASE_SCOPE_LABEL: Record<NonNullable<ManagedSecretAttestation["release_scope"]>, string> = {
+  once: "once",
+  chat: "for the chat",
+  project: "for the project",
 };
 
 const STATE_FILTER_LABEL: Record<SecretStateFilter, string> = {
@@ -245,6 +270,21 @@ const DELIVERY_LABEL: Record<ManagedSecretUse["delivery"], string> = {
   handed_off: "Handed to executor or transport",
   redacted: "Redacted before handoff",
 };
+
+export function secretCustodyLabel(secret: ManagedSecret): string {
+  return secret.custody ? CUSTODY_LABEL[secret.custody] : "—";
+}
+
+export function secretLastReleasedLabel(secret: ManagedSecret): string {
+  return formatSecretTimestamp(secret.last_released_at) ?? MANAGED_SECRETS_COPY.neverRevealed;
+}
+
+export function attestationLabel(attestation: ManagedSecretAttestation): string {
+  if (attestation.purpose === "reveal") return "Revealed to you";
+  const to = attestation.recipients.map((recipient) => recipient.label).join(", ");
+  const scope = attestation.release_scope ? RELEASE_SCOPE_LABEL[attestation.release_scope] : "";
+  return `Released to ${to || "its recipients"} ${scope}`.trim();
+}
 
 export function useOutcomeLabel(use: ManagedSecretUse): string {
   return use.outcome === "resolved" ? DELIVERY_LABEL[use.delivery] : USE_OUTCOME_LABEL[use.outcome];

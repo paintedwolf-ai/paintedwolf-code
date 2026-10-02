@@ -402,3 +402,22 @@
   overflow-wrap: anywhere;
 }
 
+
+/* A card that would hand over values a person gave the app. */
+@utility den-approval-held {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--den-border);
+  border-radius: 6px;
+}
+
+@utility den-approval-held-title {
+  margin: 0;
+  font-size: var(--text-den-label);
+  font-weight: 600;
+  color: var(--den-text);
+  overflow-wrap: anywhere;
+}

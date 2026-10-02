@@ -6,9 +6,9 @@ import type { ManagedSecret } from "../../api/types.ts";
 import { ManagedSecretsPanel, SECRETS_PAGE_SIZE } from "./ManagedSecretsPanel.tsx";
 
 const revealManagedSecret = vi.hoisted(() => vi.fn());
-vi.mock("../../platform/files/managed-secret-reveal.ts", () => ({
+vi.mock("../../platform/presence.ts", () => ({
   revealManagedSecret,
-  ManagedSecretRevealError: class ManagedSecretRevealError extends Error {},
+  PresenceError: class PresenceError extends Error {},
 }));
 
 const clipboard = vi.hoisted(() => ({
@@ -54,6 +54,7 @@ const secret: ManagedSecret = {
   version: 1,
   use_count: 0,
   reveal_count: 0,
+  release_count: 0,
 };
 
 function chatSecret(index: number): ManagedSecret {
@@ -72,6 +73,7 @@ function chatSecret(index: number): ManagedSecret {
     version: 1,
     use_count: 0,
     reveal_count: 0,
+    release_count: 0,
   };
 }
 
@@ -83,6 +85,7 @@ function clientWith(items: ManagedSecret[], extra: Partial<LycaonClient> = {}) {
       count: items.length,
     })),
     listProjectManagedSecretUses: vi.fn(async () => ({ uses: [], count: 0 })),
+    listProjectManagedSecretAttestations: vi.fn(async () => ({ attestations: [] })),
     ...extra,
   });
 }

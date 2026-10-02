@@ -20,6 +20,18 @@ export const APPROVALS_COPY = {
   },
   revokeButton: "Revoke",
   card: {
+    /** A card that would hand over values a person gave Painted Wolf Code. */
+    held: {
+      title: "Values you gave Painted Wolf Code",
+      confirm: "Approving asks you to confirm with Touch ID, Windows Hello, or your device password.",
+      needsDesktop: "Only the installed desktop app can confirm you, so approve this there.",
+      reader: {
+        file: "Anything that can read this project's files can read it.",
+        process: "Programs this chat runs can keep or forward it.",
+        service: "This service receives it.",
+        model_provider: "The AI provider receives it.",
+      },
+    },
     elevated: {
       label: "Elevated access",
       tooltip: (effects: readonly ElevatedAccessEffect[]) =>
