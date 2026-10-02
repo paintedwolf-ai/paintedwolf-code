@@ -20,7 +20,6 @@ const created: ManagedSecret = {
   version: 1,
   use_count: 0,
   reveal_count: 0,
-  release_count: 0,
 };
 
 const request = {

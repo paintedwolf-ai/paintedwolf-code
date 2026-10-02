@@ -1073,6 +1073,7 @@ describe("held release", () => {
   function heldCheckpoint(): PendingCheckpoint {
     const value = checkpoint();
     value.tool_approval!.plan.held_release = {
+      chat_session_id: "session-1",
       secrets: [{ reference: "{{paintedwolf-secret:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}}", name: "Deploy key", version: 1 }],
       recipients: [{ label: "Local file: .env", surface: "file", kind: "file" }],
     };

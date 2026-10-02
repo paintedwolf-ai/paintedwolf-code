@@ -3,9 +3,11 @@ package tools
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -102,7 +104,7 @@ func TestAskSecretScreenAsksForEveryOtherChatSecretRelease(t *testing.T) {
 	}
 }
 
-// A value a person gave is never released silently: at every posture and for
+// A value a person stored is never released silently: at every posture and for
 // local recipients it asks, and a device without presence refuses outright.
 func TestAskSecretScreenNeverReleasesAHeldValueSilently(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
@@ -132,5 +134,93 @@ func TestUnaskedScreenStillAsksForAHeldValue(t *testing.T) {
 	_, err := exec.ResolveSecretScreenUnasked(ctx, chatSecretAlert())
 	if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStagePresenceUnavailable {
 		t.Fatalf("unasked held value err = %v", err)
+	}
+}
+
+// A held value whose recipients this chat already approved still waits on
+// the chat's unlock: a locked chat takes the unlock card's path, an unlocked
+// one sends with no card.
+func TestApprovedHeldValueWaitsOnlyForTheUnlock(t *testing.T) {
+	for name, unlocked := range map[string]bool{"locked": false, "unlocked": true} {
+		t.Run(name, func(t *testing.T) {
+			exec, _ := chatReleaseExecutor(gate.PostureLight)
+			exec.SetPresenceAvailable(func() bool { return true })
+			unlocks := presence.NewUnlocks()
+			exec.SetVaultUnlocks(unlocks)
+			if unlocked {
+				unlocks.Open(presence.NewUnlock("root-1", presence.Verified{
+					ChallengeID: "22222222-2222-4222-8222-222222222222", PersonID: "owner",
+					Authenticator: presence.AuthenticatorMacOS, WindowLabel: "main", VerifiedAt: time.Now(),
+				}))
+			}
+			resolution := screenedValue(secretcap.CustodyPerson, false)
+			alert := chatSecretAlert()
+			recipients, err := secretScreenRecipients(alert)
+			testutil.FailErr(t, "recipients", err)
+			resolution.ApproveRelease(secretcap.Release{Fingerprints: alert.Fingerprints, Recipients: recipients})
+
+			got, err := exec.AskSecretScreen(secretcap.WithResolution(context.Background(), resolution), alert)
+			if !unlocked {
+				if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
+					t.Fatalf("locked chat err = %v, want the unlock card's path", err)
+				}
+				return
+			}
+			testutil.FailErr(t, "unlocked send", err)
+			if got.Decision != secretmatch.SendUnchanged {
+				t.Fatalf("decision = %q", got.Decision)
+			}
+		})
+	}
+}
+
+// A send that needs only the unlock waits behind a card already open in its
+// chat instead of raising a second one, and proceeds when that card unlocks
+// the chat. If the person refuses that card, the send is held with it; if
+// the card settles otherwise without unlocking, the send asks itself.
+func TestApprovedHeldValueWaitsBehindTheChatsOpenCard(t *testing.T) {
+	for name, tt := range map[string]struct{ unlocks, refused bool }{
+		"card unlocks":   {unlocks: true},
+		"card does not":  {},
+		"person refuses": {refused: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			exec, _ := chatReleaseExecutor(gate.PostureLight)
+			exec.SetPresenceAvailable(func() bool { return true })
+			registry := presence.NewUnlocks()
+			exec.SetVaultUnlocks(registry)
+			closeCard := exec.heldAsks.open("root-1")
+			go func() {
+				time.Sleep(2 * heldAskPoll)
+				if tt.unlocks {
+					registry.Open(presence.NewUnlock("root-1", presence.Verified{
+						ChallengeID: "33333333-3333-4333-8333-333333333333", PersonID: "owner",
+						Authenticator: presence.AuthenticatorMacOS, WindowLabel: "main", VerifiedAt: time.Now(),
+					}))
+				}
+				closeCard(tt.refused)
+			}()
+			resolution := screenedValue(secretcap.CustodyPerson, false)
+			alert := chatSecretAlert()
+			recipients, err := secretScreenRecipients(alert)
+			testutil.FailErr(t, "recipients", err)
+			resolution.ApproveRelease(secretcap.Release{Fingerprints: alert.Fingerprints, Recipients: recipients})
+
+			got, err := exec.AskSecretScreen(secretcap.WithResolution(context.Background(), resolution), alert)
+			if tt.unlocks || tt.refused {
+				testutil.FailErr(t, "send behind the open card", err)
+				want := secretmatch.SendUnchanged
+				if tt.refused {
+					want = secretmatch.Withhold
+				}
+				if got.Decision != want {
+					t.Fatalf("decision = %q, want %q", got.Decision, want)
+				}
+				return
+			}
+			if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
+				t.Fatalf("err = %v, want the unlock card's path", err)
+			}
+		})
 	}
 }

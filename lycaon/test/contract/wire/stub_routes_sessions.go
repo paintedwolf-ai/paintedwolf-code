@@ -294,11 +294,22 @@ func registerStubSessionSupportRoutes(mux *http.ServeMux, writeJSON stubJSONWrit
 	mux.HandleFunc("GET /v1/sessions/{id}/checkpoints", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.CheckpointListResponse{Checkpoints: []api.CheckpointEvent{}})
 	})
-	mux.HandleFunc("POST /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/sessions/{id}/checkpoints/{checkpoint_id}/unlock-challenges", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, api.PresenceChallenge{
-			ChallengeID: fixtureSessionID, ProofPayload: "cHJlc2VuY2U", Prompt: "Use Deploy key with Local file: .env this once in Painted Wolf Code.",
+			ChallengeID: fixtureSessionID, ProofPayload: "cHJlc2VuY2U", Prompt: "Unlock Deploy key for this chat in Painted Wolf Code.",
 			ExpiresAt: fixtureTime,
 		})
+	})
+	mux.HandleFunc("GET /v1/sessions/{id}/vault", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.ChatVault{
+			ChatSessionID: fixtureSessionID, Unlocked: true, UnlockedAt: fixtureTime, ClosesAt: fixtureTime, ExpiresAt: fixtureTime,
+		})
+	})
+	mux.HandleFunc("POST /v1/sessions/{id}/vault/lock", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.ChatVault{ChatSessionID: fixtureSessionID})
+	})
+	mux.HandleFunc("POST /v1/vault/lock", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.LockVaultResponse{Locked: 1})
 	})
 	mux.HandleFunc("POST /v1/sessions/{id}/checkpoints/{checkpoint_id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.CheckpointResponse{

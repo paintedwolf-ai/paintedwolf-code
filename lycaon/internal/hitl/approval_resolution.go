@@ -83,7 +83,6 @@ func (o ApprovalOption) grantedBy(resolution Resolution) ApprovalOption {
 	return o
 }
 
-
 // ResolveApprovalOption installs authority before committing the checkpoint.
 // A failed commit rolls back the installed authority.
 func (m *Manager) ResolveApprovalOption(ctx context.Context, sessionID, checkpointID, optionID string) (*CheckpointResponse, error) {
@@ -152,21 +151,14 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 		return nil, err
 	}
 	now := time.Now().UTC()
-	var release *verifiedRelease
+	var opened *presence.Unlock
 	if plan.releasesHeld(option) {
-		verified, err := m.verifyRelease(sessionID, checkpointID, *plan, option, resolver, resolution)
-		if err != nil {
-			return nil, err
-		}
-		release = &verified
-		if option, err = attestHeldGrants(option, plan.Held, verified.attestation, m.held.ledger, now); err != nil {
-			m.forgetAttested(option)
+		if opened, err = m.heldAnswer(sessionID, checkpointID, *plan, option, resolver, resolution); err != nil {
 			return nil, err
 		}
 	}
 	option = option.grantedBy(resolution)
 	if err := m.store.prepareApprovalOperation(ctx, checkpointID, sessionID, option); err != nil {
-		m.forgetAttested(option)
 		return nil, fmt.Errorf("prepare approval authority: %w", err)
 	}
 
@@ -176,9 +168,6 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	}
 	if option.DecisionAction == ApprovalOptionTrack {
 		result.TrackSecrets = true
-	}
-	if release != nil {
-		result.AttestationID = release.attestation.ID
 	}
 	seenGrantIDs := map[string]struct{}{}
 	for _, delta := range option.Authority {
@@ -212,11 +201,8 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 		if err := recordChatGrantsTx(ctx, tx, checkpointID, option, now); err != nil {
 			return err
 		}
-		if release != nil {
-			if err := m.held.recorder.RecordReleaseTx(ctx, tx, AttestedRelease{
-				Attestation: release.attestation, WindowLabel: release.windowLabel, CheckpointID: checkpointID,
-				Scope: releaseScope(option), Held: *plan.Held, Recipients: plan.Held.Recipients,
-			}); err != nil {
+		if opened != nil {
+			if err := m.vault.recorder.RecordUnlockTx(ctx, tx, plan.Held.ProjectID, *opened); err != nil {
 				return err
 			}
 		}
@@ -225,7 +211,6 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	rollbackAuthority, err := m.authorityInstaller.InstallApprovalOption(ctx, checkpointID, option)
 	if err != nil {
 		_ = m.store.rollbackApprovalOperation(context.WithoutCancel(ctx), checkpointID)
-		m.forgetAttested(option)
 		return nil, fmt.Errorf("install approved authority: %w", err)
 	}
 	viaOutbox, err := m.store.commitApprovalOperation(ctx, *row, result, now, resolution, seal)
@@ -234,8 +219,12 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 			rollbackAuthority()
 		}
 		_ = m.store.rollbackApprovalOperation(context.WithoutCancel(ctx), checkpointID)
-		m.forgetAttested(option)
 		return nil, err
+	}
+	// The chat unlocks only after the approval commits.
+	if opened != nil {
+		m.vault.unlocks.Open(*opened)
+		m.answerUnlockCards(ctx, *opened, checkpointID)
 	}
 	row.Status = DecisionStatusApproved
 	row.Result = result

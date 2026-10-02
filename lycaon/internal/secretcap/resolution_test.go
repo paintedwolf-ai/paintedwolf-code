@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/ptyinput"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -216,39 +218,51 @@ func TestCustodyIgnoresRelabeledMetadata(t *testing.T) {
 	}
 }
 
-// HandOff is the vault's way out: a held value leaves only under an attested
-// release, while host values leave under any reviewed one.
-func TestHandOffRefusesAnUnattestedHeldValue(t *testing.T) {
+// HandOff is the vault's way out: a held value leaves only under a reviewed
+// release while its chat is unlocked, and its use names that unlock.
+func TestHandOffNeedsAReleaseAndAnUnlock(t *testing.T) {
 	service, _, _ := testService(t)
 	matcher := custodyMatcher(t, service)
+	unlocks := presence.NewUnlocks()
+	service.SetUnlocks(unlocks)
 	person, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
 		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "handoff",
 		Name: "Deploy key", Purpose: "deploy", Value: "person-entered-handoff",
 	})
 	testutil.FailErr(t, "create settings secret", err)
 	recipient := secretmatch.Recipient{ID: "file:.env", Label: "Local file: .env", Surface: secretmatch.SurfaceFile, Kind: secretmatch.DestinationFile}
+	release := func(resolution *Resolution, fingerprints []secretmatch.SecretFingerprint) {
+		resolution.ApproveRelease(Release{Fingerprints: fingerprints, Recipients: []secretmatch.Recipient{recipient}})
+	}
 
-	resolution, fingerprints := resolveReferences(t, service, matcher, person.Reference)
-	resolution.ApproveRelease(Release{Fingerprints: fingerprints, Recipients: []secretmatch.Recipient{recipient}})
+	unreviewed, _ := resolveReferences(t, service, matcher, person.Reference)
 	var unreleased *HeldUnreleasedError
-	if err := resolution.HandOff(t.Context(), nil); !errors.As(err, &unreleased) || unreleased.Names[0] != "Deploy key" {
-		t.Fatalf("unattested handoff error = %v", err)
-	}
-	if resolution.UseCovered(fingerprints[0], recipient) {
-		t.Fatal("an unattested release covered a held value")
+	if err := unreviewed.HandOff(t.Context(), nil); !errors.As(err, &unreleased) || unreleased.Names[0] != "Deploy key" {
+		t.Fatalf("unreviewed handoff error = %v", err)
 	}
 
-	attested, attestedFingerprints := resolveReferences(t, service, matcher, person.Reference)
-	attested.ApproveRelease(Release{Fingerprints: attestedFingerprints, Recipients: []secretmatch.Recipient{recipient}, AttestationID: "11111111-1111-4111-8111-111111111111"})
-	testutil.FailErr(t, "attested handoff", attested.HandOff(t.Context(), nil))
+	locked, lockedFingerprints := resolveReferences(t, service, matcher, person.Reference)
+	release(locked, lockedFingerprints)
+	if err := locked.HandOff(t.Context(), nil); !errors.Is(err, ErrVaultLocked) {
+		t.Fatalf("locked handoff error = %v", err)
+	}
+
+	const unlockID = "11111111-1111-4111-8111-111111111111"
+	unlocks.Open(presence.NewUnlock("root-1", presence.Verified{
+		ChallengeID: unlockID, PersonID: testOwner(t, service), Authenticator: presence.AuthenticatorMacOS,
+		WindowLabel: "main", VerifiedAt: time.Now(),
+	}))
+	unlocked, unlockedFingerprints := resolveReferences(t, service, matcher, person.Reference)
+	release(unlocked, unlockedFingerprints)
+	testutil.FailErr(t, "unlocked handoff", unlocked.HandOff(t.Context(), nil))
 	history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, person.Reference, 0)
 	testutil.FailErr(t, "read uses", err)
-	if history.Items[0].Delivery != DeliveryHandedOff || history.Items[0].AttestationID != "11111111-1111-4111-8111-111111111111" ||
+	if history.Items[0].Delivery != DeliveryHandedOff || history.Items[0].UnlockID != unlockID ||
 		len(history.Items[0].Recipients) != 1 || history.Items[0].Recipients[0].Label != "Local file: .env" {
-		t.Fatalf("attested use = %+v", history.Items[0])
+		t.Fatalf("unlocked use = %+v", history.Items[0])
 	}
-	if history.Items[1].Delivery != DeliveryWithheld {
-		t.Fatalf("refused use = %+v", history.Items[1])
+	if history.Items[1].Delivery != DeliveryWithheld || history.Items[1].UnlockID != "" {
+		t.Fatalf("locked use = %+v", history.Items[1])
 	}
 }
 

@@ -48,14 +48,14 @@ components:
           type: string
           pattern: '^[A-Za-z0-9_-]+$'
           description: Base64url without padding Ed25519 signature from the installed desktop shell.
-    BeginReleaseChallengeRequest:
+    BeginUnlockChallengeRequest:
       x-go-generate: true
       type: object
       required: [option_id, window_label]
       additionalProperties: false
       description: >-
-        Starts presence verification for one pending option that releases
-        values a person gave Painted Wolf Code. The challenge binds the
+        Starts presence verification for one pending option that sends values
+        a person stored while their chat is locked. The challenge binds the
         checkpoint, the option, the exact plan, and the deciding person.
       properties:
         option_id:
@@ -66,3 +66,50 @@ components:
           minLength: 1
           maxLength: 120
           description: Native calling window label, bound into the proof; not an authorization identity.
+    ChatVault:
+      x-go-generate: true
+      type: object
+      required: [chat_session_id, unlocked]
+      additionalProperties: false
+      description: >-
+        Whether a chat may send values a person stored to recipients it
+        already approved. Times are present only while unlocked.
+      properties:
+        chat_session_id:
+          type: string
+          format: uuid
+        unlocked:
+          type: boolean
+        unlocked_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        closes_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: When the unlock ends unless another use extends it.
+        expires_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: When the unlock ends however busy the chat is.
+    LockVaultRequest:
+      x-go-generate: true
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [screen_locked, sleep, app_quit]
+    LockVaultResponse:
+      x-go-generate: true
+      type: object
+      required: [locked]
+      additionalProperties: false
+      properties:
+        locked:
+          type: integer
+          minimum: 0
+          description: Chats whose unlock ended.

@@ -11,7 +11,7 @@ import {
   untrack,
 } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import type { ManagedSecret, ManagedSecretAttestation, ManagedSecretUse } from "../../api/types.ts";
+import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
 import { InlineNotice } from "../../notices/InlineNotice.tsx";
 import {
   noticeFromCaught,
@@ -99,8 +99,6 @@ export function ManagedSecretsPanel(props: Props) {
   const [uses, setUses] = createSignal<ManagedSecretUse[]>([]);
   const [usesLoading, setUsesLoading] = createSignal(false);
   const [usesFailed, setUsesFailed] = createSignal(false);
-  const [confirmations, setConfirmations] = createSignal<ManagedSecretAttestation[]>([]);
-  const [confirmationsFailed, setConfirmationsFailed] = createSignal(false);
   const [revealed, setRevealed] = createSignal<{
     secretId: string;
     value: string;
@@ -239,17 +237,10 @@ export function ManagedSecretsPanel(props: Props) {
     setUses([]);
     setUsesFailed(false);
     setUsesLoading(true);
-    setConfirmations([]);
-    setConfirmationsFailed(false);
-    const [history, attested] = await Promise.allSettled([
-      client.listProjectManagedSecretUses(projectId, id),
-      client.listProjectManagedSecretAttestations(projectId, id),
-    ]);
+    const [history] = await Promise.allSettled([client.listProjectManagedSecretUses(projectId, id)]);
     if (!current()) return;
     if (history.status === "fulfilled") setUses(history.value.uses);
     else setUsesFailed(true);
-    if (attested.status === "fulfilled") setConfirmations(attested.value.attestations);
-    else setConfirmationsFailed(true);
     setUsesLoading(false);
   };
 
@@ -770,10 +761,6 @@ export function ManagedSecretsPanel(props: Props) {
                         items: uses(),
                         loading: usesLoading(),
                         failed: usesFailed(),
-                      }}
-                      confirmations={{
-                        items: confirmations(),
-                        failed: confirmationsFailed(),
                       }}
                       form={detailForm(secret, id)}
                       onCopyReference={() => copyReference(secret)}

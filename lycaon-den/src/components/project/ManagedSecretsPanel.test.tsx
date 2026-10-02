@@ -54,7 +54,6 @@ const secret: ManagedSecret = {
   version: 1,
   use_count: 0,
   reveal_count: 0,
-  release_count: 0,
 };
 
 function chatSecret(index: number): ManagedSecret {
@@ -73,7 +72,6 @@ function chatSecret(index: number): ManagedSecret {
     version: 1,
     use_count: 0,
     reveal_count: 0,
-    release_count: 0,
   };
 }
 
@@ -85,7 +83,6 @@ function clientWith(items: ManagedSecret[], extra: Partial<LycaonClient> = {}) {
       count: items.length,
     })),
     listProjectManagedSecretUses: vi.fn(async () => ({ uses: [], count: 0 })),
-    listProjectManagedSecretAttestations: vi.fn(async () => ({ attestations: [] })),
     ...extra,
   });
 }

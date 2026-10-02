@@ -62,8 +62,6 @@ type sandboxAskResolution struct {
 	Authorized   bool
 	Denied       bool
 	UserGuidance string
-	// AttestationID names the presence that released person-held values.
-	AttestationID string
 }
 
 // awaitSandboxAsk runs one ask from guard to settled checkpoint.
@@ -152,14 +150,10 @@ func settleSandboxAsk(ctx context.Context, req sandboxAskRequest, checkpointID s
 
 func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 	authorized := hitl.CheckpointAuthorizes(final)
-	out := sandboxAskResolution{
+	return sandboxAskResolution{
 		Answered: true, Raised: true, Authorized: authorized, Denied: !authorized,
 		UserGuidance: resolvedUserGuidance(final),
 	}
-	if final != nil && final.Result != nil {
-		out.AttestationID = final.Result.AttestationID
-	}
-	return out
 }
 
 func recordSandboxAskSuppressed(ctx context.Context, req sandboxAskRequest, cause string) {

@@ -32,6 +32,19 @@ func (m *Manager) CancelPendingForSession(ctx context.Context, sessionID, reason
 }
 
 func (m *Manager) cancelPending(ctx context.Context, checkpointID, reason string) error {
+	resolution := stopResolution(ctx)
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "user stopped the session"
+		if resolution.By == authzledger.ResolvedByHostStop {
+			reason = "the session stopped"
+		}
+	}
+	return m.settlePending(ctx, checkpointID, DecisionStatusCanceled, DecisionResult{Approved: false, Comments: reason}, resolution)
+}
+
+// settlePending settles a still-pending checkpoint the host answers itself.
+func (m *Manager) settlePending(ctx context.Context, checkpointID string, status DecisionStatus, result DecisionResult, resolution Resolution) error {
 	unlock := m.resolutionLocks.Lock(checkpointID)
 	defer unlock()
 	row, err := m.store.Get(ctx, checkpointID)
@@ -41,36 +54,27 @@ func (m *Manager) cancelPending(ctx context.Context, checkpointID, reason string
 	if row.Status != DecisionStatusPending {
 		return nil
 	}
-	resolution := stopResolution(ctx)
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "user stopped the session"
-		if resolution.By == authzledger.ResolvedByHostStop {
-			reason = "the session stopped"
-		}
-	}
-	result := DecisionResult{Approved: false, Comments: reason}
 	now := time.Now().UTC()
 	viaOutbox, err := m.store.resolveCheckpoint(
 		ctx,
 		*row,
-		DecisionStatusCanceled,
+		status,
 		&result,
 		nil,
 		now,
 		resolution,
-		m.resolutionSeal(ctx, DecisionStatusCanceled),
+		m.resolutionSeal(ctx, status),
 	)
 	if err != nil {
 		return err
 	}
-	row.Status = DecisionStatusCanceled
+	row.Status = status
 	row.Result = &result
 	row.ResolvedAt = &now
 	row.Resolution = &resolution
 	m.announceResolved(ctx, *row, viaOutbox)
 	if row.Kind == api.CheckpointKindToolApproval {
-		m.notifyToolApprovalTerminal(*row, DecisionStatusCanceled)
+		m.notifyToolApprovalTerminal(*row, status)
 	}
 	return nil
 }

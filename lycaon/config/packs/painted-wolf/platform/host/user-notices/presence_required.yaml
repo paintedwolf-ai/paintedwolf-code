@@ -2,11 +2,11 @@ surfaces: [http]
 notification: { tier: non_catastrophic, scope: project }
 title: Confirmation required
 message: >-
-  This option releases a value you gave Painted Wolf Code, so it needs your
-  confirmation on this device.
+  This option sends a value you stored while this chat is locked, so it needs
+  your confirmation on this device.
 suggested_action: >-
   Choose the option again in the desktop app and complete the operating-system
-  authentication prompt.
+  authentication prompt. Confirming also unlocks the chat.
 scenarios:
   - id: default
     vars: {}

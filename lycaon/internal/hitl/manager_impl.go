@@ -48,8 +48,8 @@ type Manager struct {
 	checkpointWait func(ctx context.Context, sessionID string) (end func())
 	// resolutionLocks serializes resolution and expiry per checkpoint id.
 	resolutionLocks keyedMutex
-	// held verifies presence for plans that release person-held values.
-	held heldRelease
+	// vault verifies presence and holds each chat's unlock for person-held values.
+	vault vaultUnlock
 }
 
 // SetSessionAdmission wires session admission.

@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"gopkg.in/yaml.v3"
 )
@@ -121,9 +120,6 @@ type ApprovalGrant struct {
 	SecretNames         []string                `yaml:"secret_names,omitempty" json:"secret_names,omitempty"`
 	// ExactActionSet contains the covered GrantKeys.
 	ExactActionSet []string `yaml:"exact_action_set,omitempty" json:"exact_action_set,omitempty"`
-	// Attestation records the presence that released person-held values; it
-	// covers them only while the vault's release ledger lists this grant.
-	Attestation *presence.Attestation `yaml:"attestation,omitempty" json:"attestation,omitempty"`
 }
 
 // ApprovalConfig is the on-disk approvals.yaml shape.

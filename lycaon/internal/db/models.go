@@ -818,19 +818,14 @@ type ManagedCookieJarSaves struct {
 	SecretID      sql.NullString `json:"secret_id"`
 }
 
-type ManagedSecretAttestations struct {
-	ID             string         `json:"id"`
-	AttestationID  string         `json:"attestation_id"`
-	SecretID       string         `json:"secret_id"`
-	Version        int64          `json:"version"`
-	Purpose        string         `json:"purpose"`
-	CheckpointID   sql.NullString `json:"checkpoint_id"`
-	RecipientsJson string         `json:"recipients_json"`
-	ReleaseScope   sql.NullString `json:"release_scope"`
-	Authenticator  string         `json:"authenticator"`
-	WindowLabel    string         `json:"window_label"`
-	PersonID       string         `json:"person_id"`
-	AttestedAt     string         `json:"attested_at"`
+type ManagedSecretReveals struct {
+	ID            string `json:"id"`
+	SecretID      string `json:"secret_id"`
+	Version       int64  `json:"version"`
+	Authenticator string `json:"authenticator"`
+	WindowLabel   string `json:"window_label"`
+	PersonID      string `json:"person_id"`
+	RevealedAt    string `json:"revealed_at"`
 }
 
 type ManagedSecretUses struct {
@@ -844,7 +839,7 @@ type ManagedSecretUses struct {
 	ToolCallID     sql.NullString `json:"tool_call_id"`
 	Delivery       string         `json:"delivery"`
 	RecipientsJson string         `json:"recipients_json"`
-	AttestationID  sql.NullString `json:"attestation_id"`
+	UnlockID       sql.NullString `json:"unlock_id"`
 	UsedAt         string         `json:"used_at"`
 }
 
@@ -1891,6 +1886,18 @@ type Turns struct {
 	UpdatedAt       string         `json:"updated_at"`
 	CompletedAt     sql.NullString `json:"completed_at"`
 	ProgressedAt    string         `json:"progressed_at"`
+}
+
+type VaultUnlocks struct {
+	ID            string         `json:"id"`
+	ProjectID     string         `json:"project_id"`
+	ChatSessionID string         `json:"chat_session_id"`
+	PersonID      string         `json:"person_id"`
+	Authenticator string         `json:"authenticator"`
+	WindowLabel   string         `json:"window_label"`
+	UnlockedAt    string         `json:"unlocked_at"`
+	EndedAt       sql.NullString `json:"ended_at"`
+	EndReason     sql.NullString `json:"end_reason"`
 }
 
 type WaitLeases struct {

@@ -146,16 +146,16 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 		t.Fatal("secret cards must face redacted through computeRecommendedOptionID, not the hour rung")
 	}
 	lookup := contractcheck.ReadRepoFile(t, root, "lycaon/internal/settings/secret_grant.go")
-	if !strings.Contains(lookup, "SecretReleaseCovered") || !strings.Contains(lookup, "ReleaseLedger.Covers") {
-		t.Fatal("secret release must be re-evaluated through the approval SSOT, and held values through the vault ledger")
+	if !strings.Contains(lookup, "SecretFingerprintsCovered") {
+		t.Fatal("secret release must be re-evaluated through the approval SSOT")
 	}
 	coverage := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/secret_permission.go")
-	if !strings.Contains(screen, "e.secretRecipientsCovered(finding, recipients, fingerprintValues, custody.HeldFingerprints())") ||
-		!strings.Contains(coverage, ".approvalGate.SecretReleaseCovered") {
+	if !strings.Contains(screen, "e.secretRecipientsCovered(finding, recipients, fingerprintValues)") ||
+		!strings.Contains(coverage, ".approvalGate.SecretFingerprintsCovered") {
 		t.Fatal("secret release coverage must use the approval gate")
 	}
 	approval := contractcheck.ReadRepoFile(t, root, "lycaon/internal/hitl/approval.go")
-	if !strings.Contains(approval, "SecretReleaseCovered(chatSessionID, projectID, destinationID, surface string, fingerprints, held []string) (bool, map[string]string)") {
+	if !strings.Contains(approval, "SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface string, fingerprints []string) bool") {
 		t.Fatal("ApprovalGate must require exact secret-release coverage")
 	}
 }

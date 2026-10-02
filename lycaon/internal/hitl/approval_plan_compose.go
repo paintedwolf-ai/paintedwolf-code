@@ -66,7 +66,7 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	if err != nil {
 		return nil, nil, err
 	}
-	plan, err = plan.RequirePresence(held)
+	plan, err = plan.WithHeld(held)
 	return plan, decision, err
 }
 

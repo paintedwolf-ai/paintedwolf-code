@@ -33,9 +33,9 @@ func sign(privateKey ed25519.PrivateKey, challenge Challenge, authenticator stri
 
 func TestBrokerVerifiesTheSignedSubjectForThePersonWhoBegan(t *testing.T) {
 	broker, privateKey := configuredBroker(t)
-	challenge, err := broker.Begin(Claim{Purpose: PurposeRelease, PersonID: "owner", WindowLabel: "main", Key: "one", Subject: testSubject{Item: "card"}})
+	challenge, err := broker.Begin(Claim{Purpose: PurposeUnlock, PersonID: "owner", WindowLabel: "main", Key: "one", Subject: testSubject{Item: "card"}})
 	testutil.FailErr(t, "begin", err)
-	verified, err := broker.Complete(sign(privateKey, challenge, AuthenticatorMacOS), PurposeRelease, "owner")
+	verified, err := broker.Complete(sign(privateKey, challenge, AuthenticatorMacOS), PurposeUnlock, "owner")
 	testutil.FailErr(t, "complete", err)
 	var subject testSubject
 	testutil.FailErr(t, "decode subject", json.Unmarshal(verified.Subject, &subject))
@@ -43,7 +43,7 @@ func TestBrokerVerifiesTheSignedSubjectForThePersonWhoBegan(t *testing.T) {
 		verified.Authenticator != AuthenticatorMacOS || verified.ChallengeID != challenge.ID {
 		t.Fatalf("verified = %+v subject = %+v", verified, subject)
 	}
-	if _, err := broker.Complete(sign(privateKey, challenge, AuthenticatorMacOS), PurposeRelease, "owner"); !errors.Is(err, ErrChallengeNotFound) {
+	if _, err := broker.Complete(sign(privateKey, challenge, AuthenticatorMacOS), PurposeUnlock, "owner"); !errors.Is(err, ErrChallengeNotFound) {
 		t.Fatalf("replayed proof error = %v", err)
 	}
 }
@@ -53,12 +53,12 @@ func TestBrokerRefusesAProofForAnotherPurposeOrPerson(t *testing.T) {
 	broker, privateKey := configuredBroker(t)
 	reveal, err := broker.Begin(Claim{Purpose: PurposeReveal, PersonID: "owner", WindowLabel: "main", Key: "secret"})
 	testutil.FailErr(t, "begin reveal", err)
-	if _, err := broker.Complete(sign(privateKey, reveal, AuthenticatorMacOS), PurposeRelease, "owner"); !errors.Is(err, ErrDenied) {
+	if _, err := broker.Complete(sign(privateKey, reveal, AuthenticatorMacOS), PurposeUnlock, "owner"); !errors.Is(err, ErrDenied) {
 		t.Fatalf("reveal proof answered a release: %v", err)
 	}
-	release, err := broker.Begin(Claim{Purpose: PurposeRelease, PersonID: "owner", WindowLabel: "main", Key: "card"})
+	release, err := broker.Begin(Claim{Purpose: PurposeUnlock, PersonID: "owner", WindowLabel: "main", Key: "card"})
 	testutil.FailErr(t, "begin release", err)
-	if _, err := broker.Complete(sign(privateKey, release, AuthenticatorMacOS), PurposeRelease, "someone-else"); !errors.Is(err, ErrDenied) {
+	if _, err := broker.Complete(sign(privateKey, release, AuthenticatorMacOS), PurposeUnlock, "someone-else"); !errors.Is(err, ErrDenied) {
 		t.Fatalf("another person completed a release: %v", err)
 	}
 }
@@ -67,9 +67,9 @@ func TestBrokerRefusesAForgedSignature(t *testing.T) {
 	broker, _ := configuredBroker(t)
 	_, otherKey, err := ed25519.GenerateKey(rand.Reader)
 	testutil.FailErr(t, "generate other key", err)
-	challenge, err := broker.Begin(Claim{Purpose: PurposeRelease, PersonID: "owner", WindowLabel: "main", Key: "card"})
+	challenge, err := broker.Begin(Claim{Purpose: PurposeUnlock, PersonID: "owner", WindowLabel: "main", Key: "card"})
 	testutil.FailErr(t, "begin", err)
-	if _, err := broker.Complete(sign(otherKey, challenge, AuthenticatorMacOS), PurposeRelease, "owner"); !errors.Is(err, ErrDenied) {
+	if _, err := broker.Complete(sign(otherKey, challenge, AuthenticatorMacOS), PurposeUnlock, "owner"); !errors.Is(err, ErrDenied) {
 		t.Fatalf("forged signature error = %v", err)
 	}
 }

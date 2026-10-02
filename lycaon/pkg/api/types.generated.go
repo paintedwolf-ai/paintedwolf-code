@@ -328,13 +328,17 @@ type ApprovalGrantsResponse struct {
 	Quiets map[string]AskQuiet `json:"quiets,omitempty"`
 }
 
-// ApprovalHeldRelease Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none.
+// ApprovalHeldRelease Values a person stored that an approving option would hand to the listed recipients. They leave only while the person's chat is unlocked: while it is locked, every option whose decision_action is approve needs the person's verified presence on this device, which also unlocks the chat, and the API bearer alone cannot answer it. A redacted send hands over nothing and needs none.
 type ApprovalHeldRelease struct {
+	// The chat whose unlock these values leave under.
+	ChatSessionID string `json:"chat_session_id"`
+	// The recipients are already approved; the card exists to unlock the chat, and its one option needs presence.
+	UnlockOnly bool                      `json:"unlock_only,omitempty"`
 	Secrets    []ApprovalHeldSecret      `json:"secrets"`
 	Recipients []ApprovalSecretRecipient `json:"recipients"`
 }
 
-// ApprovalHeldSecret One value a person gave Painted Wolf Code that this approval would release.
+// ApprovalHeldSecret One value a person stored that this approval would send.
 type ApprovalHeldSecret struct {
 	Reference string `json:"reference"`
 	Name      string `json:"name"`
@@ -720,8 +724,8 @@ type BeginManagedSecretRevealRequest struct {
 	WindowLabel string `json:"window_label"`
 }
 
-// BeginReleaseChallengeRequest Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
-type BeginReleaseChallengeRequest struct {
+// BeginUnlockChallengeRequest Starts presence verification for one pending option that sends values a person stored while their chat is locked. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
+type BeginUnlockChallengeRequest struct {
 	OptionID string `json:"option_id"`
 	// Native calling window label, bound into the proof; not an authorization identity.
 	WindowLabel string `json:"window_label"`
@@ -1059,6 +1063,17 @@ type ChatContentSearchPage struct {
 	Matches []ChatContentMatch `json:"matches"`
 	// Opaque cursor for the next search page; absent when the search reached the end of the content.
 	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// ChatVault Whether a chat may send values a person stored to recipients it already approved. Times are present only while unlocked.
+type ChatVault struct {
+	ChatSessionID string `json:"chat_session_id"`
+	Unlocked      bool   `json:"unlocked"`
+	UnlockedAt    string `json:"unlocked_at,omitempty"`
+	// When the unlock ends unless another use extends it.
+	ClosesAt string `json:"closes_at,omitempty"`
+	// When the unlock ends however busy the chat is.
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 // CheckpointDecisionMeta
@@ -3669,6 +3684,17 @@ type LocalDataStatus struct {
 	WorkspaceCaches []WorkspaceCacheStatus  `json:"workspace_caches"`
 }
 
+// LockVaultRequest
+type LockVaultRequest struct {
+	Reason string `json:"reason"`
+}
+
+// LockVaultResponse
+type LockVaultResponse struct {
+	// Chats whose unlock ended.
+	Locked int `json:"locked"`
+}
+
 // LogDigest
 type LogDigest struct {
 	Format      LogFormat            `json:"format"`
@@ -3784,30 +3810,6 @@ type ManagedSecret struct {
 	LastRevealedAt *string `json:"last_revealed_at,omitempty"`
 	// Successful authenticated human reveals retained for this capability.
 	RevealCount int64 `json:"reveal_count"`
-	// Most recent presence-verified release to a recipient; absent when never released.
-	LastReleasedAt *string `json:"last_released_at,omitempty"`
-	// Presence-verified releases retained for this capability.
-	ReleaseCount int64 `json:"release_count"`
-}
-
-// ManagedSecretAttestation One presence-verified disclosure: a reveal to the person's own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof.
-type ManagedSecretAttestation struct {
-	AttestationID string `json:"attestation_id"`
-	Purpose       string `json:"purpose"`
-	Version       int64  `json:"version"`
-	// The approval a release answered.
-	CheckpointID string                      `json:"checkpoint_id,omitempty"`
-	Recipients   []ManagedSecretUseRecipient `json:"recipients"`
-	// How long a release keeps covering its recipients.
-	ReleaseScope  string                `json:"release_scope,omitempty"`
-	Authenticator PresenceAuthenticator `json:"authenticator"`
-	PersonID      string                `json:"person_id"`
-	AttestedAt    string                `json:"attested_at"`
-}
-
-// ManagedSecretAttestationList
-type ManagedSecretAttestationList struct {
-	Attestations []ManagedSecretAttestation `json:"attestations"`
 }
 
 // ManagedSecretList
@@ -3850,8 +3852,8 @@ type ManagedSecretUse struct {
 	ChatSessionID string `json:"chat_session_id,omitempty"`
 	// Recipients the release that handed the value off reviewed; empty until one did.
 	Recipients []ManagedSecretUseRecipient `json:"recipients,omitempty"`
-	// The presence attestation that released a value a person gave; absent otherwise.
-	AttestationID string `json:"attestation_id,omitempty"`
+	// The unlock a value a person stored left under; the person verified presence to open it for this chat. Absent for other values and for uses that did not leave.
+	UnlockID string `json:"unlock_id,omitempty"`
 }
 
 // ManagedSecretUseList A bounded rolling window of recent uses, newest first. Not a permanent ledger.

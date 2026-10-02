@@ -263,7 +263,7 @@ func TestSecretOutboundReleasesChatSecretsLocallyBelowStrict(t *testing.T) {
 	}
 }
 
-// A value a person gave asks at every posture, even toward a trusted
+// A value a person stored asks at every posture, even toward a trusted
 // destination, a public-inbound source, or the chat's own processes.
 func TestHeldSecretAlwaysAsks(t *testing.T) {
 	for _, posture := range []Posture{PostureLight, PostureBalanced, PostureStrict} {

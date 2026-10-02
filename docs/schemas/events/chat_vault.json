@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/chat_vault.json",
+  "$ref": "../../openapi/components/schemas/presence.yaml#/components/schemas/ChatVault",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChatVault"
+}

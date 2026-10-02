@@ -95,8 +95,8 @@ func (coveringHostResourceGate) RevokeGrantInstalledBy(string, string) (bool, er
 	return false, nil
 }
 func (coveringHostResourceGate) ListGrants(string) []hitl.ApprovalGrant { return nil }
-func (coveringHostResourceGate) SecretReleaseCovered(string, string, string, string, []string, []string) (bool, map[string]string) {
-	return false, nil
+func (coveringHostResourceGate) SecretFingerprintsCovered(string, string, string, string, []string) bool {
+	return false
 }
 func (coveringHostResourceGate) SecretRedactionStanding(string, []string) bool { return false }
 func (coveringHostResourceGate) PutAskQuiet(hitl.AskQuiet, int) (hitl.AskQuiet, bool) {

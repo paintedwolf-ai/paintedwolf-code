@@ -134,9 +134,9 @@ type CheckpointManager interface {
 type ApprovalOptionResolver interface {
 	ResolveApprovalOption(ctx context.Context, sessionID, checkpointID, optionID string) (*CheckpointResponse, error)
 	ResolveApprovalOptionBy(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error)
-	// BeginReleaseChallenge binds the person's presence to one option that
-	// releases values they hold.
-	BeginReleaseChallenge(ctx context.Context, sessionID, checkpointID, optionID, windowLabel string) (ReleaseChallenge, error)
+	// BeginUnlockChallenge binds the person's presence to one option that
+	// sends values they hold while their chat is locked.
+	BeginUnlockChallenge(ctx context.Context, sessionID, checkpointID, optionID, windowLabel string) (UnlockChallenge, error)
 }
 
 // ApprovalAuthorityInstallerSetter wires the host authority transaction used

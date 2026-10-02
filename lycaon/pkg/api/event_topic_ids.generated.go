@@ -83,6 +83,11 @@ const (
 	// resolution. Session-scoped. The transcript page carries the same shape for
 	// the turns it shows, so a reload draws what the event drew.
 	EventTopicTurnLoad EventTopic = "turn_load"
+	// EventTopicChatVault Session-scoped, ephemeral. A chat was unlocked, a use
+	// extended its unlock, or the unlock ended. Each event carries the chat's
+	// complete state; clients re-read GET /v1/sessions/{id}/vault when the stream
+	// reopens.
+	EventTopicChatVault EventTopic = "chat_vault"
 	// EventTopicSourceView Project-scoped, content-free retained source
 	// presentation invalidation. View owners refresh bounded state and rows;
 	// paths, queries, failures, and source content never appear in this event.
@@ -123,6 +128,7 @@ var allEventTopicValues = []EventTopic{
 	EventTopicPreflight,
 	EventTopicTurnClock,
 	EventTopicTurnLoad,
+	EventTopicChatVault,
 	EventTopicSourceView,
 }
 

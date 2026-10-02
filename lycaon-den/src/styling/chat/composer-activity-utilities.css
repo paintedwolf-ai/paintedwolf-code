@@ -84,3 +84,11 @@ margin-left: auto;
     cursor: default;
   }
 }
+
+@utility den-composer-vault-unlock {
+  color: var(--den-warning-text);
+  &:disabled {
+    color: var(--den-text-muted);
+    cursor: default;
+  }
+}

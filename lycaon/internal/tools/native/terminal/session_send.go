@@ -56,7 +56,7 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			}
 		}
 		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-			return "", tools.HeldHandOffReject("terminal_send")
+			return "", tools.HeldHandOffReject("terminal_send", err)
 		}
 		if err := bg.WritePTY(tctx.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)

@@ -163,10 +163,10 @@ type serveBuilder struct {
 	secretHarvest       *secretharvest.Runtime
 	secretCaps          *secretcap.Service
 	secretFingerprinter *secretmatch.Fingerprinter
-	// presenceBroker verifies that a person is at this device; releaseLedger
-	// lists the release grants they attested, inside the vault.
+	// presenceBroker verifies that a person is at this device; vaultUnlocks
+	// holds the chats their presence unlocked.
 	presenceBroker   *presence.Broker
-	releaseLedger    *presence.ReleaseLedger
+	vaultUnlocks     *presence.Unlocks
 	rejectFmt        *guidance.StaticRejectFormatter
 	hintCfg          *guidance.HintConfig
 	agentRegistry    *orchestration.MemoryAgentRegistry

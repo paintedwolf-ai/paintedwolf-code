@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/presence"
 )
 
 // DeferredGate requires approval until Seal attaches the policy producers.
@@ -120,12 +119,9 @@ func (d *DeferredGate) ListGrants(chatSessionID string) []hitl.ApprovalGrant {
 }
 
 // An unsealed gate cannot confirm secret authority.
-func (d *DeferredGate) SecretReleaseCovered(chatSessionID, projectID, destinationID, surface string, fingerprints, held []string) (bool, map[string]string) {
+func (d *DeferredGate) SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface string, fingerprints []string) bool {
 	inner := d.inner()
-	if inner == nil {
-		return false, nil
-	}
-	return inner.SecretReleaseCovered(chatSessionID, projectID, destinationID, surface, fingerprints, held)
+	return inner != nil && inner.SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface, fingerprints)
 }
 
 // An unsealed gate cannot confirm standing redaction authority.
@@ -217,11 +213,6 @@ func (b *GateBuilder) WithApprovalRules(src ApprovalRuleCatalogSource) *GateBuil
 			s.ApprovalRules = src
 		}
 	})
-}
-
-// WithReleaseLedger lets attested release grants cover person-held values.
-func (b *GateBuilder) WithReleaseLedger(ledger *presence.ReleaseLedger) *GateBuilder {
-	return b.with(func(s *Sources) { s.ReleaseLedger = ledger })
 }
 
 func (b *GateBuilder) with(apply func(*Sources)) *GateBuilder {

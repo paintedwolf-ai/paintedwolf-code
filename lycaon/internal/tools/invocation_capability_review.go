@@ -14,17 +14,10 @@ import (
 type capabilityReviewRootsKey struct{}
 type capabilityReviewSecretKey struct{}
 
-// reviewedSecretPermission is a combined card's secret release, held until
-// the invocation boundary records it.
-type reviewedSecretPermission struct {
-	permission  *hitl.SecretPermission
-	attestation string
-}
-
 // Secret targets remain available until every capability replays the held subject.
-func approveCapabilitySecretPermission(ctx context.Context, tc ToolContext, permission *hitl.SecretPermission, attestation string) {
+func approveCapabilitySecretPermission(ctx context.Context, tc ToolContext, permission *hitl.SecretPermission) {
 	if !hitl.HasPreparedApprovalAnswers(ctx) {
-		approveSecretPermission(tc.Secrets, permission, attestation)
+		approveSecretPermission(tc.Secrets, permission)
 	}
 }
 
@@ -83,7 +76,7 @@ func (e *DefaultToolExecutor) reviewInvocationCapabilities(ctx context.Context, 
 		return ctx, e.rejectApprovalErr(ctx, tool, tc.Agent, args, isolationCheckpointReject(capabilityReviewDenialCode(plan), final))
 	}
 	if secretIncluded {
-		ctx = context.WithValue(ctx, capabilityReviewSecretKey{}, reviewedSecretPermission{permission: permission, attestation: attestationOf(final)})
+		ctx = context.WithValue(ctx, capabilityReviewSecretKey{}, permission)
 	}
 	return ctx, nil
 }

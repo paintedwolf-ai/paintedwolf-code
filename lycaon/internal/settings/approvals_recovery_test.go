@@ -97,17 +97,17 @@ func TestSecretLeaseRecoveryPreservesOtherApprovalsAndRequiresReapproval(t *test
 		t.Fatalf("recovery changed unrelated grants: %+v", grants)
 	}
 	approvalGate := NewRuleApprovalGate(store, NoSources()).(*RuleApprovalGate)
-	if releaseCovered(approvalGate, "", "project-id", "provider", "model_request", []string{"sf1_one"}) {
+	if approvalGate.SecretFingerprintsCovered("", "project-id", "provider", "model_request", []string{"sf1_one"}) {
 		t.Fatal("removing the incompatible lease retained secret authority")
 	}
 	putSecretGrant(t, store, "reviewed-secret", "project-id", t.TempDir(), []secretmatch.SecretFingerprint{"sf1_one"})
 	reloaded, err := NewApprovalStoreAt(path)
 	testutil.FailErr(t, "reload reviewed recipient lease", err)
 	approvalGate = NewRuleApprovalGate(reloaded, NoSources()).(*RuleApprovalGate)
-	if !releaseCovered(approvalGate, "", "project-id", "provider", "model_request", []string{"sf1_one"}) {
+	if !approvalGate.SecretFingerprintsCovered("", "project-id", "provider", "model_request", []string{"sf1_one"}) {
 		t.Fatal("new approval did not restore the reviewed recipient authority")
 	}
-	if releaseCovered(approvalGate, "", "project-id", "other-provider", "model_request", []string{"sf1_one"}) {
+	if approvalGate.SecretFingerprintsCovered("", "project-id", "other-provider", "model_request", []string{"sf1_one"}) {
 		t.Fatal("new approval widened to another recipient")
 	}
 }

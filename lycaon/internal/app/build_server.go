@@ -162,7 +162,7 @@ func (b *serveBuilder) wireServer() error {
 		Authority: capabilityadmin.Authority{
 			DirectIP: b.directIPCapabilityRT, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
 			Loopback: b.sandboxLoopbackRT, ReadPaths: b.sandboxReadPathRT, WriteRoots: b.sandboxWriteRootRT,
-			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr),
+			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.vaultUnlocks,
 		},
 		ScanCoordinator: b.scanCoordinator, ScannerRegistry: b.scannerReg, ScanCadence: b.scanCadence,
 		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.detections.publish,

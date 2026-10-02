@@ -1,4 +1,5 @@
 import { createComposerElevatedAccess, ElevatedAccessButton } from "./ComposerElevatedAccess.tsx";
+import { createComposerVaultUnlock, VaultUnlockButton } from "./ComposerVaultUnlock.tsx";
 import { createComposerEditMenu } from "./composer-edit-menu.ts";
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import {
@@ -328,6 +329,12 @@ export function Composer(props: Props) {
     sessionId: () => props.sessionId,
     revision: () => `${props.projectId}:${props.approvalsRevision ?? 0}:${props.sidecarStatus}`,
     focus: () => inputRef?.focus({ preventScroll: true }),
+  });
+  const vaultUnlock = createComposerVaultUnlock({
+    client: () => { props.sidecarStatus; return getLycaonClient(); },
+    connected: () => props.sidecarStatus === "connected",
+    sessionId: () => props.sessionId,
+    revision: () => `${props.projectId}:${props.sidecarStatus}`,
   });
   let footerRef: HTMLElement | undefined;
   let bodyRef: HTMLDivElement | undefined;
@@ -1249,6 +1256,7 @@ export function Composer(props: Props) {
                 </div>
               </Show>
               <ElevatedAccessButton state={elevated} />
+              <VaultUnlockButton state={vaultUnlock} />
             </div>
             <button
               type="button"

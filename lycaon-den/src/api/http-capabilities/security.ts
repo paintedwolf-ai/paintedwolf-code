@@ -9,6 +9,7 @@ import type {
   ApprovalConfigResponse,
   ApprovalGrant,
   ElevatedAccessSummary,
+  ChatVault,
   RevokeElevatedAccessResponse,
   ApprovalGrantsResponse,
   ApprovalRecentAsksResponse,
@@ -25,7 +26,6 @@ import type {
   CreateManagedSecretRequest,
   ManagedSecret,
   ManagedSecretList,
-  ManagedSecretAttestationList,
   ManagedSecretUseList,
   ReplaceManagedSecretValueRequest,
   UpdateManagedSecretRequest,
@@ -82,11 +82,6 @@ export interface SecurityClient {
     secretId: string,
     opts?: { limit?: number; cursor?: string },
   ): Promise<ManagedSecretUseList>;
-  /** Presence-verified reveals and releases, newest first. */
-  listProjectManagedSecretAttestations(
-    projectId: string,
-    secretId: string,
-  ): Promise<ManagedSecretAttestationList>;
   /** Permanently disables a secret reference. */
   revokeProjectManagedSecret(
     projectId: string,
@@ -162,6 +157,8 @@ export interface SecurityClient {
   getApprovalsSettings(projectId?: string): Promise<ApprovalConfigResponse>;
   updateApprovalsSettings(req: UpdateApprovalsSettingsRequest, projectId?: string): Promise<ApprovalConfigResponse>;
   getElevatedAccess(sessionId: string): Promise<ElevatedAccessSummary>;
+  getChatVault(sessionId: string): Promise<ChatVault>;
+  lockChatVault(sessionId: string): Promise<ChatVault>;
   revokeElevatedAccess(sessionId: string): Promise<RevokeElevatedAccessResponse>;
   listApprovalGrants(sessionId?: string): Promise<ApprovalGrantsResponse>;
   listApprovalAsks(days?: number, projectId?: string): Promise<ApprovalRecentAsksResponse>;
@@ -204,10 +201,6 @@ export function createSecurityClient(j: JsonRequester, connection: BackendConnec
     listProjectManagedSecretUses: (projectId, secretId, opts) =>
       j(
         `/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretId)}/uses${formatQuery({ limit: opts?.limit, cursor: opts?.cursor })}`,
-      ),
-    listProjectManagedSecretAttestations: (projectId, secretId) =>
-      j(
-        `/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretId)}/attestations`,
       ),
     revokeProjectManagedSecret: (projectId, secretId) =>
       j(
@@ -300,6 +293,8 @@ export function createSecurityClient(j: JsonRequester, connection: BackendConnec
         },
       ),
     getElevatedAccess: (id) => j(`/v1/sessions/${encodeURIComponent(id)}/elevated-access`),
+    getChatVault: (id) => j(`/v1/sessions/${encodeURIComponent(id)}/vault`),
+    lockChatVault: (id) => j(`/v1/sessions/${encodeURIComponent(id)}/vault/lock`, { method: "POST" }),
     revokeElevatedAccess: (id) => j(`/v1/sessions/${encodeURIComponent(id)}/elevated-access/revoke`, { method: "POST" }),
     listApprovalGrants: (sessionId) =>
       j(`/v1/approval-grants${formatQuery({ session_id: sessionId })}`),

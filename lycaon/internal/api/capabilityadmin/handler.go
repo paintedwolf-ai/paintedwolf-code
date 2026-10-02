@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
@@ -36,6 +37,8 @@ type Authority struct {
 	ReadPaths         *approvalstate.SandboxPathGrantRuntime
 	WriteRoots        *approvalstate.SandboxPathGrantRuntime
 	Sockets           *approvalstate.SocketCapabilityRuntime
+	// Vault holds each chat's unlock for values a person stored.
+	Vault *presence.Unlocks
 }
 
 // Deps are the capability routes' dependencies, fixed at construction.

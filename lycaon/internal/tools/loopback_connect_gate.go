@@ -24,13 +24,11 @@ type LoopbackConnectAsk struct {
 // LoopbackConnectResult is the resolved local client authority.
 type LoopbackConnectResult struct {
 	SecretApproved bool
-	// SecretAttestationID names the presence that released person-held values.
-	SecretAttestationID string
-	Raised              bool
-	Authorized          bool
-	Denied              bool
-	Ports               []uint16
-	UserGuidance        string
+	Raised         bool
+	Authorized     bool
+	Denied         bool
+	Ports          []uint16
+	UserGuidance   string
 }
 
 // LoopbackConnectGate raises a local-service checkpoint and exposes its chat lease.

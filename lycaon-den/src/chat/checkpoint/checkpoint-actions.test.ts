@@ -7,6 +7,8 @@ vi.mock("../../platform/presence.ts", () => ({ resolveCheckpointWithPresence }))
 import type { PendingCheckpoint } from "./checkpoint-model.ts";
 import { toolApprovalFixture } from "./approval-test-fixtures.ts";
 import { resolveToolApproval } from "./checkpoint-actions.ts";
+import { LycaonApiError } from "../../api/http.ts";
+import { applyChatVault } from "../vault/chat-vault-store.ts";
 
 function fixture() {
   const resolveCheckpoint = vi.fn().mockResolvedValue({});
@@ -71,6 +73,7 @@ describe("held release approvals", () => {
     tool_approval: (() => {
       const payload = toolApprovalFixture();
       payload.plan.held_release = {
+        chat_session_id: "session-1",
         secrets: [{ reference: "{{paintedwolf-secret:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}}", name: "Deploy key", version: 1 }],
         recipients: [{ label: "Local file: .env", surface: "file", kind: "file" }],
       };
@@ -85,6 +88,34 @@ describe("held release approvals", () => {
     await resolveToolApproval(f.client, held, "approve", { optionId: option.id });
     expect(resolveCheckpointWithPresence).toHaveBeenCalledWith("session-1", "checkpoint-tool", option.id);
     expect(f.resolveCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it("approves directly while the chat is unlocked", async () => {
+    resolveCheckpointWithPresence.mockReset();
+    applyChatVault({ chat_session_id: "session-1", unlocked: true });
+    try {
+      const f = fixture();
+      const option = held.tool_approval!.plan.options.find((candidate) => candidate.decision_action === "approve")!;
+      await resolveToolApproval(f.client, held, "approve", { optionId: option.id });
+      expect(f.resolveCheckpoint).toHaveBeenCalled();
+      expect(resolveCheckpointWithPresence).not.toHaveBeenCalled();
+    } finally {
+      applyChatVault({ chat_session_id: "session-1", unlocked: false });
+    }
+  });
+
+  it("confirms the person when the chat locked in the meantime", async () => {
+    resolveCheckpointWithPresence.mockReset().mockResolvedValue({});
+    applyChatVault({ chat_session_id: "session-1", unlocked: true });
+    try {
+      const f = fixture();
+      f.resolveCheckpoint.mockRejectedValueOnce(new LycaonApiError("locked", 409, "presence_required"));
+      const option = held.tool_approval!.plan.options.find((candidate) => candidate.decision_action === "approve")!;
+      await resolveToolApproval(f.client, held, "approve", { optionId: option.id });
+      expect(resolveCheckpointWithPresence).toHaveBeenCalledWith("session-1", "checkpoint-tool", option.id);
+    } finally {
+      applyChatVault({ chat_session_id: "session-1", unlocked: false });
+    }
   });
 
   it("keeps No on the ordinary path", async () => {

@@ -2,12 +2,12 @@ surfaces: [http]
 notification: { tier: non_catastrophic, scope: project }
 title: No confirmation needed
 message: >-
-  This option releases no value that needs your confirmation, so it takes no
-  authentication.
+  This option sends no value you stored, or this chat is already unlocked, so
+  it takes no authentication.
 suggested_action: >-
   Choose the option again without confirming.
 scenarios:
   - id: default
     vars: {}
     expect_contains:
-      - releases no value that needs your confirmation
+      - takes no authentication

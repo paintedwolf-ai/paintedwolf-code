@@ -18,7 +18,7 @@ export const API_OPERATIONS = {
   approveBlueprint: { method: "POST", path: "/v1/projects/{id}/blueprints/{blueprint_id}/approve" },
   assessProjectRemoval: { method: "GET", path: "/v1/projects/{id}/removal-assessment" },
   attachProjectRoot: { method: "POST", path: "/v1/projects/{id}/roots" },
-  beginCheckpointReleaseChallenge: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges" },
+  beginCheckpointUnlockChallenge: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}/unlock-challenges" },
   beginProjectManagedSecretReveal: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges" },
   bindGitWorktree: { method: "PUT", path: "/v1/sessions/{id}/git-worktree" },
   browseProjectSource: { method: "GET", path: "/v1/projects/{id}/source/browse" },
@@ -102,6 +102,7 @@ export const API_OPERATIONS = {
   getBlueprint: { method: "GET", path: "/v1/projects/{id}/blueprints/{blueprint_id}" },
   getBoard: { method: "GET", path: "/v1/projects/{id}/board" },
   getChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content" },
+  getChatVault: { method: "GET", path: "/v1/sessions/{id}/vault" },
   getCodeScan: { method: "GET", path: "/v1/projects/{id}/scans/{scan_id}" },
   getContributions: { method: "GET", path: "/v1/contributions" },
   getCoordinatorContext: { method: "GET", path: "/v1/sessions/{id}/coordinator-context" },
@@ -191,7 +192,6 @@ export const API_OPERATIONS = {
   listMcpRecipes: { method: "GET", path: "/v1/mcp/recipes" },
   listProjectArtifacts: { method: "GET", path: "/v1/projects/{id}/artifacts" },
   listProjectFindingIgnores: { method: "GET", path: "/v1/projects/{id}/findings/ignores" },
-  listProjectManagedSecretAttestations: { method: "GET", path: "/v1/projects/{id}/secrets/{secret_id}/attestations" },
   listProjectManagedSecretUses: { method: "GET", path: "/v1/projects/{id}/secrets/{secret_id}/uses" },
   listProjectManagedSecrets: { method: "GET", path: "/v1/projects/{id}/secrets" },
   listProjectScanners: { method: "GET", path: "/v1/projects/{id}/scanners" },
@@ -218,6 +218,8 @@ export const API_OPERATIONS = {
   listWorkflowTemplates: { method: "GET", path: "/v1/workflow-templates" },
   listWorkflows: { method: "GET", path: "/v1/workflows" },
   locateSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/locate" },
+  lockChatVault: { method: "POST", path: "/v1/sessions/{id}/vault/lock" },
+  lockVault: { method: "POST", path: "/v1/vault/lock" },
   makeProjectSourceEditable: { method: "POST", path: "/v1/projects/{id}/source/editable" },
   markEditorSecret: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark" },
   markSessionSeen: { method: "POST", path: "/v1/sessions/{id}/seen" },
@@ -357,7 +359,7 @@ export type OperationPathParameters = {
   approveBlueprint: { id: string | number; blueprint_id: string | number; };
   assessProjectRemoval: { id: string | number; };
   attachProjectRoot: { id: string | number; };
-  beginCheckpointReleaseChallenge: { id: string | number; checkpoint_id: string | number; };
+  beginCheckpointUnlockChallenge: { id: string | number; checkpoint_id: string | number; };
   beginProjectManagedSecretReveal: { id: string | number; secret_id: string | number; };
   bindGitWorktree: { id: string | number; };
   browseProjectSource: { id: string | number; };
@@ -441,6 +443,7 @@ export type OperationPathParameters = {
   getBlueprint: { id: string | number; blueprint_id: string | number; };
   getBoard: { id: string | number; };
   getChatContent: { id: string | number; message_id: string | number; };
+  getChatVault: { id: string | number; };
   getCodeScan: { id: string | number; scan_id: string | number; };
   getContributions: Record<string, never>;
   getCoordinatorContext: { id: string | number; };
@@ -530,7 +533,6 @@ export type OperationPathParameters = {
   listMcpRecipes: Record<string, never>;
   listProjectArtifacts: { id: string | number; };
   listProjectFindingIgnores: { id: string | number; };
-  listProjectManagedSecretAttestations: { id: string | number; secret_id: string | number; };
   listProjectManagedSecretUses: { id: string | number; secret_id: string | number; };
   listProjectManagedSecrets: { id: string | number; };
   listProjectScanners: { id: string | number; };
@@ -557,6 +559,8 @@ export type OperationPathParameters = {
   listWorkflowTemplates: Record<string, never>;
   listWorkflows: Record<string, never>;
   locateSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };
+  lockChatVault: { id: string | number; };
+  lockVault: Record<string, never>;
   makeProjectSourceEditable: { id: string | number; };
   markEditorSecret: { id: string | number; document_id: string | number; };
   markSessionSeen: { id: string | number; };

@@ -17,7 +17,7 @@ Den may implement complex local behavior (focus, panes, shortcuts, drafts, virtu
 | Tool outcome, process state, workers, and evidence | Activity-span projection, disclosure, animation, and navigation |
 | Source bytes and editor-document durability | Editor view state, selection, tabs, and layout |
 | Settings effects and contribution frame | Form drafts and local interaction feedback |
-| Managed-secret reveal eligibility, challenge, and audit | Native user-presence prompt and ephemeral remasked presentation |
+| Managed-secret reveal and chat unlock: eligibility, challenge, unlock lifetime, and audit | Native user-presence prompt, ephemeral remasked presentation, and reporting screen lock, sleep, and quit |
 | Events and resource revisions | Cache invalidation, hydration, and rendering |
 
 If a rendering decision requires two host projections, Den waits until they describe one coherent scope. It does not fill a gap by inspecting transcript wording or an older project cache.

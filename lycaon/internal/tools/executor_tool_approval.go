@@ -46,9 +46,19 @@ type toolApprovalRaise struct {
 	Presence PresenceReporter
 }
 
-// releasesHeld reports whether the card would hand over values a person gave.
+// releasesHeld reports whether the card would hand over values a person stored.
 func (in toolApprovalRaise) releasesHeld() bool {
-	return (in.Plan != nil && in.Plan.Held != nil) || (in.SecretScreen != nil && in.SecretScreen.Held != nil)
+	return in.held() != nil
+}
+
+func (in toolApprovalRaise) held() *hitl.HeldRelease {
+	if in.Plan != nil && in.Plan.Held != nil {
+		return in.Plan.Held
+	}
+	if in.SecretScreen != nil {
+		return in.SecretScreen.Held
+	}
+	return nil
 }
 
 func (e *DefaultToolExecutor) grantOffers(action hitl.ProposedAction, result *hitl.ApprovalResult) []hitl.ApprovalGrantOffer {
@@ -211,6 +221,14 @@ func (e *DefaultToolExecutor) raiseAndWaitToolApproval(ctx context.Context, in t
 		})
 	}
 	defer HoldForApproval(in.Presence, resp.CheckpointID)()
+	// A send waiting only on the unlock waits for this card instead of
+	// raising its own, and a refusal here holds it too.
+	if held := in.held(); held != nil && !held.UnlockOnly {
+		closed := e.heldAsks.open(held.ChatSessionID)
+		final, err := hitl.WaitForCheckpoint(ctx, e.checkpointMgr, resp.CheckpointID)
+		closed(err == nil && final != nil && final.Status == hitl.DecisionStatusRejected)
+		return final, err
+	}
 	return hitl.WaitForCheckpoint(ctx, e.checkpointMgr, resp.CheckpointID)
 }
 

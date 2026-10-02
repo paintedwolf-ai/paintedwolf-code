@@ -1533,14 +1533,14 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
-  /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges:
+  /v1/sessions/{id}/checkpoints/{checkpoint_id}/unlock-challenges:
     post:
       tags:
         - sessions
-      operationId: beginCheckpointReleaseChallenge
+      operationId: beginCheckpointUnlockChallenge
       x-person-action: none
-      summary: Begin presence verification for an option that releases held values
-      description: 'Creates a short-lived, single-use challenge binding one pending option, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof.'
+      summary: Begin presence verification to unlock a chat for values a person stored
+      description: 'Creates a short-lived, single-use challenge binding one pending option that sends values a person stored, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof, which also unlocks the chat. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof. While the chat is unlocked the option needs no challenge and this returns `presence_not_required`.'
       parameters:
         - $ref: '#/components/parameters/SessionId'
         - name: checkpoint_id
@@ -1554,7 +1554,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BeginReleaseChallengeRequest'
+              $ref: '#/components/schemas/BeginUnlockChallengeRequest'
       responses:
         '201':
           description: Challenge to verify and sign
@@ -1571,7 +1571,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The checkpoint is settled, or the option releases no held value
+          description: The checkpoint is settled, the option sends no stored value, or the chat is already unlocked
           content:
             application/json:
               schema:
@@ -1586,6 +1586,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/vault:
+    get:
+      tags:
+        - sessions
+      operationId: getChatVault
+      summary: Whether a chat is unlocked for values a person stored
+      description: A chat is unlocked when its person verified presence on an approval that sends values they stored. The unlock lasts until it goes unused for its idle period, reaches its ceiling, or the computer locks or sleeps. Unlocking never approves a recipient.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: The chat's unlock state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatVault'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/vault/lock:
+    post:
+      tags:
+        - sessions
+      operationId: lockChatVault
+      x-person-action: record
+      summary: Lock a chat's values a person stored
+      description: Ends the chat's unlock now. Sends that need those values ask again.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: The chat's unlock state after locking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatVault'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/vault/lock:
+    post:
+      tags:
+        - sessions
+      operationId: lockVault
+      x-person-action: none
+      summary: Lock every chat when the person steps away
+      description: The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockVaultRequest'
+      responses:
+        '200':
+          description: How many chats were locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockVaultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         default:
           $ref: '#/components/responses/Error'
   /v1/projects:
@@ -2417,54 +2493,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ManagedSecretUseList'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: No such secret in this project
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/projects/{id}/secrets/{secret_id}/attestations:
-    get:
-      tags:
-        - projects
-      operationId: listProjectManagedSecretAttestations
-      summary: Presence-verified reveals and releases of one managed secret
-      description: Newest first. Each entry records a reveal to the person's own view or a release to the recipients an approval reviewed, with who confirmed and how. Never the value or the proof.
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-        - name: secret_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-      responses:
-        '200':
-          description: Recorded attestations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagedSecretAttestationList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -15118,6 +15146,7 @@ components:
         - preflight
         - turn_clock
         - turn_load
+        - chat_vault
         - source_view
     EventEnvelope:
       description: Topic-discriminated EventHub SSE envelope.
@@ -15155,6 +15184,7 @@ components:
         - $ref: '#/components/schemas/EventEnvelopePreflight'
         - $ref: '#/components/schemas/EventEnvelopeTurnClock'
         - $ref: '#/components/schemas/EventEnvelopeTurnLoad'
+        - $ref: '#/components/schemas/EventEnvelopeChatVault'
         - $ref: '#/components/schemas/EventEnvelopeSourceView'
       discriminator:
         propertyName: topic
@@ -15192,6 +15222,7 @@ components:
           preflight: '#/components/schemas/EventEnvelopePreflight'
           turn_clock: '#/components/schemas/EventEnvelopeTurnClock'
           turn_load: '#/components/schemas/EventEnvelopeTurnLoad'
+          chat_vault: '#/components/schemas/EventEnvelopeChatVault'
           source_view: '#/components/schemas/EventEnvelopeSourceView'
     MessageEvent:
       x-go-generate: true
@@ -28376,7 +28407,7 @@ components:
         - name
         - version
       additionalProperties: false
-      description: One value a person gave Painted Wolf Code that this approval would release.
+      description: One value a person stored that this approval would send.
       properties:
         reference:
           type: string
@@ -28391,11 +28422,19 @@ components:
       x-go-generate: true
       type: object
       required:
+        - chat_session_id
         - secrets
         - recipients
       additionalProperties: false
-      description: Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none.
+      description: 'Values a person stored that an approving option would hand to the listed recipients. They leave only while the person''s chat is unlocked: while it is locked, every option whose decision_action is approve needs the person''s verified presence on this device, which also unlocks the chat, and the API bearer alone cannot answer it. A redacted send hands over nothing and needs none.'
       properties:
+        chat_session_id:
+          type: string
+          format: uuid
+          description: The chat whose unlock these values leave under.
+        unlock_only:
+          type: boolean
+          description: The recipients are already approved; the card exists to unlock the chat, and its one option needs presence.
         secrets:
           type: array
           minItems: 1
@@ -28904,7 +28943,6 @@ components:
         - version
         - use_count
         - reveal_count
-        - release_count
       additionalProperties: false
       properties:
         reference:
@@ -29020,18 +29058,6 @@ components:
           type: integer
           minimum: 0
           description: Successful authenticated human reveals retained for this capability.
-        last_released_at:
-          x-go-type: '*string'
-          type:
-            - string
-            - 'null'
-          format: date-time
-          description: Most recent presence-verified release to a recipient; absent when never released.
-        release_count:
-          x-go-type: int64
-          type: integer
-          minimum: 0
-          description: Presence-verified releases retained for this capability.
     ArtifactReferenceKind:
       type: string
       description: |
@@ -29090,14 +29116,14 @@ components:
           type: string
           pattern: ^[A-Za-z0-9_-]+$
           description: Base64url without padding Ed25519 signature from the installed desktop shell.
-    BeginReleaseChallengeRequest:
+    BeginUnlockChallengeRequest:
       x-go-generate: true
       type: object
       required:
         - option_id
         - window_label
       additionalProperties: false
-      description: Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
+      description: Starts presence verification for one pending option that sends values a person stored while their chat is locked. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
       properties:
         option_id:
           type: string
@@ -29132,6 +29158,58 @@ components:
           x-go-type: string
           type: string
           format: date-time
+    ChatVault:
+      x-go-generate: true
+      type: object
+      required:
+        - chat_session_id
+        - unlocked
+      additionalProperties: false
+      description: Whether a chat may send values a person stored to recipients it already approved. Times are present only while unlocked.
+      properties:
+        chat_session_id:
+          type: string
+          format: uuid
+        unlocked:
+          type: boolean
+        unlocked_at:
+          x-go-type: string
+          type: string
+          format: date-time
+        closes_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: When the unlock ends unless another use extends it.
+        expires_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: When the unlock ends however busy the chat is.
+    LockVaultRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - reason
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum:
+            - screen_locked
+            - sleep
+            - app_quit
+    LockVaultResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - locked
+      additionalProperties: false
+      properties:
+        locked:
+          type: integer
+          minimum: 0
+          description: Chats whose unlock ended.
     ProjectPromotion:
       x-go-generate: true
       type: object
@@ -29662,10 +29740,10 @@ components:
           description: Recipients the release that handed the value off reviewed; empty until one did.
           items:
             $ref: '#/components/schemas/ManagedSecretUseRecipient'
-        attestation_id:
+        unlock_id:
           type: string
           format: uuid
-          description: The presence attestation that released a value a person gave; absent otherwise.
+          description: The unlock a value a person stored left under; the person verified presence to open it for this chat. Absent for other values and for uses that did not leave.
     ManagedSecretUseList:
       x-go-generate: true
       type: object
@@ -29681,67 +29759,6 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next page of secret uses; empty or omitted at the end.
-    ManagedSecretAttestation:
-      x-go-generate: true
-      type: object
-      description: 'One presence-verified disclosure: a reveal to the person''s own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof.'
-      required:
-        - attestation_id
-        - purpose
-        - version
-        - recipients
-        - authenticator
-        - person_id
-        - attested_at
-      additionalProperties: false
-      properties:
-        attestation_id:
-          type: string
-          format: uuid
-        purpose:
-          type: string
-          enum:
-            - reveal
-            - release
-        version:
-          x-go-type: int64
-          type: integer
-          minimum: 1
-        checkpoint_id:
-          type: string
-          format: uuid
-          description: The approval a release answered.
-        recipients:
-          type: array
-          items:
-            $ref: '#/components/schemas/ManagedSecretUseRecipient'
-        release_scope:
-          type: string
-          enum:
-            - once
-            - chat
-            - project
-          description: How long a release keeps covering its recipients.
-        authenticator:
-          $ref: '#/components/schemas/PresenceAuthenticator'
-        person_id:
-          type: string
-          format: uuid
-        attested_at:
-          x-go-type: string
-          type: string
-          format: date-time
-    ManagedSecretAttestationList:
-      x-go-generate: true
-      type: object
-      required:
-        - attestations
-      additionalProperties: false
-      properties:
-        attestations:
-          type: array
-          items:
-            $ref: '#/components/schemas/ManagedSecretAttestation'
     BeginManagedSecretRevealRequest:
       x-go-generate: true
       type: object
@@ -40411,6 +40428,18 @@ components:
               const: turn_load
             data:
               $ref: '#/components/schemas/TurnLoad'
+    EventEnvelopeChatVault:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: chat_vault
+            data:
+              $ref: '#/components/schemas/ChatVault'
     SourceViewEvent:
       x-go-generate: true
       type: object

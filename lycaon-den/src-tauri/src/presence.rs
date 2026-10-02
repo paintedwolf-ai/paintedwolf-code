@@ -1,4 +1,4 @@
-//! Native user presence for values a person gave Painted Wolf Code.
+//! Native user presence for values a person stored.
 //!
 //! The engine issues a challenge whose signed payload names its purpose and
 //! subject. This module asks the operating system to verify the person and
@@ -160,8 +160,10 @@ pub async fn ipc_reveal_managed_secret(
     .map_err(|error| PresenceCommandError::failed(format!("reveal task join: {error}")))?
 }
 
-/// Approves one checkpoint option that releases values a person gave, after
-/// the operating system confirms them. Returns the engine's checkpoint answer.
+/// Approves one checkpoint option that sends values a person stored. While
+/// the chat is locked the operating system confirms the person first, which
+/// unlocks the chat; while it is unlocked the option is answered directly.
+/// Returns the engine's checkpoint answer.
 #[tauri::command(rename = "resolve_checkpoint_with_presence")]
 pub async fn ipc_resolve_checkpoint_with_presence(
     window: tauri::Window,
@@ -175,7 +177,7 @@ pub async fn ipc_resolve_checkpoint_with_presence(
         resolve_checkpoint_with_presence(&state, &window, &session_id, &checkpoint_id, &option_id)
     })
     .await
-    .map_err(|error| PresenceCommandError::failed(format!("release task join: {error}")))?
+    .map_err(|error| PresenceCommandError::failed(format!("approval task join: {error}")))?
 }
 
 fn reveal_managed_secret(
@@ -225,14 +227,14 @@ fn resolve_checkpoint_with_presence(
         "{}/v1/sessions/{session_id}/checkpoints/{checkpoint_id}",
         engine.base
     );
-    attest_and_send(
+    let attested = attest_and_send(
         state,
         window,
         &engine,
-        &format!("{checkpoint_url}/release-challenges"),
+        &format!("{checkpoint_url}/unlock-challenges"),
         serde_json::json!({"option_id": option_id, "window_label": window.label()}),
         Expectation {
-            purpose: "release",
+            purpose: "unlock",
             subject: &[
                 ("session_id", session_id.as_str()),
                 ("checkpoint_id", checkpoint_id.as_str()),
@@ -254,7 +256,16 @@ fn resolve_checkpoint_with_presence(
                 }),
             )
         },
-    )
+    );
+    match attested {
+        // The chat is already unlocked, so the option is an ordinary choice.
+        Err(error) if error.code == "presence_not_required" => send_json(
+            engine.agent.post(&checkpoint_url),
+            &engine.api_token,
+            serde_json::json!({"kind": "tool_approval", "action": "approve", "option_id": option_id}),
+        ),
+        other => other,
+    }
 }
 
 /// The app-started engine and a client bound to it.
@@ -560,35 +571,35 @@ mod tests {
     }
 
     #[test]
-    fn a_release_payload_signs_only_for_its_checkpoint_and_option() {
-        let release = Expectation {
-            purpose: "release",
+    fn an_unlock_payload_signs_only_for_its_checkpoint_and_option() {
+        let unlock = Expectation {
+            purpose: "unlock",
             subject: &[("checkpoint_id", "c1"), ("option_id", "o1")],
         };
         let good = payload(
-            "release",
+            "unlock",
             "main",
             serde_json::json!({"checkpoint_id": "c1", "option_id": "o1"}),
         );
-        assert!(check_payload(&good, "main", &release).is_ok());
+        assert!(check_payload(&good, "main", &unlock).is_ok());
         let other_option = payload(
-            "release",
+            "unlock",
             "main",
             serde_json::json!({"checkpoint_id": "c1", "option_id": "o2"}),
         );
-        assert!(check_payload(&other_option, "main", &release).is_err());
-        assert!(check_payload(&good, "other-window", &release).is_err());
+        assert!(check_payload(&other_option, "main", &unlock).is_err());
+        assert!(check_payload(&good, "other-window", &unlock).is_err());
     }
 
     #[test]
-    fn a_reveal_payload_never_signs_as_a_release() {
-        let release = Expectation {
-            purpose: "release",
+    fn a_reveal_payload_never_signs_as_an_unlock() {
+        let unlock = Expectation {
+            purpose: "unlock",
             subject: &[("checkpoint_id", "c1")],
         };
         let reveal = payload("reveal", "main", serde_json::json!({"checkpoint_id": "c1"}));
-        assert!(check_payload(&reveal, "main", &release).is_err());
-        assert!(check_payload("not-base64!", "main", &release).is_err());
+        assert!(check_payload(&reveal, "main", &unlock).is_err());
+        assert!(check_payload("not-base64!", "main", &unlock).is_err());
     }
 
     #[test]

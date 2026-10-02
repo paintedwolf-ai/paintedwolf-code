@@ -38,6 +38,7 @@ export const ALL_EVENT_TOPICS = [
   "preflight",
   "turn_clock",
   "turn_load",
+  "chat_vault",
   "source_view",
 ] as const satisfies readonly EventTopic[];
 

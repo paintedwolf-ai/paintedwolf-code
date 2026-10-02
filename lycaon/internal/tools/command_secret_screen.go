@@ -27,7 +27,8 @@ func processArgumentSurface(contract toolcontract.Contract) (secretmatch.ScreenS
 	return secretmatch.ScreenSurface(surface), surface.ProcessArguments()
 }
 
-// screenArgvSecrets checks egress-capable arguments before execution.
+// screenArgvSecrets checks egress-capable arguments, and any carrying held
+// values, before execution.
 func (e *DefaultToolExecutor) screenArgvSecrets(
 	ctx context.Context,
 	tool string,
@@ -41,7 +42,9 @@ func (e *DefaultToolExecutor) screenArgvSecrets(
 	if !screened {
 		return nil
 	}
-	if !e.actionCanEgress(ctx, tc) && len(secretUseFrom(ctx)) == 0 {
+	// A value a person holds is screened wherever it goes, since the handoff
+	// refuses it without a reviewed release.
+	if !e.actionCanEgress(ctx, tc) && len(secretUseFrom(ctx)) == 0 && !tc.Secrets.HoldsPersonValues() {
 		return nil
 	}
 	known, err := tc.Secrets.Matches(e.secretMatcher, func(string) bool { return true })

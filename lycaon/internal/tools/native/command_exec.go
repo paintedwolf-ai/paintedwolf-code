@@ -211,7 +211,7 @@ func runCommandForeground(
 		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
 	}
 	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return commandRunOutcome{}, tools.HeldHandOffReject(toolName)
+		return commandRunOutcome{}, tools.HeldHandOffReject(toolName, err)
 	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{

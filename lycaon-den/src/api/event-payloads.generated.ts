@@ -9,6 +9,7 @@ import type {
   BackgroundProcessEvent,
   BoardEvent,
   CLIOpenEvent,
+  ChatVault,
   CheckpointEvent,
   CodeScanEvent,
   CostEvent,
@@ -73,5 +74,6 @@ export type EventPayloadMap = {
   preflight: PreflightEvent;
   turn_clock: TurnClock;
   turn_load: TurnLoad;
+  chat_vault: ChatVault;
   source_view: SourceViewEvent;
 };

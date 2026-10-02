@@ -140,7 +140,7 @@ func ReferenceUseInSlots(value any, slots []string) ReferenceUse {
 
 // Resolve substitutes reference tokens in string values of a detached argument tree.
 func (s *Service) Resolve(ctx context.Context, args map[string]any, access ResolveContext) (*Resolution, error) {
-	r := &Resolution{values: map[string]resolvedValue{}, sources: map[string]string{}, service: s, access: access}
+	r := &Resolution{values: map[string]resolvedValue{}, sources: map[string]string{}, service: s, access: access, unlocks: s.unlocks}
 	resolved, err := s.resolveValue(ctx, args, access, r, "")
 	if err != nil {
 		r.Finish(ctx)

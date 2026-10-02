@@ -21,6 +21,7 @@ var expectedServeRunnerOrder = []string{
 	"store-maintenance",
 	"store-integrity-audit",
 	"managed-secret-maintenance",
+	"vault-unlock-sweep",
 	"worker-poller",
 	"scan-runner",
 	"scan-cadence",

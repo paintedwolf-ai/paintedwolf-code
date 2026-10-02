@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ type UseRecipient struct {
 }
 
 // Withhold records a policy refusal before handoff.
-func (r *Resolution) Withhold(ctx context.Context) { r.recordDelivery(ctx, DeliveryWithheld, nil) }
+func (r *Resolution) Withhold(ctx context.Context) { r.recordDelivery(ctx, DeliveryWithheld, nil, "") }
 
 // Redacted marks only identities consumed by the rewritten transport fields.
 func (r *Resolution) Redacted(included func(string) bool) {
@@ -53,27 +54,47 @@ func (r *Resolution) Redacted(included func(string) bool) {
 
 // HandOff marks delivery to an executor or transport, not remote success.
 // Every consumer calls it immediately before its transport, which makes it
-// the vault's way out: it refuses while a person-held value lacks an attested
-// release, so the value never reaches a recipient the person did not approve.
+// the vault's way out: a person-held value leaves only under a reviewed
+// release while its chat is unlocked, and each use extends the unlock.
 func (r *Resolution) HandOff(ctx context.Context, included func(string) bool) error {
-	if names := r.UnreleasedHeld(included); len(names) > 0 {
-		r.recordDelivery(ctx, DeliveryWithheld, included)
-		return &HeldUnreleasedError{Names: names}
+	if r == nil {
+		return nil
 	}
-	r.recordDelivery(ctx, DeliveryHandedOff, included)
+	r.mu.Lock()
+	unreleased, held := r.heldWithoutRelease(included)
+	r.mu.Unlock()
+	if len(unreleased) > 0 {
+		r.recordDelivery(ctx, DeliveryWithheld, included, "")
+		return &HeldUnreleasedError{Names: unreleased}
+	}
+	unlockID := ""
+	if held {
+		unlock, open := r.unlocks.Use(r.access.ChatSessionID)
+		if !open {
+			r.recordDelivery(ctx, DeliveryWithheld, included, "")
+			return ErrVaultLocked
+		}
+		unlockID = unlock.ID
+	}
+	r.recordDelivery(ctx, DeliveryHandedOff, included, unlockID)
 	return nil
 }
 
+// ErrVaultLocked: a person-held value was about to leave while its chat was locked.
+var ErrVaultLocked = errors.New("values a person holds are locked for this chat")
+
 // HeldUnreleasedError names person-held values a consumer was about to
-// receive without their attested release.
+// receive without a reviewed release.
 type HeldUnreleasedError struct{ Names []string }
 
 func (e *HeldUnreleasedError) Error() string {
-	return "a value a person holds has no attested release: " + strings.Join(e.Names, ", ")
+	return "a value a person holds has no reviewed release: " + strings.Join(e.Names, ", ")
 }
 
 // Finish settles attempts that never reached a consumer, including canceled calls.
-func (r *Resolution) Finish(ctx context.Context) { r.recordDelivery(ctx, DeliveryNotDispatched, nil) }
+func (r *Resolution) Finish(ctx context.Context) {
+	r.recordDelivery(ctx, DeliveryNotDispatched, nil, "")
+}
 
 func (r *Resolution) selectedIDs(included func(string) bool) map[string]bool {
 	ids := map[string]bool{}
@@ -91,7 +112,9 @@ func (r *Resolution) selectedIDs(included func(string) bool) map[string]bool {
 	return ids
 }
 
-func (r *Resolution) recordDelivery(ctx context.Context, delivery string, included func(string) bool) {
+// recordDelivery settles each selected use once; a handoff records its
+// reviewed recipients and the unlock it used.
+func (r *Resolution) recordDelivery(ctx context.Context, delivery string, included func(string) bool, unlockID string) {
 	if r == nil || r.service == nil {
 		return
 	}
@@ -118,9 +141,11 @@ func (r *Resolution) recordDelivery(ctx context.Context, delivery string, includ
 		}
 		params := db.UpdateManagedSecretDeliveryParams{Delivery: state.outcome, RecipientsJson: "[]", ID: v.useID}
 		if state.outcome == DeliveryHandedOff {
-			recipients, attestation := r.releaseOfLocked(v.fingerprint)
+			recipients, _ := r.releasedToLocked(v.fingerprint)
 			params.RecipientsJson = useRecipientsJSON(recipients)
-			params.AttestationID = sql.NullString{String: attestation, Valid: attestation != ""}
+			if v.custody.Held() {
+				params.UnlockID = sql.NullString{String: unlockID, Valid: unlockID != ""}
+			}
 		}
 		if err := r.service.queries.UpdateManagedSecretDelivery(ctx, params); err != nil {
 			slog.WarnContext(ctx, "managed secret delivery history write failed", "secret_id", v.id, "tool_call_id", r.access.ToolCallID)

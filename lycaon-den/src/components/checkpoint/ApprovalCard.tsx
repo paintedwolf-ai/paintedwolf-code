@@ -44,6 +44,7 @@ import { checkpointRowLabel } from "./checkpoint-row-label.ts";
 import { approvalWaitLabel } from "../../chat/checkpoint/approval-wait.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 import { presenceAvailable } from "../../platform/presence.ts";
+import { chatUnlocked } from "../../chat/vault/chat-vault-store.ts";
 
 type ContentResolveBody = {
   decision: "approve" | "reject" | "approve_partial";
@@ -237,9 +238,11 @@ function ToolApprovalBody(props: Props) {
     return id ? options().find((option) => option.id === id) : undefined;
   });
   const held = () => plan()?.held_release;
-  // Approving a held release needs the desktop shell to confirm the person.
+  // Approving a held send while the chat is locked needs the desktop shell
+  // to confirm the person.
   const heldBlocked = (option?: { decision_action: string }) =>
-    !!held() && option?.decision_action === "approve" && !presenceAvailable();
+    !!held() && option?.decision_action === "approve" && !presenceAvailable() &&
+    !chatUnlocked(held()?.chat_session_id);
   const heldReaders = createMemo(() => {
     const kinds = new Set((held()?.recipients ?? []).map((recipient) => recipient.kind));
     return [...kinds].map((kind) => copy.held.reader[kind]);
@@ -591,6 +594,12 @@ function ToolApprovalBody(props: Props) {
             (repeat().suppressed_count ?? 0) > 0 ? copy.repeat.suppressed(repeat().suppressed_count ?? 0) : "",
           ].filter(Boolean).join("\n\n")} />
         </div>}</ShowLatest>
+        <Show when={held()} keyed>{(release) => (
+          <section class="den-approval-held" data-testid="approval-held-release" aria-label={copy.held.title}>
+            <p class="den-approval-held-title">{copy.held.title}: {release.secrets.map((secret) => secret.name).join(", ")}</p>
+            <For each={heldReaders()}>{(line) => <p class="den-settings-hint">{line}</p>}</For>
+          </section>
+        )}</Show>
       </div>
       </ShellScroll>
 
@@ -607,15 +616,12 @@ function ToolApprovalBody(props: Props) {
           </Show>
         </Show>
       )}</Show>
-      <Show when={held()} keyed>{(release) => (
-        <section class="den-approval-held" data-testid="approval-held-release" aria-label={copy.held.title}>
-          <p class="den-approval-held-title">{copy.held.title}: {release.secrets.map((secret) => secret.name).join(", ")}</p>
-          <For each={heldReaders()}>{(line) => <p class="den-settings-hint">{line}</p>}</For>
-          <p class="den-settings-hint" data-testid="approval-held-confirm">
-            {presenceAvailable() ? copy.held.confirm : copy.held.needsDesktop}
-          </p>
-        </section>
-      )}</Show>
+      {/* What approving does stays beside the actions; it is one short line. */}
+      <Show when={held()} keyed>{(release) => {
+        const line = () => !presenceAvailable() ? copy.held.needsDesktop
+          : chatUnlocked(release.chat_session_id) ? copy.held.unlocked : copy.held.confirm;
+        return <p class="den-settings-hint den-approval-held-confirm" data-testid="approval-held-confirm" data-tip={line()}>{line()}</p>;
+      }}</Show>
       <ActionsZone
         sessionId={props.sessionId}
         resolving={props.resolving}

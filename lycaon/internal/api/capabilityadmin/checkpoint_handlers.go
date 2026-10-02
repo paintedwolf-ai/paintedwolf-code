@@ -119,14 +119,15 @@ func (s *Handler) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, wireCheckpointResponse(sessionID, resp))
 }
 
-// HandleBeginReleaseChallenge binds presence to one option that releases
-// values a person holds. Only the desktop shell can answer it.
-func (s *Handler) HandleBeginReleaseChallenge(w http.ResponseWriter, r *http.Request) {
+// HandleBeginUnlockChallenge binds presence to one option that sends values
+// a person holds while their chat is locked. Only the desktop shell can
+// answer it.
+func (s *Handler) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
 	}
-	var body wire.BeginReleaseChallengeRequest
+	var body wire.BeginUnlockChallengeRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)
 		return
@@ -135,7 +136,7 @@ func (s *Handler) HandleBeginReleaseChallenge(w http.ResponseWriter, r *http.Req
 		s.responses.InvalidField(w, "window_label", "must be 1 to 120 characters without control characters")
 		return
 	}
-	challenge, err := s.options.BeginReleaseChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
+	challenge, err := s.options.BeginUnlockChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
 		strings.TrimSpace(body.OptionID), strings.TrimSpace(body.WindowLabel))
 	if err != nil {
 		s.writeCheckpointResolveError(w, r, err)
@@ -153,9 +154,9 @@ func (s *Handler) writeCheckpointResolveError(w http.ResponseWriter, r *http.Req
 	}
 	switch {
 	case errors.Is(err, hitl.ErrPresenceRequired):
-		s.responses.Fail(w, wire.ApiErrorCodePresenceRequired, "this option releases a value you gave Painted Wolf Code; confirm it in the desktop app")
+		s.responses.Fail(w, wire.ApiErrorCodePresenceRequired, "this option sends a value you stored while the chat is locked; confirm it in the desktop app")
 	case errors.Is(err, hitl.ErrPresenceNotRequired):
-		s.responses.Fail(w, wire.ApiErrorCodePresenceNotRequired, "this option releases no value that needs your confirmation")
+		s.responses.Fail(w, wire.ApiErrorCodePresenceNotRequired, "this option needs no confirmation")
 	case errors.Is(err, hitl.ErrCheckpointNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeCheckpointNotFound, "checkpoint not found")
 	case errors.Is(err, hitl.ErrCheckpointNotPending):

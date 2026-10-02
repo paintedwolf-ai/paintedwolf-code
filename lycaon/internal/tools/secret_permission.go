@@ -20,22 +20,15 @@ func secretScreenRecipients(finding secretmatch.Alert) ([]secretmatch.Recipient,
 }
 
 // secretRecipientsCovered reports whether standing grants release fingerprints
-// to every recipient, and the attestation that released each held value.
-func (e *DefaultToolExecutor) secretRecipientsCovered(finding secretmatch.Alert, recipients []secretmatch.Recipient, fingerprints, held []string) (bool, map[string]string) {
-	attestations := map[string]string{}
+// to every recipient.
+func (e *DefaultToolExecutor) secretRecipientsCovered(finding secretmatch.Alert, recipients []secretmatch.Recipient, fingerprints []string) bool {
 	for _, recipient := range recipients {
-		covered, attested := e.approvalGate.SecretReleaseCovered(secretScreenChatSession(finding), finding.ProjectID,
-			recipient.ID, string(recipient.Surface), fingerprints, held)
-		if !covered {
-			return false, nil
-		}
-		for fingerprint, id := range attested {
-			if _, named := attestations[fingerprint]; !named {
-				attestations[fingerprint] = id
-			}
+		if !e.approvalGate.SecretFingerprintsCovered(secretScreenChatSession(finding), finding.ProjectID,
+			recipient.ID, string(recipient.Surface), fingerprints) {
+			return false
 		}
 	}
-	return true, attestations
+	return true
 }
 
 // secretPermissionCoverage names what a release covers; unscreened marks the

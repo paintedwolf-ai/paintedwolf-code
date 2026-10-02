@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/ptyinput"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -38,15 +39,17 @@ func quotesTerminalInput(tool string) bool {
 
 // Resolution owns one invocation's immutable version snapshot and private provenance.
 type Resolution struct {
-	Arguments         map[string]any `json:"-"`
-	values            map[string]resolvedValue
-	bindings          []binding
-	sources           map[string]string
-	service           *Service
-	access            ResolveContext
-	mu                sync.Mutex
-	delivery          map[string]deliveryState
-	permissions       []Release
+	Arguments   map[string]any `json:"-"`
+	values      map[string]resolvedValue
+	bindings    []binding
+	sources     map[string]string
+	service     *Service
+	access      ResolveContext
+	mu          sync.Mutex
+	delivery    map[string]deliveryState
+	permissions []Release
+	// unlocks is the registry whose chat unlock a held value's handoff needs.
+	unlocks           *presence.Unlocks
 	localConnectPorts []uint16
 }
 
@@ -125,6 +128,12 @@ func NewResolutionForTest(args map[string]any, values []TestResolvedValue) *Reso
 			r.sources[v.Path] = secretmatch.ReferenceToken(v.ID)
 		}
 	}
+	return r
+}
+
+// InChatForTest binds a test resolution to a chat and its unlock registry.
+func (r *Resolution) InChatForTest(chatSessionID string, unlocks *presence.Unlocks) *Resolution {
+	r.access.ChatSessionID, r.unlocks = chatSessionID, unlocks
 	return r
 }
 

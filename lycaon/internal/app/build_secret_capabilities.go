@@ -24,7 +24,12 @@ func (b *serveBuilder) wireSecretCapabilities() error {
 		return fmt.Errorf("secret capability store: %w", err)
 	}
 	service.SetPresence(b.presenceBroker)
+	service.SetUnlocks(b.vaultUnlocks)
 	service.SetFingerprinter(b.secretFingerprinter)
+	// Unlocks live in memory, so none survived the last engine.
+	if err := service.CloseUnlocksLeftOpen(b.ctx); err != nil {
+		return err
+	}
 	if err := service.Reconcile(b.ctx); err != nil {
 		return fmt.Errorf("reconcile secret capabilities: %w", err)
 	}

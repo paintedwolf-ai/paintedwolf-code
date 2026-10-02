@@ -1,9 +1,10 @@
 // Package presence verifies that a person is at this device before the host
-// discloses a value they hold.
+// discloses a value they hold, and keeps the per-chat unlocks that verified
+// presence opens.
 //
 // The desktop shell owns an ephemeral Ed25519 key for its launch and signs a
 // challenge only after the operating system confirms user presence. The API
-// bearer can begin a challenge but cannot complete one. Reveal and release
+// bearer can begin a challenge but cannot complete one. Reveal and unlock
 // share this broker; each challenge names its purpose inside the signed
 // payload, so a proof for one purpose never verifies for the other.
 package presence
@@ -48,8 +49,8 @@ type Purpose string
 const (
 	// PurposeReveal shows a held value in the person's own view.
 	PurposeReveal Purpose = "reveal"
-	// PurposeRelease hands held values to the recipients one approval names.
-	PurposeRelease Purpose = "release"
+	// PurposeUnlock unlocks a chat for using held values.
+	PurposeUnlock Purpose = "unlock"
 )
 
 var (
@@ -170,7 +171,7 @@ func (b *Broker) Begin(claim Claim) (Challenge, error) {
 	if b == nil {
 		return Challenge{}, ErrUnavailable
 	}
-	if claim.Purpose != PurposeReveal && claim.Purpose != PurposeRelease {
+	if claim.Purpose != PurposeReveal && claim.Purpose != PurposeUnlock {
 		return Challenge{}, fmt.Errorf("%w: unknown purpose %q", ErrDenied, claim.Purpose)
 	}
 	personID := strings.TrimSpace(claim.PersonID)

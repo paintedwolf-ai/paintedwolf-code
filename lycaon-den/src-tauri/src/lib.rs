@@ -12,6 +12,7 @@ mod document_outbox;
 mod external_attachment_import;
 mod item_windows;
 mod presence;
+mod vault_lock;
 #[cfg(target_os = "macos")]
 mod native_notifications;
 mod open_external;
@@ -480,6 +481,8 @@ pub fn run() {
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             wheel_smoothing::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            vault_lock::setup(app.handle().clone())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             #[cfg(target_os = "macos")]
             {
                 native_notifications::setup(app.handle().clone())
@@ -504,6 +507,8 @@ pub fn run() {
             } => window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
                 if let Some(state) = app.try_state::<SidecarState>() {
+                    // Record why the unlocks ended before the engine stops.
+                    vault_lock::lock_now(&state, vault_lock::LockReason::AppQuit);
                     sidecar::stop_sidecar(&state);
                 }
             }

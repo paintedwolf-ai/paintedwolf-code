@@ -700,7 +700,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges": {
+    "/v1/sessions/{id}/checkpoints/{checkpoint_id}/unlock-challenges": {
         parameters: {
             query?: never;
             header?: never;
@@ -710,10 +710,70 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Begin presence verification for an option that releases held values
-         * @description Creates a short-lived, single-use challenge binding one pending option, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof.
+         * Begin presence verification to unlock a chat for values a person stored
+         * @description Creates a short-lived, single-use challenge binding one pending option that sends values a person stored, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof, which also unlocks the chat. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof. While the chat is unlocked the option needs no challenge and this returns `presence_not_required`.
          */
-        post: operations["beginCheckpointReleaseChallenge"];
+        post: operations["beginCheckpointUnlockChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/vault": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether a chat is unlocked for values a person stored
+         * @description A chat is unlocked when its person verified presence on an approval that sends values they stored. The unlock lasts until it goes unused for its idle period, reaches its ceiling, or the computer locks or sleeps. Unlocking never approves a recipient.
+         */
+        get: operations["getChatVault"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/vault/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lock a chat's values a person stored
+         * @description Ends the chat's unlock now. Sends that need those values ask again.
+         */
+        post: operations["lockChatVault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/vault/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lock every chat when the person steps away
+         * @description The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+         */
+        post: operations["lockVault"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1033,26 +1093,6 @@ export interface paths {
          * @description A bounded rolling window of what the host did with this reference, newest first — successful substitutions and refusals alike. Records who asked, never the value and never the argument it was going into.
          */
         get: operations["listProjectManagedSecretUses"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{id}/secrets/{secret_id}/attestations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Presence-verified reveals and releases of one managed secret
-         * @description Newest first. Each entry records a reveal to the person's own view or a release to the recipients an approval reviewed, with who confirmed and how. Never the value or the proof.
-         */
-        get: operations["listProjectManagedSecretAttestations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5655,9 +5695,9 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -11034,14 +11074,21 @@ export interface components {
             /** @description Host copy saying why a disabled option cannot be picked here. Present exactly when disabled is true. */
             note?: string;
         };
-        /** @description One value a person gave Painted Wolf Code that this approval would release. */
+        /** @description One value a person stored that this approval would send. */
         ApprovalHeldSecret: {
             reference: string;
             name: string;
             version: number;
         };
-        /** @description Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none. */
+        /** @description Values a person stored that an approving option would hand to the listed recipients. They leave only while the person's chat is unlocked: while it is locked, every option whose decision_action is approve needs the person's verified presence on this device, which also unlocks the chat, and the API bearer alone cannot answer it. A redacted send hands over nothing and needs none. */
         ApprovalHeldRelease: {
+            /**
+             * Format: uuid
+             * @description The chat whose unlock these values leave under.
+             */
+            chat_session_id: string;
+            /** @description The recipients are already approved; the card exists to unlock the chat, and its one option needs presence. */
+            unlock_only?: boolean;
             secrets: components["schemas"]["ApprovalHeldSecret"][];
             recipients: components["schemas"]["ApprovalSecretRecipient"][];
         };
@@ -11326,13 +11373,6 @@ export interface components {
             last_revealed_at?: string | null;
             /** @description Successful authenticated human reveals retained for this capability. */
             reveal_count: number;
-            /**
-             * Format: date-time
-             * @description Most recent presence-verified release to a recipient; absent when never released.
-             */
-            last_released_at?: string | null;
-            /** @description Presence-verified releases retained for this capability. */
-            release_count: number;
         };
         /**
          * @description What holds a durable claim on an artifact. Each reference is a row written in the referrer's own transaction and cascaded by it, so retention and delete impact are the same question.
@@ -11359,8 +11399,8 @@ export interface components {
             /** @description Base64url without padding Ed25519 signature from the installed desktop shell. */
             signature: string;
         };
-        /** @description Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person. */
-        BeginReleaseChallengeRequest: {
+        /** @description Starts presence verification for one pending option that sends values a person stored while their chat is locked. The challenge binds the checkpoint, the option, the exact plan, and the deciding person. */
+        BeginUnlockChallengeRequest: {
             option_id: string;
             /** @description Native calling window label, bound into the proof; not an authorization identity. */
             window_label: string;
@@ -11375,6 +11415,32 @@ export interface components {
             prompt: string;
             /** Format: date-time */
             expires_at: string;
+        };
+        /** @description Whether a chat may send values a person stored to recipients it already approved. Times are present only while unlocked. */
+        ChatVault: {
+            /** Format: uuid */
+            chat_session_id: string;
+            unlocked: boolean;
+            /** Format: date-time */
+            unlocked_at?: string;
+            /**
+             * Format: date-time
+             * @description When the unlock ends unless another use extends it.
+             */
+            closes_at?: string;
+            /**
+             * Format: date-time
+             * @description When the unlock ends however busy the chat is.
+             */
+            expires_at?: string;
+        };
+        LockVaultRequest: {
+            /** @enum {string} */
+            reason: "screen_locked" | "sleep" | "app_quit";
+        };
+        LockVaultResponse: {
+            /** @description Chats whose unlock ended. */
+            locked: number;
         };
         ProjectPromotion: {
             destination_path: string;
@@ -11583,42 +11649,15 @@ export interface components {
             recipients?: components["schemas"]["ManagedSecretUseRecipient"][];
             /**
              * Format: uuid
-             * @description The presence attestation that released a value a person gave; absent otherwise.
+             * @description The unlock a value a person stored left under; the person verified presence to open it for this chat. Absent for other values and for uses that did not leave.
              */
-            attestation_id?: string;
+            unlock_id?: string;
         };
         /** @description A bounded rolling window of recent uses, newest first. Not a permanent ledger. */
         ManagedSecretUseList: {
             uses: components["schemas"]["ManagedSecretUse"][];
             /** @description Opaque cursor for the next page of secret uses; empty or omitted at the end. */
             next_cursor?: string;
-        };
-        /** @description One presence-verified disclosure: a reveal to the person's own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof. */
-        ManagedSecretAttestation: {
-            /** Format: uuid */
-            attestation_id: string;
-            /** @enum {string} */
-            purpose: "reveal" | "release";
-            version: number;
-            /**
-             * Format: uuid
-             * @description The approval a release answered.
-             */
-            checkpoint_id?: string;
-            recipients: components["schemas"]["ManagedSecretUseRecipient"][];
-            /**
-             * @description How long a release keeps covering its recipients.
-             * @enum {string}
-             */
-            release_scope?: "once" | "chat" | "project";
-            authenticator: components["schemas"]["PresenceAuthenticator"];
-            /** Format: uuid */
-            person_id: string;
-            /** Format: date-time */
-            attested_at: string;
-        };
-        ManagedSecretAttestationList: {
-            attestations: components["schemas"]["ManagedSecretAttestation"][];
         };
         /** @description Starts one installed-app reveal. The native shell supplies its actual calling window label; it is bound into the proof payload and audit record, but it is not an authorization identity. */
         BeginManagedSecretRevealRequest: {
@@ -16349,6 +16388,17 @@ export interface components {
              */
             topic: "turn_load";
         };
+        EventEnvelopeChatVault: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "chat_vault";
+            data: components["schemas"]["ChatVault"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "chat_vault";
+        };
         SourceViewEvent: {
             /** Format: uuid */
             view_id: string;
@@ -17937,7 +17987,7 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    beginCheckpointReleaseChallenge: {
+    beginCheckpointUnlockChallenge: {
         parameters: {
             query?: never;
             header?: never;
@@ -17949,7 +17999,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BeginReleaseChallengeRequest"];
+                "application/json": components["schemas"]["BeginUnlockChallengeRequest"];
             };
         };
         responses: {
@@ -17966,7 +18016,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The checkpoint is settled, or the option releases no held value */
+            /** @description The checkpoint is settled, the option sends no stored value, or the chat is already unlocked */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -17986,6 +18036,85 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    getChatVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chat's unlock state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatVault"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    lockChatVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chat's unlock state after locking */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatVault"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    lockVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LockVaultRequest"];
+            };
+        };
+        responses: {
+            /** @description How many chats were locked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockVaultResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             default: components["responses"]["Error"];
         };
     };
@@ -18752,46 +18881,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedSecretUseList"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description No such secret in this project */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            409: components["responses"]["Conflict"];
-            503: components["responses"]["ServiceUnavailable"];
-            default: components["responses"]["Error"];
-        };
-    };
-    listProjectManagedSecretAttestations: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                id: components["parameters"]["ProjectId"];
-                secret_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recorded attestations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ManagedSecretAttestationList"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -29504,8 +29593,11 @@ export type ArtifactReferenceCount = components["schemas"]["ArtifactReferenceCou
 export type CheckpointListResponse = components["schemas"]["CheckpointListResponse"];
 export type PresenceAuthenticator = components["schemas"]["PresenceAuthenticator"];
 export type PresenceProof = components["schemas"]["PresenceProof"];
-export type BeginReleaseChallengeRequest = components["schemas"]["BeginReleaseChallengeRequest"];
+export type BeginUnlockChallengeRequest = components["schemas"]["BeginUnlockChallengeRequest"];
 export type PresenceChallenge = components["schemas"]["PresenceChallenge"];
+export type ChatVault = components["schemas"]["ChatVault"];
+export type LockVaultRequest = components["schemas"]["LockVaultRequest"];
+export type LockVaultResponse = components["schemas"]["LockVaultResponse"];
 export type ProjectPromotion = components["schemas"]["ProjectPromotion"];
 export type ProjectListResponse = components["schemas"]["ProjectListResponse"];
 export type CloneProjectRequest = components["schemas"]["CloneProjectRequest"];
@@ -29529,8 +29621,6 @@ export type ReplaceManagedSecretValueRequest = components["schemas"]["ReplaceMan
 export type ManagedSecretUseRecipient = components["schemas"]["ManagedSecretUseRecipient"];
 export type ManagedSecretUse = components["schemas"]["ManagedSecretUse"];
 export type ManagedSecretUseList = components["schemas"]["ManagedSecretUseList"];
-export type ManagedSecretAttestation = components["schemas"]["ManagedSecretAttestation"];
-export type ManagedSecretAttestationList = components["schemas"]["ManagedSecretAttestationList"];
 export type BeginManagedSecretRevealRequest = components["schemas"]["BeginManagedSecretRevealRequest"];
 export type ManagedSecretRevealChallenge = components["schemas"]["ManagedSecretRevealChallenge"];
 export type CompleteManagedSecretRevealRequest = components["schemas"]["CompleteManagedSecretRevealRequest"];
@@ -29975,6 +30065,7 @@ export type EventEnvelopeEditorDocument = components["schemas"]["EventEnvelopeEd
 export type EventEnvelopePreflight = components["schemas"]["EventEnvelopePreflight"];
 export type EventEnvelopeTurnClock = components["schemas"]["EventEnvelopeTurnClock"];
 export type EventEnvelopeTurnLoad = components["schemas"]["EventEnvelopeTurnLoad"];
+export type EventEnvelopeChatVault = components["schemas"]["EventEnvelopeChatVault"];
 export type SourceViewEvent = components["schemas"]["SourceViewEvent"];
 export type EventEnvelopeSourceView = components["schemas"]["EventEnvelopeSourceView"];
 export type SummarizeCoverage = components["schemas"]["SummarizeCoverage"];

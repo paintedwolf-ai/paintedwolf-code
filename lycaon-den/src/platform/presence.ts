@@ -107,9 +107,11 @@ export function revealManagedSecret(
 }
 
 /**
- * Approves an option that releases values a person gave Painted Wolf Code.
- * The desktop shell confirms the person, signs the engine's challenge, and
- * resolves the checkpoint itself; the webview never sees the proof.
+ * Approves an option that sends values a person stored. While the chat is
+ * locked, the desktop shell confirms the person, which also unlocks the chat;
+ * while it is unlocked, the shell answers the option directly. The shell signs
+ * the engine's challenge and resolves the checkpoint itself; the webview never
+ * sees the proof.
  */
 export function resolveCheckpointWithPresence(
   sessionId: string,

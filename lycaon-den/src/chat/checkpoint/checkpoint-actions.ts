@@ -1,16 +1,19 @@
 import type { LycaonClient } from "../../api/client.ts";
 import type { ContentApplyDecision, ToolApprovalResolveBody } from "../../api/types.ts";
 import type { PromptSecretReferencePart } from "../../api/types.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import { resolveCheckpointWithPresence } from "../../platform/presence.ts";
+import { chatUnlocked } from "../vault/chat-vault-store.ts";
 import type { PendingCheckpoint } from "./checkpoint-model.ts";
 
 /**
- * Whether choosing optionId would hand over values a person gave Painted
- * Wolf Code, which only the desktop shell can approve after confirming them.
+ * Whether choosing optionId would send values the person stored while their
+ * chat is locked, which only the desktop shell can approve after confirming
+ * them. While the chat is unlocked, approving is an ordinary choice.
  */
 export function optionNeedsPresence(checkpoint: PendingCheckpoint, optionId: string): boolean {
   const plan = checkpoint.tool_approval?.plan;
-  if (!plan?.held_release) return false;
+  if (!plan?.held_release || chatUnlocked(plan.held_release.chat_session_id)) return false;
   return plan.options.some((option) => option.id === optionId && option.decision_action === "approve");
 }
 
@@ -32,6 +35,14 @@ export async function resolveToolApproval(
       return;
     }
     body = { kind: "tool_approval", action, option_id: options.optionId };
+    try {
+      await client.resolveCheckpoint(checkpoint.sessionId, checkpoint.checkpointId, body);
+    } catch (error) {
+      // The chat locked after this view last heard it was unlocked.
+      if (!(error instanceof LycaonApiError) || error.code !== "presence_required") throw error;
+      await resolveCheckpointWithPresence(checkpoint.sessionId, checkpoint.checkpointId, options.optionId);
+    }
+    return;
   } else {
     body = {
       kind: "tool_approval",

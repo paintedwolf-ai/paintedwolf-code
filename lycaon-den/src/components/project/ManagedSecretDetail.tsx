@@ -1,10 +1,8 @@
 import { For, Show, type JSX } from "solid-js";
-import type { ManagedSecret, ManagedSecretAttestation, ManagedSecretUse } from "../../api/types.ts";
+import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
 import {
   MANAGED_SECRETS_COPY as C,
-  attestationLabel,
   secretCustodyLabel,
-  secretLastReleasedLabel,
   formatSecretTimestamp,
   secretAgentUseEndsLabel,
   secretLastUsedLabel,
@@ -26,11 +24,6 @@ type SecretUses = {
   failed: boolean;
 };
 
-type SecretConfirmations = {
-  items: ManagedSecretAttestation[];
-  failed: boolean;
-};
-
 export type DetailMode = "facts" | "edit" | "value" | "agent_use_deadline";
 
 type ManagedSecretDetailProps = {
@@ -45,7 +38,6 @@ type ManagedSecretDetailProps = {
   revealCopied: boolean;
   revealCopyFailed: boolean;
   uses: SecretUses;
-  confirmations: SecretConfirmations;
   form: JSX.Element;
   onCopyReference: () => void;
   onReveal: () => void;
@@ -210,44 +202,7 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
           {secretLastRevealedLabel(secret())}{" "}
           <span class="den-settings-hint">{C.revealCountLabel(secret().reveal_count)}</span>
         </Fact>
-        <Show when={secret().custody === "person"}>
-          <Fact label={C.factLastReleased}>
-            {secretLastReleasedLabel(secret())}{" "}
-            <span class="den-settings-hint">{C.releaseCountLabel(secret().release_count)}</span>
-          </Fact>
-        </Show>
       </dl>
-
-      <Show when={secret().custody === "person"}>
-        <section class="den-secret-uses" data-testid="managed-secret-confirmations">
-          <div class="den-secret-reference__head">
-            <span class="den-settings-pref-label">{C.confirmationsHeading}</span>
-          </div>
-          <p class="den-settings-hint">{C.confirmationsHint}</p>
-          <Show
-            when={!props.confirmations.failed}
-            fallback={<p class="den-settings-hint">{C.confirmationsError}</p>}
-          >
-            <Show
-              when={props.confirmations.items.length > 0}
-              fallback={<p class="den-settings-hint">{C.confirmationsEmpty}</p>}
-            >
-              <ul class="den-secret-use-list">
-                <For each={props.confirmations.items}>
-                  {(item) => (
-                    <li data-purpose={item.purpose}>
-                      <span class="den-secret-use-list__outcome">{attestationLabel(item)}</span>
-                      <span class="den-secret-use-list__when">
-                        {formatSecretTimestamp(item.attested_at) ?? item.attested_at}
-                      </span>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          </Show>
-        </section>
-      </Show>
 
       <section class="den-secret-uses" data-testid="managed-secret-uses">
         <div class="den-secret-reference__head">
@@ -292,8 +247,8 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
                             {C.useRecipients((use.recipients ?? []).map((recipient) => recipient.label).join(", "))}
                           </span>
                         </Show>
-                        <Show when={use.attestation_id}>
-                          <span class="den-secret-use-list__call">{C.useConfirmed}</span>
+                        <Show when={use.unlock_id}>
+                          <span class="den-secret-use-list__call">{C.useUnlocked}</span>
                         </Show>
                         <Show when={use.tool_call_id}>
                           <span class="den-secret-use-list__call">

@@ -194,7 +194,7 @@ func (s *Handler) HandleListProjectManagedSecretUses(w http.ResponseWriter, r *h
 			UsedAt: use.UsedAt, ToolName: use.ToolName, Outcome: use.Outcome,
 			ToolCallID: use.ToolCallID, Delivery: use.Delivery,
 			Version: use.Version, SessionID: use.SessionID, ChatSessionID: use.ChatSessionID,
-			Recipients: wireUseRecipients(use.Recipients), AttestationID: use.AttestationID,
+			Recipients: wireUseRecipients(use.Recipients), UnlockID: use.UnlockID,
 		})
 	}
 	var nextCursor string
@@ -219,33 +219,6 @@ func wireUseRecipients(recipients []secretcap.UseRecipient) []wire.ManagedSecret
 		out = append(out, wire.ManagedSecretUseRecipient{Label: recipient.Label, Surface: recipient.Surface})
 	}
 	return out
-}
-
-func (s *Handler) HandleListProjectManagedSecretAttestations(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.secretTarget(w, r)
-	if !ok {
-		return
-	}
-	query, err := httpio.ReadPageQuery(r, secretUseBounds)
-	if err != nil {
-		s.responses.InvalidQuery(w, err)
-		return
-	}
-	attestations, err := s.ManagedSecrets.Attestations(r.Context(), p.ID, secretReference(r), query.Limit)
-	if err != nil {
-		secretview.WriteError(s.responses, w, r, err)
-		return
-	}
-	out := make([]wire.ManagedSecretAttestation, 0, len(attestations))
-	for _, item := range attestations {
-		out = append(out, wire.ManagedSecretAttestation{
-			AttestationID: item.AttestationID, Purpose: item.Purpose, Version: item.Version,
-			CheckpointID: item.CheckpointID, Recipients: wireUseRecipients(item.Recipients),
-			ReleaseScope: item.ReleaseScope, Authenticator: wire.PresenceAuthenticator(item.Authenticator),
-			PersonID: item.PersonID, AttestedAt: item.AttestedAt,
-		})
-	}
-	httpio.WriteJSON(w, http.StatusOK, wire.ManagedSecretAttestationList{Attestations: out})
 }
 
 func (s *Handler) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {

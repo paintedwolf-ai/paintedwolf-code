@@ -84,6 +84,9 @@ func (b *serveBuilder) registerBackgroundRunners(app *ServeApp) {
 	if b.secretCaps != nil {
 		byName["managed-secret-maintenance"] = registration{run: b.secretCaps.RunMaintenance}
 	}
+	if b.vaultUnlocks != nil {
+		byName["vault-unlock-sweep"] = registration{run: b.vaultUnlocks.RunSweeper}
+	}
 	if b.workerPoller != nil {
 		byName["worker-poller"] = registration{run: b.workerPoller.Run}
 	}

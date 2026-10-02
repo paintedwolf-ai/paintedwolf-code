@@ -101,7 +101,7 @@ func runCommandTerminalCapture(
 		facts.Network = bound.lease.ObservedHosts
 	}
 	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return commandRunOutcome{}, tools.HeldHandOffReject(toolName)
+		return commandRunOutcome{}, tools.HeldHandOffReject(toolName, err)
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.VerificationCheck {
