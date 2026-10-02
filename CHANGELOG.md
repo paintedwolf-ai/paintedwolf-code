@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
-## [1.0.0-rc.4]
+## [1.0.0]
+
+First stable release of **Painted Wolf Code**, a local-first AI coding agent
+for macOS on Apple silicon.
 
 ### Changed
 
