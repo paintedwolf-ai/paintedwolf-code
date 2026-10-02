@@ -1,7 +1,11 @@
 package gate
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -47,30 +51,132 @@ func TestPostureGatesAreInCitationPriorityOrder(t *testing.T) {
 				t.Errorf("%s.Gates() returned %s, which %s does not enable", p, g, p)
 			}
 		}
-		if len(live) != len(postureGates[p]) {
-			t.Errorf("%s.Gates() returned %d gates, the membership row holds %d", p, len(live), len(postureGates[p]))
+		floored := 0
+		for _, floor := range gateFloor {
+			if floor.Strictness() <= p.Strictness() {
+				floored++
+			}
+		}
+		if len(live) != floored {
+			t.Errorf("%s.Gates() returned %d gates, the floor table admits %d", p, len(live), floored)
 		}
 	}
 }
 
-// Unknown tokens use the default posture.
-func TestPostureFromStringNeverReadsAsAnOptOut(t *testing.T) {
+// Only the three canonical tokens parse; a typo is an error, never a posture.
+func TestParsePostureAcceptsOnlyCanonicalTokens(t *testing.T) {
 	t.Parallel()
-	for _, token := range []string{"", "  ", "paranoid", "off", "none", "LIGHTS"} {
-		if got := PostureFromString(token); got != DefaultPosture {
-			t.Errorf("PostureFromString(%q) = %q want %q", token, got, DefaultPosture)
-		}
-	}
 	for _, p := range Postures() {
-		if got := PostureFromString(string(p)); got != p {
-			t.Errorf("PostureFromString(%q) = %q want round trip", p, got)
-		}
-		if !ValidPosture(string(p)) {
-			t.Errorf("ValidPosture(%q) = false", p)
+		if got, err := ParsePosture(string(p)); err != nil || got != p {
+			t.Errorf("ParsePosture(%q) = %q, %v; want a round trip", p, got, err)
 		}
 	}
-	if ValidPosture("paranoid") {
-		t.Error("ValidPosture accepted an unknown token — an API boundary would coerce it silently")
+	for _, token := range []string{"", " strict", "Strict", "Ballanced", "paranoid", "off", "none"} {
+		if got, err := ParsePosture(token); err == nil {
+			t.Errorf("ParsePosture(%q) = %q, want an error", token, got)
+		}
+	}
+}
+
+// Decoding is where hand-edited files and wire input become postures, so it
+// applies the same parser; an empty value is an unset layer.
+func TestDecodedPostureRefusesUnknownTokens(t *testing.T) {
+	t.Parallel()
+	type doc struct {
+		Posture Posture `yaml:"approval_posture" json:"approval_posture"`
+	}
+	var fromYAML doc
+	if err := yaml.Unmarshal([]byte("approval_posture: strict\n"), &fromYAML); err != nil || fromYAML.Posture != PostureStrict {
+		t.Fatalf("yaml strict = %q, %v", fromYAML.Posture, err)
+	}
+	if err := yaml.Unmarshal([]byte("approval_posture: Ballanced\n"), &fromYAML); err == nil || !strings.Contains(err.Error(), "Ballanced") {
+		t.Fatalf("yaml typo decoded without naming it: %v", err)
+	}
+	var fromJSON doc
+	if err := json.Unmarshal([]byte(`{"approval_posture":"lite"}`), &fromJSON); err == nil {
+		t.Fatalf("json typo decoded as %q", fromJSON.Posture)
+	}
+	if err := json.Unmarshal([]byte(`{"approval_posture":""}`), &fromJSON); err != nil || fromJSON.Posture != "" {
+		t.Fatalf("empty json posture = %q, %v; want unset", fromJSON.Posture, err)
+	}
+}
+
+// A value that bypassed parsing can only add asks.
+func TestUnparsedPostureReadsAsStrict(t *testing.T) {
+	t.Parallel()
+	for _, p := range []Posture{"", "garbage", "Light"} {
+		if p.Strictness() != PostureStrict.Strictness() || p.Ladder() != PostureStrict.Ladder() {
+			t.Errorf("%q does not read as strict", p)
+		}
+		for _, g := range PostureStrict.Gates() {
+			if !p.Enables(g) {
+				t.Errorf("%q does not run strict's %s", p, g)
+			}
+		}
+		if p.ReleasesChatSecretLocally(&SecretHit{ChatGenerated: true, RecipientsLocal: true}) {
+			t.Errorf("%q releases a chat secret without a card", p)
+		}
+	}
+	f := Facts{Stage: StagePreDial, Ran: ProducerContainment | ProducerDestination | ProducerLease | ProducerRule | ProducerDetection,
+		Destination: &Endpoint{Host: "example.com", Port: 443, Transport: "http_connect", Opaque: true, FirstUseThisSession: true}}
+	if verdict, decision := Evaluate(f, "garbage"); verdict != Ask || decision.Posture != PostureStrict {
+		t.Fatalf("unparsed posture evaluated as %s/%+v, want a strict ask", verdict, decision)
+	}
+}
+
+// Every gate except missing facts has a quietest posture that runs it.
+func TestEveryGateHasAPostureFloor(t *testing.T) {
+	t.Parallel()
+	for _, g := range api.AllApprovalGateValues() {
+		floor, ok := gateFloor[g]
+		if g == api.GateIncompleteFacts {
+			if ok {
+				t.Errorf("%s asks at every posture and must not have a floor", g)
+			}
+			continue
+		}
+		if !ok {
+			t.Errorf("%s has no posture floor, so no posture runs it", g)
+			continue
+		}
+		if _, err := ParsePosture(string(floor)); err != nil {
+			t.Errorf("%s floor: %v", g, err)
+		}
+	}
+}
+
+// What a stricter posture quiets, every quieter one quiets too; what a quieter
+// posture reviews, every stricter one reviews too.
+func TestPostureRulesAreMonotone(t *testing.T) {
+	t.Parallel()
+	ordered := Postures()
+	for i := 1; i < len(ordered); i++ {
+		lower, higher := ordered[i-1].rule(), ordered[i].rule()
+		quiets := []struct {
+			name          string
+			lower, higher bool
+		}{
+			{"releasesChatSecrets", lower.releasesChatSecrets, higher.releasesChatSecrets},
+			{"quietsPublicRegistries", lower.quietsPublicRegistries, higher.quietsPublicRegistries},
+			{"quietsOwnedLocalServices", lower.quietsOwnedLocalServices, higher.quietsOwnedLocalServices},
+		}
+		for _, q := range quiets {
+			if q.higher && !q.lower {
+				t.Errorf("%s: %s quiets what %s reviews", q.name, ordered[i], ordered[i-1])
+			}
+		}
+		reviews := []struct {
+			name          string
+			lower, higher bool
+		}{
+			{"reviewsConfinedWrites", lower.reviewsConfinedWrites, higher.reviewsConfinedWrites},
+			{"leasesAgentPolicyFiles", lower.leasesAgentPolicyFiles, higher.leasesAgentPolicyFiles},
+		}
+		for _, r := range reviews {
+			if r.lower && !r.higher {
+				t.Errorf("%s: %s reviews what %s does not", r.name, ordered[i-1], ordered[i])
+			}
+		}
 	}
 }
 
@@ -127,9 +233,6 @@ func TestPostureLadderShapeIsMonotone(t *testing.T) {
 	}
 	if PostureBalanced.Widens() {
 		t.Fatal("Balanced keeps broader subjects in the menu")
-	}
-	if got := Posture("garbage").Ladder(); got != PostureBalanced.Ladder() {
-		t.Fatalf("unknown posture ladder = %+v, want Balanced's", got)
 	}
 }
 

@@ -136,6 +136,22 @@ export const APPROVALS_SETTINGS_COPY = {
   projectOffNotice:
     "Approvals are off in device Settings. This project can restore its saved approval level without changing the device setting.",
   projectRestore: "Turn approvals on for this project",
+  rejectedHeading: "Not applied in this project",
+  rejectedHint:
+    "This project's approvals.yaml has parts we could not apply. A project can only add asks, so a file or approval level we cannot read applies as Strict with approvals on. Fix the file to change this project's approvals here.",
+  rejectedEntryLabel: (entry: string | undefined) => entry ?? "The whole file",
+  rejectedReason: (code: string): string => {
+    switch (code) {
+      case "project_unreadable":
+        return "The file could not be read, so this project uses Strict with approvals on until it is fixed.";
+      case "project_fields_forbidden":
+        return "A project can only add asks. This part would have granted or loosened approval, so it was ignored.";
+      case "invalid_entry":
+        return "This part is not valid, so it was ignored.";
+      default:
+        return "This part was not applied.";
+    }
+  },
   optionsHeading: "Options",
   baselineHeading: "Always on",
   baselineLines: [

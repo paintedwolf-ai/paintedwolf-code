@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 )
 
@@ -488,7 +489,7 @@ detection:
 func TestLevelEscalates(t *testing.T) {
 	t.Parallel()
 	levels := []Level{LevelInformational, LevelLow, LevelMedium, LevelHigh, LevelCritical}
-	postures := []string{"light", "balanced", "strict"}
+	postures := gate.Postures()
 	for _, level := range levels {
 		for _, posture := range postures {
 			got := Escalates(level, posture)
@@ -512,7 +513,10 @@ func TestLevelEscalates(t *testing.T) {
 // Each posture enables a band the one below it does not have.
 func TestPosturesAreDistinctBands(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ level, quiet, loud string }{
+	for _, tc := range []struct {
+		level       string
+		quiet, loud gate.Posture
+	}{
 		{"high", "light", "balanced"},
 		{"medium", "balanced", "strict"},
 	} {
@@ -525,25 +529,14 @@ func TestPosturesAreDistinctBands(t *testing.T) {
 	}
 }
 
-func TestUnknownPostureIsInert(t *testing.T) {
+// A posture that bypassed parsing escalates as strict does, never as nothing.
+func TestUnparsedPostureEscalatesAsStrict(t *testing.T) {
 	t.Parallel()
-	for _, posture := range []string{"", "  ", "paranoid", "supervised"} {
-		for _, level := range []Level{LevelMedium, LevelHigh, LevelCritical} {
-			if Escalates(level, posture) {
-				t.Errorf("%s must be inert under posture %q", level, posture)
+	for _, posture := range []gate.Posture{"", "paranoid", "BALANCED"} {
+		for _, level := range []Level{LevelInformational, LevelLow, LevelMedium, LevelHigh, LevelCritical} {
+			if got, want := Escalates(level, posture), Escalates(level, gate.PostureStrict); got != want {
+				t.Errorf("Escalates(%s, %q) = %v, want strict's %v", level, posture, got, want)
 			}
-		}
-	}
-	for _, tc := range []struct {
-		posture string
-		level   Level
-	}{
-		{"BALANCED", LevelHigh},
-		{" Light ", LevelCritical},
-		{"STRICT", LevelMedium},
-	} {
-		if !Escalates(tc.level, tc.posture) {
-			t.Errorf("%s must escalate under normalized posture %q", tc.level, tc.posture)
 		}
 	}
 }

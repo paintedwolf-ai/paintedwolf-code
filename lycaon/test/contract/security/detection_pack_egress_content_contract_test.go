@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -184,7 +185,7 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
 	confine.SetEgressRuleEvaluator(nil)
 	t.Cleanup(func() { confine.SetEgressRuleEvaluator(nil) })
-	confine.SetDetectionApprovalPosture(func(confine.EgressCommand) string { return "balanced" })
+	confine.SetDetectionApprovalPosture(func(confine.EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { confine.SetDetectionApprovalPosture(nil) })
 
 	stub := stubConfineEgressDetection{

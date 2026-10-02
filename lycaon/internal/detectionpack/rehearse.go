@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"gopkg.in/yaml.v3"
 )
@@ -159,7 +160,7 @@ func (c FixtureCase) Render() string {
 
 // rehearsalPosture is the strictest posture, so a case is judged by whether the
 // rule matched at all rather than by which band the reader happens to run.
-const rehearsalPosture = "strict"
+const rehearsalPosture = gate.PostureStrict
 
 // ruleMatchesCase enters one case through the adapter its log source names.
 func ruleMatchesCase(p Pack, rule Rule, fixture FixtureCase, semantics *ActionSemanticsCatalog) bool {

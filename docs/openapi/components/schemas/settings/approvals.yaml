@@ -24,7 +24,7 @@ components:
       - host_resource
     ApprovalConfigResponse:
       x-go-generate: true
-      x-go-field-order: ["scope", "rules", "merged_from", "managed_rules", "approval_posture", "ai_rationale_enabled", "never_ask", "field_sources", "defaults"]
+      x-go-field-order: ["scope", "rules", "merged_from", "managed_rules", "approval_posture", "ai_rationale_enabled", "never_ask", "field_sources", "defaults", "rejected"]
       type: object
       required:
       - scope
@@ -79,6 +79,38 @@ components:
           description: >
             Present on project scope. Device-global effective values for the
             following-Settings summary when the project override is disabled.
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalOverlayRejectedRow"
+          description: >
+            Present on project scope. Parts of the project's approvals.yaml the
+            host did not apply. Repository policy can only tighten, so an
+            unreadable file or posture applies as strict with approvals on, and
+            the project's settings cannot be saved until the file is fixed.
+    ApprovalOverlayRejectedRow:
+      x-go-generate: true
+      type: object
+      required: [code, detail]
+      additionalProperties: false
+      properties:
+        entry:
+          type: string
+          description: >
+            The refused part, such as approval_posture, rules[2], grants, or
+            never_ask. Absent when the whole file was refused.
+        code:
+          type: string
+          enum: [project_unreadable, project_fields_forbidden, invalid_entry]
+          description: >
+            Why the part was not applied, from the vocabulary shared with
+            detection-pack and scanner overlays. project_unreadable means none
+            of the file applied; project_fields_forbidden means the part would
+            have granted or loosened; invalid_entry means it was malformed.
+            Clients branch on this rather than on detail.
+        detail:
+          type: string
+          description: What was wrong, for display beside the part.
     ApprovalFieldSources:
       x-go-generate: true
       type: object

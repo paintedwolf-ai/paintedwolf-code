@@ -106,6 +106,8 @@ Security-sensitive grants remain exact. A socket-path grant must not widen to it
 
 Secret-release leases use `secret_recipients` and a witness bound to that exact recipient set; a destination-only lease cannot establish recipient authority. Startup refuses incompatible entries, including expired ones, and leaves the entire approvals file unchanged. Its error identifies the file and either the invalid YAML line or the invalid grant ID.
 
+An unknown `approval_posture` likewise stops startup with the file unchanged, and the error names the file and the token; correct it to `light`, `balanced`, or `strict` and restart. It is never read as the default, which would quietly lower an ask-line someone chose.
+
 To recover, make a private copy of the reported file, remove only the affected `category: secret` entries from its `grants` list, and restart. Preserve the other grants, rules, posture, and preferences. The next secret release requires a new approval for its exact recipients. Do not translate destination strings into recipient authority or delete the approvals file or database to recover.
 
 ## Ephemeral data

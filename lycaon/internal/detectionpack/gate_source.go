@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 )
 
@@ -25,7 +26,7 @@ func NewGateSource(m *Matcher, semantics ...*ActionSemanticsCatalog) *GateSource
 }
 
 // MatchAction returns the highest-severity match for the posture.
-func (s *GateSource) MatchAction(action hitl.ProposedAction, posture string) (hitl.DetectionMatch, bool) {
+func (s *GateSource) MatchAction(action hitl.ProposedAction, posture gate.Posture) (hitl.DetectionMatch, bool) {
 	if s == nil || s.m == nil {
 		return hitl.DetectionMatch{}, false
 	}
@@ -135,7 +136,7 @@ func effectReachRoots(contained hitl.Contained) []string {
 }
 
 // Escalates reports whether the match applies to the posture.
-func (s *GateSource) Escalates(match hitl.DetectionMatch, posture string) bool {
+func (s *GateSource) Escalates(match hitl.DetectionMatch, posture gate.Posture) bool {
 	return Escalates(Level(match.Level), posture)
 }
 
@@ -200,6 +201,6 @@ func uniqueStrings(values []string) []string {
 }
 
 // Escalates reports whether the match applies to the posture.
-func (s *EgressSource) Escalates(match hitl.DetectionMatch, posture string) bool {
+func (s *EgressSource) Escalates(match hitl.DetectionMatch, posture gate.Posture) bool {
 	return Escalates(Level(match.Level), posture)
 }

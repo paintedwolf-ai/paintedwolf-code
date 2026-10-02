@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/projectview"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/api/settingsadmin"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -69,7 +70,9 @@ func (s *Server) handleUpdateHostResource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := s.settingsSvc.Approvals.SetHostResourceRule(scope, projectDir, id, effect); err != nil {
-		s.responses.InternalError(w, r, err)
+		if !settingsadmin.ProjectApprovalsWriteError(&s.responses, w, err) {
+			s.responses.InternalError(w, r, err)
+		}
 		return
 	}
 	projectview.PublishSettings(s.events, s.projectRegistry, r.Context(), wire.SettingsAreaApprovals, string(scope), projectDir, "updated")

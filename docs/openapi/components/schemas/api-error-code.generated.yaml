@@ -127,6 +127,7 @@ components:
         - extension_suggestion_invalid
         - overlay_format_unsupported
         - overlay_format_invalid
+        - project_approvals_need_repair
         - root_not_found
         - root_busy
         - duplicate_root

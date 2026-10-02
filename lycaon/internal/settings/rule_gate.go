@@ -65,7 +65,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 		return &hitl.ApprovalResult{}, nil
 	}
 	facts, citation, matchedRules := g.factsForAction(action, cfg, layers)
-	verdict, decision := gate.Evaluate(facts, gate.PostureFromString(string(cfg.Posture)))
+	verdict, decision := gate.Evaluate(facts, cfg.Posture)
 	res := &hitl.ApprovalResult{DetectionCitation: citation}
 	if verdict != gate.Ask {
 		return res, nil

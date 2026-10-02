@@ -496,6 +496,11 @@ values:
     status: 409
     comment: >-
       workspace .paintedwolf/overlay.yaml has a missing or invalid overlay_format
+  - id: project_approvals_need_repair
+    status: 409
+    comment: >-
+      the project's .paintedwolf/approvals.yaml has parts the host did not apply;
+      saving would replace them, so the file must be fixed first
   - id: root_not_found
     status: 404
     comment: >-

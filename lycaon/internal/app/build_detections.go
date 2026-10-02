@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 )
@@ -124,6 +125,6 @@ func (a egressDetectionAdapter) Match(observation confine.EgressDetectionObserva
 	}, true
 }
 
-func (a egressDetectionAdapter) Escalates(match confine.EgressDetectionCitation, posture string) bool {
+func (a egressDetectionAdapter) Escalates(match confine.EgressDetectionCitation, posture gate.Posture) bool {
 	return detectionpack.Escalates(detectionpack.Level(match.Level), posture)
 }

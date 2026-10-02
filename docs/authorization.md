@@ -129,11 +129,13 @@ Posture controls which eligible gates ask. It does not alter protected control-p
 | Strict | More declared risk gates ask before release |
 | Advanced Off (`never_ask`) | Suppress eligible asks and grant requested capabilities; deny rules still apply |
 
-The gate roster each posture enables is `postureGates` in [`gate/posture.go`](../lycaon/internal/gate/posture.go); each posture includes the gates of the less restrictive ones. Posture also selects whether a broader network subject belongs on the face or in the menu (`postureLadder`):
+Each gate's quietest posture is its row in `gateFloor` in [`gate/posture.go`](../lycaon/internal/gate/posture.go), so every posture runs the gates of the less restrictive ones by construction; only `incomplete_facts` has no floor, because missing facts ask at every posture. Everything else a posture decides lives beside it in `postureRules`, including whether a broader network subject belongs on the face or in the menu:
 
 | | Light | Balanced | Strict |
 |---|---|---|---|
 | Broader network subject | May be primary from the first card | Explicit menu choice | Explicit menu choice |
+
+A posture is exactly `light`, `balanced`, or `strict`. `gate.ParsePosture` and decoding, the only ways a posture enters the host, refuse any other token rather than reading it as the default, and a value that bypassed them reads as Strict so it can only add asks. An unknown posture in the device `approvals.yaml` stops startup with the file unchanged ([device configuration](compatibility.md#device-configuration)). In a repository `approvals.yaml` it applies Strict and is reported, as are the file's other refused parts ([approvals overlay](project-overlay.md#approvalsyaml--additive-tightening)).
 
 Broader subjects use structural identities: an exact command's mediated network, a configured destination set, or the endpoints observed during one gathering window. Detection evidence and secret exposure can constrain widening. Asking again never increases authority by itself.
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -16,7 +17,7 @@ import (
 
 type runtimeDetectionFixture struct{ matched bool }
 
-func (s runtimeDetectionFixture) MatchAction(hitl.ProposedAction, string) (hitl.DetectionMatch, bool) {
+func (s runtimeDetectionFixture) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
 	return hitl.DetectionMatch{PackID: "fixture", RuleID: "rule", Level: "critical",
 		External: true, Unrecoverable: true, Tagged: true}, s.matched
 }

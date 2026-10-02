@@ -240,7 +240,7 @@ func TestSecretOutboundReleasesChatSecretsLocallyBelowStrict(t *testing.T) {
 		{"strict asks", true, true, true, PostureStrict},
 		{"remote recipient asks", true, false, true, PostureLight},
 		{"person's secret asks", false, true, true, PostureLight},
-		{"unknown posture uses the default", true, true, false, Posture("unset")},
+		{"unparsed posture asks as strict", true, true, true, Posture("unset")},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

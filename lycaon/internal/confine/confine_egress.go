@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
@@ -154,7 +155,7 @@ type EgressDetectionObservation struct {
 type EgressDetectionSource interface {
 	Match(observation EgressDetectionObservation) (EgressDetectionCitation, bool)
 	// Escalates uses the approval posture.
-	Escalates(match EgressDetectionCitation, approvalPosture string) bool
+	Escalates(match EgressDetectionCitation, approvalPosture gate.Posture) bool
 }
 
 // EgressResolver returns the approval decision for one observed destination.
@@ -313,7 +314,7 @@ func SetEgressResolver(fn EgressResolver) {
 var (
 	egressDetectionMu      sync.RWMutex
 	egressDetectionSrc     EgressDetectionSource
-	detectionPermPostureFn func(EgressCommand) string
+	detectionPermPostureFn func(EgressCommand) gate.Posture
 )
 
 // SetEgressDetectionSource installs the detection-pack CONNECT overlay. Nil disables it.
@@ -324,16 +325,16 @@ func SetEgressDetectionSource(src EgressDetectionSource) {
 }
 
 // SetDetectionApprovalPosture installs the detection severity posture reader.
-func SetDetectionApprovalPosture(fn func(EgressCommand) string) {
+func SetDetectionApprovalPosture(fn func(EgressCommand) gate.Posture) {
 	egressDetectionMu.Lock()
 	detectionPermPostureFn = fn
 	egressDetectionMu.Unlock()
 }
 
-func currentEgressDetection(cmd EgressCommand) (EgressDetectionSource, string) {
+func currentEgressDetection(cmd EgressCommand) (EgressDetectionSource, gate.Posture) {
 	egressDetectionMu.RLock()
 	defer egressDetectionMu.RUnlock()
-	posture := ""
+	var posture gate.Posture
 	if detectionPermPostureFn != nil {
 		posture = detectionPermPostureFn(cmd)
 	}

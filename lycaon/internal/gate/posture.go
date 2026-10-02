@@ -1,12 +1,13 @@
 package gate
 
 import (
-	"strings"
+	"fmt"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Posture selects the active gates and default approval scope.
+// Posture selects the active gates and default approval scope. The zero value
+// means unset; any other value comes from ParsePosture or decoding.
 type Posture string
 
 const (
@@ -22,40 +23,80 @@ const (
 // DefaultPosture is the out-of-the-box ask-line.
 const DefaultPosture = PostureBalanced
 
-// PostureFromString uses the default for empty or unknown tokens.
-func PostureFromString(s string) Posture {
-	switch Posture(strings.TrimSpace(strings.ToLower(s))) {
-	case PostureLight:
-		return PostureLight
-	case PostureStrict:
-		return PostureStrict
-	default:
-		return PostureBalanced
+// ParsePosture accepts exactly light, balanced, or strict; anything else is an
+// error.
+func ParsePosture(token string) (Posture, error) {
+	p := Posture(token)
+	if _, ok := postureRules[p]; !ok {
+		return "", fmt.Errorf("unknown approval posture %q (use light, balanced, or strict)", token)
 	}
+	return p, nil
 }
 
-// ValidPosture reports whether s is a recognized posture token (light|balanced|strict).
-func ValidPosture(s string) bool {
-	switch Posture(strings.TrimSpace(strings.ToLower(s))) {
-	case PostureLight, PostureBalanced, PostureStrict:
-		return true
+// UnmarshalText applies ParsePosture to YAML and JSON input. An empty value
+// decodes as unset.
+func (p *Posture) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*p = ""
+		return nil
 	}
-	return false
+	parsed, err := ParsePosture(string(text))
+	if err != nil {
+		return err
+	}
+	*p = parsed
+	return nil
 }
+
+// postureRule is everything a posture decides besides its gate roster.
+type postureRule struct {
+	strictness int
+	ladder     LadderPolicy
+	// releasesChatSecrets lets a secret generated for this chat reach the
+	// chat's own local recipients without a card.
+	releasesChatSecrets bool
+	// quietsPublicRegistries treats a tunnel to a public package registry as
+	// baseline rather than an agent-chosen destination.
+	quietsPublicRegistries bool
+	// quietsOwnedLocalServices lets a listener on an unprivileged port, and a
+	// loopback connection to ports the chat owns, widen without a card.
+	quietsOwnedLocalServices bool
+	// reviewsConfinedWrites asks for a write even inside the chat's scratch
+	// authority.
+	reviewsConfinedWrites bool
+	// leasesAgentPolicyFiles narrows an agent-policy lease to the exact files
+	// instead of the trust surfaces the change touched.
+	leasesAgentPolicyFiles bool
+}
+
+var postureRules = map[Posture]postureRule{
+	PostureLight: {
+		strictness: 0, ladder: LadderPolicy{Widening: WidenFromFirstCard},
+		releasesChatSecrets: true, quietsPublicRegistries: true, quietsOwnedLocalServices: true,
+	},
+	PostureBalanced: {
+		strictness: 1, ladder: LadderPolicy{Widening: WidenMenuOnly},
+		releasesChatSecrets: true, quietsPublicRegistries: true, quietsOwnedLocalServices: true,
+	},
+	PostureStrict: {
+		strictness: 2, ladder: LadderPolicy{Widening: WidenMenuOnly},
+		reviewsConfinedWrites: true, leasesAgentPolicyFiles: true,
+	},
+}
+
+// known returns the posture whose rule applies. A value that bypassed parsing
+// reads as Strict, so it can only add asks.
+func (p Posture) known() Posture {
+	if _, ok := postureRules[p]; ok {
+		return p
+	}
+	return PostureStrict
+}
+
+func (p Posture) rule() postureRule { return postureRules[p.known()] }
 
 // Strictness orders postures by their active gate sets.
-func (p Posture) Strictness() int {
-	switch p {
-	case PostureLight:
-		return 0
-	case PostureStrict:
-		return 2
-	case PostureBalanced:
-		return 1
-	default:
-		return DefaultPosture.Strictness()
-	}
-}
+func (p Posture) Strictness() int { return p.rule().strictness }
 
 // Stricter selects the stricter configured posture; empty means unset.
 func Stricter(a, b Posture) Posture {
@@ -71,33 +112,27 @@ func Stricter(a, b Posture) Posture {
 	}
 }
 
-// postureReleasesChatSecrets defines postures releasing chat-generated secrets locally without prompting.
-var postureReleasesChatSecrets = map[Posture]bool{
-	PostureLight:    true,
-	PostureBalanced: true,
-}
-
 // ReleasesChatSecretLocally reports whether the secret gate stays silent for hit.
 func (p Posture) ReleasesChatSecretLocally(hit *SecretHit) bool {
-	return hit != nil && !hit.Held && hit.ChatGenerated && hit.RecipientsLocal && postureReleasesChatSecrets[normalize(p)]
-}
-
-// postureQuietsPublicRegistries defines postures where a tunnel to a public
-// package registry is not an agent-chosen destination.
-var postureQuietsPublicRegistries = map[Posture]bool{
-	PostureLight:    true,
-	PostureBalanced: true,
+	return hit != nil && !hit.Held && hit.ChatGenerated && hit.RecipientsLocal && p.rule().releasesChatSecrets
 }
 
 // QuietsPublicRegistry reports whether the destination is a public package
 // registry this posture treats as baseline. Credential-class content in the chat
 // withdraws the baseline, because the tunnel's payload is not screened.
 func (p Posture) QuietsPublicRegistry(f Facts) bool {
-	if f.Destination == nil || f.Destination.PublicRegistry == "" || !postureQuietsPublicRegistries[normalize(p)] {
+	if f.Destination == nil || f.Destination.PublicRegistry == "" || !p.rule().quietsPublicRegistries {
 		return false
 	}
 	return f.Ran.Has(ProducerExposure) && !f.SecretExposed
 }
+
+// ReviewsConfinedWrites reports whether a write inside scratch authority still asks.
+func (p Posture) ReviewsConfinedWrites() bool { return p.rule().reviewsConfinedWrites }
+
+// LeasesAgentPolicyFiles reports whether an agent-policy lease covers only the
+// exact files a change touched.
+func (p Posture) LeasesAgentPolicyFiles() bool { return p.rule().leasesAgentPolicyFiles }
 
 // AsksOnFirstHost reports whether the first reach to a host asks; it also sets
 // the default egress posture.
@@ -119,77 +154,42 @@ type LadderPolicy struct {
 	Widening Widening
 }
 
-var postureLadder = map[Posture]LadderPolicy{
-	PostureLight:    {Widening: WidenFromFirstCard},
-	PostureBalanced: {Widening: WidenMenuOnly},
-	PostureStrict:   {Widening: WidenMenuOnly},
-}
-
 // Ladder returns this posture's card-ladder policy.
-func (p Posture) Ladder() LadderPolicy { return postureLadder[normalize(p)] }
+func (p Posture) Ladder() LadderPolicy { return p.rule().ladder }
 
 // Widens reports whether the first card offers the widened grant as its chat option.
 func (p Posture) Widens() bool { return p.Ladder().Widening == WidenFromFirstCard }
 
-// Each posture includes the gates enabled by less restrictive postures.
-var postureGates = map[Posture][]api.ApprovalGate{
-	PostureLight: {
-		api.GateSecretOutbound,
-		api.GateConsentDrift,
-		api.GateRemotePackageExecution,
-		// Detection severity is filtered by the producer for this posture.
-		api.GateAuthorityMisuse,
-		api.GateOutsideRootsWrite,
-		api.GateOutsideRootsRead,
-		api.GateUnobservedChannel,
-		api.GateUserRule,
-		api.GateExplicitApprovalRequest,
-	},
-	PostureBalanced: {
-		api.GateAgentPolicyChange,
-		api.GateSecretOutbound,
-		api.GateConsentDrift,
-		api.GateRemotePackageExecution,
-		api.GateRemotePackageExecutionKnown,
-		api.GateAuthorityMisuse,
-		api.GateSensitiveLocation,
-		api.GateAgentChosenOutbound,
-		api.GateOutsideRootsWrite,
-		api.GateOutsideRootsRead,
-		api.GateUnobservedChannel,
-		api.GateUserRule,
-		api.GateExplicitApprovalRequest,
-		api.GateCapabilityWidening,
-	},
-	PostureStrict: {
-		api.GateAgentPolicyChange,
-		api.GateSecretOutbound,
-		api.GateConsentDrift,
-		api.GateRemotePackageExecution,
-		api.GateRemotePackageExecutionKnown,
-		api.GateAuthorityMisuse,
-		api.GateSensitiveLocation,
-		api.GateAgentChosenOutbound,
-		api.GateSecretExposedOutbound,
-		api.GateOutsideRootsWrite,
-		api.GateOutsideRootsRead,
-		api.GateUnobservedChannel,
-		api.GateUserRule,
-		api.GateExplicitApprovalRequest,
-		api.GateCapabilityWidening,
-		api.GateFirstHost,
-		api.GateMCPUnleased,
-	},
+// gateFloor is the quietest posture that runs each gate. Every stricter posture
+// runs it too, so each roster contains the quieter ones by construction.
+// GateIncompleteFacts has no floor: missing facts ask at every posture.
+var gateFloor = map[api.ApprovalGate]Posture{
+	api.GateSecretOutbound:         PostureLight,
+	api.GateConsentDrift:           PostureLight,
+	api.GateRemotePackageExecution: PostureLight,
+	// Detection severity is filtered by the producer for each posture.
+	api.GateAuthorityMisuse:         PostureLight,
+	api.GateOutsideRootsWrite:       PostureLight,
+	api.GateOutsideRootsRead:        PostureLight,
+	api.GateUnobservedChannel:       PostureLight,
+	api.GateUserRule:                PostureLight,
+	api.GateExplicitApprovalRequest: PostureLight,
+
+	api.GateAgentPolicyChange:           PostureBalanced,
+	api.GateRemotePackageExecutionKnown: PostureBalanced,
+	api.GateSensitiveLocation:           PostureBalanced,
+	api.GateAgentChosenOutbound:         PostureBalanced,
+	api.GateCapabilityWidening:          PostureBalanced,
+
+	api.GateSecretExposedOutbound: PostureStrict,
+	api.GateFirstHost:             PostureStrict,
+	api.GateMCPUnleased:           PostureStrict,
 }
 
 // Enables reports whether this posture runs the given gate.
 func (p Posture) Enables(g api.ApprovalGate) bool {
-	for _, candidate := range postureGates[normalize(p)] {
-		if candidate == g {
-			return true
-		}
-	}
-	return false
+	floor, ok := gateFloor[g]
+	return ok && p.Strictness() >= floor.Strictness()
 }
 
 // Gates returns the live set for this posture in citation-priority order.
@@ -207,11 +207,4 @@ func (p Posture) Gates() []api.ApprovalGate {
 // Postures returns every posture, quietest first.
 func Postures() []Posture {
 	return []Posture{PostureLight, PostureBalanced, PostureStrict}
-}
-
-func normalize(p Posture) Posture {
-	if _, ok := postureGates[p]; ok {
-		return p
-	}
-	return DefaultPosture
 }

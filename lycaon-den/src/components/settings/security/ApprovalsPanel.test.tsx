@@ -457,4 +457,64 @@ describe("ApprovalsPanel", () => {
       );
     });
   });
+  it("reports project approvals it could not apply and locks editing until the file is fixed", () => {
+    const settingsStore = createSettingsStore({
+      ...INITIAL_SETTINGS_STATE,
+      approvals: projectApprovals({
+        approval_posture: "strict",
+        field_sources: {
+          approval_posture: "override",
+          ai_rationale_enabled: "default",
+          never_ask: "default",
+        },
+        rejected: [
+          {
+            entry: "approval_posture",
+            code: "invalid_entry",
+            detail: 'unknown approval posture "stirct" (use light, balanced, or strict); this project uses strict until it is fixed',
+          },
+          { code: "project_unreadable", detail: "could not parse .paintedwolf/approvals.yaml" },
+        ],
+      }),
+    });
+    const client = stubClient({ listApprovalGrants: vi.fn().mockResolvedValue({ grants: [] }) });
+
+    render(() => (
+      <ApprovalsPanel
+        client={client}
+        settingsStore={settingsStore}
+        alwaysProjectScope
+        initialTab="ask"
+        projectId="proj-1"
+      />
+    ));
+
+    const section = screen.getByTestId("approval-rejected");
+    expect(section.getAttribute("role")).toBe("alert");
+    expect(screen.getByTestId("approval-rejected-row-0").getAttribute("data-code")).toBe("invalid_entry");
+    expect(screen.getByTestId("approval-rejected-row-0").textContent).toMatch(/approval_posture/);
+    expect(screen.getByTestId("approval-rejected-row-0").textContent).toMatch(/stirct/);
+    expect(screen.getByTestId("approval-rejected-row-1").textContent).toMatch(/The whole file/);
+    expect(screen.getByTestId("approval-posture-strict").closest("fieldset")?.disabled).toBe(true);
+  });
+
+  it("shows no repair notice when the project file applied cleanly", () => {
+    const settingsStore = createSettingsStore({
+      ...INITIAL_SETTINGS_STATE,
+      approvals: projectApprovals(),
+    });
+    const client = stubClient({ listApprovalGrants: vi.fn().mockResolvedValue({ grants: [] }) });
+
+    render(() => (
+      <ApprovalsPanel
+        client={client}
+        settingsStore={settingsStore}
+        alwaysProjectScope
+        initialTab="ask"
+        projectId="proj-1"
+      />
+    ));
+
+    expect(screen.queryByTestId("approval-rejected")).toBeNull();
+  });
 });

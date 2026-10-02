@@ -220,6 +220,8 @@ type ApprovalConfigResponse struct {
 	FieldSources *ApprovalFieldSources `json:"field_sources,omitempty"`
 	// Present on project scope. Device-global effective values for the following-Settings summary when the project override is disabled.
 	Defaults *ApprovalDefaults `json:"defaults,omitempty"`
+	// Present on project scope. Parts of the project's approvals.yaml the host did not apply. Repository policy can only tighten, so an unreadable file or posture applies as strict with approvals on, and the project's settings cannot be saved until the file is fixed.
+	Rejected []ApprovalOverlayRejectedRow `json:"rejected,omitempty"`
 }
 
 // ApprovalDefaults
@@ -362,6 +364,16 @@ type ApprovalOption struct {
 	Disabled bool `json:"disabled,omitempty"`
 	// Host copy saying why a disabled option cannot be picked here. Present exactly when disabled is true.
 	Note string `json:"note,omitempty"`
+}
+
+// ApprovalOverlayRejectedRow
+type ApprovalOverlayRejectedRow struct {
+	// The refused part, such as approval_posture, rules[2], grants, or never_ask. Absent when the whole file was refused.
+	Entry string `json:"entry,omitempty"`
+	// Why the part was not applied, from the vocabulary shared with detection-pack and scanner overlays. project_unreadable means none of the file applied; project_fields_forbidden means the part would have granted or loosened; invalid_entry means it was malformed. Clients branch on this rather than on detail.
+	Code string `json:"code"`
+	// What was wrong, for display beside the part.
+	Detail string `json:"detail"`
 }
 
 // ApprovalPlan
