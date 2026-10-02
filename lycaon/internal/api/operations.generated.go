@@ -177,6 +177,7 @@ var (
 	operationGetWorkerChanges                   = generatedOperation{ID: "getWorkerChanges", Method: "GET", Path: "/v1/workers/{id}/changes", Params: []string{"id"}}
 	operationGetWorkflowRun                     = generatedOperation{ID: "getWorkflowRun", Method: "GET", Path: "/v1/workflow-runs/{id}", Params: []string{"id"}}
 	operationGetWorkflowRunReport               = generatedOperation{ID: "getWorkflowRunReport", Method: "GET", Path: "/v1/workflow-runs/{id}/report", Params: []string{"id"}}
+	operationHoldProjectManagedSecret           = generatedOperation{ID: "holdProjectManagedSecret", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/hold", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
 	operationImportDetectionPack                = generatedOperation{ID: "importDetectionPack", Method: "POST", Path: "/v1/detection-packs", RecordsPersonAction: true}
 	operationInstallExtensionMetaPack           = generatedOperation{ID: "installExtensionMetaPack", Method: "POST", Path: "/v1/extensions/meta-packs", RecordsPersonAction: true}
 	operationInstallExtensionPack               = generatedOperation{ID: "installExtensionPack", Method: "POST", Path: "/v1/extensions/packs", RecordsPersonAction: true}
@@ -511,6 +512,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetWorkerChanges,
 	operationGetWorkflowRun,
 	operationGetWorkflowRunReport,
+	operationHoldProjectManagedSecret,
 	operationImportDetectionPack,
 	operationInstallExtensionMetaPack,
 	operationInstallExtensionPack,

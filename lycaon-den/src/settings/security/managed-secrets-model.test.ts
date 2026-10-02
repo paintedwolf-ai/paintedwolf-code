@@ -3,6 +3,7 @@ import type { ManagedSecret } from "../../api/types.ts";
 import {
   DEFAULT_SECRET_FILTER,
   addDraftProblem,
+  canHold,
   canPromote,
   filterSecrets,
   hiddenRevokedCount,
@@ -98,6 +99,16 @@ describe("what a state allows", () => {
     expect(canPromote(secret({ scope: "chat", chat_session_id: "t" }))).toBe(true);
     expect(canPromote(secret({ scope: "project" }))).toBe(false);
     expect(canPromote(secret({ scope: "chat", state: "revoked" }))).toBe(false);
+  });
+
+  it("offers a hold only for a live value the host supplied", () => {
+    expect(canHold(secret({ custody: "chat" }))).toBe(true);
+    expect(canHold(secret({ custody: "host" }))).toBe(true);
+    expect(canHold(secret({ custody: "person" }))).toBe(false);
+    expect(canHold(secret({ custody: "file", origin: "file_marked" }))).toBe(false);
+    expect(canHold(secret({ custody: "host", origin: "cookie_jar" }))).toBe(false);
+    expect(canHold(secret({ custody: "chat", state: "revoked" }))).toBe(false);
+    expect(canHold(secret({ state: "unavailable" }))).toBe(false);
   });
 });
 

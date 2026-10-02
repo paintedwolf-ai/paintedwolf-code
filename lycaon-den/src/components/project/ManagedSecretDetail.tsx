@@ -14,7 +14,7 @@ import {
   secretStateLabel,
   useOutcomeLabel,
 } from "../../settings/security/managed-secrets-copy.ts";
-import { canPromote, canReplaceValue, isRevoked, needsValue } from "../../settings/security/managed-secrets-model.ts";
+import { canHold, canPromote, canReplaceValue, isRevoked, needsValue } from "../../settings/security/managed-secrets-model.ts";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 
@@ -45,7 +45,10 @@ type ManagedSecretDetailProps = {
   /** Called with the bytes actually copied; absent means copy the whole value. */
   onCopyValue: (selection?: string) => void;
   onMode: (mode: DetailMode) => void;
+  /** The one-click action in flight, if any. */
+  pending?: "promote" | "hold";
   onPromote: () => void;
+  onHold: () => void;
   onRevoke: () => void;
 };
 
@@ -336,6 +339,20 @@ function Actions(props: ManagedSecretDetailProps) {
           {C.edit}
         </DenButton>
       </div>
+      <Show when={canHold(secret())}>
+        <div class="den-secret-promote">
+          <p class="den-settings-hint">{C.holdHint}</p>
+          <DenButton
+            variant="secondary"
+            compact
+            disabled={props.busy || props.revealBusy}
+            data-testid="managed-secret-hold"
+            onClick={() => props.onHold()}
+          >
+            {props.pending === "hold" ? C.holding : C.hold}
+          </DenButton>
+        </div>
+      </Show>
       <Show when={canPromote(secret())}>
         <div class="den-secret-promote">
           <p class="den-settings-hint">{C.promoteHint}</p>
@@ -346,7 +363,7 @@ function Actions(props: ManagedSecretDetailProps) {
             data-testid="managed-secret-promote"
             onClick={() => props.onPromote()}
           >
-            {props.busy ? C.promoting : C.promote}
+            {props.pending === "promote" ? C.promoting : C.promote}
           </DenButton>
         </div>
       </Show>

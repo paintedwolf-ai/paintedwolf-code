@@ -137,6 +137,19 @@ func (s *Handler) HandleReplaceProjectManagedSecretValue(w http.ResponseWriter, 
 	httpio.WriteJSON(w, http.StatusOK, secretview.Metadata(meta))
 }
 
+func (s *Handler) HandleHoldProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.secretTarget(w, r)
+	if !ok {
+		return
+	}
+	meta, err := s.ManagedSecrets.HoldValue(r.Context(), p.ID, secretReference(r))
+	if err != nil {
+		secretview.WriteError(s.responses, w, r, err)
+		return
+	}
+	httpio.WriteJSON(w, http.StatusOK, secretview.Metadata(meta))
+}
+
 func (s *Handler) HandleRevokeProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.secretTarget(w, r)
 	if !ok {

@@ -181,18 +181,50 @@ func TestAgentRevokeAllowsAgentAuthoredOrigins(t *testing.T) {
 	if revoked.State != StateRevoked {
 		t.Fatalf("generated revoke state = %q", revoked.State)
 	}
+}
 
+// Revocation follows custody: bytes a person handed over are theirs to end,
+// whatever origin created the capability.
+func TestAgentRevokeRefusesPersonCustody(t *testing.T) {
+	service, _, _ := testService(t)
+	generate := func(operation string) string {
+		meta, err := service.Generate(t.Context(), GenerateRequest{
+			ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1",
+			OperationID: operation, Name: operation, Scope: ScopeChat,
+		})
+		testutil.FailErr(t, "generate "+operation, err)
+		return meta.Reference
+	}
 	detected, err := service.Put(t.Context(), PutRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1",
 		OperationID: "agent-detected", Name: "tracked", Scope: ScopeChat,
 		Origin: OriginDetected, Value: "detected-outbound-value-1",
 	})
 	testutil.FailErr(t, "mint detected", err)
-	revokedDetected, err := service.RevokeByAgent(
-		t.Context(), testdbseed.DefaultProjectID, "root-1", detected.Metadata.Reference)
-	testutil.FailErr(t, "agent revoke detected", err)
-	if revokedDetected.State != StateRevoked {
-		t.Fatalf("detected revoke state = %q", revokedDetected.State)
+	replaced := generate("generated-then-replaced")
+	_, err = service.ReplaceValue(t.Context(), ReplaceValueRequest{
+		ProjectID: testdbseed.DefaultProjectID, Reference: replaced, Value: "person-supplied-rotation",
+	})
+	testutil.FailErr(t, "replace value", err)
+	held := generate("generated-then-held")
+	_, err = service.HoldValue(t.Context(), testdbseed.DefaultProjectID, held)
+	testutil.FailErr(t, "hold value", err)
+
+	for name, reference := range map[string]string{
+		"protected detection": detected.Metadata.Reference,
+		"replaced value":      replaced,
+		"held value":          held,
+	} {
+		if _, err := service.RevokeByAgent(
+			t.Context(), testdbseed.DefaultProjectID, "root-1", reference,
+		); !errors.Is(err, ErrHumanAuthored) {
+			t.Fatalf("agent revoke of %s error = %v", name, err)
+		}
+		still, err := service.Describe(t.Context(), testdbseed.DefaultProjectID, "root-1", reference)
+		testutil.FailErr(t, "describe "+name, err)
+		if still.State != StateActive {
+			t.Fatalf("%s state after refused revoke = %q", name, still.State)
+		}
 	}
 }
 

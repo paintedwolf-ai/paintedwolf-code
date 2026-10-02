@@ -281,6 +281,74 @@ func TestReplacementTakesThePersonsCustody(t *testing.T) {
 	}
 }
 
+// Holding a generated value makes it a person's without changing its bytes or
+// version: the generating chat loses its silent release.
+func TestHoldTakesThePersonsCustody(t *testing.T) {
+	service, values, _ := testService(t)
+	for _, scope := range []string{ScopeChat, ScopeProject} {
+		req := GenerateRequest{
+			ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1",
+			OperationID: "held-" + scope, Name: "Held " + scope, Purpose: "guards production", Scope: scope,
+		}
+		if scope == ScopeChat {
+			req.ChatSessionID = "root-1"
+		}
+		meta, err := service.Generate(t.Context(), req)
+		testutil.FailErr(t, "generate "+scope, err)
+		valueID := currentValueID(t, service, meta.Reference)
+		before, _ := storedEntry(values, valueID)
+
+		held, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, meta.Reference)
+		testutil.FailErr(t, "hold "+scope, err)
+		if held.Custody != CustodyPerson || held.Version != meta.Version {
+			t.Fatalf("%s held metadata = %+v", scope, held)
+		}
+		after, ok := storedEntry(values, currentValueID(t, service, meta.Reference))
+		if !ok || after.Value != before.Value || after.Chat != "" || after.GeneratedFor("root-1") {
+			t.Fatalf("%s held entry = %+v", scope, after)
+		}
+
+		again, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, meta.Reference)
+		testutil.FailErr(t, "hold "+scope+" again", err)
+		if again.Custody != CustodyPerson {
+			t.Fatalf("%s repeated hold custody = %q", scope, again.Custody)
+		}
+	}
+}
+
+// Only a host-supplied value can be held: a jar never takes a reviewed
+// release, a marked file governs its own bytes, and revocation is terminal.
+func TestHoldRefusesValuesItCannotGovern(t *testing.T) {
+	service, _, _ := testService(t)
+	site, err := url.Parse("http://localhost:5555/login")
+	testutil.FailErr(t, "parse url", err)
+	jar, err := service.OpenCookieJar(t.Context(), jarRequest("jar-hold"))
+	testutil.FailErr(t, "open jar", err)
+	jar.Store.SetCookies(site, []*http.Cookie{{Name: "session", Value: "cookie-value-hold", Path: "/"}})
+	jarMeta, err := service.SaveCookieJar(t.Context(), jarRequest("jar-hold"), jar)
+	testutil.FailErr(t, "save jar", err)
+	if _, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, jarMeta.Reference); !errors.Is(err, ErrInvalidUpdate) {
+		t.Fatalf("jar hold error = %v", err)
+	}
+
+	marked, err := service.Put(t.Context(), PutRequest{
+		ProjectID: testdbseed.DefaultProjectID, OperationID: "file-hold",
+		Name: "Marked", Purpose: "in a file", Scope: ScopeProject,
+		Origin: OriginFileMarked, PersonID: testOwner(t, service), Value: "file-marked-hold-value",
+	})
+	testutil.FailErr(t, "mark file value", err)
+	if _, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, marked.Metadata.Reference); !errors.Is(err, ErrInvalidUpdate) {
+		t.Fatalf("file hold error = %v", err)
+	}
+
+	revoked := putChatSecret(t, service, "revoked-hold", "root-1", "revoked-hold-value-01")
+	_, err = service.RevokeByAgent(t.Context(), testdbseed.DefaultProjectID, "root-1", revoked)
+	testutil.FailErr(t, "revoke", err)
+	if _, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, revoked); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("revoked hold error = %v", err)
+	}
+}
+
 // A jar's values reach services through the jar, so a person cannot place
 // their own bytes in one.
 func TestReplaceValueRefusesAJar(t *testing.T) {

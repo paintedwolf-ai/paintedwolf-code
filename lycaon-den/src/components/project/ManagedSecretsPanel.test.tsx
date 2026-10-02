@@ -661,6 +661,27 @@ describe("ManagedSecretsPanel", () => {
     );
   });
 
+  it("holds a generated secret so every release needs the person's approval", async () => {
+    const chat: ManagedSecret = { ...chatSecret(1), custody: "chat" };
+    const held: ManagedSecret = { ...chat, custody: "person" };
+    const id = chat.reference.slice("{{paintedwolf-secret:".length, -2);
+    const client = clientWith([chat], {
+      holdProjectManagedSecret: vi.fn(async () => held),
+    });
+
+    renderPanel(client);
+    await openDetail(id);
+    fireEvent.click(screen.getByTestId("managed-secret-hold"));
+
+    await waitFor(() =>
+      expect(client.holdProjectManagedSecret).toHaveBeenCalledWith("project-1", id),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("managed-secret-hold")).toBeNull(),
+    );
+    expect(screen.getByTestId("managed-secret-promote")).toBeTruthy();
+  });
+
   it("names the chat a chat secret belongs to", async () => {
     const live = chatSecret(1);
     renderPanel(clientWith([live]));

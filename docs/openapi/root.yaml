@@ -203,6 +203,8 @@ paths:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}
   /v1/projects/{id}/secrets/{secret_id}/value:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1value
+  /v1/projects/{id}/secrets/{secret_id}/hold:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1hold
   /v1/projects/{id}/secrets/{secret_id}/uses:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1uses
   /v1/projects/{id}/secrets/{secret_id}/reveal-challenges:

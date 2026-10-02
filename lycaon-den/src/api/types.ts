@@ -1081,6 +1081,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/secrets/{secret_id}/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Require a person's presence to release a generated value
+         * @description Re-records the current value's custody as `person`, as if a person had stored it. Every later release, including one from the chat that generated it, then needs a reviewed handoff to each recipient and that chat unlocked by verified presence, and the agent can no longer revoke it. The bytes, reference, and version are unchanged. Holding is one-way. A value already held returns unchanged; a jar or a value marked in a project file cannot be held.
+         */
+        post: operations["holdProjectManagedSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/secrets/{secret_id}/uses": {
         parameters: {
             query?: never;
@@ -11331,7 +11351,7 @@ export interface components {
              */
             origin: "generated" | "ask_user_response" | "detected" | "file_marked" | "composer_marked" | "settings_entered" | "cookie_jar" | "token_jar";
             /**
-             * @description Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy: revealing it or handing it to any file, process, service, or MCP server needs that person's verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent's work beyond one chat. Absent when no value is readable.
+             * @description Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy, or chose to hold a value the host generated: revealing it or handing it to any file, process, service, or MCP server needs that person's verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent's work beyond one chat. Absent when no value is readable.
              * @enum {string}
              */
             custody?: "person" | "file" | "chat" | "host";
@@ -18867,6 +18887,60 @@ export interface operations {
             };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    holdProjectManagedSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capability metadata with `person` custody */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedSecret"];
+                };
+            };
+            /** @description This capability's value cannot be held */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such secret in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The capability is revoked, which is terminal, or has no readable value to hold */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
