@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
-## [1.0.0]
+## [1.0.0-rc.3]
 
-### Added
+### Changed
 
-- First stable release of **Painted Wolf Code** for macOS on Apple silicon,
-  including everything in 1.0.0-rc.1 and 1.0.0-rc.2.
+- Managed secrets act as a vault: storing or reading a secret asks for your
+  presence (Touch ID) wherever the request starts, including file writes and
+  agent requests, not only in project configuration.
+- The document editor's core runs as a native program alongside the engine.
+
+### Fixed
+
+- Opening or editing documents no longer crashes the engine in signed release
+  builds.
+- The app restarts its engine after an unexpected exit and says when it stops.
 
 ## [1.0.0-rc.2]
 
