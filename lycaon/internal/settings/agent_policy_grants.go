@@ -40,7 +40,7 @@ func agentPolicyPredicate(action hitl.ProposedAction, posture gate.Posture) Appr
 	var subjects []string
 	prefix := agentPolicySurfacesPrefix
 	for _, target := range action.AgentPolicy {
-		if posture == gate.PostureStrict {
+		if posture.LeasesAgentPolicyFiles() {
 			prefix = agentPolicyFilesPrefix
 			subjects = append(subjects, agentPolicyFile(target, action.ProjectDir))
 			continue
@@ -115,7 +115,7 @@ func agentPolicyGrantApplies(grant hitl.ApprovalGrant, action hitl.ProposedActio
 	if files, ok := strings.CutPrefix(grant.Predicate.Pattern, agentPolicyFilesPrefix); ok {
 		return slices.Contains(strings.Split(files, "\n"), file)
 	}
-	if posture == gate.PostureStrict {
+	if posture.LeasesAgentPolicyFiles() {
 		return false
 	}
 	surfaces, ok := strings.CutPrefix(grant.Predicate.Pattern, agentPolicySurfacesPrefix)

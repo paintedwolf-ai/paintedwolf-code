@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"gopkg.in/yaml.v3"
@@ -17,7 +18,7 @@ type approvalNoiseCorpus struct {
 
 type approvalNoiseCorpusCase struct {
 	ID               string         `yaml:"id"`
-	Posture          string         `yaml:"posture"`
+	Posture          gate.Posture   `yaml:"posture"`
 	Tool             string         `yaml:"tool"`
 	Args             map[string]any `yaml:"args"`
 	TargetFiles      []string       `yaml:"target_files"`

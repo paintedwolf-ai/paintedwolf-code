@@ -164,6 +164,12 @@ budgets:
 
 Under the algebras above this is a keyed overlay for budgets and, for the pattern lists, a project-only statement with no device layer.
 
+### `approvals.yaml` — additive tightening
+
+A project may add ask and deny rules, raise the approval posture, turn approvals back on when the device has them off, and suppress generated rationale. It cannot grant, save an approval, allow, lower the posture, or turn approvals off.
+
+The host reads the file at every decision, so an edit applies to the next action. A part that tries to grant or loosen (`grants`, an `allow` rule, `never_ask: true`) is refused as `project_fields_forbidden`, and a malformed rule or posture as `invalid_entry`; the rules beside it still apply. Because the file can only tighten, what the host cannot apply fails closed: an unknown posture applies Strict, and a file that cannot be read or parsed (`project_unreadable`) applies Strict with approvals on and none of its rules. Project approval settings list every refused part, and the host will not save project approvals over them, so a write never erases what the person wrote; fixing the file is the way forward.
+
 ### Detection packs — project enable-only
 
 A project may enable a detection pack already installed on the device. It cannot disable one, define detection rules, or install a pack through project content.

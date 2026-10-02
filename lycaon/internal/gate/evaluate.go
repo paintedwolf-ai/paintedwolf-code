@@ -326,6 +326,7 @@ func (d definition) appliesAt(s Stage) bool {
 
 // Evaluate combines supplied facts. Missing required reports raise GateIncompleteFacts.
 func Evaluate(f Facts, p Posture) (Verdict, *Decision) {
+	p = p.known()
 	var fired []api.ApprovalGate
 	citedByGate := make(map[api.ApprovalGate][]Fact)
 	reasonByGate := make(map[api.ApprovalGate]string)
@@ -367,7 +368,7 @@ func Evaluate(f Facts, p Posture) (Verdict, *Decision) {
 			Primary:   api.GateIncompleteFacts,
 			Cited:     missing,
 			ReasonKey: string(api.GateIncompleteFacts) + ":unreported",
-			Posture:   normalize(p),
+			Posture:   p,
 		}
 	}
 	if len(fired) == 0 {
@@ -388,7 +389,7 @@ func Evaluate(f Facts, p Posture) (Verdict, *Decision) {
 		Also:      fired[1:],
 		Cited:     cited,
 		ReasonKey: strings.Join(reasons, "|"),
-		Posture:   normalize(p),
+		Posture:   p,
 	}
 }
 
@@ -426,7 +427,7 @@ func capabilityWidening(f Facts, p Posture) (bool, []Fact, string) {
 		return false, nil, ""
 	}
 	cw := f.CapabilityWidening
-	if p == PostureBalanced {
+	if p.rule().quietsOwnedLocalServices {
 		allSilent := true
 		for _, axis := range cw.Axes {
 			switch axis {

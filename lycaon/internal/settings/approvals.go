@@ -137,20 +137,16 @@ type ApprovalConfig struct {
 // ApprovalStore loads bundled, global, and project approval overlays.
 type ApprovalStore struct {
 	// writeMu serializes global read-modify-write cycles.
-	writeMu      sync.Mutex
-	mu           sync.RWMutex
-	globalPath   string
-	bundled      ApprovalConfig
-	global       *ApprovalConfig
-	projectCache map[string]ApprovalConfig
+	writeMu    sync.Mutex
+	mu         sync.RWMutex
+	globalPath string
+	bundled    ApprovalConfig
+	global     *ApprovalConfig
 }
 
 // NewApprovalStoreAt loads the global overlay at globalPath.
 func NewApprovalStoreAt(globalPath string) (*ApprovalStore, error) {
-	s := &ApprovalStore{
-		globalPath:   globalPath,
-		projectCache: make(map[string]ApprovalConfig),
-	}
+	s := &ApprovalStore{globalPath: globalPath}
 	if err := s.reloadBundled(); err != nil {
 		return nil, err
 	}
@@ -184,45 +180,6 @@ func NewApprovalStore() (*ApprovalStore, error) {
 	return NewApprovalStoreAt(globalPath)
 }
 
-func loadApprovalFile(path string) (ApprovalConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ApprovalConfig{}, err
-	}
-	var cfg ApprovalConfig
-	if err := config.DecodeYAML(data, &cfg); err != nil {
-		return ApprovalConfig{}, fmt.Errorf("parse approvals %s: %w", path, err)
-	}
-	return normalizeApprovalConfig(cfg), nil
-}
-
-// loadProjectApprovalFile reads and tightens repository policy.
-func loadProjectApprovalFile(path string) (ApprovalConfig, error) {
-	cfg, err := loadApprovalFile(path)
-	if err != nil {
-		return ApprovalConfig{}, err
-	}
-	return clampProjectApprovalConfig(cfg), nil
-}
-
-// clampProjectApprovalConfig removes authority from repository policy.
-func clampProjectApprovalConfig(cfg ApprovalConfig) ApprovalConfig {
-	rules := make([]ApprovalRule, 0, len(cfg.Rules))
-	for _, rule := range cfg.Rules {
-		if allowedEffects[rule.Effect] {
-			rules = append(rules, rule)
-		}
-	}
-	cfg.Rules = rules
-	cfg.Grants = nil
-	// A repository contributes a valid posture or none: gate.Stricter ranks an
-	// unknown token at the default, so it would otherwise outrank a Light device.
-	if !gate.ValidPosture(string(cfg.Posture)) {
-		cfg.Posture = ""
-	}
-	return cfg
-}
-
 func normalizeApprovalConfig(cfg ApprovalConfig) ApprovalConfig {
 	out := make([]ApprovalRule, 0, len(cfg.Rules))
 	for _, r := range cfg.Rules {
@@ -250,9 +207,6 @@ func normalizeApprovalConfig(cfg ApprovalConfig) ApprovalConfig {
 		grants = append(grants, grant)
 	}
 	cfg.Grants = grants
-	if cfg.Posture != "" {
-		cfg.Posture = gate.PostureFromString(string(cfg.Posture))
-	}
 	return cfg
 }
 
@@ -362,7 +316,7 @@ func (s *ApprovalStore) Get(scope llm.SettingsScope, ref ProjectRef) ApprovalCon
 	enabled := s.aiRationaleEnabledLocked()
 	neverAsk := s.neverAskLocked()
 	if scope == llm.SettingsScopeProject && ref.Dir != "" {
-		proj := s.projectOverlayLocked(ref.Dir)
+		proj := readProjectApprovals(ref.Dir).Config
 		rules = mergeProjectApprovalRules(rules, proj.Rules)
 		// Repository posture can only tighten device posture.
 		posture = gate.Stricter(posture, proj.Posture)
@@ -397,7 +351,7 @@ func (s *ApprovalStore) RuleLayers(scope llm.SettingsScope, ref ProjectRef) Appr
 	}
 	var projectRules []ApprovalRule
 	if scope == llm.SettingsScopeProject && ref.Dir != "" {
-		projectRules = append(projectRules, s.projectOverlayLocked(ref.Dir).Rules...)
+		projectRules = append(projectRules, readProjectApprovals(ref.Dir).Config.Rules...)
 		for i := range projectRules {
 			projectRules[i].Source.Scope = ApprovalRuleScopeProject
 		}
@@ -507,8 +461,8 @@ func (s *ApprovalStore) MergedFrom(scope llm.SettingsScope, projectDir string) [
 		layers = append(layers, "global")
 	}
 	if scope == llm.SettingsScopeProject && projectDir != "" {
-		proj := s.projectOverlayLocked(projectDir)
-		if projectOverlayActive(proj) {
+		proj := readProjectApprovals(projectDir)
+		if projectOverlayActive(proj.Config) {
 			layers = append(layers, "project")
 		}
 	}
@@ -517,22 +471,6 @@ func (s *ApprovalStore) MergedFrom(scope llm.SettingsScope, projectDir string) [
 
 func projectOverlayActive(cfg ApprovalConfig) bool {
 	return len(cfg.Rules) > 0 || cfg.Posture != "" || cfg.AIRationale != nil || cfg.NeverAsk != nil
-}
-
-// projectOverlayLocked returns the project overlay (cache or disk). Caller holds the lock.
-func (s *ApprovalStore) projectOverlayLocked(projectDir string) ApprovalConfig {
-	if projectDir == "" {
-		return ApprovalConfig{}
-	}
-	if cached, ok := s.projectCache[projectDir]; ok {
-		return cached
-	}
-	// Read-locked callers load from disk without mutating the cache.
-	proj, err := loadProjectApprovalFile(projectApprovalsPath(projectDir))
-	if err != nil {
-		return ApprovalConfig{}
-	}
-	return proj
 }
 
 // UpsertGlobalGrant stores a host-minted project or device lease.
@@ -749,28 +687,13 @@ func (s *ApprovalStore) OverlayRules() []ApprovalRule {
 	return append([]ApprovalRule(nil), s.global.Rules...)
 }
 
-// ProjectOverlay returns a copy of the project overlay config (not merged with global).
-func (s *ApprovalStore) ProjectOverlay(projectDir string) ApprovalConfig {
+// ProjectOverlay returns the project overlay as applied (not merged with
+// global) and the entries it refused.
+func (s *ApprovalStore) ProjectOverlay(projectDir string) ProjectApprovals {
 	if projectDir == "" {
-		return ApprovalConfig{}
+		return ProjectApprovals{}
 	}
-	s.mu.RLock()
-	if cached, ok := s.projectCache[projectDir]; ok {
-		out := cached
-		s.mu.RUnlock()
-		return cloneApprovalConfig(out)
-	}
-	s.mu.RUnlock()
-	proj, err := loadProjectApprovalFile(projectApprovalsPath(projectDir))
-	if err != nil {
-		return ApprovalConfig{}
-	}
-	return proj
-}
-
-// ProjectOverlayRules returns a copy of the project overlay rules.
-func (s *ApprovalStore) ProjectOverlayRules(projectDir string) []ApprovalRule {
-	return append([]ApprovalRule(nil), s.ProjectOverlay(projectDir).Rules...)
+	return readProjectApprovals(projectDir)
 }
 
 // PutProject persists a project overlay at <overlay>/approvals.yaml. Empty posture and
@@ -782,6 +705,10 @@ func (s *ApprovalStore) PutProject(projectDir string, cfg ApprovalConfig) error 
 }
 
 func (s *ApprovalStore) putProjectLocked(projectDir string, cfg ApprovalConfig) error {
+	// A write would discard the parts the host could not apply.
+	if len(s.ProjectOverlay(projectDir).Rejected) > 0 {
+		return ErrProjectApprovalsNeedRepair
+	}
 	cfg = normalizeApprovalConfig(cfg)
 	if len(cfg.Grants) > 0 {
 		return fmt.Errorf("project approval policy cannot contain grants")
@@ -794,13 +721,7 @@ func (s *ApprovalStore) putProjectLocked(projectDir string, cfg ApprovalConfig) 
 	if err != nil {
 		return err
 	}
-	if err := writeSettingsFile(path, data); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.projectCache[projectDir] = cfg
-	s.mu.Unlock()
-	return nil
+	return writeSettingsFile(path, data)
 }
 
 // SetHostResourceRule updates one resource rule. Removing it exposes any broader matching rule.
@@ -828,7 +749,7 @@ func (s *ApprovalStore) SetHostResourceRule(scope llm.SettingsScope, projectDir,
 		if strings.TrimSpace(projectDir) == "" {
 			return fmt.Errorf("project directory is required")
 		}
-		cfg := s.ProjectOverlay(projectDir)
+		cfg := s.ProjectOverlay(projectDir).Config
 		cfg.Rules = replaceHostResourceRule(cfg.Rules, resourceID, effect)
 		return s.putProjectLocked(projectDir, cfg)
 	default:
@@ -904,8 +825,10 @@ func ValidatePolicyRules(rules []ApprovalRule) error {
 }
 
 func validateApprovalConfig(cfg ApprovalConfig) error {
-	if cfg.Posture != "" && gate.PostureFromString(string(cfg.Posture)) != cfg.Posture {
-		return fmt.Errorf("invalid approval posture %q", cfg.Posture)
+	if cfg.Posture != "" {
+		if _, err := gate.ParsePosture(string(cfg.Posture)); err != nil {
+			return err
+		}
 	}
 	for _, r := range cfg.Rules {
 		if !allowedPolicyCategories[r.Category] {

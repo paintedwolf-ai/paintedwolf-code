@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 )
 
@@ -27,19 +28,16 @@ const (
 	LevelCritical      Level = "critical"
 )
 
-// Escalates reports whether a severity requires review under posture. An unknown
-// token is inert rather than coerced into a band.
-func Escalates(level Level, posture string) bool {
-	p := strings.ToLower(strings.TrimSpace(posture))
-	switch p {
-	case "light":
+// Escalates reports whether a severity requires review under posture. A
+// posture that bypassed parsing reads as strict, so it can only add asks.
+func Escalates(level Level, posture gate.Posture) bool {
+	switch posture {
+	case gate.PostureLight:
 		return level == LevelCritical
-	case "balanced":
+	case gate.PostureBalanced:
 		return level == LevelHigh || level == LevelCritical
-	case "strict":
-		return level == LevelMedium || level == LevelHigh || level == LevelCritical
 	default:
-		return false
+		return level == LevelMedium || level == LevelHigh || level == LevelCritical
 	}
 }
 

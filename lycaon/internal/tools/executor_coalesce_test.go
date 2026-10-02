@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -457,16 +458,16 @@ type stubDetSource struct {
 	ok    bool
 }
 
-func (s stubDetSource) MatchAction(hitl.ProposedAction, string) (hitl.DetectionMatch, bool) {
+func (s stubDetSource) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
 	return s.match, s.ok
 }
 
-func (s stubDetSource) Escalates(match hitl.DetectionMatch, posture string) bool {
+func (s stubDetSource) Escalates(match hitl.DetectionMatch, posture gate.Posture) bool {
 	switch match.Level {
 	case "high", "critical":
 		return true
 	case "medium":
-		return posture == "strict"
+		return posture == gate.PostureStrict
 	default:
 		return false
 	}

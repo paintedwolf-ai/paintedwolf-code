@@ -2,6 +2,7 @@ package settingsadmin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -48,9 +49,14 @@ func (s *Handler) approvalConfigResponse(ctx context.Context, scope llm.Settings
 		overlay := s.Service.Approvals.ProjectOverlay(projectDir)
 		global := s.Service.Approvals.Get(llm.SettingsScopeGlobal, settings.ProjectRef{})
 		resp.FieldSources = &wire.ApprovalFieldSources{
-			ApprovalPosture:    fieldSource(overlay.Posture != ""),
-			AIRationaleEnabled: fieldSource(overlay.AIRationale != nil),
-			NeverAsk:           fieldSource(overlay.NeverAsk != nil),
+			ApprovalPosture:    fieldSource(overlay.Config.Posture != ""),
+			AIRationaleEnabled: fieldSource(overlay.Config.AIRationale != nil),
+			NeverAsk:           fieldSource(overlay.Config.NeverAsk != nil),
+		}
+		for _, refused := range overlay.Rejected {
+			resp.Rejected = append(resp.Rejected, wire.ApprovalOverlayRejectedRow{
+				Entry: refused.Entry, Code: refused.Code, Detail: refused.Detail,
+			})
 		}
 		ai := true
 		if global.AIRationale != nil {
@@ -70,6 +76,26 @@ func fieldSource(overridden bool) string {
 		return "override"
 	}
 	return "default"
+}
+
+// ProjectApprovalsWriteError answers a refused write over a project
+// approvals.yaml the host could not fully apply. Reports whether it handled err.
+func ProjectApprovalsWriteError(responses *httpio.Responder, w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, settings.ErrProjectApprovalsNeedRepair) {
+		return false
+	}
+	responses.Fail(w, wire.ApiErrorCodeProjectApprovalsNeedRepair,
+		"this project's approvals.yaml has parts that were not applied; fix the file before saving")
+	return true
+}
+
+// requestedPosture parses a present, non-null approval_posture.
+func requestedPosture(token *string) (gate.Posture, bool) {
+	if token == nil {
+		return "", false
+	}
+	posture, err := gate.ParsePosture(*token)
+	return posture, err == nil
 }
 
 func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +131,7 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 
 	switch scope {
 	case llm.SettingsScopeProject:
-		existing := s.Service.Approvals.ProjectOverlay(projectDir)
+		existing := s.Service.Approvals.ProjectOverlay(projectDir).Config
 		if !rulesPresent {
 			rules = existing.Rules
 		}
@@ -115,11 +141,12 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			if raw["approval_posture"] == nil {
 				posture = ""
 			} else {
-				if req.ApprovalPosture == nil || !gate.ValidPosture(*req.ApprovalPosture) {
+				parsed, ok := requestedPosture(req.ApprovalPosture)
+				if !ok {
 					s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "approval_posture"}, "unknown approval_posture (light|balanced|strict)")
 					return
 				}
-				posture = gate.PostureFromString(*req.ApprovalPosture)
+				posture = parsed
 			}
 		}
 		if global := s.Service.Approvals.Posture(); gate.Stricter(global, posture) != posture && posture != "" {
@@ -159,7 +186,9 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			NeverAsk:    neverAsk,
 		}
 		if err := s.Service.Approvals.PutProject(projectDir, cfg); err != nil {
-			s.responses.InternalError(w, r, err)
+			if !ProjectApprovalsWriteError(s.responses, w, err) {
+				s.responses.InternalError(w, r, err)
+			}
 			return
 		}
 	default:
@@ -173,11 +202,12 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			if raw["approval_posture"] == nil {
 				posture = gate.PostureBalanced
 			} else {
-				if req.ApprovalPosture == nil || !gate.ValidPosture(*req.ApprovalPosture) {
+				parsed, ok := requestedPosture(req.ApprovalPosture)
+				if !ok {
 					s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "approval_posture"}, "unknown approval_posture (light|balanced|strict)")
 					return
 				}
-				posture = gate.PostureFromString(*req.ApprovalPosture)
+				posture = parsed
 			}
 		}
 

@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type {
+  ApprovalOverlayRejectedRow,
   ApprovalPosture,
   ManagedApprovalRule,
   UpdateApprovalsSettingsRequest,
@@ -79,6 +80,12 @@ export function ApprovalsPanel(props: Props) {
       setBusy(false);
     }
   };
+
+  const rejectedParts = (): ApprovalOverlayRejectedRow[] =>
+    projectLocal() ? props.settingsStore.state.approvals?.rejected ?? [] : [];
+
+  // The host refuses to save over parts it could not apply.
+  const editingLocked = () => busy() || rejectedParts().length > 0;
 
   const projectOverrideEnabled = (): boolean => {
     const sources = props.settingsStore.state.approvals?.field_sources;
@@ -209,6 +216,36 @@ export function ApprovalsPanel(props: Props) {
     </section>
   );
 
+  const rejectedSection = () => (
+    <Show when={rejectedParts().length > 0}>
+      <section class="den-approvals-block" role="alert" data-testid="approval-rejected">
+        <h3 class="den-settings-overline">
+          {APPROVALS_SETTINGS_COPY.rejectedHeading}
+        </h3>
+        <p class="den-settings-hint">{APPROVALS_SETTINGS_COPY.rejectedHint}</p>
+        <ul class="den-approval-policy-list">
+          <For each={rejectedParts()}>
+            {(row, index) => (
+              <li
+                class="den-approval-policy-rule"
+                data-testid={`approval-rejected-row-${index()}`}
+                data-code={row.code}
+              >
+                <div class="den-approval-policy-rule__head">
+                  <code>{APPROVALS_SETTINGS_COPY.rejectedEntryLabel(row.entry)}</code>
+                </div>
+                <p class="den-settings-hint">
+                  {APPROVALS_SETTINGS_COPY.rejectedReason(row.code)}
+                </p>
+                <p class="den-settings-hint">{row.detail}</p>
+              </li>
+            )}
+          </For>
+        </ul>
+      </section>
+    </Show>
+  );
+
   const askEditors = () => (
     <>
       <p class="den-settings-hint">{APPROVALS_SETTINGS_COPY.askIntro}</p>
@@ -224,7 +261,7 @@ export function ApprovalsPanel(props: Props) {
             <DenButton
               variant="primary"
               compact
-              disabled={busy()}
+              disabled={editingLocked()}
               data-testid="approvals-project-restore"
               onClick={() => void restoreProjectApprovals()}
             >
@@ -238,7 +275,7 @@ export function ApprovalsPanel(props: Props) {
         <h3 class="den-settings-overline">
           {settingLabel("approval-level")}
         </h3>
-        <fieldset class="den-approvals-posture-cards" disabled={busy()}>
+        <fieldset class="den-approvals-posture-cards" disabled={editingLocked()}>
           <For each={availablePostureCards()}>
             {(card) => (
               <label
@@ -280,7 +317,7 @@ export function ApprovalsPanel(props: Props) {
             </div>
             <DenCheckbox
               checked={aiRationaleEnabled()}
-              disabled={busy()}
+              disabled={editingLocked()}
               data-testid="approval-ai-rationale-toggle"
               onChange={(e) => void applyAIRationale(e.currentTarget.checked)}
             >
@@ -362,10 +399,11 @@ export function ApprovalsPanel(props: Props) {
           <Show when={projectLocal()}
             fallback={askEditors()}
           >
+            {rejectedSection()}
             <ProjectSettingsOverrideControl
               settingsPath={PROJECT_SETTINGS_OVERLAY_COPY.settingsPath.approvals}
               enabled={projectOverrideEnabled()}
-              disabled={busy()}
+              disabled={editingLocked()}
               followingSummary={followingSummary()}
               onChange={(enabled) => void applyProjectOverride(enabled)}
             />

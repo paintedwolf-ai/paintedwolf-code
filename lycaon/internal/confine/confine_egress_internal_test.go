@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/gate"
 )
 
 func newTestBroker() *egressBrokerT {
@@ -310,7 +311,7 @@ func (s stubEgressDetection) Match(EgressDetectionObservation) (EgressDetectionC
 	return s.match, s.ok
 }
 
-func (s stubEgressDetection) Escalates(match EgressDetectionCitation, posture string) bool {
+func (s stubEgressDetection) Escalates(match EgressDetectionCitation, posture gate.Posture) bool {
 	switch posture {
 	case "light":
 		return match.Level == "critical"
@@ -326,7 +327,7 @@ func (s stubEgressDetection) Escalates(match EgressDetectionCitation, posture st
 func TestDetectionHoldsConnectUnderObserve(t *testing.T) {
 	SetEgressPosture(PostureObserve)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
-	SetDetectionApprovalPosture(func(EgressCommand) string { return "balanced" })
+	SetDetectionApprovalPosture(func(EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { SetDetectionApprovalPosture(nil) })
 	SetEgressDetectionSource(stubEgressDetection{
 		ok: true,
@@ -371,7 +372,7 @@ func TestForgetActionRetainsOrdinaryHostVerdict(t *testing.T) {
 func TestDetectionCannotSoftenHostDeny(t *testing.T) {
 	SetEgressPosture(PostureObserve)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
-	SetDetectionApprovalPosture(func(EgressCommand) string { return "balanced" })
+	SetDetectionApprovalPosture(func(EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { SetDetectionApprovalPosture(nil) })
 	SetEgressDetectionSource(stubEgressDetection{
 		ok: true, match: EgressDetectionCitation{PackID: "p", RuleID: "r", RuleTitle: "t", Level: "critical"},
@@ -403,7 +404,7 @@ func TestDetectionCannotSoftenHostDeny(t *testing.T) {
 func TestHostAskPolicyCannotSkipDetectionHold(t *testing.T) {
 	SetEgressPosture(PostureObserve)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
-	SetDetectionApprovalPosture(func(EgressCommand) string { return "balanced" })
+	SetDetectionApprovalPosture(func(EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { SetDetectionApprovalPosture(nil) })
 	SetEgressDetectionSource(stubEgressDetection{
 		ok: true, match: EgressDetectionCitation{PackID: "p", RuleID: "r", RuleTitle: "t", Level: "critical"},
@@ -435,7 +436,7 @@ func TestHostAskPolicyCannotSkipDetectionHold(t *testing.T) {
 func TestCachedHostApprovalCannotSilenceDetection(t *testing.T) {
 	SetEgressPosture(PostureAsk)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
-	SetDetectionApprovalPosture(func(EgressCommand) string { return "balanced" })
+	SetDetectionApprovalPosture(func(EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { SetDetectionApprovalPosture(nil) })
 	SetEgressDetectionSource(nil)
 	t.Cleanup(func() { SetEgressDetectionSource(nil) })
@@ -469,7 +470,7 @@ func TestCachedHostApprovalCannotSilenceDetection(t *testing.T) {
 func TestCoalesceSameHostWaiters(t *testing.T) {
 	SetEgressPosture(PostureObserve)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
-	SetDetectionApprovalPosture(func(EgressCommand) string { return "balanced" })
+	SetDetectionApprovalPosture(func(EgressCommand) gate.Posture { return gate.PostureBalanced })
 	t.Cleanup(func() { SetDetectionApprovalPosture(nil) })
 	SetEgressDetectionSource(stubEgressDetection{
 		ok: true, match: EgressDetectionCitation{PackID: "p", RuleID: "r", RuleTitle: "t", Level: "critical"},

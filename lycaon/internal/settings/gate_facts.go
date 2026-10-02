@@ -14,7 +14,7 @@ import (
 
 // DetectionSource supplies posture-filtered detection matches.
 type DetectionSource interface {
-	MatchAction(action hitl.ProposedAction, posture string) (hitl.DetectionMatch, bool)
+	MatchAction(action hitl.ProposedAction, posture gate.Posture) (hitl.DetectionMatch, bool)
 }
 
 // MCPToolPinSource reports tool-definition drift.
@@ -52,7 +52,7 @@ func (s Sources) normalized() Sources {
 
 type inertDetections struct{}
 
-func (inertDetections) MatchAction(hitl.ProposedAction, string) (hitl.DetectionMatch, bool) {
+func (inertDetections) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
 	return hitl.DetectionMatch{}, false
 }
 
@@ -82,7 +82,7 @@ func (g *RuleApprovalGate) factsForAction(
 	}
 	if detections != nil {
 		facts.Ran |= gate.ProducerDetection
-		if m, ok := detections.MatchAction(action, string(cfg.Posture)); ok {
+		if m, ok := detections.MatchAction(action, cfg.Posture); ok {
 			facts.Detection = detectionFact(m)
 			citation = &m
 		}
@@ -99,7 +99,7 @@ func (g *RuleApprovalGate) factsForAction(
 	facts.LeasedExact = g.actionExactLeaseCovers(cfg, action)
 	facts.LeasedPackage = g.actionPackageLeaseCovers(cfg, action)
 	facts.FileLeased = grantedPathGrantCovers(g, cfg.Grants, action)
-	facts.AgentPolicyLeased = agentPolicyGrantCovers(g, action, gate.PostureFromString(string(cfg.Posture)))
+	facts.AgentPolicyLeased = agentPolicyGrantCovers(g, action, cfg.Posture)
 	var matchedRules []ApprovalRule
 	for _, rules := range [][]ApprovalRule{layers.Device, layers.Project} {
 		matches, primary := effectiveAskRulesForLayer(rules, action, actionLeased, hostCovered)
@@ -185,7 +185,7 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 		return nil
 	}
 	// Strict reviews the write itself, so scratch authority stands for reads only.
-	if gate.PostureFromString(string(cfg.Posture)) == gate.PostureStrict {
+	if cfg.Posture.ReviewsConfinedWrites() {
 		for _, target := range targets {
 			if target.Mode == gate.ModeWrite {
 				target.WithinConfinement = false

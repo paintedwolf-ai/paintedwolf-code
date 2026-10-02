@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -127,7 +128,7 @@ func (s stubConfineEgressDetection) Match(confine.EgressDetectionObservation) (c
 	return s.match, s.ok
 }
 
-func (s stubConfineEgressDetection) Escalates(match confine.EgressDetectionCitation, posture string) bool {
+func (s stubConfineEgressDetection) Escalates(match confine.EgressDetectionCitation, posture gate.Posture) bool {
 	return detectionpack.Escalates(detectionpack.Level(match.Level), posture)
 }
 

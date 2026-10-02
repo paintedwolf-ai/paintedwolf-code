@@ -26,7 +26,7 @@ type stubDetectionSource struct {
 	ok    bool
 }
 
-func (s stubDetectionSource) MatchAction(hitl.ProposedAction, string) (hitl.DetectionMatch, bool) {
+func (s stubDetectionSource) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
 	return s.match, s.ok
 }
 

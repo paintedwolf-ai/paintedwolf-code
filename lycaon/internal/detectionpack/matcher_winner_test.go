@@ -3,6 +3,7 @@ package detectionpack
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 )
 
@@ -133,7 +134,7 @@ func TestEscalatesPostureBands(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		level   Level
-		posture string
+		posture gate.Posture
 		want    bool
 	}{
 		{LevelCritical, "light", true},

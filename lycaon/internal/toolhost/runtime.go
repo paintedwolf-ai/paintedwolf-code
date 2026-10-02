@@ -210,8 +210,8 @@ func (r *Runtime) SetEgressDetectionSource(src confine.EgressDetectionSource) {
 	confine.SetEgressDetectionSource(src)
 	// Wired with or without a store: a nil reader hands the seam an empty posture.
 	store := r.approvals
-	confine.SetDetectionApprovalPosture(func(cmd confine.EgressCommand) string {
-		return string(effectiveEgressApprovalConfig(store, cmd).Posture)
+	confine.SetDetectionApprovalPosture(func(cmd confine.EgressCommand) gate.Posture {
+		return effectiveEgressApprovalConfig(store, cmd).Posture
 	})
 }
 

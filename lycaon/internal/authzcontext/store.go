@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/spawn"
 )
 
@@ -255,9 +254,10 @@ func scanContextRow(row contextScanner) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	// Read back verbatim: row_hash was computed over the stored token, so
-	// normalizing here would make a re-derived hash disagree with the ledger.
-	c.ApprovalPosture = gate.Posture(posture)
+	// Read verbatim, since row_hash covers the token; an unknown one is refused.
+	if err := c.ApprovalPosture.UnmarshalText([]byte(posture)); err != nil {
+		return Context{}, fmt.Errorf("authorization context %s: %w", c.ID, err)
+	}
 	if c.AllowedTools, err = unmarshalStrings(allowed); err != nil {
 		return Context{}, err
 	}
