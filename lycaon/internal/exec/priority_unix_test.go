@@ -4,8 +4,8 @@ package exec
 
 import (
 	"context"
+	"os"
 	"os/exec"
-	"syscall"
 	"testing"
 	"time"
 
@@ -34,12 +34,12 @@ func TestPriorityBelowNormalSetsNice(t *testing.T) {
 	}
 	// Give the kernel a beat to apply priority.
 	time.Sleep(20 * time.Millisecond)
-	nice, err := syscall.Getpriority(syscall.PRIO_PROCESS, cmd.Process.Pid)
-	if err != nil {
-		t.Fatalf("Getpriority: %v", err)
-	}
-	if nice != DefaultBelowNormalNice {
-		t.Fatalf("nice = %d want %d", nice, DefaultBelowNormalNice)
+	inherited, err := processNice(os.Getpid())
+	testutil.FailErr(t, "read the test's nice value", err)
+	nice, err := processNice(cmd.Process.Pid)
+	testutil.FailErr(t, "read the child's nice value", err)
+	if want := max(inherited, DefaultBelowNormalNice); nice != want {
+		t.Fatalf("nice = %d want %d (inherited %d)", nice, want, inherited)
 	}
 }
 
