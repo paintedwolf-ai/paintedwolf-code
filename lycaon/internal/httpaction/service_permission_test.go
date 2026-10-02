@@ -12,7 +12,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -68,11 +67,9 @@ func (r *servicePermissionReview) SessionLoopbackGrant(context.Context, string, 
 }
 
 func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
-	service, owner := managedRequestService(t)
+	service, _ := managedRequestService(t)
 	const value = "local-service-password"
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "service-password", Name: "Service password", Purpose: "local service", Value: value})
-	testutil.FailErr(t, "create password", err)
+	meta := hostSecret(t, service, "service-password", "Service password", value)
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		_, password, ok := req.BasicAuth()

@@ -23,8 +23,8 @@ func TestCreateSettingsSecretStoresProjectActWithoutSession(t *testing.T) {
 	if meta.Version != 1 || meta.ValueReplacedAt != nil || meta.UseCount != 0 || meta.State != StateActive {
 		t.Fatalf("entered lifecycle facts = %+v", meta)
 	}
-	if value, ok := values.Get(currentValueID(t, service, meta.Reference)); !ok || value != "sk-test-entered-value-0001" {
-		t.Fatalf("stored value = %q ok=%v", value, ok)
+	if entry, ok := storedEntry(values, currentValueID(t, service, meta.Reference)); !ok || entry.Value != "sk-test-entered-value-0001" || entry.Custody != CustodyPerson {
+		t.Fatalf("stored entry ok=%v custody=%q", ok, entry.Custody)
 	}
 }
 
@@ -63,8 +63,8 @@ func TestUpdateRelabelsWithoutTouchingProvenanceOrValue(t *testing.T) {
 	if got := currentValueID(t, service, meta.Reference); got != valueID {
 		t.Fatal("relabel replaced the stored value")
 	}
-	if value, ok := values.Get(valueID); !ok || value != "entered-value-relabel-1" {
-		t.Fatalf("stored value after relabel = %q ok=%v", value, ok)
+	if entry, ok := storedEntry(values, valueID); !ok || entry.Value != "entered-value-relabel-1" {
+		t.Fatalf("stored value after relabel changed, ok=%v", ok)
 	}
 }
 

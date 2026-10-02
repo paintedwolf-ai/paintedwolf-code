@@ -37,7 +37,6 @@ func (e *DefaultToolExecutor) screenFileSecrets(
 	finding := argvSecretFinding(secretmatch.SurfaceFile, tool, tc, known[0], known)
 	finding.DestinationID, finding.DestinationLabel = fileSecretDestination(filePath)
 	finding.SecretNames = secretmatch.ManagedNames(known)
-	finding.ChatGenerated = tc.Secrets.GeneratedForChat(known)
 	finding.RecipientsLocal = true
 
 	attribution := secretmatch.AskAttributionFrom(ctx)

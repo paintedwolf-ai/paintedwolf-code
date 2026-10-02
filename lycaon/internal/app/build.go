@@ -47,6 +47,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
@@ -162,19 +163,23 @@ type serveBuilder struct {
 	secretHarvest       *secretharvest.Runtime
 	secretCaps          *secretcap.Service
 	secretFingerprinter *secretmatch.Fingerprinter
-	rejectFmt           *guidance.StaticRejectFormatter
-	hintCfg             *guidance.HintConfig
-	agentRegistry       *orchestration.MemoryAgentRegistry
-	toolProfiles        []sandbox.ToolProfile
-	postureRegistry     *session.PostureRegistry
-	promptEngine        *prompts.FileTemplateEngine
-	mgr                 *session.Manager
-	projectLiveness     *projectliveness.Tracker
-	checkpointMgr       hitl.CheckpointManager
-	workersCfg          worker.WorkersConfig
-	delegationStore     *delegation.SQLStore
-	blueprintMgr        *blueprint.Manager
-	manifestRegistry    *workflowdef.Registry
+	// presenceBroker verifies that a person is at this device; releaseLedger
+	// lists the release grants they attested, inside the vault.
+	presenceBroker   *presence.Broker
+	releaseLedger    *presence.ReleaseLedger
+	rejectFmt        *guidance.StaticRejectFormatter
+	hintCfg          *guidance.HintConfig
+	agentRegistry    *orchestration.MemoryAgentRegistry
+	toolProfiles     []sandbox.ToolProfile
+	postureRegistry  *session.PostureRegistry
+	promptEngine     *prompts.FileTemplateEngine
+	mgr              *session.Manager
+	projectLiveness  *projectliveness.Tracker
+	checkpointMgr    hitl.CheckpointManager
+	workersCfg       worker.WorkersConfig
+	delegationStore  *delegation.SQLStore
+	blueprintMgr     *blueprint.Manager
+	manifestRegistry *workflowdef.Registry
 	// manifestResolver is the one workflow catalog seam: discovery and start
 	// read the same source.
 	manifestResolver     workflow.ManifestResolver
@@ -265,6 +270,7 @@ func Build(ctx context.Context, cfg Config) (*ServeApp, error) {
 		{"host_resources", startupprotocol.PhaseHostResources, b.wireHostResources},
 		{"llm", startupprotocol.PhaseProviders, b.wireLLM},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
+		{"presence", startupprotocol.PhaseTools, b.wirePresence},
 		{"agents", startupprotocol.PhaseAgents, b.wireAgents},
 		{"session-manager", startupprotocol.PhaseSessions, b.wireSessionManager},
 		{"oar-block-plane", startupprotocol.PhasePolicy, b.wireOARBlockPlane},

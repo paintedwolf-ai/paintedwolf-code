@@ -294,6 +294,12 @@ func registerStubSessionSupportRoutes(mux *http.ServeMux, writeJSON stubJSONWrit
 	mux.HandleFunc("GET /v1/sessions/{id}/checkpoints", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.CheckpointListResponse{Checkpoints: []api.CheckpointEvent{}})
 	})
+	mux.HandleFunc("POST /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusCreated, api.PresenceChallenge{
+			ChallengeID: fixtureSessionID, ProofPayload: "cHJlc2VuY2U", Prompt: "Use Deploy key with Local file: .env this once in Painted Wolf Code.",
+			ExpiresAt: fixtureTime,
+		})
+	})
 	mux.HandleFunc("POST /v1/sessions/{id}/checkpoints/{checkpoint_id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.CheckpointResponse{
 			ID:        fixtureSessionID,

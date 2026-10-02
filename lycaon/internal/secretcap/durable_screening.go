@@ -191,10 +191,10 @@ func (s *Service) restoreDurableEvidence(ctx context.Context) error {
 			if !exists {
 				continue
 			}
-			if value, ok := s.values.Get(version.ID); ok {
+			if entry, ok := s.values.get(version.ID); ok {
 				owner := identityOf(row)
 				versions[version.ID] = durableVersion{
-					owner: owner, values: versionEvidence(owner, value.Value(), standingOf(row, version, false)),
+					owner: owner, values: versionEvidence(owner, entry.Value, standingOf(row, version, false)),
 				}
 			}
 		}

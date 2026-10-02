@@ -135,6 +135,12 @@ const (
 	FaultStageScreenUnwired = "screen_unwired"
 	// FaultStageManagedSecretStore means managed values could not be loaded or stored.
 	FaultStageManagedSecretStore = "managed_secret_store"
+	// FaultStagePresenceUnavailable means the send carries a value a person
+	// holds and this device cannot verify their presence to release it.
+	FaultStagePresenceUnavailable = "presence_unavailable"
+	// FaultStageHeldUnreleased means a consumer was about to receive a value
+	// a person holds without their attested release.
+	FaultStageHeldUnreleased = "held_unreleased"
 )
 
 // AskFault reports a failure before a card reaches a human.
@@ -222,9 +228,9 @@ type Alert struct {
 	DestinationTrusted bool
 	// HostComposed sends redact matched values automatically.
 	HostComposed bool
-	// ChatGenerated and RecipientsLocal reach the gate as facts; posture
-	// decides whether a chat's generated secrets may reach local recipients.
-	ChatGenerated   bool
+	// RecipientsLocal reaches the gate as a fact; with the custody of the
+	// values the invocation resolved, posture decides whether a chat's
+	// generated secrets may reach local recipients.
 	RecipientsLocal bool
 	RuleID          string
 	RuleTitle       string

@@ -117,7 +117,7 @@ func (e *DefaultToolExecutor) awaitActionApproval(ctx context.Context, action hi
 	}
 	switch {
 	case hitl.CheckpointAuthorizes(final):
-		approveSecretPermission(tc.Secrets, permission)
+		approveSecretPermission(tc.Secrets, permission, attestationOf(final))
 		return args, nil
 	case final.Status == hitl.DecisionStatusRejected || final.Status == hitl.DecisionStatusApproved:
 		return nil, e.approvalRefusal(approvaloutcome.CodeApprovalDenied)

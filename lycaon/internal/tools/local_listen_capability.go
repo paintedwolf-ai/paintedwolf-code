@@ -82,7 +82,7 @@ func (e *DefaultToolExecutor) preflightLocalListenCapability(
 		})
 	}
 	if result.SecretApproved {
-		approveCapabilitySecretPermission(ctx, tc, permission)
+		approveCapabilitySecretPermission(ctx, tc, permission, result.SecretAttestationID)
 	}
 	result.Ports = spawnPortNarrowing(result.Ports, ports)
 	return &result, nil

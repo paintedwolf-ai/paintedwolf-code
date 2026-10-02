@@ -17,11 +17,16 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 	declared := tc.Invocation.Contract.SecretReferenceSurface
 	surface := secretmatch.ScreenSurface(declared)
 	defer func() {
-		if failure != nil {
-			failure = &ToolReject{Code: OutboundSecretScreenFailedCode, Data: map[string]any{
-				"surface": string(surface), "rule_id": secretmatch.ManagedRuleID, "shape": "Protected value", "fault_stage": secretmatch.FaultStageScreenUnwired,
-			}}
+		if failure == nil {
+			return
 		}
+		stage := secretmatch.FaultStageScreenUnwired
+		if fault, ok := secretmatch.Faulted(failure); ok {
+			stage = fault.Stage
+		}
+		failure = &ToolReject{Code: OutboundSecretScreenFailedCode, Data: map[string]any{
+			"surface": string(surface), "rule_id": secretmatch.ManagedRuleID, "shape": "Protected value", "fault_stage": stage,
+		}}
 	}()
 	if e.approvalsDisabled != nil && e.approvalsDisabled(tc.ActiveRootPath()) {
 		return nil, nil
@@ -66,9 +71,14 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 	if err != nil {
 		return nil, err
 	}
-	if secretInvocationCovered(tc.Secrets, finding.Fingerprints, recipients) ||
-		(e.approvalGate != nil && e.secretRecipientsCovered(finding, recipients, secretFingerprintValues(finding.Fingerprints))) {
+	custody := tc.Secrets.Custody(finding.Fingerprints)
+	if secretInvocationCovered(tc.Secrets, finding.Fingerprints, recipients) {
 		return nil, nil
+	}
+	if e.approvalGate != nil {
+		if covered, _ := e.secretRecipientsCovered(finding, recipients, secretFingerprintValues(finding.Fingerprints), custody.HeldFingerprints()); covered {
+			return nil, nil
+		}
 	}
 	// Standing redaction is applied by the final payload screen.
 	if e.approvalGate != nil && e.approvalGate.SecretRedactionStanding(tc.ProjectID, secretFingerprintValues(finding.Fingerprints)) {
@@ -76,10 +86,13 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 	}
 	// A release the gate makes silently joins no card; the final payload
 	// screen records it.
-	finding.ChatGenerated, finding.RecipientsLocal = tc.Secrets.GeneratedForChat(known), local
+	finding.RecipientsLocal = local
 	posture := e.secretPosture(tc.ActiveRootPath())
-	if verdict, _ := evaluateSecretScreen(finding, posture); verdict == gate.Silent {
+	if verdict, _ := evaluateSecretScreen(finding, custody, posture); verdict == gate.Silent {
 		return nil, nil
+	}
+	if len(custody.Held) > 0 && !e.presenceAvailable() {
+		return nil, secretmatch.NewAskFault(secretmatch.FaultStagePresenceUnavailable, nil)
 	}
 	offers := secretReleaseLadder(secretScreenChatSession(finding), tc.ProjectID, tc.ActiveRootPath(), recipients,
 		finding.SecretNames, true, finding.Fingerprints)
@@ -92,6 +105,7 @@ func (e *DefaultToolExecutor) prepareSecretPermission(ctx context.Context, tool 
 			DestinationID: destination, DestinationLabel: label, DestinationKind: surface.DestinationKind(),
 			Recipients: recipients, SecretNames: finding.SecretNames,
 			SourcePath: "arguments", OriginKind: secretmatch.OriginField, ToolCallID: tc.ToolCallID,
+			Held: heldRelease(custody, recipients),
 		},
 		Offers: offers, Fingerprints: finding.Fingerprints,
 		ConnectPorts: append([]uint16(nil), secretUseConnectPorts(ctx)...),
@@ -112,9 +126,17 @@ func secretInvocationCovered(resolution *secretcap.Resolution, fingerprints []se
 	return true
 }
 
-func approveSecretPermission(resolution *secretcap.Resolution, permission *hitl.SecretPermission) {
+// approveSecretPermission records a composed card's release; attestation
+// names the presence that released held values, when any.
+func approveSecretPermission(resolution *secretcap.Resolution, permission *hitl.SecretPermission, attestation string) {
 	if permission != nil {
-		resolution.ApproveUse(permission.Fingerprints, permission.Screen.Recipients)
+		attestations := map[string]string{}
+		if permission.Screen.Held != nil && attestation != "" {
+			for _, fingerprint := range permission.Screen.Held.Fingerprints {
+				attestations[fingerprint] = attestation
+			}
+		}
+		resolution.ApproveAttested(permission.Fingerprints, permission.Screen.Recipients, attestations)
 		resolution.ApproveLocalConnections(permission.ConnectPorts)
 	}
 }

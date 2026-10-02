@@ -23,14 +23,14 @@ func TestGenerateResolveAndListNeverReturnTheValue(t *testing.T) {
 		OperationID: "call-1", Name: "registry token", Purpose: "authenticate a local registry",
 	})
 	testutil.FailErr(t, "generate secret", err)
-	value, ok := values.Get(currentValueID(t, service, meta.Reference))
-	if !ok || len(value.Value()) < 32 {
+	value, ok := storedEntry(values, currentValueID(t, service, meta.Reference))
+	if !ok || len(value.Value) < 32 {
 		t.Fatal("generated value was not stored")
 	}
-	if strings.Contains(meta.Reference, value.Value()) || meta.State != "active" || meta.EntropyBits != 256 {
+	if strings.Contains(meta.Reference, value.Value) || meta.State != "active" || meta.EntropyBits != 256 {
 		t.Fatalf("unsafe or incomplete metadata: %+v", meta)
 	}
-	if len(*remembered) != 1 || (*remembered)[0].Secret != value.Value() {
+	if len(*remembered) != 1 || (*remembered)[0].Secret != value.Value {
 		t.Fatal("generated value was not admitted to exact-match screening")
 	}
 
@@ -40,7 +40,7 @@ func TestGenerateResolveAndListNeverReturnTheValue(t *testing.T) {
 	})
 	testutil.FailErr(t, "resolve reference", err)
 	resolvedHeader := resolved.Arguments["headers"].([]any)[0].(map[string]any)["value"].(string)
-	if resolvedHeader != "Bearer "+value.Value() {
+	if resolvedHeader != "Bearer "+value.Value {
 		t.Fatal("execution copy did not receive the secret")
 	}
 	canonicalHeader := canonical["headers"].([]any)[0].(map[string]any)["value"].(string)
@@ -53,7 +53,7 @@ func TestGenerateResolveAndListNeverReturnTheValue(t *testing.T) {
 		t.Fatalf("listed metadata = %+v", listed)
 	}
 	encoded := listed[0].Reference + listed[0].Name + listed[0].Purpose
-	if strings.Contains(encoded, value.Value()) {
+	if strings.Contains(encoded, value.Value) {
 		t.Fatal("list exposed the secret value")
 	}
 }
@@ -90,8 +90,8 @@ func TestPutTracksUserAndDetectedValuesWithoutGeneratedClaims(t *testing.T) {
 		if meta.Origin != origin || meta.Format != "" || meta.EntropyBits != 0 {
 			t.Fatalf("metadata = %+v", meta)
 		}
-		if value, ok := values.Get(currentValueID(t, service, meta.Reference)); !ok || value.Value() != origin+"-secret-value" {
-			t.Fatalf("protected value = %q ok=%v", value.Value(), ok)
+		if value, ok := storedEntry(values, currentValueID(t, service, meta.Reference)); !ok || value.Value != origin+"-secret-value" {
+			t.Fatalf("protected value = %q ok=%v", value.Value, ok)
 		}
 	}
 	if len(*remembered) != 2 || (*remembered)[0].Reference == "" || !(*remembered)[0].NonDisclosable {
@@ -115,7 +115,7 @@ func TestDetectedMetadataFitsStorageWithoutChangingProtectedValue(t *testing.T) 
 			if !utf8.ValidString(meta.Name) || utf8.RuneCountInString(meta.Name) < 1 || utf8.RuneCountInString(meta.Name) > 80 || utf8.RuneCountInString(meta.Purpose) > 240 {
 				t.Fatalf("detector metadata exceeds storage contract: %+v", meta)
 			}
-			if got, ok := values.Get(currentValueID(t, service, meta.Reference)); !ok || got.Value() != value {
+			if got, ok := storedEntry(values, currentValueID(t, service, meta.Reference)); !ok || got.Value != value {
 				t.Fatal("detector metadata normalization changed protected bytes")
 			}
 			if len(*remembered) != 1 || !(*remembered)[0].NonDisclosable || (*remembered)[0].Reference != meta.Reference {
@@ -155,8 +155,8 @@ func TestPutStoresFloorLengthAndWhitespaceBearingValuesExactly(t *testing.T) {
 		})
 		testutil.FailErr(t, "put exact value", err)
 		meta := put.Metadata
-		if got, ok := values.Get(currentValueID(t, service, meta.Reference)); !ok || got.Value() != want {
-			t.Fatalf("stored value = %q, %v; want exact %q", got.Value(), ok, want)
+		if got, ok := storedEntry(values, currentValueID(t, service, meta.Reference)); !ok || got.Value != want {
+			t.Fatalf("stored value = %q, %v; want exact %q", got.Value, ok, want)
 		}
 	}
 	_, err := service.Put(t.Context(), PutRequest{
@@ -206,7 +206,7 @@ func TestResolveSubstitutesEveryNestedStringValueWithoutMutatingCanonicalArgs(t 
 		OperationID: "deep-resolution", Name: "nested token",
 	})
 	testutil.FailErr(t, "generate nested secret", err)
-	value, ok := values.Get(currentValueID(t, service, meta.Reference))
+	value, ok := storedEntry(values, currentValueID(t, service, meta.Reference))
 	if !ok {
 		t.Fatal("generated nested value is unavailable")
 	}
@@ -222,14 +222,14 @@ func TestResolveSubstitutesEveryNestedStringValueWithoutMutatingCanonicalArgs(t 
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1",
 	})
 	testutil.FailErr(t, "resolve nested strings", err)
-	if got := resolved.Arguments["scalar"]; got != "prefix-"+value.Value()+"-suffix" {
+	if got := resolved.Arguments["scalar"]; got != "prefix-"+value.Value+"-suffix" {
 		t.Fatalf("resolved scalar = %q", got)
 	}
 	array := resolved.Arguments["array"].([]any)
-	if array[0] != value.Value() || array[1].(map[string]any)["arbitrary_future_field"] != "Bearer "+value.Value() {
+	if array[0] != value.Value || array[1].(map[string]any)["arbitrary_future_field"] != "Bearer "+value.Value {
 		t.Fatalf("resolved array = %#v", array)
 	}
-	if got := resolved.Arguments["strings"].([]string); got[1] != value.Value() {
+	if got := resolved.Arguments["strings"].([]string); got[1] != value.Value {
 		t.Fatalf("resolved string slice = %#v", got)
 	}
 	if got := canonical["scalar"]; got != "prefix-"+meta.Reference+"-suffix" {
@@ -321,7 +321,7 @@ func TestRememberProjectValuesIncludesRetiredChatSecrets(t *testing.T) {
 		OperationID: "chat-prime", Name: "retired deployment token", Scope: ScopeChat,
 	})
 	testutil.FailErr(t, "generate chat secret", err)
-	want, ok := values.Get(currentValueID(t, service, meta.Reference))
+	want, ok := storedEntry(values, currentValueID(t, service, meta.Reference))
 	if !ok {
 		t.Fatal("generated value is unavailable")
 	}
@@ -337,7 +337,7 @@ func TestRememberProjectValuesIncludesRetiredChatSecrets(t *testing.T) {
 	testutil.FailErr(t, "prime later chat", service.RememberProjectValues(
 		t.Context(), testdbseed.DefaultProjectID, "root-2",
 	))
-	if gotRoot != "root-2" || len(got) != 1 || got[0].Secret != want.Value() || !got[0].NonDisclosable {
+	if gotRoot != "root-2" || len(got) != 1 || got[0].Secret != want.Value || !got[0].NonDisclosable {
 		t.Fatalf("remembered root=%q values=%+v", gotRoot, got)
 	}
 }
@@ -482,4 +482,9 @@ func TestReferenceLimitCountsDistinctCapabilitiesAndWithholdsPartialResolution(t
 	if args["values"].([]string)[0] != references[0] {
 		t.Fatal("failed resolution modified canonical arguments")
 	}
+}
+
+// storedEntry reads one vault entry through its envelope.
+func storedEntry(values *credentialstore.Store, versionID string) (protectedValue, bool) {
+	return vaultValues{store: values}.get(versionID)
 }

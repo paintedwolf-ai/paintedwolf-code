@@ -18,6 +18,7 @@ export const API_OPERATIONS = {
   approveBlueprint: { method: "POST", path: "/v1/projects/{id}/blueprints/{blueprint_id}/approve" },
   assessProjectRemoval: { method: "GET", path: "/v1/projects/{id}/removal-assessment" },
   attachProjectRoot: { method: "POST", path: "/v1/projects/{id}/roots" },
+  beginCheckpointReleaseChallenge: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges" },
   beginProjectManagedSecretReveal: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges" },
   bindGitWorktree: { method: "PUT", path: "/v1/sessions/{id}/git-worktree" },
   browseProjectSource: { method: "GET", path: "/v1/projects/{id}/source/browse" },
@@ -190,6 +191,7 @@ export const API_OPERATIONS = {
   listMcpRecipes: { method: "GET", path: "/v1/mcp/recipes" },
   listProjectArtifacts: { method: "GET", path: "/v1/projects/{id}/artifacts" },
   listProjectFindingIgnores: { method: "GET", path: "/v1/projects/{id}/findings/ignores" },
+  listProjectManagedSecretAttestations: { method: "GET", path: "/v1/projects/{id}/secrets/{secret_id}/attestations" },
   listProjectManagedSecretUses: { method: "GET", path: "/v1/projects/{id}/secrets/{secret_id}/uses" },
   listProjectManagedSecrets: { method: "GET", path: "/v1/projects/{id}/secrets" },
   listProjectScanners: { method: "GET", path: "/v1/projects/{id}/scanners" },
@@ -355,6 +357,7 @@ export type OperationPathParameters = {
   approveBlueprint: { id: string | number; blueprint_id: string | number; };
   assessProjectRemoval: { id: string | number; };
   attachProjectRoot: { id: string | number; };
+  beginCheckpointReleaseChallenge: { id: string | number; checkpoint_id: string | number; };
   beginProjectManagedSecretReveal: { id: string | number; secret_id: string | number; };
   bindGitWorktree: { id: string | number; };
   browseProjectSource: { id: string | number; };
@@ -527,6 +530,7 @@ export type OperationPathParameters = {
   listMcpRecipes: Record<string, never>;
   listProjectArtifacts: { id: string | number; };
   listProjectFindingIgnores: { id: string | number; };
+  listProjectManagedSecretAttestations: { id: string | number; secret_id: string | number; };
   listProjectManagedSecretUses: { id: string | number; secret_id: string | number; };
   listProjectManagedSecrets: { id: string | number; };
   listProjectScanners: { id: string | number; };

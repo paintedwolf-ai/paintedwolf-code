@@ -26,6 +26,7 @@ const (
 	NamespaceMCPOAuth          = "mcp-oauth"
 	NamespaceSecretFingerprint = "secret-fingerprint"
 	NamespaceManagedSecrets    = "managed-secrets"
+	NamespacePresenceReleases  = "presence-releases"
 )
 
 // Slot declares one validated namespace inside the shared encrypted vault.
@@ -54,3 +55,9 @@ func developmentIdentityPath(vaultPath string) string {
 }
 
 func releaseBuild() bool { return !configdir.IsDevelopmentBuild() }
+
+// UnlocksUnattended reports whether the vault opens without a human secret:
+// any process that can start the signed engine reaches its plaintext.
+func UnlocksUnattended() bool {
+	return unattendedIdentityProvider && releaseBuild() && !isolatedProcess()
+}

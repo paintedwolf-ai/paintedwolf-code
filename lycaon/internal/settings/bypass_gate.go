@@ -38,8 +38,8 @@ func (BypassApprovalGate) RevokeGrantInstalledBy(string, string) (bool, error) {
 
 func (BypassApprovalGate) ListGrants(string) []hitl.ApprovalGrant { return nil }
 
-func (BypassApprovalGate) SecretFingerprintsCovered(string, string, string, string, []string) bool {
-	return false
+func (BypassApprovalGate) SecretReleaseCovered(string, string, string, string, []string, []string) (bool, map[string]string) {
+	return false, nil
 }
 
 // Bypass carries no standing redaction choice.

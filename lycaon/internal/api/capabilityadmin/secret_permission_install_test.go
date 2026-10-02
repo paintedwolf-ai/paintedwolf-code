@@ -44,7 +44,7 @@ func TestServicePermissionFailureRollsBackSecretAuthority(t *testing.T) {
 	if !recorder.installed {
 		t.Fatal("test did not reach the partial-install rollback path")
 	}
-	if authority.SecretFingerprintsCovered("task", "project", "service", "http_request", []string{"value"}) {
+	if covered, _ := authority.SecretReleaseCovered("task", "project", "service", "http_request", []string{"value"}, nil); covered {
 		t.Fatal("partial permission survived failed installation")
 	}
 }

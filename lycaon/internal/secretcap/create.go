@@ -138,7 +138,7 @@ func (s *Service) createWithFirstVersion(ctx context.Context, id string, req Put
 	// A failed mint may still have supplied bytes to a diagnostic or tool result.
 	owner := secretIdentity{id: id, projectID: req.ProjectID, name: req.Name, origin: req.Origin}
 	s.protectDurableVersion(valueID, owner, req.Value)
-	if err := s.values.Set(valueID, req.Value); err != nil {
+	if err := s.values.put(valueID, firstEntry(req)); err != nil {
 		return fmt.Errorf("store managed secret: %w", err)
 	}
 	stamp := db.FormatTime(now)
@@ -173,7 +173,7 @@ func (s *Service) createWithFirstVersion(ctx context.Context, id string, req Put
 		return nil
 	})
 	if err != nil {
-		_ = s.values.Delete(valueID)
+		_ = s.values.delete(valueID)
 		return err
 	}
 	return nil

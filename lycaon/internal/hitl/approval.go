@@ -87,8 +87,9 @@ type ApprovalGate interface {
 	RevokeGrantInstalledBy(id, operationID string) (found bool, err error)
 	// ListGrants returns active chat and durable grants visible to a chat.
 	ListGrants(chatSessionID string) []ApprovalGrant
-	// SecretFingerprintsCovered checks release authority for one outbound seam.
-	SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface string, fingerprints []string) bool
+	// SecretReleaseCovered checks release authority for one outbound seam. A
+	// held fingerprint is covered only by an attested release, which it names.
+	SecretReleaseCovered(chatSessionID, projectID, destinationID, surface string, fingerprints, held []string) (bool, map[string]string)
 	// SecretRedactionStanding reports complete standing-redaction coverage.
 	SecretRedactionStanding(projectID string, fingerprints []string) bool
 	// PutAskQuiet installs a chat-keyed ask quiet. ttlSeconds 0 means until revoked.

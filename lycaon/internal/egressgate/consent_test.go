@@ -20,7 +20,7 @@ func TestHTTPConsentIsBoundToOriginOnEveryHop(t *testing.T) {
 	testutil.FailErr(t, "parse service", err)
 	id, label := secretmatch.HTTPDestination(target)
 	resolution := &secretcap.Resolution{}
-	resolution.ApproveUse([]secretmatch.SecretFingerprint{"value"}, []secretmatch.Recipient{{ID: id, Label: label, Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}})
+	resolution.ApproveRelease(secretcap.Release{Fingerprints: []secretmatch.SecretFingerprint{"value"}, Recipients: []secretmatch.Recipient{{ID: id, Label: label, Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}}})
 	ctx := secretcap.WithResolution(t.Context(), resolution)
 	ctx = hitl.WithStopContext(ctx, t.Context())
 	for i, hop := range []struct {

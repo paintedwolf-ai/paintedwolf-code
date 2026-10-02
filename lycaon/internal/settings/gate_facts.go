@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 )
@@ -32,6 +33,9 @@ type Sources struct {
 	Locations *sensitivepath.Catalog
 	// ApprovalRules supplies trust-gated extension rules.
 	ApprovalRules ApprovalRuleCatalogSource
+	// ReleaseLedger lists attested releases of person-held values; without it
+	// no grant covers a held value.
+	ReleaseLedger *presence.ReleaseLedger
 }
 
 // NoSources reports successful empty fact producers.

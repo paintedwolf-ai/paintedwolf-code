@@ -210,7 +210,9 @@ func runCommandForeground(
 	if tctx.VerificationCheck {
 		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
 	}
-	tctx.Secrets.HandOff(ctx, nil)
+	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
+		return commandRunOutcome{}, tools.HeldHandOffReject(toolName)
+	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
 		IsCheck:        tctx.VerificationCheck,

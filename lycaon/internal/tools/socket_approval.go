@@ -125,6 +125,6 @@ func (e *DefaultToolExecutor) awaitSocketCapabilities(
 	if !hitl.CheckpointAuthorizes(final) {
 		return isolationCheckpointReject(isolation.CodeSocketPathDenied, final)
 	}
-	approveCapabilitySecretPermission(ctx, tc, permission)
+	approveCapabilitySecretPermission(ctx, tc, permission, attestationOf(final))
 	return nil
 }

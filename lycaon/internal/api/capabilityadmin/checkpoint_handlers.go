@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -92,7 +93,14 @@ func (s *Handler) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request
 			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "option_id is required to approve a tool approval")
 			return
 		}
-		resp, err := s.options.ResolveApprovalOption(r.Context(), sessionID, checkpointID, req.OptionID)
+		resolver := hitl.HumanApproval()
+		if req.Presence != nil {
+			resolver = hitl.AttestedApproval(presence.Proof{
+				ChallengeID: req.Presence.ChallengeID, Authenticator: string(req.Presence.Authenticator),
+				Signature: req.Presence.Signature,
+			})
+		}
+		resp, err := s.options.ResolveApprovalOptionBy(r.Context(), sessionID, checkpointID, req.OptionID, resolver)
 		if err != nil {
 			s.writeCheckpointResolveError(w, r, err)
 			return
@@ -111,8 +119,43 @@ func (s *Handler) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, wireCheckpointResponse(sessionID, resp))
 }
 
+// HandleBeginReleaseChallenge binds presence to one option that releases
+// values a person holds. Only the desktop shell can answer it.
+func (s *Handler) HandleBeginReleaseChallenge(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "id")
+	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+		return
+	}
+	var body wire.BeginReleaseChallengeRequest
+	if err := httpio.DecodeJSON(w, r, &body); err != nil {
+		s.responses.DecodeError(w, r, err)
+		return
+	}
+	if !presence.IsWindowLabel(strings.TrimSpace(body.WindowLabel)) {
+		s.responses.InvalidField(w, "window_label", "must be 1 to 120 characters without control characters")
+		return
+	}
+	challenge, err := s.options.BeginReleaseChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
+		strings.TrimSpace(body.OptionID), strings.TrimSpace(body.WindowLabel))
+	if err != nil {
+		s.writeCheckpointResolveError(w, r, err)
+		return
+	}
+	httpio.WriteJSON(w, http.StatusCreated, wire.PresenceChallenge{
+		ChallengeID: challenge.ID, ProofPayload: challenge.ProofPayload, Prompt: challenge.Prompt,
+		ExpiresAt: challenge.ExpiresAt,
+	})
+}
+
 func (s *Handler) writeCheckpointResolveError(w http.ResponseWriter, r *http.Request, err error) {
+	if secretview.WritePresenceError(s.responses, w, err) {
+		return
+	}
 	switch {
+	case errors.Is(err, hitl.ErrPresenceRequired):
+		s.responses.Fail(w, wire.ApiErrorCodePresenceRequired, "this option releases a value you gave Painted Wolf Code; confirm it in the desktop app")
+	case errors.Is(err, hitl.ErrPresenceNotRequired):
+		s.responses.Fail(w, wire.ApiErrorCodePresenceNotRequired, "this option releases no value that needs your confirmation")
 	case errors.Is(err, hitl.ErrCheckpointNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeCheckpointNotFound, "checkpoint not found")
 	case errors.Is(err, hitl.ErrCheckpointNotPending):
@@ -142,6 +185,9 @@ func resolveFromRequest(req wire.ResolveCheckpointRequest) (*hitl.DecisionResult
 	}
 	if req.OptionID != "" && (req.Kind != wire.CheckpointKindToolApproval || req.Action != wire.ApprovalActionApprove) {
 		return nil, nil, &resolveFieldError{"option_id", "option_id requires an approving tool_approval resolution"}
+	}
+	if req.Presence != nil && (req.Kind != wire.CheckpointKindToolApproval || req.Action != wire.ApprovalActionApprove) {
+		return nil, nil, &resolveFieldError{"presence", "presence accompanies an approving tool_approval resolution"}
 	}
 	switch req.Kind {
 	case wire.CheckpointKindToolApproval:

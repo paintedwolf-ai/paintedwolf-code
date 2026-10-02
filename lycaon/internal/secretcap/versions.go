@@ -31,6 +31,11 @@ func (s *Service) ReplaceValue(ctx context.Context, req ReplaceValueRequest) (Me
 	if row.RevokedAt.Valid {
 		return Metadata{}, ErrRevoked
 	}
+	// A jar's values reach services through the jar, never through a reviewed
+	// release, so its document stays host-maintained; a person ends one.
+	if row.Origin == OriginCookieJar || row.Origin == OriginTokenJar {
+		return Metadata{}, fmt.Errorf("%w: a jar is kept from service responses; revoke it instead", ErrInvalidPut)
+	}
 	if err := validateValue(req.Value); err != nil {
 		return Metadata{}, err
 	}
@@ -39,17 +44,19 @@ func (s *Service) ReplaceValue(ctx context.Context, req ReplaceValueRequest) (Me
 	if err != nil {
 		return Metadata{}, err
 	}
-	if err := s.replaceOnto(ctx, row, current, hasCurrent, req.Value, nil); err != nil {
+	// A person supplied the replacement bytes, whatever produced the first value.
+	if err := s.replaceOnto(ctx, row, current, hasCurrent, CustodyPerson, req.Value, nil); err != nil {
 		return Metadata{}, err
 	}
 	s.screeningGeneration.Add(1)
 	return s.metadataRow(ctx, row)
 }
 
-// replaceOnto swaps the current version in one metadata transaction.
+// replaceOnto swaps the current version in one metadata transaction. custody
+// names who supplied the new bytes.
 func (s *Service) replaceOnto(
-	ctx context.Context, row db.ManagedSecrets, current db.ManagedSecretVersions, hasCurrent bool, value string,
-	record func(*db.Queries) error,
+	ctx context.Context, row db.ManagedSecrets, current db.ManagedSecretVersions, hasCurrent bool,
+	custody Custody, value string, record func(*db.Queries) error,
 ) error {
 	next, err := s.queries.NextManagedSecretVersion(ctx, row.ID)
 	if err != nil {
@@ -57,7 +64,7 @@ func (s *Service) replaceOnto(
 	}
 	valueID := uuid.NewString()
 	s.protectDurableVersion(valueID, identityOf(row), value)
-	if err := s.values.Set(valueID, value); err != nil {
+	if err := s.values.put(valueID, protectedValue{Custody: custody, Value: value}); err != nil {
 		return fmt.Errorf("store managed secret: %w", err)
 	}
 	stamp := db.FormatTime(s.now())
@@ -80,7 +87,7 @@ func (s *Service) replaceOnto(
 		return nil
 	})
 	if err != nil {
-		_ = s.values.Delete(valueID)
+		_ = s.values.delete(valueID)
 		return err
 	}
 	if hasCurrent {
@@ -159,11 +166,11 @@ func (s *Service) screeningValues(
 		row := rows[i]
 		owner, spent := identityOf(row), spends(row)
 		for _, version := range bySecret[row.ID] {
-			value, ok := s.values.Get(version.ID)
+			entry, ok := s.values.get(version.ID)
 			if !ok {
 				continue
 			}
-			evidence = append(evidence, versionEvidence(owner, value.Value(), standingOf(row, version, spent))...)
+			evidence = append(evidence, versionEvidence(owner, entry.Value, standingOf(row, version, spent))...)
 		}
 	}
 	return evidence, nil
@@ -187,7 +194,7 @@ func (s *Service) ProjectRemoval(ctx context.Context, projectID string) (func() 
 		s.mutationMu.Lock()
 		defer s.mutationMu.Unlock()
 		for _, id := range ids {
-			if err := s.values.Delete(id); err != nil {
+			if err := s.values.delete(id); err != nil {
 				return fmt.Errorf("remove project secret value: %w", err)
 			}
 			s.forgetDurableVersion(id)
@@ -226,7 +233,7 @@ func (s *Service) DiscardCreated(ctx context.Context, projectID, reference strin
 		return ErrNotFound
 	}
 	for _, valueID := range ids {
-		if err := s.values.Delete(valueID); err != nil {
+		if err := s.values.delete(valueID); err != nil {
 			return fmt.Errorf("remove discarded secret value: %w", err)
 		}
 		s.forgetDurableVersion(valueID)
@@ -247,11 +254,11 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	for _, id := range ids {
 		known[id] = struct{}{}
 	}
-	for _, id := range s.values.IDs() {
+	for _, id := range s.values.ids() {
 		if _, ok := known[id]; ok {
 			continue
 		}
-		if err := s.values.Delete(id); err != nil {
+		if err := s.values.delete(id); err != nil {
 			return fmt.Errorf("remove orphaned secret value: %w", err)
 		}
 	}

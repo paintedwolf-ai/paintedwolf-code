@@ -15,6 +15,9 @@ import (
 type resolvedValue struct {
 	id, name, value, useID string
 	version                int64
+	custody                Custody
+	// fingerprint is the screen's identity for the value's exact bytes.
+	fingerprint secretmatch.SecretFingerprint
 	// chatGenerated marks a value the host generated for this chat. Chat scope
 	// is visible only from its own chat, so this chat is the one that holds it.
 	chatGenerated bool
@@ -43,7 +46,7 @@ type Resolution struct {
 	access            ResolveContext
 	mu                sync.Mutex
 	delivery          map[string]deliveryState
-	permissions       []invocationPermission
+	permissions       []Release
 	localConnectPorts []uint16
 }
 
@@ -95,6 +98,9 @@ func (r *Resolution) HasUnsafeFileBytes() bool {
 // TestResolvedValue describes a secret value for testing resolution mechanics.
 type TestResolvedValue struct {
 	ID, Name, Value, Path string
+	Version               int64
+	Custody               Custody
+	Fingerprint           secretmatch.SecretFingerprint
 	ChatGenerated         bool
 }
 
@@ -106,11 +112,13 @@ func NewResolutionForTest(args map[string]any, values []TestResolvedValue) *Reso
 		sources:   make(map[string]string),
 	}
 	for _, v := range values {
+		custody := v.Custody
+		if custody == "" {
+			custody = CustodyHost
+		}
 		r.values[v.ID] = resolvedValue{
-			id:            v.ID,
-			name:          v.Name,
-			value:         v.Value,
-			chatGenerated: v.ChatGenerated,
+			id: v.ID, name: v.Name, value: v.Value, version: v.Version,
+			custody: custody, fingerprint: v.Fingerprint, chatGenerated: v.ChatGenerated,
 		}
 		if v.Path != "" {
 			r.bindings = append(r.bindings, binding{path: v.Path, id: v.ID})
@@ -140,24 +148,6 @@ func (r *Resolution) Matches(matcher *secretmatch.Matcher, included func(string)
 		out = append(out, match)
 	}
 	return out, nil
-}
-
-// GeneratedForChat reports whether every match is exact evidence for a value
-// this invocation resolved from a secret the host generated for the chat.
-func (r *Resolution) GeneratedForChat(matches []secretmatch.Match) bool {
-	if r == nil || len(matches) == 0 {
-		return false
-	}
-	for _, match := range matches {
-		if !secretmatch.IsManagedRule(match.RuleID) {
-			return false
-		}
-		id, ok := secretmatch.ParseReferenceToken(match.Reference)
-		if !ok || !r.values[id].chatGenerated {
-			return false
-		}
-	}
-	return true
 }
 
 // Binds reports whether this argument field contains an original reference span.

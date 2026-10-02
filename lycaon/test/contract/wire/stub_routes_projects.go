@@ -68,6 +68,16 @@ func registerStubProjectRoutes(mux *http.ServeMux, now time.Time, writeJSON stub
 			}},
 		})
 	})
+	mux.HandleFunc("GET /v1/projects/{id}/secrets/{secret_id}/attestations", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.ManagedSecretAttestationList{
+			Attestations: []api.ManagedSecretAttestation{{
+				AttestationID: fixtureSessionID, Purpose: "release", Version: 1, CheckpointID: fixtureSessionID,
+				Recipients:   []api.ManagedSecretUseRecipient{{Label: "Local file: .env", Surface: "file"}},
+				ReleaseScope: "chat", Authenticator: api.PresenceAuthenticatorMacOS, PersonID: fixtureSessionID,
+				AttestedAt: fixtureTime,
+			}},
+		})
+	})
 	mux.HandleFunc("POST /v1/projects/{id}/secrets/{secret_id}/reveal-challenges", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, api.ManagedSecretRevealChallenge{
 			ChallengeID:  fixtureCheckpointID,

@@ -117,4 +117,6 @@ type DecisionResult struct {
 	GrantIDs   []string
 	GrantScope ApprovalGrantScope
 	GrantTitle string
+	// AttestationID names the verified presence that released held values.
+	AttestationID string
 }

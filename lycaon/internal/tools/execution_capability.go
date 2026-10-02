@@ -119,7 +119,7 @@ func (e *DefaultToolExecutor) awaitExecutionCapability(ctx context.Context, acti
 	if !hitl.CheckpointAuthorizes(final) {
 		return isolationCheckpointReject(isolation.CodeExecutionCapabilityDenied, final)
 	}
-	approveCapabilitySecretPermission(ctx, tc, permission)
+	approveCapabilitySecretPermission(ctx, tc, permission, attestationOf(final))
 	return nil
 }
 

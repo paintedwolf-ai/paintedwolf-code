@@ -89,8 +89,8 @@ func (b *LoopbackCheckpointBroker) raise(ctx context.Context, in tools.LoopbackC
 	}
 	return tools.LoopbackConnectResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
-		SecretApproved: resolved.Authorized && in.SecretPermission != nil,
-		Ports:          ports, UserGuidance: resolved.UserGuidance,
+		SecretApproved: resolved.Authorized && in.SecretPermission != nil, SecretAttestationID: resolved.AttestationID,
+		Ports: ports, UserGuidance: resolved.UserGuidance,
 	}, nil
 }
 

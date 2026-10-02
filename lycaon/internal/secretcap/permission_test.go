@@ -15,7 +15,7 @@ func TestInvocationPermissionIsExactAndDetached(t *testing.T) {
 	resolution := &Resolution{}
 	fingerprints := []secretmatch.SecretFingerprint{"one"}
 	recipients := []secretmatch.Recipient{recipient}
-	resolution.ApproveUse(fingerprints, recipients)
+	resolution.ApproveRelease(Release{Fingerprints: fingerprints, Recipients: recipients})
 	fingerprints[0] = "two"
 	recipients[0].ID = "other"
 	if !resolution.UseCovered("one", recipient) || resolution.UseCovered("two", recipient) {

@@ -700,6 +700,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin presence verification for an option that releases held values
+         * @description Creates a short-lived, single-use challenge binding one pending option, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof.
+         */
+        post: operations["beginCheckpointReleaseChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -1013,6 +1033,26 @@ export interface paths {
          * @description A bounded rolling window of what the host did with this reference, newest first — successful substitutions and refusals alike. Records who asked, never the value and never the argument it was going into.
          */
         get: operations["listProjectManagedSecretUses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/secrets/{secret_id}/attestations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Presence-verified reveals and releases of one managed secret
+         * @description Newest first. Each entry records a reveal to the person's own view or a release to the recipients an approval reviewed, with who confirmed and how. Never the value or the proof.
+         */
+        get: operations["listProjectManagedSecretAttestations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7723,6 +7763,8 @@ export interface components {
             action: "approve";
             /** @description Selects one exact opaque option from tool_approval.plan; authority is installed atomically before resolution. */
             option_id: string;
+            /** @description Required when the plan carries held_release and the option approves. Only the installed desktop shell can produce it. */
+            presence?: components["schemas"]["PresenceProof"];
         };
         ToolApprovalRejectBody: {
             /** @constant */
@@ -9852,7 +9894,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "write_root_is_filesystem_root" | "write_root_is_home" | "write_root_not_absolute" | "write_root_under_secret_store" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "project_policy_denied" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "managed_secret_reveal_unavailable" | "managed_secret_reveal_denied" | "managed_secret_reveal_changed" | "managed_secret_reveal_challenge_not_found" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "write_root_is_filesystem_root" | "write_root_is_home" | "write_root_not_absolute" | "write_root_under_secret_store" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "project_policy_denied" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -10992,6 +11034,17 @@ export interface components {
             /** @description Host copy saying why a disabled option cannot be picked here. Present exactly when disabled is true. */
             note?: string;
         };
+        /** @description One value a person gave Painted Wolf Code that this approval would release. */
+        ApprovalHeldSecret: {
+            reference: string;
+            name: string;
+            version: number;
+        };
+        /** @description Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none. */
+        ApprovalHeldRelease: {
+            secrets: components["schemas"]["ApprovalHeldSecret"][];
+            recipients: components["schemas"]["ApprovalSecretRecipient"][];
+        };
         ApprovalPlan: {
             id: string;
             action_digest: string;
@@ -11005,6 +11058,7 @@ export interface components {
             elevated_effects?: components["schemas"]["ElevatedAccessEffect"][];
             /** @description Id of the face option. Exactly one; computed by the host from the subject kind and rung set. Clients must not invent a fallback. A disabled face stays in that slot; Enter does not select another send. */
             recommended_option_id: string;
+            held_release?: components["schemas"]["ApprovalHeldRelease"];
         };
         ApprovalRepeat: {
             reason_key: string;
@@ -11228,6 +11282,11 @@ export interface components {
              */
             origin: "generated" | "ask_user_response" | "detected" | "file_marked" | "composer_marked" | "settings_entered" | "cookie_jar" | "token_jar";
             /**
+             * @description Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy: revealing it or handing it to any file, process, service, or MCP server needs that person's verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent's work beyond one chat. Absent when no value is readable.
+             * @enum {string}
+             */
+            custody?: "person" | "file" | "chat" | "host";
+            /**
              * @description Present only for generated material.
              * @enum {string}
              */
@@ -11267,6 +11326,13 @@ export interface components {
             last_revealed_at?: string | null;
             /** @description Successful authenticated human reveals retained for this capability. */
             reveal_count: number;
+            /**
+             * Format: date-time
+             * @description Most recent presence-verified release to a recipient; absent when never released.
+             */
+            last_released_at?: string | null;
+            /** @description Presence-verified releases retained for this capability. */
+            release_count: number;
         };
         /**
          * @description What holds a durable claim on an artifact. Each reference is a row written in the referrer's own transaction and cascaded by it, so retention and delete impact are the same question.
@@ -11279,6 +11345,36 @@ export interface components {
         };
         CheckpointListResponse: {
             checkpoints: components["schemas"]["CheckpointEvent"][];
+        };
+        /**
+         * @description Operating-system user-presence verifier that confirmed the person before the shell signed.
+         * @enum {string}
+         */
+        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence";
+        /** @description Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier. */
+        PresenceProof: {
+            /** Format: uuid */
+            challenge_id: string;
+            authenticator: components["schemas"]["PresenceAuthenticator"];
+            /** @description Base64url without padding Ed25519 signature from the installed desktop shell. */
+            signature: string;
+        };
+        /** @description Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person. */
+        BeginReleaseChallengeRequest: {
+            option_id: string;
+            /** @description Native calling window label, bound into the proof; not an authorization identity. */
+            window_label: string;
+        };
+        /** @description One short-lived request for native user-presence verification. The proof payload is opaque canonical bytes naming its purpose and subject; the native shell signs it only after the operating system verifies the device user. The API bearer can begin a challenge but cannot complete one. */
+        PresenceChallenge: {
+            /** Format: uuid */
+            challenge_id: string;
+            /** @description Base64url without padding of the exact bytes the native shell signs. */
+            proof_payload: string;
+            /** @description Host-authored reason shown by the operating-system prompt. */
+            prompt: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         ProjectPromotion: {
             destination_path: string;
@@ -11456,6 +11552,10 @@ export interface components {
             /** @description The new credential. Never echoed back. Named so the host's own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked. */
             secret_value: string;
         };
+        ManagedSecretUseRecipient: {
+            label: string;
+            surface: string;
+        };
         /** @description One recorded attempt to substitute a reference into a tool call. Carries what the host decided and who asked, never the value and never the argument the value was going into. */
         ManagedSecretUse: {
             /** @description Invocation identity shared with authorization history; absent for non-tool resolution. */
@@ -11479,12 +11579,46 @@ export interface components {
             session_id?: string;
             /** Format: uuid */
             chat_session_id?: string;
+            /** @description Recipients the release that handed the value off reviewed; empty until one did. */
+            recipients?: components["schemas"]["ManagedSecretUseRecipient"][];
+            /**
+             * Format: uuid
+             * @description The presence attestation that released a value a person gave; absent otherwise.
+             */
+            attestation_id?: string;
         };
         /** @description A bounded rolling window of recent uses, newest first. Not a permanent ledger. */
         ManagedSecretUseList: {
             uses: components["schemas"]["ManagedSecretUse"][];
             /** @description Opaque cursor for the next page of secret uses; empty or omitted at the end. */
             next_cursor?: string;
+        };
+        /** @description One presence-verified disclosure: a reveal to the person's own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof. */
+        ManagedSecretAttestation: {
+            /** Format: uuid */
+            attestation_id: string;
+            /** @enum {string} */
+            purpose: "reveal" | "release";
+            version: number;
+            /**
+             * Format: uuid
+             * @description The approval a release answered.
+             */
+            checkpoint_id?: string;
+            recipients: components["schemas"]["ManagedSecretUseRecipient"][];
+            /**
+             * @description How long a release keeps covering its recipients.
+             * @enum {string}
+             */
+            release_scope?: "once" | "chat" | "project";
+            authenticator: components["schemas"]["PresenceAuthenticator"];
+            /** Format: uuid */
+            person_id: string;
+            /** Format: date-time */
+            attested_at: string;
+        };
+        ManagedSecretAttestationList: {
+            attestations: components["schemas"]["ManagedSecretAttestation"][];
         };
         /** @description Starts one installed-app reveal. The native shell supplies its actual calling window label; it is bound into the proof payload and audit record, but it is not an authorization identity. */
         BeginManagedSecretRevealRequest: {
@@ -11504,8 +11638,7 @@ export interface components {
         };
         /** @description Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier; the ordinary API bearer is never sufficient to reveal a value. */
         CompleteManagedSecretRevealRequest: {
-            /** @enum {string} */
-            authenticator: "macos_user_presence" | "windows_user_presence";
+            authenticator: components["schemas"]["PresenceAuthenticator"];
             /** @description Base64url without padding Ed25519 signature from the installed desktop shell. */
             signature: string;
         };
@@ -17804,6 +17937,58 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    beginCheckpointReleaseChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                checkpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginReleaseChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Challenge to verify and sign */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceChallenge"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The checkpoint is settled, or the option releases no held value */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description This app session cannot verify presence */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
     listProjects: {
         parameters: {
             query?: {
@@ -18567,6 +18752,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedSecretUseList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such secret in this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProjectManagedSecretAttestations: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded attestations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedSecretAttestationList"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -29248,6 +29473,8 @@ export type ApprovalOptionKind = components["schemas"]["ApprovalOptionKind"];
 export type ApprovalOptionRung = components["schemas"]["ApprovalOptionRung"];
 export type ApprovalOptionDecision = components["schemas"]["ApprovalOptionDecision"];
 export type ApprovalOption = components["schemas"]["ApprovalOption"];
+export type ApprovalHeldSecret = components["schemas"]["ApprovalHeldSecret"];
+export type ApprovalHeldRelease = components["schemas"]["ApprovalHeldRelease"];
 export type ApprovalPlan = components["schemas"]["ApprovalPlan"];
 export type ApprovalRepeat = components["schemas"]["ApprovalRepeat"];
 export type PreviewAttachment = components["schemas"]["PreviewAttachment"];
@@ -29275,6 +29502,10 @@ export type ManagedSecret = components["schemas"]["ManagedSecret"];
 export type ArtifactReferenceKind = components["schemas"]["ArtifactReferenceKind"];
 export type ArtifactReferenceCount = components["schemas"]["ArtifactReferenceCount"];
 export type CheckpointListResponse = components["schemas"]["CheckpointListResponse"];
+export type PresenceAuthenticator = components["schemas"]["PresenceAuthenticator"];
+export type PresenceProof = components["schemas"]["PresenceProof"];
+export type BeginReleaseChallengeRequest = components["schemas"]["BeginReleaseChallengeRequest"];
+export type PresenceChallenge = components["schemas"]["PresenceChallenge"];
 export type ProjectPromotion = components["schemas"]["ProjectPromotion"];
 export type ProjectListResponse = components["schemas"]["ProjectListResponse"];
 export type CloneProjectRequest = components["schemas"]["CloneProjectRequest"];
@@ -29295,8 +29526,11 @@ export type ManagedSecretList = components["schemas"]["ManagedSecretList"];
 export type CreateManagedSecretRequest = components["schemas"]["CreateManagedSecretRequest"];
 export type UpdateManagedSecretRequest = components["schemas"]["UpdateManagedSecretRequest"];
 export type ReplaceManagedSecretValueRequest = components["schemas"]["ReplaceManagedSecretValueRequest"];
+export type ManagedSecretUseRecipient = components["schemas"]["ManagedSecretUseRecipient"];
 export type ManagedSecretUse = components["schemas"]["ManagedSecretUse"];
 export type ManagedSecretUseList = components["schemas"]["ManagedSecretUseList"];
+export type ManagedSecretAttestation = components["schemas"]["ManagedSecretAttestation"];
+export type ManagedSecretAttestationList = components["schemas"]["ManagedSecretAttestationList"];
 export type BeginManagedSecretRevealRequest = components["schemas"]["BeginManagedSecretRevealRequest"];
 export type ManagedSecretRevealChallenge = components["schemas"]["ManagedSecretRevealChallenge"];
 export type CompleteManagedSecretRevealRequest = components["schemas"]["CompleteManagedSecretRevealRequest"];

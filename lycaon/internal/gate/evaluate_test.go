@@ -263,6 +263,28 @@ func TestSecretOutboundReleasesChatSecretsLocallyBelowStrict(t *testing.T) {
 	}
 }
 
+// A value a person gave asks at every posture, even toward a trusted
+// destination, a public-inbound source, or the chat's own processes.
+func TestHeldSecretAlwaysAsks(t *testing.T) {
+	for _, posture := range []Posture{PostureLight, PostureBalanced, PostureStrict} {
+		for name, hit := range map[string]SecretHit{
+			"local chat value":     {ChatGenerated: true, RecipientsLocal: true},
+			"trusted destination":  {DestinationTrusted: true},
+			"public inbound value": {Source: SecretSourcePublicInbound},
+		} {
+			t.Run(string(posture)+"/"+name, func(t *testing.T) {
+				hit.Surface, hit.RuleID, hit.RuleTitle, hit.Held = "command", "managed-secret", "A managed secret", true
+				facts := baseFacts(StagePreSend)
+				facts.Payload = &hit
+				verdict, decision := Evaluate(facts, posture)
+				if verdict != Ask || !slices.ContainsFunc(decision.Cited, func(f Fact) bool { return f.Key == "secret.custody" }) {
+					t.Fatalf("held value verdict = %s cited = %v", verdict, decision)
+				}
+			})
+		}
+	}
+}
+
 func TestExplicitApprovalRequestNeedsOnlyItsTypedProducer(t *testing.T) {
 	verdict, decision := Evaluate(Facts{
 		Stage: StagePreSpawn, Ran: ProducerApprovalRequest,

@@ -377,7 +377,7 @@ func (e *DefaultToolExecutor) awaitDirectIPCapability(
 	}
 	switch {
 	case hitl.CheckpointAuthorizes(final):
-		approveCapabilitySecretPermission(ctx, tc, permission)
+		approveCapabilitySecretPermission(ctx, tc, permission, attestationOf(final))
 		e.emitDirectIPLifecycle(DirectIPLifecycleEvent{
 			Phase:                DirectIPLifecycleApproved,
 			SessionID:            action.SessionID,

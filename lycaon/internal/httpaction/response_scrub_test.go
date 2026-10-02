@@ -36,11 +36,8 @@ func echoingServer(t *testing.T, padding int) *httptest.Server {
 // resolvedBearer prepares a request whose bearer token is a managed secret.
 func resolvedBearer(t *testing.T, server *httptest.Server, extra map[string]any) (Deps, *secretcap.Resolution, map[string]any) {
 	t.Helper()
-	service, owner := managedRequestService(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "create", Name: "API key", Purpose: "echo", Value: echoedCredential,
-	})
-	testutil.FailErr(t, "create managed secret", err)
+	service, _ := managedRequestService(t)
+	meta := hostSecret(t, service, "create", "API key", echoedCredential)
 	args := map[string]any{
 		"url": server.URL, "auth": map[string]any{"scheme": "bearer", "token": meta.Reference},
 		"capability_request": loopbackCapability(t, server.URL),

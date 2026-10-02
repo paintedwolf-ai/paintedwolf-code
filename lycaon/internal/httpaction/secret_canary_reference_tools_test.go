@@ -19,10 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -94,11 +92,8 @@ func (canaryEchoSession) Close() error { return nil }
 // Every tool whose contract resolves managed-secret references returns a
 // result free of the resolved value, whatever its consumer echoes back.
 func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
-	service, _, database := newTestSecrets(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: testdbseed.OwnerID(t, database), OperationID: "canary", Name: "Canary", Purpose: "secret canary", Value: canaryValue,
-	})
-	testutil.FailErr(t, "create canary secret", err)
+	service, _, _ := newTestSecrets(t)
+	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
 	root := t.TempDir()
 	script := filepath.Join(root, "echo.sh")
 	testutil.FailErr(t, "write echo script", os.WriteFile(script, []byte(echoScript), 0o755))

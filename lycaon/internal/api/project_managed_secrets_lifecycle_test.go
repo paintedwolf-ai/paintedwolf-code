@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
@@ -109,9 +110,9 @@ func TestProjectManagedSecretRevealRequiresNativeProofAndAuditsSuccess(t *testin
 	srv, secrets, _ := newManagedSecretServer(t)
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	testutil.FailErr(t, "generate native reveal key", err)
-	testutil.FailErr(t, "configure native reveal key", secrets.ConfigureRevealPublicKey(
-		base64.RawURLEncoding.EncodeToString(publicKey),
-	))
+	broker := presence.NewBroker()
+	testutil.FailErr(t, "configure native reveal key", broker.Configure(base64.RawURLEncoding.EncodeToString(publicKey)))
+	secrets.SetPresence(broker)
 	base := "/v1/projects/" + testdbseed.DefaultProjectID + "/secrets"
 	created := decodeSecret(t, callSecrets(t, srv, http.MethodPost, base, map[string]any{
 		"operation_id": uuid.NewString(),
@@ -129,15 +130,14 @@ func TestProjectManagedSecretRevealRequiresNativeProofAndAuditsSuccess(t *testin
 	bad := begin()
 	callSecrets(t, srv, http.MethodPost,
 		base+"/"+id+"/reveal-challenges/"+bad.ChallengeID+"/complete",
-		map[string]any{"authenticator": secretcap.RevealAuthenticatorMacOS, "signature": "invalid"},
+		map[string]any{"authenticator": presence.AuthenticatorMacOS, "signature": "invalid"},
 		http.StatusForbidden)
 
 	challenge := begin()
-	message := []byte("painted-wolf-managed-secret-reveal-v1\n" + challenge.ProofPayload +
-		"\nauthenticator=" + secretcap.RevealAuthenticatorMacOS)
+	message := presence.SigningMessage(challenge.ProofPayload, presence.AuthenticatorMacOS)
 	signature := base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, message))
 	encoded, err := json.Marshal(wire.CompleteManagedSecretRevealRequest{
-		Authenticator: secretcap.RevealAuthenticatorMacOS, Signature: signature,
+		Authenticator: wire.PresenceAuthenticatorMacOS, Signature: signature,
 	})
 	testutil.FailErr(t, "encode reveal proof", err)
 	rec := httptest.NewRecorder()

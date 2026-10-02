@@ -140,7 +140,6 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		Occurrences: len(matches), SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request",
 		SourcePath: path, OriginKind: origin, Fingerprints: secretmatch.Fingerprints(matches),
 		VarName: match.VarName, Container: match.Container, ContestToken: strings.TrimSpace(spec.contest),
-		ChatGenerated:   tc.Secrets.GeneratedForChat(matches),
 		RecipientsLocal: spec.dialsLoopback(),
 	})
 	if err != nil {

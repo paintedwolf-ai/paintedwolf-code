@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -24,9 +23,8 @@ func (b *serveBuilder) wireSecretCapabilities() error {
 	if err != nil {
 		return fmt.Errorf("secret capability store: %w", err)
 	}
-	if err := service.ConfigureRevealPublicKey(os.Getenv(secretcap.RevealPublicKeyEnv)); err != nil {
-		return fmt.Errorf("configure managed secret reveal: %w", err)
-	}
+	service.SetPresence(b.presenceBroker)
+	service.SetFingerprinter(b.secretFingerprinter)
 	if err := service.Reconcile(b.ctx); err != nil {
 		return fmt.Errorf("reconcile secret capabilities: %w", err)
 	}

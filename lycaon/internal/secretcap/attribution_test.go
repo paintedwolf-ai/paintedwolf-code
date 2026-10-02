@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -86,23 +87,21 @@ func TestRevealCompletesOnlyForThePersonWhoBeganIt(t *testing.T) {
 	stolen, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
 	testutil.FailErr(t, "begin reveal", err)
 	if _, err := service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
-		stolen.ID, "00000000-0000-4000-8000-0000000000ee", RevealAuthenticatorMacOS,
-		signReveal(privateKey, stolen.ProofPayload, RevealAuthenticatorMacOS)); !errors.Is(err, ErrRevealDenied) {
+		"00000000-0000-4000-8000-0000000000ee", signedProof(privateKey, stolen, presence.AuthenticatorMacOS)); !errors.Is(err, presence.ErrDenied) {
 		t.Fatalf("reveal completed by another person error = %v", err)
 	}
 
 	challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
 	testutil.FailErr(t, "begin reveal again", err)
 	_, err = service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
-		challenge.ID, owner, RevealAuthenticatorMacOS,
-		signReveal(privateKey, challenge.ProofPayload, RevealAuthenticatorMacOS))
+		owner, signedProof(privateKey, challenge, presence.AuthenticatorMacOS))
 	testutil.FailErr(t, "complete reveal", err)
 	id, err := ParseReference(meta.Reference)
 	testutil.FailErr(t, "parse reference", err)
 	var count int
 	var person string
 	testutil.FailErr(t, "read reveal audit", service.handle.QueryRowContext(t.Context(),
-		`SELECT COUNT(*), MAX(person_id) FROM managed_secret_reveals WHERE secret_id = ?`, id).Scan(&count, &person))
+		`SELECT COUNT(*), MAX(person_id) FROM managed_secret_attestations WHERE secret_id = ? AND purpose = 'reveal'`, id).Scan(&count, &person))
 	if count != 1 || person != owner {
 		t.Fatalf("reveal audit = %d rows by %q, want 1 by %q", count, person, owner)
 	}

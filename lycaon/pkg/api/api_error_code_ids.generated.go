@@ -767,18 +767,23 @@ const (
 	// ApiErrorCodeManagedSecretAgentUseExpired managed secret reference passed its
 	// agent-use deadline
 	ApiErrorCodeManagedSecretAgentUseExpired ApiErrorCode = "managed_secret_agent_use_expired"
-	// ApiErrorCodeManagedSecretRevealUnavailable managed secret reveal has no
-	// trusted user-presence verifier
-	ApiErrorCodeManagedSecretRevealUnavailable ApiErrorCode = "managed_secret_reveal_unavailable"
-	// ApiErrorCodeManagedSecretRevealDenied managed secret reveal proof was
-	// refused
-	ApiErrorCodeManagedSecretRevealDenied ApiErrorCode = "managed_secret_reveal_denied"
-	// ApiErrorCodeManagedSecretRevealChanged managed secret value changed after
-	// authentication began
-	ApiErrorCodeManagedSecretRevealChanged ApiErrorCode = "managed_secret_reveal_changed"
-	// ApiErrorCodeManagedSecretRevealChallengeNotFound managed secret reveal
-	// challenge was never issued, expired, or was already used
-	ApiErrorCodeManagedSecretRevealChallengeNotFound ApiErrorCode = "managed_secret_reveal_challenge_not_found"
+	// ApiErrorCodePresenceUnavailable this app session has no trusted
+	// user-presence verifier
+	ApiErrorCodePresenceUnavailable ApiErrorCode = "presence_unavailable"
+	// ApiErrorCodePresenceDenied a presence proof was refused
+	ApiErrorCodePresenceDenied ApiErrorCode = "presence_denied"
+	// ApiErrorCodePresenceRequired the chosen option releases values a person
+	// holds and needs their verified presence
+	ApiErrorCodePresenceRequired ApiErrorCode = "presence_required"
+	// ApiErrorCodePresenceNotRequired the chosen option releases no value a person
+	// holds, so it takes no presence challenge
+	ApiErrorCodePresenceNotRequired ApiErrorCode = "presence_not_required"
+	// ApiErrorCodePresenceChallengeNotFound a presence challenge was never issued,
+	// expired, or was already used
+	ApiErrorCodePresenceChallengeNotFound ApiErrorCode = "presence_challenge_not_found"
+	// ApiErrorCodeManagedSecretValueChanged managed secret value changed after
+	// presence verification began
+	ApiErrorCodeManagedSecretValueChanged ApiErrorCode = "managed_secret_value_changed"
 	// ApiErrorCodeManagedSecretValueUnavailable managed secret metadata stands but
 	// its current value cannot be read
 	ApiErrorCodeManagedSecretValueUnavailable ApiErrorCode = "managed_secret_value_unavailable"
@@ -1203,10 +1208,12 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeReportNotFound,
 	ApiErrorCodeManagedSecretRevoked,
 	ApiErrorCodeManagedSecretAgentUseExpired,
-	ApiErrorCodeManagedSecretRevealUnavailable,
-	ApiErrorCodeManagedSecretRevealDenied,
-	ApiErrorCodeManagedSecretRevealChanged,
-	ApiErrorCodeManagedSecretRevealChallengeNotFound,
+	ApiErrorCodePresenceUnavailable,
+	ApiErrorCodePresenceDenied,
+	ApiErrorCodePresenceRequired,
+	ApiErrorCodePresenceNotRequired,
+	ApiErrorCodePresenceChallengeNotFound,
+	ApiErrorCodeManagedSecretValueChanged,
 	ApiErrorCodeManagedSecretValueUnavailable,
 	ApiErrorCodeAuthUnavailable,
 	ApiErrorCodeRecoverySnapshotInvalid,
@@ -1348,7 +1355,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeProjectPolicyDenied,
 		ApiErrorCodeForbidden,
 		ApiErrorCodeWorkflowStartRequiresHumanApproval,
-		ApiErrorCodeManagedSecretRevealDenied:
+		ApiErrorCodePresenceDenied,
+		ApiErrorCodePresenceRequired:
 		return 403
 	case ApiErrorCodeSourceViewNotFound,
 		ApiErrorCodeBackgroundProcessNotFound,
@@ -1382,7 +1390,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeWorkflowNotFound,
 		ApiErrorCodeWorkflowRunNotFound,
 		ApiErrorCodeReportNotFound,
-		ApiErrorCodeManagedSecretRevealChallengeNotFound,
+		ApiErrorCodePresenceChallengeNotFound,
 		ApiErrorCodePricingSourceNotFound,
 		ApiErrorCodeManagedSecretNotFound,
 		ApiErrorCodeSourceHistoryNotFound,
@@ -1512,7 +1520,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeWorkflowNotRunnable,
 		ApiErrorCodeManagedSecretRevoked,
 		ApiErrorCodeManagedSecretAgentUseExpired,
-		ApiErrorCodeManagedSecretRevealChanged,
+		ApiErrorCodePresenceNotRequired,
+		ApiErrorCodeManagedSecretValueChanged,
 		ApiErrorCodeManagedSecretValueUnavailable,
 		ApiErrorCodeRecoverySnapshotInvalid,
 		ApiErrorCodeSourceVersionChanged,
@@ -1621,7 +1630,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeMcpProviderUnreachable,
 		ApiErrorCodeMcpOauthUnavailable,
 		ApiErrorCodeWorkerWorkspaceUnavailable,
-		ApiErrorCodeManagedSecretRevealUnavailable,
+		ApiErrorCodePresenceUnavailable,
 		ApiErrorCodeAuthUnavailable:
 		return 503
 	case ApiErrorCodeProviderSilent:

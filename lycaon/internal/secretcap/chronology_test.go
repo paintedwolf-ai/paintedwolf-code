@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -83,7 +84,7 @@ func TestRevealSummaryAcrossFractionalSecondPrecision(t *testing.T) {
 		challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", testOwner(t, service))
 		testutil.FailErr(t, "begin timed reveal", err)
 		_, err = service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
-			challenge.ID, testOwner(t, service), RevealAuthenticatorMacOS, signReveal(privateKey, challenge.ProofPayload, RevealAuthenticatorMacOS))
+			testOwner(t, service), signedProof(privateKey, challenge, presence.AuthenticatorMacOS))
 		testutil.FailErr(t, "complete timed reveal", err)
 	}
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)

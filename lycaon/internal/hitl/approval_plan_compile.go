@@ -139,7 +139,11 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 	if req.SecretScreen != nil {
 		face.SecretManaged = req.SecretScreen.Managed
 	}
-	return NewApprovalPlan(action, stage, subject, presentation, reasons, options, face)
+	plan, err := NewApprovalPlan(action, stage, subject, presentation, reasons, options, face)
+	if err != nil || req.SecretScreen == nil {
+		return plan, err
+	}
+	return plan.RequirePresence(req.SecretScreen.Held)
 }
 
 // leadFactKeys orders the facts shown on the approval card.

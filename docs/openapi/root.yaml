@@ -163,6 +163,8 @@ paths:
     $ref: paths/sessions/checkpoints.yaml#/paths/~1v1~1sessions~1{id}~1checkpoints
   /v1/sessions/{id}/checkpoints/{checkpoint_id}:
     $ref: paths/sessions/checkpoints.yaml#/paths/~1v1~1sessions~1{id}~1checkpoints~1{checkpoint_id}
+  /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges:
+    $ref: paths/sessions/checkpoints.yaml#/paths/~1v1~1sessions~1{id}~1checkpoints~1{checkpoint_id}~1release-challenges
   /v1/projects:
     $ref: paths/projects/identity.yaml#/paths/~1v1~1projects
   /v1/projects/clone:
@@ -197,6 +199,8 @@ paths:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1value
   /v1/projects/{id}/secrets/{secret_id}/uses:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1uses
+  /v1/projects/{id}/secrets/{secret_id}/attestations:
+    $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1attestations
   /v1/projects/{id}/secrets/{secret_id}/reveal-challenges:
     $ref: paths/projects/managed-secrets.yaml#/paths/~1v1~1projects~1{id}~1secrets~1{secret_id}~1reveal-challenges
   /v1/projects/{id}/secrets/{secret_id}/reveal-challenges/{challenge_id}/complete:

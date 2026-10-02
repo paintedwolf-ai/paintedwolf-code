@@ -20,11 +20,8 @@ import (
 
 func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 	const value = "managed-opaque-credential"
-	service, owner := managedRequestService(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "create", Name: "Token", Purpose: "sent headers", Value: value,
-	})
-	testutil.FailErr(t, "create managed secret", err)
+	service, _ := managedRequestService(t)
+	meta := hostSecret(t, service, "create", "Token", value)
 	var wire []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wire = append(wire, r.Header.Get("Authorization"))
@@ -79,11 +76,8 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 
 func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 	const value = "managed-query-credential+/="
-	service, owner := managedRequestService(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "create", Name: "Key", Purpose: "final url", Value: value,
-	})
-	testutil.FailErr(t, "create managed secret", err)
+	service, _ := managedRequestService(t)
+	meta := hostSecret(t, service, "create", "Key", value)
 	var landed string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/start" {

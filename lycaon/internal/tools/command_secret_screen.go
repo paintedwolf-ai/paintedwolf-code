@@ -84,7 +84,6 @@ func (e *DefaultToolExecutor) screenArgvSecretGroup(ctx context.Context, tool st
 	if finding.Managed() {
 		finding.Recipients = secretUseFrom(ctx)
 		finding.ConnectPorts = secretUseConnectPorts(ctx)
-		finding.ChatGenerated = tc.Secrets.GeneratedForChat(matches)
 		finding.RecipientsLocal = argvSecretRecipientsLocal(ctx)
 	}
 	if line := commandsurface.PrimaryCommandLine(args, nil); line != "" {

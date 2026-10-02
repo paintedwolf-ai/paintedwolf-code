@@ -71,7 +71,7 @@ func (e *DefaultToolExecutor) preflightLocalNetworkCapability(
 			})
 		}
 		if result.SecretApproved {
-			approveCapabilitySecretPermission(ctx, tc, permission)
+			approveCapabilitySecretPermission(ctx, tc, permission, result.SecretAttestationID)
 		}
 		return &LocalListenResult{
 				Authorized: true,

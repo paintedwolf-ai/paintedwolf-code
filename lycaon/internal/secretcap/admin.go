@@ -52,6 +52,11 @@ func (s *Service) Update(ctx context.Context, req UpdateRequest) (Metadata, erro
 		// Revocation is the only guarded concurrent change.
 		return Metadata{}, ErrRevoked
 	}
+	if target.Scope != row.Scope {
+		if err := s.releaseChatCustody(ctx, row.ID); err != nil {
+			return Metadata{}, err
+		}
+	}
 	updated, err := s.queries.GetManagedSecret(ctx, row.ID)
 	if err != nil {
 		return Metadata{}, err
@@ -177,4 +182,23 @@ func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revok
 		s.retireDurable(func(_ string, owner secretIdentity) bool { return owner.id == row.ID })
 	}
 	return s.metadataRow(ctx, row)
+}
+
+// releaseChatCustody re-records a promoted value as the host's: once later
+// chats can spend it, no one chat alone has held it. A failed rewrite leaves
+// the entry bound to its first chat, which only withholds the silent release.
+func (s *Service) releaseChatCustody(ctx context.Context, secretID string) error {
+	current, ok, err := s.currentVersion(ctx, secretID)
+	if err != nil || !ok {
+		return err
+	}
+	entry, ok := s.values.get(current.ID)
+	if !ok || entry.Custody != CustodyChat {
+		return nil
+	}
+	entry.Custody = CustodyHost
+	if err := s.values.put(current.ID, entry); err != nil {
+		return fmt.Errorf("record promoted custody: %w", err)
+	}
+	return nil
 }
