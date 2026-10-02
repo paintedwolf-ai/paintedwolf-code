@@ -35,7 +35,13 @@ var manifestRequiredKeys = []string{
 	"semantics_sha256",
 }
 
-const releaseBaselineVersion = "1.0.0-rc.1"
+// releaseCandidateCorpus is the fixture this candidate ships; pre-v1 builds
+// leave no released baseline behind.
+func releaseCandidateCorpus(t *testing.T, root string) string {
+	t.Helper()
+	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, root, "VERSION"))
+	return filepath.Join(root, "lycaon", "testdata", "upgrade-corpus", version)
+}
 
 var releaseBlastForbiddenTouch = []string{
 	"lycaon/internal/db/schema.sql",
@@ -46,7 +52,7 @@ var releaseBlastForbiddenTouch = []string{
 func TestReleaseBlastRadiusCorpusLayout(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
-	baseline := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus", releaseBaselineVersion)
+	baseline := releaseCandidateCorpus(t, root)
 	raw, err := os.ReadFile(filepath.Join(baseline, "MANIFEST.json"))
 	contractcheck.FailErr(t, "read release baseline MANIFEST", err)
 	var m map[string]any
@@ -365,7 +371,7 @@ func TestReleaseBlastRadiusNonInterference(t *testing.T) {
 func TestReleaseBlastRadiusFixtureHonesty(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
-	baseline := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus", releaseBaselineVersion)
+	baseline := releaseCandidateCorpus(t, root)
 	raw, err := os.ReadFile(filepath.Join(baseline, "MANIFEST.json"))
 	contractcheck.FailErr(t, "read MANIFEST", err)
 	var m map[string]any
