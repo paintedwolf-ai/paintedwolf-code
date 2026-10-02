@@ -39,8 +39,9 @@ script and `./task` target:
 | Location | Holds | Default | Override |
 |---|---|---|---|
 | Artifact root | Verification receipts and stage logs, digest captures (`last-run/`), background jobs, performance reports (`perf/`), e2e state | `<user cache>/artifacts/<checkout>` | `PW_ARTIFACT_ROOT` (`PW_TEST_ARTIFACT_ROOT` wins inside test runs) |
-| Build directory | Executables and stages compiled from this checkout: `lycaon-dev`, `pw-logs`, `lycaon-debug`, the performance sidecar, the staged scanner bundle, the document core Cargo target | `<artifact root>/bin` | `PW_BUILD_DIR` |
-| Tool directory | Downloaded and pinned third-party tools shared by every checkout: `task`, linters, `oasdiff`, license tools, the scanner release cache, the document core Rust toolchain | `<user cache>/bin` | `PW_BIN_DIR` |
+| Build directory | Executables and stages compiled from this checkout: `lycaon-dev`, `pw-logs`, `pw-document-core`, `lycaon-debug`, the performance sidecar, the staged scanner bundle | `<artifact root>/bin` | `PW_BUILD_DIR` |
+| Tool directory | Downloaded and pinned third-party tools shared by every checkout: `task`, linters, `oasdiff`, license tools, the scanner release cache | `<user cache>/bin` | `PW_BIN_DIR` |
+| Document core builds | `pw-document-core` builds addressed by a digest of their sources, shared by every checkout and verification slot | `<user cache>/document-core/<digest>` | — |
 | Lock root | Repository snapshot and source capture locks | `/tmp/paintedwolf-$UID/locks/<checkout>` | `PW_LOCK_ROOT` |
 
 `<user cache>` is `~/Library/Caches/PaintedWolf` on macOS and
@@ -109,9 +110,13 @@ selection and staging recheck the archive. Isolated test checkouts reuse this
 cache while keeping their own release selection. Download failures can be
 retried normally and never start an engine source build.
 
-Ad-hoc artifacts are for development. Developer ID signing of engine
-components and notarization of the final app follow
-[Release operations](operations/release.md#engine-selection).
+Development executables run under the hardened runtime releases ship with:
+`scripts/sign-dev-binary.sh` signs them with the stable development identity
+when it is provisioned and ad hoc otherwise, always with `--options runtime`.
+They differ from release only in `get-task-allow`, so debuggers can attach.
+Code that generates machine code at run time is killed here exactly as in a
+release. Developer ID signing of engine components and notarization of the
+final app follow [Release operations](operations/release.md#engine-selection).
 
 ## Den local dev (backend logs visible)
 
@@ -577,9 +582,10 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `db:wipe` | Clears the store and every store-keyed host tree; preserves Den app preferences, device configuration, credentials, debug captures, and upgrade recovery archives. Refuses while any process holds the store open — stop the engine first |
 | `check:coverage` / `check:coverage:packages` | `check:coverage` produces aggregate and package reports from one test run. `COVERAGE_MIN` (default 62) gates the aggregate; the per-package report is advisory until `COVERAGE_PKG_ENFORCE=1`, with `COVERAGE_PKG_MIN` default 40 and exemptions in `lycaon/coverage-exempt.txt`. Floors must be finite percentages from 0 through 100; fractional floors are compared without truncation. Go and Den coverage runs use the digest runners and retain failure diagnostics |
 | `build:decide` / `decide:test` | Build and test `bialy` with the host's features (`scripts/decide-features.sh`: `metal,mlx` on Apple silicon). The first MLX build compiles the framework from source: several minutes, a network fetch, and Xcode's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain` when the build cannot execute `metal`). Development builds stage heads installed under `$(python3 scripts/artifact_paths.py bin .)/decide-heads/`; the dev sidecar provisions the checkpoint at its first boot |
+| `build:document-core` | Builds `pw-document-core` for this host into the shared, content-addressed cache and prints its path. Go and Vitest digests, fuzz, and benchmark runs call it themselves and export `LYCAON_DOCUMENT_CORE_BINARY`, so editor tests always run the core built from the source they test; `build:lycaon-dev` stages a copy beside `lycaon-dev` |
 | `den:stage-engine` | Stages the sidecar and engine-root a desktop Playwright run expects. `e2e:den:desktop` does **not** stage for you — the release workflow runs `den:stage-engine` immediately before it, and a local reproduction without it fails on a missing engine |
-| `bundle:verify` | macOS-only structural audit (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, staple, Gatekeeper). The release workflow already runs it (with `bundle:smoke`) on every staged macOS artifact, so you run it by hand only on a copy that travelled — see [Clean-Mac validation](#clean-mac-validation) |
-| `bundle:smoke` | Ad-hoc-signed builds are **rejected**: they cannot exercise the release Keychain path without an authorization dialog, so a pass on one would prove nothing about the shipped app |
+| `bundle:verify` | macOS-only structural audit (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, each executable's exact entitlements, staple, Gatekeeper), then runs the packaged engine's scanner, document-core, and credential probes. The release workflow already runs it (with `bundle:smoke`) on every staged macOS artifact, so you run it by hand only on a copy that travelled — see [Clean-Mac validation](#clean-mac-validation) |
+| `bundle:smoke` | Launches the app through LaunchServices, then authenticates, resolves catalogs, opens and edits a document, and checks the engine survived. Ad-hoc-signed builds are **rejected**: they cannot exercise the release Keychain path without an authorization dialog, so a pass on one would prove nothing about the shipped app |
 | `release:preflight` | Read-only validation of version, updater, and brand inputs. `-- --require-corpus` additionally demands the committed upgrade fixture, which is what the tag gate wants |
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
 | `openapi:diff` | Optional breaking-change report against the committed release-review baseline. Differences succeed; input and tool errors fail. It is not in `check`, `check:drift`, or any workflow |
@@ -916,7 +922,7 @@ Run `./task release:preflight -- --require-corpus` first, then run the `release`
 
 ### Clean-Mac validation
 
-Every check that is decidable from the artifact already runs in CI: `bundle:verify` (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, staple, Gatekeeper) and `bundle:smoke` (real LaunchServices launch and Keychain isolation probe). This optional verification tests the artifact on a second Mac, ideally one that has never run a dev build:
+Every check that is decidable from the artifact already runs in the release workflow: `bundle:verify` (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, entitlements, staple, Gatekeeper, and the packaged engine's probes, all blocking) and `bundle:smoke` (real LaunchServices launch, Keychain isolation probe, and a document edit; warn-only on hosted runners). This optional verification tests the artifact on a second Mac, ideally one that has never run a dev build:
 
 1. Download the DMG from the dry-run's build artifacts or public download.
 2. Re-run the structural audit on the downloaded copy:
@@ -954,7 +960,7 @@ Every release tag clears the same gate:
    boot modes pass.
 4. `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
    clean `main` tip.
-5. Automated CI build, code-signing, notarization, `bundle:verify`, and `bundle:smoke` pass during the release run.
+5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac (it only warns on hosted runners).
 6. The updater public key is real, the private key is available to Actions, and
    both closed channel endpoints match the egress inventory.
 7. Tag only the exact current `origin/main` commit — the workflow rejects an ancestor or

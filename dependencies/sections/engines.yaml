@@ -70,12 +70,10 @@ rows:
       then run `./task test:scanners` so first-party and vendored rules still load.
 
   - id: document-core
-    name: Document core (WASM)
+    name: Document core
     pins:
       - label: yrs
         from: cargo-lock lycaon/internal/documentcore/native/Cargo.lock yrs
-      - label: target
-        from: json lycaon/internal/documentcore/core.manifest.json target
     upstream:
       - label: yrs
         from: crate yrs
@@ -84,7 +82,7 @@ rows:
       Divergence in CRDT state loses user edits.
     friction: high
     friction_reason: |
-      Built by `scripts/build-document-core.sh` into `core.wasm`; `core.manifest.json` pins the
-      source hashes, and `wazero` loads the result. Den binds CodeMirror to Yjs text and the
-      host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a
-      0.x minor bump as breaking.
+      Built by `scripts/build-document-core.sh` into the native `pw-document-core`, which the
+      host runs confined beside itself and every release signs and probes. Den binds CodeMirror
+      to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with
+      Den's `yjs`. Treat a 0.x minor bump as breaking.

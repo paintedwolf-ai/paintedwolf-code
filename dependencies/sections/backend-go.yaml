@@ -24,11 +24,6 @@ groups:
         notes: |
           Encrypts credential vaults in `internal/credentialstore`. Before any change, prove
           existing vaults still decrypt.
-      github.com/tetratelabs/wazero:
-        urgency: high
-        friction: moderate
-        notes: |
-          Runs `core.wasm` in-process. Preserve memory bounds and deterministic execution.
       github.com/flosch/pongo2/v6:
         urgency: moderate
         friction: moderate
