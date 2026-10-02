@@ -21,12 +21,47 @@ services:
           },
         });
 
+  # The engine runs reads through the native document core; build it for Linux.
+  document-core:
+    # Match rust-toolchain.toml.
+    image: rust:1.97.1-bookworm
+    working_dir: /workspace/document-core
+    volumes:
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon/internal/documentcore/native
+        target: /workspace/document-core
+        read_only: true
+      - type: bind
+        source: ${LYCAON_E2E_STATE_DIR}
+        target: ${LYCAON_E2E_STATE_DIR}
+      # Registry and build caches outlive the per-run compose project.
+      - type: bind
+        source: ${LYCAON_E2E_GO_CACHE_DIR}/cargo-registry
+        target: /usr/local/cargo/registry
+      - type: bind
+        source: ${LYCAON_E2E_GO_CACHE_DIR}/document-core-target
+        target: /cargo-target
+    environment:
+      CARGO_TARGET_DIR: /cargo-target
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        echo "e2e-document-core: cargo build…" >&2
+        cargo build --release --locked --bin pw-document-core
+        mkdir -p "${LYCAON_E2E_STATE_DIR}/document-core"
+        cp /cargo-target/release/pw-document-core "${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core"
+
   sidecar:
     # Match the module's pinned toolchain.
     image: golang:1.26.8-bookworm
     working_dir: /workspace/lycaon
     depends_on:
-      - model-fixture
+      model-fixture:
+        condition: service_started
+      document-core:
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ${LYCAON_REPO_ROOT}/lycaon
@@ -62,6 +97,7 @@ services:
       LYCAON_HARNESS: "1"
       LYCAON_DEV: "1"
       LYCAON_DEV_CORS: "1"
+      LYCAON_DOCUMENT_CORE_BINARY: ${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core
       GOPROXY: https://proxy.golang.org,direct
     command:
       - sh
