@@ -48,37 +48,41 @@ struct Entry {
 
 const HOST_WIRE_MIRRORS: &[Entry] = &[
     Entry {
-        file: "src/managed_secret_reveal.rs",
+        file: "src/presence.rs",
         rust_type: "HostError",
         binding: Binding::Mirror {
             fixture: "error_response",
             ignored: &[
-                ("details", "reveal notices render from host copy, not structured context"),
-                ("retryable", "a reveal is always a fresh user action"),
+                ("details", "presence notices render from host copy, not structured context"),
+                ("retryable", "a confirmation is always a fresh user action"),
                 ("tier", "HTTP error bodies are always non_catastrophic"),
             ],
             forward: Some(Forward {
-                rust_type: "RevealCommandError",
+                rust_type: "PresenceCommandError",
                 renames: &[],
-                ts_file: "../src/platform/files/managed-secret-reveal.ts",
-                ts_type: "NativeRevealFailure",
+                ts_file: "../src/platform/presence.ts",
+                ts_type: "NativeFailure",
             }),
         },
     },
     Entry {
-        file: "src/managed_secret_reveal.rs",
-        rust_type: "RevealChallenge",
+        file: "src/presence.rs",
+        rust_type: "Challenge",
         binding: Binding::Mirror {
-            fixture: "managed_secret_reveal_challenge",
-            ignored: &[
-                ("version", "the completion request is bound by challenge_id"),
-                ("expires_at", "the host enforces expiry when the challenge completes"),
-            ],
+            fixture: "presence_challenge",
+            ignored: &[("expires_at", "the host enforces expiry when the challenge completes")],
             forward: None,
         },
     },
     Entry {
-        file: "src/managed_secret_reveal.rs",
+        file: "src/presence.rs",
+        rust_type: "SignedPayload",
+        binding: Binding::NotHostWire {
+            reason: "decoded from the opaque proof payload only to refuse signing a purpose or subject the command did not ask for",
+        },
+    },
+    Entry {
+        file: "src/presence.rs",
         rust_type: "ManagedSecretReveal",
         binding: Binding::Mirror {
             fixture: "managed_secret_reveal_response",
