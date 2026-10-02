@@ -113,6 +113,11 @@ if [[ ! -x "${LOGS_CLI}" ]]; then
   echo "error: bundle has no executable Contents/MacOS/pw-logs" >&2
   exit 1
 fi
+DOCUMENT_CORE="${APP}/Contents/MacOS/pw-document-core"
+if [[ ! -x "${DOCUMENT_CORE}" ]]; then
+  echo "error: bundle has no executable Contents/MacOS/pw-document-core" >&2
+  exit 1
+fi
 DECIDE_ENGINE="${APP}/Contents/MacOS/bialy"
 if [[ ! -x "${DECIDE_ENGINE}" ]]; then
   echo "error: bundle has no executable Contents/MacOS/bialy" >&2
@@ -143,7 +148,9 @@ require_stable_signature() {
 # Stable signing allows the release credential path to initialize.
 require_stable_signature "${APP_BINARY}" "desktop app"
 require_stable_signature "${ENGINE}" "bundled engine"
+require_stable_signature "${DOCUMENT_CORE}" "bundled document core"
 "${ENGINE}" credentials verify-protection
+"${ENGINE}" diagnostics document-core
 
 # Quarantine exercises the downloaded-bundle path.
 if (( QUARANTINE == 1 )); then
@@ -247,9 +254,36 @@ printf 'protocol=https\nhost=%s\n\n' "${MISSING_CREDENTIAL_HOST}" \
 [[ ! -s "${WORK}/credential.out" ]] || fail "missing Git credential unexpectedly returned a value"
 echo "  macOS Git credential bridge: ok" >&2
 
+# Editing runs the document core under the shipped signatures; an engine
+# that may not execute its code dies here rather than in a user's first edit.
+PROJECT_DIR="${WORK}/project"
+mkdir -p "${PROJECT_DIR}"
+printf 'before\n' >"${PROJECT_DIR}/notes.txt"
+api() {
+  curl -sf -X "$1" -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+    --data "$3" "${BASE}$2"
+}
+PROJECT="$(api POST /v1/projects "$(jq -nc --arg path "${PROJECT_DIR}" '{roots: [{path: $path}]}')")" ||
+  fail "could not create the smoke project"
+PROJECT_ID="$(jq -r '.id' <<<"${PROJECT}")"
+ROOT_ID="$(jq -r '.roots[0].id' <<<"${PROJECT}")"
+DOCUMENT="$(api POST "/v1/projects/${PROJECT_ID}/editor-documents" \
+  "$(jq -nc --arg root "${ROOT_ID}" '{path: "notes.txt", root_id: $root, client_id: "window:bundle-smoke"}')")" ||
+  fail "the engine could not open a document in the editor"
+DOCUMENT_ID="$(jq -r '.id' <<<"${DOCUMENT}")"
+REVISION="$(jq -r '.revision' <<<"${DOCUMENT}")"
+EDITED="$(api PUT "/v1/projects/${PROJECT_ID}/editor-documents/${DOCUMENT_ID}" \
+  "$(jq -nc --arg op "$(uuidgen | tr '[:upper:]' '[:lower:]')" --argjson revision "${REVISION}" \
+    '{client_id: "window:bundle-smoke", operation_id: $op, expected_revision: $revision, content: "after\n", eol: "lf", mixed_eol: false, history_vector: null, session_id: null}')")" ||
+  fail "the engine could not apply an edit"
+[[ "$(jq -r '.dirty' <<<"${EDITED}")" == "true" ]] || fail "the edited document is not dirty"
+kill -0 "${ENGINE_PID}" 2>/dev/null || fail "the engine exited while editing"
+curl -sf --max-time 2 "${BASE}/health" >/dev/null || fail "the engine stopped answering after an edit"
+echo "  editor document round trip: ok" >&2
+
 SCHEMA="$(jq -r '.schema_version // empty' <<<"${HEALTH}")"
 WANT_SCHEMA="$(jq -r '.schema_version' "${ROOT}/lycaon/internal/db/schema_version_lock.json")"
 [[ "${SCHEMA}" == "${WANT_SCHEMA}" ]] || \
   fail "bundled engine schema_version=${SCHEMA} want ${WANT_SCHEMA}"
 
-echo "bundle:smoke — GUI launched, sidecar authenticated, catalog/path/credentials resolved, schema ${SCHEMA}: ok" >&2
+echo "bundle:smoke — GUI launched, sidecar authenticated, catalog/path/credentials resolved, document edited, schema ${SCHEMA}: ok" >&2

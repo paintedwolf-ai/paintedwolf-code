@@ -33,39 +33,15 @@ func newScannerScriptFixture(t *testing.T) scannerScriptFixture {
 	f.log = filepath.Join(f.root, "calls")
 	f.artifact = filepath.Join(f.root, "qualified artifact")
 	f.paths = contractcheck.InstallArtifactPaths(t, f.root, filepath.Join(f.root, "user cache"))
-	for _, script := range []string{"resolve-opengrep.sh", "select-opengrep-release.sh", "stage-bundled-opengrep.sh", "build-dev-engine.sh", "stage-engine.sh", "document-core-manifest.py", "build-document-core.sh"} {
+	for _, script := range []string{"resolve-opengrep.sh", "select-opengrep-release.sh", "stage-bundled-opengrep.sh", "build-dev-engine.sh", "stage-engine.sh"} {
 		scannerScriptFile(t, filepath.Join(f.root, "scripts", script), contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/"+script))
 	}
 	for _, file := range []string{"lycaon/go.mod", "lycaon/go.sum", "lycaon/main.go", "lycaon/config/pin.yaml", "VERSION", "lycaon/config/runtime/scanners/bundled-manifest.yaml", "schemas/example.json", "lycaon/internal/platformfloor/macos_floor.txt"} {
 		scannerScriptFile(t, filepath.Join(f.root, file), "1.0.0\n")
 	}
-	core := filepath.Join(contractcheck.RepoRoot(t), "lycaon/internal/documentcore")
-	contractcheck.FailErr(t, "copy document build inputs", filepath.WalkDir(core, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(core, path)
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if entry.Name() == "target" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if rel != "core.wasm" && rel != "core.manifest.json" && !strings.HasPrefix(rel, "native"+string(filepath.Separator)) {
-			return nil
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		scannerScriptFile(t, filepath.Join(f.root, "lycaon/internal/documentcore", rel), string(raw))
-		return nil
-	}))
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/sign-dev-binary.sh"), "#!/bin/bash\nexit 0\n")
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/build-decide.sh"), "#!/bin/bash\nmkdir -p \"$(dirname \"$1\")\"\n: > \"$1\"\n")
+	scannerScriptFile(t, filepath.Join(f.root, "scripts/build-document-core.sh"), "#!/bin/bash\nmkdir -p \"$(dirname \"$2\")\"\n: > \"$2\"\nprintf '%s\\n' \"$2\"\n")
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/stage-decide-heads.sh"), "#!/bin/bash\nexit 0\n")
 	scannerScriptFile(t, filepath.Join(f.tools, "rustc"), "#!/bin/bash\nprintf 'rustc\\n' >> \"$SCANNER_TEST_LOG\"\nprintf 'aarch64-apple-darwin\\n'\n")
 
