@@ -115,6 +115,7 @@ boot_engine() {
 
   (
     cd "${GO_DIR}"
+    HOME="${BOOT_HOME:-${HOME}}" \
     LYCAON_CONFIG_DIR="${config_dir}" \
     LYCAON_LLM_MOCK=1 \
     LYCAON_DEV=1 \
@@ -184,7 +185,10 @@ rehearse() {
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/upgrade-rehearse.XXXXXX")"
   trap 'upgrade_stop_owned_child && rm -rf "${tmp}"' RETURN
 
-  local config_dir="${tmp}/config" project_abs="${tmp}/project-root"
+  # Release builds ignore LYCAON_CONFIG_DIR and read ~/.config/paintedwolf, so
+  # the store lives under a scratch home the prior release is booted with.
+  local home="${tmp}/home"
+  local config_dir="${home}/.config/${CONFIG_DIR_NAME_PROD}" project_abs="${tmp}/project-root"
   mkdir -p "${config_dir}"
   python3 "${ROOT}/scripts/upgrade-fixture-files.py" materialize "${fixture}" "${config_dir}"
   cp -a "${fixture}/project-root" "${project_abs}"
@@ -198,7 +202,7 @@ rehearse() {
 
   echo "→ booting prior release ${tag}" >&2
   local prior_health prior_schema=""
-  if boot_engine "${prior_engine}" "${config_dir}" "${tmp}/prior.log" "${tmp}/prior-health.json" "${fixture}"; then
+  if BOOT_HOME="${home}" boot_engine "${prior_engine}" "${config_dir}" "${tmp}/prior.log" "${tmp}/prior-health.json" "${fixture}"; then
     prior_health="$(cat "${tmp}/prior-health.json")"
     if ! jq -e --arg version "${tag#v}" '(.status == "ok" or .status == "degraded") and .version == $version' <<<"${prior_health}" >/dev/null; then
       echo "error: ${tag} did not serve its exact-version fixture: ${prior_health}" >&2
