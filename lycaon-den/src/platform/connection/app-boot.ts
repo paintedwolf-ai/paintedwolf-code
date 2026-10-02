@@ -52,6 +52,7 @@ import {
   attachKnownBackend,
   connectAppBackend,
   disconnectAppBackend,
+  followEngineState,
   getLycaonClient,
   handleSessionGone,
   noticeReporterFor,
@@ -447,5 +448,7 @@ async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Prom
     }
   }
 
+  // Listen first, so the engine this boot connects to is the one followed.
+  await followEngineState(stores.appStore);
   void bootstrapAppBackend(stores, bootScopeApplied).finally(releaseBoot);
 }

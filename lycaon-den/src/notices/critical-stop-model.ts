@@ -4,6 +4,7 @@ import { contractCompatible } from "../platform/connection/host-identity.ts";
 import type { PreflightProbe, PreflightReport } from "../api/types.ts";
 import type { HealthResponse } from "../platform/connection/backend.ts";
 import type { SidecarStartFailure } from "../platform/connection/backend.ts";
+import type { EngineState } from "../platform/connection/engine-supervision.ts";
 import { isBackendReachable } from "../platform/connection/sidecar-status.ts";
 import type { SidecarStatus } from "../store/app-state-model.ts";
 import { CLIENT_NOTICES, type ClientNoticeCopy } from "./client-notices.generated.ts";
@@ -133,6 +134,24 @@ function offlineCriticalStop(
   };
 }
 
+/** The shell stopped restarting an engine that kept exiting or could not start again. */
+export const ENGINE_STOPPED_STOP_CODE = "engine_stopped";
+
+export function engineStoppedCriticalStop(
+  engine: Extract<EngineState, { state: "stopped" }>,
+): CriticalStopSpec {
+  const copy = CLIENT_NOTICES.engine_stopped;
+  const exited = `The engine ${engine.exit.description}.`;
+  return {
+    code: ENGINE_STOPPED_STOP_CODE,
+    title: copy.title,
+    message: copy.message,
+    retryFailed: copy.suggestedAction,
+    recovery: "reconnect",
+    diagnostic: engine.failure ? `${exited} Restarting it failed: ${engine.failure}` : exited,
+  };
+}
+
 /** Store this build cannot open — health.status === "recovery". */
 export const STORE_INCOMPATIBLE_STOP_CODE = "store_incompatible";
 
@@ -149,6 +168,8 @@ export type CriticalStopInput = {
   health?: HealthResponse | null;
   /** Host handshake, once read. */
   host?: HostInfo | null;
+  /** The engine the shell supervises, when it launched one. */
+  engine?: EngineState;
 };
 
 export function formatRecoverySnapshotAt(iso: string): string {
@@ -245,6 +266,11 @@ export function hostIncompatibleCriticalStop(host: HostInfo): CriticalStopSpec {
 export function resolveCriticalStop(
   input: CriticalStopInput,
 ): CriticalStopSpec | undefined {
+  // Only a person's retry starts an engine the shell stopped restarting,
+  // so this stops even a window that already admitted a workspace.
+  if (input.engine?.state === "stopped") {
+    return engineStoppedCriticalStop(input.engine);
+  }
   if (!isBackendReachable(input.sidecarStatus) && (!input.offlineAvailable || input.startFailure)) {
     return offlineCriticalStop(input.startFailure, input.startDetail);
   }

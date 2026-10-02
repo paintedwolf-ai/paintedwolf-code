@@ -27,6 +27,7 @@ import {
   provideCredentialVaultPassword,
   resetCredentialVault,
 } from "../platform/connection/backend.ts";
+import { engineState } from "../platform/connection/engine-supervision.ts";
 import { lastSeenHealth } from "../platform/connection/health.ts";
 import { hostIdentity, incompatibleHost } from "../platform/connection/host-identity.ts";
 import { saveReportBundle } from "../report-a-bug/report-a-bug.ts";
@@ -66,6 +67,7 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
     preflight: preflightReport(),
     health: lastSeenHealth(),
     host: hostIdentity(),
+    engine: engineState(),
   });
   const offlineAvailable = createMemo<boolean>((admitted) => admitted || (
     facts().sidecarStatus === "connected" && facts().health?.status === "ok" &&

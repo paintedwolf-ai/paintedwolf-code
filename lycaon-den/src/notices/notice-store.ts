@@ -121,6 +121,12 @@ export function createNoticeStore() {
       });
     },
 
+    /** Withdraw a condition's notice once the condition has passed. */
+    withdraw(code: string, scope: NoticeScope): void {
+      const key = noticeScopeKey(scope);
+      dropWhere((n) => noticeScopeKey(n.scope) === key && n.code?.trim() === code);
+    },
+
     /** Dismiss every notice in one scope. */
     dismissScope(scope: NoticeScope): void {
       const key = noticeScopeKey(scope);

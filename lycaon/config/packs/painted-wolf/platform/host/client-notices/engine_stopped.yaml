@@ -1,0 +1,16 @@
+# The shell stopped restarting an engine that kept exiting, or whose
+# replacement could not start. Only a person's retry starts it again.
+scope: app
+title: The engine stopped
+message: >-
+  The app's local engine stopped unexpectedly and could not be kept running.
+  Try again to start it.
+suggested_action: That did not work. Reopening the app is the next thing to try.
+scenarios:
+  - id: default
+    expect_contains:
+      - stopped unexpectedly
+      - Try again
+  - id: retry-failed
+    expect_contains:
+      - Reopening the app

@@ -137,4 +137,20 @@ describe("Tauri IPC parity", () => {
 
     expect(tsCodes.sort()).toEqual(rustCodes.sort());
   });
+
+  it("Den reads every EngineState the shell publishes", () => {
+    const supervisor = rustModuleSource(["sidecar", "supervisor"]);
+    expect(supervisor).toMatch(/#\[serde\(tag = "state", rename_all = "snake_case"\)\]\s*pub enum EngineState/);
+    const body = supervisor.match(/pub enum EngineState \{([\s\S]*?)\n\}/)?.[1];
+    if (body === undefined) throw new Error("EngineState not found in sidecar/supervisor.rs");
+    const rustStates = [...body.matchAll(/^ {4}(\w+)\b/gm)]
+      .map(([, variant]) => variant!.replace(/[A-Z]/g, (c, i: number) => (i > 0 ? "_" : "") + c.toLowerCase()));
+
+    const supervision = readFileSync(join(denSourceRoot, "platform", "connection", "engine-supervision.ts"), "utf8");
+    const union = supervision.match(/export type EngineState =([\s\S]*?)\n\n/)?.[1];
+    if (union === undefined) throw new Error("EngineState not found in engine-supervision.ts");
+    const tsStates = [...union.matchAll(/state: "([^"]+)"/g)].map(([, state]) => state!);
+
+    expect(tsStates.sort()).toEqual(rustStates.sort());
+  });
 });

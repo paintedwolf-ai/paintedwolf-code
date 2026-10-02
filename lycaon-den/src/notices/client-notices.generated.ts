@@ -25,6 +25,8 @@ export type ClientNoticeKind =
   | "den_version_skew"
   | "engine_already_running"
   | "engine_not_started"
+  | "engine_restarting"
+  | "engine_stopped"
   | "fetch_failure"
   | "host_incompatible"
   | "model_catalog_refresh_failed"
@@ -96,6 +98,17 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "No engine running",
     message: "This build attaches to an engine you start yourself, and none is running yet. Start one, then try again.",
     suggestedAction: "Still nothing to attach to. An engine has to be running first.",
+    scope: "app",
+  },
+  engine_restarting: {
+    title: "Restarting the engine",
+    message: "The engine stopped unexpectedly, so the app is starting it again. This window reconnects on its own.",
+    scope: "app",
+  },
+  engine_stopped: {
+    title: "The engine stopped",
+    message: "The app's local engine stopped unexpectedly and could not be kept running. Try again to start it.",
+    suggestedAction: "That did not work. Reopening the app is the next thing to try.",
     scope: "app",
   },
   fetch_failure: {

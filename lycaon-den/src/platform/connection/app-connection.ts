@@ -92,9 +92,12 @@ import {
   discoverBackend,
   fetchHealth,
   getBackendConnection,
+  readSidecarInfo,
   restartBackend,
   setBackendConnection,
 } from "./backend.ts";
+import { watchEngineState } from "./engine-supervision.ts";
+import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { isTauriRuntime } from "../runtime.ts";
 import {
   noteHealthResponse,
@@ -104,6 +107,8 @@ import {
 import { incompatibleHost, noteHostInfo, type HostInfoNote } from "./host-identity.ts";
 import { setBackendReachabilityObserver } from "./request-connectivity.ts";
 import { watchDocumentVisibilityResume } from "../visibility-resume.ts";
+
+const ENGINE_RESTARTING_NOTICE = "engine_restarting";
 
 let cachedClient: LycaonClient | null = null;
 let backendGeneration = 0;
@@ -337,6 +342,8 @@ export function attachKnownBackend(
 export type ConnectAppBackendOpts = {
   /** Reports connection errors for explicit retries. */
   reportFailure?: boolean;
+  /** A connection the shell already established, bound instead of discovering one. */
+  connection?: BackendConnection;
 };
 
 /** The host answered that a chat is gone: retire it and leave its conversation. */
@@ -487,7 +494,11 @@ export async function connectAppBackend(
     if (opts?.reportFailure) connectFailureNotices = true;
     return connectInFlight;
   }
-  if (cachedClient) {
+  const known = opts?.connection;
+  if (known && cachedClient) {
+    // The shell replaced the engine this window was bound to.
+    disconnectAppBackend();
+  } else if (cachedClient) {
     const client = cachedClient;
     const generation = backendGeneration;
     const valid = await verifyCachedBackend(appStore);
@@ -497,7 +508,13 @@ export async function connectAppBackend(
   }
   connectFailureNotices = opts?.reportFailure ?? false;
   const generation = backendGeneration;
-  const flight = connectAppBackendInner(appStore, generation)
+  const discover = known
+    ? async () => {
+      setBackendConnection(known);
+      return known;
+    }
+    : discoverBackend;
+  const flight = connectAppBackendInner(appStore, generation, discover)
     .catch((err) => {
       if (generation === backendGeneration && connectFailureNotices) {
         appNoticeReporter().reportError(
@@ -526,10 +543,14 @@ export async function restartAppBackend(): Promise<LycaonClient> {
   return connectAppBackend(appStore, { reportFailure: true });
 }
 
-async function connectAppBackendInner(appStore: AppStore, generation: number): Promise<LycaonClient> {
+async function connectAppBackendInner(
+  appStore: AppStore,
+  generation: number,
+  discover: () => Promise<BackendConnection>,
+): Promise<LycaonClient> {
   appStore.actions.setSidecarStatus("connecting");
   try {
-    const connection = await discoverBackend();
+    const connection = await discover();
     assertCurrentBackend(generation);
     resetBackendEventStream(appStore);
     cachedConnection = connection;
@@ -980,6 +1001,53 @@ export function subscribeProjectEvents(
       if (!sessionId || !cachedClient) return;
       void refreshSessionSnapshot(appStore, cachedClient, sessionId).catch(() => undefined);
     },
+  });
+}
+
+/** The shell's engine generation this window's connection belongs to, if it launched one. */
+export function boundEngineGeneration(): number | undefined {
+  return (cachedConnection ?? getBackendConnection())?.engineGeneration;
+}
+
+/**
+ * Follows the engine the shell supervises. A new generation is a replacement
+ * process with its own port and token, so the window rebinds to it; while
+ * the engine is down the window holds its place instead of reporting each
+ * failed request.
+ */
+export async function followEngineState(appStore: AppStore): Promise<() => void> {
+  let sawEngineDown = false;
+  return watchEngineState((engine) => {
+    const notices = appNoticeReporter();
+    if (engine.state === "restarting") {
+      sawEngineDown = true;
+      appStore.actions.setSidecarStatus("disconnected");
+      notices.publish({
+        code: ENGINE_RESTARTING_NOTICE,
+        severity: "warning",
+        title: CLIENT_NOTICES.engine_restarting.title,
+        message: CLIENT_NOTICES.engine_restarting.message,
+      });
+      return;
+    }
+    noticeStoreRef?.withdraw(ENGINE_RESTARTING_NOTICE, APP_SCOPE);
+    if (engine.state === "stopped") {
+      sawEngineDown = true;
+      appStore.actions.setSidecarStatus("disconnected");
+      return;
+    }
+    if (engine.state !== "running" || connectInFlight) return;
+    const bound = boundEngineGeneration();
+    // An unbound window that never lost an engine is still booting; its own connect binds it.
+    if (bound === engine.generation || (bound === undefined && !sawEngineDown)) return;
+    sawEngineDown = false;
+    void readSidecarInfo()
+      .then((connection) => {
+        if (!connection || connection.engineGeneration !== engine.generation) return;
+        if (boundEngineGeneration() === engine.generation) return;
+        return connectAppBackend(appStore, { connection });
+      })
+      .catch(() => undefined);
   });
 }
 
