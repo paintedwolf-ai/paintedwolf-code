@@ -5,7 +5,7 @@ version: 2
 # The state every decision reads: the request in the user's words plus host
 # facts. The engine reads a bounded window, so the text is cut at the end.
 state:
-  # A worker leg's prompt often states its goal past 900 characters.
+  # Sized for worker leg prompts, which often state their goal late.
   user_text_chars: 1600
   recent_tools: 12
   # Each encoded question reserves this many tokens; the state gets the remainder.
@@ -21,10 +21,9 @@ turn:
   # load_at, on warm and cold turns alike; the set drops tools only at a cold
   # boundary. Without an answer the standing set stays and the model can ask
   # through request_tools. option_words bounds each tool's option text.
-  # On validation B5 at 0.6 reaches a needed tool on 76% of the turns that
-  # need one, against 55% at 0.85, for 1.2 loads a turn of which half are
-  # unneeded. A wrong load costs one schema on the call; a missed load costs
-  # a request_tools round trip.
+  # On validation, 0.6 reaches a needed tool on 76% of the turns that need
+  # one (55% at 0.85), at 1.2 loads a turn, half unneeded. A wrong load costs
+  # one schema on the call; a missed load costs a request_tools round trip.
   tools:
     question: Which of these tools will completing this request call?
     independent: true
@@ -67,9 +66,8 @@ turn:
       delegate: a broad or multi-part change that parallel workers should split
 
 # request_tools ranks schemas against the stated need.
-# nearest_loads would load the closest tools when none clears load_at; the
-# recorded sessions show the nearest tool wrong both times it fired, and the
-# model's rephrase reaches the right one, so nothing loads below the bar.
+# nearest_loads stays 0: in recorded sessions the nearest tool below load_at
+# was wrong, and the model's rephrased need reached the right one.
 # A need that names files scores its tool lower than a bare operation does;
 # 1.8 still loads write for "create the app files: index.html, style.css".
 request:
@@ -174,8 +172,8 @@ rerank:
     max_candidates: 16
     chunk: 16
     weight: 0.1
-  # web research: verified pages ordered by fetched content. Off until a
-  # web-rank head ships.
+  # web research: verified pages ordered by fetched content. Needs a web-rank
+  # head.
   web_pages:
     enabled: false
     deadline_ms: 5000
