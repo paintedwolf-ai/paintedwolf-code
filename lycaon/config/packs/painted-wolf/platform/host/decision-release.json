@@ -1,6 +1,23 @@
 {
   "version": 1,
   "release": "open1-b5-b7g-e4",
+  "source": {
+    "heads": {
+      "repo": "paintedwolfcode/bialy",
+      "tag": "open1-b5-b7g-e4",
+      "revision": "49119f9e107aec0e96eeb27873d94fbdb4849191"
+    },
+    "dataset": {
+      "repo": "paintedwolfcode/bialy-dataset",
+      "tag": "open1-b7g-e4",
+      "revision": "48f76bcf2625787017a30c65fe4ca55e85ea3f89"
+    },
+    "factory": {
+      "repo": "paintedwolf-ai/bialy",
+      "tag": "heads-open1-b5-b7g-e4",
+      "commit": "de4b524239d24f94024880fa9bb3902888004299"
+    }
+  },
   "backbone": {
     "model": "convaiinnovations/laya-multilingual",
     "revision": "e4e9ddf21a7b1903b7acffd8814ad4307bf63a67"

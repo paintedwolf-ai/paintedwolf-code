@@ -5,8 +5,6 @@ runs:
   steps:
     - name: Download and verify Bialy heads
       shell: bash
-      env:
-        BIALY_REVISION: 49119f9e107aec0e96eeb27873d94fbdb4849191
       run: |
         set -euo pipefail
         SOURCE_DIR="$(mktemp -d "${RUNNER_TEMP}/bialy-download.XXXXXX")"
@@ -14,11 +12,13 @@ runs:
         # The default lookup location: verification receives only declared environment.
         HEADS_DIR="$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")/decide-heads"
         MANIFEST=lycaon/config/packs/painted-wolf/platform/host/decision-release.json
+        HEADS_REPO="$(jq -er '.source.heads.repo' "${MANIFEST}")"
+        HEADS_REVISION="$(jq -er '.source.heads.revision' "${MANIFEST}")"
         for HEAD in $(jq -r '.heads | keys[]' "${MANIFEST}"); do
           curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' \
             --retry 3 --connect-timeout 30 --max-time 600 \
-            "https://huggingface.co/paintedwolfcode/bialy/resolve/${BIALY_REVISION}/${HEAD}.safetensors" \
+            "https://huggingface.co/${HEADS_REPO}/resolve/${HEADS_REVISION}/${HEAD}.safetensors" \
             --output "${SOURCE_DIR}/${HEAD}.safetensors"
         done
         python3 scripts/stage-decide-heads.py \

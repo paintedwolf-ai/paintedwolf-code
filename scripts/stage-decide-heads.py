@@ -11,6 +11,20 @@ import tempfile
 
 REQUIRED = {"turn-load", "unit-rank", "code-rank"}
 ALLOWED = REQUIRED | {"guide-load", "web-rank"}
+COMMIT = re.compile(r"[0-9a-f]{40}")
+
+
+def source_errors(source):
+    """What a release's `source` lacks to trace its heads to the Hub revisions a build
+    downloads and the Bialy commit that trained them."""
+    errors = []
+    for part, pin in (("heads", "revision"), ("dataset", "revision"), ("factory", "commit")):
+        entry = (source or {}).get(part) or {}
+        if not entry.get("repo") or not entry.get("tag"):
+            errors.append(f"source.{part} needs repo and tag")
+        if not COMMIT.fullmatch(str(entry.get(pin, ""))):
+            errors.append(f"source.{part}.{pin} must be a full 40-character commit")
+    return errors
 
 
 def metadata(path):
@@ -31,6 +45,11 @@ def stage(manifest_path, source, destination):
         raise ValueError("manifest must pin turn-load, unit-rank and code-rank; guide-load and web-rank are optional")
     if not manifest.get("release") or not manifest.get("backbone", {}).get("model"):
         raise ValueError("manifest must identify the release and backbone model")
+    errors = source_errors(manifest.get("source"))
+    if errors:
+        raise ValueError("manifest must name the release's source: " + "; ".join(errors))
+    if manifest["source"]["heads"]["tag"] != manifest["release"]:
+        raise ValueError("source.heads.tag must be the release the manifest names")
     preload = manifest.get("preload", {})
     if not preload.get("catalog_revision") or not isinstance(preload.get("options"), dict) or not preload["options"]:
         raise ValueError("manifest must pin the preload catalog and option texts")
