@@ -1,0 +1,39 @@
+name: Website problem
+description: Something on paintedwolf.ai is broken, wrong, or out of date.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This form is for the paintedwolf.ai website**: broken pages or links, wrong or stale
+        documentation, and download or deployment problems.
+
+        - **A bug in the app itself** → the *Bug report* form.
+        - **A website security vulnerability** → the private advisory flow. Never a public issue.
+        - **A site impersonating Painted Wolf** → email info@paintedwolf.ai. Do not link a
+          phishing site in a public issue.
+
+        Filing does not entitle you to a reply or a fix.
+
+  - type: input
+    id: url
+    attributes:
+      label: Page URL
+      description: The paintedwolf.ai address where you saw the problem.
+      placeholder: https://paintedwolf.ai/docs/
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What is wrong
+      description: What you saw, and what you expected instead. For documentation, quote the sentence and say what is incorrect.
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      description: Only for layout or rendering problems.
+      placeholder: Safari 19 on macOS 26

@@ -13,7 +13,8 @@ Report privately through GitHub's **Report a vulnerability** flow (repository
 **Security** tab → **Report a vulnerability**), which opens a private advisory visible
 only to maintainers. Include:
 
-- affected component (Lycaon sidecar, Den frontend, a bundled pack, or a dependency),
+- affected component (Lycaon sidecar, Den frontend, a bundled pack, a dependency, or the
+  paintedwolf.ai website),
 - version / commit,
 - a description and, where possible, a minimal reproduction,
 - the impact you believe it has.
@@ -40,6 +41,8 @@ In scope for a report:
   metadata endpoints past the `guardedGet` and provider-endpoint guards.
 - **Secret exposure** — credentials or tokens leaking into logs, tool output, API
   responses, or transcripts.
+- **The paintedwolf.ai website** — cross-site scripting, unsafe headers or redirects,
+  tampered downloads, or a deployment path an outsider can write to.
 
 Explicitly **out of scope** for the local-first threat model (see
 [`docs/security.md`](docs/security.md#local-threat-model)): multi-tenant hosted auth, per-session
