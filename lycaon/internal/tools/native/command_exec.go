@@ -70,14 +70,13 @@ func canonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
 // commandEgressIdentity supplies the shared subject for posture, leases, and attribution.
 func commandEgressIdentity(tctx tools.ToolContext, toolName, commandLine string) confine.EgressCommand {
 	identity := confine.EgressCommand{
-		SessionID:           tctx.SessionID,
-		RootSessionID:       tctx.ChatSessionID(),
-		ProjectID:           tctx.ProjectID,
-		ProjectDir:          tctx.ActiveRootPath(),
-		ToolCallID:          tctx.ToolCallID,
-		ToolName:            toolName,
-		CommandLine:         commandLine,
-		OfflineVerification: tctx.VerificationCheck && !tctx.DirectIPRequested,
+		SessionID:     tctx.SessionID,
+		RootSessionID: tctx.ChatSessionID(),
+		ProjectID:     tctx.ProjectID,
+		ProjectDir:    tctx.ActiveRootPath(),
+		ToolCallID:    tctx.ToolCallID,
+		ToolName:      toolName,
+		CommandLine:   commandLine,
 	}
 	if tctx.PackageExecution != nil {
 		identity.DeclaredHosts = append([]string(nil), tctx.PackageExecution.AllowedHosts...)
