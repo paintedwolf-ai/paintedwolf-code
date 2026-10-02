@@ -46,12 +46,13 @@ type ReleaseChallenge struct {
 // BeginReleaseChallenge binds presence to one pending option that releases
 // held values, the exact plan that offers it, and the deciding person.
 func (m *Manager) BeginReleaseChallenge(ctx context.Context, sessionID, checkpointID, optionID, windowLabel string) (ReleaseChallenge, error) {
-	if !m.PresenceAvailable() {
-		return ReleaseChallenge{}, presence.ErrUnavailable
-	}
+	// An unknown or settled checkpoint answers as such before presence is consulted.
 	plan, option, err := m.pendingReleaseOption(ctx, sessionID, checkpointID, optionID)
 	if err != nil {
 		return ReleaseChallenge{}, err
+	}
+	if !m.PresenceAvailable() {
+		return ReleaseChallenge{}, presence.ErrUnavailable
 	}
 	person, err := personResolution(ctx)
 	if err != nil {
