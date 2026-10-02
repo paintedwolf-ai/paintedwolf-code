@@ -167,6 +167,7 @@ export const API_OPERATIONS = {
   getWorkerChanges: { method: "GET", path: "/v1/workers/{id}/changes" },
   getWorkflowRun: { method: "GET", path: "/v1/workflow-runs/{id}" },
   getWorkflowRunReport: { method: "GET", path: "/v1/workflow-runs/{id}/report" },
+  holdProjectManagedSecret: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/hold" },
   importDetectionPack: { method: "POST", path: "/v1/detection-packs" },
   installExtensionMetaPack: { method: "POST", path: "/v1/extensions/meta-packs" },
   installExtensionPack: { method: "POST", path: "/v1/extensions/packs" },
@@ -508,6 +509,7 @@ export type OperationPathParameters = {
   getWorkerChanges: { id: string | number; };
   getWorkflowRun: { id: string | number; };
   getWorkflowRunReport: { id: string | number; };
+  holdProjectManagedSecret: { id: string | number; secret_id: string | number; };
   importDetectionPack: Record<string, never>;
   installExtensionMetaPack: Record<string, never>;
   installExtensionPack: Record<string, never>;

@@ -87,12 +87,14 @@ Custody says who supplied a value's current bytes, and so what releasing them re
 
 | Custody | Bytes come from | Releasing them |
 |---|---|---|
-| `person` | `ask_user_response`, `composer_marked`, `settings_entered`, `detected`, and any value a person replaces | A reviewed release to each recipient, and the chat [unlocked](#unlocking-a-chat-and-revealing-a-value) by that person's verified presence, at every posture, with approvals enabled or not |
+| `person` | `ask_user_response`, `composer_marked`, `settings_entered`, `detected`, any value a person replaces, and any generated value a person holds | A reviewed release to each recipient, and the chat [unlocked](#unlocking-a-chat-and-revealing-a-value) by that person's verified presence, at every posture, with approvals enabled or not |
 | `file` | `file_marked`: bytes already in a project file, which governs them | Ordinary outbound screen and approval |
 | `chat` | `generated` with chat scope; the entry names the chat | Released without a card to local recipients of that chat at Light and Balanced ([Secrets the chat generated](#secrets-the-chat-generated)); promotion rewrites the entry as `host` |
 | `host` | `generated` with project scope, `cookie_jar`, `token_jar` | Ordinary outbound screen and approval |
 
 A person-held value is the vault's purpose: it may hold the only copy. Protecting a detection makes it `person` because a person chose to vault bytes that may exist nowhere else, such as a key pasted into a prompt that durable redaction kept out of every store. A jar stays `host`: its values reach services through the jar rather than a reviewed release, so **Replace stored value** refuses a jar and a person revokes one instead.
+
+A generated value can come to matter after it is minted: a database password the agent generated and a person released to the database now guards that database, yet its `chat` custody still lets the chat's local programs spend it without a card. **Require my approval** (`POST /v1/projects/{id}/secrets/{secret_id}/hold`) rewrites a `chat` or `host` entry as `person` in place: the bytes, reference, and version are unchanged, and every later release, the generating chat's included, needs a reviewed release and an unlock. Holding is one-way, like promotion, and adds no prompt unless a person chooses it. A jar cannot be held, for the reason it cannot be replaced, and neither can a `file` value, whose bytes the file governs.
 
 An entry whose shape the vault does not recognize is refused without modification and reports `unavailable`.
 
@@ -324,13 +326,14 @@ Live preview frames get the same projection before SSE publication, so Den-assem
 | Unavailable | Metadata remains but current bytes are missing; supplying a value restores the same reference |
 | Replace stored value | A new protected version becomes current behind the same reference; retired bytes remain screening evidence. No source file or external credential is changed |
 | Promote | A live chat capability becomes project-scoped, so later chats can spend it |
+| Require my approval | A live `chat` or `host` value becomes `person`-held behind the same reference and version ([Custody](#custody)) |
 | Revoke | Resolution and reveal stop permanently; administration is terminal |
 
-Only revocation is terminal, and only an explicit request revokes: a person in project settings, or an agent ending a capability that arose from its own work. An agent-use deadline controls what the agent may do with the capability and says nothing about the credential's provider-side lifetime.
+Only revocation is terminal, and only an explicit request revokes: a person in project settings, or an agent ending a capability whose current bytes the host supplied. An agent-use deadline controls what the agent may do with the capability and says nothing about the credential's provider-side lifetime.
 
 Scope decides which chats may spend a capability, never how long it lives, because a managed secret stands for a credential that exists outside the chat: a generated password written into `.env` is still that database's password after the chat that made it is gone, and revoking the protected copy would rotate nothing at the provider. Stopping, archiving, or deleting a chat therefore revokes nothing. After deletion its chat-scoped capabilities stay active: they keep screening, a person can still reveal, replace, promote, or revoke them, and Project configuration → Secrets marks them as from a deleted chat (`chat_deleted`). No agent can spend them, because no chat can see them. Deleting the project removes its capabilities with it.
 
-Revocation is asymmetric by origin. The agent may revoke a capability that arose from its own work (`generated`, `detected`, and the jars); a capability a person authored is theirs to end, from project settings. Immutable origin is what makes the distinction enforceable.
+Revocation is asymmetric by custody. The agent may revoke a capability whose current value has `chat` or `host` custody: a jar, or a generated value no person has replaced or held. Bytes a person supplied are theirs to end, from project settings: a protected detection, a replaced value, a held value, and a file mark. A value with no readable bytes has no custody, so only a person revokes it. Custody, not origin, decides because a protected detection may hold the only copy of a key, and the vault entry, unlike origin metadata, is beyond a same-user process's reach.
 
 ## Unlocking a chat and revealing a value
 
@@ -403,7 +406,7 @@ New credentials should come from `secret_generate`; existing credentials should 
 - A request the host composed for its own use never asks and never sends a detected credential; no held send is retried at a second destination or replaced by a truncated stand-in.
 - A card is never held on the model's clock: turn and utility ceilings are call budgets that start when the request leaves the host.
 - Ordinary secret reads and create/replace responses expose no equality flag or value-derived metadata. Exact-match screening still has an observable result, which can confirm low-entropy guesses; the minimum length is a screening floor, not an anti-guessing guarantee. A file mark's `already_protected` refusal is that same screening result: it addresses bytes the editor already draws as tracked.
-- The agent may end a capability that arose from its own work; a person's capability is theirs to revoke.
+- The agent may end a capability whose current bytes the host supplied; bytes a person supplied or held are theirs to revoke.
 - A screen decision that cannot be carried out fails the send. A reported redaction means the bytes actually changed where the screen matched.
 - Process and browser owners publish captures from protected render environments with matched text screened in place; pixels outside matched rune spans are unchanged, and the host never substitutes a fabricated surface.
 - Den renders host-stamped redaction metadata, never infers it from marker text, and neutralizes redaction markup that arrived in model-authored content before painting the host's own.

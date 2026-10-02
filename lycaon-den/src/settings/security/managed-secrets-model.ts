@@ -78,14 +78,23 @@ export function needsValue(secret: ManagedSecret): boolean {
   return secret.state === "unavailable";
 }
 
-/** Only a chat capability can widen, and only to the project. */
 /** A jar is kept from service responses; a person revokes one rather than replace it. */
 export function canReplaceValue(secret: ManagedSecret): boolean {
   return secret.origin !== "cookie_jar" && secret.origin !== "token_jar";
 }
 
+/** Only a chat capability can widen, and only to the project. */
 export function canPromote(secret: ManagedSecret): boolean {
   return secret.scope === "chat" && !isRevoked(secret);
+}
+
+/** Only a value the host supplied can be held, and a jar never takes a reviewed release. */
+export function canHold(secret: ManagedSecret): boolean {
+  return (
+    !isRevoked(secret) &&
+    (secret.custody === "chat" || secret.custody === "host") &&
+    canReplaceValue(secret)
+  );
 }
 
 export type SecretDraft = {

@@ -128,6 +128,7 @@ describe("managed secret writes", () => {
 
     await client.updateProjectManagedSecret("p1", "secret1", details);
     await client.replaceProjectManagedSecretValue("p1", "secret1", replacement);
+    await client.holdProjectManagedSecret("p1", "secret1");
 
     expect(fetchMock.mock.calls).toEqual([
       ["http://127.0.0.1:8787/v1/projects/p1/secrets/secret1", expect.objectContaining({
@@ -135,6 +136,9 @@ describe("managed secret writes", () => {
       })],
       ["http://127.0.0.1:8787/v1/projects/p1/secrets/secret1/value", expect.objectContaining({
         method: "PUT", body: JSON.stringify(replacement),
+      })],
+      ["http://127.0.0.1:8787/v1/projects/p1/secrets/secret1/hold", expect.objectContaining({
+        method: "POST",
       })],
     ]);
   });

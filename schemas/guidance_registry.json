@@ -2410,7 +2410,7 @@
       "branch_instruction": "Leave human-owned credentials in place; only revoke a reference when this task has authority to end it",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "That managed secret was entered by a person, so it is not yours to revoke."
+      "summary": "That managed secret holds a person's value, so it is not yours to revoke."
     },
     "SECRET_STORE_UNAVAILABLE": {
       "branch_instruction": "Do not generate or reconstruct a replacement value in model-visible text",

@@ -2457,6 +2457,55 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/secrets/{secret_id}/hold:
+    post:
+      tags:
+        - projects
+      operationId: holdProjectManagedSecret
+      x-person-action: record
+      summary: Require a person's presence to release a generated value
+      description: Re-records the current value's custody as `person`, as if a person had stored it. Every later release, including one from the chat that generated it, then needs a reviewed handoff to each recipient and that chat unlocked by verified presence, and the agent can no longer revoke it. The bytes, reference, and version are unchanged. Holding is one-way. A value already held returns unchanged; a jar or a value marked in a project file cannot be held.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: secret_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Capability metadata with `person` custody
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedSecret'
+        '400':
+          description: This capability's value cannot be held
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such secret in this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The capability is revoked, which is terminal, or has no readable value to hold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/secrets/{secret_id}/uses:
     get:
       tags:
@@ -28997,7 +29046,7 @@ components:
             - file
             - chat
             - host
-          description: 'Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy: revealing it or handing it to any file, process, service, or MCP server needs that person''s verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent''s work beyond one chat. Absent when no value is readable.'
+          description: 'Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy, or chose to hold a value the host generated: revealing it or handing it to any file, process, service, or MCP server needs that person''s verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent''s work beyond one chat. Absent when no value is readable.'
         format:
           type: string
           enum:

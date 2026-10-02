@@ -91,6 +91,7 @@ export function ManagedSecretsPanel(props: Props) {
   const [adding, setAdding] = createSignal(false);
   const [mode, setMode] = createSignal<DetailMode>("facts");
   const [busy, setBusy] = createSignal(false);
+  const [pending, setPending] = createSignal<"promote" | "hold">();
   const [copied, setCopied] = createSignal(false);
   const [page, setPage] = createSignal(0);
   const [filter, setFilter] = createSignal<SecretFilter>(DEFAULT_SECRET_FILTER);
@@ -406,6 +407,20 @@ export function ManagedSecretsPanel(props: Props) {
       return false;
     } finally {
       if (alive) setBusy(false);
+    }
+  };
+
+  /** Runs a one-click action so only its own button reports progress. */
+  const act = async (
+    action: "promote" | "hold",
+    fallback: string,
+    run: () => Promise<ManagedSecret>,
+  ) => {
+    setPending(action);
+    try {
+      await mutate(fallback, run);
+    } finally {
+      if (alive) setPending(undefined);
     }
   };
 
@@ -768,11 +783,17 @@ export function ManagedSecretsPanel(props: Props) {
                       onHideReveal={hideReveal}
                       onCopyValue={copyRevealedValue}
                       onMode={changeMode}
+                      pending={pending()}
                       onPromote={() =>
-                        void mutate(C.promoteError, () =>
+                        void act("promote", C.promoteError, () =>
                           props.client.updateProjectManagedSecret(props.projectId, id, {
                             scope: "project",
                           }),
+                        )
+                      }
+                      onHold={() =>
+                        void act("hold", C.holdError, () =>
+                          props.client.holdProjectManagedSecret(props.projectId, id),
                         )
                       }
                       onRevoke={() => void revoke(secret)}

@@ -123,6 +123,12 @@ export const MANAGED_SECRETS_COPY = {
   promoting: "Promoting…",
   promoteError: "This secret could not be promoted.",
 
+  hold: "Require my approval",
+  holdHint:
+    "If this value now guards something that matters, such as a database it opens, treat it like one you stored. Every recipient then needs your approval, including programs in the chat that generated it, and only while you have unlocked that chat. The agent can no longer revoke it. This can't be undone.",
+  holding: "Saving…",
+  holdError: "This secret could not be changed to require your approval.",
+
   usesHeading: "Recent uses",
   usesHint:
     "Resolution and handoff to a program or transport, refusals included. Handoff does not prove delivery or successful authentication. A bounded recent window.",
@@ -192,7 +198,7 @@ const ORIGIN_LABEL: Record<ManagedSecret["origin"], string> = {
 };
 
 const CUSTODY_LABEL: Record<NonNullable<ManagedSecret["custody"]>, string> = {
-  person: "You stored it. A chat uses it only after you approve each recipient and while you have unlocked that chat.",
+  person: "Held for you. A chat uses it only after you approve each recipient and while you have unlocked that chat.",
   file: "A project file holds it. Anything that can read that file can read it.",
   chat: "Generated for one chat. Its programs may use it without asking at Light and Balanced.",
   host: "Generated or captured for the agent's work.",

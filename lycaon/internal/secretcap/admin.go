@@ -119,12 +119,14 @@ func applyScope(target *db.UpdateManagedSecretParams, row db.ManagedSecrets, sco
 	return nil
 }
 
-// agentAuthoredOrigin uses immutable provenance to determine revocation authority.
+// agentAuthoredOrigin reports origins created without naming a person.
 func agentAuthoredOrigin(origin string) bool {
 	return origin == OriginGenerated || origin == OriginDetected || origin == OriginCookieJar || origin == OriginTokenJar
 }
 
-// RevokeByAgent revokes visible capabilities with agent-authored origins.
+// RevokeByAgent revokes a visible capability whose current bytes the host
+// supplied. Custody, not origin, decides: a protected detection, a replaced
+// value, and a held value all carry bytes a person handed over.
 func (s *Service) RevokeByAgent(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
 	row, err := s.rowForReference(ctx, reference)
 	if err != nil {
@@ -133,10 +135,27 @@ func (s *Service) RevokeByAgent(ctx context.Context, projectID, chatSessionID, r
 	if err := visible(row, projectID, chatSessionID); err != nil {
 		return Metadata{}, err
 	}
-	if !agentAuthoredOrigin(row.Origin) {
-		return Metadata{}, fmt.Errorf("%w: %s", ErrHumanAuthored, row.Origin)
+	return s.revokeRow(ctx, row, revoker{by: revokedByAgent, allowed: s.hostSupplied})
+}
+
+// hostSupplied refuses unless the current bytes have chat or host custody.
+// No readable value means no custody to grant the agent authority.
+func (s *Service) hostSupplied(ctx context.Context, row db.ManagedSecrets) error {
+	current, ok, err := s.currentVersion(ctx, row.ID)
+	if err != nil {
+		return err
 	}
-	return s.revokeRow(ctx, row, revoker{by: revokedByAgent})
+	if !ok {
+		return fmt.Errorf("%w: no readable value", ErrHumanAuthored)
+	}
+	entry, ok := s.values.get(current.ID)
+	if !ok {
+		return fmt.Errorf("%w: no readable value", ErrHumanAuthored)
+	}
+	if entry.Custody != CustodyChat && entry.Custody != CustodyHost {
+		return fmt.Errorf("%w: %s custody", ErrHumanAuthored, entry.Custody)
+	}
+	return nil
 }
 
 // RevokeProject disables any capability in the project on a person's request.
@@ -158,9 +177,12 @@ const (
 )
 
 // revoker is who ended a capability: a person, or the agent that authored it.
+// allowed, when set, decides authority under the mutation lock so a concurrent
+// replace or hold cannot change custody between the check and the revoke.
 type revoker struct {
 	by       string
 	personID string
+	allowed  func(context.Context, db.ManagedSecrets) error
 }
 
 // revokeRow serializes terminal state with other mutations.
@@ -170,6 +192,11 @@ func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revok
 	defer s.mutationMu.Unlock()
 
 	when := db.FormatTime(s.now())
+	if !row.RevokedAt.Valid && by.allowed != nil {
+		if err := by.allowed(ctx, row); err != nil {
+			return Metadata{}, err
+		}
+	}
 	if !row.RevokedAt.Valid {
 		if _, err := s.queries.RevokeManagedSecret(ctx, db.RevokeManagedSecretParams{
 			RevokedAt: nullable(when), RevokedBy: nullable(by.by), RevokedByPersonID: nullable(by.personID),
@@ -180,6 +207,50 @@ func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revok
 		row.RevokedAt = nullable(when)
 		row.RevokedBy, row.RevokedByPersonID = nullable(by.by), nullable(by.personID)
 		s.retireDurable(func(_ string, owner secretIdentity) bool { return owner.id == row.ID })
+	}
+	return s.metadataRow(ctx, row)
+}
+
+// HoldValue re-records a host-supplied current value as person-held, so every
+// release, including the generating chat's own, needs a reviewed handoff and
+// that person's unlock. It is one-way, like promotion; a value already held
+// returns unchanged. A jar never takes a reviewed release, and a marked
+// file's bytes stay governed by the file, so neither can be held.
+func (s *Service) HoldValue(ctx context.Context, projectID, reference string) (Metadata, error) {
+	defer s.invalidateScreening(ctx, projectID)
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	row, err := s.projectRow(ctx, projectID, reference)
+	if err != nil {
+		return Metadata{}, err
+	}
+	if row.RevokedAt.Valid {
+		return Metadata{}, ErrRevoked
+	}
+	if row.Origin == OriginCookieJar || row.Origin == OriginTokenJar {
+		return Metadata{}, fmt.Errorf("%w: a jar reaches services through the jar; revoke it instead", ErrInvalidUpdate)
+	}
+	current, ok, err := s.currentVersion(ctx, row.ID)
+	if err != nil {
+		return Metadata{}, err
+	}
+	if !ok {
+		return Metadata{}, ErrValueMissing
+	}
+	entry, ok := s.values.get(current.ID)
+	if !ok {
+		return Metadata{}, ErrValueMissing
+	}
+	switch entry.Custody {
+	case CustodyPerson:
+		return s.metadataRow(ctx, row)
+	case CustodyFile:
+		return Metadata{}, fmt.Errorf("%w: a value marked in a project file is governed by that file", ErrInvalidUpdate)
+	}
+	entry.Custody = CustodyPerson
+	if err := s.values.put(current.ID, entry); err != nil {
+		return Metadata{}, fmt.Errorf("record held custody: %w", err)
 	}
 	return s.metadataRow(ctx, row)
 }

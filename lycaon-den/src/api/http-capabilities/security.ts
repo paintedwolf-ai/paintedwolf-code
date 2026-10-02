@@ -76,6 +76,8 @@ export interface SecurityClient {
     secretId: string,
     req: ReplaceManagedSecretValueRequest,
   ): Promise<ManagedSecret>;
+  /** Requires a person's presence to release a generated value; one-way. */
+  holdProjectManagedSecret(projectId: string, secretId: string): Promise<ManagedSecret>;
   /** Recent substitution attempts, newest first. */
   listProjectManagedSecretUses(
     projectId: string,
@@ -197,6 +199,11 @@ export function createSecurityClient(j: JsonRequester, connection: BackendConnec
       j(
         `/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretId)}/value`,
         jsonRequest("PUT", req),
+      ),
+    holdProjectManagedSecret: (projectId, secretId) =>
+      j(
+        `/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretId)}/hold`,
+        { method: "POST" },
       ),
     listProjectManagedSecretUses: (projectId, secretId, opts) =>
       j(
