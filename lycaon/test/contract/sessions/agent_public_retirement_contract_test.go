@@ -173,16 +173,19 @@ func TestDisappearedAgentPublicIDsAreRecorded(t *testing.T) {
 		return
 	}
 	led := loadRetiredLedger(t)
-	live := liveIDsByKind(t)
-	atTag := map[string]map[string]struct{}{
-		"hint_code":    hintCodesAtRef(t, tag),
-		"tool_name":    toolNamesAtRef(t, tag),
-		"rule_effect":  ruleEffectsAtRef(t, tag),
-		"theme_token":  themeTokensAtRef(t, tag),
-		"virtual_root": virtualRootsAtRef(t, tag),
+	// Both sides use the same parsers: the live registries count ids differently.
+	atRef := func(rev string) map[string]map[string]struct{} {
+		return map[string]map[string]struct{}{
+			"hint_code":    hintCodesAtRef(t, rev),
+			"tool_name":    toolNamesAtRef(t, rev),
+			"rule_effect":  ruleEffectsAtRef(t, rev),
+			"theme_token":  themeTokensAtRef(t, rev),
+			"virtual_root": virtualRootsAtRef(t, rev),
+		}
 	}
+	atTag, atHead := atRef(tag), atRef("HEAD")
 	for _, kind := range retiredKinds {
-		for _, id := range unrecordedDisappearances(led, kind, atTag[kind], live[kind]) {
+		for _, id := range unrecordedDisappearances(led, kind, atTag[kind], atHead[kind]) {
 			t.Errorf("%s %q was present at %s and is gone at HEAD but not in %s; append a retired entry with kind: %s",
 				kind, id, tag, agentPublicRetiredRel, kind)
 		}
