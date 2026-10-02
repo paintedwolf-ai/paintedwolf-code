@@ -31,8 +31,9 @@ func (s keychainStatus) Error() string {
 		return "macOS data protection Keychain item is not limited to this device while unlocked"
 	case keychainUnexpectedSynchronization:
 		return "macOS data protection Keychain item is synchronizable"
+	default:
+		return fmt.Sprintf("macOS data protection Keychain failed (OSStatus %d)", int32(s))
 	}
-	return fmt.Sprintf("macOS data protection Keychain failed (OSStatus %d)", int32(s))
 }
 
 type dataProtectionItems struct{}
