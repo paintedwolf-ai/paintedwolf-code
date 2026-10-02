@@ -16,6 +16,9 @@ that it will be acted on.
 | The app will not start or install | **Issues** → *App won't start* |
 | The agent stayed inside its permissions and did something you did not want | **Issues** → *The agent did something wrong.* Read that form first — not every such report is a defect. |
 | The agent escaped its boundary — wrote outside an approved root, reached a host it should not, or exposed a secret | **Private advisory.** Repository **Security** tab → **Report a vulnerability**. Never a public issue. See [`SECURITY.md`](SECURITY.md). |
+| A broken page, link, or wrong documentation on paintedwolf.ai | **Issues** → *Website problem* |
+| A security vulnerability in paintedwolf.ai | **Private advisory**, same as above. |
+| A site impersonating Painted Wolf | Email **info@paintedwolf.ai**. Do not link it in a public issue. |
 | You want to contribute code | [`CONTRIBUTING.md`](CONTRIBUTING.md) — read the pull-request section first |
 
 Issues are a public record of work that might be done. An open issue is not a promise that
