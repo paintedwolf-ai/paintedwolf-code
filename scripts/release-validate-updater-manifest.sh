@@ -6,7 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FILE=""
 EXPECTED_VERSION=""
 # A published manifest is read to be replaced or to locate a prior release, so
-# its packages need not be installable; a manifest about to publish must be.
+# its packages need not be installable; a manifest about to publish must be,
+# unless it is withdrawn and offers nothing to install.
 EXISTING=0
 
 usage() {
@@ -92,7 +93,7 @@ for key, row in expected.items():
         raise SystemExit(f"error: updater entry {key} has an unsupported shape")
     if not isinstance(value["signature"], str) or not value["signature"].strip():
         raise SystemExit(f"error: updater entry {key} has an empty signature")
-    if sys.argv[5] != "1":
+    if sys.argv[5] != "1" and not manifest.get("withdrawn", False):
         try:
             require_version(value["signature"], version, f"updater entry {key}")
         except ValueError as exc:
