@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// fakeRunner keys results by command and optional first argument.
+// fakeRunner keys results by command, optional first argument, and optional target basename.
 type fakeRunner struct {
 	stdout  map[string][]byte
 	stderr  map[string][]byte
@@ -42,6 +42,10 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 	key := name
 	if len(args) > 0 {
 		composite := name + " " + args[0]
+		// "<tool> <first arg> @<target basename>" answers for one target.
+		if targeted := composite + " @" + filepath.Base(args[len(args)-1]); f.has(targeted) {
+			return f.stdout[targeted], f.stderr[targeted], f.err[targeted]
+		}
 		if _, ok := f.stdout[composite]; ok {
 			key = composite
 		} else if _, ok := f.stderr[composite]; ok {
@@ -51,6 +55,13 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 		}
 	}
 	return f.stdout[key], f.stderr[key], f.err[key]
+}
+
+func (f *fakeRunner) has(key string) bool {
+	_, out := f.stdout[key]
+	_, errOut := f.stderr[key]
+	_, err := f.err[key]
+	return out || errOut || err
 }
 
 func (f *fakeRunner) callsFor(name string, prefix ...string) [][]string {
@@ -66,7 +77,9 @@ func (f *fakeRunner) callsFor(name string, prefix ...string) [][]string {
 func signedOK() *fakeRunner {
 	r := newFakeRunner()
 	r.stderr["codesign"] = []byte(codesignDeveloperIDWithRuntime)
-	r.stdout["codesign -d"] = []byte(entitlementsBrowserOK)
+	r.stdout["codesign -d"] = []byte(entitlementsEmpty)
+	r.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsBrowserOK)
+	r.stdout["codesign -d @pw"] = []byte(entitlementsEngineOK)
 	return r
 }
 
@@ -80,6 +93,7 @@ type appOptions struct {
 	browserFat    bool
 	omitSidecar   bool
 	omitLogsCLI   bool
+	omitCore      bool
 	omitDecide    bool
 	omitMetallib  bool
 	omitModel     bool
@@ -115,6 +129,10 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 			macho.CpuArm64, "13.0",
 			[]string{"/usr/lib/libSystem.B.dylib", "/System/Library/Frameworks/Security.framework/Security"},
 			opts.logsExtra)
+	}
+	if !opts.omitCore {
+		writeThinMachO(t, filepath.Join(app, documentCoreRelPath),
+			macho.CpuArm64, "13.0", []string{"/usr/lib/libSystem.B.dylib"})
 	}
 	if !opts.omitDecide {
 		writeThinMachO(t, filepath.Join(app, decideEngineRelPath),
@@ -243,8 +261,8 @@ func TestVerifyCleanBundle(t *testing.T) {
 	if errs != 0 {
 		t.Fatalf("clean bundle has %d error findings: %+v", errs, report.Findings)
 	}
-	if report.MachOCount != 6 {
-		t.Fatalf("MachOCount = %d, want 6 (sidecar, logs CLI, decision engine, app binary, browser, scanner)", report.MachOCount)
+	if report.MachOCount != 7 {
+		t.Fatalf("MachOCount = %d, want 7 (sidecar, logs CLI, document core, decision engine, app binary, browser, scanner)", report.MachOCount)
 	}
 }
 
@@ -459,7 +477,7 @@ func TestVerifyAdhocSignatureWarnsWithoutRequireSigned(t *testing.T) {
 
 	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
 
-	got := requireCodeCount(t, report, CodeSignatureAdhoc, 7) // .app + 6 Mach-Os
+	got := requireCodeCount(t, report, CodeSignatureAdhoc, 8) // .app + 7 Mach-Os
 	for _, f := range got {
 		if f.Severity != SeverityWarn {
 			t.Fatalf("SIGNATURE_ADHOC severity = %q, want warn without --require-signed", f.Severity)
@@ -616,19 +634,19 @@ func TestVerifyDMGAssessesBothAppAndDMG(t *testing.T) {
 	}
 }
 
-func TestVerifyBrowserEntitlementsMissing(t *testing.T) {
+func TestVerifyBrowserWithoutItsJITGrantsFails(t *testing.T) {
 	runner := signedOK()
-	runner.stdout["codesign -d"] = []byte(entitlementsEmpty)
+	runner.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsEmpty)
 
 	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
 
-	got := requireCodeCount(t, report, CodeBrowserEntitlementMissing, 2)
+	got := requireCodeCount(t, report, CodeEntitlementMissing, 2)
 	seen := map[string]bool{}
 	for _, f := range got {
 		if f.Severity != SeverityError {
-			t.Fatalf("BROWSER_ENTITLEMENT_MISSING severity = %q, want error under --require-signed", f.Severity)
+			t.Fatalf("ENTITLEMENT_MISSING severity = %q, want error under --require-signed", f.Severity)
 		}
-		if filepath.Base(f.Path) != "chrome-headless-shell" {
+		if filepath.Base(f.Path) != browserBinaryName {
 			t.Fatalf("finding on %q, want it scoped to the browser binary", f.Path)
 		}
 		seen[f.Detail["entitlement"]] = true
@@ -636,44 +654,127 @@ func TestVerifyBrowserEntitlementsMissing(t *testing.T) {
 	if !seen["com.apple.security.cs.allow-jit"] || !seen["com.apple.security.cs.allow-unsigned-executable-memory"] {
 		t.Fatalf("findings do not name both required entitlements: %+v", got)
 	}
-	if !report.Failed() {
-		t.Fatal("missing browser entitlements must fail the report under --require-signed")
-	}
 }
 
-func TestVerifyBrowserEntitlementsMissingWarnsWithoutRequireSigned(t *testing.T) {
+func TestVerifyEntitlementFindingsWarnWithoutRequireSigned(t *testing.T) {
 	runner := signedOK()
-	runner.stdout["codesign -d"] = []byte(entitlementsEmpty)
+	runner.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsEmpty)
 
 	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
 
-	got := requireCodeCount(t, report, CodeBrowserEntitlementMissing, 2)
-	for _, f := range got {
+	for _, f := range requireCodeCount(t, report, CodeEntitlementMissing, 2) {
 		if f.Severity != SeverityWarn {
-			t.Fatalf("BROWSER_ENTITLEMENT_MISSING severity = %q, want warn without --require-signed", f.Severity)
+			t.Fatalf("ENTITLEMENT_MISSING severity = %q, want warn without --require-signed", f.Severity)
 		}
 	}
 }
 
-func TestVerifyBrowserEntitlementsSkippedWithoutHardenedRuntime(t *testing.T) {
+func TestVerifyRefusesRuntimeCodeGenerationOutsideTheBrowser(t *testing.T) {
+	for _, target := range []string{filepath.Base(sidecarRelPath), filepath.Base(documentCoreRelPath), filepath.Base(decideEngineRelPath)} {
+		t.Run(target, func(t *testing.T) {
+			runner := signedOK()
+			runner.stdout["codesign -d @"+target] = []byte(entitlementsBrowserOK)
+
+			report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+
+			got := requireCodeCount(t, report, CodeEntitlementUnexpected, 2)
+			for _, f := range got {
+				if filepath.Base(f.Path) != target || f.Severity != SeverityError {
+					t.Fatalf("unexpected-entitlement finding = %+v, want an error on %s", f, target)
+				}
+			}
+		})
+	}
+}
+
+func TestVerifyRefusesADebuggableExecutable(t *testing.T) {
+	runner := signedOK()
+	runner.stdout["codesign -d @"+filepath.Base(documentCoreRelPath)] = []byte(
+		`<plist version="1.0"><dict><key>com.apple.security.get-task-allow</key><true/></dict></plist>`)
+
+	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+
+	got := requireCodeCount(t, report, CodeEntitlementUnexpected, 1)
+	if got[0].Path != documentCoreRelPath || got[0].Detail["entitlement"] != "com.apple.security.get-task-allow" {
+		t.Fatalf("finding = %+v, want get-task-allow on the document core", got[0])
+	}
+}
+
+func TestVerifyEngineProfileEntitlementsAreItsOnly(t *testing.T) {
+	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, signedOK())
+	requireNoCode(t, report, CodeEntitlementUnexpected)
+	requireNoCode(t, report, CodeEntitlementMissing)
+
+	runner := signedOK()
+	runner.stdout["codesign -d @"+filepath.Base(logsCLIRelPath)] = []byte(entitlementsEngineOK)
+	report = runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+	if got := requireCodeCount(t, report, CodeEntitlementUnexpected, 3); got[0].Path != logsCLIRelPath {
+		t.Fatalf("finding on %q, want the profile entitlements refused on the log viewer", got[0].Path)
+	}
+}
+
+func TestVerifyUnreadableEntitlementsFail(t *testing.T) {
+	runner := signedOK()
+	runner.stdout["codesign -d @"+filepath.Base(decideEngineRelPath)] = []byte("<plist><dict><key>truncated")
+
+	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+
+	if got := requireCodeCount(t, report, CodeEntitlementUnreadable, 1); got[0].Path != decideEngineRelPath {
+		t.Fatalf("finding on %q, want the decision engine", got[0].Path)
+	}
+}
+
+func TestVerifyEntitlementsSkippedWithoutHardenedRuntime(t *testing.T) {
 	runner := newFakeRunner()
 	runner.stderr["codesign"] = []byte(codesignDeveloperIDNoRuntime)
 
 	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
 
-	requireNoCode(t, report, CodeBrowserEntitlementMissing)
+	requireNoCode(t, report, CodeEntitlementMissing)
 	if len(findingsWithCode(report, CodeHardenedRuntimeMissing)) == 0 {
 		t.Fatal("expected HARDENED_RUNTIME_MISSING findings for a non-hardened bundle")
 	}
 }
 
-func TestVerifyBrowserEntitlementsAbsentBrowser(t *testing.T) {
+func TestVerifyEntitlementsWithoutBrowser(t *testing.T) {
 	opts := defaultAppOptions()
 	opts.omitBrowser = true
 
 	report := runVerify(t, buildFakeApp(t, opts), true, signedOK())
 
-	requireNoCode(t, report, CodeBrowserEntitlementMissing)
+	requireNoCode(t, report, CodeEntitlementMissing)
+}
+
+func TestVerifyMissingDocumentCoreFails(t *testing.T) {
+	opts := defaultAppOptions()
+	opts.omitCore = true
+
+	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
+
+	if got := requireCodeCount(t, report, CodeDocumentCoreMissing, 1); got[0].Path != documentCoreRelPath {
+		t.Fatalf("finding on %q, want %q", got[0].Path, documentCoreRelPath)
+	}
+}
+
+func TestVerifyRunsTheDocumentCoreThroughThePackagedEngine(t *testing.T) {
+	app := buildFakeApp(t, defaultAppOptions())
+	runner := signedOK()
+	sidecar := filepath.Join(app, sidecarRelPath)
+	runner.stdout[sidecar] = []byte(filepath.Join(app, fakeOpenGrepRelPath) + "\n")
+
+	report := runVerify(t, app, true, runner)
+	requireNoCode(t, report, CodeDocumentCoreFailed)
+	if calls := runner.callsFor(sidecar, "diagnostics", "document-core"); len(calls) != 1 {
+		t.Fatalf("document core probe calls = %v, want one", calls)
+	}
+
+	runner.err[sidecar+" diagnostics"] = errors.New("signal: killed")
+	runner.stderr[sidecar+" diagnostics"] = []byte("document core exited (signal: killed)")
+	report = runVerify(t, app, true, runner)
+	got := requireCodeCount(t, report, CodeDocumentCoreFailed, 1)
+	if got[0].Severity != SeverityError || !strings.Contains(got[0].Detail["output"], "signal: killed") {
+		t.Fatalf("finding = %+v, want an error carrying the probe's output", got[0])
+	}
 }
 
 func TestVerifyFatBinaryExtraSlice(t *testing.T) {
@@ -698,8 +799,8 @@ func TestVerifySkipsNonMachOFiles(t *testing.T) {
 
 	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
 
-	if report.MachOCount != 6 {
-		t.Fatalf("MachOCount = %d, want 6 — non-Mach-O files must not be counted", report.MachOCount)
+	if report.MachOCount != 7 {
+		t.Fatalf("MachOCount = %d, want 7 — non-Mach-O files must not be counted", report.MachOCount)
 	}
 }
 

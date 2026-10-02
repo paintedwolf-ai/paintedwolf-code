@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 func signingSeverity(requireSigned bool) Severity {
@@ -13,13 +11,6 @@ func signingSeverity(requireSigned bool) Severity {
 		return SeverityError
 	}
 	return SeverityWarn
-}
-
-const browserBinaryName = "chrome-headless-shell"
-
-var browserRequiredEntitlements = []string{
-	"com.apple.security.cs.allow-jit",
-	"com.apple.security.cs.allow-unsigned-executable-memory",
 }
 
 func checkSigning(ctx context.Context, runner Runner, opts Options, machOs []MachOFacts) []Finding {
@@ -49,7 +40,7 @@ func checkSigning(ctx context.Context, runner Runner, opts Options, machOs []Mac
 		findings = append(findings, f...)
 	}
 
-	findings = append(findings, checkBrowserEntitlements(ctx, runner, opts, machOs, severity)...)
+	findings = append(findings, checkEntitlements(ctx, runner, opts, machOs, severity)...)
 
 	// Validate the staple on the distributed container.
 	stapleTarget := opts.AppPath
@@ -132,60 +123,6 @@ func checkDeepVerify(ctx context.Context, runner Runner, opts Options, severity 
 		}}, ""
 	}
 	return nil, ""
-}
-
-// checkBrowserEntitlements validates signed browser execution permissions.
-func checkBrowserEntitlements(ctx context.Context, runner Runner, opts Options, machOs []MachOFacts, severity Severity) []Finding {
-	var findings []Finding
-
-	for _, m := range machOs {
-		if filepath.Base(m.Path) != browserBinaryName {
-			continue
-		}
-		rel := bundleRel(opts.AppPath, m.Path)
-
-		_, stderr, err := runner.Run(ctx, "codesign", "--display", "--verbose=2", m.Path)
-		if err != nil {
-			continue
-		}
-		flags, haveFlags := parseCodesignFlags(stderr)
-		if !haveFlags || flags&hardenedRuntimeFlag == 0 {
-			continue
-		}
-
-		stdout, _, err := runner.Run(ctx, "codesign", "-d", "--entitlements", "-", "--xml", m.Path)
-		if isToolMissing(err) {
-			continue
-		}
-		if err != nil {
-			findings = append(findings, Finding{
-				Code: CodeBrowserEntitlementMissing, Severity: severity, Path: rel,
-				Detail: map[string]string{"reason": "entitlements query failed"},
-			})
-			continue
-		}
-		for _, ent := range browserRequiredEntitlements {
-			if !entitlementEnabled(stdout, ent) {
-				findings = append(findings, Finding{
-					Code: CodeBrowserEntitlementMissing, Severity: severity, Path: rel,
-					Detail: map[string]string{"entitlement": ent},
-				})
-			}
-		}
-	}
-
-	return findings
-}
-
-// entitlementEnabled matches a boolean entitlement entry.
-func entitlementEnabled(data []byte, name string) bool {
-	token := "<key>" + name + "</key>"
-	idx := strings.Index(string(data), token)
-	if idx < 0 {
-		return false
-	}
-	rest := strings.TrimLeft(string(data)[idx+len(token):], " \t\r\n")
-	return strings.HasPrefix(rest, "<true/>")
 }
 
 func checkStaple(ctx context.Context, runner Runner, opts Options, target string, severity Severity) ([]Finding, string) {

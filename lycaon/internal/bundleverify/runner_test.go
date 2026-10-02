@@ -1,9 +1,11 @@
 package bundleverify
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/dotversion"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Signature fixtures retain the stderr fields consumed by the parser.
@@ -41,26 +43,47 @@ const entitlementsBrowserOK = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE p
 
 const entitlementsEmpty = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict/></plist>`
 
-func TestEntitlementEnabled(t *testing.T) {
+const entitlementsEngineOK = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.application-identifier</key>
+	<string>ABCDE12345.dev.paintedwolf.code.engine</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>ABCDE12345</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>ABCDE12345.dev.paintedwolf.code.engine</string>
+	</array>
+</dict>
+</plist>`
+
+func TestParseEntitlements(t *testing.T) {
 	cases := []struct {
 		name string
 		data string
-		key  string
-		want bool
+		want map[string]bool
 	}{
-		{"present true", entitlementsBrowserOK, "com.apple.security.cs.allow-jit", true},
-		{"present true with whitespace", "<dict>\n\t<key>com.apple.security.cs.allow-jit</key>\n\t<true/>\n</dict>", "com.apple.security.cs.allow-jit", true},
-		{"absent", entitlementsEmpty, "com.apple.security.cs.allow-jit", false},
-		{"present but false", "<dict><key>com.apple.security.cs.allow-jit</key><false/></dict>", "com.apple.security.cs.allow-jit", false},
-		{"empty output", "", "com.apple.security.cs.allow-jit", false},
+		{"browser grants", entitlementsBrowserOK, map[string]bool{
+			"com.apple.security.cs.allow-jit": true, "com.apple.security.cs.allow-unsigned-executable-memory": true}},
+		{"profile values that are not booleans", entitlementsEngineOK, map[string]bool{
+			"com.apple.application-identifier": false, "com.apple.developer.team-identifier": false, "keychain-access-groups": false}},
+		{"explicit false", "<plist><dict><key>com.apple.security.cs.allow-jit</key><false/></dict></plist>",
+			map[string]bool{"com.apple.security.cs.allow-jit": false}},
+		{"empty dictionary", entitlementsEmpty, map[string]bool{}},
+		{"no entitlements blob", "", map[string]bool{}},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := entitlementEnabled([]byte(tc.data), tc.key); got != tc.want {
-				t.Fatalf("entitlementEnabled(%q) = %v, want %v", tc.key, got, tc.want)
+			got, err := parseEntitlements([]byte(tc.data))
+			testutil.FailErr(t, "parse entitlements", err)
+			if !maps.Equal(got, tc.want) {
+				t.Fatalf("parseEntitlements = %v, want %v", got, tc.want)
 			}
 		})
+	}
+	if _, err := parseEntitlements([]byte("<plist><dict><key>truncated")); err == nil {
+		t.Fatal("parsed a truncated entitlements plist")
 	}
 }
 

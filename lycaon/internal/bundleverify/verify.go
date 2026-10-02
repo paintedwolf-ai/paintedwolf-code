@@ -18,6 +18,7 @@ import (
 const (
 	sidecarRelPath      = "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"
 	logsCLIRelPath      = "Contents/MacOS/pw-logs"
+	documentCoreRelPath = "Contents/MacOS/pw-document-core"
 	decideEngineRelPath = "Contents/MacOS/bialy"
 	// decideMetallibRelPath is MLX's compiled kernels, which the engine needs on Apple silicon.
 	decideMetallibRelPath = "Contents/Resources/engine-root/decide/mlx.metallib"
@@ -92,6 +93,7 @@ func Verify(ctx context.Context, opts Options) (Report, error) {
 		})
 	} else {
 		findings = append(findings, checkOpenGrep(ctx, runner, opts)...)
+		findings = append(findings, checkDocumentCore(ctx, runner, opts)...)
 		findings = append(findings, checkCredentialProtection(ctx, runner, opts)...)
 	}
 
@@ -112,49 +114,25 @@ func bundleRel(appPath, path string) string {
 func checkLayout(appPath string) []Finding {
 	var findings []Finding
 
-	sidecar := filepath.Join(appPath, sidecarRelPath)
-	info, err := os.Stat(sidecar)
-	switch {
-	case err != nil:
-		findings = append(findings, Finding{
-			Code: CodeSidecarMissing, Severity: SeverityError, Path: sidecarRelPath,
-			Detail: map[string]string{"reason": "not found"},
-		})
-	case info.Mode().Perm()&0o111 == 0:
-		findings = append(findings, Finding{
-			Code: CodeSidecarMissing, Severity: SeverityError, Path: sidecarRelPath,
-			Detail: map[string]string{"reason": "not executable"},
-		})
-	}
-
-	logsCLI := filepath.Join(appPath, logsCLIRelPath)
-	info, err = os.Stat(logsCLI)
-	switch {
-	case err != nil:
-		findings = append(findings, Finding{
-			Code: CodeLogsCLIMissing, Severity: SeverityError, Path: logsCLIRelPath,
-			Detail: map[string]string{"reason": "not found"},
-		})
-	case info.Mode().Perm()&0o111 == 0:
-		findings = append(findings, Finding{
-			Code: CodeLogsCLIMissing, Severity: SeverityError, Path: logsCLIRelPath,
-			Detail: map[string]string{"reason": "not executable"},
-		})
-	}
-
-	decideEngine := filepath.Join(appPath, decideEngineRelPath)
-	info, err = os.Stat(decideEngine)
-	switch {
-	case err != nil:
-		findings = append(findings, Finding{
-			Code: CodeDecideEngineMissing, Severity: SeverityError, Path: decideEngineRelPath,
-			Detail: map[string]string{"reason": "not found"},
-		})
-	case info.Mode().Perm()&0o111 == 0:
-		findings = append(findings, Finding{
-			Code: CodeDecideEngineMissing, Severity: SeverityError, Path: decideEngineRelPath,
-			Detail: map[string]string{"reason": "not executable"},
-		})
+	for _, executable := range []struct{ rel, code string }{
+		{sidecarRelPath, CodeSidecarMissing},
+		{logsCLIRelPath, CodeLogsCLIMissing},
+		{documentCoreRelPath, CodeDocumentCoreMissing},
+		{decideEngineRelPath, CodeDecideEngineMissing},
+	} {
+		info, err := os.Stat(filepath.Join(appPath, executable.rel))
+		switch {
+		case err != nil:
+			findings = append(findings, Finding{
+				Code: executable.code, Severity: SeverityError, Path: executable.rel,
+				Detail: map[string]string{"reason": "not found"},
+			})
+		case info.Mode().Perm()&0o111 == 0:
+			findings = append(findings, Finding{
+				Code: executable.code, Severity: SeverityError, Path: executable.rel,
+				Detail: map[string]string{"reason": "not executable"},
+			})
+		}
 	}
 	if st, err := os.Stat(filepath.Join(appPath, decideMetallibRelPath)); err != nil || st.IsDir() || st.Size() == 0 {
 		findings = append(findings, Finding{
@@ -173,7 +151,7 @@ func checkLayout(appPath string) []Finding {
 	}
 
 	noticesPath := filepath.Join(appPath, noticesRelPath)
-	info, err = os.Stat(noticesPath)
+	info, err := os.Stat(noticesPath)
 	switch {
 	case err != nil:
 		findings = append(findings, Finding{
