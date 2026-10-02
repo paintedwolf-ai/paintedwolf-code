@@ -151,14 +151,8 @@ else
 fi
 
 bash "${ROOT}/scripts/release-validate-updater-manifest.sh" --file "${CURRENT_LOCAL}" --existing
-# A restored release must install; a withdrawal re-marks the current bytes.
-if [[ -n "${LAST_GOOD_VERSION}" ]]; then
-  bash "${ROOT}/scripts/release-validate-updater-manifest.sh" \
-    --file "${RELEASE_LOCAL}" --version "${LAST_GOOD_VERSION}"
-else
-  bash "${ROOT}/scripts/release-validate-updater-manifest.sh" \
-    --file "${RELEASE_LOCAL}" --version "${BAD_VERSION}" --existing
-fi
+bash "${ROOT}/scripts/release-validate-updater-manifest.sh" \
+  --file "${RELEASE_LOCAL}" --version "${LAST_GOOD_VERSION:-${BAD_VERSION}}"
 for manifest in "${CURRENT_LOCAL}" "${RELEASE_LOCAL}"; do
   [[ "$(jq -r '.update_keys.signing_generation' "${manifest}")" == "${GENERATION}" ]] || {
     echo "error: halt cannot point a generation at a release signed by another key" >&2; exit 1;

@@ -15435,7 +15435,7 @@ source_files:
     scripts/release-assemble-updater-manifest.py: 98
     scripts/release-collect-public-artifacts.py: 63
     scripts/release-halt-plan.py: 115
-    scripts/release-halt.sh: 182
+    scripts/release-halt.sh: 177
     scripts/release-metadata.py: 50
     scripts/release-preflight.sh: 156
     scripts/release-r2-immutable-put.sh: 101
@@ -21914,7 +21914,7 @@ test_files:
     lycaon/test/contract/runner/platform_floor_contract_test.go: 119
     lycaon/test/contract/runner/registry_testmain_test.go: 10
     lycaon/test/contract/runner/release_blast_radius_contract_test.go: 424
-    lycaon/test/contract/runner/release_channel_invariants_test.go: 480
+    lycaon/test/contract/runner/release_channel_invariants_test.go: 486
     lycaon/test/contract/runner/repo_snapshot_lock_contract_test.go: 351
     lycaon/test/contract/runner/retired_artifact_paths_contract_test.go: 211
     lycaon/test/contract/runner/scanner_suite_scope_contract_test.go: 128

@@ -176,6 +176,13 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	validate(misboundPath, false)
 	// A live pointer is read to be replaced, so a mis-bound one must not block that.
 	validate(misboundPath, true, "--existing")
+	// A withdrawal publishes nothing to install, so halting a mis-bound release works.
+	served["withdrawn"] = true
+	withdrawn, err := json.Marshal(served)
+	contractcheck.FailErr(t, "encode withdrawn manifest", err)
+	withdrawnPath := filepath.Join(dir, "withdrawn.json")
+	contractcheck.FailErr(t, "write withdrawn manifest", os.WriteFile(withdrawnPath, withdrawn, 0o644))
+	validate(withdrawnPath, true)
 	// The bundle version omits the prerelease; the signature must carry the release version.
 	writeSignedFragment("darwin-aarch64", "app.tar.gz", "1.0.0")
 	run(false)
