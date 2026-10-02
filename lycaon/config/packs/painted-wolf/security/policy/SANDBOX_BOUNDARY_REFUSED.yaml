@@ -30,10 +30,9 @@ copy:
   cause: The observed destination was not allowed by the invocation's egress policy.
   why: This refusal identifies a connection; it does not determine the outcome of the entire command.
   fix: >-
-    For offline verification, fix missing mocks or vendoring. For package installs,
-    use recognized package managers. The broker already reached this destination's
-    decision, so direct_ip or host_execution would only route around it. If the
-    destination is required, name it to the person.
+    For package installs, use recognized package managers. The broker already
+    reached this destination's decision, so direct_ip or host_execution would
+    only route around it. If the destination is required, name it to the person.
   instead: Use the observed destination when requesting the required access
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
