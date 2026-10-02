@@ -33,7 +33,7 @@ pub(crate) const RESTART_POLICY: RestartPolicy = RestartPolicy {
 /// An engine that closed its output gets this long to finish exiting.
 const REAP_GRACE: Duration = Duration::from_secs(2);
 
-/// What the shell knows about the engine it owns.
+/// What the shell knows about the engine it supervises.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum EngineState {

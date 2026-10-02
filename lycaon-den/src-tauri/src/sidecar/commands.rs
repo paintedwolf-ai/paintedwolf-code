@@ -81,7 +81,7 @@ pub async fn ipc_sidecar_info(
         .map_err(|e| e.to_string())
 }
 
-/// The engine this shell owns, for windows that open after a change was published.
+/// The engine this shell runs, for windows that open after a change was published.
 #[tauri::command(rename = "engine_state")]
 pub fn ipc_engine_state(state: tauri::State<'_, SidecarState>) -> EngineState {
     state.engine_state()
