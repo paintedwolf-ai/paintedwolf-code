@@ -1,6 +1,6 @@
 {
   "name": "lycaon-den",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "private": true,
   "description": "Painted Wolf Code — desktop app",
   "type": "module",
