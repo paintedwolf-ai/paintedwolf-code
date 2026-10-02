@@ -45,8 +45,6 @@ type EgressCommand struct {
 	DeclaredHosts []string
 	// ReducedPackageExecution restricts egress to reviewed registries.
 	ReducedPackageExecution bool
-	// OfflineVerification restricts egress to offline/hermetic operation.
-	OfflineVerification bool
 	// UserRule is the matching ask-rule citation.
 	UserRule *EgressUserRule
 }
@@ -611,10 +609,6 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 	// Package execution denies undeclared destinations.
 	if cmd.ReducedPackageExecution {
 		return cmd.DeclaresHost(ep.Host), true, nil, nil
-	}
-	// Offline verification denies external destinations immediately.
-	if cmd.OfflineVerification {
-		return false, true, nil, nil
 	}
 	// Disabled approvals bypass the remaining ask-only checks.
 	if approvalsDisabled(cmd) {

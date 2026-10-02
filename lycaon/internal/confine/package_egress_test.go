@@ -26,21 +26,3 @@ func TestReducedPackageExecutionAllowsOnlyReviewedRegistryHosts(t *testing.T) {
 		t.Fatalf("unreviewed host decision = allow %v decided %v", allow, decided)
 	}
 }
-
-func TestOfflineVerificationDeniesExternalEndpointsImmediately(t *testing.T) {
-	SetEgressRuleEvaluator(nil)
-	SetEgressPosture(PostureObserve)
-	t.Cleanup(func() {
-		SetEgressRuleEvaluator(nil)
-		SetEgressPosture(PostureObserve)
-	})
-	cmd := EgressCommand{
-		SessionID:           "session",
-		OfflineVerification: true,
-	}
-	ep := egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: egressproxy.TransportHTTPConnect}
-	allow, decided, _, _ := egressBroker.ruleOrPosture(t.Context(), cmd, ep, "test")
-	if allow || !decided {
-		t.Fatalf("offline verification decision = allow %v decided %v, want allow=false decided=true", allow, decided)
-	}
-}
