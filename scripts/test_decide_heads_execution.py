@@ -23,7 +23,9 @@ class DecisionReleaseTests(unittest.TestCase):
         self.destination.mkdir(parents=True)
         (self.destination / "prior-release").write_text("preserve on failure")
         self.manifest = self.root / "release.json"
-        self.release = {"version": 1, "release": "test", "backbone": {"model": "test-model"}, "heads": {}, "preload": {"catalog_revision": "test-corpus", "encoding": "joint", "max_len": 1024, "head_tokens": 512, "options": {"command": "Run a command"}}}
+        source = {"heads": {"repo": "o/heads", "tag": "test", "revision": "a" * 40}, "dataset": {"repo": "o/data", "tag": "d1", "revision": "b" * 40},
+                  "factory": {"repo": "o/bialy", "tag": "heads-test", "commit": "c" * 40}}
+        self.release = {"version": 1, "release": "test", "source": source, "backbone": {"model": "test-model"}, "heads": {}, "preload": {"catalog_revision": "test-corpus", "encoding": "joint", "max_len": 1024, "head_tokens": 512, "options": {"command": "Run a command"}}}
         for name in sorted(staging.REQUIRED):
             header = json.dumps({"__metadata__": {"format": "pw-decide-head/1", "model": "test-model", "label": name, "corpus": "test-corpus", "max_len": "1024", "head_max_len": "512"}}).encode()
             data = struct.pack("<Q", len(header)) + header
@@ -39,6 +41,25 @@ class DecisionReleaseTests(unittest.TestCase):
         self.assertFalse((self.destination / "prior-release").exists())
         self.assertEqual(json.loads((self.destination / "release.json").read_text()), self.release)
         self.assertEqual(len(list(self.destination.glob("*.safetensors"))), 3)
+
+    def test_a_release_must_name_its_source(self):
+        del self.release["source"]["factory"]["commit"]
+        self.release["source"]["dataset"].pop("tag")
+        self.save()
+        with self.assertRaisesRegex(ValueError, "source.dataset needs repo and tag; source.factory.commit must be a full 40-character commit"):
+            staging.stage(self.manifest, self.source, self.destination)
+        self.assertTrue((self.destination / "prior-release").exists())
+
+    def test_the_downloaded_heads_must_be_the_named_release(self):
+        self.release["source"]["heads"]["tag"] = "other"
+        self.save()
+        with self.assertRaisesRegex(ValueError, "source.heads.tag must be the release"):
+            staging.stage(self.manifest, self.source, self.destination)
+
+    def test_the_shipped_manifest_names_its_source(self):
+        shipped = json.loads((Path(__file__).resolve().parents[1] / "lycaon/config/packs/painted-wolf/platform/host/decision-release.json").read_text())
+        self.assertEqual(staging.source_errors(shipped["source"]), [])
+        self.assertEqual(shipped["source"]["heads"]["tag"], shipped["release"])
 
     def test_partial_cache_is_rejected_without_replacing_stage(self):
         (self.source / "unit-rank.safetensors").unlink()

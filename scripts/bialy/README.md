@@ -74,6 +74,18 @@ app resolves the checkpoint `stage-engine.sh` bundles under
 `LYCAON_DECIDE_DISABLED=1` switches the engine off; every decision then falls
 back as the table above says.
 
+Which heads a build ships, and where they came from, is one file:
+`lycaon/config/packs/painted-wolf/platform/host/decision-release.json`. Its
+`release` names the heads release, `heads` pins each file by sha256, and
+`source` pins the rest of the chain: the Hugging Face revisions of the heads
+and of the dataset they trained on (`source.heads`, `source.dataset`, each a
+repository, tag, and commit), and the Bialy commit and tag that built them
+(`source.factory`). CI downloads the heads from `source.heads` and staging
+refuses a manifest whose source is incomplete. A Bialy release records the
+Painted Wolf Code commit it trained against in turn, and Bialy's
+`docs/releases.md` lists every release with the Painted Wolf Code versions
+that ship it.
+
 On Apple silicon the engine runs the model on Apple's MLX (`--device mlx`,
 what `auto` picks there): candle's Metal backend costs about five times more
 per row, and the MLX port in `native/src/mlx.rs` mirrors the candle port op
