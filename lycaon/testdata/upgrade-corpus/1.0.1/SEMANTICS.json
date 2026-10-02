@@ -1,0 +1,75 @@
+{
+  "artifact": {
+    "id": "99b65c0a-6090-4ac2-a305-a0237024998c",
+    "mime": "image/png",
+    "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
+  },
+  "grant": {
+    "category": "host",
+    "expires_at": "2099-01-01T00:00:00Z",
+    "granted_at": "2026-10-02T18:03:16.46195Z",
+    "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
+    "pattern": "*.example.com",
+    "scope": "device"
+  },
+  "messages": [
+    {
+      "content": "",
+      "id": "8d188825-90ea-41a7-a11c-b9511daa9ebe",
+      "role": "tool"
+    },
+    {
+      "content": "",
+      "id": "90b86b56-6438-409e-b89e-d0aa81f3f526",
+      "role": "assistant"
+    },
+    {
+      "content": "Corpus seed turn complete.",
+      "id": "b82fc752-7b3e-498b-9dd4-7ea7ce827490",
+      "role": "assistant"
+    },
+    {
+      "content": "corpus seed",
+      "id": "f3b75d8d-13f0-416e-acde-8194b2092921",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "id": "fc59234e-c268-5129-a7b0-80290e036cd3",
+      "role": "system"
+    }
+  ],
+  "project_id": "a5d349ea-d9f1-479e-80a2-817f84558ef0",
+  "trust_read": {
+    "review": {
+      "changes": [
+        {
+          "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
+          "before": "format: 1\ndisabled: []\n",
+          "id": "ca871b1d-08d1-5629-8418-739841170636",
+          "kind": "modified",
+          "path": ".paintedwolf/extensions.yaml",
+          "root_id": "25bf2d8b-f92a-4862-87ae-d59755392ff2",
+          "root_label": "seed-project",
+          "surface_ids": [
+            "extension_config",
+            "extension_suggestions"
+          ]
+        }
+      ],
+      "id": "ec2f1d45-7913-5abf-8f84-8e7821284327",
+      "project_id": "a5d349ea-d9f1-479e-80a2-817f84558ef0"
+    },
+    "surfaces": {
+      "agents_md": true,
+      "extension_config": true,
+      "extension_suggestions": true,
+      "project_mcp": true,
+      "project_settings": true,
+      "prompt_overrides": true,
+      "scan_config": true,
+      "skills": true
+    },
+    "unread_count": 0
+  }
+}
