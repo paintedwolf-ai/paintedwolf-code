@@ -2682,7 +2682,7 @@ name = "painted-wolf-code"
 version = "1.0.1"
 dependencies = [
  "arboard",
- "base64 0.22.1",
+ "base64 0.23.1",
  "block2",
  "ed25519-dalek",
  "futures-util",
