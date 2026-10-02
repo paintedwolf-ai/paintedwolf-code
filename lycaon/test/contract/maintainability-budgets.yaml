@@ -38,10 +38,10 @@ go_receiver_lines:
     lycaon/internal/advisory/severity/severity.indexResolver: 21
     lycaon/internal/agentpresence/agentpresence.Tracker: 687
     lycaon/internal/agentpresence/agentpresence.chatPresence: 28
-    lycaon/internal/api/api.Server: 3424
+    lycaon/internal/api/api.Server: 3426
     lycaon/internal/api/api.projectReplaceStore: 16
     lycaon/internal/api/api.searchPageCache: 36
-    lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 1140
+    lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 1179
     lycaon/internal/api/extensionadmin/extensionadmin.Handler: 1605
     lycaon/internal/api/extensionadmin/extensionadmin.extensionEmitter: 7
     lycaon/internal/api/extensionadmin/extensionadmin.extensionPublisher: 6
@@ -54,7 +54,7 @@ go_receiver_lines:
     lycaon/internal/api/mcpadmin/mcpadmin.Handler: 254
     lycaon/internal/api/modeladmin/modeladmin.Handler: 410
     lycaon/internal/api/modeladmin/modeladmin.providerFields: 7
-    lycaon/internal/api/projectadmin/projectadmin.Handler: 1600
+    lycaon/internal/api/projectadmin/projectadmin.Handler: 1627
     lycaon/internal/api/promptadmin/promptadmin.Handler: 1090
     lycaon/internal/api/researchadmin/researchadmin.Handler: 224
     lycaon/internal/api/scanadmin/scanadmin.Handler: 985
@@ -96,6 +96,7 @@ go_receiver_lines:
     lycaon/internal/app/app.editorDocumentsAdapter: 104
     lycaon/internal/app/app.egressDetectionAdapter: 33
     lycaon/internal/app/app.gitStateReader: 25
+    lycaon/internal/app/app.heldReleaseRecorder: 12
     lycaon/internal/app/app.nudgeFormatter: 3
     lycaon/internal/app/app.oarHostEventPublisher: 8
     lycaon/internal/app/app.outboxSourceFeed: 16
@@ -103,7 +104,7 @@ go_receiver_lines:
     lycaon/internal/app/app.presenceChats: 39
     lycaon/internal/app/app.presenceDrafts: 66
     lycaon/internal/app/app.runtimeResources: 172
-    lycaon/internal/app/app.serveBuilder: 4109
+    lycaon/internal/app/app.serveBuilder: 4128
     lycaon/internal/app/app.sessionRootResolver: 3
     lycaon/internal/app/app.socketCapabilityAdapter: 30
     lycaon/internal/app/app.untrustedIngestionStore: 7
@@ -207,6 +208,7 @@ go_receiver_lines:
     lycaon/internal/browser/renderhandle/renderhandle.memoryStore: 133
     lycaon/internal/browserengine/browserengine.RejectError: 9
     lycaon/internal/bundleverify/bundleverify.Report: 18
+    lycaon/internal/bundleverify/bundleverify.entitlementContract: 20
     lycaon/internal/bundleverify/bundleverify.execRunner: 14
     lycaon/internal/bytebound/bytebound.Materialization: 1
     lycaon/internal/bytebound/bytebound.Prompt: 1
@@ -244,8 +246,8 @@ go_receiver_lines:
     lycaon/internal/confine/confine.EgressCommand: 12
     lycaon/internal/confine/confine.ExecDeniedError: 6
     lycaon/internal/confine/confine.FilesystemRules: 109
-    lycaon/internal/confine/confine.FloorLayer: 14
-    lycaon/internal/confine/confine.FloorRecovery: 11
+    lycaon/internal/confine/confine.FloorLayer: 16
+    lycaon/internal/confine/confine.FloorRecovery: 13
     lycaon/internal/confine/confine.NetworkMode: 12
     lycaon/internal/confine/confine.Observation: 19
     lycaon/internal/confine/confine.Report: 29
@@ -341,7 +343,7 @@ go_receiver_lines:
     lycaon/internal/credentialstore/credentialstore.dataProtectionItems: 32
     lycaon/internal/credentialstore/credentialstore.developmentIdentityProvider: 36
     lycaon/internal/credentialstore/credentialstore.keychainIdentityProvider: 39
-    lycaon/internal/credentialstore/credentialstore.keychainStatus: 6
+    lycaon/internal/credentialstore/credentialstore.keychainStatus: 11
     lycaon/internal/credentialstore/credentialstore.namespaceBackend: 39
     lycaon/internal/credentialstore/credentialstore.passphraseIdentityProvider: 79
     lycaon/internal/credentialstore/credentialstore.vaultFile: 120
@@ -356,7 +358,7 @@ go_receiver_lines:
     lycaon/internal/debugretention/debugretention.Config: 15
     lycaon/internal/debugretention/debugretention.File: 38
     lycaon/internal/decide/bialy/bialy.Client: 155
-    lycaon/internal/decide/bialy/bialy.Config: 37
+    lycaon/internal/decide/bialy/bialy.Config: 33
     lycaon/internal/decide/bialy/bialy.Model: 6
     lycaon/internal/decide/bialy/bialy.process: 94
     lycaon/internal/decide/bialy/bialy.stderrLogger: 8
@@ -413,8 +415,11 @@ go_receiver_lines:
     lycaon/internal/detectionpack/detectionpack.nodeSelection: 7
     lycaon/internal/detectionpack/detectionpack.selection: 9
     lycaon/internal/diagnostics/diagnostics.Redactor: 13
-    lycaon/internal/documentcore/documentcore.Engine: 59
+    lycaon/internal/documentcore/documentcore.Engine: 38
+    lycaon/internal/documentcore/documentcore.ExitError: 7
     lycaon/internal/documentcore/documentcore.Rejected: 1
+    lycaon/internal/documentcore/documentcore.process: 87
+    lycaon/internal/documentcore/documentcore.tail: 14
     lycaon/internal/editorconfig/editorconfig.Properties: 72
     lycaon/internal/editordoc/editordoc.ClientLiveness: 47
     lycaon/internal/editordoc/editordoc.Document: 11
@@ -623,16 +628,17 @@ go_receiver_lines:
     lycaon/internal/hintregistry/hintregistry.policyRegistryCache: 22
     lycaon/internal/historyretention/historyretention.Service: 654
     lycaon/internal/hitl/hitl.ApprovalAuthorityDelta: 177
-    lycaon/internal/hitl/hitl.ApprovalGrant: 25
+    lycaon/internal/hitl/hitl.ApprovalGrant: 32
     lycaon/internal/hitl/hitl.ApprovalOption: 104
-    lycaon/internal/hitl/hitl.ApprovalPlan: 288
-    lycaon/internal/hitl/hitl.ApprovalResolver: 6
+    lycaon/internal/hitl/hitl.ApprovalPlan: 348
+    lycaon/internal/hitl/hitl.ApprovalResolver: 9
     lycaon/internal/hitl/hitl.ApprovalResult: 8
     lycaon/internal/hitl/hitl.ChatGrant: 22
     lycaon/internal/hitl/hitl.Contained: 49
     lycaon/internal/hitl/hitl.ContentApplyPlan: 96
     lycaon/internal/hitl/hitl.DirectIPLease: 13
-    lycaon/internal/hitl/hitl.Manager: 810
+    lycaon/internal/hitl/hitl.HeldRelease: 38
+    lycaon/internal/hitl/hitl.Manager: 932
     lycaon/internal/hitl/hitl.PreparedApproval: 1
     lycaon/internal/hitl/hitl.ProposedAction: 9
     lycaon/internal/hitl/hitl.SQLStore: 495
@@ -852,7 +858,7 @@ go_receiver_lines:
     lycaon/internal/mcp/mcp.OverlayUnknownFieldError: 3
     lycaon/internal/mcp/mcp.Recipe: 13
     lycaon/internal/mcp/mcp.RecipeCatalog: 41
-    lycaon/internal/mcp/mcp.RegistryImpl: 1478
+    lycaon/internal/mcp/mcp.RegistryImpl: 1480
     lycaon/internal/mcp/mcp.ResourceGeneration: 23
     lycaon/internal/mcp/mcp.SDKConnector: 66
     lycaon/internal/mcp/mcp.authorizationError: 6
@@ -971,6 +977,8 @@ go_receiver_lines:
     lycaon/internal/preflight/preflight.osVersionProbe: 25
     lycaon/internal/preflight/preflight.providerConfiguredProbe: 17
     lycaon/internal/preflight/preflight.scannerEngineProbe: 19
+    lycaon/internal/presence/presence.Broker: 128
+    lycaon/internal/presence/presence.ReleaseLedger: 56
     lycaon/internal/pricing/pricing.Rate: 39
     lycaon/internal/pricing/pricing.Registry: 95
     lycaon/internal/pricing/pricing.aiPricingSource: 38
@@ -1249,12 +1257,16 @@ go_receiver_lines:
     lycaon/internal/search/search.substringMatcher: 14
     lycaon/internal/search/search.symbolNameAdmitted: 1
     lycaon/internal/search/search.wildcardMatcher: 21
+    lycaon/internal/secretcap/secretcap.Custody: 1
+    lycaon/internal/secretcap/secretcap.CustodySummary: 7
+    lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 3
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
-    lycaon/internal/secretcap/secretcap.Resolution: 319
-    lycaon/internal/secretcap/secretcap.Service: 1524
+    lycaon/internal/secretcap/secretcap.Resolution: 408
+    lycaon/internal/secretcap/secretcap.Service: 1533
     lycaon/internal/secretcap/secretcap.TokenJar: 33
     lycaon/internal/secretcap/secretcap.ValidationError: 2
-    lycaon/internal/secretcap/secretcap.revealBroker: 42
+    lycaon/internal/secretcap/secretcap.protectedValue: 3
+    lycaon/internal/secretcap/secretcap.vaultValues: 32
     lycaon/internal/secretharvest/secretharvest.Runtime: 216
     lycaon/internal/secretharvest/secretharvest.Value: 1
     lycaon/internal/secretmatch/secretmatch.Alert: 10
@@ -1367,12 +1379,12 @@ go_receiver_lines:
     lycaon/internal/session/workercompletion/workercompletion.WorkerCompletionReport: 43
     lycaon/internal/session/workercompletion/workercompletion.WorkerSummaryEvalResult: 12
     lycaon/internal/session/workercompletion/workercompletion.citationGroundingAudit: 210
-    lycaon/internal/settings/settings.ApprovalGrant: 19
+    lycaon/internal/settings/settings.ApprovalGrant: 20
     lycaon/internal/settings/settings.ApprovalStore: 425
     lycaon/internal/settings/settings.BypassApprovalGate: 30
-    lycaon/internal/settings/settings.DeferredGate: 131
+    lycaon/internal/settings/settings.DeferredGate: 134
     lycaon/internal/settings/settings.FileSummariesStore: 24
-    lycaon/internal/settings/settings.GateBuilder: 46
+    lycaon/internal/settings/settings.GateBuilder: 49
     lycaon/internal/settings/settings.LimitsStore: 77
     lycaon/internal/settings/settings.PowerStore: 24
     lycaon/internal/settings/settings.PricingHost: 277
@@ -1381,7 +1393,7 @@ go_receiver_lines:
     lycaon/internal/settings/settings.ProjectSurfaceGate: 51
     lycaon/internal/settings/settings.ReviewConfig: 15
     lycaon/internal/settings/settings.ReviewStore: 75
-    lycaon/internal/settings/settings.RuleApprovalGate: 643
+    lycaon/internal/settings/settings.RuleApprovalGate: 676
     lycaon/internal/settings/settings.SecurityScannersStore: 87
     lycaon/internal/settings/settings.SessionLimits: 56
     lycaon/internal/settings/settings.Sources: 9
@@ -1565,7 +1577,7 @@ go_receiver_lines:
     lycaon/internal/toolcontract/toolcontract.TurnOrder: 10
     lycaon/internal/toolhost/toolhost.ContentApplyService: 88
     lycaon/internal/toolhost/toolhost.GroundingService: 54
-    lycaon/internal/toolhost/toolhost.Runtime: 385
+    lycaon/internal/toolhost/toolhost.Runtime: 390
     lycaon/internal/toolhost/toolhost.approvalRationaleAttacher: 89
     lycaon/internal/toolhost/toolhost.catalogOutcomeRenderer: 3
     lycaon/internal/toolhost/toolhost.gateRepeatLedgerAdapter: 18
@@ -1671,7 +1683,7 @@ go_receiver_lines:
     lycaon/internal/tools/tools.ApprovalPolicyEngine: 50
     lycaon/internal/tools/tools.BlockPlane: 109
     lycaon/internal/tools/tools.DefaultRegistry: 128
-    lycaon/internal/tools/tools.DefaultToolExecutor: 3557
+    lycaon/internal/tools/tools.DefaultToolExecutor: 3601
     lycaon/internal/tools/tools.ExecutorRegistry: 27
     lycaon/internal/tools/tools.GuidanceRejectPolicy: 26
     lycaon/internal/tools/tools.MCPToolPlan: 8
@@ -1921,7 +1933,7 @@ go_receiver_methods:
     lycaon/internal/api/api.Server: 142
     lycaon/internal/api/api.projectReplaceStore: 1
     lycaon/internal/api/api.searchPageCache: 3
-    lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 34
+    lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 35
     lycaon/internal/api/extensionadmin/extensionadmin.Handler: 69
     lycaon/internal/api/extensionadmin/extensionadmin.extensionEmitter: 1
     lycaon/internal/api/extensionadmin/extensionadmin.extensionPublisher: 1
@@ -1934,7 +1946,7 @@ go_receiver_methods:
     lycaon/internal/api/mcpadmin/mcpadmin.Handler: 20
     lycaon/internal/api/modeladmin/modeladmin.Handler: 17
     lycaon/internal/api/modeladmin/modeladmin.providerFields: 2
-    lycaon/internal/api/projectadmin/projectadmin.Handler: 69
+    lycaon/internal/api/projectadmin/projectadmin.Handler: 70
     lycaon/internal/api/promptadmin/promptadmin.Handler: 38
     lycaon/internal/api/researchadmin/researchadmin.Handler: 12
     lycaon/internal/api/scanadmin/scanadmin.Handler: 36
@@ -1976,6 +1988,7 @@ go_receiver_methods:
     lycaon/internal/app/app.editorDocumentsAdapter: 9
     lycaon/internal/app/app.egressDetectionAdapter: 2
     lycaon/internal/app/app.gitStateReader: 2
+    lycaon/internal/app/app.heldReleaseRecorder: 1
     lycaon/internal/app/app.nudgeFormatter: 1
     lycaon/internal/app/app.oarHostEventPublisher: 1
     lycaon/internal/app/app.outboxSourceFeed: 4
@@ -1983,7 +1996,7 @@ go_receiver_methods:
     lycaon/internal/app/app.presenceChats: 1
     lycaon/internal/app/app.presenceDrafts: 2
     lycaon/internal/app/app.runtimeResources: 8
-    lycaon/internal/app/app.serveBuilder: 120
+    lycaon/internal/app/app.serveBuilder: 121
     lycaon/internal/app/app.sessionRootResolver: 1
     lycaon/internal/app/app.socketCapabilityAdapter: 5
     lycaon/internal/app/app.untrustedIngestionStore: 1
@@ -2087,6 +2100,7 @@ go_receiver_methods:
     lycaon/internal/browser/renderhandle/renderhandle.memoryStore: 7
     lycaon/internal/browserengine/browserengine.RejectError: 1
     lycaon/internal/bundleverify/bundleverify.Report: 2
+    lycaon/internal/bundleverify/bundleverify.entitlementContract: 1
     lycaon/internal/bundleverify/bundleverify.execRunner: 1
     lycaon/internal/bytebound/bytebound.Materialization: 1
     lycaon/internal/bytebound/bytebound.Prompt: 1
@@ -2293,8 +2307,11 @@ go_receiver_methods:
     lycaon/internal/detectionpack/detectionpack.nodeSelection: 1
     lycaon/internal/detectionpack/detectionpack.selection: 1
     lycaon/internal/diagnostics/diagnostics.Redactor: 1
-    lycaon/internal/documentcore/documentcore.Engine: 4
+    lycaon/internal/documentcore/documentcore.Engine: 3
+    lycaon/internal/documentcore/documentcore.ExitError: 2
     lycaon/internal/documentcore/documentcore.Rejected: 1
+    lycaon/internal/documentcore/documentcore.process: 6
+    lycaon/internal/documentcore/documentcore.tail: 2
     lycaon/internal/editorconfig/editorconfig.Properties: 3
     lycaon/internal/editordoc/editordoc.ClientLiveness: 4
     lycaon/internal/editordoc/editordoc.Document: 2
@@ -2503,16 +2520,17 @@ go_receiver_methods:
     lycaon/internal/hintregistry/hintregistry.policyRegistryCache: 2
     lycaon/internal/historyretention/historyretention.Service: 19
     lycaon/internal/hitl/hitl.ApprovalAuthorityDelta: 6
-    lycaon/internal/hitl/hitl.ApprovalGrant: 4
+    lycaon/internal/hitl/hitl.ApprovalGrant: 5
     lycaon/internal/hitl/hitl.ApprovalOption: 3
-    lycaon/internal/hitl/hitl.ApprovalPlan: 8
+    lycaon/internal/hitl/hitl.ApprovalPlan: 11
     lycaon/internal/hitl/hitl.ApprovalResolver: 1
     lycaon/internal/hitl/hitl.ApprovalResult: 3
     lycaon/internal/hitl/hitl.ChatGrant: 1
     lycaon/internal/hitl/hitl.Contained: 3
     lycaon/internal/hitl/hitl.ContentApplyPlan: 4
     lycaon/internal/hitl/hitl.DirectIPLease: 2
-    lycaon/internal/hitl/hitl.Manager: 40
+    lycaon/internal/hitl/hitl.HeldRelease: 5
+    lycaon/internal/hitl/hitl.Manager: 46
     lycaon/internal/hitl/hitl.PreparedApproval: 1
     lycaon/internal/hitl/hitl.ProposedAction: 2
     lycaon/internal/hitl/hitl.SQLStore: 23
@@ -2851,6 +2869,8 @@ go_receiver_methods:
     lycaon/internal/preflight/preflight.osVersionProbe: 2
     lycaon/internal/preflight/preflight.providerConfiguredProbe: 2
     lycaon/internal/preflight/preflight.scannerEngineProbe: 2
+    lycaon/internal/presence/presence.Broker: 6
+    lycaon/internal/presence/presence.ReleaseLedger: 4
     lycaon/internal/pricing/pricing.Rate: 2
     lycaon/internal/pricing/pricing.Registry: 7
     lycaon/internal/pricing/pricing.aiPricingSource: 5
@@ -3129,12 +3149,16 @@ go_receiver_methods:
     lycaon/internal/search/search.substringMatcher: 1
     lycaon/internal/search/search.symbolNameAdmitted: 1
     lycaon/internal/search/search.wildcardMatcher: 2
+    lycaon/internal/secretcap/secretcap.Custody: 1
+    lycaon/internal/secretcap/secretcap.CustodySummary: 1
+    lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 1
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
-    lycaon/internal/secretcap/secretcap.Resolution: 25
-    lycaon/internal/secretcap/secretcap.Service: 69
+    lycaon/internal/secretcap/secretcap.Resolution: 30
+    lycaon/internal/secretcap/secretcap.Service: 72
     lycaon/internal/secretcap/secretcap.TokenJar: 4
     lycaon/internal/secretcap/secretcap.ValidationError: 2
-    lycaon/internal/secretcap/secretcap.revealBroker: 3
+    lycaon/internal/secretcap/secretcap.protectedValue: 1
+    lycaon/internal/secretcap/secretcap.vaultValues: 4
     lycaon/internal/secretharvest/secretharvest.Runtime: 12
     lycaon/internal/secretharvest/secretharvest.Value: 1
     lycaon/internal/secretmatch/secretmatch.Alert: 3
@@ -3252,7 +3276,7 @@ go_receiver_methods:
     lycaon/internal/settings/settings.BypassApprovalGate: 18
     lycaon/internal/settings/settings.DeferredGate: 21
     lycaon/internal/settings/settings.FileSummariesStore: 2
-    lycaon/internal/settings/settings.GateBuilder: 5
+    lycaon/internal/settings/settings.GateBuilder: 6
     lycaon/internal/settings/settings.LimitsStore: 6
     lycaon/internal/settings/settings.PowerStore: 2
     lycaon/internal/settings/settings.PricingHost: 17
@@ -3261,7 +3285,7 @@ go_receiver_methods:
     lycaon/internal/settings/settings.ProjectSurfaceGate: 4
     lycaon/internal/settings/settings.ReviewConfig: 1
     lycaon/internal/settings/settings.ReviewStore: 5
-    lycaon/internal/settings/settings.RuleApprovalGate: 35
+    lycaon/internal/settings/settings.RuleApprovalGate: 37
     lycaon/internal/settings/settings.SecurityScannersStore: 7
     lycaon/internal/settings/settings.SessionLimits: 10
     lycaon/internal/settings/settings.Sources: 1
@@ -3445,7 +3469,7 @@ go_receiver_methods:
     lycaon/internal/toolcontract/toolcontract.TurnOrder: 1
     lycaon/internal/toolhost/toolhost.ContentApplyService: 2
     lycaon/internal/toolhost/toolhost.GroundingService: 2
-    lycaon/internal/toolhost/toolhost.Runtime: 42
+    lycaon/internal/toolhost/toolhost.Runtime: 43
     lycaon/internal/toolhost/toolhost.approvalRationaleAttacher: 4
     lycaon/internal/toolhost/toolhost.catalogOutcomeRenderer: 1
     lycaon/internal/toolhost/toolhost.gateRepeatLedgerAdapter: 2
@@ -3551,7 +3575,7 @@ go_receiver_methods:
     lycaon/internal/tools/tools.ApprovalPolicyEngine: 3
     lycaon/internal/tools/tools.BlockPlane: 4
     lycaon/internal/tools/tools.DefaultRegistry: 9
-    lycaon/internal/tools/tools.DefaultToolExecutor: 143
+    lycaon/internal/tools/tools.DefaultToolExecutor: 145
     lycaon/internal/tools/tools.ExecutorRegistry: 5
     lycaon/internal/tools/tools.GuidanceRejectPolicy: 2
     lycaon/internal/tools/tools.MCPToolPlan: 2
@@ -4074,6 +4098,7 @@ go_struct_fields:
     lycaon/internal/app/app.editorDocumentsAdapter: 1
     lycaon/internal/app/app.egressDetectionAdapter: 1
     lycaon/internal/app/app.gitStateReader: 1
+    lycaon/internal/app/app.heldReleaseRecorder: 0
     lycaon/internal/app/app.nudgeFormatter: 1
     lycaon/internal/app/app.oarHostEventPublisher: 1
     lycaon/internal/app/app.outboxSourceFeed: 2
@@ -4081,7 +4106,7 @@ go_struct_fields:
     lycaon/internal/app/app.presenceChats: 4
     lycaon/internal/app/app.presenceDrafts: 3
     lycaon/internal/app/app.runtimeResources: 6
-    lycaon/internal/app/app.serveBuilder: 146
+    lycaon/internal/app/app.serveBuilder: 148
     lycaon/internal/app/app.sessionRootResolver: 1
     lycaon/internal/app/app.socketCapabilityAdapter: 1
     lycaon/internal/app/app.untrustedIngestionStore: 1
@@ -4369,6 +4394,7 @@ go_struct_fields:
     lycaon/internal/bundleverify/bundleverify.Options: 4
     lycaon/internal/bundleverify/bundleverify.Report: 5
     lycaon/internal/bundleverify/bundleverify.SliceFacts: 3
+    lycaon/internal/bundleverify/bundleverify.entitlementContract: 2
     lycaon/internal/bundleverify/bundleverify.execRunner: 0
     lycaon/internal/call/call.ActiveReservation: 2
     lycaon/internal/call/call.CallInitRequest: 3
@@ -4892,12 +4918,16 @@ go_struct_fields:
     lycaon/internal/documentcore/documentcore.AnchoredEdit: 4
     lycaon/internal/documentcore/documentcore.AuthorshipSpan: 4
     lycaon/internal/documentcore/documentcore.Edit: 3
-    lycaon/internal/documentcore/documentcore.Engine: 3
+    lycaon/internal/documentcore/documentcore.Engine: 2
+    lycaon/internal/documentcore/documentcore.ExitError: 2
     lycaon/internal/documentcore/documentcore.IdentityRange: 3
     lycaon/internal/documentcore/documentcore.LineChange: 5
     lycaon/internal/documentcore/documentcore.Rejected: 1
     lycaon/internal/documentcore/documentcore.Request: 15
     lycaon/internal/documentcore/documentcore.Snapshot: 12
+    lycaon/internal/documentcore/documentcore.Verification: 2
+    lycaon/internal/documentcore/documentcore.process: 9
+    lycaon/internal/documentcore/documentcore.tail: 3
     lycaon/internal/editorconfig/editorconfig.Change: 2
     lycaon/internal/editorconfig/editorconfig.File: 3
     lycaon/internal/editorconfig/editorconfig.Properties: 8
@@ -5274,7 +5304,7 @@ go_struct_fields:
     lycaon/internal/gate/gate.PackageExecution: 3
     lycaon/internal/gate/gate.PackageIdentity: 7
     lycaon/internal/gate/gate.Reuse: 3
-    lycaon/internal/gate/gate.SecretHit: 10
+    lycaon/internal/gate/gate.SecretHit: 11
     lycaon/internal/gate/gate.UserRule: 3
     lycaon/internal/gate/gate.definition: 6
     lycaon/internal/git/git.AheadBehind: 4
@@ -5493,14 +5523,14 @@ go_struct_fields:
     lycaon/internal/hitl/hitl.AgentPolicyTarget: 2
     lycaon/internal/hitl/hitl.ApprovalAuthorityDelta: 16
     lycaon/internal/hitl/hitl.ApprovalExplanation: 4
-    lycaon/internal/hitl/hitl.ApprovalGrant: 27
+    lycaon/internal/hitl/hitl.ApprovalGrant: 28
     lycaon/internal/hitl/hitl.ApprovalGrantOffer: 14
     lycaon/internal/hitl/hitl.ApprovalGrantPredicate: 2
     lycaon/internal/hitl/hitl.ApprovalGrantWitness: 3
     lycaon/internal/hitl/hitl.ApprovalOption: 13
-    lycaon/internal/hitl/hitl.ApprovalPlan: 8
+    lycaon/internal/hitl/hitl.ApprovalPlan: 9
     lycaon/internal/hitl/hitl.ApprovalPresentation: 19
-    lycaon/internal/hitl/hitl.ApprovalResolver: 1
+    lycaon/internal/hitl/hitl.ApprovalResolver: 2
     lycaon/internal/hitl/hitl.ApprovalResult: 9
     lycaon/internal/hitl/hitl.ApprovalRuleMatch: 7
     lycaon/internal/hitl/hitl.ApprovalSocketTarget: 2
@@ -5508,6 +5538,7 @@ go_struct_fields:
     lycaon/internal/hitl/hitl.ApprovalTarget: 3
     lycaon/internal/hitl/hitl.AskQuiet: 10
     lycaon/internal/hitl/hitl.AskQuietDelta: 4
+    lycaon/internal/hitl/hitl.AttestedRelease: 6
     lycaon/internal/hitl/hitl.BoundaryPermit: 3
     lycaon/internal/hitl/hitl.ChatGrant: 5
     lycaon/internal/hitl/hitl.CheckpointRequest: 30
@@ -5517,29 +5548,34 @@ go_struct_fields:
     lycaon/internal/hitl/hitl.ContentApplyPlan: 8
     lycaon/internal/hitl/hitl.ContentApplyPlanHunk: 6
     lycaon/internal/hitl/hitl.ContentApplyResolve: 4
-    lycaon/internal/hitl/hitl.DecisionResult: 8
+    lycaon/internal/hitl/hitl.DecisionResult: 9
     lycaon/internal/hitl/hitl.DeclaredEndpoints: 4
     lycaon/internal/hitl/hitl.DetectionMatch: 9
     lycaon/internal/hitl/hitl.DirectIPCapability: 5
     lycaon/internal/hitl/hitl.DirectIPLease: 6
     lycaon/internal/hitl/hitl.FaceContext: 1
     lycaon/internal/hitl/hitl.GrantedPathDelta: 3
-    lycaon/internal/hitl/hitl.Manager: 12
+    lycaon/internal/hitl/hitl.HeldRelease: 3
+    lycaon/internal/hitl/hitl.HeldSecret: 3
+    lycaon/internal/hitl/hitl.Manager: 13
     lycaon/internal/hitl/hitl.PreparedApproval: 2
     lycaon/internal/hitl/hitl.PresentedFact: 4
     lycaon/internal/hitl/hitl.ProposedAction: 32
     lycaon/internal/hitl/hitl.QuietSubject: 4
+    lycaon/internal/hitl/hitl.ReleaseChallenge: 2
+    lycaon/internal/hitl/hitl.ReleaseSubject: 6
     lycaon/internal/hitl/hitl.RepeatContext: 6
     lycaon/internal/hitl/hitl.Resolution: 3
     lycaon/internal/hitl/hitl.SQLStore: 3
     lycaon/internal/hitl/hitl.SecretPermission: 4
-    lycaon/internal/hitl/hitl.SecretScreen: 32
+    lycaon/internal/hitl/hitl.SecretScreen: 33
     lycaon/internal/hitl/hitl.SocketCapability: 2
     lycaon/internal/hitl/hitl.SocketCapabilityTarget: 3
     lycaon/internal/hitl/hitl.StoredCheckpoint: 19
     lycaon/internal/hitl/hitl.TrustDestinationDelta: 3
     lycaon/internal/hitl/hitl.approvalAnswersKey: 0
     lycaon/internal/hitl/hitl.approvalPreparationKey: 0
+    lycaon/internal/hitl/hitl.heldRelease: 3
     lycaon/internal/hitl/hitl.keyedMutex: 2
     lycaon/internal/hitl/hitl.keyedMutexEntry: 2
     lycaon/internal/hitl/hitl.preparedApprovalOperation: 3
@@ -5547,6 +5583,7 @@ go_struct_fields:
     lycaon/internal/hitl/hitl.storedDetection: 9
     lycaon/internal/hitl/hitl.storedDetectionEndpoint: 4
     lycaon/internal/hitl/hitl.storedDetectionSocket: 2
+    lycaon/internal/hitl/hitl.verifiedRelease: 2
     lycaon/internal/hostcmd/hostcmd.BackgroundStartResult: 8
     lycaon/internal/hostcmd/hostcmd.CommandRunningResult: 7
     lycaon/internal/hostcmd/hostcmd.ExecFailure: 2
@@ -5645,6 +5682,8 @@ go_struct_fields:
     lycaon/internal/invocation/invocation.SettlementRefusedError: 3
     lycaon/internal/invocation/invocation.Start: 7
     lycaon/internal/isolation/isolation.Outcome: 2
+    lycaon/internal/jsonfence/jsonfence.Block: 2
+    lycaon/internal/jsonfence/jsonfence.fence: 3
     lycaon/internal/jsonshape/jsonshape.Issue: 6
     lycaon/internal/jsonshape/jsonshape.decoder: 1
     lycaon/internal/jsonshape/jsonshape.field: 2
@@ -6374,6 +6413,18 @@ go_struct_fields:
     lycaon/internal/preflight/preflight.osVersionProbe: 0
     lycaon/internal/preflight/preflight.providerConfiguredProbe: 0
     lycaon/internal/preflight/preflight.scannerEngineProbe: 0
+    lycaon/internal/presence/presence.Attestation: 4
+    lycaon/internal/presence/presence.Broker: 4
+    lycaon/internal/presence/presence.Challenge: 3
+    lycaon/internal/presence/presence.Claim: 5
+    lycaon/internal/presence/presence.Proof: 3
+    lycaon/internal/presence/presence.ReleaseCoverage: 7
+    lycaon/internal/presence/presence.ReleaseLedger: 2
+    lycaon/internal/presence/presence.Verified: 7
+    lycaon/internal/presence/presence.coverageDocument: 11
+    lycaon/internal/presence/presence.ledgerEntry: 2
+    lycaon/internal/presence/presence.payload: 7
+    lycaon/internal/presence/presence.pending: 5
     lycaon/internal/pricing/pricing.PromptTier: 2
     lycaon/internal/pricing/pricing.Rate: 7
     lycaon/internal/pricing/pricing.RateKey: 2
@@ -7133,47 +7184,53 @@ go_struct_fields:
     lycaon/internal/search/search.wildcardMatcher: 0
     lycaon/internal/search/search.workerManifestFinding: 2
     lycaon/internal/secretcap/secretcap.AgentUseDeadline: 1
+    lycaon/internal/secretcap/secretcap.Attestation: 9
     lycaon/internal/secretcap/secretcap.CookieJar: 6
     lycaon/internal/secretcap/secretcap.CookieJarRequest: 5
     lycaon/internal/secretcap/secretcap.CreateSettingsSecretRequest: 7
+    lycaon/internal/secretcap/secretcap.CustodySummary: 2
     lycaon/internal/secretcap/secretcap.GenerateRequest: 10
-    lycaon/internal/secretcap/secretcap.Metadata: 19
+    lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 1
+    lycaon/internal/secretcap/secretcap.HeldValue: 4
+    lycaon/internal/secretcap/secretcap.Metadata: 22
     lycaon/internal/secretcap/secretcap.PutRequest: 14
     lycaon/internal/secretcap/secretcap.PutResult: 2
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
     lycaon/internal/secretcap/secretcap.ReferenceUse: 2
+    lycaon/internal/secretcap/secretcap.Release: 3
+    lycaon/internal/secretcap/secretcap.ReleaseRecord: 9
     lycaon/internal/secretcap/secretcap.ReplaceValueRequest: 3
     lycaon/internal/secretcap/secretcap.Resolution: 10
     lycaon/internal/secretcap/secretcap.ResolveContext: 6
     lycaon/internal/secretcap/secretcap.RevealChallenge: 5
     lycaon/internal/secretcap/secretcap.RevealResult: 4
-    lycaon/internal/secretcap/secretcap.Service: 10
-    lycaon/internal/secretcap/secretcap.TestResolvedValue: 5
+    lycaon/internal/secretcap/secretcap.Service: 11
+    lycaon/internal/secretcap/secretcap.TestResolvedValue: 8
     lycaon/internal/secretcap/secretcap.Token: 3
     lycaon/internal/secretcap/secretcap.TokenJar: 6
     lycaon/internal/secretcap/secretcap.TokenJarRequest: 5
     lycaon/internal/secretcap/secretcap.UpdateRequest: 6
-    lycaon/internal/secretcap/secretcap.Use: 8
+    lycaon/internal/secretcap/secretcap.Use: 10
     lycaon/internal/secretcap/secretcap.UseHistory: 2
+    lycaon/internal/secretcap/secretcap.UseRecipient: 2
     lycaon/internal/secretcap/secretcap.ValidationError: 3
     lycaon/internal/secretcap/secretcap.binding: 2
     lycaon/internal/secretcap/secretcap.deliveryState: 2
     lycaon/internal/secretcap/secretcap.durableEvidence: 2
     lycaon/internal/secretcap/secretcap.durableVersion: 2
-    lycaon/internal/secretcap/secretcap.facts: 9
-    lycaon/internal/secretcap/secretcap.invocationPermission: 2
-    lycaon/internal/secretcap/secretcap.pendingReveal: 3
+    lycaon/internal/secretcap/secretcap.facts: 11
+    lycaon/internal/secretcap/secretcap.protectedValue: 4
     lycaon/internal/secretcap/secretcap.resolutionContextKey: 0
-    lycaon/internal/secretcap/secretcap.resolvedValue: 6
-    lycaon/internal/secretcap/secretcap.revealBroker: 3
-    lycaon/internal/secretcap/secretcap.revealProof: 8
+    lycaon/internal/secretcap/secretcap.resolvedValue: 8
+    lycaon/internal/secretcap/secretcap.revealSubject: 3
     lycaon/internal/secretcap/secretcap.revoker: 2
     lycaon/internal/secretcap/secretcap.secretIdentity: 4
+    lycaon/internal/secretcap/secretcap.vaultValues: 1
     lycaon/internal/secretharvest/secretharvest.ContainerRead: 5
     lycaon/internal/secretharvest/secretharvest.Pair: 2
     lycaon/internal/secretharvest/secretharvest.Runtime: 7
     lycaon/internal/secretharvest/secretharvest.Value: 10
-    lycaon/internal/secretmatch/secretmatch.Alert: 34
+    lycaon/internal/secretmatch/secretmatch.Alert: 33
     lycaon/internal/secretmatch/secretmatch.AmbientAuth: 5
     lycaon/internal/secretmatch/secretmatch.AskAttribution: 5
     lycaon/internal/secretmatch/secretmatch.AskFault: 2
@@ -7353,7 +7410,7 @@ go_struct_fields:
     lycaon/internal/session/session.runtimeBoardHook: 1
     lycaon/internal/session/session.sandboxAskCard: 5
     lycaon/internal/session/session.sandboxAskRequest: 11
-    lycaon/internal/session/session.sandboxAskResolution: 5
+    lycaon/internal/session/session.sandboxAskResolution: 6
     lycaon/internal/session/session.sessionStopOptions: 2
     lycaon/internal/session/session.sessionWorkflowManifest: 1
     lycaon/internal/session/session.socketListener: 3
@@ -7442,7 +7499,7 @@ go_struct_fields:
     lycaon/internal/session/workercompletion/workercompletion.workerSummaryObs: 12
     lycaon/internal/session/workercontext/workercontext.workerJobContextKey: 0
     lycaon/internal/settings/settings.ApprovalConfig: 5
-    lycaon/internal/settings/settings.ApprovalGrant: 26
+    lycaon/internal/settings/settings.ApprovalGrant: 27
     lycaon/internal/settings/settings.ApprovalRule: 4
     lycaon/internal/settings/settings.ApprovalRuleLayers: 2
     lycaon/internal/settings/settings.ApprovalRuleSource: 3
@@ -7470,7 +7527,7 @@ go_struct_fields:
     lycaon/internal/settings/settings.SecurityScannersUserOverlay: 3
     lycaon/internal/settings/settings.Service: 9
     lycaon/internal/settings/settings.SessionLimits: 18
-    lycaon/internal/settings/settings.Sources: 4
+    lycaon/internal/settings/settings.Sources: 5
     lycaon/internal/settings/settings.TrustSurfacesFile: 1
     lycaon/internal/settings/settings.TrustSurfacesStore: 3
     lycaon/internal/settings/settings.VerifyConfig: 1
@@ -7482,6 +7539,7 @@ go_struct_fields:
     lycaon/internal/settings/settings.inertDetections: 0
     lycaon/internal/settings/settings.inertPins: 0
     lycaon/internal/settings/settings.powerConfig: 1
+    lycaon/internal/settings/settings.releaseCandidate: 3
     lycaon/internal/settings/settings.sessionGrants: 3
     lycaon/internal/settings/settings.trustReviewFile: 2
     lycaon/internal/settingsoverlay/settingsoverlay.formatDocument: 1
@@ -8289,7 +8347,7 @@ go_struct_fields:
     lycaon/internal/tools/tools.CapabilityRequest: 9
     lycaon/internal/tools/tools.CredentialFileRead: 7
     lycaon/internal/tools/tools.DefaultRegistry: 4
-    lycaon/internal/tools/tools.DefaultToolExecutor: 48
+    lycaon/internal/tools/tools.DefaultToolExecutor: 49
     lycaon/internal/tools/tools.Definition: 3
     lycaon/internal/tools/tools.DirectIPLifecycleEvent: 8
     lycaon/internal/tools/tools.DirectIPRequest: 1
@@ -8309,12 +8367,12 @@ go_struct_fields:
     lycaon/internal/tools/tools.Invocation: 9
     lycaon/internal/tools/tools.LocalListenAsk: 9
     lycaon/internal/tools/tools.LocalListenRequest: 1
-    lycaon/internal/tools/tools.LocalListenResult: 6
+    lycaon/internal/tools/tools.LocalListenResult: 7
     lycaon/internal/tools/tools.LocalNetworkAsk: 10
-    lycaon/internal/tools/tools.LocalNetworkResult: 7
+    lycaon/internal/tools/tools.LocalNetworkResult: 8
     lycaon/internal/tools/tools.LoopbackConnectAsk: 9
     lycaon/internal/tools/tools.LoopbackConnectRequest: 1
-    lycaon/internal/tools/tools.LoopbackConnectResult: 6
+    lycaon/internal/tools/tools.LoopbackConnectResult: 7
     lycaon/internal/tools/tools.MCPToolPlan: 2
     lycaon/internal/tools/tools.MemoryActivation: 2
     lycaon/internal/tools/tools.ProfilePolicyEngine: 2
@@ -8346,6 +8404,7 @@ go_struct_fields:
     lycaon/internal/tools/tools.recoveryToolsKey: 0
     lycaon/internal/tools/tools.relocatedInfo: 6
     lycaon/internal/tools/tools.requestTools: 2
+    lycaon/internal/tools/tools.reviewedSecretPermission: 2
     lycaon/internal/tools/tools.schemaDiagnostic: 10
     lycaon/internal/tools/tools.secretFingerprintSet: 2
     lycaon/internal/tools/tools.secretReceipt: 3
@@ -8873,7 +8932,7 @@ go_struct_fields:
     lycaon/pkg/api/api.PromptReferencePathFilePart: 6
     lycaon/pkg/api/api.PromptReferencePathFolderPart: 4
     lycaon/pkg/api/api.PromptReferenceSearchHitPart: 5
-    lycaon/pkg/api/api.ResolveCheckpointRequest: 7
+    lycaon/pkg/api/api.ResolveCheckpointRequest: 8
     lycaon/pkg/api/api.SourceComparisonSelector: 13
     lycaon/pkg/api/api.SourceTreeCommand: 5
     lycaon/pkg/api/api.SourceView: 2
@@ -8923,7 +8982,7 @@ source_directories:
     lycaon-den/src-tauri/src/detect_editors: 1
     lycaon-den/src-tauri/src/document_outbox: 3
     lycaon-den/src-tauri/src/item_windows: 2
-    lycaon-den/src-tauri/src/sidecar: 7
+    lycaon-den/src-tauri/src/sidecar: 8
     lycaon-den/src-tauri/src/update_service: 5
     lycaon-den/src-tauri/src/wheel_smoothing: 3
     lycaon-den/src/api: 18
@@ -9032,10 +9091,10 @@ source_directories:
     lycaon-den/src/list: 5
     lycaon-den/src/notices: 14
     lycaon-den/src/notifications: 3
-    lycaon-den/src/platform: 4
-    lycaon-den/src/platform/connection: 13
+    lycaon-den/src/platform: 5
+    lycaon-den/src/platform/connection: 14
     lycaon-den/src/platform/desktop: 10
-    lycaon-den/src/platform/files: 13
+    lycaon-den/src/platform/files: 12
     lycaon-den/src/platform/harness: 2
     lycaon-den/src/platform/interaction: 11
     lycaon-den/src/platform/navigation: 7
@@ -9130,7 +9189,7 @@ source_directories:
     lycaon/internal/api/sourceapi: 54
     lycaon/internal/api/taskgroup: 1
     lycaon/internal/api/workflowadmin: 19
-    lycaon/internal/app: 48
+    lycaon/internal/app: 49
     lycaon/internal/approvaloutcome: 3
     lycaon/internal/approvalregistry: 1
     lycaon/internal/approvals: 7
@@ -9162,7 +9221,7 @@ source_directories:
     lycaon/internal/browserengine: 6
     lycaon/internal/browserengine/browsertest: 1
     lycaon/internal/bundledhint: 1
-    lycaon/internal/bundleverify: 8
+    lycaon/internal/bundleverify: 10
     lycaon/internal/bytebound: 1
     lycaon/internal/call: 8
     lycaon/internal/captureprojection: 1
@@ -9213,8 +9272,8 @@ source_directories:
     lycaon/internal/destconfig: 1
     lycaon/internal/detectionpack: 23
     lycaon/internal/diagnostics: 2
-    lycaon/internal/documentcore: 3
-    lycaon/internal/documentcore/native/src: 4
+    lycaon/internal/documentcore: 6
+    lycaon/internal/documentcore/native/src: 5
     lycaon/internal/dotversion: 1
     lycaon/internal/editorconfig: 4
     lycaon/internal/editordoc: 41
@@ -9265,7 +9324,7 @@ source_directories:
     lycaon/internal/heldcall: 2
     lycaon/internal/hintregistry: 1
     lycaon/internal/historyretention: 7
-    lycaon/internal/hitl: 42
+    lycaon/internal/hitl: 44
     lycaon/internal/hostcmd: 5
     lycaon/internal/hostctx: 2
     lycaon/internal/hostidentity: 1
@@ -9285,7 +9344,7 @@ source_directories:
     lycaon/internal/invocation: 2
     lycaon/internal/isolation: 1
     lycaon/internal/jsonblob: 1
-    lycaon/internal/jsonfence: 2
+    lycaon/internal/jsonfence: 3
     lycaon/internal/jsonshape: 1
     lycaon/internal/jsonvalue: 2
     lycaon/internal/keylock: 1
@@ -9345,6 +9404,7 @@ source_directories:
     lycaon/internal/platformfloor: 1
     lycaon/internal/pongoplain: 3
     lycaon/internal/preflight: 6
+    lycaon/internal/presence: 5
     lycaon/internal/pricing: 15
     lycaon/internal/progress: 17
     lycaon/internal/project: 83
@@ -9404,7 +9464,7 @@ source_directories:
     lycaon/internal/scopedstore: 2
     lycaon/internal/scratch: 1
     lycaon/internal/search: 52
-    lycaon/internal/secretcap: 16
+    lycaon/internal/secretcap: 19
     lycaon/internal/secretharvest: 2
     lycaon/internal/secretmatch: 20
     lycaon/internal/secretmint: 9
@@ -9523,7 +9583,7 @@ source_directories:
     lycaon/internal/workspace: 26
     lycaon/internal/workspacebaseline: 10
     lycaon/internal/zstdcodec: 1
-    lycaon/pkg/api: 31
+    lycaon/pkg/api: 32
     lycaon/pkg/pathglob: 2
     scripts: 152
     scripts/bialy: 10
@@ -9560,31 +9620,32 @@ source_files:
     lycaon-den/src-tauri/src/document_outbox/retention.rs: 139
     lycaon-den/src-tauri/src/document_outbox/storage.rs: 216
     lycaon-den/src-tauri/src/document_outbox/transaction.rs: 334
-    lycaon-den/src-tauri/src/external_attachment_import.rs: 260
+    lycaon-den/src-tauri/src/external_attachment_import.rs: 261
     lycaon-den/src-tauri/src/item_windows.rs: 362
     lycaon-den/src-tauri/src/item_windows/drag.rs: 344
     lycaon-den/src-tauri/src/item_windows/presentation.rs: 118
-    lycaon-den/src-tauri/src/lib.rs: 847
+    lycaon-den/src-tauri/src/lib.rs: 850
     lycaon-den/src-tauri/src/main.rs: 4
-    lycaon-den/src-tauri/src/managed_secret_reveal.rs: 358
     lycaon-den/src-tauri/src/native_notifications.rs: 252
     lycaon-den/src-tauri/src/open_external.rs: 379
     lycaon-den/src-tauri/src/open_local_path.rs: 157
     lycaon-den/src-tauri/src/open_third_party_notices.rs: 83
     lycaon-den/src-tauri/src/pick_path.rs: 61
     lycaon-den/src-tauri/src/picked_file.rs: 195
+    lycaon-den/src-tauri/src/presence.rs: 555
     lycaon-den/src-tauri/src/read_path_bytes.rs: 430
     lycaon-den/src-tauri/src/reveal_in_file_manager.rs: 240
     lycaon-den/src-tauri/src/shared_composer_documents.rs: 518
     lycaon-den/src-tauri/src/shell_command.rs: 491
-    lycaon-den/src-tauri/src/sidecar.rs: 269
-    lycaon-den/src-tauri/src/sidecar/commands.rs: 74
-    lycaon-den/src-tauri/src/sidecar/daemon.rs: 102
+    lycaon-den/src-tauri/src/sidecar.rs: 374
+    lycaon-den/src-tauri/src/sidecar/commands.rs: 79
+    lycaon-den/src-tauri/src/sidecar/daemon.rs: 104
     lycaon-den/src-tauri/src/sidecar/diagnostics.rs: 68
     lycaon-den/src-tauri/src/sidecar/layout.rs: 85
     lycaon-den/src-tauri/src/sidecar/logging.rs: 93
     lycaon-den/src-tauri/src/sidecar/process.rs: 173
-    lycaon-den/src-tauri/src/sidecar/startup.rs: 334
+    lycaon-den/src-tauri/src/sidecar/startup.rs: 342
+    lycaon-den/src-tauri/src/sidecar/supervisor.rs: 175
     lycaon-den/src-tauri/src/system_appearance.rs: 177
     lycaon-den/src-tauri/src/update_service.rs: 396
     lycaon-den/src-tauri/src/update_service/check.rs: 179
@@ -9613,7 +9674,7 @@ source_files:
     lycaon-den/src/api/http-capabilities/mcp.ts: 95
     lycaon-den/src/api/http-capabilities/projects.ts: 161
     lycaon-den/src/api/http-capabilities/search.ts: 86
-    lycaon-den/src/api/http-capabilities/security.ts: 315
+    lycaon-den/src/api/http-capabilities/security.ts: 324
     lycaon-den/src/api/http-capabilities/sessions.ts: 360
     lycaon-den/src/api/http-capabilities/settings.ts: 225
     lycaon-den/src/api/http-capabilities/source-history.ts: 281
@@ -9657,7 +9718,7 @@ source_files:
     lycaon-den/src/chat/checkpoint/approval-slots.ts: 18
     lycaon-den/src/chat/checkpoint/approval-test-fixtures.ts: 77
     lycaon-den/src/chat/checkpoint/approval-wait.ts: 11
-    lycaon-den/src/chat/checkpoint/checkpoint-actions.ts: 54
+    lycaon-den/src/chat/checkpoint/checkpoint-actions.ts: 64
     lycaon-den/src/chat/checkpoint/checkpoint-model.ts: 46
     lycaon-den/src/chat/checkpoint/checkpoint-session-scope.ts: 64
     lycaon-den/src/chat/checkpoint/gate-copy.ts: 5
@@ -9879,7 +9940,7 @@ source_files:
     lycaon-den/src/components/ConfirmDestructiveDialog.tsx: 121
     lycaon-den/src/components/ContextMenu.tsx: 493
     lycaon-den/src/components/CriticalStop.tsx: 84
-    lycaon-den/src/components/CriticalStopStage.tsx: 461
+    lycaon-den/src/components/CriticalStopStage.tsx: 463
     lycaon-den/src/components/EngineStartupStage.tsx: 129
     lycaon-den/src/components/FileEditDiff.tsx: 69
     lycaon-den/src/components/GitCheckout.tsx: 765
@@ -9928,7 +9989,7 @@ source_files:
     lycaon-den/src/components/chatview/composer-secret-mark.ts: 37
     lycaon-den/src/components/chatview/queue-controller.ts: 105
     lycaon-den/src/components/chatview/tabs.ts: 12
-    lycaon-den/src/components/checkpoint/ApprovalCard.tsx: 776
+    lycaon-den/src/components/checkpoint/ApprovalCard.tsx: 793
     lycaon-den/src/components/checkpoint/ApprovalContentLink.tsx: 24
     lycaon-den/src/components/checkpoint/ApprovalFileChanges.tsx: 45
     lycaon-den/src/components/checkpoint/ApprovalShell.tsx: 853
@@ -10039,9 +10100,9 @@ source_files:
     lycaon-den/src/components/primitives/VirtualCardList.tsx: 301
     lycaon-den/src/components/project-path-menu-items.ts: 85
     lycaon-den/src/components/project/IgnoredSecretValues.tsx: 235
-    lycaon-den/src/components/project/ManagedSecretDetail.tsx: 328
+    lycaon-den/src/components/project/ManagedSecretDetail.tsx: 383
     lycaon-den/src/components/project/ManagedSecretForms.tsx: 382
-    lycaon-den/src/components/project/ManagedSecretsPanel.tsx: 753
+    lycaon-den/src/components/project/ManagedSecretsPanel.tsx: 760
     lycaon-den/src/components/project/ProjectArtifactsView.tsx: 768
     lycaon-den/src/components/project/ProjectBlueprintsView.tsx: 753
     lycaon-den/src/components/project/ProjectChatsView.tsx: 462
@@ -10704,7 +10765,7 @@ source_files:
     lycaon-den/src/list/pagination.ts: 38
     lycaon-den/src/notices/InlineNotice.tsx: 55
     lycaon-den/src/notices/client-notices.ts: 13
-    lycaon-den/src/notices/critical-stop-model.ts: 240
+    lycaon-den/src/notices/critical-stop-model.ts: 260
     lycaon-den/src/notices/no-provider-card.ts: 17
     lycaon-den/src/notices/notice-actions.ts: 129
     lycaon-den/src/notices/notice-model.ts: 207
@@ -10713,19 +10774,20 @@ source_files:
     lycaon-den/src/notices/notice-routing.ts: 23
     lycaon-den/src/notices/notice-scope.ts: 36
     lycaon-den/src/notices/notice-select.ts: 51
-    lycaon-den/src/notices/notice-store.ts: 176
+    lycaon-den/src/notices/notice-store.ts: 180
     lycaon-den/src/notices/report-policy.ts: 19
-    lycaon-den/src/notices/surface-failure.ts: 49
+    lycaon-den/src/notices/surface-failure.ts: 54
     lycaon-den/src/notifications/mount-notification-service.ts: 116
     lycaon-den/src/notifications/notification-open.ts: 24
     lycaon-den/src/notifications/notification-service.ts: 159
     lycaon-den/src/platform/connection/app-boot-readiness.ts: 2
-    lycaon-den/src/platform/connection/app-boot.ts: 400
-    lycaon-den/src/platform/connection/app-connection.ts: 901
-    lycaon-den/src/platform/connection/backend.ts: 214
+    lycaon-den/src/platform/connection/app-boot.ts: 402
+    lycaon-den/src/platform/connection/app-connection.ts: 956
+    lycaon-den/src/platform/connection/backend.ts: 218
     lycaon-den/src/platform/connection/boot-fallback.ts: 60
     lycaon-den/src/platform/connection/client-identity.ts: 51
     lycaon-den/src/platform/connection/engine-startup.ts: 128
+    lycaon-den/src/platform/connection/engine-supervision.ts: 76
     lycaon-den/src/platform/connection/health.ts: 90
     lycaon-den/src/platform/connection/host-authority-registry.ts: 41
     lycaon-den/src/platform/connection/host-identity-test.ts: 14
@@ -10748,7 +10810,6 @@ source_files:
     lycaon-den/src/platform/files/file-drop.ts: 203
     lycaon-den/src/platform/files/folder.ts: 30
     lycaon-den/src/platform/files/host-folder-dialog.ts: 9
-    lycaon-den/src/platform/files/managed-secret-reveal.ts: 90
     lycaon-den/src/platform/files/native-path-dialog.ts: 30
     lycaon-den/src/platform/files/overlay-dir.ts: 7
     lycaon-den/src/platform/files/path-kind.ts: 19
@@ -10783,6 +10844,7 @@ source_files:
     lycaon-den/src/platform/persistence/backup-transfer.ts: 53
     lycaon-den/src/platform/persistence/preflight-report.ts: 9
     lycaon-den/src/platform/persistence/preflight-store.ts: 36
+    lycaon-den/src/platform/presence.ts: 107
     lycaon-den/src/platform/runtime.ts: 50
     lycaon-den/src/platform/scrolling/overlay-scrollbar-autohide.ts: 111
     lycaon-den/src/platform/scrolling/overlay-scrollbar-input.ts: 179
@@ -10890,10 +10952,10 @@ source_files:
     lycaon-den/src/settings/research/web-research-settings-copy.ts: 108
     lycaon-den/src/settings/security/approval-grants-cache.ts: 110
     lycaon-den/src/settings/security/approval-grants-model.ts: 254
-    lycaon-den/src/settings/security/approvals-copy.ts: 200
+    lycaon-den/src/settings/security/approvals-copy.ts: 211
     lycaon-den/src/settings/security/approvals-settings-copy.ts: 183
-    lycaon-den/src/settings/security/managed-secrets-copy.ts: 287
-    lycaon-den/src/settings/security/managed-secrets-model.ts: 142
+    lycaon-den/src/settings/security/managed-secrets-copy.ts: 321
+    lycaon-den/src/settings/security/managed-secrets-model.ts: 145
     lycaon-den/src/settings/security/project-settings-overlay-copy.ts: 69
     lycaon-den/src/settings/security/project-trust.ts: 61
     lycaon-den/src/settings/security/saved-approvals-copy.ts: 133
@@ -11101,7 +11163,7 @@ source_files:
     lycaon/cmd/lycaon/completion.go: 93
     lycaon/cmd/lycaon/credentials.go: 117
     lycaon/cmd/lycaon/decide.go: 53
-    lycaon/cmd/lycaon/diagnostics.go: 55
+    lycaon/cmd/lycaon/diagnostics.go: 67
     lycaon/cmd/lycaon/diagnostics_store.go: 36
     lycaon/cmd/lycaon/dispatch.go: 25
     lycaon/cmd/lycaon/extensions.go: 786
@@ -11176,7 +11238,7 @@ source_files:
     lycaon/internal/api/backup_restore_handlers.go: 137
     lycaon/internal/api/capabilityadmin/authority_chat.go: 189
     lycaon/internal/api/capabilityadmin/authority_install.go: 228
-    lycaon/internal/api/capabilityadmin/checkpoint_handlers.go: 217
+    lycaon/internal/api/capabilityadmin/checkpoint_handlers.go: 260
     lycaon/internal/api/capabilityadmin/elevated_access.go: 154
     lycaon/internal/api/capabilityadmin/grant_create.go: 224
     lycaon/internal/api/capabilityadmin/grant_list.go: 135
@@ -11250,7 +11312,7 @@ source_files:
     lycaon/internal/api/projectadmin/project_agent_context.go: 72
     lycaon/internal/api/projectadmin/project_delete.go: 110
     lycaon/internal/api/projectadmin/project_handlers.go: 150
-    lycaon/internal/api/projectadmin/project_managed_secrets.go: 262
+    lycaon/internal/api/projectadmin/project_managed_secrets.go: 297
     lycaon/internal/api/projectadmin/project_mutation.go: 55
     lycaon/internal/api/projectadmin/project_promote_clone.go: 142
     lycaon/internal/api/projectadmin/project_promotion.go: 109
@@ -11296,9 +11358,9 @@ source_files:
     lycaon/internal/api/search_handlers.go: 698
     lycaon/internal/api/search_page_cache.go: 59
     lycaon/internal/api/search_replace_store.go: 44
-    lycaon/internal/api/secretview/secretview.go: 155
+    lycaon/internal/api/secretview/secretview.go: 167
     lycaon/internal/api/security.go: 67
-    lycaon/internal/api/server.go: 890
+    lycaon/internal/api/server.go: 892
     lycaon/internal/api/sessionadmin/ambient_session_attach.go: 26
     lycaon/internal/api/sessionadmin/handler.go: 58
     lycaon/internal/api/sessionadmin/session_abort.go: 35
@@ -11404,7 +11466,7 @@ source_files:
     lycaon/internal/api/workflowadmin/workflow_persist_handlers.go: 67
     lycaon/internal/app/agent_presence_adapters.go: 94
     lycaon/internal/app/agent_presence_drafts.go: 87
-    lycaon/internal/app/build.go: 310
+    lycaon/internal/app/build.go: 314
     lycaon/internal/app/build_board.go: 517
     lycaon/internal/app/build_consequence.go: 29
     lycaon/internal/app/build_credential_stores.go: 35
@@ -11415,12 +11477,13 @@ source_files:
     lycaon/internal/app/build_infra.go: 421
     lycaon/internal/app/build_oar.go: 116
     lycaon/internal/app/build_preflight.go: 159
+    lycaon/internal/app/build_presence.go: 44
     lycaon/internal/app/build_recovery.go: 61
     lycaon/internal/app/build_runners.go: 233
     lycaon/internal/app/build_scan.go: 238
-    lycaon/internal/app/build_secret_capabilities.go: 52
+    lycaon/internal/app/build_secret_capabilities.go: 50
     lycaon/internal/app/build_server.go: 647
-    lycaon/internal/app/build_session.go: 613
+    lycaon/internal/app/build_session.go: 615
     lycaon/internal/app/build_session_capability.go: 88
     lycaon/internal/app/build_tools.go: 254
     lycaon/internal/app/build_user_path.go: 36
@@ -11631,12 +11694,14 @@ source_files:
     lycaon/internal/browserengine/resolve.go: 136
     lycaon/internal/bundledhint/envelope.go: 19
     lycaon/internal/bundleverify/credential_protection.go: 27
+    lycaon/internal/bundleverify/document_core.go: 17
+    lycaon/internal/bundleverify/entitlements.go: 127
     lycaon/internal/bundleverify/macho.go: 120
     lycaon/internal/bundleverify/opengrep.go: 65
-    lycaon/internal/bundleverify/report.go: 81
+    lycaon/internal/bundleverify/report.go: 85
     lycaon/internal/bundleverify/runner.go: 59
-    lycaon/internal/bundleverify/signing.go: 192
-    lycaon/internal/bundleverify/verify.go: 377
+    lycaon/internal/bundleverify/signing.go: 139
+    lycaon/internal/bundleverify/verify.go: 357
     lycaon/internal/bundleverify/walk.go: 30
     lycaon/internal/bytebound/bytebound.go: 7
     lycaon/internal/call/errors.go: 6
@@ -11696,7 +11761,7 @@ source_files:
     lycaon/internal/configdir/configdir.go: 80
     lycaon/internal/configdir/mode_unix.go: 20
     lycaon/internal/configdir/mode_windows.go: 2
-    lycaon/internal/configlayout/bundle.go: 25
+    lycaon/internal/configlayout/bundle.go: 55
     lycaon/internal/configlayout/paths.go: 110
     lycaon/internal/confine/agent_policy.go: 82
     lycaon/internal/confine/command_not_found.go: 30
@@ -11715,8 +11780,8 @@ source_files:
     lycaon/internal/confine/exec_denied.go: 35
     lycaon/internal/confine/failure_attribution.go: 3
     lycaon/internal/confine/filesystem_roots.go: 24
-    lycaon/internal/confine/filesystem_rules.go: 255
-    lycaon/internal/confine/floor_grants.go: 45
+    lycaon/internal/confine/filesystem_rules.go: 260
+    lycaon/internal/confine/floor_grants.go: 72
     lycaon/internal/confine/hard_deny_writes.go: 77
     lycaon/internal/confine/helper.go: 100
     lycaon/internal/confine/helper_windows.go: 2
@@ -11953,13 +12018,13 @@ source_files:
     lycaon/internal/credentialstore/identity_darwin.go: 63
     lycaon/internal/credentialstore/identity_development.go: 49
     lycaon/internal/credentialstore/identity_passphrase.go: 100
-    lycaon/internal/credentialstore/keychain_darwin.go: 51
+    lycaon/internal/credentialstore/keychain_darwin.go: 58
     lycaon/internal/credentialstore/protection_darwin.go: 41
     lycaon/internal/credentialstore/protection_other.go: 5
     lycaon/internal/credentialstore/select.go: 33
-    lycaon/internal/credentialstore/select_darwin.go: 7
-    lycaon/internal/credentialstore/select_other.go: 7
-    lycaon/internal/credentialstore/service.go: 36
+    lycaon/internal/credentialstore/select_darwin.go: 8
+    lycaon/internal/credentialstore/select_other.go: 8
+    lycaon/internal/credentialstore/service.go: 40
     lycaon/internal/credentialstore/store.go: 146
     lycaon/internal/curationctx/curationctx.go: 80
     lycaon/internal/datamark/datamark.go: 54
@@ -11992,7 +12057,7 @@ source_files:
     lycaon/internal/decide/bialy/client.go: 366
     lycaon/internal/decide/bialy/models.go: 41
     lycaon/internal/decide/bialy/provision.go: 142
-    lycaon/internal/decide/bialy/resolve.go: 172
+    lycaon/internal/decide/bialy/resolve.go: 147
     lycaon/internal/decide/catalog.go: 134
     lycaon/internal/decide/decide.go: 95
     lycaon/internal/decide/decidetest/fake.go: 96
@@ -12078,13 +12143,17 @@ source_files:
     lycaon/internal/detectionpack/tool_text.go: 19
     lycaon/internal/diagnostics/bundle.go: 181
     lycaon/internal/diagnostics/redactor.go: 80
-    lycaon/internal/documentcore/core.go: 151
+    lycaon/internal/documentcore/binary.go: 26
+    lycaon/internal/documentcore/core.go: 121
     lycaon/internal/documentcore/native/src/authorship.rs: 59
     lycaon/internal/documentcore/native/src/compaction.rs: 44
-    lycaon/internal/documentcore/native/src/lib.rs: 392
+    lycaon/internal/documentcore/native/src/lib.rs: 372
+    lycaon/internal/documentcore/native/src/main.rs: 136
     lycaon/internal/documentcore/native/src/undo.rs: 108
+    lycaon/internal/documentcore/process.go: 244
     lycaon/internal/documentcore/text.go: 237
     lycaon/internal/documentcore/vector.go: 33
+    lycaon/internal/documentcore/verify.go: 47
     lycaon/internal/dotversion/dotversion.go: 49
     lycaon/internal/editorconfig/check.go: 132
     lycaon/internal/editorconfig/editorconfig.go: 177
@@ -12243,7 +12312,7 @@ source_files:
     lycaon/internal/exec/guard_unix.go: 64
     lycaon/internal/exec/guard_windows.go: 76
     lycaon/internal/exec/io.go: 175
-    lycaon/internal/exec/launch.go: 88
+    lycaon/internal/exec/launch.go: 92
     lycaon/internal/exec/own_group.go: 24
     lycaon/internal/exec/pipeline.go: 458
     lycaon/internal/exec/pipeline_background.go: 103
@@ -12382,10 +12451,10 @@ source_files:
     lycaon/internal/fspath/entry_identity_windows.go: 48
     lycaon/internal/fssync/fssync.go: 18
     lycaon/internal/gate/doc.go: 1
-    lycaon/internal/gate/evaluate.go: 674
-    lycaon/internal/gate/facts.go: 168
+    lycaon/internal/gate/evaluate.go: 679
+    lycaon/internal/gate/facts.go: 169
     lycaon/internal/gate/gate.go: 31
-    lycaon/internal/gate/posture.go: 159
+    lycaon/internal/gate/posture.go: 161
     lycaon/internal/gate/reuse.go: 85
     lycaon/internal/git/clone.go: 40
     lycaon/internal/git/commit_failed.go: 55
@@ -12460,7 +12529,7 @@ source_files:
     lycaon/internal/guidance/closeout_grounding.go: 268
     lycaon/internal/guidance/closeout_present.go: 82
     lycaon/internal/guidance/closeout_present_markdown.go: 55
-    lycaon/internal/guidance/closeout_read.go: 159
+    lycaon/internal/guidance/closeout_read.go: 147
     lycaon/internal/guidance/closeout_repair.go: 74
     lycaon/internal/guidance/closeout_stream_narrative.go: 87
     lycaon/internal/guidance/compaction_system.go: 22
@@ -12536,24 +12605,24 @@ source_files:
     lycaon/internal/hitl/agent_policy.go: 35
     lycaon/internal/hitl/approval.go: 65
     lycaon/internal/hitl/approval_copy.go: 124
-    lycaon/internal/hitl/approval_grant.go: 133
-    lycaon/internal/hitl/approval_inputs.go: 70
+    lycaon/internal/hitl/approval_grant.go: 135
+    lycaon/internal/hitl/approval_inputs.go: 71
     lycaon/internal/hitl/approval_offers.go: 108
     lycaon/internal/hitl/approval_operation_store.go: 185
-    lycaon/internal/hitl/approval_plan.go: 1054
-    lycaon/internal/hitl/approval_plan_compile.go: 427
-    lycaon/internal/hitl/approval_plan_compose.go: 153
+    lycaon/internal/hitl/approval_plan.go: 1058
+    lycaon/internal/hitl/approval_plan_compile.go: 431
+    lycaon/internal/hitl/approval_plan_compose.go: 159
     lycaon/internal/hitl/approval_preparation.go: 93
-    lycaon/internal/hitl/approval_resolution.go: 203
+    lycaon/internal/hitl/approval_resolution.go: 235
     lycaon/internal/hitl/approval_secret_impact.go: 59
     lycaon/internal/hitl/approval_secret_location.go: 152
     lycaon/internal/hitl/ask_quiet.go: 162
     lycaon/internal/hitl/ask_quiet_options.go: 104
     lycaon/internal/hitl/chat_grants.go: 167
-    lycaon/internal/hitl/checkpoint.go: 93
+    lycaon/internal/hitl/checkpoint.go: 94
     lycaon/internal/hitl/checkpoint_events.go: 15
     lycaon/internal/hitl/checkpoint_tool_approval.go: 76
-    lycaon/internal/hitl/checkpoint_wire.go: 312
+    lycaon/internal/hitl/checkpoint_wire.go: 326
     lycaon/internal/hitl/contained.go: 218
     lycaon/internal/hitl/content_apply_plan.go: 235
     lycaon/internal/hitl/content_apply_resolution.go: 85
@@ -12562,12 +12631,14 @@ source_files:
     lycaon/internal/hitl/errors.go: 15
     lycaon/internal/hitl/execution_capability.go: 31
     lycaon/internal/hitl/grant_key.go: 150
-    lycaon/internal/hitl/manager.go: 74
-    lycaon/internal/hitl/manager_impl.go: 595
+    lycaon/internal/hitl/held_release.go: 189
+    lycaon/internal/hitl/manager.go: 75
+    lycaon/internal/hitl/manager_impl.go: 596
     lycaon/internal/hitl/package_coordinate.go: 30
+    lycaon/internal/hitl/release_attestation.go: 132
     lycaon/internal/hitl/resolution_seal.go: 209
     lycaon/internal/hitl/secret_permission.go: 79
-    lycaon/internal/hitl/secret_permission_plan.go: 103
+    lycaon/internal/hitl/secret_permission_plan.go: 107
     lycaon/internal/hitl/secret_service_connection.go: 79
     lycaon/internal/hitl/stop.go: 71
     lycaon/internal/hitl/store.go: 56
@@ -12611,11 +12682,11 @@ source_files:
     lycaon/internal/httpaction/request_secrets.go: 83
     lycaon/internal/httpaction/response_body.go: 59
     lycaon/internal/httpaction/response_scrub.go: 58
-    lycaon/internal/httpaction/secret_screen.go: 159
+    lycaon/internal/httpaction/secret_screen.go: 158
     lycaon/internal/httpaction/sent_headers.go: 44
     lycaon/internal/httpaction/token_jar.go: 347
     lycaon/internal/httpaction/token_release.go: 69
-    lycaon/internal/httpaction/tool.go: 458
+    lycaon/internal/httpaction/tool.go: 460
     lycaon/internal/httpaction/web_page.go: 38
     lycaon/internal/httpaction/wire_provenance.go: 54
     lycaon/internal/httpclient/feed.go: 141
@@ -12643,6 +12714,7 @@ source_files:
     lycaon/internal/jsonblob/jsonblob.go: 82
     lycaon/internal/jsonfence/json_fence.go: 84
     lycaon/internal/jsonfence/strict.go: 20
+    lycaon/internal/jsonfence/trailing.go: 79
     lycaon/internal/jsonshape/decode.go: 216
     lycaon/internal/jsonvalue/clone.go: 27
     lycaon/internal/jsonvalue/number.go: 13
@@ -12900,7 +12972,7 @@ source_files:
     lycaon/internal/mcp/qualify.go: 62
     lycaon/internal/mcp/recipe_catalog.go: 197
     lycaon/internal/mcp/registry_admin.go: 606
-    lycaon/internal/mcp/registry_call.go: 390
+    lycaon/internal/mcp/registry_call.go: 392
     lycaon/internal/mcp/registry_impl.go: 396
     lycaon/internal/mcp/registry_sessions.go: 264
     lycaon/internal/mcp/registry_sync.go: 220
@@ -13103,6 +13175,11 @@ source_files:
     lycaon/internal/preflight/env_other.go: 5
     lycaon/internal/preflight/preflight.go: 129
     lycaon/internal/preflight/probes.go: 243
+    lycaon/internal/presence/broker.go: 242
+    lycaon/internal/presence/launcher.go: 12
+    lycaon/internal/presence/launcher_darwin.go: 15
+    lycaon/internal/presence/launcher_other.go: 5
+    lycaon/internal/presence/ledger.go: 148
     lycaon/internal/pricing/ai_pricing_source.go: 81
     lycaon/internal/pricing/aipricing.go: 99
     lycaon/internal/pricing/cache.go: 108
@@ -13648,25 +13725,28 @@ source_files:
     lycaon/internal/search/store_query_compile.go: 266
     lycaon/internal/search/symbol_leg.go: 136
     lycaon/internal/search/write_through.go: 57
-    lycaon/internal/secretcap/admin.go: 153
+    lycaon/internal/secretcap/admin.go: 173
     lycaon/internal/secretcap/cookiejar.go: 135
     lycaon/internal/secretcap/cookiejar_save.go: 162
     lycaon/internal/secretcap/create.go: 394
-    lycaon/internal/secretcap/delivery.go: 83
+    lycaon/internal/secretcap/custody.go: 76
+    lycaon/internal/secretcap/custody_resolution.go: 74
+    lycaon/internal/secretcap/delivery.go: 129
     lycaon/internal/secretcap/durable_screening.go: 170
     lycaon/internal/secretcap/echo.go: 77
-    lycaon/internal/secretcap/permission.go: 68
-    lycaon/internal/secretcap/resolution.go: 237
-    lycaon/internal/secretcap/resolve.go: 264
-    lycaon/internal/secretcap/reveal.go: 285
-    lycaon/internal/secretcap/service.go: 369
+    lycaon/internal/secretcap/permission.go: 111
+    lycaon/internal/secretcap/release.go: 88
+    lycaon/internal/secretcap/resolution.go: 229
+    lycaon/internal/secretcap/resolve.go: 268
+    lycaon/internal/secretcap/reveal.go: 123
+    lycaon/internal/secretcap/service.go: 384
     lycaon/internal/secretcap/tokenjar.go: 227
-    lycaon/internal/secretcap/uses.go: 91
+    lycaon/internal/secretcap/uses.go: 97
     lycaon/internal/secretcap/validation.go: 11
-    lycaon/internal/secretcap/versions.go: 241
+    lycaon/internal/secretcap/versions.go: 244
     lycaon/internal/secretharvest/minted.go: 81
     lycaon/internal/secretharvest/secretharvest.go: 381
-    lycaon/internal/secretmatch/ask.go: 209
+    lycaon/internal/secretmatch/ask.go: 210
     lycaon/internal/secretmatch/classification.go: 77
     lycaon/internal/secretmatch/destination.go: 86
     lycaon/internal/secretmatch/encoded_forms.go: 46
@@ -13830,7 +13910,7 @@ source_files:
     lycaon/internal/session/root_detach.go: 111
     lycaon/internal/session/roots_changed_kick.go: 64
     lycaon/internal/session/run_turn.go: 345
-    lycaon/internal/session/sandbox_ask_broker.go: 155
+    lycaon/internal/session/sandbox_ask_broker.go: 160
     lycaon/internal/session/sandbox_capability_widening.go: 18
     lycaon/internal/session/sandbox_listen_broker.go: 235
     lycaon/internal/session/sandbox_local_network_broker.go: 183
@@ -13990,7 +14070,7 @@ source_files:
     lycaon/internal/session/worktree_binding.go: 57
     lycaon/internal/settings/agent_policy_grants.go: 103
     lycaon/internal/settings/approval_rule_layers.go: 31
-    lycaon/internal/settings/approvals.go: 858
+    lycaon/internal/settings/approvals.go: 860
     lycaon/internal/settings/ask_quiet.go: 195
     lycaon/internal/settings/bypass_gate.go: 37
     lycaon/internal/settings/command_pattern.go: 109
@@ -13999,9 +14079,9 @@ source_files:
     lycaon/internal/settings/dto.go: 148
     lycaon/internal/settings/execution_capability.go: 60
     lycaon/internal/settings/file_summaries.go: 64
-    lycaon/internal/settings/gate_builder.go: 199
-    lycaon/internal/settings/gate_facts.go: 392
-    lycaon/internal/settings/grant_authority.go: 473
+    lycaon/internal/settings/gate_builder.go: 206
+    lycaon/internal/settings/gate_facts.go: 394
+    lycaon/internal/settings/grant_authority.go: 489
     lycaon/internal/settings/grant_predicate.go: 94
     lycaon/internal/settings/granted_path_offer.go: 177
     lycaon/internal/settings/host_rules.go: 89
@@ -14014,7 +14094,7 @@ source_files:
     lycaon/internal/settings/reversibility.go: 171
     lycaon/internal/settings/review.go: 207
     lycaon/internal/settings/rule_gate.go: 370
-    lycaon/internal/settings/secret_grant.go: 73
+    lycaon/internal/settings/secret_grant.go: 97
     lycaon/internal/settings/security_scanners.go: 199
     lycaon/internal/settings/session_grants.go: 395
     lycaon/internal/settings/session_limits.go: 306
@@ -14367,7 +14447,7 @@ source_files:
     lycaon/internal/toolhost/git_operations.go: 26
     lycaon/internal/toolhost/git_tools.go: 225
     lycaon/internal/toolhost/grounding_service.go: 73
-    lycaon/internal/toolhost/runtime.go: 964
+    lycaon/internal/toolhost/runtime.go: 970
     lycaon/internal/toolhost/runtime_detection.go: 7
     lycaon/internal/toolhost/tool_approval_coalesce_adapter.go: 36
     lycaon/internal/tooloutput/emit_reject.go: 145
@@ -14414,7 +14494,7 @@ source_files:
     lycaon/internal/tools/command_operand_expansion.go: 101
     lycaon/internal/tools/command_reject.go: 100
     lycaon/internal/tools/command_replacement_paths.go: 102
-    lycaon/internal/tools/command_secret_screen.go: 241
+    lycaon/internal/tools/command_secret_screen.go: 240
     lycaon/internal/tools/command_stages.go: 11
     lycaon/internal/tools/config.go: 18
     lycaon/internal/tools/confine_request.go: 125
@@ -14438,14 +14518,14 @@ source_files:
     lycaon/internal/tools/executor_egress.go: 153
     lycaon/internal/tools/executor_egress_ask.go: 146
     lycaon/internal/tools/executor_egress_gather.go: 285
-    lycaon/internal/tools/executor_impl.go: 314
+    lycaon/internal/tools/executor_impl.go: 320
     lycaon/internal/tools/executor_registry.go: 42
     lycaon/internal/tools/executor_repeat_approval.go: 94
     lycaon/internal/tools/executor_tool_approval.go: 264
     lycaon/internal/tools/executor_tool_metadata.go: 104
     lycaon/internal/tools/external_access_capture.go: 99
     lycaon/internal/tools/file_change_review.go: 160
-    lycaon/internal/tools/file_secret_screen.go: 46
+    lycaon/internal/tools/file_secret_screen.go: 45
     lycaon/internal/tools/fileage/fileage.go: 200
     lycaon/internal/tools/gate_explain.go: 148
     lycaon/internal/tools/gate_repeat_ledger.go: 13
@@ -14457,19 +14537,19 @@ source_files:
     lycaon/internal/tools/inboundwrite/inboundwrite.go: 139
     lycaon/internal/tools/inboundwrite/review.go: 63
     lycaon/internal/tools/invocation_boundary.go: 199
-    lycaon/internal/tools/invocation_capability_review.go: 215
+    lycaon/internal/tools/invocation_capability_review.go: 219
     lycaon/internal/tools/list_policy.go: 18
     lycaon/internal/tools/local_listen_capability.go: 100
-    lycaon/internal/tools/local_listen_gate.go: 28
+    lycaon/internal/tools/local_listen_gate.go: 29
     lycaon/internal/tools/local_network_capability.go: 90
-    lycaon/internal/tools/local_network_gate.go: 29
+    lycaon/internal/tools/local_network_gate.go: 30
     lycaon/internal/tools/local_network_grant.go: 10
     lycaon/internal/tools/loopback_connect_capability.go: 80
-    lycaon/internal/tools/loopback_connect_gate.go: 28
+    lycaon/internal/tools/loopback_connect_gate.go: 29
     lycaon/internal/tools/mcp_loading.go: 28
     lycaon/internal/tools/mediated_egress.go: 35
     lycaon/internal/tools/mutation_floor.go: 11
-    lycaon/internal/tools/native/background_tools.go: 366
+    lycaon/internal/tools/native/background_tools.go: 368
     lycaon/internal/tools/native/blueprint_write_observer.go: 36
     lycaon/internal/tools/native/chmod.go: 72
     lycaon/internal/tools/native/chmod_mode.go: 174
@@ -14479,14 +14559,14 @@ source_files:
     lycaon/internal/tools/native/code_rewrite.go: 212
     lycaon/internal/tools/native/code_rewrite_multi.go: 417
     lycaon/internal/tools/native/code_rewrite_transaction.go: 76
-    lycaon/internal/tools/native/command_exec.go: 456
+    lycaon/internal/tools/native/command_exec.go: 458
     lycaon/internal/tools/native/command_exec_denied.go: 29
     lycaon/internal/tools/native/command_index_watch.go: 19
     lycaon/internal/tools/native/command_io.go: 164
     lycaon/internal/tools/native/command_network_lifecycle.go: 60
     lycaon/internal/tools/native/command_not_found.go: 104
     lycaon/internal/tools/native/command_snapshot_capture.go: 160
-    lycaon/internal/tools/native/command_terminal_capture.go: 160
+    lycaon/internal/tools/native/command_terminal_capture.go: 162
     lycaon/internal/tools/native/command_window.go: 62
     lycaon/internal/tools/native/confined_foreground.go: 104
     lycaon/internal/tools/native/confined_foreground_gates.go: 24
@@ -14608,9 +14688,9 @@ source_files:
     lycaon/internal/tools/native/terminal/grid_render.go: 153
     lycaon/internal/tools/native/terminal/session.go: 91
     lycaon/internal/tools/native/terminal/session_close.go: 48
-    lycaon/internal/tools/native/terminal/session_open.go: 227
+    lycaon/internal/tools/native/terminal/session_open.go: 229
     lycaon/internal/tools/native/terminal/session_read.go: 118
-    lycaon/internal/tools/native/terminal/session_send.go: 116
+    lycaon/internal/tools/native/terminal/session_send.go: 118
     lycaon/internal/tools/native/terminal/session_snapshot.go: 185
     lycaon/internal/tools/native/terminal/snapshot_grid.go: 130
     lycaon/internal/tools/native/toolkit/args.go: 85
@@ -14627,7 +14707,7 @@ source_files:
     lycaon/internal/tools/native/worktree_notify.go: 37
     lycaon/internal/tools/native/write_scope_reject.go: 69
     lycaon/internal/tools/observation_facts.go: 339
-    lycaon/internal/tools/outbound_secret_screen.go: 337
+    lycaon/internal/tools/outbound_secret_screen.go: 391
     lycaon/internal/tools/owner_failure.go: 26
     lycaon/internal/tools/package_execution_boundary.go: 104
     lycaon/internal/tools/policy.go: 75
@@ -14650,8 +14730,8 @@ source_files:
     lycaon/internal/tools/safecmd/safecmd.go: 125
     lycaon/internal/tools/scope_context.go: 23
     lycaon/internal/tools/secret_ignore_review.go: 27
-    lycaon/internal/tools/secret_permission.go: 50
-    lycaon/internal/tools/secret_permission_prepare.go: 134
+    lycaon/internal/tools/secret_permission.go: 57
+    lycaon/internal/tools/secret_permission_prepare.go: 154
     lycaon/internal/tools/secret_receipts.go: 81
     lycaon/internal/tools/secret_reference.go: 77
     lycaon/internal/tools/secret_reference_echo.go: 23
@@ -15134,7 +15214,7 @@ source_files:
     lycaon/pkg/api/attention_types.go: 30
     lycaon/pkg/api/blueprint_types.go: 8
     lycaon/pkg/api/board_types.go: 48
-    lycaon/pkg/api/checkpoint_types.go: 114
+    lycaon/pkg/api/checkpoint_types.go: 115
     lycaon/pkg/api/cost_types.go: 15
     lycaon/pkg/api/delegation_types.go: 71
     lycaon/pkg/api/enum_registries.go: 125
@@ -15148,6 +15228,7 @@ source_files:
     lycaon/pkg/api/message_provenance.go: 126
     lycaon/pkg/api/message_transcript.go: 272
     lycaon/pkg/api/parse.go: 28
+    lycaon/pkg/api/presence_types.go: 6
     lycaon/pkg/api/progress_types.go: 10
     lycaon/pkg/api/project_types.go: 32
     lycaon/pkg/api/recovery.go: 6
@@ -15179,10 +15260,10 @@ source_files:
     scripts/bialy/train.py: 501
     scripts/build-advisory-severity.py: 77
     scripts/build-decide.sh: 36
-    scripts/build-dev-engine.sh: 22
-    scripts/build-document-core.sh: 40
+    scripts/build-dev-engine.sh: 23
+    scripts/build-document-core.sh: 64
     scripts/bundle-openapi.sh: 56
-    scripts/bundle-smoke.sh: 214
+    scripts/bundle-smoke.sh: 245
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
     scripts/ci_verification.py: 114
@@ -15289,7 +15370,7 @@ source_files:
     scripts/debug-session.sh: 63
     scripts/decide-features.sh: 9
     scripts/den-build-app.sh: 77
-    scripts/den-build-bundle.sh: 243
+    scripts/den-build-bundle.sh: 244
     scripts/den-coverage-check.sh: 59
     scripts/den-dev-app.sh: 55
     scripts/den-dev-sidecar.sh: 115
@@ -15305,7 +15386,7 @@ source_files:
     scripts/digest-run-lock-smoke.sh: 26
     scripts/digest-run-lock.sh: 57
     scripts/doc-link-check.sh: 5
-    scripts/document-core-manifest.py: 28
+    scripts/document-core-env.sh: 2
     scripts/e2e-cleanup.sh: 15
     scripts/e2e-den-desktop.sh: 50
     scripts/e2e-den.sh: 138
@@ -15318,12 +15399,12 @@ source_files:
     scripts/e2e-wait-health.sh: 14
     scripts/ensure-tauri-binaries.sh: 10
     scripts/eval-agent-live.sh: 182
-    scripts/fuzz-short.sh: 61
+    scripts/fuzz-short.sh: 62
     scripts/gitengine-ensure.sh: 15
     scripts/gitengine-fetch.sh: 309
     scripts/go-bench-report.py: 96
-    scripts/go-bench.sh: 40
-    scripts/go-test-digest.sh: 308
+    scripts/go-bench.sh: 41
+    scripts/go-test-digest.sh: 309
     scripts/go-test-exec.py: 150
     scripts/go-test-failed.sh: 63
     scripts/gocache-trim.sh: 39
@@ -15348,17 +15429,17 @@ source_files:
     scripts/release-halt.sh: 177
     scripts/release-metadata.py: 50
     scripts/release-preflight.sh: 155
-    scripts/release-r2-immutable-put.sh: 77
+    scripts/release-r2-immutable-put.sh: 101
     scripts/release-r2-live-test.sh: 334
     scripts/release-r2-publish-pointer.sh: 162
-    scripts/release-r2-rest.sh: 49
+    scripts/release-r2-rest.sh: 83
     scripts/release-recovery-prepare.sh: 43
     scripts/release-source-validate.sh: 46
-    scripts/release-stage-platform-artifacts.sh: 228
+    scripts/release-stage-platform-artifacts.sh: 244
     scripts/release-validate-bridge.sh: 30
     scripts/release-validate-updater-manifest.sh: 94
-    scripts/release_control.py: 75
-    scripts/release_distribution.py: 274
+    scripts/release_control.py: 76
+    scripts/release_distribution.py: 275
     scripts/release_pointer_headers.py: 14
     scripts/release_semver.py: 62
     scripts/release_withdrawal.py: 154
@@ -15367,15 +15448,15 @@ source_files:
     scripts/rewrite-fail-messages.py: 285
     scripts/select-opengrep-release.sh: 35
     scripts/semver-compare.py: 22
-    scripts/setup-dev.sh: 111
-    scripts/sign-dev-binary.sh: 17
+    scripts/setup-dev.sh: 105
+    scripts/sign-dev-binary.sh: 20
     scripts/snapshot-publish.sh: 130
     scripts/sqlc-version.sh: 2
     scripts/stage-bundled-opengrep.sh: 20
     scripts/stage-decide-heads.py: 75
     scripts/stage-decide-heads.sh: 8
-    scripts/stage-engine.sh: 137
-    scripts/stage-macos-host.py: 122
+    scripts/stage-engine.sh: 141
+    scripts/stage-macos-host.py: 110
     scripts/sync-den-versions.sh: 49
     scripts/task.sh: 21
     scripts/test-digest.py: 186
@@ -15394,7 +15475,7 @@ source_files:
     scripts/upgrade-corpus-semantics.py: 84
     scripts/upgrade-editor-fixture.mjs: 169
     scripts/upgrade-fixture-files.py: 148
-    scripts/upgrade-rehearse.sh: 278
+    scripts/upgrade-rehearse.sh: 299
     scripts/upgrade-store-contract.sh: 167
     scripts/validate-openapi.sh: 9
     scripts/vendor-oar-spec.sh: 119
@@ -15418,7 +15499,7 @@ source_files:
     scripts/verify-bundle.sh: 6
     scripts/verify-updater-signature.sh: 20
     scripts/vitest-digest.py: 277
-    scripts/vitest-digest.sh: 204
+    scripts/vitest-digest.sh: 205
     scripts/with-bundled-scanners.sh: 13
     task: 3
 test_directories:
@@ -15533,10 +15614,10 @@ test_directories:
     lycaon-den/src/list: 5
     lycaon-den/src/notices: 13
     lycaon-den/src/notifications: 1
-    lycaon-den/src/platform: 20
-    lycaon-den/src/platform/connection: 12
+    lycaon-den/src/platform: 21
+    lycaon-den/src/platform/connection: 13
     lycaon-den/src/platform/desktop: 8
-    lycaon-den/src/platform/files: 9
+    lycaon-den/src/platform/files: 8
     lycaon-den/src/platform/harness: 2
     lycaon-den/src/platform/interaction: 7
     lycaon-den/src/platform/navigation: 3
@@ -15648,7 +15729,7 @@ test_directories:
     lycaon/internal/conditions: 20
     lycaon/internal/configdir: 2
     lycaon/internal/configlayout: 2
-    lycaon/internal/confine: 48
+    lycaon/internal/confine: 49
     lycaon/internal/contactsheet: 1
     lycaon/internal/contentblob: 7
     lycaon/internal/contribframe: 1
@@ -15683,9 +15764,9 @@ test_directories:
     lycaon/internal/destconfig: 1
     lycaon/internal/detectionpack: 19
     lycaon/internal/diagnostics: 1
-    lycaon/internal/documentcore: 8
+    lycaon/internal/documentcore: 11
     lycaon/internal/editorconfig: 2
-    lycaon/internal/editordoc: 33
+    lycaon/internal/editordoc: 34
     lycaon/internal/editoroutbox: 2
     lycaon/internal/editorturn: 1
     lycaon/internal/egress: 4
@@ -15738,7 +15819,7 @@ test_directories:
     lycaon/internal/hostprocess: 1
     lycaon/internal/hostresources: 4
     lycaon/internal/hostscope: 1
-    lycaon/internal/httpaction: 19
+    lycaon/internal/httpaction: 20
     lycaon/internal/httpclient: 9
     lycaon/internal/httpcookies: 3
     lycaon/internal/indexwatch: 2
@@ -15746,7 +15827,7 @@ test_directories:
     lycaon/internal/inspector: 4
     lycaon/internal/invocation: 3
     lycaon/internal/jsonblob: 1
-    lycaon/internal/jsonfence: 2
+    lycaon/internal/jsonfence: 3
     lycaon/internal/jsonshape: 1
     lycaon/internal/keylock: 1
     lycaon/internal/lineage: 3
@@ -15800,6 +15881,7 @@ test_directories:
     lycaon/internal/platformfloor: 1
     lycaon/internal/pongoplain: 1
     lycaon/internal/preflight: 2
+    lycaon/internal/presence: 2
     lycaon/internal/pricing: 4
     lycaon/internal/progress: 12
     lycaon/internal/project: 56
@@ -15972,7 +16054,7 @@ test_directories:
     lycaon/pkg/pathglob: 2
     lycaon/pkg/testcorpus: 5
     lycaon/test/contract: 4
-    lycaon/test/contract/agentcontext: 74
+    lycaon/test/contract/agentcontext: 75
     lycaon/test/contract/architecture: 56
     lycaon/test/contract/catalogs: 30
     lycaon/test/contract/evidence: 14
@@ -15989,7 +16071,7 @@ test_directories:
     lycaon/test/contract/persistence: 18
     lycaon/test/contract/prompts: 54
     lycaon/test/contract/providers: 13
-    lycaon/test/contract/release: 12
+    lycaon/test/contract/release: 13
     lycaon/test/contract/runner: 26
     lycaon/test/contract/scanning: 20
     lycaon/test/contract/security: 50
@@ -16004,7 +16086,7 @@ test_directories:
     lycaon/test/replay: 1
     lycaon/test/scanstress: 10
     lycaon/test/security: 118
-    lycaon/test/smoke: 5
+    lycaon/test/smoke: 6
     lycaon/test/wiring: 54
     lycaon/test/wiring/fixtures/coordinator_batch: 1
     lycaon/test/wiring/fixtures/coordinator_coordination_plane: 1
@@ -16197,10 +16279,10 @@ test_files:
     lycaon-den/src-tauri/src/detect_editors/tests.rs: 187
     lycaon-den/src-tauri/src/document_outbox/tests.rs: 515
     lycaon-den/src-tauri/src/item_windows/tests.rs: 122
-    lycaon-den/src-tauri/src/sidecar/tests.rs: 442
+    lycaon-den/src-tauri/src/sidecar/tests.rs: 643
     lycaon-den/src-tauri/src/test_support.rs: 54
     lycaon-den/src-tauri/src/update_service/tests.rs: 592
-    lycaon-den/src-tauri/tests/host_wire_mirrors.rs: 685
+    lycaon-den/src-tauri/tests/host_wire_mirrors.rs: 689
     lycaon-den/src/App.boot.test.tsx: 45
     lycaon-den/src/api/client-impl-paths.test.ts: 194
     lycaon-den/src/api/client-impl.test.ts: 179
@@ -16244,7 +16326,7 @@ test_files:
     lycaon-den/src/chat/checkpoint/approval-reveal.test.ts: 28
     lycaon-den/src/chat/checkpoint/approval-slots.test.ts: 30
     lycaon-den/src/chat/checkpoint/approval-wait.test.ts: 17
-    lycaon-den/src/chat/checkpoint/checkpoint-actions.test.ts: 58
+    lycaon-den/src/chat/checkpoint/checkpoint-actions.test.ts: 88
     lycaon-den/src/chat/checkpoint/checkpoint-model.test.ts: 36
     lycaon-den/src/chat/checkpoint/checkpoint-session-scope.test.ts: 81
     lycaon-den/src/chat/checkpoint/gate-copy.test.ts: 19
@@ -16493,9 +16575,9 @@ test_files:
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.test.tsx: 157
     lycaon-den/src/components/chatview/chat-tabs.test.ts: 115
     lycaon-den/src/components/chatview/chat-workflow-state.test.ts: 182
-    lycaon-den/src/components/chatview/composer-secret-mark.test.ts: 95
+    lycaon-den/src/components/chatview/composer-secret-mark.test.ts: 96
     lycaon-den/src/components/chatview/queue-controller.test.ts: 182
-    lycaon-den/src/components/checkpoint/ApprovalCard.test.tsx: 1016
+    lycaon-den/src/components/checkpoint/ApprovalCard.test.tsx: 1040
     lycaon-den/src/components/checkpoint/ApprovalContentLink.test.tsx: 26
     lycaon-den/src/components/checkpoint/ApprovalFileChanges.test.tsx: 44
     lycaon-den/src/components/checkpoint/CheckpointCards.exit.test.tsx: 200
@@ -16587,8 +16669,8 @@ test_files:
     lycaon-den/src/components/project-path-menu-items.test.ts: 241
     lycaon-den/src/components/project/IgnoredSecretValues.test.tsx: 71
     lycaon-den/src/components/project/ManagedSecretForms.test.tsx: 33
-    lycaon-den/src/components/project/ManagedSecretsPanel.refresh.test.tsx: 69
-    lycaon-den/src/components/project/ManagedSecretsPanel.test.tsx: 727
+    lycaon-den/src/components/project/ManagedSecretsPanel.refresh.test.tsx: 72
+    lycaon-den/src/components/project/ManagedSecretsPanel.test.tsx: 730
     lycaon-den/src/components/project/ProjectArtifactsView.test.tsx: 482
     lycaon-den/src/components/project/ProjectBlueprintsView.test.tsx: 668
     lycaon-den/src/components/project/ProjectContextView.test.tsx: 206
@@ -17105,16 +17187,16 @@ test_files:
     lycaon-den/src/list/pagination.test.ts: 24
     lycaon-den/src/notices/InlineNotice.test.tsx: 80
     lycaon-den/src/notices/copy-contract.test.ts: 32
-    lycaon-den/src/notices/critical-stop-model.test.ts: 338
+    lycaon-den/src/notices/critical-stop-model.test.ts: 364
     lycaon-den/src/notices/no-provider-card.test.ts: 35
     lycaon-den/src/notices/no-provider-copy-contract.test.ts: 72
     lycaon-den/src/notices/notice-actions.test.ts: 130
     lycaon-den/src/notices/notice-model.test.ts: 153
     lycaon-den/src/notices/notice-rollup.test.ts: 24
     lycaon-den/src/notices/notice-store.test.ts: 207
-    lycaon-den/src/notices/notification-tier-invariants.test.ts: 186
+    lycaon-den/src/notices/notification-tier-invariants.test.ts: 200
     lycaon-den/src/notices/report-policy.test.ts: 84
-    lycaon-den/src/notices/surface-failure.test.ts: 58
+    lycaon-den/src/notices/surface-failure.test.ts: 88
     lycaon-den/src/notices/upgrade-survival-copy.contract.test.ts: 48
     lycaon-den/src/notifications/notification-service.test.ts: 193
     lycaon-den/src/platform/accessibility-axe-smoke.test.tsx: 436
@@ -17123,18 +17205,19 @@ test_files:
     lycaon-den/src/platform/chat-usability-invariants.test.ts: 101
     lycaon-den/src/platform/codemirror-view-patch-behavior.test.ts: 152
     lycaon-den/src/platform/codemirror-view-patch.test.ts: 85
-    lycaon-den/src/platform/connection/app-boot.test.ts: 457
-    lycaon-den/src/platform/connection/app-connection.test.ts: 1002
+    lycaon-den/src/platform/connection/app-boot.test.ts: 462
+    lycaon-den/src/platform/connection/app-connection.test.ts: 1076
     lycaon-den/src/platform/connection/backend-contract.test.ts: 22
     lycaon-den/src/platform/connection/backend.test.ts: 117
     lycaon-den/src/platform/connection/boot-fallback.test.ts: 95
     lycaon-den/src/platform/connection/client-identity.test.ts: 42
     lycaon-den/src/platform/connection/engine-startup.test.ts: 62
+    lycaon-den/src/platform/connection/engine-supervision.test.ts: 38
     lycaon-den/src/platform/connection/health.test.ts: 110
     lycaon-den/src/platform/connection/host-identity.test.ts: 80
     lycaon-den/src/platform/connection/request-connectivity.test.ts: 55
     lycaon-den/src/platform/connection/sidecar-status.test.ts: 16
-    lycaon-den/src/platform/connection/tauri-ipc-parity.contract.test.ts: 121
+    lycaon-den/src/platform/connection/tauri-ipc-parity.contract.test.ts: 134
     lycaon-den/src/platform/context-menus-reveal-invariants.test.ts: 55
     lycaon-den/src/platform/csp-nonce.test.ts: 16
     lycaon-den/src/platform/decision-journey-wiring.test.ts: 77
@@ -17152,7 +17235,6 @@ test_files:
     lycaon-den/src/platform/files/file-drop.register.test.ts: 103
     lycaon-den/src/platform/files/file-drop.test.ts: 119
     lycaon-den/src/platform/files/folder.test.ts: 43
-    lycaon-den/src/platform/files/managed-secret-reveal.test.ts: 63
     lycaon-den/src/platform/files/native-path-dialog.test.ts: 16
     lycaon-den/src/platform/files/overlay-dir.test.ts: 15
     lycaon-den/src/platform/files/reveal-in-file-manager.test.ts: 139
@@ -17190,6 +17272,7 @@ test_files:
     lycaon-den/src/platform/persistence/app-state.test.ts: 86
     lycaon-den/src/platform/persistence/backup-transfer.test.ts: 80
     lycaon-den/src/platform/persistence/preflight-store.test.ts: 51
+    lycaon-den/src/platform/presence.test.ts: 87
     lycaon-den/src/platform/runtime.test.ts: 71
     lycaon-den/src/platform/scrolling/native-smooth-scroll.test.ts: 94
     lycaon-den/src/platform/scrolling/overlay-scrollbar-autohide.test.ts: 184
@@ -17290,7 +17373,7 @@ test_files:
     lycaon-den/src/settings/security/approval-grants-cache.test.ts: 142
     lycaon-den/src/settings/security/approval-grants-model.test.ts: 256
     lycaon-den/src/settings/security/approvals-settings-copy.test.ts: 41
-    lycaon-den/src/settings/security/managed-secrets-model.test.ts: 151
+    lycaon-den/src/settings/security/managed-secrets-model.test.ts: 152
     lycaon-den/src/settings/security/project-settings-overlay-copy.test.ts: 44
     lycaon-den/src/settings/security/project-trust.test.ts: 79
     lycaon-den/src/settings/security/trust-item-tree.test.ts: 105
@@ -17412,7 +17495,7 @@ test_files:
     lycaon-den/src/test/composer-view-fixture.tsx: 98
     lycaon-den/src/test/console-trap.test.ts: 16
     lycaon-den/src/test/console-trap.ts: 12
-    lycaon-den/src/test/document-core.ts: 42
+    lycaon-den/src/test/document-core.ts: 68
     lycaon-den/src/test/document-fixture.ts: 69
     lycaon-den/src/test/document-outbox-fixture.ts: 11
     lycaon-den/src/test/file-edit-fixture.ts: 16
@@ -17940,8 +18023,8 @@ test_files:
     lycaon/internal/bundleverify/credential_protection_test.go: 59
     lycaon/internal/bundleverify/macho_fixture_test.go: 206
     lycaon/internal/bundleverify/opengrep_test.go: 141
-    lycaon/internal/bundleverify/runner_test.go: 137
-    lycaon/internal/bundleverify/verify_test.go: 611
+    lycaon/internal/bundleverify/runner_test.go: 160
+    lycaon/internal/bundleverify/verify_test.go: 693
     lycaon/internal/call/reservation_test.go: 91
     lycaon/internal/captureprojection/projector_test.go: 363
     lycaon/internal/captureprojection/raster_mask_test.go: 58
@@ -17988,7 +18071,7 @@ test_files:
     lycaon/internal/conditions/var_primitives_test.go: 42
     lycaon/internal/configdir/build_channel_test.go: 21
     lycaon/internal/configdir/configdir_test.go: 98
-    lycaon/internal/configlayout/bundle_test.go: 60
+    lycaon/internal/configlayout/bundle_test.go: 92
     lycaon/internal/configlayout/paths_test.go: 76
     lycaon/internal/confine/action_lease_live_test.go: 152
     lycaon/internal/confine/agent_policy_roots_test.go: 85
@@ -18025,6 +18108,7 @@ test_files:
     lycaon/internal/confine/refusal_stamp_test.go: 51
     lycaon/internal/confine/refusal_watch_internal_test.go: 285
     lycaon/internal/confine/remote_package_refusal_test.go: 105
+    lycaon/internal/confine/repository_tree_grant_test.go: 97
     lycaon/internal/confine/request_test.go: 174
     lycaon/internal/confine/resolve_socket_test.go: 44
     lycaon/internal/confine/sandbox_refusal_internal_test.go: 211
@@ -18414,8 +18498,11 @@ test_files:
     lycaon/internal/documentcore/cancellation_test.go: 26
     lycaon/internal/documentcore/changed_lines_test.go: 23
     lycaon/internal/documentcore/compaction_test.go: 39
+    lycaon/internal/documentcore/core_bench_test.go: 41
     lycaon/internal/documentcore/core_test.go: 67
+    lycaon/internal/documentcore/hardened_darwin_test.go: 28
     lycaon/internal/documentcore/large_document_test.go: 24
+    lycaon/internal/documentcore/process_test.go: 94
     lycaon/internal/documentcore/text_test.go: 73
     lycaon/internal/documentcore/undo_supersession_test.go: 74
     lycaon/internal/editorconfig/check_test.go: 87
@@ -18432,6 +18519,7 @@ test_files:
     lycaon/internal/editordoc/collaboration_test.go: 479
     lycaon/internal/editordoc/command_history_test.go: 98
     lycaon/internal/editordoc/compaction_integration_test.go: 93
+    lycaon/internal/editordoc/core_replacement_test.go: 33
     lycaon/internal/editordoc/external_test.go: 253
     lycaon/internal/editordoc/file_lifecycle_test.go: 111
     lycaon/internal/editordoc/mutation_origin_test.go: 82
@@ -18649,7 +18737,7 @@ test_files:
     lycaon/internal/fspath/canonical_path_darwin_test.go: 38
     lycaon/internal/fspath/canonical_path_test.go: 150
     lycaon/internal/gate/direct_ip_channel_test.go: 58
-    lycaon/internal/gate/evaluate_test.go: 816
+    lycaon/internal/gate/evaluate_test.go: 833
     lycaon/internal/gate/execution_capability_test.go: 41
     lycaon/internal/gate/ingestion_citation_test.go: 74
     lycaon/internal/gate/posture_test.go: 136
@@ -18720,7 +18808,7 @@ test_files:
     lycaon/internal/guidance/closeout_stream_narrative_test.go: 95
     lycaon/internal/guidance/closeout_summarize_grounding_test.go: 76
     lycaon/internal/guidance/config_test.go: 110
-    lycaon/internal/guidance/coordinator_completion_report_test.go: 202
+    lycaon/internal/guidance/coordinator_completion_report_test.go: 220
     lycaon/internal/guidance/coordinator_nudge_test.go: 31
     lycaon/internal/guidance/coordinator_tool_banner_test.go: 264
     lycaon/internal/guidance/draft_version_outcome_test.go: 27
@@ -18832,17 +18920,18 @@ test_files:
     lycaon/internal/httpaction/complete_request_test.go: 285
     lycaon/internal/httpaction/cookie_concurrency_test.go: 115
     lycaon/internal/httpaction/cookie_reference_test.go: 225
+    lycaon/internal/httpaction/custody_fixture_test.go: 80
     lycaon/internal/httpaction/dials_loopback_test.go: 45
     lycaon/internal/httpaction/failure_classification_test.go: 42
-    lycaon/internal/httpaction/managed_secrets_test.go: 218
+    lycaon/internal/httpaction/managed_secrets_test.go: 209
     lycaon/internal/httpaction/response_body_test.go: 207
     lycaon/internal/httpaction/response_path_test.go: 88
-    lycaon/internal/httpaction/response_scrub_test.go: 113
-    lycaon/internal/httpaction/secret_canary_invariant_test.go: 229
-    lycaon/internal/httpaction/secret_canary_reference_tools_test.go: 248
+    lycaon/internal/httpaction/response_scrub_test.go: 110
+    lycaon/internal/httpaction/secret_canary_invariant_test.go: 224
+    lycaon/internal/httpaction/secret_canary_reference_tools_test.go: 243
     lycaon/internal/httpaction/secret_screen_test.go: 156
-    lycaon/internal/httpaction/sent_headers_test.go: 126
-    lycaon/internal/httpaction/service_permission_test.go: 133
+    lycaon/internal/httpaction/sent_headers_test.go: 120
+    lycaon/internal/httpaction/service_permission_test.go: 130
     lycaon/internal/httpaction/token_jar_test.go: 177
     lycaon/internal/httpaction/token_release_test.go: 161
     lycaon/internal/httpaction/tool_test.go: 200
@@ -18873,6 +18962,7 @@ test_files:
     lycaon/internal/jsonblob/jsonblob_test.go: 70
     lycaon/internal/jsonfence/json_fence_test.go: 102
     lycaon/internal/jsonfence/strict_test.go: 21
+    lycaon/internal/jsonfence/trailing_test.go: 89
     lycaon/internal/jsonshape/decode_test.go: 94
     lycaon/internal/keylock/keylock_test.go: 24
     lycaon/internal/lineage/lineage_test.go: 179
@@ -19369,6 +19459,8 @@ test_files:
     lycaon/internal/pongoplain/pongoplain_test.go: 200
     lycaon/internal/preflight/catastrophic_test.go: 121
     lycaon/internal/preflight/probes_test.go: 392
+    lycaon/internal/presence/broker_test.go: 120
+    lycaon/internal/presence/ledger_test.go: 80
     lycaon/internal/pricing/cache_rates_test.go: 47
     lycaon/internal/pricing/client_test.go: 81
     lycaon/internal/pricing/normalize_test.go: 60
@@ -19866,8 +19958,8 @@ test_files:
     lycaon/internal/search/symbol_leg_test.go: 182
     lycaon/internal/search/untrusted_compile_test.go: 92
     lycaon/internal/secretcap/admin_test.go: 177
-    lycaon/internal/secretcap/attribution_test.go: 101
-    lycaon/internal/secretcap/chronology_test.go: 104
+    lycaon/internal/secretcap/attribution_test.go: 100
+    lycaon/internal/secretcap/chronology_test.go: 105
     lycaon/internal/secretcap/cookiejar_concurrency_test.go: 192
     lycaon/internal/secretcap/cookiejar_lifecycle_test.go: 153
     lycaon/internal/secretcap/cookiejar_test.go: 98
@@ -19876,12 +19968,12 @@ test_files:
     lycaon/internal/secretcap/echo_test.go: 73
     lycaon/internal/secretcap/permission_test.go: 30
     lycaon/internal/secretcap/reference_test.go: 96
-    lycaon/internal/secretcap/resolution_test.go: 184
-    lycaon/internal/secretcap/reveal_test.go: 204
-    lycaon/internal/secretcap/service_test.go: 453
+    lycaon/internal/secretcap/resolution_test.go: 305
+    lycaon/internal/secretcap/reveal_test.go: 163
+    lycaon/internal/secretcap/service_test.go: 456
     lycaon/internal/secretcap/tokenjar_test.go: 34
     lycaon/internal/secretcap/uses_test.go: 114
-    lycaon/internal/secretcap/versions_test.go: 236
+    lycaon/internal/secretcap/versions_test.go: 293
     lycaon/internal/secretharvest/minted_test.go: 63
     lycaon/internal/secretharvest/secretharvest_test.go: 195
     lycaon/internal/secretmatch/classification_test.go: 44
@@ -20300,7 +20392,7 @@ test_files:
     lycaon/internal/settings/grant_list_all_test.go: 51
     lycaon/internal/settings/grant_provenance_test.go: 56
     lycaon/internal/settings/grant_tunnel_identity_internal_test.go: 174
-    lycaon/internal/settings/granted_path_offer_test.go: 617
+    lycaon/internal/settings/granted_path_offer_test.go: 640
     lycaon/internal/settings/host_resource_family_test.go: 49
     lycaon/internal/settings/host_rules_test.go: 99
     lycaon/internal/settings/hostile_project_overlay_test.go: 88
@@ -20319,7 +20411,7 @@ test_files:
     lycaon/internal/settings/review_pause_internal_test.go: 54
     lycaon/internal/settings/rule_gate_test.go: 1204
     lycaon/internal/settings/scratch_write_approval_test.go: 71
-    lycaon/internal/settings/secret_grant_test.go: 208
+    lycaon/internal/settings/secret_grant_test.go: 272
     lycaon/internal/settings/security_scanners_test.go: 31
     lycaon/internal/settings/session_grants_test.go: 52
     lycaon/internal/settings/session_limits_derived_test.go: 78
@@ -20891,7 +20983,7 @@ test_files:
     lycaon/internal/tools/native/write_scope_reject_test.go: 79
     lycaon/internal/tools/oar_boundary_test.go: 49
     lycaon/internal/tools/oar_identity_test.go: 42
-    lycaon/internal/tools/outbound_secret_screen_chat_release_test.go: 82
+    lycaon/internal/tools/outbound_secret_screen_chat_release_test.go: 117
     lycaon/internal/tools/outbound_secret_screen_host_test.go: 76
     lycaon/internal/tools/outbound_secret_screen_trust_test.go: 66
     lycaon/internal/tools/owner_failure_test.go: 29
@@ -20923,7 +21015,7 @@ test_files:
     lycaon/internal/tools/request_tools_recovery_test.go: 267
     lycaon/internal/tools/safecmd/safecmd_test.go: 163
     lycaon/internal/tools/scope_reject_test.go: 73
-    lycaon/internal/tools/secret_file_invariants_test.go: 552
+    lycaon/internal/tools/secret_file_invariants_test.go: 559
     lycaon/internal/tools/secret_ignore_review_test.go: 64
     lycaon/internal/tools/secret_never_ask_test.go: 57
     lycaon/internal/tools/secret_reference_test.go: 196
@@ -21433,6 +21525,7 @@ test_files:
     lycaon/test/contract/agentcontext/prompt_render_helpers.go: 33
     lycaon/test/contract/agentcontext/registry_testmain_test.go: 10
     lycaon/test/contract/agentcontext/reject_copy_reachable_fields_contract_test.go: 228
+    lycaon/test/contract/agentcontext/report_fence_prompt_contract_test.go: 67
     lycaon/test/contract/agentcontext/secret_lifecycle_invariants_contract_test.go: 49
     lycaon/test/contract/agentcontext/secret_tool_profile_contract_test.go: 55
     lycaon/test/contract/agentcontext/secure_by_default_prompt_contract_test.go: 48
@@ -21789,6 +21882,7 @@ test_files:
     lycaon/test/contract/release/release_corpus_identity_test.go: 66
     lycaon/test/contract/release/release_preflight_corpus_test.go: 73
     lycaon/test/contract/release/release_preparation_test.go: 141
+    lycaon/test/contract/release/runtime_code_generation_contract_test.go: 37
     lycaon/test/contract/release/scan_rules_vendor_pin_contract_test.go: 184
     lycaon/test/contract/release/shipped_go_notices_scope_contract_test.go: 80
     lycaon/test/contract/release/version_release_contract_test.go: 310
@@ -21801,7 +21895,7 @@ test_files:
     lycaon/test/contract/runner/harness_cleanup_contract_test.go: 123
     lycaon/test/contract/runner/harness_supervisor_contract_test.go: 19
     lycaon/test/contract/runner/integration_tag_tooling_contract_test.go: 69
-    lycaon/test/contract/runner/opengrep_artifact_scripts_test.go: 366
+    lycaon/test/contract/runner/opengrep_artifact_scripts_test.go: 342
     lycaon/test/contract/runner/parallel_test_safety_contract_test.go: 34
     lycaon/test/contract/runner/platform_floor_contract_test.go: 119
     lycaon/test/contract/runner/registry_testmain_test.go: 10
@@ -22013,11 +22107,11 @@ test_files:
     lycaon/test/contract/wire/stub_routes_history.go: 172
     lycaon/test/contract/wire/stub_routes_integrations.go: 112
     lycaon/test/contract/wire/stub_routes_preferences.go: 64
-    lycaon/test/contract/wire/stub_routes_projects.go: 277
+    lycaon/test/contract/wire/stub_routes_projects.go: 287
     lycaon/test/contract/wire/stub_routes_providers.go: 188
     lycaon/test/contract/wire/stub_routes_scanning.go: 184
     lycaon/test/contract/wire/stub_routes_search.go: 123
-    lycaon/test/contract/wire/stub_routes_sessions.go: 295
+    lycaon/test/contract/wire/stub_routes_sessions.go: 301
     lycaon/test/contract/wire/stub_routes_workflows.go: 146
     lycaon/test/contract/wire/stub_server.go: 193
     lycaon/test/contract/wire/stub_source_git_review.go: 45
@@ -22219,6 +22313,7 @@ test_files:
     lycaon/test/smoke/app_build_test.go: 38
     lycaon/test/smoke/den_sidecar_handoff_test.go: 52
     lycaon/test/smoke/fireworks_live_test.go: 69
+    lycaon/test/smoke/hardened_serve_darwin_test.go: 110
     lycaon/test/smoke/prompt_identity_test.go: 21
     lycaon/test/smoke/serve_test.go: 398
     lycaon/test/wiring/agent_first_session_test.go: 65
@@ -22357,7 +22452,7 @@ test_files:
     scripts/e2e/sidecar-process.sh: 31
     scripts/harness/test_supervise.py: 234
     scripts/test_decide_heads_execution.py: 65
-    scripts/test_stage_macos_host.py: 154
+    scripts/test_stage_macos_host.py: 124
     scripts/test_update_keys.py: 137
     scripts/verification_tests/__init__.py: 1
     scripts/verification_tests/support.py: 178
@@ -22377,7 +22472,7 @@ test_files:
     scripts/verification_tests/test_health_execution.py: 169
     scripts/verification_tests/test_live_go_execution.py: 187
     scripts/verification_tests/test_planning_execution.py: 444
-    scripts/verification_tests/test_release_distribution_execution.py: 271
+    scripts/verification_tests/test_release_distribution_execution.py: 279
     scripts/verification_tests/test_reuse_execution.py: 247
     scripts/verification_tests/test_test_execution.py: 486
     scripts/verification_tests/test_tier_exclusion_execution.py: 40
@@ -22446,7 +22541,7 @@ ts_local_dependencies:
     lycaon-den/src/chat/checkpoint/approval-slots.ts: 1
     lycaon-den/src/chat/checkpoint/approval-test-fixtures.ts: 1
     lycaon-den/src/chat/checkpoint/approval-wait.ts: 0
-    lycaon-den/src/chat/checkpoint/checkpoint-actions.ts: 3
+    lycaon-den/src/chat/checkpoint/checkpoint-actions.ts: 4
     lycaon-den/src/chat/checkpoint/checkpoint-model.ts: 1
     lycaon-den/src/chat/checkpoint/checkpoint-session-scope.ts: 4
     lycaon-den/src/chat/checkpoint/gate-copy.ts: 2
@@ -22668,7 +22763,7 @@ ts_local_dependencies:
     lycaon-den/src/components/ConfirmDestructiveDialog.tsx: 6
     lycaon-den/src/components/ContextMenu.tsx: 4
     lycaon-den/src/components/CriticalStop.tsx: 2
-    lycaon-den/src/components/CriticalStopStage.tsx: 22
+    lycaon-den/src/components/CriticalStopStage.tsx: 23
     lycaon-den/src/components/EngineStartupStage.tsx: 7
     lycaon-den/src/components/FileEditDiff.tsx: 6
     lycaon-den/src/components/GitCheckout.tsx: 10
@@ -22717,7 +22812,7 @@ ts_local_dependencies:
     lycaon-den/src/components/chatview/composer-secret-mark.ts: 5
     lycaon-den/src/components/chatview/queue-controller.ts: 4
     lycaon-den/src/components/chatview/tabs.ts: 0
-    lycaon-den/src/components/checkpoint/ApprovalCard.tsx: 20
+    lycaon-den/src/components/checkpoint/ApprovalCard.tsx: 21
     lycaon-den/src/components/checkpoint/ApprovalContentLink.tsx: 2
     lycaon-den/src/components/checkpoint/ApprovalFileChanges.tsx: 5
     lycaon-den/src/components/checkpoint/ApprovalShell.tsx: 14
@@ -23493,7 +23588,7 @@ ts_local_dependencies:
     lycaon-den/src/list/pagination.ts: 0
     lycaon-den/src/notices/InlineNotice.tsx: 3
     lycaon-den/src/notices/client-notices.ts: 1
-    lycaon-den/src/notices/critical-stop-model.ts: 7
+    lycaon-den/src/notices/critical-stop-model.ts: 8
     lycaon-den/src/notices/no-provider-card.ts: 0
     lycaon-den/src/notices/notice-actions.ts: 3
     lycaon-den/src/notices/notice-model.ts: 7
@@ -23504,17 +23599,18 @@ ts_local_dependencies:
     lycaon-den/src/notices/notice-select.ts: 3
     lycaon-den/src/notices/notice-store.ts: 4
     lycaon-den/src/notices/report-policy.ts: 3
-    lycaon-den/src/notices/surface-failure.ts: 4
+    lycaon-den/src/notices/surface-failure.ts: 6
     lycaon-den/src/notifications/mount-notification-service.ts: 11
     lycaon-den/src/notifications/notification-open.ts: 0
     lycaon-den/src/notifications/notification-service.ts: 4
     lycaon-den/src/platform/connection/app-boot-readiness.ts: 1
     lycaon-den/src/platform/connection/app-boot.ts: 29
-    lycaon-den/src/platform/connection/app-connection.ts: 50
+    lycaon-den/src/platform/connection/app-connection.ts: 52
     lycaon-den/src/platform/connection/backend.ts: 3
     lycaon-den/src/platform/connection/boot-fallback.ts: 1
     lycaon-den/src/platform/connection/client-identity.ts: 1
     lycaon-den/src/platform/connection/engine-startup.ts: 1
+    lycaon-den/src/platform/connection/engine-supervision.ts: 2
     lycaon-den/src/platform/connection/health.ts: 4
     lycaon-den/src/platform/connection/host-authority-registry.ts: 0
     lycaon-den/src/platform/connection/host-identity-test.ts: 2
@@ -23537,7 +23633,6 @@ ts_local_dependencies:
     lycaon-den/src/platform/files/file-drop.ts: 7
     lycaon-den/src/platform/files/folder.ts: 4
     lycaon-den/src/platform/files/host-folder-dialog.ts: 0
-    lycaon-den/src/platform/files/managed-secret-reveal.ts: 2
     lycaon-den/src/platform/files/native-path-dialog.ts: 0
     lycaon-den/src/platform/files/overlay-dir.ts: 0
     lycaon-den/src/platform/files/path-kind.ts: 1
@@ -23572,6 +23667,7 @@ ts_local_dependencies:
     lycaon-den/src/platform/persistence/backup-transfer.ts: 3
     lycaon-den/src/platform/persistence/preflight-report.ts: 1
     lycaon-den/src/platform/persistence/preflight-store.ts: 3
+    lycaon-den/src/platform/presence.ts: 2
     lycaon-den/src/platform/runtime.ts: 0
     lycaon-den/src/platform/scrolling/overlay-scrollbar-autohide.ts: 1
     lycaon-den/src/platform/scrolling/overlay-scrollbar-input.ts: 1
