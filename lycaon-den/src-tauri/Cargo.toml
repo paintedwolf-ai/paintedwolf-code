@@ -1,6 +1,6 @@
 [package]
 name = "painted-wolf-code"
-version = "1.0.0"
+version = "1.0.1"
 description = "Painted Wolf Code desktop shell"
 authors = ["Painted Wolf Code"]
 edition = "2021"

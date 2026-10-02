@@ -256,7 +256,7 @@ go_receiver_lines:
     lycaon/internal/confine/confine.SocketResolveError: 15
     lycaon/internal/confine/confine.SpawnFacts: 10
     lycaon/internal/confine/confine.WriteRootRefusalError: 7
-    lycaon/internal/confine/confine.egressBrokerT: 330
+    lycaon/internal/confine/confine.egressBrokerT: 327
     lycaon/internal/confine/confine.fsMatch: 28
     lycaon/internal/confine/confine.fsOperation: 10
     lycaon/internal/confine/confine.limitedWriter: 6
@@ -4468,7 +4468,7 @@ go_struct_fields:
     lycaon/internal/confine/confine.CommandNotFoundError: 1
     lycaon/internal/confine/confine.Confinement: 29
     lycaon/internal/confine/confine.DirectIPPermit: 2
-    lycaon/internal/confine/confine.EgressCommand: 12
+    lycaon/internal/confine/confine.EgressCommand: 11
     lycaon/internal/confine/confine.EgressDegraded: 1
     lycaon/internal/confine/confine.EgressDetectionCitation: 9
     lycaon/internal/confine/confine.EgressDetectionObservation: 7
@@ -11776,7 +11776,7 @@ source_files:
     lycaon/internal/confine/confine.go: 844
     lycaon/internal/confine/confine_action.go: 259
     lycaon/internal/confine/confine_broker.go: 150
-    lycaon/internal/confine/confine_egress.go: 752
+    lycaon/internal/confine/confine_egress.go: 748
     lycaon/internal/confine/confine_egress_ingestion.go: 38
     lycaon/internal/confine/confine_orphan.go: 83
     lycaon/internal/confine/control_plane_read_floor.go: 17
@@ -14568,7 +14568,7 @@ source_files:
     lycaon/internal/tools/native/code_rewrite.go: 212
     lycaon/internal/tools/native/code_rewrite_multi.go: 417
     lycaon/internal/tools/native/code_rewrite_transaction.go: 76
-    lycaon/internal/tools/native/command_exec.go: 458
+    lycaon/internal/tools/native/command_exec.go: 457
     lycaon/internal/tools/native/command_exec_denied.go: 29
     lycaon/internal/tools/native/command_index_watch.go: 19
     lycaon/internal/tools/native/command_io.go: 164
@@ -15466,7 +15466,7 @@ source_files:
     scripts/stage-decide-heads.sh: 8
     scripts/stage-engine.sh: 141
     scripts/stage-macos-host.py: 110
-    scripts/sync-den-versions.sh: 49
+    scripts/sync-den-versions.sh: 59
     scripts/task.sh: 21
     scripts/test-digest.py: 186
     scripts/test-execution.py: 514
@@ -16015,7 +16015,7 @@ test_directories:
     lycaon/internal/tools/docrefs: 1
     lycaon/internal/tools/fileage: 1
     lycaon/internal/tools/inboundwrite: 1
-    lycaon/internal/tools/native: 88
+    lycaon/internal/tools/native: 89
     lycaon/internal/tools/native/heldtools: 1
     lycaon/internal/tools/native/internal/testfixture: 1
     lycaon/internal/tools/native/jq: 4
@@ -18107,7 +18107,7 @@ test_files:
     lycaon/internal/confine/listen_grant_profile_test.go: 95
     lycaon/internal/confine/loopback_connect_profile_test.go: 97
     lycaon/internal/confine/loopback_listen_test.go: 70
-    lycaon/internal/confine/package_egress_test.go: 42
+    lycaon/internal/confine/package_egress_test.go: 25
     lycaon/internal/confine/path_case_test.go: 100
     lycaon/internal/confine/policy_write_grants_test.go: 94
     lycaon/internal/confine/profile_block_test.go: 68
@@ -20834,6 +20834,7 @@ test_files:
     lycaon/internal/tools/native/code_rewrite_transaction_test.go: 43
     lycaon/internal/tools/native/command_await_test.go: 276
     lycaon/internal/tools/native/command_cwd_test.go: 265
+    lycaon/internal/tools/native/command_egress_identity_test.go: 15
     lycaon/internal/tools/native/command_exec_denied_test.go: 53
     lycaon/internal/tools/native/command_failure_approach_test.go: 42
     lycaon/internal/tools/native/command_io_grants_test.go: 49
