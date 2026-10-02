@@ -47,9 +47,8 @@ export function AboutSettingsPanel(props: AboutPanelProps): JSX.Element {
       >
         <h3 class="den-settings-subhead">{settingLabel("tell-a-friend")}</h3>
         <p class="den-settings-hint">
-          {PRODUCT_NAME} is free and open source, and we don’t take donations.
-          If it has been useful to you, the best thanks is telling a colleague
-          who would use it, or starring the project on GitHub.
+          If {PRODUCT_NAME} has been useful to you, the best thanks is telling
+          a colleague who would use it, or starring the project on GitHub.
         </p>
         <div class="den-settings-actions">
           <DenButton
