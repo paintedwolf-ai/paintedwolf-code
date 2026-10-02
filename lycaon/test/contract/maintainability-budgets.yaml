@@ -21988,7 +21988,7 @@ test_files:
     lycaon/test/contract/security/wire_enum_codegen_gate_contract_test.go: 163
     lycaon/test/contract/sessions/advance_policy_contract_test.go: 173
     lycaon/test/contract/sessions/agent_confinement_copy_contract_test.go: 54
-    lycaon/test/contract/sessions/agent_public_retirement_contract_test.go: 318
+    lycaon/test/contract/sessions/agent_public_retirement_contract_test.go: 320
     lycaon/test/contract/sessions/agent_registry_contract_test.go: 33
     lycaon/test/contract/sessions/agent_spawn_limits_contract_test.go: 65
     lycaon/test/contract/sessions/agent_visible_worker_branch_paths_contract_test.go: 90
