@@ -124,10 +124,15 @@ pub(super) fn read_bounded_startup_line<R: BufRead>(
     }
 }
 
+/// Delivers startup records until the engine is ready, then holds its output
+/// open until end of file. `closed` drops with this reader, so its receiver
+/// learns the moment a running engine exits.
 pub(super) fn read_startup_records<R: Read>(
     stdout: R,
     tx: mpsc::Sender<Result<StartupRecord, String>>,
+    closed: mpsc::Sender<()>,
 ) {
+    let _closed = closed;
     let mut reader = BufReader::new(stdout);
     loop {
         match read_bounded_startup_line(&mut reader) {
@@ -137,12 +142,17 @@ pub(super) fn read_startup_records<R: Read>(
             }
             Ok(Some(line)) => match serde_json::from_str::<StartupRecord>(&line) {
                 Ok(record) => {
-                    let terminal = matches!(record.kind, StartupKind::Ready | StartupKind::Failed);
+                    let kind = record.kind;
                     if tx.send(Ok(record)).is_err() {
                         return;
                     }
-                    if terminal {
-                        return;
+                    match kind {
+                        StartupKind::Ready => {
+                            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+                            return;
+                        }
+                        StartupKind::Failed => return,
+                        StartupKind::Phase | StartupKind::Heartbeat => {}
                     }
                 }
                 Err(err) => {
@@ -223,13 +233,14 @@ pub(super) fn await_child_ready<F>(
     state: &SidecarState,
     child_pid: u32,
     stdout: ChildStdout,
+    closed: mpsc::Sender<()>,
     emit: &F,
 ) -> Result<u16, SidecarStartError>
 where
     F: Fn(StartupProgress),
 {
     let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || read_startup_records(stdout, tx));
+    std::thread::spawn(move || read_startup_records(stdout, tx, closed));
 
     let started = Instant::now();
     let mut last_record_at = started;

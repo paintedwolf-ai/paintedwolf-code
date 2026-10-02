@@ -11,7 +11,7 @@ mod detect_editors;
 mod document_outbox;
 mod external_attachment_import;
 mod item_windows;
-mod managed_secret_reveal;
+mod presence;
 #[cfg(target_os = "macos")]
 mod native_notifications;
 mod open_external;
@@ -453,7 +453,9 @@ pub fn run() {
             sidecar::commands::ipc_cancel_sidecar_start,
             sidecar::commands::ipc_attach_existing_daemon,
             sidecar::commands::ipc_sidecar_info,
-            managed_secret_reveal::ipc_reveal_managed_secret,
+            sidecar::commands::ipc_engine_state,
+            presence::ipc_reveal_managed_secret,
+            presence::ipc_resolve_checkpoint_with_presence,
             window_appearance::den_reveal_window,
             window_appearance::den_set_window_bounds,
             window_backdrop::den_set_window_backdrop,
@@ -469,6 +471,7 @@ pub fn run() {
             backup_transfer_journal::cleanup_on_launch();
             document_outbox::reconcile_windows(app.handle(), None);
             sidecar::layout::setup_bundled_engine_layout(app.handle());
+            sidecar::setup_supervision(app.handle());
             window_appearance::setup(app.handle());
             update_service::check::start_update_scheduler(app.handle().clone());
             accessibility_text_size::setup(app.handle().clone())

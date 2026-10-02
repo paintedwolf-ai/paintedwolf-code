@@ -139,33 +139,30 @@ fn bundled_layout_requires_resource_marker() {
 }
 
 #[test]
-fn reveal_signature_is_url_safe_and_protocol_bound() {
+fn presence_signature_is_url_safe_and_protocol_bound() {
     use ed25519_dalek::{Signature, Verifier};
 
     let state = SidecarState::new();
     let payload = "eyJjaGFsbGVuZ2VfaWQiOiJmaXh0dXJlIn0";
     let authenticator = "macos_user_presence";
-    let encoded = state.sign_reveal(payload, authenticator);
+    let encoded = state.sign_presence(payload, authenticator);
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
-        .expect("decode reveal signature");
-    let signature = Signature::from_slice(&bytes).expect("parse reveal signature");
-    let message =
-        format!("painted-wolf-managed-secret-reveal-v1\n{payload}\nauthenticator={authenticator}");
+        .expect("decode presence signature");
+    let signature = Signature::from_slice(&bytes).expect("parse presence signature");
+    let message = format!("painted-wolf-presence-v1\n{payload}\nauthenticator={authenticator}");
 
     state
-        .reveal_signing_key
+        .presence_signing_key
         .verifying_key()
         .verify(message.as_bytes(), &signature)
         .expect("signature covers the host protocol message");
     assert!(state
-        .reveal_signing_key
+        .presence_signing_key
         .verifying_key()
         .verify(
-            format!(
-                "painted-wolf-managed-secret-reveal-v1\n{payload}\nauthenticator=windows_user_presence"
-            )
-            .as_bytes(),
+            format!("painted-wolf-presence-v1\n{payload}\nauthenticator=windows_user_presence")
+                .as_bytes(),
             &signature,
         )
         .is_err());
@@ -274,7 +271,8 @@ sleep 30
     state.starting.store(true, Ordering::Release);
     let emitted = Mutex::new(Vec::new());
 
-    let port = await_child_ready(&state, pid, stdout, &|progress| {
+    let (closed, _exit_watch) = std::sync::mpsc::channel();
+    let port = await_child_ready(&state, pid, stdout, closed, &|progress| {
         emitted.lock().unwrap().push(progress);
     })
     .expect("wait for protocol ready");
@@ -492,4 +490,231 @@ fn graceful_stop_writes_the_control_frame() {
 
     assert!(request_graceful_stop(&mut child));
     assert!(child.wait().expect("wait for control fixture").success());
+}
+
+/// Stands in for `launch_sidecar_locked`: a child whose output the shell holds
+/// open, registered for supervision and published as running.
+#[cfg(unix)]
+fn launch_fixture(state: &SidecarState, script: &str) -> Result<SidecarInfo, SidecarStartError> {
+    let mut child = Command::new("sh")
+        .args(["-c", script])
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|err| SidecarStartError::Failed(err.to_string()))?;
+    let stdout = child.stdout.take().expect("fixture stdout");
+    *state.process.lock().unwrap() = Some(child);
+    let (closed, exit_watch) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let _closed = closed;
+        let _ = std::io::copy(&mut BufReader::new(stdout), &mut std::io::sink());
+    });
+    *state.port.lock().unwrap() = 43123;
+    *state.api_token.lock().unwrap() = "fixture".into();
+    let generation = state.generation.fetch_add(1, Ordering::AcqRel) + 1;
+    let _ = state.watches.send(supervisor::ExitWatch {
+        generation,
+        closed: exit_watch,
+    });
+    state.publish(supervisor::EngineState::Running { generation });
+    Ok(SidecarInfo {
+        port: 43123,
+        api_token: "fixture".into(),
+        generation,
+    })
+}
+
+#[cfg(unix)]
+const FAST_RESTARTS: supervisor::RestartPolicy = supervisor::RestartPolicy {
+    crash_window: Duration::from_secs(60),
+    delays: &[Duration::from_millis(10), Duration::from_millis(10)],
+};
+
+/// Supervises `state` on its own thread and records every published state.
+#[cfg(unix)]
+fn supervised<R>(state: &std::sync::Arc<SidecarState>, relaunch: R) -> std::sync::Arc<Mutex<Vec<supervisor::EngineState>>>
+where
+    R: Fn(&SidecarState) -> Result<SidecarInfo, SidecarStartError> + Send + 'static,
+{
+    let published = std::sync::Arc::new(Mutex::new(Vec::new()));
+    let sink = published.clone();
+    state.observe(Box::new(move |engine| sink.lock().unwrap().push(engine.clone())));
+    let watches = state.take_exit_watches().expect("exit watches");
+    let supervised = state.clone();
+    std::thread::spawn(move || supervisor::supervise(&supervised, watches, &FAST_RESTARTS, relaunch));
+    published
+}
+
+#[cfg(unix)]
+fn wait_until(what: &str, ready: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ready() {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+fn kill_engine(state: &SidecarState) -> i32 {
+    let pid = state.process.lock().unwrap().as_ref().expect("running engine").id() as i32;
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    pid
+}
+
+#[cfg(unix)]
+#[test]
+fn an_engine_killed_mid_session_is_reaped_reported_and_replaced() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    let published = supervised(&state, |state| launch_fixture(state, "sleep 30"));
+    launch_fixture(&state, "sleep 30").expect("first engine");
+
+    let first = kill_engine(&state);
+    // Reaping retires the old generation; the replacement takes the next one.
+    wait_until("the replacement", || {
+        matches!(state.engine_state(), supervisor::EngineState::Running { generation } if generation > 1)
+    });
+
+    assert!(!is_pid_alive(first), "the exited engine must be reaped, not left a zombie");
+    let restarting = published.lock().unwrap().iter().find_map(|engine| match engine {
+        supervisor::EngineState::Restarting { exit, attempt } => Some((exit.clone(), *attempt)),
+        _ => None,
+    });
+    let (exit, attempt) = restarting.expect("a restarting state was published");
+    assert_eq!(exit.signal, Some(libc::SIGKILL));
+    assert_eq!(exit.description, "was killed by signal 9 (SIGKILL)");
+    assert_eq!(attempt, 1);
+    assert_eq!(state.cached_info().map(|info| info.port), Some(43123));
+    stop_sidecar(&state);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_intentional_stop_is_not_answered_as_a_crash() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    let relaunches = std::sync::Arc::new(AtomicU64::new(0));
+    let counted = relaunches.clone();
+    let published = supervised(&state, move |state| {
+        counted.fetch_add(1, Ordering::AcqRel);
+        launch_fixture(state, "sleep 30")
+    });
+    launch_fixture(&state, "sleep 30").expect("engine");
+
+    stop_sidecar(&state);
+    std::thread::sleep(Duration::from_millis(100));
+
+    assert_eq!(state.engine_state(), supervisor::EngineState::Idle);
+    assert_eq!(relaunches.load(Ordering::Acquire), 0);
+    assert!(
+        !published.lock().unwrap().iter().any(|engine| matches!(engine, supervisor::EngineState::Restarting { .. })),
+        "an engine stopped on request was reported as crashed"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn an_engine_that_keeps_exiting_stops_being_restarted() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    let published = supervised(&state, |state| launch_fixture(state, "exit 3"));
+    launch_fixture(&state, "exit 3").expect("engine");
+
+    wait_until("the shell to stop retrying", || {
+        matches!(state.engine_state(), supervisor::EngineState::Stopped { .. })
+    });
+
+    let restarts = published
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|engine| matches!(engine, supervisor::EngineState::Restarting { .. }))
+        .count();
+    assert_eq!(restarts, FAST_RESTARTS.delays.len());
+    let supervisor::EngineState::Stopped { exit, failure } = state.engine_state() else {
+        unreachable!();
+    };
+    assert_eq!((exit.code, failure), (Some(3), None));
+    assert!(state.cached_info().is_none(), "a stopped engine must not hand out credentials");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_replacement_that_cannot_start_stops_with_its_reason() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    supervised(&state, |_| {
+        Err(SidecarStartError::StoreLocked("another engine is already serving this store".into()))
+    });
+    launch_fixture(&state, "sleep 30").expect("engine");
+
+    kill_engine(&state);
+    wait_until("the failed replacement", || {
+        matches!(state.engine_state(), supervisor::EngineState::Stopped { .. })
+    });
+
+    assert_eq!(
+        state.engine_state(),
+        supervisor::EngineState::Stopped {
+            exit: supervisor::EngineExit {
+                code: None,
+                signal: Some(libc::SIGKILL),
+                description: "was killed by signal 9 (SIGKILL)".into(),
+            },
+            failure: Some("another engine is already serving this store".into()),
+        }
+    );
+}
+
+#[test]
+fn crashes_outside_the_window_are_forgotten() {
+    let state = SidecarState::new();
+    let window = Duration::from_secs(60);
+    let start = Instant::now();
+    assert_eq!(state.record_crash(start, window), 1);
+    assert_eq!(state.record_crash(start + Duration::from_secs(30), window), 2);
+    assert_eq!(state.record_crash(start + Duration::from_secs(80), window), 2);
+}
+
+#[test]
+fn engine_state_wire_shape_matches_den() {
+    let restarting = supervisor::EngineState::Restarting {
+        exit: supervisor::EngineExit {
+            code: None,
+            signal: Some(9),
+            description: "was killed by signal 9 (SIGKILL)".into(),
+        },
+        attempt: 1,
+    };
+    assert_eq!(
+        serde_json::to_value(&restarting).expect("serialize"),
+        serde_json::json!({
+            "state": "restarting",
+            "exit": { "signal": 9, "description": "was killed by signal 9 (SIGKILL)" },
+            "attempt": 1,
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(supervisor::EngineState::Running { generation: 4 }).expect("serialize"),
+        serde_json::json!({ "state": "running", "generation": 4 })
+    );
+    assert_eq!(
+        serde_json::to_value(supervisor::EngineState::Idle).expect("serialize"),
+        serde_json::json!({ "state": "idle" })
+    );
+}
+
+#[test]
+fn the_engine_log_records_each_unexpected_exit_once() {
+    let exit = supervisor::EngineExit {
+        code: None,
+        signal: Some(9),
+        description: "was killed by signal 9 (SIGKILL)".into(),
+    };
+    let restarting = supervisor::EngineState::Restarting { exit: exit.clone(), attempt: 2 };
+    assert_eq!(
+        supervisor::log_line(&restarting).as_deref(),
+        Some("--- engine was killed by signal 9 (SIGKILL); restarting (attempt 2) ---\n")
+    );
+    let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()) };
+    assert_eq!(
+        supervisor::log_line(&refused).as_deref(),
+        Some("--- replacement engine could not start: store locked ---\n")
+    );
+    assert!(supervisor::log_line(&supervisor::EngineState::Running { generation: 1 }).is_none());
 }
