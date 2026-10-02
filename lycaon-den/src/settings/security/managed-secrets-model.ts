@@ -79,6 +79,11 @@ export function needsValue(secret: ManagedSecret): boolean {
 }
 
 /** Only a chat capability can widen, and only to the project. */
+/** A jar is kept from service responses; a person revokes one rather than replace it. */
+export function canReplaceValue(secret: ManagedSecret): boolean {
+  return secret.origin !== "cookie_jar" && secret.origin !== "token_jar";
+}
+
 export function canPromote(secret: ManagedSecret): boolean {
   return secret.scope === "chat" && !isRevoked(secret);
 }

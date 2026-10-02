@@ -11,7 +11,7 @@ import {
   untrack,
 } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import type { ManagedSecret, ManagedSecretUse } from "../../api/types.ts";
+import type { ManagedSecret, ManagedSecretAttestation, ManagedSecretUse } from "../../api/types.ts";
 import { InlineNotice } from "../../notices/InlineNotice.tsx";
 import {
   noticeFromCaught,
@@ -21,9 +21,9 @@ import {
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
 import { confirmDestructive } from "../../platform/interaction/confirm-dialog.ts";
 import {
-  ManagedSecretRevealError,
+  PresenceError,
   revealManagedSecret,
-} from "../../platform/files/managed-secret-reveal.ts";
+} from "../../platform/presence.ts";
 import { copyTextToClipboard, writeClipboardText } from "../../utils/clipboard.ts";
 import { paginateSlice } from "../../list/pagination.ts";
 import {
@@ -99,6 +99,8 @@ export function ManagedSecretsPanel(props: Props) {
   const [uses, setUses] = createSignal<ManagedSecretUse[]>([]);
   const [usesLoading, setUsesLoading] = createSignal(false);
   const [usesFailed, setUsesFailed] = createSignal(false);
+  const [confirmations, setConfirmations] = createSignal<ManagedSecretAttestation[]>([]);
+  const [confirmationsFailed, setConfirmationsFailed] = createSignal(false);
   const [revealed, setRevealed] = createSignal<{
     secretId: string;
     value: string;
@@ -237,17 +239,18 @@ export function ManagedSecretsPanel(props: Props) {
     setUses([]);
     setUsesFailed(false);
     setUsesLoading(true);
-    try {
-      const history = await client.listProjectManagedSecretUses(
-        projectId,
-        id,
-      );
-      if (current()) setUses(history.uses);
-    } catch {
-      if (current()) setUsesFailed(true);
-    } finally {
-      if (current()) setUsesLoading(false);
-    }
+    setConfirmations([]);
+    setConfirmationsFailed(false);
+    const [history, attested] = await Promise.allSettled([
+      client.listProjectManagedSecretUses(projectId, id),
+      client.listProjectManagedSecretAttestations(projectId, id),
+    ]);
+    if (!current()) return;
+    if (history.status === "fulfilled") setUses(history.value.uses);
+    else setUsesFailed(true);
+    if (attested.status === "fulfilled") setConfirmations(attested.value.attestations);
+    else setConfirmationsFailed(true);
+    setUsesLoading(false);
   };
 
   const openDetail = (secret: ManagedSecret) => {
@@ -339,7 +342,7 @@ export function ManagedSecretsPanel(props: Props) {
       });
     } catch (err) {
       if (!current()) return;
-      if (err instanceof ManagedSecretRevealError) {
+      if (err instanceof PresenceError) {
         setError(
           noticeFromWire(
             {
@@ -767,6 +770,10 @@ export function ManagedSecretsPanel(props: Props) {
                         items: uses(),
                         loading: usesLoading(),
                         failed: usesFailed(),
+                      }}
+                      confirmations={{
+                        items: confirmations(),
+                        failed: confirmationsFailed(),
                       }}
                       form={detailForm(secret, id)}
                       onCopyReference={() => copyReference(secret)}

@@ -1068,3 +1068,30 @@ describe("ApprovalCard shortcuts", () => {
     expect(onContentApply).toHaveBeenCalledWith({ decision: "approve" });
   });
 });
+
+describe("held release", () => {
+  function heldCheckpoint(): PendingCheckpoint {
+    const value = checkpoint();
+    value.tool_approval!.plan.held_release = {
+      secrets: [{ reference: "{{paintedwolf-secret:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}}", name: "Deploy key", version: 1 }],
+      recipients: [{ label: "Local file: .env", surface: "file", kind: "file" }],
+    };
+    return value;
+  }
+
+  // Tests run outside the desktop shell, which alone can confirm the person.
+  it("names the values and who can read them, and leaves approval to the desktop app", () => {
+    const onToolApproval = vi.fn();
+    const view = render(() => (
+      <ApprovalCard checkpoint={heldCheckpoint()} onToolApproval={onToolApproval} onContentApply={noopContent} />
+    ));
+    const notice = view.getByTestId("approval-held-release");
+    expect(notice.textContent).toContain("Deploy key");
+    expect(notice.textContent).toContain("Anything that can read this project's files can read it.");
+    expect(view.getByTestId("approval-held-confirm").textContent).toContain("installed desktop app");
+    const primary = view.getByTestId("approval-approve-primary") as HTMLButtonElement;
+    expect(primary.disabled).toBe(true);
+    fireEvent.click(primary);
+    expect(onToolApproval).not.toHaveBeenCalled();
+  });
+});

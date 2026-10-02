@@ -11,7 +11,7 @@ const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const secret: ManagedSecret = {
   reference: `{{paintedwolf-secret:${id}}}`, name: "Local service", purpose: "Validation",
   scope: "project", origin: "settings_entered", format: "base64url", entropy_bits: 0,
-  created_at: "2026-09-01T10:00:00Z", state: "active", version: 1, use_count: 0, reveal_count: 0,
+  created_at: "2026-09-01T10:00:00Z", state: "active", version: 1, use_count: 0, reveal_count: 0, release_count: 0,
 };
 
 function deferred<T>() {
@@ -27,6 +27,7 @@ describe("managed secret refresh boundaries", () => {
     const client = stubClient({
       listProjectManagedSecrets: vi.fn(async () => ({ secrets: [current], count: 1 })),
       listProjectManagedSecretUses: vi.fn(async () => ({ uses: [], count: 0 })),
+    listProjectManagedSecretAttestations: vi.fn(async () => ({ attestations: [] })),
     });
     render(() => <ResidentPresenceProvider presence={presence()}><ManagedSecretsPanel client={client} projectId="project-1" /></ResidentPresenceProvider>);
     fireEvent.click(await screen.findByTestId(`managed-secret-${id}`));
@@ -44,6 +45,7 @@ describe("managed secret refresh boundaries", () => {
     const client = stubClient({
       listProjectManagedSecrets: vi.fn((projectId: string) => projectId === "old-project" ? old.promise : Promise.resolve({ secrets: [{ ...secret, name: "Current project key" }], count: 1 })),
       listProjectManagedSecretUses: vi.fn(async () => ({ uses: [], count: 0 })),
+    listProjectManagedSecretAttestations: vi.fn(async () => ({ attestations: [] })),
     });
     render(() => <ManagedSecretsPanel client={client} projectId={project()} />);
     setProject("new-project");
@@ -61,6 +63,7 @@ describe("managed secret refresh boundaries", () => {
     const client = stubClient({
       listProjectManagedSecrets: vi.fn(async () => ({ secrets: [secret, second], count: 2 })),
       listProjectManagedSecretUses: vi.fn((_projectId: string, secretId: string) => secretId === id ? old.promise : Promise.resolve({ uses: [], count: 0 })),
+      listProjectManagedSecretAttestations: vi.fn(async () => ({ attestations: [] })),
     });
     render(() => <ManagedSecretsPanel client={client} projectId="project-1" />);
     fireEvent.click(await screen.findByTestId(`managed-secret-${id}`));

@@ -6,9 +6,9 @@ const { invoke, isTauriRuntime } = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-vi.mock("../runtime.ts", () => ({ isTauriRuntime }));
+vi.mock("./runtime.ts", () => ({ isTauriRuntime }));
 
-import { revealManagedSecret } from "./managed-secret-reveal.ts";
+import { resolveCheckpointWithPresence, revealManagedSecret } from "./presence.ts";
 
 describe("revealManagedSecret", () => {
   beforeEach(() => {
@@ -36,21 +36,21 @@ describe("revealManagedSecret", () => {
   it("is unavailable outside the installed app", async () => {
     isTauriRuntime.mockReturnValue(false);
     await expect(revealManagedSecret("project-1", "secret-1")).rejects.toMatchObject({
-      code: "managed_secret_reveal_unavailable",
+      code: "presence_unavailable",
     });
     expect(invoke).not.toHaveBeenCalled();
   });
 
   it("preserves structured native refusals", async () => {
     invoke.mockRejectedValue({
-      code: "managed_secret_reveal_denied",
+      code: "presence_denied",
       message: "Authentication was canceled.",
       title: "Secret reveal was not authorized",
       suggested_action: "Choose Reveal again.",
       scope: "project",
     });
     await expect(revealManagedSecret("project-1", "secret-1")).rejects.toMatchObject({
-      code: "managed_secret_reveal_denied",
+      code: "presence_denied",
       message: "Authentication was canceled.",
       title: "Secret reveal was not authorized",
       suggestedAction: "Choose Reveal again.",
@@ -67,5 +67,32 @@ describe("revealManagedSecret", () => {
     await expect(revealManagedSecret("project-1", "secret-1")).rejects.toMatchObject({
       actions: ["open_ai_providers", "prompt_retry"],
     });
+  });
+});
+
+describe("resolveCheckpointWithPresence", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    isTauriRuntime.mockReturnValue(true);
+  });
+
+  it("lets the native shell resolve the checkpoint", async () => {
+    invoke.mockResolvedValue({ id: "checkpoint-1", status: "approved" });
+    await expect(resolveCheckpointWithPresence("session-1", "checkpoint-1", "lease-chat")).resolves.toMatchObject({
+      status: "approved",
+    });
+    expect(invoke).toHaveBeenCalledWith("resolve_checkpoint_with_presence", {
+      sessionId: "session-1",
+      checkpointId: "checkpoint-1",
+      optionId: "lease-chat",
+    });
+  });
+
+  it("is unavailable outside the installed app", async () => {
+    isTauriRuntime.mockReturnValue(false);
+    await expect(resolveCheckpointWithPresence("session-1", "checkpoint-1", "once")).rejects.toMatchObject({
+      code: "presence_unavailable",
+    });
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
