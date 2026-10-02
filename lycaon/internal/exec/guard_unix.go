@@ -48,7 +48,12 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	if !g.belowNormal {
 		return nil
 	}
-	err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, DefaultBelowNormalNice)
+	// Below normal never raises priority: a child that inherited a higher nice
+	// keeps it, and lowering a nice value needs privilege.
+	nice, err := processNice(cmd.Process.Pid)
+	if err == nil && nice < DefaultBelowNormalNice {
+		err = syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, DefaultBelowNormalNice)
+	}
 	if errors.Is(err, syscall.ESRCH) {
 		// Fast children may exit before priority assignment.
 		return nil
