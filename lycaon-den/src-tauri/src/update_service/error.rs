@@ -65,9 +65,11 @@ impl UpdateError {
     pub fn download(error: tauri_plugin_updater::Error) -> Self {
         use tauri_plugin_updater::Error;
         let code = match &error {
-            Error::Minisign(_) | Error::Base64(_) | Error::SignatureUtf8(_) => {
-                UpdateErrorCode::VerificationFailed
-            }
+            Error::Minisign(_)
+            | Error::Base64(_)
+            | Error::SignatureUtf8(_)
+            | Error::SignedVersionMismatch { .. }
+            | Error::MissingSignedVersion => UpdateErrorCode::VerificationFailed,
             _ => UpdateErrorCode::DownloadFailed,
         };
         Self::new(code, error)
@@ -94,6 +96,13 @@ mod tests {
             "opaque signature diagnostic".into(),
         ));
         assert_eq!(signature.code, UpdateErrorCode::VerificationFailed);
+        let rebound = UpdateError::download(tauri_plugin_updater::Error::SignedVersionMismatch {
+            signed: "1.0.0".into(),
+            announced: "1.0.0-rc.3".into(),
+        });
+        assert_eq!(rebound.code, UpdateErrorCode::VerificationFailed);
+        let unbound = UpdateError::download(tauri_plugin_updater::Error::MissingSignedVersion);
+        assert_eq!(unbound.code, UpdateErrorCode::VerificationFailed);
         let transport = UpdateError::download(tauri_plugin_updater::Error::Network(
             "signature verification failed".into(),
         ));

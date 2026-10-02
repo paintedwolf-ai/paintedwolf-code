@@ -12,6 +12,7 @@ import sys
 
 from release_semver import parse
 from update_keys import load_registry, release_binding
+from updater_signature import require_version
 
 
 def fail(message: str) -> None:
@@ -67,6 +68,7 @@ def main() -> int:
                 fail(f"duplicate release fragment for {key}")
             if not isinstance(fragment["signature"], str) or not fragment["signature"].strip():
                 fail(f"{path.name} has an empty signature")
+            require_version(fragment["signature"], version, f"{path.name} signature")
             updater_extension = expected[key]["updater_extension"]
             wanted_artifact = f"painted-wolf-code_v{version}_{key}.{updater_extension}"
             if fragment["updater_artifact"] != wanted_artifact:

@@ -180,24 +180,25 @@ describe("UpdatesSettingsPanel", () => {
     await waitFor(() => expect(updates.install).toHaveBeenCalledWith("0.2.0"));
   });
 
-  it("shows release notes for the retained candidate", async () => {
+  it("renders the retained candidate's changelog notes as structured text", async () => {
     const updates = service({
       getState: vi.fn(async () =>
         direct({
           phase: "available",
           available_version: "0.2.0",
-          notes: "Reliability and performance improvements.",
+          notes: "### Fixed\n\n- Updates install from earlier previews.\n- The engine restarts after an unexpected exit.",
         }),
       ),
     });
     const rendered = render(() => (
       <UpdatesSettingsPanel updateService={updates} />
     ));
-    await waitFor(() =>
-      expect(rendered.getByTestId("updates-release-notes").textContent).toContain(
-        "Reliability and performance improvements.",
-      ),
-    );
+    const notes = await waitFor(() => rendered.getByTestId("updates-release-notes"));
+    await waitFor(() => expect(notes.querySelector("h3")?.textContent).toBe("Fixed"));
+    expect([...notes.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+      "Updates install from earlier previews.",
+      "The engine restarts after an unexpected exit.",
+    ]);
   });
 
   it("recovers the available state when the native install command is refused", async () => {

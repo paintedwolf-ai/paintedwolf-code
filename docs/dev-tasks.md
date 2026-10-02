@@ -825,8 +825,10 @@ increasing platform build number and increments for every distributed build.
 `scripts/release-metadata.py` is the sole projection into native numeric
 versions, channel, package token, and the numeric Windows package version.
 For example, product `1.0.0-rc.1` with `RELEASE_BUILD=42` remains
-`1.0.0-rc.1` to the app and updater while the Windows installer uses
-`1.0.42`; artifact verification reads that version back from the signed file.
+`1.0.0-rc.1` to the app, its update service, the updater feed, and every
+updater signature, while the macOS bundle carries native `1.0.0` build `42` and
+the Windows installer uses `1.0.42`; artifact verification reads each version
+back from the signed file.
 
 | Stream | Example | Bumps when |
 |--------|---------|------------|
@@ -909,6 +911,18 @@ bunx --bun @tauri-apps/cli signer generate -w ~/.tauri/painted-wolf-code.key
 ```
 
 `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` live in the protected release environment. The matching **public** key is committed at `plugins.updater.pubkey` in [`tauri.conf.json`](../lycaon-den/src-tauri/tauri.conf.json). Windows, a candidate platform that is not published, is configured for Azure Artifact Signing through Tauri's custom signing command: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` are protected secrets; `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, and `AZURE_ARTIFACT_SIGNING_PROFILE` are protected environment variables. Publishing Windows requires qualifying its engine artifact and packaging signatures together.
+
+**Signatures bind the product version.** The updater reads the version from
+each signature's trusted comment and refuses any feed entry that announces a
+different one, and `requireSignedVersion` in `tauri.conf.json` also refuses
+signatures that carry no version. `tauri build` signs with the native bundle
+version, which drops the prerelease, so `den-build-bundle.sh` re-signs every
+updater artifact of the build with `tauri signer sign --app-version <VERSION>`.
+Staging verifies the signature cryptographically against that version, and the
+manifest assembler and `release-validate-updater-manifest.sh` refuse any feed
+whose signatures name another version. A stable release that also advances the
+Preview feed is signed for its own version, so Preview clients install it like
+any other offer.
 
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. `sync-den-versions.sh` projects the embedded key and feed into Tauri configuration. The native updater derives both channel URLs from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[[ $# -eq 2 ]] || {
-  echo "Usage: verify-updater-signature.sh ARTIFACT SIGNATURE" >&2
+[[ $# -eq 3 ]] || {
+  echo "Usage: verify-updater-signature.sh ARTIFACT SIGNATURE VERSION" >&2
   exit 2
 }
 
@@ -20,4 +20,4 @@ PYKEY
 cargo run --quiet --locked \
   --manifest-path "${ROOT}/lycaon-den/src-tauri/Cargo.toml" \
   --example verify_updater_signature -- \
-  "$1" "$2" "${WORKDIR}/signing.json"
+  "$1" "$2" "${WORKDIR}/signing.json" "$3"

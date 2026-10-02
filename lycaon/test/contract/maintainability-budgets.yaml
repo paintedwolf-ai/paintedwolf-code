@@ -9588,7 +9588,7 @@ source_directories:
     lycaon/internal/zstdcodec: 1
     lycaon/pkg/api: 32
     lycaon/pkg/pathglob: 2
-    scripts: 152
+    scripts: 153
     scripts/bialy: 10
     scripts/bialy/rerank: 2
     scripts/commentlint: 8
@@ -9605,7 +9605,7 @@ source_files:
     lycaon-den/src-tauri/examples/scroll_thread_invariants.rs: 299
     lycaon-den/src-tauri/examples/support/scroll_thread_page.js: 200
     lycaon-den/src-tauri/examples/support/web_view_driver.rs: 208
-    lycaon-den/src-tauri/examples/verify_updater_signature.rs: 120
+    lycaon-den/src-tauri/examples/verify_updater_signature.rs: 187
     lycaon-den/src-tauri/examples/webkit_features_probe.rs: 20
     lycaon-den/src-tauri/examples/wheel_glide_probe.rs: 128
     lycaon-den/src-tauri/src/accessibility_text_size.rs: 256
@@ -9652,7 +9652,7 @@ source_files:
     lycaon-den/src-tauri/src/system_appearance.rs: 177
     lycaon-den/src-tauri/src/update_service.rs: 396
     lycaon-den/src-tauri/src/update_service/check.rs: 179
-    lycaon-den/src-tauri/src/update_service/error.rs: 107
+    lycaon-den/src-tauri/src/update_service/error.rs: 116
     lycaon-den/src-tauri/src/update_service/install.rs: 161
     lycaon-den/src-tauri/src/update_service/persistence.rs: 161
     lycaon-den/src-tauri/src/update_service/preferences.rs: 79
@@ -10220,7 +10220,7 @@ source_files:
     lycaon-den/src/components/settings/storage/CacheSettingsPanel.tsx: 320
     lycaon-den/src/components/settings/storage/DataSettingsPanel.tsx: 154
     lycaon-den/src/components/settings/storage/HistoryStorageSettingsPanel.tsx: 176
-    lycaon-den/src/components/settings/system/AboutSettingsPanel.tsx: 128
+    lycaon-den/src/components/settings/system/AboutSettingsPanel.tsx: 127
     lycaon-den/src/components/settings/system/DebugSettingsPanel.tsx: 282
     lycaon-den/src/components/settings/system/DiagnosticsExportPanel.tsx: 65
     lycaon-den/src/components/settings/system/PowerSettingsPanel.tsx: 74
@@ -10421,7 +10421,7 @@ source_files:
     lycaon-den/src/components/trust/TrustSurfaceRows.tsx: 66
     lycaon-den/src/components/trust/trust-review-navigation.ts: 22
     lycaon-den/src/components/update/RecoveryUpdates.tsx: 11
-    lycaon-den/src/components/update/UpdatePanel.tsx: 278
+    lycaon-den/src/components/update/UpdatePanel.tsx: 279
     lycaon-den/src/components/verdict/VerdictCard.tsx: 81
     lycaon-den/src/components/window-menu-items.ts: 26
     lycaon-den/src/components/worker/SessionWorkersDrawer.tsx: 179
@@ -13186,7 +13186,7 @@ source_files:
     lycaon/internal/presence/launcher.go: 12
     lycaon/internal/presence/launcher_darwin.go: 15
     lycaon/internal/presence/launcher_other.go: 5
-    lycaon/internal/presence/unlocks.go: 196
+    lycaon/internal/presence/unlocks.go: 199
     lycaon/internal/pricing/ai_pricing_source.go: 81
     lycaon/internal/pricing/aipricing.go: 99
     lycaon/internal/pricing/cache.go: 108
@@ -15379,7 +15379,7 @@ source_files:
     scripts/debug-session.sh: 63
     scripts/decide-features.sh: 9
     scripts/den-build-app.sh: 77
-    scripts/den-build-bundle.sh: 244
+    scripts/den-build-bundle.sh: 264
     scripts/den-coverage-check.sh: 59
     scripts/den-dev-app.sh: 55
     scripts/den-dev-sidecar.sh: 115
@@ -15432,12 +15432,12 @@ source_files:
     scripts/process-group-watchdog.py: 56
     scripts/redocly-cli.sh: 9
     scripts/redocly-version.sh: 2
-    scripts/release-assemble-updater-manifest.py: 96
+    scripts/release-assemble-updater-manifest.py: 98
     scripts/release-collect-public-artifacts.py: 63
     scripts/release-halt-plan.py: 115
-    scripts/release-halt.sh: 177
+    scripts/release-halt.sh: 182
     scripts/release-metadata.py: 50
-    scripts/release-preflight.sh: 155
+    scripts/release-preflight.sh: 156
     scripts/release-r2-immutable-put.sh: 101
     scripts/release-r2-live-test.sh: 335
     scripts/release-r2-publish-pointer.sh: 162
@@ -15446,7 +15446,7 @@ source_files:
     scripts/release-source-validate.sh: 46
     scripts/release-stage-platform-artifacts.sh: 244
     scripts/release-validate-bridge.sh: 30
-    scripts/release-validate-updater-manifest.sh: 94
+    scripts/release-validate-updater-manifest.sh: 102
     scripts/release_control.py: 76
     scripts/release_distribution.py: 275
     scripts/release_pointer_headers.py: 14
@@ -15477,6 +15477,7 @@ source_files:
     scripts/test-run-manifest.py: 195
     scripts/test-source-snapshot.sh: 250
     scripts/update_keys.py: 101
+    scripts/updater_signature.py: 45
     scripts/upgrade-archive-roundtrip.sh: 66
     scripts/upgrade-corpus-boot.sh: 339
     scripts/upgrade-corpus-prepare.sh: 31
@@ -15484,7 +15485,7 @@ source_files:
     scripts/upgrade-corpus-semantics.py: 84
     scripts/upgrade-editor-fixture.mjs: 169
     scripts/upgrade-fixture-files.py: 148
-    scripts/upgrade-rehearse.sh: 299
+    scripts/upgrade-rehearse.sh: 300
     scripts/upgrade-store-contract.sh: 167
     scripts/validate-openapi.sh: 9
     scripts/vendor-oar-spec.sh: 119
@@ -16760,7 +16761,7 @@ test_files:
     lycaon-den/src/components/settings/system/PreflightProbeList.test.tsx: 67
     lycaon-den/src/components/settings/system/ShellCommandPanel.test.tsx: 62
     lycaon-den/src/components/settings/system/SystemInfoPanel.test.tsx: 62
-    lycaon-den/src/components/settings/system/UpdatesSettingsPanel.test.tsx: 425
+    lycaon-den/src/components/settings/system/UpdatesSettingsPanel.test.tsx: 426
     lycaon-den/src/components/shell/ChromeDragSurface.test.tsx: 44
     lycaon-den/src/components/shell/ContextDrawer.test.tsx: 55
     lycaon-den/src/components/shell/LayoutDock.test.tsx: 305
@@ -21913,7 +21914,7 @@ test_files:
     lycaon/test/contract/runner/platform_floor_contract_test.go: 119
     lycaon/test/contract/runner/registry_testmain_test.go: 10
     lycaon/test/contract/runner/release_blast_radius_contract_test.go: 424
-    lycaon/test/contract/runner/release_channel_invariants_test.go: 417
+    lycaon/test/contract/runner/release_channel_invariants_test.go: 480
     lycaon/test/contract/runner/repo_snapshot_lock_contract_test.go: 351
     lycaon/test/contract/runner/retired_artifact_paths_contract_test.go: 211
     lycaon/test/contract/runner/scanner_suite_scope_contract_test.go: 128
@@ -23253,7 +23254,7 @@ ts_local_dependencies:
     lycaon-den/src/components/trust/TrustSurfaceRows.tsx: 5
     lycaon-den/src/components/trust/trust-review-navigation.ts: 4
     lycaon-den/src/components/update/RecoveryUpdates.tsx: 2
-    lycaon-den/src/components/update/UpdatePanel.tsx: 7
+    lycaon-den/src/components/update/UpdatePanel.tsx: 8
     lycaon-den/src/components/verdict/VerdictCard.tsx: 7
     lycaon-den/src/components/window-menu-items.ts: 2
     lycaon-den/src/components/worker/SessionWorkersDrawer.tsx: 11

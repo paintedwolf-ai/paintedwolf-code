@@ -52,9 +52,9 @@ done
 
 head_schema_version() { jq -r '.schema_version' "${SCHEMA_LOCK}"; }
 
-# Validate a public manifest through the same contract as publication.
+# A prior release is installed from its disk image, not through the updater.
 parse_prior_release() {
-  bash "${ROOT}/scripts/release-validate-updater-manifest.sh" --file "$1" || return 1
+  bash "${ROOT}/scripts/release-validate-updater-manifest.sh" --file "$1" --existing || return 1
   jq -r '.version' "$1"
 }
 
@@ -302,12 +302,13 @@ run_self_test() {
   local base="https://rehearse.invalid"
   jq -n \
     --arg base "${base}" \
+    --arg signature "$(python3 "${ROOT}/scripts/updater_signature.py" rehearsal 0.0.9)" \
     --argjson update_keys "$(PYTHONPATH="${ROOT}/scripts" python3 -c 'from update_keys import load_registry,release_binding; import json; r=load_registry(); r["signing_generation"]=r["embedded_generation"]=len(r["generations"]); print(json.dumps(release_binding(r,"0.0.9")))')" \
     --slurpfile catalog "${ROOT}/packaging/release-platforms.json" \
     '{version: "0.0.9", notes: "self-test", pub_date: "2026-01-01T00:00:00Z", update_keys: $update_keys,
       platforms: (reduce ($catalog[0].platforms[] | select(.publication == "public")) as $platform ({};
         .[$platform.updater_key] = {
-          signature: "self-test-signature",
+          signature: $signature,
           url: ($base + "/releases/v0.0.9/painted-wolf-code_v0.0.9_" +
             $platform.updater_key + "." + $platform.updater_extension)
         }))}' \

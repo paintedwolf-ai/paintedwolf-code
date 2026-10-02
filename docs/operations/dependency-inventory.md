@@ -391,7 +391,7 @@ Windows build runs.
 | `tauri-plugin-dialog` | `2.8.0` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-notification` · not macOS | `2.5.0` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-shell` | `2.4.0` | current | **Moderate** | **Low** |  |  |
-| `tauri-plugin-updater` | `2.13.1` | current | **Critical** | **High** |  | In-place updates. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/verify-updater-signature.sh` against the `tauri.conf.json` public key; see [Release operations](release.md). `Cargo.toml` selects its features explicitly: the plugin's default `system-proxy` feature would route the check through OS proxy discovery, which the shell's other clients also avoid. |
+| `tauri-plugin-updater` | `2.13.1` | current | **Critical** | **High** |  | In-place updates. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/verify-updater-signature.sh` against the `tauri.conf.json` public key and the release version bound in each signature; see [Release operations](release.md). `Cargo.toml` selects its features explicitly: the plugin's default `system-proxy` feature would route the check through OS proxy discovery, which the shell's other clients also avoid. |
 | `tokio` | `1.52.3` | `1.53.1` | **Moderate** | **Low** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
 | `uuid` | `1.23.2` | `1.26.1` |  |  |  |  |

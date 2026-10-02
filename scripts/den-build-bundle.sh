@@ -201,6 +201,10 @@ elif [[ "${HOST_KIND}" == "darwin" ]]; then
   echo "         updater artifacts (.app.tar.gz/.sig). Release publishes must set it." >&2
 fi
 
+BUNDLE_DIR="${TAURI_DIR}/target/${TARGET}/release/bundle"
+BUILD_STARTED="$(mktemp "${TMPDIR:-/tmp}/den-bundle-started.XXXXXX")"
+trap 'rm -f "${BUILD_STARTED}"' EXIT
+
 echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >&2
 (
   cd "${DEN_DIR}"
@@ -216,9 +220,31 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
   fi
 )
 
+# The updater refuses an artifact whose signed version differs from the version
+# its feed announces. `tauri build` signs with the bundle version, which drops
+# the prerelease, so each signature from this build is replaced by one bound to
+# the product version.
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  UPDATER_SIGNATURES=()
+  while IFS= read -r -d '' signature; do
+    UPDATER_SIGNATURES+=("${signature}")
+  done < <(find "${BUNDLE_DIR}" -type f -name '*.sig' -newer "${BUILD_STARTED}" -print0)
+  if (( ${#UPDATER_SIGNATURES[@]} == 0 )); then
+    echo "error: tauri build produced no updater signatures under ${BUNDLE_DIR}" >&2
+    exit 1
+  fi
+  for signature in "${UPDATER_SIGNATURES[@]}"; do
+    echo "den:bundle — binding $(basename "${signature%.sig}") to version ${PRODUCT_VERSION}" >&2
+    (
+      cd "${DEN_DIR}"
+      bun run tauri signer sign --app-version "${PRODUCT_VERSION}" "${signature%.sig}" >/dev/null
+    )
+  done
+fi
+
 APP_PATH=""
 if [[ "${HOST_KIND}" == "darwin" ]]; then
-  APP_PATH="$(find "${TAURI_DIR}/target/${TARGET}/release/bundle/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+  APP_PATH="$(find "${BUNDLE_DIR}/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
 fi
 if [[ -n "${APP_PATH}" ]]; then
   VERIFY_ARGS=(--app "${APP_PATH}" --require-signed)
@@ -228,7 +254,7 @@ fi
 
 DMG_PATH=""
 if [[ "${HOST_KIND}" == "darwin" ]]; then
-  DMG_PATH="$(find "${TAURI_DIR}/target/${TARGET}/release/bundle/dmg" -maxdepth 1 -name '*.dmg' -print -quit 2>/dev/null || true)"
+  DMG_PATH="$(find "${BUNDLE_DIR}/dmg" -maxdepth 1 -name '*.dmg' -print -quit 2>/dev/null || true)"
 fi
 
 DMG_NOTARIZED=0
@@ -264,5 +290,5 @@ if [[ -n "${DMG_PATH}" ]]; then
 else
   echo ""
   echo "Bundle output under:"
-  echo "  ${TAURI_DIR}/target/${TARGET}/release/bundle/"
+  echo "  ${BUNDLE_DIR}/"
 fi

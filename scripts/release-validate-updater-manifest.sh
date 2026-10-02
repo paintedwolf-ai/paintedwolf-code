@@ -5,9 +5,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FILE=""
 EXPECTED_VERSION=""
+# A published manifest is read to be replaced or to locate a prior release, so
+# its packages need not be installable; a manifest about to publish must be.
+EXISTING=0
 
 usage() {
-  echo "Usage: release-validate-updater-manifest.sh --file PATH [--version VERSION]" >&2
+  echo "Usage: release-validate-updater-manifest.sh --file PATH [--version VERSION] [--existing]" >&2
   exit 2
 }
 
@@ -15,6 +18,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --file) FILE="${2:-}"; shift 2 ;;
     --version) EXPECTED_VERSION="${2:-}"; shift 2 ;;
+    --existing) EXISTING=1; shift ;;
     -h|--help) usage ;;
     *) echo "error: unknown argument: $1" >&2; usage ;;
   esac
@@ -41,7 +45,7 @@ if [[ -n "${EXPECTED_VERSION}" ]]; then
   }
 fi
 
-python3 - "${FILE}" "${ROOT}/packaging/release-platforms.json" "${DOWNLOAD_BASE_URL%/}" "${ROOT}/scripts" <<'PY'
+python3 - "${FILE}" "${ROOT}/packaging/release-platforms.json" "${DOWNLOAD_BASE_URL%/}" "${ROOT}/scripts" "${EXISTING}" <<'PY'
 import datetime
 import json
 import re
@@ -49,6 +53,7 @@ import sys
 
 sys.path.insert(0, sys.argv[4])
 from update_keys import load_registry, validate_binding
+from updater_signature import require_version
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     manifest = json.load(handle)
@@ -87,6 +92,11 @@ for key, row in expected.items():
         raise SystemExit(f"error: updater entry {key} has an unsupported shape")
     if not isinstance(value["signature"], str) or not value["signature"].strip():
         raise SystemExit(f"error: updater entry {key} has an empty signature")
+    if sys.argv[5] != "1":
+        try:
+            require_version(value["signature"], version, f"updater entry {key}")
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}")
     wanted = (
         f"{sys.argv[3]}/releases/v{version}/painted-wolf-code_v{version}_"
         f"{key}.{extension}"
