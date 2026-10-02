@@ -3,7 +3,7 @@ import type { ChatVault } from "../../api/types.ts";
 
 /**
  * Each chat's unlock for values the person stored, as the engine last
- * reported it. The engine owns the state; `chat_vault` events and reads
+ * reported it. The engine holds the state; `chat_vault` events and reads
  * replace a chat's entry whole.
  */
 const [vaults, setVaults] = createSignal<Readonly<Record<string, ChatVault>>>({});
