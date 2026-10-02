@@ -1,15 +1,14 @@
 surfaces: [http]
 notification: { tier: non_catastrophic, scope: project }
-title: Secret reveal is unavailable
+title: Confirmation is unavailable
 message: >-
   This app session has no trusted operating-system authenticator connected to
-  the sidecar, so it cannot release the stored value.
+  the engine, so it cannot store or release secrets.
 suggested_action: >-
-  Open the installed desktop app and try again. Reveal is unavailable when Den
-  is attached to a separately started development sidecar.
+  Open the installed desktop app and try again. Confirmation is unavailable
+  when the app is attached to a separately started development engine.
 scenarios:
   - id: default
     vars: {}
     expect_contains:
       - no trusted operating-system authenticator
-      - installed desktop app
