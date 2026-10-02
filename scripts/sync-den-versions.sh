@@ -37,10 +37,10 @@ with open(tauri_path, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
 
-python3 - "${NATIVE_VERSION}" "${CARGO}" <<'PY'
+python3 - "${NATIVE_VERSION}" "${CARGO}" "${CARGO%.toml}.lock" <<'PY'
 import re, sys
-version, path = sys.argv[1], sys.argv[2]
-text = open(path, encoding="utf-8").read()
+version, manifest, lock = sys.argv[1:]
+text = open(manifest, encoding="utf-8").read()
 new, n = re.subn(
     r'(?m)^(version\s*=\s*")[^"]*(")',
     rf"\g<1>{version}\2",
@@ -48,8 +48,18 @@ new, n = re.subn(
     count=1,
 )
 if n != 1:
-    raise SystemExit(f"expected one package version= in {path}, got {n}")
-open(path, "w", encoding="utf-8").write(new)
+    raise SystemExit(f"expected one package version= in {manifest}, got {n}")
+open(manifest, "w", encoding="utf-8").write(new)
+# Release builds are --locked, so the lock must name the same package version.
+text = open(lock, encoding="utf-8").read()
+new, n = re.subn(
+    r'(?m)^(name = "painted-wolf-code"\nversion = ")[^"]*(")',
+    rf"\g<1>{version}\2",
+    text,
+)
+if n != 1:
+    raise SystemExit(f"expected one painted-wolf-code package in {lock}, got {n}")
+open(lock, "w", encoding="utf-8").write(new)
 PY
 
 echo "synced den product ${PRODUCT_VERSION} → native ${NATIVE_VERSION} (${CHANNEL}, build ${RELEASE_BUILD})" >&2
