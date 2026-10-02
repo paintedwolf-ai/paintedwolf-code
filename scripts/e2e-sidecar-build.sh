@@ -23,3 +23,7 @@ chmod +x "${TMP_BIN}"
 # Each harness keeps its own executable.
 mv -f "${TMP_BIN}" "${BIN}"
 trap - EXIT
+
+# The engine runs its native document core from beside its own executable.
+bash "${ROOT}/scripts/build-document-core.sh" --output "${BIN_DIR}/pw-document-core" >/dev/null
+bash "${ROOT}/scripts/sign-dev-binary.sh" "${BIN_DIR}/pw-document-core"
