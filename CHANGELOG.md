@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.0-rc.4]
+
+### Changed
+
+- Your stored secrets are unlocked per chat. Approving a recipient and
+  unlocking are separate: one Touch ID confirmation unlocks a chat, and it
+  locks again after 15 idle minutes, after 4 hours, when you lock it from the
+  composer, or when you step away from the computer.
+- An approval level in an `approvals.yaml` that the app does not recognize is
+  no longer read as Balanced. On this device it stops startup with a message
+  naming the file; in a project it applies Strict, and project approval
+  settings list each part of the file that was not applied.
+
+### Fixed
+
+- Updating from an earlier preview no longer fails with a message that the
+  update was signed for a different version.
+- A failed update check reports a verification problem instead of telling you
+  to check your connection.
+- Release notes in Settings → Updates show formatted headings and lists.
+- Edits to a project's `approvals.yaml` apply right away, including after
+  changing project approval settings in the app.
+- The stable and preview Homebrew casks no longer install over each other.
+
 ## [1.0.0-rc.3]
 
 ### Changed
