@@ -79,7 +79,10 @@ type Claim struct {
 	lock     *os.File
 	lockInfo os.FileInfo
 
-	mu        sync.Mutex
+	mu sync.Mutex
+	// store stays open so its inode cannot be reused by a replacement,
+	// which would otherwise pass as the same file on some filesystems.
+	store     *os.File
 	storeInfo os.FileInfo
 }
 
@@ -119,13 +122,22 @@ func AcquireStore(dbPath string) (*Claim, error) {
 // BindStore records the identity of the store file just opened. Call it right
 // after opening.
 func (c *Claim) BindStore() error {
-	info, err := os.Stat(c.dbPath)
+	store, err := os.Open(c.dbPath)
 	if err != nil {
 		return fmt.Errorf("bind store claim: %w", err)
 	}
+	info, err := store.Stat()
+	if err != nil {
+		_ = store.Close()
+		return fmt.Errorf("bind store claim: %w", err)
+	}
 	c.mu.Lock()
-	c.storeInfo = info
+	previous := c.store
+	c.store, c.storeInfo = store, info
 	c.mu.Unlock()
+	if previous != nil {
+		_ = previous.Close()
+	}
 	return nil
 }
 
@@ -190,6 +202,13 @@ func (c *Claim) Release() {
 	}
 	_ = filelock.Unlock(c.lock)
 	_ = c.lock.Close()
+	c.mu.Lock()
+	store := c.store
+	c.store = nil
+	c.mu.Unlock()
+	if store != nil {
+		_ = store.Close()
+	}
 }
 
 // storeLockPath is {configdir}/locks/{hash}.engine.lock. It sits in locks/ so
