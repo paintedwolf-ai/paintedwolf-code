@@ -4,6 +4,7 @@ import type { JSX } from "solid-js";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckbox } from "../primitives/DenCheckbox.tsx";
 import { DenSelect } from "../primitives/DenSelect.tsx";
+import { MarkdownBody } from "../transcript/MarkdownBody.tsx";
 import { settingAnchor, settingLabel } from "../../settings/settings-registry.ts";
 import {
   nativeUpdateService,
@@ -254,9 +255,9 @@ export function UpdatePanel(props: UpdatePanelProps): JSX.Element {
 
       <Show when={state()?.phase === "available" && state()?.notes} keyed>
         {(notes) => (
-          <p class="den-settings-hint" data-testid="updates-release-notes">
-            {notes}
-          </p>
+          <div class="den-settings-hint update-release-notes" data-testid="updates-release-notes">
+            <MarkdownBody untrusted source={notes} />
+          </div>
         )}
       </Show>
 

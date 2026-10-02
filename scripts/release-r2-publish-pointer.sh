@@ -119,7 +119,7 @@ case "${get_status}" in
     if python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "${FILE}" "${CURRENT}"; then
       echo "release-pointer: authenticated pointer already has the requested bytes" >&2
     else
-      bash "$(dirname "$0")/release-validate-updater-manifest.sh" --file "${CURRENT}"
+      bash "$(dirname "$0")/release-validate-updater-manifest.sh" --file "${CURRENT}" --existing
       current_version="$(jq -r '.version' "${CURRENT}")"
       if [[ -n "${FROM_VERSION}" ]]; then
         [[ "${current_version}" == "${FROM_VERSION}" ]] || {

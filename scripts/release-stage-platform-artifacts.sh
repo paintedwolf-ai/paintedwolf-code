@@ -227,7 +227,7 @@ esac
 
 SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
-bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}"
+bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"
 
 mkdir -p "${OUTPUT}/opengrep"
 OUTPUT="$(cd "${OUTPUT}" && pwd)"

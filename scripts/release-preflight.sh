@@ -95,6 +95,7 @@ check_equal "updater endpoint count" "${ENDPOINT_COUNT}" "1"
 check_equal "updater endpoint" "${ENDPOINT}" "https://downloads.paintedwolf.dev/updates/stable/key-${EMBEDDED_GENERATION}/latest.json"
 EXPECTED_PUBKEY="$(jq -r --argjson generation "${EMBEDDED_GENERATION}" '.generations[] | select(.generation == $generation) | .public_key' "${ROOT}/packaging/update-keys.json")"
 check_equal "embedded updater public key" "${PUBKEY}" "${EXPECTED_PUBKEY}"
+check_equal "updater signed-version requirement" "$(jq -r '.plugins.updater.requireSignedVersion' "${TAURI_CONF}")" "true"
 
 if ! jq -e '
   .schema_version == 1

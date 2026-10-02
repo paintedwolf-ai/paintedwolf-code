@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -104,19 +105,23 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	contractcheck.FailErr(t, "write notes", os.WriteFile(notes, []byte("Ready to test.\n"), 0o644))
 	fragments := filepath.Join(dir, "fragments")
 	contractcheck.FailErr(t, "create fragments", os.Mkdir(fragments, 0o755))
-	writeFragment := func(key, extension string) string {
+	writeSignedFragment := func(key, extension, signedVersion string) string {
 		t.Helper()
 		path := filepath.Join(fragments, key+".json")
 		value := map[string]any{
 			"update_keys":      testUpdateKeyBinding(t, root),
 			"platform":         key,
-			"signature":        "signed-" + key,
+			"signature":        testUpdaterSignature(signedVersion, key),
 			"updater_artifact": "painted-wolf-code_v1.0.0-rc.1_" + key + "." + extension,
 		}
 		raw, err := json.Marshal(value)
 		contractcheck.FailErr(t, "encode fragment", err)
 		contractcheck.FailErr(t, "write fragment", os.WriteFile(path, raw, 0o644))
 		return path
+	}
+	writeFragment := func(key, extension string) string {
+		t.Helper()
+		return writeSignedFragment(key, extension, "1.0.0-rc.1")
 	}
 	darwin := writeFragment("darwin-aarch64", "app.tar.gz")
 	output := filepath.Join(dir, "latest.json")
@@ -150,6 +155,30 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	if len(manifest.Platforms) != 1 || manifest.Platforms["darwin-aarch64"] == nil {
 		t.Fatalf("candidate platforms leaked into updater manifest: %v", manifest.Platforms)
 	}
+	validate := func(path string, wantSuccess bool, extra ...string) {
+		t.Helper()
+		args := append([]string{filepath.Join(root, "scripts", "release-validate-updater-manifest.sh"), "--file", path}, extra...)
+		cmd := exec.Command("bash", args...)
+		cmd.Env = append(os.Environ(), "DOWNLOAD_BASE_URL=https://downloads.paintedwolf.dev")
+		combined, err := cmd.CombinedOutput()
+		if (err == nil) != wantSuccess {
+			t.Fatalf("manifest validation success=%v want %v: %v\n%s", err == nil, wantSuccess, err, combined)
+		}
+	}
+	validate(output, true)
+	var served map[string]any
+	contractcheck.FailErr(t, "decode served manifest", json.Unmarshal(raw, &served))
+	served["platforms"].(map[string]any)["darwin-aarch64"].(map[string]any)["signature"] = testUpdaterSignature("1.0.0", "darwin-aarch64")
+	misbound, err := json.Marshal(served)
+	contractcheck.FailErr(t, "encode mis-bound manifest", err)
+	misboundPath := filepath.Join(dir, "misbound.json")
+	contractcheck.FailErr(t, "write mis-bound manifest", os.WriteFile(misboundPath, misbound, 0o644))
+	validate(misboundPath, false)
+	// A live pointer is read to be replaced, so a mis-bound one must not block that.
+	validate(misboundPath, true, "--existing")
+	// The bundle version omits the prerelease; the signature must carry the release version.
+	writeSignedFragment("darwin-aarch64", "app.tar.gz", "1.0.0")
+	run(false)
 	contractcheck.FailErr(t, "remove darwin fragment", os.Remove(darwin))
 	run(false)
 	foreign := writeFragment("freebsd-x86_64", "tar.gz")
@@ -415,6 +444,47 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 	if strings.Contains(e2eBuild, `gitengine-ensure.sh" || true`) {
 		t.Fatal("E2E staging must not accept a partial engine payload")
 	}
+}
+
+func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	var tauri struct {
+		Plugins struct {
+			Updater struct {
+				RequireSignedVersion bool `json:"requireSignedVersion"`
+			} `json:"updater"`
+		} `json:"plugins"`
+	}
+	contractcheck.FailErr(t, "parse tauri.conf.json", json.Unmarshal(
+		[]byte(contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/tauri.conf.json")), &tauri))
+	if !tauri.Plugins.Updater.RequireSignedVersion {
+		t.Fatal("the updater must refuse signatures that are not bound to a version")
+	}
+	// The native bundle version drops the prerelease, so build signatures are rebound.
+	bundle := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")
+	if !strings.Contains(bundle, `tauri signer sign --app-version "${PRODUCT_VERSION}"`) {
+		t.Fatal("den-build-bundle.sh must bind updater signatures to the product version")
+	}
+	pointer := contractcheck.ReadRepoFile(t, root, "scripts/release-r2-publish-pointer.sh")
+	if !strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${FILE}"`+"\n") ||
+		!strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${CURRENT}" --existing`) {
+		t.Fatal("the pointer publisher must validate the new manifest strictly and read the current one as existing")
+	}
+	stage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
+	if !strings.Contains(stage, `verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"`) {
+		t.Fatal("artifact staging must verify the signature's bound version")
+	}
+}
+
+// testUpdaterSignature encodes an unverifiable minisign document whose trusted
+// comment binds version, matching what `tauri signer sign --app-version` writes.
+func testUpdaterSignature(version, file string) string {
+	document := "untrusted comment: test signature\n" +
+		base64.StdEncoding.EncodeToString(append([]byte("Ed"), make([]byte, 72)...)) + "\n" +
+		"trusted comment: timestamp:0\tfile:" + file + "\tversion:" + version + "\n" +
+		base64.StdEncoding.EncodeToString(make([]byte, 64)) + "\n"
+	return base64.StdEncoding.EncodeToString([]byte(document))
 }
 
 func testUpdateKeyBinding(t *testing.T, root string) map[string]any {

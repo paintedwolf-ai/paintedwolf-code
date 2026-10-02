@@ -67,7 +67,7 @@ def resolve_prior(base: str, candidate: str, generation: int) -> list[str]:
             with tempfile.TemporaryDirectory(prefix="release-prior-") as temporary:
                 path = Path(temporary) / "manifest.json"
                 path.write_text(json.dumps(manifest))
-                subprocess.run(["bash", str(ROOT / "scripts/release-validate-updater-manifest.sh"), "--file", str(path)],
+                subprocess.run(["bash", str(ROOT / "scripts/release-validate-updater-manifest.sh"), "--file", str(path), "--existing"],
                                env={**os.environ, "DOWNLOAD_BASE_URL": base}, check=True)
             if manifest["update_keys"]["signing_generation"] != generation:
                 raise ValueError("prior manifest belongs to another signing generation")

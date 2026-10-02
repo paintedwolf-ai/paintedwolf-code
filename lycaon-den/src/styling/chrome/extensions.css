@@ -316,6 +316,12 @@
 .whats-new-dialog__body .markdown-body > :last-child {
   margin-bottom: 0;
 }
+.update-release-notes .markdown-body > :first-child {
+  margin-top: 0;
+}
+.update-release-notes .markdown-body > :last-child {
+  margin-bottom: 0;
+}
 .whats-new-dialog__share {
   margin: 20px 0 0;
   padding-top: 16px;

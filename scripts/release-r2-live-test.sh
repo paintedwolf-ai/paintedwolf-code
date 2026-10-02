@@ -159,7 +159,7 @@ write_manifest() {
     --argjson update_keys "$(PYTHONPATH="${ROOT}/scripts" python3 -c 'from update_keys import load_registry,release_binding; import json; r=load_registry(); r["signing_generation"]=r["embedded_generation"]=len(r["generations"]); print(json.dumps(release_binding(r,"0.0.1-live.1")))')" \
     --arg notes "Credentialed release-system rehearsal ${RUN_ID}." \
     --arg pub_date "2026-01-01T00:00:00Z" \
-    --arg signature "release-live-test-signature-${version}" \
+    --arg signature "$(python3 "${ROOT}/scripts/updater_signature.py" rehearsal "${version}")" \
     --arg base "${DOWNLOAD_BASE_URL}" \
     --slurpfile catalog "${ROOT}/packaging/release-platforms.json" \
     '{version: $version, update_keys: $update_keys, notes: $notes, pub_date: $pub_date,
