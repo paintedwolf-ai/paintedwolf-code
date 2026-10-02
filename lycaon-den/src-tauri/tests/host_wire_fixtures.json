@@ -60,18 +60,6 @@
         }
       ]
     },
-    "managed_secret_reveal_challenge": {
-      "source": "pkg/api.ManagedSecretRevealChallenge",
-      "examples": [
-        {
-          "challenge_id": "challenge_id",
-          "expires_at": "expires_at",
-          "prompt": "prompt",
-          "proof_payload": "proof_payload",
-          "version": 1
-        }
-      ]
-    },
     "managed_secret_reveal_response": {
       "source": "pkg/api.ManagedSecretRevealResponse",
       "examples": [
@@ -80,6 +68,17 @@
           "revealed_at": "revealed_at",
           "secret_value": "secret_value",
           "version": 1
+        }
+      ]
+    },
+    "presence_challenge": {
+      "source": "pkg/api.PresenceChallenge",
+      "examples": [
+        {
+          "challenge_id": "challenge_id",
+          "expires_at": "expires_at",
+          "prompt": "prompt",
+          "proof_payload": "proof_payload"
         }
       ]
     },

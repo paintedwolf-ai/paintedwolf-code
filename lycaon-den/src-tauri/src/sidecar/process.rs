@@ -100,7 +100,7 @@ pub(super) fn wait_for_exit(proc: &mut Child, timeout: Duration) -> bool {
 
 pub(super) fn spawn_sidecar_process(
     api_token: &str,
-    reveal_public_key: &str,
+    presence_public_key: &str,
     password: Option<&[u8]>,
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
@@ -109,7 +109,7 @@ pub(super) fn spawn_sidecar_process(
     cmd.arg("serve")
         .env("LYCAON_ADDR", "127.0.0.1:0")
         .env("LYCAON_API_TOKEN", api_token)
-        .env("LYCAON_SECRET_REVEAL_PUBLIC_KEY", reveal_public_key)
+        .env("LYCAON_PRESENCE_PUBLIC_KEY", presence_public_key)
         .env("LYCAON_CONFIG_DIR", &config_dir)
         .env(STARTUP_PROTOCOL_ENV, STARTUP_PROTOCOL_VERSION.to_string())
         .env(CONTROL_STDIN_ENV, "1")
