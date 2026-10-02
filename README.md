@@ -60,7 +60,7 @@ New here: [architecture](docs/architecture.md) covers the two binaries, the one 
 
 ## Changelog
 
-Notable changes are tracked in [`CHANGELOG.md`](CHANGELOG.md), following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for the host/desktop stream (`VERSION` + `v*` git tags). Current version: **1.0.0-rc.1**.
+Notable changes are tracked in [`CHANGELOG.md`](CHANGELOG.md), following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for the host/desktop stream (`VERSION` + `v*` git tags).
 
 ## Community
 
