@@ -709,6 +709,19 @@ func sortApprovalOptions(in []ApprovalOption) []ApprovalOption {
 // faceRungs is the recommended-option order: chat first, wider rungs last.
 var faceRungs = []ApprovalOptionRung{ApprovalRungChat, ApprovalRungOnce, ApprovalRungDay, ApprovalRungProject, ApprovalRungDevice}
 
+// refaceAfterFilter recomputes the face when narrowing the options removed it.
+func (p *ApprovalPlan) refaceAfterFilter(face FaceContext) error {
+	if _, ok := p.Option(p.RecommendedOptionID); ok {
+		return nil
+	}
+	id, err := computeRecommendedOptionID(p.Subject.Kind, p.Reasons, p.Options, face)
+	if err != nil {
+		return err
+	}
+	p.RecommendedOptionID = id
+	return nil
+}
+
 // computeRecommendedOptionID selects the recommended option.
 func computeRecommendedOptionID(kind ApprovalSubjectKind, reasons []api.ApprovalGate, options []ApprovalOption, face FaceContext) (string, error) {
 	if kind == ApprovalSubjectSecret {
