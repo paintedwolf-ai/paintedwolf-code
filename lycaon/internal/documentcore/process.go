@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"strconv"
@@ -117,7 +118,7 @@ func start(ctx context.Context, binary string) (*process, error) {
 		untrack()
 		release()
 	})
-	if err := p.handshake(); err != nil {
+	if err := p.handshake(ctx); err != nil {
 		p.stop(0)
 		return nil, err
 	}
@@ -125,8 +126,8 @@ func start(ctx context.Context, binary string) (*process, error) {
 	return p, nil
 }
 
-func (p *process) handshake() error {
-	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+func (p *process) handshake(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	frame, err := p.receive(ctx)
 	if err != nil {
@@ -159,8 +160,9 @@ func (p *process) read(stdout io.Reader, release func()) {
 	case <-p.stopping:
 		p.exitErr = ErrExited
 	default:
-		p.exitErr = &ExitError{Status: exitStatus(p.cmd.ProcessState, waitErr, readErr), Diagnostics: p.stderr.String()}
-		log.Warn("document core ended unexpectedly", "status", p.exitErr.(*ExitError).Status, "stderr", p.stderr.String())
+		exitErr := &ExitError{Status: exitStatus(p.cmd.ProcessState, waitErr, readErr), Diagnostics: p.stderr.String()}
+		p.exitErr = exitErr
+		log.Warn("document core ended unexpectedly", "status", exitErr.Status, "stderr", p.stderr.String())
 	}
 	close(p.done)
 }
@@ -239,8 +241,11 @@ func readFrame(r io.Reader) ([]byte, error) {
 }
 
 func writeFrame(w io.Writer, frame []byte) error {
+	if len(frame) > math.MaxUint32 {
+		return fmt.Errorf("document core frame of %d bytes exceeds its length prefix", len(frame))
+	}
 	var header [4]byte
-	binary.LittleEndian.PutUint32(header[:], uint32(len(frame)))
+	binary.LittleEndian.PutUint32(header[:], uint32(len(frame))) // #nosec G115 -- bounded above
 	if _, err := w.Write(header[:]); err != nil {
 		return err
 	}

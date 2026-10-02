@@ -24,7 +24,7 @@ var ErrBinaryMissing = errors.New("document core executable is not installed")
 // sibling shipped with the host.
 func Binary() (string, error) {
 	if path := strings.TrimSpace(os.Getenv(EnvBinary)); path != "" {
-		st, err := os.Stat(path)
+		st, err := os.Stat(path) // #nosec G703 -- an explicit development override; the core it names runs confined
 		if err != nil || st.IsDir() {
 			return "", fmt.Errorf("%w: %s=%q", ErrBinaryMissing, EnvBinary, path)
 		}
