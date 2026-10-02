@@ -37,8 +37,11 @@ func IsLockReason(reason EndReason) bool {
 	switch reason {
 	case EndScreenLocked, EndSleep, EndAppQuit, EndManual:
 		return true
+	case EndIdle, EndCeiling, EndRenewed, EndRestart:
+		return false
+	default:
+		return false
 	}
-	return false
 }
 
 // Unlock is one chat's open unlock: a person verified presence, so the
