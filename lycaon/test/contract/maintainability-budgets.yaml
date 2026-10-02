@@ -630,7 +630,7 @@ go_receiver_lines:
     lycaon/internal/hitl/hitl.ApprovalAuthorityDelta: 177
     lycaon/internal/hitl/hitl.ApprovalGrant: 32
     lycaon/internal/hitl/hitl.ApprovalOption: 104
-    lycaon/internal/hitl/hitl.ApprovalPlan: 348
+    lycaon/internal/hitl/hitl.ApprovalPlan: 355
     lycaon/internal/hitl/hitl.ApprovalResolver: 9
     lycaon/internal/hitl/hitl.ApprovalResult: 8
     lycaon/internal/hitl/hitl.ChatGrant: 22
@@ -1702,6 +1702,7 @@ go_receiver_lines:
     lycaon/internal/tools/tools.errString: 1
     lycaon/internal/tools/tools.requestTools: 135
     lycaon/internal/tools/tools.secretReceiptRuntime: 52
+    lycaon/internal/tools/tools.toolApprovalRaise: 3
     lycaon/internal/toolschema/toolschema.Config: 23
     lycaon/internal/toolsurface/toolsurface.Plan: 74
     lycaon/internal/toolvocab/toolvocab.Catalog: 57
@@ -2522,7 +2523,7 @@ go_receiver_methods:
     lycaon/internal/hitl/hitl.ApprovalAuthorityDelta: 6
     lycaon/internal/hitl/hitl.ApprovalGrant: 5
     lycaon/internal/hitl/hitl.ApprovalOption: 3
-    lycaon/internal/hitl/hitl.ApprovalPlan: 11
+    lycaon/internal/hitl/hitl.ApprovalPlan: 12
     lycaon/internal/hitl/hitl.ApprovalResolver: 1
     lycaon/internal/hitl/hitl.ApprovalResult: 3
     lycaon/internal/hitl/hitl.ChatGrant: 1
@@ -3594,6 +3595,7 @@ go_receiver_methods:
     lycaon/internal/tools/tools.errString: 1
     lycaon/internal/tools/tools.requestTools: 3
     lycaon/internal/tools/tools.secretReceiptRuntime: 3
+    lycaon/internal/tools/tools.toolApprovalRaise: 1
     lycaon/internal/toolschema/toolschema.Config: 1
     lycaon/internal/toolsurface/toolsurface.Plan: 13
     lycaon/internal/toolvocab/toolvocab.Catalog: 6
@@ -12609,7 +12611,7 @@ source_files:
     lycaon/internal/hitl/approval_inputs.go: 71
     lycaon/internal/hitl/approval_offers.go: 108
     lycaon/internal/hitl/approval_operation_store.go: 185
-    lycaon/internal/hitl/approval_plan.go: 1058
+    lycaon/internal/hitl/approval_plan.go: 1069
     lycaon/internal/hitl/approval_plan_compile.go: 431
     lycaon/internal/hitl/approval_plan_compose.go: 159
     lycaon/internal/hitl/approval_preparation.go: 93
@@ -12631,7 +12633,7 @@ source_files:
     lycaon/internal/hitl/errors.go: 15
     lycaon/internal/hitl/execution_capability.go: 31
     lycaon/internal/hitl/grant_key.go: 150
-    lycaon/internal/hitl/held_release.go: 189
+    lycaon/internal/hitl/held_release.go: 185
     lycaon/internal/hitl/manager.go: 75
     lycaon/internal/hitl/manager_impl.go: 596
     lycaon/internal/hitl/package_coordinate.go: 30
@@ -14521,7 +14523,7 @@ source_files:
     lycaon/internal/tools/executor_impl.go: 320
     lycaon/internal/tools/executor_registry.go: 42
     lycaon/internal/tools/executor_repeat_approval.go: 94
-    lycaon/internal/tools/executor_tool_approval.go: 264
+    lycaon/internal/tools/executor_tool_approval.go: 267
     lycaon/internal/tools/executor_tool_metadata.go: 104
     lycaon/internal/tools/external_access_capture.go: 99
     lycaon/internal/tools/file_change_review.go: 160
@@ -14549,7 +14551,7 @@ source_files:
     lycaon/internal/tools/mcp_loading.go: 28
     lycaon/internal/tools/mediated_egress.go: 35
     lycaon/internal/tools/mutation_floor.go: 11
-    lycaon/internal/tools/native/background_tools.go: 368
+    lycaon/internal/tools/native/background_tools.go: 373
     lycaon/internal/tools/native/blueprint_write_observer.go: 36
     lycaon/internal/tools/native/chmod.go: 72
     lycaon/internal/tools/native/chmod_mode.go: 174
@@ -15810,7 +15812,7 @@ test_directories:
     lycaon/internal/heldcall: 1
     lycaon/internal/hintregistry: 2
     lycaon/internal/historyretention: 6
-    lycaon/internal/hitl: 39
+    lycaon/internal/hitl: 40
     lycaon/internal/hostcmd: 5
     lycaon/internal/hostidentity: 1
     lycaon/internal/hostlock: 1
@@ -18502,7 +18504,7 @@ test_files:
     lycaon/internal/documentcore/core_test.go: 67
     lycaon/internal/documentcore/hardened_darwin_test.go: 28
     lycaon/internal/documentcore/large_document_test.go: 24
-    lycaon/internal/documentcore/process_test.go: 94
+    lycaon/internal/documentcore/process_test.go: 108
     lycaon/internal/documentcore/text_test.go: 73
     lycaon/internal/documentcore/undo_supersession_test.go: 74
     lycaon/internal/editorconfig/check_test.go: 87
@@ -18889,6 +18891,7 @@ test_files:
     lycaon/internal/hitl/elevated_access_test.go: 77
     lycaon/internal/hitl/elevated_revocation_test.go: 78
     lycaon/internal/hitl/grant_key_test.go: 126
+    lycaon/internal/hitl/held_release_test.go: 150
     lycaon/internal/hitl/manager_test.go: 1045
     lycaon/internal/hitl/parent_checkpoints_test.go: 89
     lycaon/internal/hitl/resolution_order_test.go: 90
@@ -21603,7 +21606,7 @@ test_files:
     lycaon/test/contract/architecture/worker_summary_guard_contract_test.go: 30
     lycaon/test/contract/architecture/worker_synthesis_grounding_parity_contract_test.go: 320
     lycaon/test/contract/architecture/workflow_session_view_contract_test.go: 32
-    lycaon/test/contract/architecture/write_root_parity_contract_test.go: 246
+    lycaon/test/contract/architecture/write_root_parity_contract_test.go: 247
     lycaon/test/contract/catalogs/anchor_emitters_contract_test.go: 123
     lycaon/test/contract/catalogs/anchor_registry_contract_test.go: 146
     lycaon/test/contract/catalogs/anchor_schema_contract_test.go: 120
@@ -21899,7 +21902,7 @@ test_files:
     lycaon/test/contract/runner/parallel_test_safety_contract_test.go: 34
     lycaon/test/contract/runner/platform_floor_contract_test.go: 119
     lycaon/test/contract/runner/registry_testmain_test.go: 10
-    lycaon/test/contract/runner/release_blast_radius_contract_test.go: 420
+    lycaon/test/contract/runner/release_blast_radius_contract_test.go: 424
     lycaon/test/contract/runner/release_channel_invariants_test.go: 417
     lycaon/test/contract/runner/repo_snapshot_lock_contract_test.go: 351
     lycaon/test/contract/runner/retired_artifact_paths_contract_test.go: 211
@@ -22470,7 +22473,7 @@ test_files:
     scripts/verification_tests/test_failure_helpers_execution.py: 49
     scripts/verification_tests/test_harness_execution.py: 152
     scripts/verification_tests/test_health_execution.py: 169
-    scripts/verification_tests/test_live_go_execution.py: 187
+    scripts/verification_tests/test_live_go_execution.py: 189
     scripts/verification_tests/test_planning_execution.py: 444
     scripts/verification_tests/test_release_distribution_execution.py: 279
     scripts/verification_tests/test_reuse_execution.py: 247
