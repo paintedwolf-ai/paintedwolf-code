@@ -109,5 +109,9 @@ func ComposeSecretPermission(plan *ApprovalPlan, action ProposedAction, permissi
 		Gate: api.GateSecretOutbound, Key: "secret.use", Value: "Managed values and their recipients", Source: "managed_secret",
 	})
 	reasons := append(append([]api.ApprovalGate(nil), plan.Reasons...), api.GateSecretOutbound)
-	return NewApprovalPlan(action, plan.Stage, subject, presentation, reasons, options, face)
+	composed, err := NewApprovalPlan(action, plan.Stage, subject, presentation, reasons, options, face)
+	if err != nil {
+		return nil, err
+	}
+	return composed.RequirePresence(plan.Held.merged(permission.Screen.Held))
 }

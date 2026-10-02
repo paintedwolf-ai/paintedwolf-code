@@ -87,3 +87,64 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
         '503':
           $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges:
+    post:
+      tags:
+      - sessions
+      operationId: beginCheckpointReleaseChallenge
+      x-person-action: none
+      summary: Begin presence verification for an option that releases held values
+      description: >-
+        Creates a short-lived, single-use challenge binding one pending option,
+        the exact plan that offers it, and the deciding person. Only the
+        installed desktop shell can complete it: it asks the operating system
+        to verify the person, signs the challenge, and resolves the checkpoint
+        with the proof. A bearer-authenticated caller can begin a challenge but
+        cannot answer the option without that proof.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - name: checkpoint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../components/schemas/presence.yaml#/components/schemas/BeginReleaseChallengeRequest
+      responses:
+        '201':
+          description: Challenge to verify and sign
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/presence.yaml#/components/schemas/PresenceChallenge
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          description: The checkpoint is settled, or the option releases no held value
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '503':
+          description: This app session cannot verify presence
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '413':
+          $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge

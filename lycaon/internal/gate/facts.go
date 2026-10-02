@@ -117,6 +117,9 @@ type SecretHit struct {
 	// ChatGenerated is true when every matched value is a managed secret the
 	// host generated for this chat, so nothing outside the chat has held it.
 	ChatGenerated bool
+	// Held is true when any matched value is one a person handed to the vault.
+	// Its release always asks, at every posture, and needs their presence.
+	Held bool
 	// RecipientsLocal is true when every recipient is a process this chat runs,
 	// a file a tool saves, or an HTTP service reached over loopback.
 	RecipientsLocal bool

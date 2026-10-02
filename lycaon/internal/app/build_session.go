@@ -401,6 +401,8 @@ func (b *serveBuilder) wireCheckpointRuntime() error {
 	checkpointStore.SetEventOutbox(b.eventOutbox)
 	checkpointMgr := hitl.NewManager(checkpointStore, b.eventPub, b.authzCapturer.Recorder)
 	checkpointMgr.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
+	checkpointMgr.SetHeldRelease(b.presenceBroker, b.releaseLedger, heldReleaseRecorder{})
+	b.toolRuntime.Executor.SetPresenceAvailable(checkpointMgr.PresenceAvailable)
 	checkpointMgr.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
 	var authzRec authzledger.Recorder = b.authzCapturer.Recorder
 	if b.toolRuntime != nil {

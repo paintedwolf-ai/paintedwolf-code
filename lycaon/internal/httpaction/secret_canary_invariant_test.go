@@ -15,9 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -153,11 +151,8 @@ func assertNoCanary(t *testing.T, tool, scheme, out string) {
 }
 
 func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
-	service, _, database := newTestSecrets(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: testdbseed.OwnerID(t, database), OperationID: "canary", Name: "Canary", Purpose: "secret canary", Value: canaryValue,
-	})
-	testutil.FailErr(t, "create canary secret", err)
+	service, _, _ := newTestSecrets(t)
+	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
 
 	var wire []string
 	mux := http.NewServeMux()

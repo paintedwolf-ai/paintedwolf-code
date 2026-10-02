@@ -333,7 +333,9 @@ func send(
 			return nil
 		}
 	}
-	tctx.Secrets.HandOff(ctx, spec.outgoing)
+	if err := tctx.Secrets.HandOff(ctx, spec.outgoing); err != nil {
+		return outboundhttp.Response{}, nil, nil, tools.HeldHandOffReject("http_request")
+	}
 	resp, err := outboundhttp.Do(ctx, req)
 	return resp, landed, bufferedResponsePathBytes, err
 }

@@ -155,6 +155,16 @@ func missingCommandHandleReject(reg *bgprocess.Registry, sessionID, handle strin
 	return &tools.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
 }
 
+// rejectBackgroundCapture refuses capture modes that need a foreground run.
+func rejectBackgroundCapture(args map[string]any) error {
+	for _, capture := range []string{"terminal_capture", "snapshot_capture"} {
+		if _, ok := args[capture]; ok {
+			return tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
+		}
+	}
+	return nil
+}
+
 func runCommandBackground(
 	ctx context.Context,
 	registry *bgprocess.Registry,
@@ -171,11 +181,8 @@ func runCommandBackground(
 	if runner == nil {
 		return "", fmt.Errorf("command runner not configured")
 	}
-	if _, ok := args["terminal_capture"]; ok {
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_incompatible", "field": "background"})
-	}
-	if _, ok := args["snapshot_capture"]; ok {
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_incompatible", "field": "background"})
+	if reject := rejectBackgroundCapture(args); reject != nil {
+		return "", reject
 	}
 	plan, err := tctx.CommandPlan(args)
 	if err != nil {
@@ -225,12 +232,14 @@ func runCommandBackground(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, commandLine),
 		tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
 	), Action: egressLease, Network: egressLease.ObservedHosts}
+	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
+		return "", tools.HeldHandOffReject(toolName)
+	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string
 	if tctx.VerificationCheck {
 		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
 	}
-	tctx.Secrets.HandOff(ctx, nil)
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
 		IsCheck:        tctx.VerificationCheck,

@@ -55,8 +55,8 @@ func (*countingApprovalGate) HostResourceLeaseCovers(hitl.ProposedAction) bool  
 func (*countingApprovalGate) RevokeGrant(string) (bool, error)                    { return false, nil }
 func (*countingApprovalGate) RevokeGrantInstalledBy(string, string) (bool, error) { return false, nil }
 func (*countingApprovalGate) ListGrants(string) []hitl.ApprovalGrant              { return nil }
-func (*countingApprovalGate) SecretFingerprintsCovered(string, string, string, string, []string) bool {
-	return false
+func (*countingApprovalGate) SecretReleaseCovered(string, string, string, string, []string, []string) (bool, map[string]string) {
+	return false, nil
 }
 
 func (*countingApprovalGate) SecretRedactionStanding(string, []string) bool { return false }

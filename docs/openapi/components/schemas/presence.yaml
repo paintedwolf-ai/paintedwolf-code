@@ -1,0 +1,68 @@
+components:
+  schemas:
+    PresenceAuthenticator:
+      type: string
+      enum: [macos_user_presence, windows_user_presence]
+      description: Operating-system user-presence verifier that confirmed the person before the shell signed.
+    PresenceChallenge:
+      x-go-generate: true
+      type: object
+      required: [challenge_id, proof_payload, prompt, expires_at]
+      additionalProperties: false
+      description: >-
+        One short-lived request for native user-presence verification. The
+        proof payload is opaque canonical bytes naming its purpose and subject;
+        the native shell signs it only after the operating system verifies the
+        device user. The API bearer can begin a challenge but cannot complete
+        one.
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        proof_payload:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Base64url without padding of the exact bytes the native shell signs.
+        prompt:
+          type: string
+          description: Host-authored reason shown by the operating-system prompt.
+        expires_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    PresenceProof:
+      x-go-generate: true
+      type: object
+      required: [challenge_id, authenticator, signature]
+      additionalProperties: false
+      description: >-
+        Challenge-bound native user-presence proof. The signature covers the
+        challenge payload plus the authenticator identifier.
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        authenticator:
+          $ref: presence.yaml#/components/schemas/PresenceAuthenticator
+        signature:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Base64url without padding Ed25519 signature from the installed desktop shell.
+    BeginReleaseChallengeRequest:
+      x-go-generate: true
+      type: object
+      required: [option_id, window_label]
+      additionalProperties: false
+      description: >-
+        Starts presence verification for one pending option that releases
+        values a person gave Painted Wolf Code. The challenge binds the
+        checkpoint, the option, the exact plan, and the deciding person.
+      properties:
+        option_id:
+          type: string
+          pattern: '^[A-Za-z0-9_.:-]+$'
+        window_label:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Native calling window label, bound into the proof; not an authorization identity.

@@ -87,11 +87,8 @@ func TestRedactionReusesReviewedUploadBytes(t *testing.T) {
 }
 
 func TestHTTPDoesNotTreatUnusedAuthFieldsAsDisclosure(t *testing.T) {
-	service, owner := managedRequestService(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "unused", Name: "Unused", Purpose: "unused field", Value: "unused-password",
-	})
-	testutil.FailErr(t, "create unused secret", err)
+	service, _ := managedRequestService(t)
+	meta := hostSecret(t, service, "unused", "Unused", "unused-password")
 	args := map[string]any{"auth": map[string]any{"scheme": "bearer", "token": "public-test-value", "password": meta.Reference}, "response_path": meta.Reference}
 	resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "resolve unused fields", err)
@@ -110,11 +107,8 @@ func TestHTTPDoesNotTreatUnusedAuthFieldsAsDisclosure(t *testing.T) {
 }
 
 func TestManagedWireProvenancePreservesUnrelatedSecretDetection(t *testing.T) {
-	service, owner := managedRequestService(t)
-	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "mixed", Name: "Managed", Purpose: "mixed field", Value: "managed-opaque-value",
-	})
-	testutil.FailErr(t, "create managed secret", err)
+	service, _ := managedRequestService(t)
+	meta := hostSecret(t, service, "mixed", "Managed", "managed-opaque-value")
 	args := map[string]any{"body_text": "X-Subscription-Token: " + plantedBraveKey + "\nManaged: " + meta.Reference}
 	resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "resolve mixed field", err)
@@ -134,12 +128,9 @@ func TestManagedWireProvenancePreservesUnrelatedSecretDetection(t *testing.T) {
 func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 	for _, decision := range []secretmatch.Decision{secretmatch.SendUnchanged, secretmatch.SendRedacted, secretmatch.Withhold} {
 		t.Run(string(decision), func(t *testing.T) {
-			service, owner := managedRequestService(t)
+			service, _ := managedRequestService(t)
 			const value = " 4321&\"<>\\unicode-λ "
-			meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-				ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "create", Name: "Password", Purpose: "test encoding", Value: value,
-			})
-			testutil.FailErr(t, "create managed password", err)
+			meta := hostSecret(t, service, "create", "Password", value)
 			var received atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				received.Add(1)

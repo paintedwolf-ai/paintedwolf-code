@@ -1,6 +1,9 @@
 package secretcap
 
 import (
+	"errors"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -36,7 +39,7 @@ func TestRotationKeepsTheReferenceAndResolvesToTheNewValue(t *testing.T) {
 	if resolved.Arguments["value"] != "entered-value-after-002" {
 		t.Fatalf("resolved value = %v", resolved.Arguments["value"])
 	}
-	if value, ok := values.Get(before); !ok || value != "entered-value-before-01" {
+	if entry, ok := storedEntry(values, before); !ok || entry.Value != "entered-value-before-01" {
 		t.Fatal("replacement deleted the value the agent has already seen")
 	}
 }
@@ -254,5 +257,68 @@ func TestScreeningAudiencesShareStandingNotReferences(t *testing.T) {
 					audience.label, retired, values[0].Retired, values[0].Reference)
 			}
 		}
+	}
+}
+
+// Custody names who supplied the current bytes: a person's replacement makes
+// even a host-generated value theirs.
+func TestReplacementTakesThePersonsCustody(t *testing.T) {
+	service, _, _ := testService(t)
+	meta, err := service.Generate(t.Context(), GenerateRequest{
+		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1",
+		OperationID: "generated-then-replaced", Name: "Rotated", Purpose: "rotate", Scope: ScopeChat,
+	})
+	testutil.FailErr(t, "generate", err)
+	if meta.Custody != CustodyChat {
+		t.Fatalf("generated custody = %q", meta.Custody)
+	}
+	replaced, err := service.ReplaceValue(t.Context(), ReplaceValueRequest{
+		ProjectID: testdbseed.DefaultProjectID, Reference: meta.Reference, Value: "person-supplied-rotation",
+	})
+	testutil.FailErr(t, "replace value", err)
+	if replaced.Custody != CustodyPerson {
+		t.Fatalf("replaced custody = %q", replaced.Custody)
+	}
+}
+
+// A jar's values reach services through the jar, so a person cannot place
+// their own bytes in one.
+func TestReplaceValueRefusesAJar(t *testing.T) {
+	service, _, _ := testService(t)
+	site, err := url.Parse("http://localhost:5555/login")
+	testutil.FailErr(t, "parse url", err)
+	jar, err := service.OpenCookieJar(t.Context(), jarRequest("jar-replace"))
+	testutil.FailErr(t, "open jar", err)
+	jar.Store.SetCookies(site, []*http.Cookie{{Name: "session", Value: "cookie-value-replace", Path: "/"}})
+	meta, err := service.SaveCookieJar(t.Context(), jarRequest("jar-replace"), jar)
+	testutil.FailErr(t, "save jar", err)
+	if meta.Custody != CustodyHost {
+		t.Fatalf("jar custody = %q", meta.Custody)
+	}
+	if _, err := service.ReplaceValue(t.Context(), ReplaceValueRequest{
+		ProjectID: testdbseed.DefaultProjectID, Reference: meta.Reference, Value: "person-supplied-jar",
+	}); !errors.Is(err, ErrInvalidPut) {
+		t.Fatalf("jar replacement error = %v", err)
+	}
+}
+
+// An entry whose shape the vault does not recognize stays untouched and
+// reports unavailable.
+func TestUnknownVaultEntryReportsUnavailable(t *testing.T) {
+	service, values, _ := testService(t)
+	meta, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
+		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "unknown-shape",
+		Name: "Unknown", Purpose: "shape", Value: "settings-unknown-shape",
+	})
+	testutil.FailErr(t, "create settings secret", err)
+	valueID := currentValueID(t, service, meta.Reference)
+	testutil.FailErr(t, "write a bare value", values.Set(valueID, "settings-unknown-shape"))
+	described, err := service.Describe(t.Context(), testdbseed.DefaultProjectID, "", meta.Reference)
+	testutil.FailErr(t, "describe", err)
+	if described.State != StateUnavailable || described.Custody != "" {
+		t.Fatalf("unknown entry metadata = %+v", described)
+	}
+	if raw, ok := values.Get(valueID); !ok || raw.Value() != "settings-unknown-shape" {
+		t.Fatal("an unknown entry was modified")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,10 +31,17 @@ func (m *Manager) SetApprovalAuthorityInstaller(installer ApprovalAuthorityInsta
 // named standing policy rule. Its constructors are the whole vocabulary.
 type ApprovalResolver struct {
 	policy *authzledger.PolicyIdentity
+	// proof is the deciding person's signed presence, required to release
+	// values they hold.
+	proof *presence.Proof
 }
 
 // HumanApproval resolves as the deciding person.
 func HumanApproval() ApprovalResolver { return ApprovalResolver{} }
+
+// AttestedApproval resolves as the deciding person with their verified
+// presence, which a plan releasing held values requires.
+func AttestedApproval(proof presence.Proof) ApprovalResolver { return ApprovalResolver{proof: &proof} }
 
 // PolicyApproval resolves under the named standing policy rule, with no person.
 func PolicyApproval(policy authzledger.PolicyIdentity) ApprovalResolver {
@@ -43,6 +51,9 @@ func PolicyApproval(policy authzledger.PolicyIdentity) ApprovalResolver {
 func (r ApprovalResolver) validate() error {
 	if r.policy != nil && !r.policy.Complete() {
 		return fmt.Errorf("%w: a policy resolution names its pack, unit, and rule", ErrApprovalResolverInvalid)
+	}
+	if r.policy != nil && r.proof != nil {
+		return fmt.Errorf("%w: a policy resolution carries no presence", ErrApprovalResolverInvalid)
 	}
 	return nil
 }
@@ -71,6 +82,7 @@ func (o ApprovalOption) grantedBy(resolution Resolution) ApprovalOption {
 	o.Authority = authority
 	return o
 }
+
 
 // ResolveApprovalOption installs authority before committing the checkpoint.
 // A failed commit rolls back the installed authority.
@@ -139,8 +151,22 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	var release *verifiedRelease
+	if plan.releasesHeld(option) {
+		verified, err := m.verifyRelease(sessionID, checkpointID, *plan, option, resolver, resolution)
+		if err != nil {
+			return nil, err
+		}
+		release = &verified
+		if option, err = attestHeldGrants(option, plan.Held, verified.attestation, m.held.ledger, now); err != nil {
+			m.forgetAttested(option)
+			return nil, err
+		}
+	}
 	option = option.grantedBy(resolution)
 	if err := m.store.prepareApprovalOperation(ctx, checkpointID, sessionID, option); err != nil {
+		m.forgetAttested(option)
 		return nil, fmt.Errorf("prepare approval authority: %w", err)
 	}
 
@@ -150,6 +176,9 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	}
 	if option.DecisionAction == ApprovalOptionTrack {
 		result.TrackSecrets = true
+	}
+	if release != nil {
+		result.AttestationID = release.attestation.ID
 	}
 	seenGrantIDs := map[string]struct{}{}
 	for _, delta := range option.Authority {
@@ -171,7 +200,6 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 			result.GrantTitle = option.Title
 		}
 	}
-	now := time.Now().UTC()
 	sealed := *row
 	sealed.Status = DecisionStatusApproved
 	sealed.Result = result
@@ -184,11 +212,20 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 		if err := recordChatGrantsTx(ctx, tx, checkpointID, option, now); err != nil {
 			return err
 		}
+		if release != nil {
+			if err := m.held.recorder.RecordReleaseTx(ctx, tx, AttestedRelease{
+				Attestation: release.attestation, WindowLabel: release.windowLabel, CheckpointID: checkpointID,
+				Scope: releaseScope(option), Held: *plan.Held, Recipients: plan.Held.Recipients,
+			}); err != nil {
+				return err
+			}
+		}
 		return m.sealDetectionResolvedTx(ctx, tx, sealed, DecisionStatusApproved)
 	}
 	rollbackAuthority, err := m.authorityInstaller.InstallApprovalOption(ctx, checkpointID, option)
 	if err != nil {
 		_ = m.store.rollbackApprovalOperation(context.WithoutCancel(ctx), checkpointID)
+		m.forgetAttested(option)
 		return nil, fmt.Errorf("install approved authority: %w", err)
 	}
 	viaOutbox, err := m.store.commitApprovalOperation(ctx, *row, result, now, resolution, seal)
@@ -197,6 +234,7 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 			rollbackAuthority()
 		}
 		_ = m.store.rollbackApprovalOperation(context.WithoutCancel(ctx), checkpointID)
+		m.forgetAttested(option)
 		return nil, err
 	}
 	row.Status = DecisionStatusApproved

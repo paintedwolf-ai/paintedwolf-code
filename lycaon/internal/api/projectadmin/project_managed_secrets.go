@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/people/personactions"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -193,6 +194,7 @@ func (s *Handler) HandleListProjectManagedSecretUses(w http.ResponseWriter, r *h
 			UsedAt: use.UsedAt, ToolName: use.ToolName, Outcome: use.Outcome,
 			ToolCallID: use.ToolCallID, Delivery: use.Delivery,
 			Version: use.Version, SessionID: use.SessionID, ChatSessionID: use.ChatSessionID,
+			Recipients: wireUseRecipients(use.Recipients), AttestationID: use.AttestationID,
 		})
 	}
 	var nextCursor string
@@ -211,13 +213,48 @@ func (s *Handler) HandleListProjectManagedSecretUses(w http.ResponseWriter, r *h
 	httpio.WriteJSON(w, http.StatusOK, wire.ManagedSecretUseList{Uses: out, NextCursor: nextCursor})
 }
 
+func wireUseRecipients(recipients []secretcap.UseRecipient) []wire.ManagedSecretUseRecipient {
+	out := make([]wire.ManagedSecretUseRecipient, 0, len(recipients))
+	for _, recipient := range recipients {
+		out = append(out, wire.ManagedSecretUseRecipient{Label: recipient.Label, Surface: recipient.Surface})
+	}
+	return out
+}
+
+func (s *Handler) HandleListProjectManagedSecretAttestations(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.secretTarget(w, r)
+	if !ok {
+		return
+	}
+	query, err := httpio.ReadPageQuery(r, secretUseBounds)
+	if err != nil {
+		s.responses.InvalidQuery(w, err)
+		return
+	}
+	attestations, err := s.ManagedSecrets.Attestations(r.Context(), p.ID, secretReference(r), query.Limit)
+	if err != nil {
+		secretview.WriteError(s.responses, w, r, err)
+		return
+	}
+	out := make([]wire.ManagedSecretAttestation, 0, len(attestations))
+	for _, item := range attestations {
+		out = append(out, wire.ManagedSecretAttestation{
+			AttestationID: item.AttestationID, Purpose: item.Purpose, Version: item.Version,
+			CheckpointID: item.CheckpointID, Recipients: wireUseRecipients(item.Recipients),
+			ReleaseScope: item.ReleaseScope, Authenticator: wire.PresenceAuthenticator(item.Authenticator),
+			PersonID: item.PersonID, AttestedAt: item.AttestedAt,
+		})
+	}
+	httpio.WriteJSON(w, http.StatusOK, wire.ManagedSecretAttestationList{Attestations: out})
+}
+
 func (s *Handler) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {
 	var body wire.BeginManagedSecretRevealRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !secretcap.IsRevealWindowLabel(strings.TrimSpace(body.WindowLabel)) {
+	if !presence.IsWindowLabel(strings.TrimSpace(body.WindowLabel)) {
 		s.responses.InvalidField(w, "window_label", "must be 1 to 120 characters without control characters")
 		return
 	}
@@ -245,7 +282,7 @@ func (s *Handler) HandleCompleteProjectManagedSecretReveal(w http.ResponseWriter
 		return
 	}
 	switch {
-	case !secretcap.IsRevealAuthenticator(strings.TrimSpace(body.Authenticator)):
+	case !presence.IsAuthenticator(strings.TrimSpace(string(body.Authenticator))):
 		s.responses.InvalidField(w, "authenticator", "must name a supported user-presence authenticator")
 		return
 	case strings.TrimSpace(body.Signature) == "":
@@ -256,10 +293,10 @@ func (s *Handler) HandleCompleteProjectManagedSecretReveal(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	result, err := s.ManagedSecrets.CompleteReveal(
-		r.Context(), p.ID, secretReference(r), strings.TrimSpace(chi.URLParam(r, "challenge_id")),
-		requestscope.Caller(r).ID, strings.TrimSpace(body.Authenticator), strings.TrimSpace(body.Signature),
-	)
+	result, err := s.ManagedSecrets.CompleteReveal(r.Context(), p.ID, secretReference(r), requestscope.Caller(r).ID, presence.Proof{
+		ChallengeID:   strings.TrimSpace(chi.URLParam(r, "challenge_id")),
+		Authenticator: strings.TrimSpace(string(body.Authenticator)), Signature: strings.TrimSpace(body.Signature),
+	})
 	if err != nil {
 		secretview.WriteError(s.responses, w, r, err)
 		return

@@ -39,13 +39,13 @@ type rustHostWireFixtureFile struct {
 func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	fixtures := map[string]rustHostWireFixture{
-		"error_response":                  goTypeFixture(t, "pkg/api.ErrorResponse", wire.ErrorResponse{}),
-		"attachment_upload_response":      goTypeFixture(t, "pkg/api.AttachmentUploadResponse", wire.AttachmentUploadResponse{}),
-		"attachment_video_facts":          goTypeFixture(t, "pkg/api.AttachmentVideoFacts", wire.AttachmentVideoFacts{}),
-		"managed_secret_reveal_challenge": goTypeFixture(t, "pkg/api.ManagedSecretRevealChallenge", wire.ManagedSecretRevealChallenge{}),
-		"managed_secret_reveal_response":  goTypeFixture(t, "pkg/api.ManagedSecretRevealResponse", wire.ManagedSecretRevealResponse{}),
-		"daemon_manifest":                 goTypeFixture(t, "internal/api.DaemonManifest", api.DaemonManifest{}),
-		"startup_record":                  startupRecordFixture(t),
+		"error_response":                 goTypeFixture(t, "pkg/api.ErrorResponse", wire.ErrorResponse{}),
+		"attachment_upload_response":     goTypeFixture(t, "pkg/api.AttachmentUploadResponse", wire.AttachmentUploadResponse{}),
+		"attachment_video_facts":         goTypeFixture(t, "pkg/api.AttachmentVideoFacts", wire.AttachmentVideoFacts{}),
+		"presence_challenge":             goTypeFixture(t, "pkg/api.PresenceChallenge", wire.PresenceChallenge{}),
+		"managed_secret_reveal_response": goTypeFixture(t, "pkg/api.ManagedSecretRevealResponse", wire.ManagedSecretRevealResponse{}),
+		"daemon_manifest":                goTypeFixture(t, "internal/api.DaemonManifest", api.DaemonManifest{}),
+		"startup_record":                 startupRecordFixture(t),
 	}
 	phases := make([]string, 0, len(startupprotocol.Phases()))
 	for _, phase := range startupprotocol.Phases() {

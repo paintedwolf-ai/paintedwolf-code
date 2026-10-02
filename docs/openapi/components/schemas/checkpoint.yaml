@@ -147,6 +147,44 @@ components:
         surface: {type: string}
         kind:
           $ref: checkpoint.yaml#/components/schemas/ApprovalSecretDestinationKind
+    ApprovalHeldSecret:
+      x-go-generate: true
+      type: object
+      required: [reference, name, version]
+      additionalProperties: false
+      description: One value a person gave Painted Wolf Code that this approval would release.
+      properties:
+        reference:
+          type: string
+          pattern: '^\{\{paintedwolf-secret:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}\}$'
+        name:
+          type: string
+        version:
+          x-go-type: "int64"
+          type: integer
+          minimum: 1
+    ApprovalHeldRelease:
+      x-go-generate: true
+      type: object
+      required: [secrets, recipients]
+      additionalProperties: false
+      description: >-
+        Values a person gave Painted Wolf Code that an approving option would
+        hand to the listed recipients. Every option whose decision_action is
+        approve needs the person's verified presence on this device; the API
+        bearer alone cannot answer it. A redacted send releases nothing and
+        needs none.
+      properties:
+        secrets:
+          type: array
+          minItems: 1
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalHeldSecret
+        recipients:
+          type: array
+          minItems: 1
+          items:
+            $ref: checkpoint.yaml#/components/schemas/ApprovalSecretRecipient
     ApprovalSecretLocation:
       type: object
       required: [origin, destination, origin_kind, destination_kind]
@@ -411,6 +449,9 @@ components:
             subject kind and rung set. Clients must not invent a fallback.
             A disabled face stays in that slot; Enter does not select another
             send.
+        held_release:
+          x-go-pointer: true
+          $ref: checkpoint.yaml#/components/schemas/ApprovalHeldRelease
     ApprovalRepeat:
       x-go-generate: true
       type: object
@@ -563,6 +604,12 @@ components:
           description: >
             Selects one exact opaque option from tool_approval.plan; authority is
             installed atomically before resolution.
+        presence:
+          x-go-pointer: true
+          $ref: presence.yaml#/components/schemas/PresenceProof
+          description: >
+            Required when the plan carries held_release and the option approves.
+            Only the installed desktop shell can produce it.
     ToolApprovalRejectBody:
       type: object
       required:

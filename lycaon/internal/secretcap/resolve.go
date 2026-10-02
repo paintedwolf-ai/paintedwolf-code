@@ -280,16 +280,20 @@ func (s *Service) substitute(ctx context.Context, id string, access ResolveConte
 		s.recordUse(ctx, id, 0, UseUnavailable, access)
 		return resolvedValue{}, ErrValueMissing
 	}
-	secret, ok := s.values.Get(current.ID)
+	entry, ok := s.values.get(current.ID)
 	if !ok {
 		s.recordUse(ctx, id, current.Version, UseUnavailable, access)
 		return resolvedValue{}, ErrValueMissing
 	}
-	s.rememberValue(access.ChatSessionID, row.Name, id, secret.Value())
-	return resolvedValue{
-		id: id, version: current.Version, name: row.Name, value: secret.Value(),
-		chatGenerated: row.Origin == OriginGenerated && row.Scope == ScopeChat,
-	}, nil
+	s.rememberValue(access.ChatSessionID, row.Name, id, entry.Value)
+	value := resolvedValue{
+		id: id, version: current.Version, name: row.Name, value: entry.Value, custody: entry.Custody,
+		chatGenerated: entry.GeneratedFor(access.ChatSessionID),
+	}
+	if s.fingerprint != nil {
+		value.fingerprint = s.fingerprint(entry.Value)
+	}
+	return value, nil
 }
 
 // ReferenceLimitError reports the first distinct reference beyond the call bound.

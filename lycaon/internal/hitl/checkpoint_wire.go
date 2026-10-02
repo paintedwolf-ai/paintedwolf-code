@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -126,6 +127,7 @@ func wireApprovalPlan(plan *ApprovalPlan) api.ApprovalPlan {
 		RecommendedOptionID: plan.RecommendedOptionID,
 	}
 	out.ElevatedEffects = savedOptionElevatedEffects(plan.Options)
+	out.HeldRelease = wireHeldRelease(plan.Held)
 	for _, cited := range plan.Presentation.Cited {
 		out.Presentation.Cited = append(out.Presentation.Cited, api.PresentedFact{
 			Gate: cited.Gate, Key: cited.Key, Value: cited.Value, Source: cited.Source,
@@ -154,6 +156,21 @@ func wireApprovalPlan(plan *ApprovalPlan) api.ApprovalPlan {
 			Title: option.Title, Coverage: option.Coverage, ExpiresWhen: option.ExpiresWhen,
 			ReaskWhen: option.ReaskWhen, DecisionAction: api.ApprovalOptionDecision(option.DecisionAction),
 			Disabled: option.Disabled, Note: option.Note,
+		})
+	}
+	return out
+}
+
+// wireHeldRelease names the held values and recipients; fingerprints stay
+// host-only.
+func wireHeldRelease(held *HeldRelease) *api.ApprovalHeldRelease {
+	if held.empty() {
+		return nil
+	}
+	out := &api.ApprovalHeldRelease{Recipients: WireSecretRecipients(held.Recipients)}
+	for _, secret := range held.Secrets {
+		out.Secrets = append(out.Secrets, api.ApprovalHeldSecret{
+			Reference: secretmatch.ReferenceToken(secret.SecretID), Name: secret.Name, Version: secret.Version,
 		})
 	}
 	return out

@@ -231,13 +231,13 @@ type secretReleaseGateStub struct {
 	fingerprints   []string
 }
 
-func (g *secretReleaseGateStub) SecretFingerprintsCovered(chatSessionID, projectID, destinationID, surface string, fingerprints []string) bool {
+func (g *secretReleaseGateStub) SecretReleaseCovered(chatSessionID, projectID, destinationID, surface string, fingerprints, _ []string) (bool, map[string]string) {
 	g.chatSessionID = chatSessionID
 	g.projectID = projectID
 	g.destinationID = destinationID
 	g.surface = surface
 	g.fingerprints = append([]string(nil), fingerprints...)
-	return g.covered
+	return g.covered, nil
 }
 
 func (g *secretReleaseGateStub) SecretRedactionStanding(string, []string) bool {
@@ -329,7 +329,7 @@ func TestRedactionContestRequiresReviewDespiteEarlierPermission(t *testing.T) {
 		Fingerprints: []secretmatch.SecretFingerprint{"value"},
 	}
 	permission := &secretcap.Resolution{}
-	permission.ApproveUse(finding.Fingerprints, []secretmatch.Recipient{{ID: "provider", Label: "Provider", Surface: secretmatch.SurfaceModel, Kind: secretmatch.DestinationModelProvider}})
+	permission.ApproveRelease(secretcap.Release{Fingerprints: finding.Fingerprints, Recipients: []secretmatch.Recipient{{ID: "provider", Label: "Provider", Surface: secretmatch.SurfaceModel, Kind: secretmatch.DestinationModelProvider}}})
 	ctx := secretcap.WithResolution(t.Context(), permission)
 	redacted, err := exec.AskSecretScreen(ctx, finding)
 	testutil.FailErr(t, "apply standing redaction", err)

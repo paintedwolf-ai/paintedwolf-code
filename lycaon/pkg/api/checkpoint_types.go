@@ -136,6 +136,9 @@ type ResolveCheckpointRequest struct {
 	Action ApprovalDecisionAction `json:"action,omitempty"`
 	// OptionID selects one exact host-authored option from tool_approval.plan.
 	OptionID string `json:"option_id,omitempty"`
+	// Presence is the desktop shell's proof for an option that releases
+	// values a person holds.
+	Presence *PresenceProof `json:"presence,omitempty"`
 	// Guidance adds non-authorizing direction to a denying resolution.
 	Guidance string                      `json:"guidance,omitempty"`
 	Secrets  []PromptSecretReferencePart `json:"secrets,omitempty"`

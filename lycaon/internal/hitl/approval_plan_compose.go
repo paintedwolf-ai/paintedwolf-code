@@ -23,6 +23,7 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	presentation := ApprovalPresentation{Action: "Use the listed capabilities", Tool: action.Tool, Command: action.Command}
 	var reasons []api.ApprovalGate
 	var reasonKeys []string
+	var held *HeldRelease
 	plans := make([]*ApprovalPlan, 0, len(reviews))
 	for _, review := range reviews {
 		req := review.Request
@@ -38,6 +39,7 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 			return nil, nil, fmt.Errorf("capability review crosses approval stages")
 		}
 		plans = append(plans, plan)
+		held = held.merged(plan.Held)
 		subject.Targets = append(subject.Targets, plan.Subject.Targets...)
 		reasons = append(reasons, plan.Reasons...)
 		decision.Posture = gate.Stricter(decision.Posture, req.Decision.Posture)
@@ -61,6 +63,10 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	}
 	options = append(options, combinedCapabilityQuiet(plans, options)...)
 	plan, err := NewApprovalPlan(action, ApprovalStagePreSpawn, subject, presentation, reasons, options, FaceContext{})
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err = plan.RequirePresence(held)
 	return plan, decision, err
 }
 

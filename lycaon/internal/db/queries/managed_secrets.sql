@@ -133,7 +133,8 @@ INSERT INTO managed_secret_uses (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListManagedSecretUses :many
-SELECT id, secret_id, version, tool_name, session_id, chat_session_id, outcome, tool_call_id, delivery, used_at
+SELECT id, secret_id, version, tool_name, session_id, chat_session_id, outcome, tool_call_id, delivery,
+       recipients_json, attestation_id, used_at
 FROM managed_secret_uses
 WHERE secret_id = sqlc.arg(secret_id)
 ORDER BY used_at DESC, rowid DESC
@@ -163,29 +164,45 @@ WHERE managed_secret_uses.secret_id = sqlc.arg(secret_id)
       LIMIT sqlc.arg(keep)
   );
 
--- Successful authenticated human disclosures.
+-- Presence-verified disclosures of held values.
 
--- name: CreateManagedSecretReveal :exec
-INSERT INTO managed_secret_reveals (
-    id, secret_id, version, authenticator, window_label, person_id, revealed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?);
+-- name: CreateManagedSecretAttestation :exec
+INSERT INTO managed_secret_attestations (
+    id, attestation_id, secret_id, version, purpose, checkpoint_id, recipients_json, release_scope,
+    authenticator, window_label, person_id, attested_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
--- name: GetManagedSecretRevealSummary :one
-SELECT COUNT(*) AS reveal_count,
-       CAST(COALESCE(MAX(revealed_at), '') AS TEXT) AS last_revealed_at
-FROM managed_secret_reveals
+-- name: GetManagedSecretAttestationSummary :one
+SELECT CAST(COALESCE(SUM(purpose = 'reveal'), 0) AS INTEGER) AS reveal_count,
+       CAST(COALESCE(MAX(CASE WHEN purpose = 'reveal' THEN attested_at END), '') AS TEXT) AS last_revealed_at,
+       CAST(COALESCE(SUM(purpose = 'release'), 0) AS INTEGER) AS release_count,
+       CAST(COALESCE(MAX(CASE WHEN purpose = 'release' THEN attested_at END), '') AS TEXT) AS last_released_at
+FROM managed_secret_attestations
 WHERE secret_id = ?;
 
--- name: ListProjectManagedSecretRevealSummaries :many
-SELECT r.secret_id, COUNT(*) AS reveal_count,
-       CAST(COALESCE(MAX(r.revealed_at), '') AS TEXT) AS last_revealed_at
-FROM managed_secret_reveals r
-JOIN managed_secrets s ON s.id = r.secret_id
+-- name: ListProjectManagedSecretAttestationSummaries :many
+SELECT a.secret_id,
+       CAST(COALESCE(SUM(a.purpose = 'reveal'), 0) AS INTEGER) AS reveal_count,
+       CAST(COALESCE(MAX(CASE WHEN a.purpose = 'reveal' THEN a.attested_at END), '') AS TEXT) AS last_revealed_at,
+       CAST(COALESCE(SUM(a.purpose = 'release'), 0) AS INTEGER) AS release_count,
+       CAST(COALESCE(MAX(CASE WHEN a.purpose = 'release' THEN a.attested_at END), '') AS TEXT) AS last_released_at
+FROM managed_secret_attestations a
+JOIN managed_secrets s ON s.id = a.secret_id
 WHERE s.project_id = ?
-GROUP BY r.secret_id;
+GROUP BY a.secret_id;
+
+-- name: ListManagedSecretAttestations :many
+SELECT id, attestation_id, secret_id, version, purpose, checkpoint_id, recipients_json, release_scope,
+       authenticator, window_label, person_id, attested_at
+FROM managed_secret_attestations
+WHERE secret_id = sqlc.arg(secret_id)
+ORDER BY attested_at DESC, id DESC
+LIMIT sqlc.arg(limit_count);
 
 -- name: UpdateManagedSecretDelivery :exec
-UPDATE managed_secret_uses SET delivery = ? WHERE id = ?;
+UPDATE managed_secret_uses
+SET delivery = ?, recipients_json = ?, attestation_id = ?
+WHERE id = ?;
 
 -- name: InsertCredentialAuthoredValue :exec
 -- The first authorship of a value at a location is kept.

@@ -112,13 +112,13 @@ func (s *Service) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*Token
 		s.recordUse(ctx, row.ID, 0, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
-	raw, ok := s.values.Get(current.ID)
+	entry, ok := s.values.get(current.ID)
 	if !ok {
 		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
 	var tokens map[string]Token
-	if err := json.Unmarshal([]byte(raw.Value()), &tokens); err != nil {
+	if err := json.Unmarshal([]byte(entry.Value), &tokens); err != nil {
 		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, fmt.Errorf("%w: stored token jar is unreadable", ErrValueMissing)
 	}
@@ -167,7 +167,7 @@ func (s *Service) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *To
 		return nil, err
 	}
 	record := s.tokenJarSaveRecorder(ctx, req, row.ID)
-	err = s.replaceOnto(ctx, row, current, true, string(encoded), record)
+	err = s.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
 	if err != nil {
 		return nil, err
 	}

@@ -55,11 +55,13 @@ type DefaultToolExecutor struct {
 	directIPRuntime    DirectIPCapabilityRuntime
 	directIPLifecycle  DirectIPLifecycleHook
 	approvalsDisabled  func(projectDir string) bool
-	secretMatcher      *secretmatch.Matcher
-	secretIgnores      *projectignore.SecretService
-	secretResolver     func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
-	secretReceiptOnce  sync.Once
-	secretReceiptRT    *secretReceiptRuntime
+	// presenceAvailableFn reports whether held values can be released at all.
+	presenceAvailableFn func() bool
+	secretMatcher       *secretmatch.Matcher
+	secretIgnores       *projectignore.SecretService
+	secretResolver      func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
+	secretReceiptOnce   sync.Once
+	secretReceiptRT     *secretReceiptRuntime
 	// secretExposure reads the session's credential-exposure fact.
 	secretExposure func(ctx context.Context, chatSessionID string) (bool, error)
 	// untrustedIngestion reads the session's external-content ingestion fact.
@@ -176,6 +178,12 @@ func (e *DefaultToolExecutor) Invoke(ctx context.Context, qualifiedName string, 
 	}
 	if err := e.screenFileSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
 		return "", err
+	}
+	// The screened save is a file tool's transport.
+	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
+		if err := tc.Secrets.HandOff(ctx, nil); err != nil {
+			return "", e.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, HeldHandOffReject(string(secretmatch.SurfaceFile)))
+		}
 	}
 	tc.ProcessReview = e.processReviewer(qualifiedName, canonicalArgs, tc)
 	tc.FileChangeReview = e.fileChangeReviewer(qualifiedName, canonicalArgs, tc)

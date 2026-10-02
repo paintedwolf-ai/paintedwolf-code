@@ -123,13 +123,17 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 		}
 	}
 
+	// A refused handoff is the host's decision, not a provider failure, so it
+	// stays outside the breaker.
+	if err := secretcap.ResolutionFrom(ctx).HandOff(ctx, mcpOutboundArgument); err != nil {
+		return "", tools.HeldHandOffReject("mcp")
+	}
 	br := r.breakerFor(providerID)
 	raw, err := br.Execute(func() (any, error) {
 		sess, err := r.ensureSession(ctx, scope, entry)
 		if err != nil {
 			return "", err
 		}
-		secretcap.ResolutionFrom(ctx).HandOff(ctx, mcpOutboundArgument)
 		res, err := sess.CallTool(ctx, toolName, args)
 		if err != nil {
 			// Evict failed transports before the next call.

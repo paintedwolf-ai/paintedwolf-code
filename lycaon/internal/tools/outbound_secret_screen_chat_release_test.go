@@ -20,9 +20,16 @@ func chatSecretAlert() secretmatch.Alert {
 		RuleID:           secretmatch.ManagedRuleID, RuleTitle: secretmatch.ManagedRuleTitle, GenericShape: "Protected value",
 		SecretNames:     []string{"todos-postgres-password"},
 		Fingerprints:    []secretmatch.SecretFingerprint{"fp-chat"},
-		ChatGenerated:   true,
 		RecipientsLocal: true,
 	}
+}
+
+// screenedValue is the invocation's resolution of the alert's one value.
+func screenedValue(custody secretcap.Custody, chatGenerated bool) *secretcap.Resolution {
+	return secretcap.NewResolutionForTest(map[string]any{"value": "{{ref}}"}, []secretcap.TestResolvedValue{{
+		ID: "11111111-1111-4111-8111-111111111111", Name: "todos-postgres-password", Value: "screened-chat-value",
+		Path: "/value", Version: 1, Custody: custody, Fingerprint: "fp-chat", ChatGenerated: chatGenerated,
+	}})
 }
 
 func chatReleaseExecutor(posture gate.Posture) (*DefaultToolExecutor, *capabilityRecorder) {
@@ -39,7 +46,7 @@ func TestAskSecretScreenReleasesChatSecretsLocallyBelowStrict(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced} {
 		t.Run(string(posture), func(t *testing.T) {
 			exec, recorder := chatReleaseExecutor(posture)
-			resolution := &secretcap.Resolution{}
+			resolution := screenedValue(secretcap.CustodyChat, true)
 			ctx := secretcap.WithResolution(context.Background(), resolution)
 
 			got, err := exec.AskSecretScreen(ctx, chatSecretAlert())
@@ -72,16 +79,18 @@ func TestAskSecretScreenAsksForEveryOtherChatSecretRelease(t *testing.T) {
 	for name, tt := range map[string]struct {
 		posture gate.Posture
 		edit    func(*secretmatch.Alert)
+		value   *secretcap.Resolution
 	}{
-		"strict":           {gate.PostureStrict, func(*secretmatch.Alert) {}},
-		"remote recipient": {gate.PostureLight, func(a *secretmatch.Alert) { a.RecipientsLocal = false }},
-		"person's secret":  {gate.PostureLight, func(a *secretmatch.Alert) { a.ChatGenerated = false }},
+		"strict":           {gate.PostureStrict, func(*secretmatch.Alert) {}, screenedValue(secretcap.CustodyChat, true)},
+		"remote recipient": {gate.PostureLight, func(a *secretmatch.Alert) { a.RecipientsLocal = false }, screenedValue(secretcap.CustodyChat, true)},
+		"host value":       {gate.PostureLight, func(*secretmatch.Alert) {}, screenedValue(secretcap.CustodyHost, false)},
+		"unresolved bytes": {gate.PostureLight, func(*secretmatch.Alert) {}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			exec, recorder := chatReleaseExecutor(tt.posture)
 			alert := chatSecretAlert()
 			tt.edit(&alert)
-			_, err := exec.AskSecretScreen(context.Background(), alert)
+			_, err := exec.AskSecretScreen(secretcap.WithResolution(context.Background(), tt.value), alert)
 			fault, ok := secretmatch.Faulted(err)
 			if !ok || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
 				t.Fatalf("err = %v, want the card path", err)
@@ -90,5 +99,38 @@ func TestAskSecretScreenAsksForEveryOtherChatSecretRelease(t *testing.T) {
 				t.Fatalf("ledger rows = %+v, want none before a card exists", recorder.records)
 			}
 		})
+	}
+}
+
+// A value a person gave is never released silently: at every posture and for
+// local recipients it asks, and a device without presence refuses outright.
+func TestAskSecretScreenNeverReleasesAHeldValueSilently(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			exec, recorder := chatReleaseExecutor(posture)
+			ctx := secretcap.WithResolution(context.Background(), screenedValue(secretcap.CustodyPerson, false))
+			_, err := exec.AskSecretScreen(ctx, chatSecretAlert())
+			if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStagePresenceUnavailable {
+				t.Fatalf("held value without presence err = %v", err)
+			}
+			exec.SetPresenceAvailable(func() bool { return true })
+			_, err = exec.AskSecretScreen(ctx, chatSecretAlert())
+			if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
+				t.Fatalf("held value with presence err = %v, want the card path", err)
+			}
+			if len(recorder.records) != 0 {
+				t.Fatalf("ledger rows = %+v, want none", recorder.records)
+			}
+		})
+	}
+}
+
+// Approvals disabled at device scope do not disable custody.
+func TestUnaskedScreenStillAsksForAHeldValue(t *testing.T) {
+	exec, _ := chatReleaseExecutor(gate.PostureLight)
+	ctx := secretcap.WithResolution(context.Background(), screenedValue(secretcap.CustodyPerson, false))
+	_, err := exec.ResolveSecretScreenUnasked(ctx, chatSecretAlert())
+	if fault, ok := secretmatch.Faulted(err); !ok || fault.Stage != secretmatch.FaultStagePresenceUnavailable {
+		t.Fatalf("unasked held value err = %v", err)
 	}
 }

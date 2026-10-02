@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -120,6 +121,9 @@ type ApprovalGrant struct {
 	// exactly one is set once the grant is installed.
 	GrantedByPersonID string                      `json:"granted_by_person_id,omitempty"`
 	GrantedByPolicy   *authzledger.PolicyIdentity `json:"granted_by_policy,omitempty"`
+	// Attestation records the presence that released person-held values. It
+	// covers them only while the vault's release ledger lists this grant.
+	Attestation *presence.Attestation `json:"attestation,omitempty"`
 	// OwnerOperationID confines rollback to the operation that installed the grant.
 	OwnerOperationID string `json:"-"`
 }

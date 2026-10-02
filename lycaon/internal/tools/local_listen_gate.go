@@ -24,6 +24,8 @@ type LocalListenAsk struct {
 // LocalListenResult is the gate outcome after optional HITL.
 type LocalListenResult struct {
 	SecretApproved bool
+	// SecretAttestationID names the presence that released person-held values.
+	SecretAttestationID string
 	// Raised reports whether an approval was awaited.
 	Raised bool
 	// Authorized reports whether listener authority covers the ask.

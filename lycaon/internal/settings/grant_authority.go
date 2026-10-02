@@ -355,6 +355,7 @@ func (g *RuleApprovalGate) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
 		SecretNames:         append([]string(nil), grant.SecretNames...),
 		ExactActionSet:      append([]string(nil), grant.ExactActionSet...),
 		ElevatedEffects:     slices.Clone(grant.ElevatedEffects),
+		Attestation:         grant.Attestation,
 	}
 	return g.store.UpsertGlobalGrant(persisted)
 }
@@ -393,16 +394,33 @@ func (g *RuleApprovalGate) HostResourceLeaseCovers(action hitl.ProposedAction) b
 
 func (g *RuleApprovalGate) RevokeGrant(id string) (bool, error) {
 	if g.grants != nil && g.grants.revoke(id) {
-		return true, nil
+		return true, g.forgetRelease(id)
 	}
-	return g.store.RevokeGlobalGrant(id)
+	found, err := g.store.RevokeGlobalGrant(id)
+	if err != nil || !found {
+		return found, err
+	}
+	return true, g.forgetRelease(id)
 }
 
 func (g *RuleApprovalGate) RevokeGrantInstalledBy(id, operationID string) (bool, error) {
 	if g.grants != nil && g.grants.revokeInstalledBy(id, operationID) {
-		return true, nil
+		return true, g.forgetRelease(id)
 	}
-	return g.store.RevokeGlobalGrantInstalledBy(id, operationID)
+	found, err := g.store.RevokeGlobalGrantInstalledBy(id, operationID)
+	if err != nil || !found {
+		return found, err
+	}
+	return true, g.forgetRelease(id)
+}
+
+// forgetRelease ends a revoked grant's attested release, so a stored copy of
+// the grant can never cover a held value again.
+func (g *RuleApprovalGate) forgetRelease(id string) error {
+	if g.sources.ReleaseLedger == nil {
+		return nil
+	}
+	return g.sources.ReleaseLedger.Forget(id)
 }
 
 // ListGrants returns chat and durable leases visible to a chat.
@@ -436,6 +454,7 @@ func (grant ApprovalGrant) ToDomain() hitl.ApprovalGrant {
 		SecretNames:         append([]string(nil), grant.SecretNames...),
 		ExactActionSet:      append([]string(nil), grant.ExactActionSet...),
 		ElevatedEffects:     slices.Clone(grant.ElevatedEffects),
+		Attestation:         grant.Attestation,
 	}
 }
 

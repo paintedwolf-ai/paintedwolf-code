@@ -67,12 +67,12 @@ func (s *Service) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*Coo
 		s.recordUse(ctx, row.ID, 0, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
-	raw, ok := s.values.Get(current.ID)
+	entry, ok := s.values.get(current.ID)
 	if !ok {
 		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
-	cookies, err := httpcookies.Decode([]byte(raw.Value()))
+	cookies, err := httpcookies.Decode([]byte(entry.Value))
 	if err != nil {
 		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, fmt.Errorf("%w: stored cookie jar is unreadable", ErrValueMissing)

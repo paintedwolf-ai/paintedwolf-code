@@ -29,6 +29,9 @@ type Use struct {
 	Version       int64  `json:"version,omitempty"`
 	SessionID     string `json:"session_id,omitempty"`
 	ChatSessionID string `json:"chat_session_id,omitempty"`
+	// Recipients and AttestationID describe the release that handed the value off.
+	Recipients    []UseRecipient `json:"recipients"`
+	AttestationID string         `json:"attestation_id,omitempty"`
 }
 
 // UseHistory is one capability's recent uses plus how many the window holds.
@@ -54,7 +57,11 @@ func (s *Service) Uses(ctx context.Context, projectID, reference string, limit i
 	}
 	out := UseHistory{Items: make([]Use, 0, len(rows)), Count: len(rows)}
 	for _, use := range rows {
-		item := Use{UsedAt: use.UsedAt, ToolName: use.ToolName, Outcome: use.Outcome, ToolCallID: use.ToolCallID.String, Delivery: use.Delivery}
+		item := Use{
+			UsedAt: use.UsedAt, ToolName: use.ToolName, Outcome: use.Outcome, ToolCallID: use.ToolCallID.String,
+			Delivery: use.Delivery, Recipients: decodeUseRecipients(use.RecipientsJson),
+			AttestationID: use.AttestationID.String,
+		}
 		if use.Version.Valid {
 			item.Version = use.Version.Int64
 		}

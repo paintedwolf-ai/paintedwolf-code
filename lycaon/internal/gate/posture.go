@@ -79,7 +79,7 @@ var postureReleasesChatSecrets = map[Posture]bool{
 
 // ReleasesChatSecretLocally reports whether the secret gate stays silent for hit.
 func (p Posture) ReleasesChatSecretLocally(hit *SecretHit) bool {
-	return hit != nil && hit.ChatGenerated && hit.RecipientsLocal && postureReleasesChatSecrets[normalize(p)]
+	return hit != nil && !hit.Held && hit.ChatGenerated && hit.RecipientsLocal && postureReleasesChatSecrets[normalize(p)]
 }
 
 // postureQuietsPublicRegistries defines postures where a tunnel to a public

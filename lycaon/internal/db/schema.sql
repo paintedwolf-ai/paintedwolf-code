@@ -731,29 +731,46 @@ CREATE TABLE IF NOT EXISTS managed_secret_uses (
     ),
     tool_call_id TEXT,
     delivery TEXT NOT NULL DEFAULT 'not_dispatched' CHECK (delivery IN ('pending', 'not_dispatched', 'withheld', 'handed_off', 'redacted')),
+    -- Recipients the approval that released this use reviewed, as
+    -- [{"label", "surface"}]. Empty until a release covers the use.
+    recipients_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(recipients_json) AND json_type(recipients_json) = 'array'),
+    -- The presence attestation that released a held value, when one did.
+    attestation_id TEXT CHECK (attestation_id IS NULL OR length(attestation_id) = 36),
     used_at TEXT NOT NULL CHECK (used_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z')
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_managed_secret_uses_secret
     ON managed_secret_uses(secret_id, used_at, id);
 
--- Successful human reveals without values or proofs.
-CREATE TABLE IF NOT EXISTS managed_secret_reveals (
+-- Presence-verified disclosures of held values, without values or proofs. One
+-- attestation answers one native prompt and may cover several values.
+CREATE TABLE IF NOT EXISTS managed_secret_attestations (
     id TEXT PRIMARY KEY CHECK (length(id) = 36),
+    attestation_id TEXT NOT NULL CHECK (length(attestation_id) = 36),
     secret_id TEXT NOT NULL REFERENCES managed_secrets(id) ON DELETE CASCADE,
     version INTEGER NOT NULL CHECK (version >= 1),
+    purpose TEXT NOT NULL CHECK (purpose IN ('reveal', 'release')),
+    -- A release names the approval it answered, its reviewed recipients as
+    -- [{"label", "surface"}], and how long its permission lasts.
+    checkpoint_id TEXT CHECK (checkpoint_id IS NULL OR length(trim(checkpoint_id)) > 0),
+    recipients_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(recipients_json) AND json_type(recipients_json) = 'array'),
+    release_scope TEXT CHECK (release_scope IN ('once', 'chat', 'project')),
     authenticator TEXT NOT NULL CHECK (
         authenticator IN ('macos_user_presence', 'windows_user_presence')
     ),
     window_label TEXT NOT NULL CHECK (length(trim(window_label)) BETWEEN 1 AND 120),
     person_id TEXT NOT NULL REFERENCES people(id),
-    revealed_at TEXT NOT NULL CHECK (revealed_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z')
+    attested_at TEXT NOT NULL CHECK (attested_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+    CHECK ((purpose = 'release') = (checkpoint_id IS NOT NULL)),
+    CHECK ((purpose = 'release') = (release_scope IS NOT NULL)),
+    CHECK (purpose = 'release' OR recipients_json = '[]'),
+    UNIQUE (attestation_id, secret_id)
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_managed_secret_reveals_secret
-    ON managed_secret_reveals(secret_id, revealed_at, id);
-CREATE INDEX IF NOT EXISTS idx_managed_secret_reveals_person
-    ON managed_secret_reveals(person_id);
+CREATE INDEX IF NOT EXISTS idx_managed_secret_attestations_secret
+    ON managed_secret_attestations(secret_id, attested_at, id);
+CREATE INDEX IF NOT EXISTS idx_managed_secret_attestations_person
+    ON managed_secret_attestations(person_id);
 
 -- Credential-file values a model wrote from its own tool arguments. A model
 -- already holds these bytes, so reading the file back is no disclosure.

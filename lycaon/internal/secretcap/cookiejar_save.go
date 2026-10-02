@@ -56,7 +56,7 @@ func (s *Service) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *
 		if err := validateValue(string(encoded)); err != nil {
 			return nil, err
 		}
-		err = s.replaceOnto(ctx, row, current, true, string(encoded), record)
+		err = s.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
 	} else {
 		err = s.inTx(ctx, record)
 	}
@@ -96,11 +96,11 @@ func (s *Service) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSe
 	if !found {
 		return current, nil, ErrValueMissing
 	}
-	raw, ok := s.values.Get(current.ID)
+	entry, ok := s.values.get(current.ID)
 	if !ok {
 		return current, nil, ErrValueMissing
 	}
-	cookies, err := httpcookies.Decode([]byte(raw.Value()))
+	cookies, err := httpcookies.Decode([]byte(entry.Value))
 	if err != nil {
 		return current, nil, fmt.Errorf("%w: stored cookie jar is unreadable", ErrValueMissing)
 	}

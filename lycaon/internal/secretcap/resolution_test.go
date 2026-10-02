@@ -3,6 +3,7 @@ package secretcap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -51,10 +52,11 @@ func TestDeliveryHistorySeparatesResolutionFromHandoff(t *testing.T) {
 	for _, delivery := range []string{DeliveryNotDispatched, DeliveryWithheld, DeliveryHandedOff, DeliveryRedacted} {
 		t.Run(delivery, func(t *testing.T) {
 			service, _, _ := testService(t)
-			meta, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
-				ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "delivery", Name: "Delivery", Purpose: "delivery test", Value: "private-delivery-value",
+			meta, err := service.Generate(t.Context(), GenerateRequest{
+				ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1", OperationID: "delivery",
+				Name: "Delivery", Purpose: "delivery test", Scope: ScopeProject,
 			})
-			testutil.FailErr(t, "create secret", err)
+			testutil.FailErr(t, "generate secret", err)
 			resolved, err := service.Resolve(t.Context(), map[string]any{"stdin": meta.Reference}, ResolveContext{ProjectID: testdbseed.DefaultProjectID, ToolName: "command", ToolCallID: "call-delivery"})
 			testutil.FailErr(t, "resolve secret", err)
 			ctx, cancel := context.WithCancel(t.Context())
@@ -63,10 +65,10 @@ func TestDeliveryHistorySeparatesResolutionFromHandoff(t *testing.T) {
 			case DeliveryWithheld:
 				resolved.Withhold(ctx)
 			case DeliveryHandedOff:
-				resolved.HandOff(ctx, nil)
+				testutil.FailErr(t, "hand off", resolved.HandOff(ctx, nil))
 			case DeliveryRedacted:
 				resolved.Redacted(nil)
-				resolved.HandOff(ctx, nil)
+				testutil.FailErr(t, "hand off redacted", resolved.HandOff(ctx, nil))
 			}
 			resolved.Finish(ctx)
 			history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, meta.Reference, 0)
@@ -135,9 +137,11 @@ func TestTerminalSecretValueIsNotControlSyntax(t *testing.T) {
 }
 
 // Only chat-scoped generated values carry chat provenance; a person's secret,
-// a project secret, or any other evidence in the same send withholds it.
-func TestGeneratedForChatRequiresEveryMatchToBeAChatGeneratedValue(t *testing.T) {
+// a project secret, or any other evidence in the same send withholds it. A
+// person's value is held whatever travels beside it.
+func TestCustodyOfAScreenedSend(t *testing.T) {
 	service, _, _ := testService(t)
+	matcher := custodyMatcher(t, service)
 	generate := func(operation, scope string) string {
 		req := GenerateRequest{
 			ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1",
@@ -156,39 +160,174 @@ func TestGeneratedForChatRequiresEveryMatchToBeAChatGeneratedValue(t *testing.T)
 		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "person", Name: "Person", Purpose: "entered", Value: "person-entered-value",
 	})
 	testutil.FailErr(t, "create settings secret", err)
-	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("g", 32)))
-	testutil.FailErr(t, "fingerprinter", err)
-	matcher := secretmatch.NewInertMatcher()
-	matcher.SetFingerprinter(fingerprinter)
 
 	for name, tt := range map[string]struct {
-		refs []string
-		want bool
+		refs     []string
+		chat     bool
+		heldName string
 	}{
-		"chat generated":         {[]string{chat}, true},
-		"project generated":      {[]string{project}, false},
-		"person entered":         {[]string{person.Reference}, false},
-		"chat with person value": {[]string{chat, person.Reference}, false},
+		"chat generated":         {refs: []string{chat}, chat: true},
+		"project generated":      {refs: []string{project}},
+		"person entered":         {refs: []string{person.Reference}, heldName: "Person"},
+		"chat with person value": {refs: []string{chat, person.Reference}, heldName: "Person"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			args := map[string]any{"env": map[string]any{}}
-			for i, ref := range tt.refs {
-				args["env"].(map[string]any)["V"+strconv.Itoa(i)] = ref
+			resolution, fingerprints := resolveReferences(t, service, matcher, tt.refs...)
+			custody := resolution.Custody(fingerprints)
+			if custody.ChatGenerated != tt.chat {
+				t.Fatalf("ChatGenerated = %v, want %v", custody.ChatGenerated, tt.chat)
 			}
-			resolution, err := service.Resolve(t.Context(), args, ResolveContext{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1"})
-			testutil.FailErr(t, "resolve", err)
-			defer resolution.Finish(t.Context())
-			matches, err := resolution.Matches(matcher, func(string) bool { return true })
-			testutil.FailErr(t, "matches", err)
-			if got := resolution.GeneratedForChat(matches); got != tt.want {
-				t.Fatalf("GeneratedForChat = %v, want %v", got, tt.want)
+			if (tt.heldName == "") != (len(custody.Held) == 0) || (tt.heldName != "" && custody.Held[0].Name != tt.heldName) {
+				t.Fatalf("held = %+v, want %q", custody.Held, tt.heldName)
 			}
-			if tt.want && resolution.GeneratedForChat(append(matches, secretmatch.Match{RuleID: "gitleaks:generic-api-key"})) {
-				t.Fatal("a shape-rule match beside chat values kept chat provenance")
+			if tt.chat && resolution.Custody(append(fingerprints, "sf1_raw-detection")).ChatGenerated {
+				t.Fatal("a raw detection beside chat values kept chat provenance")
 			}
 		})
 	}
-	if (*Resolution)(nil).GeneratedForChat(nil) {
-		t.Fatal("a nil resolution reported chat provenance")
+	if summary := (*Resolution)(nil).Custody(nil); summary.ChatGenerated || len(summary.Held) != 0 {
+		t.Fatal("a nil resolution reported custody")
+	}
+}
+
+// Custody lives in the encrypted vault entry, so relabeling a person's value
+// in the metadata store neither releases it nor makes it chat generated.
+func TestCustodyIgnoresRelabeledMetadata(t *testing.T) {
+	service, _, _ := testService(t)
+	matcher := custodyMatcher(t, service)
+	person, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
+		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "relabeled",
+		Name: "Relabeled", Purpose: "entered", Value: "person-entered-relabeled",
+	})
+	testutil.FailErr(t, "create settings secret", err)
+	id, err := ParseReference(person.Reference)
+	testutil.FailErr(t, "parse reference", err)
+	_, err = service.handle.ExecContext(t.Context(), `PRAGMA ignore_check_constraints = ON`)
+	testutil.FailErr(t, "allow forged metadata", err)
+	_, err = service.handle.ExecContext(t.Context(),
+		`UPDATE managed_secrets SET origin = 'generated', scope = 'chat', chat_session_id = 'root-1',
+		 created_by_person_id = NULL, format = 'base64url', entropy_bits = 256 WHERE id = ?`, id)
+	testutil.FailErr(t, "relabel metadata", err)
+
+	resolution, fingerprints := resolveReferences(t, service, matcher, person.Reference)
+	custody := resolution.Custody(fingerprints)
+	if custody.ChatGenerated || len(custody.Held) != 1 {
+		t.Fatalf("relabeled custody = %+v", custody)
+	}
+}
+
+// HandOff is the vault's way out: a held value leaves only under an attested
+// release, while host values leave under any reviewed one.
+func TestHandOffRefusesAnUnattestedHeldValue(t *testing.T) {
+	service, _, _ := testService(t)
+	matcher := custodyMatcher(t, service)
+	person, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
+		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "handoff",
+		Name: "Deploy key", Purpose: "deploy", Value: "person-entered-handoff",
+	})
+	testutil.FailErr(t, "create settings secret", err)
+	recipient := secretmatch.Recipient{ID: "file:.env", Label: "Local file: .env", Surface: secretmatch.SurfaceFile, Kind: secretmatch.DestinationFile}
+
+	resolution, fingerprints := resolveReferences(t, service, matcher, person.Reference)
+	resolution.ApproveRelease(Release{Fingerprints: fingerprints, Recipients: []secretmatch.Recipient{recipient}})
+	var unreleased *HeldUnreleasedError
+	if err := resolution.HandOff(t.Context(), nil); !errors.As(err, &unreleased) || unreleased.Names[0] != "Deploy key" {
+		t.Fatalf("unattested handoff error = %v", err)
+	}
+	if resolution.UseCovered(fingerprints[0], recipient) {
+		t.Fatal("an unattested release covered a held value")
+	}
+
+	attested, attestedFingerprints := resolveReferences(t, service, matcher, person.Reference)
+	attested.ApproveRelease(Release{Fingerprints: attestedFingerprints, Recipients: []secretmatch.Recipient{recipient}, AttestationID: "11111111-1111-4111-8111-111111111111"})
+	testutil.FailErr(t, "attested handoff", attested.HandOff(t.Context(), nil))
+	history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, person.Reference, 0)
+	testutil.FailErr(t, "read uses", err)
+	if history.Items[0].Delivery != DeliveryHandedOff || history.Items[0].AttestationID != "11111111-1111-4111-8111-111111111111" ||
+		len(history.Items[0].Recipients) != 1 || history.Items[0].Recipients[0].Label != "Local file: .env" {
+		t.Fatalf("attested use = %+v", history.Items[0])
+	}
+	if history.Items[1].Delivery != DeliveryWithheld {
+		t.Fatalf("refused use = %+v", history.Items[1])
+	}
+}
+
+func custodyMatcher(t *testing.T, service *Service) *secretmatch.Matcher {
+	t.Helper()
+	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("g", 32)))
+	testutil.FailErr(t, "fingerprinter", err)
+	service.SetFingerprinter(fingerprinter)
+	matcher := secretmatch.NewInertMatcher()
+	matcher.SetFingerprinter(fingerprinter)
+	return matcher
+}
+
+func resolveReferences(t *testing.T, service *Service, matcher *secretmatch.Matcher, refs ...string) (*Resolution, []secretmatch.SecretFingerprint) {
+	t.Helper()
+	args := map[string]any{"env": map[string]any{}}
+	for i, ref := range refs {
+		args["env"].(map[string]any)["V"+strconv.Itoa(i)] = ref
+	}
+	resolution, err := service.Resolve(t.Context(), args, ResolveContext{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", ToolName: "command"})
+	testutil.FailErr(t, "resolve", err)
+	t.Cleanup(func() { resolution.Finish(t.Context()) })
+	matches, err := resolution.Matches(matcher, func(string) bool { return true })
+	testutil.FailErr(t, "matches", err)
+	return resolution, secretmatch.Fingerprints(matches)
+}
+
+// Chat custody is recorded in the vault with its chat: relabeling a host
+// value in the metadata store, moving a chat value to another chat, or
+// promoting it never yields a silent chat release.
+func TestChatCustodyIsBoundInTheVault(t *testing.T) {
+	service, _, _ := testService(t)
+	matcher := custodyMatcher(t, service)
+	project, err := service.Generate(t.Context(), GenerateRequest{
+		ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1", OperationID: "project-relabeled",
+		Name: "Project", Purpose: "provenance", Scope: ScopeProject,
+	})
+	testutil.FailErr(t, "generate project value", err)
+	projectID, err := ParseReference(project.Reference)
+	testutil.FailErr(t, "parse project reference", err)
+	_, err = service.handle.ExecContext(t.Context(),
+		`UPDATE managed_secrets SET scope = 'chat', chat_session_id = 'root-1' WHERE id = ?`, projectID)
+	testutil.FailErr(t, "relabel project value as chat", err)
+	resolution, fingerprints := resolveReferences(t, service, matcher, project.Reference)
+	if resolution.Custody(fingerprints).ChatGenerated {
+		t.Fatal("a metadata relabel made a host value chat generated")
+	}
+
+	chat, err := service.Generate(t.Context(), GenerateRequest{
+		ProjectID: testdbseed.DefaultProjectID, SessionID: "root-1", ChatSessionID: "root-1",
+		OperationID: "chat-moved", Name: "Chat", Purpose: "provenance", Scope: ScopeChat,
+	})
+	testutil.FailErr(t, "generate chat value", err)
+	chatID, err := ParseReference(chat.Reference)
+	testutil.FailErr(t, "parse chat reference", err)
+	_, err = service.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-2' WHERE id = ?`, chatID)
+	testutil.FailErr(t, "move chat value", err)
+	moved, err := service.Resolve(t.Context(), map[string]any{"value": chat.Reference},
+		ResolveContext{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-2", SessionID: "root-2", ToolName: "command"})
+	testutil.FailErr(t, "resolve from the other chat", err)
+	t.Cleanup(func() { moved.Finish(t.Context()) })
+	matches, err := moved.Matches(matcher, func(string) bool { return true })
+	testutil.FailErr(t, "matches", err)
+	if moved.Custody(secretmatch.Fingerprints(matches)).ChatGenerated {
+		t.Fatal("a chat value moved to another chat kept chat custody there")
+	}
+	_, err = service.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-1' WHERE id = ?`, chatID)
+	testutil.FailErr(t, "restore chat value", err)
+
+	scope := ScopeProject
+	_, err = service.Update(t.Context(), UpdateRequest{ProjectID: testdbseed.DefaultProjectID, Reference: chat.Reference, Scope: &scope})
+	testutil.FailErr(t, "promote", err)
+	promoted, promotedFingerprints := resolveReferences(t, service, matcher, chat.Reference)
+	if promoted.Custody(promotedFingerprints).ChatGenerated {
+		t.Fatal("a promoted value kept chat custody")
+	}
+	described, err := service.Describe(t.Context(), testdbseed.DefaultProjectID, "root-1", chat.Reference)
+	testutil.FailErr(t, "describe promoted", err)
+	if described.Custody != CustodyHost {
+		t.Fatalf("promoted custody = %q", described.Custody)
 	}
 }

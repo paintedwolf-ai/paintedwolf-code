@@ -1533,6 +1533,61 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/checkpoints/{checkpoint_id}/release-challenges:
+    post:
+      tags:
+        - sessions
+      operationId: beginCheckpointReleaseChallenge
+      x-person-action: none
+      summary: Begin presence verification for an option that releases held values
+      description: 'Creates a short-lived, single-use challenge binding one pending option, the exact plan that offers it, and the deciding person. Only the installed desktop shell can complete it: it asks the operating system to verify the person, signs the challenge, and resolves the checkpoint with the proof. A bearer-authenticated caller can begin a challenge but cannot answer the option without that proof.'
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: checkpoint_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeginReleaseChallengeRequest'
+      responses:
+        '201':
+          description: Challenge to verify and sign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresenceChallenge'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The checkpoint is settled, or the option releases no held value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          description: This app session cannot verify presence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects:
     get:
       tags:
@@ -2362,6 +2417,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ManagedSecretUseList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such secret in this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/secrets/{secret_id}/attestations:
+    get:
+      tags:
+        - projects
+      operationId: listProjectManagedSecretAttestations
+      summary: Presence-verified reveals and releases of one managed secret
+      description: Newest first. Each entry records a reveal to the person's own view or a release to the recipients an approval reviewed, with who confirmed and how. Never the value or the proof.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: secret_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Recorded attestations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedSecretAttestationList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -20156,6 +20259,11 @@ components:
           pattern: ^[A-Za-z0-9_.:-]+$
           description: |
             Selects one exact opaque option from tool_approval.plan; authority is installed atomically before resolution.
+        presence:
+          x-go-pointer: true
+          $ref: '#/components/schemas/PresenceProof'
+          description: |
+            Required when the plan carries held_release and the option approves. Only the installed desktop shell can produce it.
     ToolApprovalRejectBody:
       type: object
       required:
@@ -25494,10 +25602,12 @@ components:
         - report_not_found
         - managed_secret_revoked
         - managed_secret_agent_use_expired
-        - managed_secret_reveal_unavailable
-        - managed_secret_reveal_denied
-        - managed_secret_reveal_changed
-        - managed_secret_reveal_challenge_not_found
+        - presence_unavailable
+        - presence_denied
+        - presence_required
+        - presence_not_required
+        - presence_challenge_not_found
+        - managed_secret_value_changed
         - managed_secret_value_unavailable
         - auth_unavailable
         - recovery_snapshot_invalid
@@ -28258,6 +28368,44 @@ components:
         note:
           type: string
           description: Host copy saying why a disabled option cannot be picked here. Present exactly when disabled is true.
+    ApprovalHeldSecret:
+      x-go-generate: true
+      type: object
+      required:
+        - reference
+        - name
+        - version
+      additionalProperties: false
+      description: One value a person gave Painted Wolf Code that this approval would release.
+      properties:
+        reference:
+          type: string
+          pattern: ^\{\{paintedwolf-secret:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}\}$
+        name:
+          type: string
+        version:
+          x-go-type: int64
+          type: integer
+          minimum: 1
+    ApprovalHeldRelease:
+      x-go-generate: true
+      type: object
+      required:
+        - secrets
+        - recipients
+      additionalProperties: false
+      description: Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none.
+      properties:
+        secrets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalHeldSecret'
+        recipients:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalSecretRecipient'
     ApprovalPlan:
       x-go-generate: true
       type: object
@@ -28302,6 +28450,9 @@ components:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
           description: Id of the face option. Exactly one; computed by the host from the subject kind and rung set. Clients must not invent a fallback. A disabled face stays in that slot; Enter does not select another send.
+        held_release:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ApprovalHeldRelease'
     ApprovalRepeat:
       x-go-generate: true
       type: object
@@ -28753,6 +28904,7 @@ components:
         - version
         - use_count
         - reveal_count
+        - release_count
       additionalProperties: false
       properties:
         reference:
@@ -28792,6 +28944,14 @@ components:
             - settings_entered
             - cookie_jar
             - token_jar
+        custody:
+          type: string
+          enum:
+            - person
+            - file
+            - chat
+            - host
+          description: 'Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy: revealing it or handing it to any file, process, service, or MCP server needs that person''s verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent''s work beyond one chat. Absent when no value is readable.'
         format:
           type: string
           enum:
@@ -28860,6 +29020,18 @@ components:
           type: integer
           minimum: 0
           description: Successful authenticated human reveals retained for this capability.
+        last_released_at:
+          x-go-type: '*string'
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: Most recent presence-verified release to a recipient; absent when never released.
+        release_count:
+          x-go-type: int64
+          type: integer
+          minimum: 0
+          description: Presence-verified releases retained for this capability.
     ArtifactReferenceKind:
       type: string
       description: |
@@ -28893,6 +29065,73 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CheckpointEvent'
+    PresenceAuthenticator:
+      type: string
+      enum:
+        - macos_user_presence
+        - windows_user_presence
+      description: Operating-system user-presence verifier that confirmed the person before the shell signed.
+    PresenceProof:
+      x-go-generate: true
+      type: object
+      required:
+        - challenge_id
+        - authenticator
+        - signature
+      additionalProperties: false
+      description: Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier.
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        authenticator:
+          $ref: '#/components/schemas/PresenceAuthenticator'
+        signature:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+          description: Base64url without padding Ed25519 signature from the installed desktop shell.
+    BeginReleaseChallengeRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - option_id
+        - window_label
+      additionalProperties: false
+      description: Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
+      properties:
+        option_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+        window_label:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Native calling window label, bound into the proof; not an authorization identity.
+    PresenceChallenge:
+      x-go-generate: true
+      type: object
+      required:
+        - challenge_id
+        - proof_payload
+        - prompt
+        - expires_at
+      additionalProperties: false
+      description: One short-lived request for native user-presence verification. The proof payload is opaque canonical bytes naming its purpose and subject; the native shell signs it only after the operating system verifies the device user. The API bearer can begin a challenge but cannot complete one.
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        proof_payload:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+          description: Base64url without padding of the exact bytes the native shell signs.
+        prompt:
+          type: string
+          description: Host-authored reason shown by the operating-system prompt.
+        expires_at:
+          x-go-type: string
+          type: string
+          format: date-time
     ProjectPromotion:
       x-go-generate: true
       type: object
@@ -29356,6 +29595,18 @@ components:
           minLength: 4
           writeOnly: true
           description: 'The new credential. Never echoed back. Named so the host''s own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked.'
+    ManagedSecretUseRecipient:
+      x-go-generate: true
+      type: object
+      required:
+        - label
+        - surface
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+        surface:
+          type: string
     ManagedSecretUse:
       x-go-generate: true
       type: object
@@ -29406,6 +29657,15 @@ components:
         chat_session_id:
           type: string
           format: uuid
+        recipients:
+          type: array
+          description: Recipients the release that handed the value off reviewed; empty until one did.
+          items:
+            $ref: '#/components/schemas/ManagedSecretUseRecipient'
+        attestation_id:
+          type: string
+          format: uuid
+          description: The presence attestation that released a value a person gave; absent otherwise.
     ManagedSecretUseList:
       x-go-generate: true
       type: object
@@ -29421,6 +29681,67 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next page of secret uses; empty or omitted at the end.
+    ManagedSecretAttestation:
+      x-go-generate: true
+      type: object
+      description: 'One presence-verified disclosure: a reveal to the person''s own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof.'
+      required:
+        - attestation_id
+        - purpose
+        - version
+        - recipients
+        - authenticator
+        - person_id
+        - attested_at
+      additionalProperties: false
+      properties:
+        attestation_id:
+          type: string
+          format: uuid
+        purpose:
+          type: string
+          enum:
+            - reveal
+            - release
+        version:
+          x-go-type: int64
+          type: integer
+          minimum: 1
+        checkpoint_id:
+          type: string
+          format: uuid
+          description: The approval a release answered.
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedSecretUseRecipient'
+        release_scope:
+          type: string
+          enum:
+            - once
+            - chat
+            - project
+          description: How long a release keeps covering its recipients.
+        authenticator:
+          $ref: '#/components/schemas/PresenceAuthenticator'
+        person_id:
+          type: string
+          format: uuid
+        attested_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    ManagedSecretAttestationList:
+      x-go-generate: true
+      type: object
+      required:
+        - attestations
+      additionalProperties: false
+      properties:
+        attestations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedSecretAttestation'
     BeginManagedSecretRevealRequest:
       x-go-generate: true
       type: object
@@ -29473,10 +29794,7 @@ components:
       description: Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier; the ordinary API bearer is never sufficient to reveal a value.
       properties:
         authenticator:
-          type: string
-          enum:
-            - macos_user_presence
-            - windows_user_presence
+          $ref: '#/components/schemas/PresenceAuthenticator'
         signature:
           type: string
           pattern: ^[A-Za-z0-9_-]+$

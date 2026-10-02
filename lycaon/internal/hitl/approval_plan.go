@@ -264,6 +264,9 @@ type ApprovalPlan struct {
 	Reasons             []api.ApprovalGate   `json:"reasons"`
 	Options             []ApprovalOption     `json:"options"`
 	RecommendedOptionID string               `json:"recommended_option_id"`
+	// Held names person-held values an approving option would release; each
+	// such answer needs the person's verified presence.
+	Held *HeldRelease `json:"held,omitempty"`
 }
 
 // NewApprovalPlan validates, orders, and selects the recommended option.
@@ -311,6 +314,9 @@ func NewApprovalPlan(action ProposedAction, stage ApprovalStage, subject Approva
 func (p ApprovalPlan) Validate() error {
 	if strings.TrimSpace(p.ID) == "" || strings.TrimSpace(p.ActionDigest) == "" {
 		return fmt.Errorf("approval plan identity is incomplete")
+	}
+	if err := p.validateHeld(); err != nil {
+		return err
 	}
 	if p.Stage == "" || p.Subject.Kind == "" || strings.TrimSpace(p.Subject.Title) == "" || len(p.Subject.Targets) == 0 {
 		return fmt.Errorf("approval plan subject is incomplete")

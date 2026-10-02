@@ -126,8 +126,8 @@ func (*recordingGate) HostResourceLeaseCovers(hitl.ProposedAction) bool    { ret
 func (*recordingGate) RevokeGrant(string) (bool, error)                    { return false, nil }
 func (*recordingGate) RevokeGrantInstalledBy(string, string) (bool, error) { return false, nil }
 func (*recordingGate) ListGrants(string) []hitl.ApprovalGrant              { return nil }
-func (*recordingGate) SecretFingerprintsCovered(string, string, string, string, []string) bool {
-	return false
+func (*recordingGate) SecretReleaseCovered(string, string, string, string, []string, []string) (bool, map[string]string) {
+	return false, nil
 }
 func (*recordingGate) SecretRedactionStanding(string, []string) bool { return false }
 func (*recordingGate) PutAskQuiet(hitl.AskQuiet, int) (hitl.AskQuiet, bool) {

@@ -475,11 +475,13 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	if f.Payload == nil {
 		return false, nil, ""
 	}
-	if f.Payload.Source == SecretSourcePublicInbound && f.Payload.Surface != "visual_perception" {
-		return false, nil, ""
-	}
-	if f.Payload.DestinationTrusted || p.ReleasesChatSecretLocally(f.Payload) {
-		return false, nil, ""
+	if !f.Payload.Held {
+		if f.Payload.Source == SecretSourcePublicInbound && f.Payload.Surface != "visual_perception" {
+			return false, nil, ""
+		}
+		if f.Payload.DestinationTrusted || p.ReleasesChatSecretLocally(f.Payload) {
+			return false, nil, ""
+		}
 	}
 	cited := []Fact{
 		fact("secret.rule", firstNonEmpty(f.Payload.RuleTitle, f.Payload.RuleID), "payload_lens"),
@@ -497,6 +499,9 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	}
 	if f.Payload.ChatGenerated {
 		cited = append(cited, fact("secret.origin", "generated for this chat", "managed_secret"))
+	}
+	if f.Payload.Held {
+		cited = append(cited, fact("secret.custody", "a value you gave to Painted Wolf Code", "managed_secret"))
 	}
 	return true, cited, f.Payload.RuleID
 }

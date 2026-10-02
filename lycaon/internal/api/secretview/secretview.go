@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -21,6 +22,9 @@ import (
 )
 
 func WriteError(responses *httpio.Responder, w http.ResponseWriter, r *http.Request, err error) {
+	if WritePresenceError(responses, w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, secretcap.ErrInvalidReference):
 		responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "secret id must be a UUID")
@@ -32,19 +36,29 @@ func WriteError(responses *httpio.Responder, w http.ResponseWriter, r *http.Requ
 		responses.Fail(w, wire.ApiErrorCodeManagedSecretAgentUseExpired, "this secret has passed its agent-use deadline")
 	case errors.Is(err, secretcap.ErrValueMissing):
 		responses.Fail(w, wire.ApiErrorCodeManagedSecretValueUnavailable, "this secret has no readable current value")
-	case errors.Is(err, secretcap.ErrRevealUnavailable):
-		responses.Fail(w, wire.ApiErrorCodeManagedSecretRevealUnavailable, "authenticated reveal is unavailable in this app session")
-	case errors.Is(err, secretcap.ErrRevealDenied):
-		responses.Fail(w, wire.ApiErrorCodeManagedSecretRevealDenied, "the reveal request expired, was already used, or could not be verified")
-	case errors.Is(err, secretcap.ErrRevealChallengeNotFound):
-		responses.Fail(w, wire.ApiErrorCodeManagedSecretRevealChallengeNotFound, "the reveal request expired or was already used")
-	case errors.Is(err, secretcap.ErrRevealChanged):
-		responses.Fail(w, wire.ApiErrorCodeManagedSecretRevealChanged, "the secret changed while authentication was in progress; reveal it again")
+	case errors.Is(err, secretcap.ErrValueChanged):
+		responses.Fail(w, wire.ApiErrorCodeManagedSecretValueChanged, "the secret changed while you were confirming; try again")
 	case errors.Is(err, secretcap.ErrInvalidUpdate), errors.Is(err, secretcap.ErrInvalidPut):
 		responses.Fail(w, wire.ApiErrorCodeInvalidRequest, managedSecretRefusal(err))
 	default:
 		responses.InternalError(w, r, err)
 	}
+}
+
+// WritePresenceError answers a presence failure; it reports false for any
+// other error.
+func WritePresenceError(responses *httpio.Responder, w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, presence.ErrUnavailable):
+		responses.Fail(w, wire.ApiErrorCodePresenceUnavailable, "this app session cannot confirm you are present")
+	case errors.Is(err, presence.ErrChallengeNotFound):
+		responses.Fail(w, wire.ApiErrorCodePresenceChallengeNotFound, "the confirmation request expired or was already used")
+	case errors.Is(err, presence.ErrDenied):
+		responses.Fail(w, wire.ApiErrorCodePresenceDenied, "the confirmation could not be verified")
+	default:
+		return false
+	}
+	return true
 }
 
 func managedSecretRefusal(err error) string {
@@ -64,6 +78,7 @@ func Metadata(item secretcap.Metadata) wire.ManagedSecret {
 		AgentUseEndsAt: item.AgentUseEndsAt, State: item.State, Version: item.Version,
 		ValueReplacedAt: item.ValueReplacedAt, LastUsedAt: item.LastUsedAt, UseCount: item.UseCount,
 		LastRevealedAt: item.LastRevealedAt, RevealCount: item.RevealCount,
+		LastReleasedAt: item.LastReleasedAt, ReleaseCount: item.ReleaseCount, Custody: string(item.Custody),
 	}
 }
 

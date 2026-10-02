@@ -60,7 +60,7 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 					"path":    canonical["path"],
 					"content": "TOKEN=" + chatSecretVal + "\n",
 				}, []secretcap.TestResolvedValue{
-					{ID: "11111111-1111-1111-1111-111111111111", Name: "chat token", Value: chatSecretVal, ChatGenerated: true, Path: "/content"},
+					{ID: "11111111-1111-1111-1111-111111111111", Name: "chat token", Value: chatSecretVal, ChatGenerated: true, Path: "/content", Fingerprint: fingerprintFor(m, chatSecretVal)},
 				}), nil
 			}
 
@@ -143,7 +143,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 						"path":    canonical["path"],
 						"content": "TOKEN=" + tcCase.val + "\n",
 					}, []secretcap.TestResolvedValue{
-						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content"},
+						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content", Fingerprint: fingerprintFor(m, tcCase.val)},
 					}), nil
 				}
 
@@ -204,7 +204,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 						"path":    canonical["path"],
 						"content": "TOKEN=" + tcCase.val + "\n",
 					}, []secretcap.TestResolvedValue{
-						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content"},
+						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content", Fingerprint: fingerprintFor(m, tcCase.val)},
 					}), nil
 				}
 
@@ -253,13 +253,13 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 				"path":    canonical["path"],
 				"content": "TOKEN=" + projSecretVal + "\n",
 			}, []secretcap.TestResolvedValue{
-				{ID: "22222222-2222-2222-2222-222222222222", Name: "project token", Value: projSecretVal, ChatGenerated: false, Path: "/content"},
+				{ID: "22222222-2222-2222-2222-222222222222", Name: "project token", Value: projSecretVal, ChatGenerated: false, Path: "/content", Fingerprint: fingerprintFor(m, projSecretVal)},
 			})
 			recipient := secretmatch.Recipient{
 				ID: "file:.env", Label: "Local file: .env", Surface: secretmatch.SurfaceFile, Kind: secretmatch.DestinationFile,
 			}
 			known, _ := res.Matches(m, func(string) bool { return true })
-			res.ApproveUse(secretmatch.Fingerprints(known), []secretmatch.Recipient{recipient})
+			res.ApproveRelease(secretcap.Release{Fingerprints: secretmatch.Fingerprints(known), Recipients: []secretmatch.Recipient{recipient}})
 			return res, nil
 		}
 
@@ -655,4 +655,13 @@ func TestInvariant7_OutboundReadMasking(t *testing.T) {
 	if replacements[1].Reference != "" {
 		t.Fatalf("replacement[1].Reference = %q, want empty (placeholder)", replacements[1].Reference)
 	}
+}
+
+// fingerprintFor is the screen identity m gives value.
+func fingerprintFor(m *secretmatch.Matcher, value string) secretmatch.SecretFingerprint {
+	match, err := m.ManagedValue(value, "", "")
+	if err != nil {
+		return ""
+	}
+	return match.Fingerprint
 }

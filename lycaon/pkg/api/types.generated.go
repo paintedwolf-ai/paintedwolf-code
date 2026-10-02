@@ -328,6 +328,19 @@ type ApprovalGrantsResponse struct {
 	Quiets map[string]AskQuiet `json:"quiets,omitempty"`
 }
 
+// ApprovalHeldRelease Values a person gave Painted Wolf Code that an approving option would hand to the listed recipients. Every option whose decision_action is approve needs the person's verified presence on this device; the API bearer alone cannot answer it. A redacted send releases nothing and needs none.
+type ApprovalHeldRelease struct {
+	Secrets    []ApprovalHeldSecret      `json:"secrets"`
+	Recipients []ApprovalSecretRecipient `json:"recipients"`
+}
+
+// ApprovalHeldSecret One value a person gave Painted Wolf Code that this approval would release.
+type ApprovalHeldSecret struct {
+	Reference string `json:"reference"`
+	Name      string `json:"name"`
+	Version   int64  `json:"version"`
+}
+
 // ApprovalOption
 type ApprovalOption struct {
 	ID    string             `json:"id"`
@@ -360,7 +373,8 @@ type ApprovalPlan struct {
 	// Host-classified elevated access that a selectable saved option on this card can install. Empty when no choice would make the composer unlock indicator appear. Allow once is excluded.
 	ElevatedEffects []ElevatedAccessEffect `json:"elevated_effects,omitempty"`
 	// Id of the face option. Exactly one; computed by the host from the subject kind and rung set. Clients must not invent a fallback. A disabled face stays in that slot; Enter does not select another send.
-	RecommendedOptionID string `json:"recommended_option_id"`
+	RecommendedOptionID string               `json:"recommended_option_id"`
+	HeldRelease         *ApprovalHeldRelease `json:"held_release,omitempty"`
 }
 
 // ApprovalPlanPresentation
@@ -703,6 +717,13 @@ type BackupRestoreResult struct {
 
 // BeginManagedSecretRevealRequest Starts one installed-app reveal. The native shell supplies its actual calling window label; it is bound into the proof payload and audit record, but it is not an authorization identity.
 type BeginManagedSecretRevealRequest struct {
+	WindowLabel string `json:"window_label"`
+}
+
+// BeginReleaseChallengeRequest Starts presence verification for one pending option that releases values a person gave Painted Wolf Code. The challenge binds the checkpoint, the option, the exact plan, and the deciding person.
+type BeginReleaseChallengeRequest struct {
+	OptionID string `json:"option_id"`
+	// Native calling window label, bound into the proof; not an authorization identity.
 	WindowLabel string `json:"window_label"`
 }
 
@@ -1294,7 +1315,7 @@ type CompactedChunkMeta struct {
 
 // CompleteManagedSecretRevealRequest Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier; the ordinary API bearer is never sufficient to reveal a value.
 type CompleteManagedSecretRevealRequest struct {
-	Authenticator string `json:"authenticator"`
+	Authenticator PresenceAuthenticator `json:"authenticator"`
 	// Base64url without padding Ed25519 signature from the installed desktop shell.
 	Signature string `json:"signature"`
 }
@@ -3740,6 +3761,8 @@ type ManagedSecret struct {
 	Scope       string `json:"scope"`
 	// How the capability was created. This is immutable provenance, not a claim about where the current stored value lives or whether an external credential still matches it. `file_marked` means a person marked a value in a project file; `composer_marked` means a person protected selected draft text for a chat; `settings_entered` means a person typed a value into project settings. File marks and settings entries are project acts; composer marks initially take chat scope. `cookie_jar` means the host stored the cookies an agent's own `http_request` calls received under a named jar; every cookie value in it is screened like any other managed value. `token_jar` is the same for tokens `http_request` captured from responses.
 	Origin string `json:"origin"`
+	// Who supplied the current value, recorded in the encrypted vault when the bytes entered. `person` means a person gave the value to Painted Wolf Code, which may hold the only copy: revealing it or handing it to any file, process, service, or MCP server needs that person's verified presence on this device. `file` means a person marked bytes already in a project file, which governs them. `chat` means the host generated the value for one chat, which alone has held it. `host` means the host generated or captured the value for the agent's work beyond one chat. Absent when no value is readable.
+	Custody string `json:"custody,omitempty"`
 	// Present only for generated material.
 	Format string `json:"format,omitempty"`
 	// Present only for generated material.
@@ -3761,6 +3784,30 @@ type ManagedSecret struct {
 	LastRevealedAt *string `json:"last_revealed_at,omitempty"`
 	// Successful authenticated human reveals retained for this capability.
 	RevealCount int64 `json:"reveal_count"`
+	// Most recent presence-verified release to a recipient; absent when never released.
+	LastReleasedAt *string `json:"last_released_at,omitempty"`
+	// Presence-verified releases retained for this capability.
+	ReleaseCount int64 `json:"release_count"`
+}
+
+// ManagedSecretAttestation One presence-verified disclosure: a reveal to the person's own view, or a release to the recipients an approval reviewed. Carries who confirmed and how, never the value or the proof.
+type ManagedSecretAttestation struct {
+	AttestationID string `json:"attestation_id"`
+	Purpose       string `json:"purpose"`
+	Version       int64  `json:"version"`
+	// The approval a release answered.
+	CheckpointID string                      `json:"checkpoint_id,omitempty"`
+	Recipients   []ManagedSecretUseRecipient `json:"recipients"`
+	// How long a release keeps covering its recipients.
+	ReleaseScope  string                `json:"release_scope,omitempty"`
+	Authenticator PresenceAuthenticator `json:"authenticator"`
+	PersonID      string                `json:"person_id"`
+	AttestedAt    string                `json:"attested_at"`
+}
+
+// ManagedSecretAttestationList
+type ManagedSecretAttestationList struct {
+	Attestations []ManagedSecretAttestation `json:"attestations"`
 }
 
 // ManagedSecretList
@@ -3801,6 +3848,10 @@ type ManagedSecretUse struct {
 	Version       int64  `json:"version,omitempty"`
 	SessionID     string `json:"session_id,omitempty"`
 	ChatSessionID string `json:"chat_session_id,omitempty"`
+	// Recipients the release that handed the value off reviewed; empty until one did.
+	Recipients []ManagedSecretUseRecipient `json:"recipients,omitempty"`
+	// The presence attestation that released a value a person gave; absent otherwise.
+	AttestationID string `json:"attestation_id,omitempty"`
 }
 
 // ManagedSecretUseList A bounded rolling window of recent uses, newest first. Not a permanent ledger.
@@ -3808,6 +3859,12 @@ type ManagedSecretUseList struct {
 	Uses []ManagedSecretUse `json:"uses"`
 	// Opaque cursor for the next page of secret uses; empty or omitted at the end.
 	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// ManagedSecretUseRecipient
+type ManagedSecretUseRecipient struct {
+	Label   string `json:"label"`
+	Surface string `json:"surface"`
 }
 
 // McpCheckResponse
@@ -4237,6 +4294,24 @@ type PreflightReport struct {
 	// Probe results in registration order.
 	Probes                 []PreflightProbe       `json:"probes"`
 	AttachmentCapabilities AttachmentCapabilities `json:"attachment_capabilities"`
+}
+
+// PresenceChallenge One short-lived request for native user-presence verification. The proof payload is opaque canonical bytes naming its purpose and subject; the native shell signs it only after the operating system verifies the device user. The API bearer can begin a challenge but cannot complete one.
+type PresenceChallenge struct {
+	ChallengeID string `json:"challenge_id"`
+	// Base64url without padding of the exact bytes the native shell signs.
+	ProofPayload string `json:"proof_payload"`
+	// Host-authored reason shown by the operating-system prompt.
+	Prompt    string `json:"prompt"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// PresenceProof Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier.
+type PresenceProof struct {
+	ChallengeID   string                `json:"challenge_id"`
+	Authenticator PresenceAuthenticator `json:"authenticator"`
+	// Base64url without padding Ed25519 signature from the installed desktop shell.
+	Signature string `json:"signature"`
 }
 
 // PreviewActionOverlay

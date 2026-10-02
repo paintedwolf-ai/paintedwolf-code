@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -67,13 +68,10 @@ var (
 	// already protects: a second capability would duplicate that secret.
 	ErrAlreadyProtected = fmt.Errorf("%w: that selection is already protected by a managed secret", ErrInvalidPut)
 	// ErrHumanAuthored refuses agent revocation of a person's own capability.
-	ErrHumanAuthored     = errors.New("secret capability was authored by a person")
-	ErrRevealUnavailable = errors.New("managed secret reveal is unavailable")
-	ErrRevealDenied      = errors.New("managed secret reveal was denied")
-	ErrRevealChanged     = errors.New("managed secret changed during reveal")
-	// ErrRevealChallengeNotFound: the challenge was never issued, expired, or
-	// was already used.
-	ErrRevealChallengeNotFound = errors.New("managed secret reveal challenge not found")
+	ErrHumanAuthored = errors.New("secret capability was authored by a person")
+	// ErrValueChanged: the value an attestation named was replaced before the
+	// attestation completed.
+	ErrValueChanged = errors.New("managed secret changed during presence verification")
 )
 
 // RememberFunc admits a managed value to exact-match secret screening.
@@ -86,10 +84,11 @@ type Service struct {
 	screeningGeneration    atomic.Uint64
 	handle                 db.Handle
 	queries                *db.Queries
-	values                 *credentialstore.Store
+	values                 vaultValues
 	remember               RememberFunc
 	now                    func() time.Time
-	reveal                 *revealBroker
+	presence               *presence.Broker
+	fingerprint            func(string) secretmatch.SecretFingerprint
 	onScreeningInvalidated []func(context.Context, string)
 }
 
@@ -132,10 +131,17 @@ func New(database db.Handle, remember RememberFunc) (*Service, error) {
 // NewWithStore constructs a service over an explicit value store.
 func NewWithStore(database db.Handle, values *credentialstore.Store, remember RememberFunc) *Service {
 	return &Service{
-		handle: database, queries: db.New(database), values: values, remember: remember,
-		now: time.Now, reveal: newRevealBroker(),
+		handle: database, queries: db.New(database), values: vaultValues{store: values}, remember: remember,
+		now: time.Now,
 	}
 }
+
+// SetPresence installs the broker that verifies reveals.
+func (s *Service) SetPresence(broker *presence.Broker) { s.presence = broker }
+
+// SetFingerprinter installs the screen's identity for exact bytes, so a
+// resolution can name which screened values a person holds.
+func (s *Service) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
 
 // ScreeningGeneration changes when screening gains protected bytes.
 func (s *Service) ScreeningGeneration() uint64 {
@@ -158,11 +164,13 @@ type Metadata struct {
 	ChatTitle string `json:"chat_title,omitempty"`
 	// ChatDeleted marks a chat-scoped capability whose chat was deleted. It
 	// stays active for people; no agent can spend it.
-	ChatDeleted    bool    `json:"chat_deleted,omitempty"`
-	Name           string  `json:"name"`
-	Purpose        string  `json:"purpose,omitempty"`
-	Scope          string  `json:"scope"`
-	Origin         string  `json:"origin"`
+	ChatDeleted bool   `json:"chat_deleted,omitempty"`
+	Name        string `json:"name"`
+	Purpose     string `json:"purpose,omitempty"`
+	Scope       string `json:"scope"`
+	Origin      string `json:"origin"`
+	// Custody comes from the vault entry; empty when no value is available.
+	Custody        Custody `json:"custody,omitempty"`
 	Format         string  `json:"format,omitempty"`
 	EntropyBits    int64   `json:"entropy_bits,omitempty"`
 	CreatedAt      string  `json:"created_at"`
@@ -176,6 +184,9 @@ type Metadata struct {
 	UseCount       int64   `json:"use_count"`
 	LastRevealedAt *string `json:"last_revealed_at,omitempty"`
 	RevealCount    int64   `json:"reveal_count"`
+	// LastReleasedAt and ReleaseCount count presence-verified releases.
+	LastReleasedAt *string `json:"last_released_at,omitempty"`
+	ReleaseCount   int64   `json:"release_count"`
 }
 
 type facts struct {
@@ -189,6 +200,8 @@ type facts struct {
 	lastUsedAt      string
 	revealCount     int64
 	lastRevealedAt  string
+	releaseCount    int64
+	lastReleasedAt  string
 }
 
 // List returns value-free capabilities visible from a chat.
@@ -272,13 +285,14 @@ func (s *Service) projectFacts(ctx context.Context, projectID string) (map[strin
 		entry.useCount, entry.lastUsedAt = summary.UseCount, summary.LastUsedAt
 		out[summary.SecretID] = entry
 	}
-	reveals, err := s.queries.ListProjectManagedSecretRevealSummaries(ctx, projectID)
+	attestations, err := s.queries.ListProjectManagedSecretAttestationSummaries(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	for _, summary := range reveals {
+	for _, summary := range attestations {
 		entry := out[summary.SecretID]
 		entry.revealCount, entry.lastRevealedAt = summary.RevealCount, summary.LastRevealedAt
+		entry.releaseCount, entry.lastReleasedAt = summary.ReleaseCount, summary.LastReleasedAt
 		out[summary.SecretID] = entry
 	}
 	chats, err := s.queries.ListProjectManagedSecretChats(ctx, projectID)
@@ -310,11 +324,12 @@ func (s *Service) secretFacts(ctx context.Context, secretID string) (facts, erro
 		return facts{}, err
 	}
 	out.useCount, out.lastUsedAt = usage.UseCount, usage.LastUsedAt
-	reveals, err := s.queries.GetManagedSecretRevealSummary(ctx, secretID)
+	attestations, err := s.queries.GetManagedSecretAttestationSummary(ctx, secretID)
 	if err != nil {
 		return facts{}, err
 	}
-	out.revealCount, out.lastRevealedAt = reveals.RevealCount, reveals.LastRevealedAt
+	out.revealCount, out.lastRevealedAt = attestations.RevealCount, attestations.LastRevealedAt
+	out.releaseCount, out.lastReleasedAt = attestations.ReleaseCount, attestations.LastReleasedAt
 	title, err := s.queries.GetManagedSecretChat(ctx, secretID)
 	switch {
 	case err == nil:
@@ -331,7 +346,10 @@ func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
 		Reference: secretmatch.ReferenceToken(row.ID), Name: row.Name, Purpose: row.Purpose,
 		Scope: row.Scope, Origin: row.Origin, CreatedAt: row.CreatedAt,
 		State: s.state(row, f), Version: f.version, UseCount: f.useCount,
-		RevealCount: f.revealCount,
+		RevealCount: f.revealCount, ReleaseCount: f.releaseCount,
+	}
+	if entry, ok := s.values.get(f.valueID); ok && f.valueID != "" {
+		meta.Custody = entry.Custody
 	}
 	if row.ChatSessionID.Valid {
 		value := row.ChatSessionID.String
@@ -360,6 +378,10 @@ func (s *Service) metadata(row db.ManagedSecrets, f facts) Metadata {
 		value := f.lastRevealedAt
 		meta.LastRevealedAt = &value
 	}
+	if f.lastReleasedAt != "" {
+		value := f.lastReleasedAt
+		meta.LastReleasedAt = &value
+	}
 	return meta
 }
 
@@ -371,7 +393,7 @@ func (s *Service) state(row db.ManagedSecrets, f facts) string {
 	if f.valueID == "" {
 		return StateUnavailable
 	}
-	if _, ok := s.values.Get(f.valueID); !ok {
+	if _, ok := s.values.get(f.valueID); !ok {
 		return StateUnavailable
 	}
 	if agentUseEnded(row.AgentUseEndsAt, s.now()) {

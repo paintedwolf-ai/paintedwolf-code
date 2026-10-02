@@ -95,4 +95,6 @@ type SecretScreen struct {
 	CommandLine string
 	// ScreeningGap names content the screen could not read.
 	ScreeningGap secretmatch.ScreeningGap
+	// Held names the person-held values this send would release.
+	Held *HeldRelease
 }

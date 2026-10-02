@@ -46,6 +46,11 @@ type toolApprovalRaise struct {
 	Presence PresenceReporter
 }
 
+// releasesHeld reports whether the card would hand over values a person gave.
+func (in toolApprovalRaise) releasesHeld() bool {
+	return (in.Plan != nil && in.Plan.Held != nil) || (in.SecretScreen != nil && in.SecretScreen.Held != nil)
+}
+
 func (e *DefaultToolExecutor) grantOffers(action hitl.ProposedAction, result *hitl.ApprovalResult) []hitl.ApprovalGrantOffer {
 	if e == nil || e.approvalGate == nil {
 		return nil
@@ -96,7 +101,8 @@ func (e *DefaultToolExecutor) raiseAndWaitToolApproval(ctx context.Context, in t
 	chat := in.Action.ChatSession()
 	toolCallID := strings.TrimSpace(in.ToolCallID)
 
-	if e.decisionQuieted(chat, in) {
+	// A quiet never answers for a person who must confirm a held release.
+	if !in.releasesHeld() && e.decisionQuieted(chat, in) {
 		e.noteQuietSuppressed(chat, in)
 		e.noteRepeatSuppressed(chat, in)
 		e.recordAskSuppressed(ctx, in, authzledger.AskSuppressedCauseQuiet)

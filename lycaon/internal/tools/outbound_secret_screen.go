@@ -21,6 +21,7 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 	finding = fillSecretAttribution(finding, attr)
 	fingerprintValues := secretFingerprintValues(finding.Fingerprints)
 	canRedact := finding.CanRedact()
+	custody := secretcap.ResolutionFrom(ctx).Custody(finding.Fingerprints)
 	// Host-composed requests redact credentials regardless of destination trust.
 	if finding.HostComposed && canRedact {
 		e.recordSecretLedger(ctx, finding, authzledger.ActionSecretHostComposedRedacted,
@@ -47,13 +48,13 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 		return e.redactedResolution(ctx, finding), nil
 	}
 	posture := e.secretPosture(finding.ProjectDir)
-	verdict, decision := evaluateSecretScreen(finding, posture)
+	verdict, decision := evaluateSecretScreen(finding, custody, posture)
 	if verdict == gate.Silent {
 		switch {
 		case finding.DestinationTrusted:
 			e.recordSecretLedger(ctx, finding, authzledger.ActionSecretDestinationTrusted,
 				authzledger.ResolvedByHuman, authzledger.AuthorizationSourceTrustedDestination)
-		case posture.ReleasesChatSecretLocally(secretHit(finding)):
+		case posture.ReleasesChatSecretLocally(secretHit(finding, custody)):
 			// A policy release is not a reviewed handoff, so it grants no
 			// connection consent to the recipients it names.
 			e.recordSecretLedger(ctx, finding, authzledger.ActionSecretChatLocalRelease,
@@ -66,12 +67,18 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 		return secretmatch.Resolution{}, secretmatch.NewAskFault(secretmatch.FaultStageScreenUnwired, err)
 	}
 	if !contested && secretInvocationCovered(secretcap.ResolutionFrom(ctx), finding.Fingerprints, recipients) {
-		return allowSecretInvocation(ctx, finding, recipients), nil
+		return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 	}
-	if !contested && e != nil && e.approvalGate != nil &&
-		e.secretRecipientsCovered(finding, recipients, fingerprintValues) {
-		e.recordSecretLedger(ctx, finding, authzledger.ActionSecretPermissionUsed, authzledger.ResolvedByHuman, authzledger.AuthorizationSourceLease)
-		return allowSecretInvocation(ctx, finding, recipients), nil
+	if !contested && e != nil && e.approvalGate != nil {
+		if covered, attestations := e.secretRecipientsCovered(finding, recipients, fingerprintValues, custody.HeldFingerprints()); covered {
+			e.recordSecretLedger(ctx, finding, authzledger.ActionSecretPermissionUsed, authzledger.ResolvedByHuman, authzledger.AuthorizationSourceLease)
+			return allowSecretInvocation(ctx, finding, recipients, attestations), nil
+		}
+	}
+	// A value a person holds leaves only with their verified presence; on a
+	// device that cannot verify it, no card could release the value.
+	if len(custody.Held) > 0 && !e.presenceAvailable() {
+		return secretmatch.Resolution{}, secretmatch.NewAskFault(secretmatch.FaultStagePresenceUnavailable, nil)
 	}
 	if e == nil || e.checkpointMgr == nil {
 		return secretmatch.Resolution{}, secretmatch.NewAskFault(
@@ -82,6 +89,7 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 			secretmatch.FaultStageNoSession, nil)
 	}
 	payload := secretReviewPayload(finding, recipients, standingRedaction)
+	payload.Held = heldRelease(custody, recipients)
 	releaseReview := e.offerSecretIgnoreReview(ctx, finding, payload)
 	defer releaseReview()
 	args := secretScreenArgs(payload)
@@ -131,6 +139,9 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 	if finding.Managed() {
 		title = fmt.Sprintf("A protected value will be used in this %s", payload.SurfaceLabel)
 	}
+	if payload.Held != nil {
+		title = fmt.Sprintf("A value you gave Painted Wolf Code will be used in this %s", payload.SurfaceLabel)
+	}
 	if contested {
 		title = fmt.Sprintf("The agent asked to send the real value with this %s", payload.SurfaceLabel)
 	}
@@ -152,9 +163,42 @@ func (e *DefaultToolExecutor) AskSecretScreen(ctx context.Context, finding secre
 	}
 	resolution, err := e.resolveSecretScreenDecision(ctx, finding, final)
 	if err == nil && resolution.Decision == secretmatch.SendUnchanged {
-		return allowSecretInvocation(ctx, finding, recipients), nil
+		return allowSecretInvocation(ctx, finding, recipients, heldAttestations(custody, attestationOf(final))), nil
 	}
 	return resolution, err
+}
+
+// attestationOf names the presence that released held values on a card.
+func attestationOf(final *hitl.CheckpointResponse) string {
+	if final == nil || final.Result == nil {
+		return ""
+	}
+	return final.Result.AttestationID
+}
+
+// presenceAvailable reports whether this device can verify presence.
+func (e *DefaultToolExecutor) presenceAvailable() bool {
+	return e != nil && e.presenceAvailableFn != nil && e.presenceAvailableFn()
+}
+
+// SetPresenceAvailable reports whether a card can collect verified presence.
+func (e *DefaultToolExecutor) SetPresenceAvailable(available func() bool) {
+	if e != nil {
+		e.presenceAvailableFn = available
+	}
+}
+
+// heldRelease names the person-held values a card would release.
+func heldRelease(custody secretcap.CustodySummary, recipients []secretmatch.Recipient) *hitl.HeldRelease {
+	if len(custody.Held) == 0 {
+		return nil
+	}
+	held := &hitl.HeldRelease{Recipients: append([]secretmatch.Recipient(nil), recipients...)}
+	for _, value := range custody.Held {
+		held.Secrets = append(held.Secrets, hitl.HeldSecret{SecretID: value.SecretID, Version: value.Version, Name: value.Name})
+		held.Fingerprints = append(held.Fingerprints, string(value.Fingerprint))
+	}
+	return held
 }
 
 // secretEstimatedImpact states what the held send may carry.
@@ -197,8 +241,13 @@ func (e *DefaultToolExecutor) resolveSecretScreenDecision(
 	return secretmatch.Resolution{Decision: secretmatch.Withhold, Guidance: guidance}, nil
 }
 
-// ResolveSecretScreenUnasked applies recorded redactions without an approval card.
+// ResolveSecretScreenUnasked applies recorded redactions without an approval
+// card. Custody is not an approval preference, so a value a person holds is
+// still asked about with approvals disabled.
 func (e *DefaultToolExecutor) ResolveSecretScreenUnasked(ctx context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
+	if len(secretcap.ResolutionFrom(ctx).Custody(finding.Fingerprints).Held) > 0 {
+		return e.AskSecretScreen(ctx, finding)
+	}
 	finding = fillSecretAttribution(finding, secretmatch.AskAttributionFrom(ctx))
 	standing := e != nil && e.approvalGate != nil &&
 		e.approvalGate.SecretRedactionStanding(finding.ProjectID, secretFingerprintValues(finding.Fingerprints))
@@ -338,13 +387,14 @@ func (e *DefaultToolExecutor) secretPosture(projectDir string) gate.Posture {
 }
 
 // evaluateSecretScreen projects the match into the shared gate table.
-func evaluateSecretScreen(finding secretmatch.Alert, posture gate.Posture) (gate.Verdict, *gate.Decision) {
-	facts := gate.Facts{Stage: gate.StagePreSend, Ran: gate.ProducerPayload, Payload: secretHit(finding)}
+func evaluateSecretScreen(finding secretmatch.Alert, custody secretcap.CustodySummary, posture gate.Posture) (gate.Verdict, *gate.Decision) {
+	facts := gate.Facts{Stage: gate.StagePreSend, Ran: gate.ProducerPayload, Payload: secretHit(finding, custody)}
 	return gate.Evaluate(facts, posture)
 }
 
-// secretHit is the gate's value-free view of a finding.
-func secretHit(finding secretmatch.Alert) *gate.SecretHit {
+// secretHit is the gate's value-free view of a finding and the custody of the
+// values its invocation resolved.
+func secretHit(finding secretmatch.Alert, custody secretcap.CustodySummary) *gate.SecretHit {
 	return &gate.SecretHit{
 		Surface:            string(finding.Surface),
 		RuleID:             finding.RuleID,
@@ -354,14 +404,29 @@ func secretHit(finding secretmatch.Alert) *gate.SecretHit {
 		SourceKind:         string(finding.SourceKind),
 		SourceTool:         finding.SourceTool,
 		DestinationTrusted: finding.DestinationTrusted,
-		ChatGenerated:      finding.ChatGenerated,
+		ChatGenerated:      custody.ChatGenerated,
+		Held:               len(custody.Held) > 0,
 		RecipientsLocal:    finding.RecipientsLocal,
 	}
 }
 
-func allowSecretInvocation(ctx context.Context, finding secretmatch.Alert, recipients []secretmatch.Recipient) secretmatch.Resolution {
+// heldAttestations names one card's attestation for each held value it released.
+func heldAttestations(custody secretcap.CustodySummary, attestation string) map[string]string {
+	out := map[string]string{}
+	if attestation == "" {
+		return out
+	}
+	for _, fingerprint := range custody.HeldFingerprints() {
+		out[fingerprint] = attestation
+	}
+	return out
+}
+
+// allowSecretInvocation records the reviewed release on the invocation;
+// attestations names the presence that released each held value.
+func allowSecretInvocation(ctx context.Context, finding secretmatch.Alert, recipients []secretmatch.Recipient, attestations map[string]string) secretmatch.Resolution {
 	resolved := secretcap.ResolutionFrom(ctx)
-	resolved.ApproveUse(finding.Fingerprints, recipients)
+	resolved.ApproveAttested(finding.Fingerprints, recipients, attestations)
 	resolved.ApproveLocalConnections(finding.ConnectPorts)
 	return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}
 }
@@ -376,4 +441,13 @@ func secretRecipientLabels(finding secretmatch.Alert) []string {
 		labels = append(labels, recipient.Label)
 	}
 	return labels
+}
+
+// HeldHandOffReject refuses a consumer that would receive a person-held
+// value without its attested release.
+func HeldHandOffReject(surface string) *ToolReject {
+	return &ToolReject{Code: OutboundSecretScreenFailedCode, Data: map[string]any{
+		"surface": surface, "rule_id": secretmatch.ManagedRuleID, "shape": "Protected value",
+		"fault_stage": secretmatch.FaultStageHeldUnreleased,
+	}}
 }

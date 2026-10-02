@@ -284,10 +284,12 @@ components:
         - report_not_found
         - managed_secret_revoked
         - managed_secret_agent_use_expired
-        - managed_secret_reveal_unavailable
-        - managed_secret_reveal_denied
-        - managed_secret_reveal_changed
-        - managed_secret_reveal_challenge_not_found
+        - presence_unavailable
+        - presence_denied
+        - presence_required
+        - presence_not_required
+        - presence_challenge_not_found
+        - managed_secret_value_changed
         - managed_secret_value_unavailable
         - auth_unavailable
         - recovery_snapshot_invalid
