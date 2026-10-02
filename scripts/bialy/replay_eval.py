@@ -133,11 +133,10 @@ def macro_auc(tools, support=5):
 
 
 def session_standing(standing, schema_bytes):
-    """Replay each coordinator session's turns in receipt order, accumulating the tools that
-    join its standing set. It assumes every turn after the first is warm, as in these
-    unattended sessions where follow-ups arrive seconds apart; a chat idle past the cache
-    window would drop the set, so real chats with pauses carry less than this reports. Reports the standing set's size and schema bytes by turn, and the
-    share of later turns whose needed tools were already standing."""
+    """Replay each coordinator session's turns in receipt order: the standing set's size and
+    schema bytes by turn, and the share of later turns whose needed tools were already
+    standing. Every turn after the first counts as warm; a chat idle past the cache window
+    drops its set, so real chats with pauses carry less than this reports."""
     by_turn = collections.defaultdict(list)
     covered = later = 0
     for turns in standing.values():

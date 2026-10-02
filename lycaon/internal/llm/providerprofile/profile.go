@@ -35,7 +35,7 @@ type Profile struct {
 	ToolCallID ToolCallIDStyle
 	// ReasoningWire selects the provider's assistant-reasoning replay format.
 	ReasoningWire ReasoningWireStyle
-	// Imported tool history preserves signed responses.
+	// GoogleThoughtSignatures marks unsigned replayed tool calls as imported history.
 	GoogleThoughtSignatures bool
 	// SystemPreambleOnly projects one leading system slot and later host events in order.
 	SystemPreambleOnly bool
