@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.0-rc.2]
+
+### Fixed
+
+- The credential vault opens on macOS. Release builds rejected the identity
+  they had just stored in the Keychain, so 1.0.0-rc.1 could not start.
+- Reads outside the attached folders ask at every approval posture.
+- A refused write outside the write roots offers the enclosing repository.
+- Untagged report fences in a closing answer are read as report fields.
+
 ## [1.0.0-rc.1]
 
 ### Added
