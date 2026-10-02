@@ -66,6 +66,14 @@ resolve_prior_release() {
     --candidate "$(tr -d '[:space:]' < "${ROOT}/VERSION")" --generation "${SIGNING_GENERATION}"
 }
 
+# A halt records the withdrawal as an immutable public marker.
+prior_withdrawn() {
+  local version="$1" base="${DOWNLOAD_BASE_URL:-}"
+  [[ -n "${base}" ]] || return 1
+  [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -A painted-wolf-release/1 \
+    -H 'Cache-Control: no-cache' "${base%/}/release-metadata/${version}/withdrawn.json")" == 200 ]]
+}
+
 # Extract the prior release's engine binary into $1. Echoes the binary path.
 fetch_prior_engine() {
   local tag="$1" dest="$2"
@@ -187,19 +195,23 @@ rehearse() {
   prior_engine="$(fetch_prior_engine "${tag}" "${tmp}")" || return 1
 
   echo "→ booting prior release ${tag}" >&2
-  local prior_health
-  if ! boot_engine "${prior_engine}" "${config_dir}" "${tmp}/prior.log" "${tmp}/prior-health.json" "${fixture}"; then
+  local prior_health prior_schema=""
+  if boot_engine "${prior_engine}" "${config_dir}" "${tmp}/prior.log" "${tmp}/prior-health.json" "${fixture}"; then
+    prior_health="$(cat "${tmp}/prior-health.json")"
+    if ! jq -e --arg version "${tag#v}" '(.status == "ok" or .status == "degraded") and .version == $version' <<<"${prior_health}" >/dev/null; then
+      echo "error: ${tag} did not serve its exact-version fixture: ${prior_health}" >&2
+      return 1
+    fi
+    prior_schema="$(jq -r '.schema_version // empty' <<<"${prior_health}")"
+    echo "  prior schema_version=${prior_schema}" >&2
+  elif prior_withdrawn "${tag#v}"; then
+    # A withdrawn release may be withdrawn because it cannot boot; its
+    # installations still upgrade, so HEAD must still upgrade its fixture.
+    echo "warning: withdrawn prior release ${tag} could not serve its fixture; rehearsing HEAD's upgrade of it" >&2
+  else
     echo "error: prior release ${tag} could not serve its own corpus fixture" >&2
     return 1
   fi
-  prior_health="$(cat "${tmp}/prior-health.json")"
-  if ! jq -e --arg version "${tag#v}" '(.status == "ok" or .status == "degraded") and .version == $version' <<<"${prior_health}" >/dev/null; then
-    echo "error: ${tag} did not serve its exact-version fixture: ${prior_health}" >&2
-    return 1
-  fi
-  local prior_schema
-  prior_schema="$(jq -r '.schema_version // empty' <<<"${prior_health}")"
-  echo "  prior schema_version=${prior_schema}" >&2
 
   local baseline
   baseline="$(upgrade_store_baseline "${HEAD_SIDECAR}" "${config_dir}/store.db")" || return 1

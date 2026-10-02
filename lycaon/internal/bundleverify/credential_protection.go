@@ -25,10 +25,6 @@ func checkCredentialProtection(ctx context.Context, runner Runner, opts Options)
 	if err == nil {
 		return nil
 	}
-	severity := SeverityError
-	if opts.CredentialProbeAdvisory {
-		severity = SeverityWarn
-	}
-	return []Finding{{Code: CodeCredentialProtectionFailed, Severity: severity, Path: sidecarRelPath,
+	return []Finding{{Code: CodeCredentialProtectionFailed, Severity: SeverityError, Path: sidecarRelPath,
 		Detail: map[string]string{"reason": err.Error(), "output": strings.TrimSpace(string(stderr))}}}
 }

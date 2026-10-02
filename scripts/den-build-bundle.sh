@@ -221,10 +221,6 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
 fi
 if [[ -n "${APP_PATH}" ]]; then
   VERIFY_ARGS=(--app "${APP_PATH}" --require-signed)
-  # Hosted macOS VMs refuse data-protection Keychain items for every build.
-  if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]; then
-    VERIFY_ARGS+=(--credential-probe-advisory)
-  fi
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi

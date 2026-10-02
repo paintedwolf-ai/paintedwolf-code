@@ -34,6 +34,17 @@ static CFMutableDictionaryRef identity_query(const char *service, const char *ac
     return query;
 }
 
+// Data-protection attributes may come back as CFNumber 0 rather than kCFBooleanFalse.
+static Boolean pw_cf_false(CFTypeRef value) {
+    if (!value) return true;
+    if (CFGetTypeID(value) == CFBooleanGetTypeID()) return !CFBooleanGetValue((CFBooleanRef)value);
+    if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+        long long number = 1;
+        return CFNumberGetValue((CFNumberRef)value, kCFNumberLongLongType, &number) && number == 0;
+    }
+    return false;
+}
+
 OSStatus pw_keychain_read(const char *service, const char *account, unsigned char **data, long *size) {
     @autoreleasepool {
         *data = NULL;
@@ -55,12 +66,18 @@ OSStatus pw_keychain_read(const char *service, const char *account, unsigned cha
         CFTypeRef accessibility = CFDictionaryGetValue(item, kSecAttrAccessible);
         CFTypeRef synchronized = CFDictionaryGetValue(item, kSecAttrSynchronizable);
         CFDataRef value = (CFDataRef)CFDictionaryGetValue(item, kSecValueData);
-        if (!accessibility || !CFEqual(accessibility, kSecAttrAccessibleWhenUnlockedThisDeviceOnly) ||
-            (synchronized && !CFEqual(synchronized, kCFBooleanFalse)) ||
-            !value || CFGetTypeID(value) != CFDataGetTypeID() ||
+        if (!value || CFGetTypeID(value) != CFDataGetTypeID() ||
             CFDataGetLength(value) < 1 || CFDataGetLength(value) > 65536) {
             CFRelease(result);
             return errSecDecode;
+        }
+        if (!accessibility || !CFEqual(accessibility, kSecAttrAccessibleWhenUnlockedThisDeviceOnly)) {
+            CFRelease(result);
+            return PW_KEYCHAIN_UNEXPECTED_ACCESSIBILITY;
+        }
+        if (!pw_cf_false(synchronized)) {
+            CFRelease(result);
+            return PW_KEYCHAIN_UNEXPECTED_SYNCHRONIZATION;
         }
         *size = CFDataGetLength(value);
         *data = malloc((size_t)*size);

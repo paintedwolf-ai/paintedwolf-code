@@ -62,22 +62,3 @@ func TestCredentialProtectionRequiresEmbeddedProfile(t *testing.T) {
 	}
 }
 
-// Hosted runners report a refused probe as a warning; a missing profile stays an error.
-func TestAdvisoryCredentialProbeWarnsOnlyForTheKeychainCall(t *testing.T) {
-	app := buildFakeApp(t, defaultAppOptions())
-	runner := signedOK()
-	runner.err[filepath.Join(app, sidecarRelPath)+" credentials"] = errors.New("OSStatus -26275")
-	findings := checkCredentialProtection(context.Background(), runner, Options{AppPath: app, RequireSigned: true, CredentialProbeAdvisory: true})
-	if len(findings) != 1 || findings[0].Code != CodeCredentialProtectionFailed || findings[0].Severity != SeverityWarn {
-		t.Fatalf("advisory probe findings: %+v", findings)
-	}
-
-	profile := filepath.Join(app, filepath.Dir(filepath.Dir(sidecarRelPath)), "embedded.provisionprofile")
-	if err := os.Remove(profile); err != nil {
-		t.Fatalf("remove profile fixture: %v", err)
-	}
-	findings = checkCredentialProtection(context.Background(), signedOK(), Options{AppPath: app, RequireSigned: true, CredentialProbeAdvisory: true})
-	if len(findings) != 1 || findings[0].Severity != SeverityError {
-		t.Fatalf("missing profile must stay an error: %+v", findings)
-	}
-}

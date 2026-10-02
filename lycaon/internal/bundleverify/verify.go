@@ -52,10 +52,7 @@ type Options struct {
 	AppPath       string
 	DMGPath       string // optional
 	RequireSigned bool
-	// CredentialProbeAdvisory reports a failed Keychain probe as a warning.
-	// Hosted macOS VMs refuse data-protection Keychain items for every build.
-	CredentialProbeAdvisory bool
-	Runner                  Runner // nil ⇒ execRunner{}
+	Runner        Runner // nil ⇒ execRunner{}
 }
 
 // Verify runs the configured bundle audit.

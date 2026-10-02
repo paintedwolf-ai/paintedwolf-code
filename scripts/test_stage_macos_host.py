@@ -110,37 +110,6 @@ class ProfileTests(unittest.TestCase):
                 self.assertTrue(info["CFBundleVersion"].isdigit())
                 self.assertEqual(info["CFBundleIdentifier"], host.BUNDLE_ID)
 
-    def test_probe_is_advisory_only_on_hosted_runners(self):
-        import plistlib
-        import subprocess as sp
-        for hosted in (True, False):
-            with self.subTest(hosted=hosted), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                binary = root / "pw"
-                binary.write_bytes(b"synthetic executable")
-                profile = root / "profile"
-                profile.write_bytes(b"synthetic signed profile")
-                summary = root / "summary.md"
-                def run(arguments, **kwargs):
-                    extract = [a for a in arguments if a.startswith("--extract-certificates=")]
-                    if extract:
-                        Path(extract[0].split("=", 1)[1] + "0").write_bytes(b"certificate")
-                    if "verify-protection" in arguments:
-                        if kwargs.get("check"):
-                            raise sp.CalledProcessError(1, arguments)
-                        return sp.CompletedProcess(arguments, 1, "", "Keychain failed (OSStatus -26275)")
-                    return sp.CompletedProcess(arguments, 0, "", "")
-                environment = {"APPLE_SIGNING_IDENTITY": "synthetic signer", "APPLE_ENGINE_PROVISIONING_PROFILE": str(profile)}
-                if hosted:
-                    environment.update(RUNNER_ENVIRONMENT="github-hosted", GITHUB_STEP_SUMMARY=str(summary))
-                with patch.dict("os.environ", environment, clear=True), patch.object(host.subprocess, "check_output", return_value=plistlib.dumps(self.profile)), patch.object(host.subprocess, "run", side_effect=run):
-                    if hosted:
-                        host.stage(binary, root / "output", "1.2.3-rc.1", True)
-                        self.assertIn("-26275", summary.read_text())
-                    else:
-                        with self.assertRaises(sp.CalledProcessError):
-                            host.stage(binary, root / "output", "1.2.3-rc.1", True)
-
     def test_development_rebuild_removes_stale_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
