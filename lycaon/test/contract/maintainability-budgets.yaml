@@ -38,7 +38,7 @@ go_receiver_lines:
     lycaon/internal/advisory/severity/severity.indexResolver: 21
     lycaon/internal/agentpresence/agentpresence.Tracker: 687
     lycaon/internal/agentpresence/agentpresence.chatPresence: 28
-    lycaon/internal/api/api.Server: 3430
+    lycaon/internal/api/api.Server: 3431
     lycaon/internal/api/api.projectReplaceStore: 16
     lycaon/internal/api/api.searchPageCache: 36
     lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 1207
@@ -54,7 +54,7 @@ go_receiver_lines:
     lycaon/internal/api/mcpadmin/mcpadmin.Handler: 254
     lycaon/internal/api/modeladmin/modeladmin.Handler: 410
     lycaon/internal/api/modeladmin/modeladmin.providerFields: 7
-    lycaon/internal/api/projectadmin/projectadmin.Handler: 1601
+    lycaon/internal/api/projectadmin/projectadmin.Handler: 1613
     lycaon/internal/api/promptadmin/promptadmin.Handler: 1090
     lycaon/internal/api/researchadmin/researchadmin.Handler: 224
     lycaon/internal/api/scanadmin/scanadmin.Handler: 985
@@ -1262,7 +1262,7 @@ go_receiver_lines:
     lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 3
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
     lycaon/internal/secretcap/secretcap.Resolution: 400
-    lycaon/internal/secretcap/secretcap.Service: 1516
+    lycaon/internal/secretcap/secretcap.Service: 1572
     lycaon/internal/secretcap/secretcap.TokenJar: 33
     lycaon/internal/secretcap/secretcap.ValidationError: 2
     lycaon/internal/secretcap/secretcap.protectedValue: 3
@@ -1948,7 +1948,7 @@ go_receiver_methods:
     lycaon/internal/api/mcpadmin/mcpadmin.Handler: 20
     lycaon/internal/api/modeladmin/modeladmin.Handler: 17
     lycaon/internal/api/modeladmin/modeladmin.providerFields: 2
-    lycaon/internal/api/projectadmin/projectadmin.Handler: 69
+    lycaon/internal/api/projectadmin/projectadmin.Handler: 70
     lycaon/internal/api/promptadmin/promptadmin.Handler: 38
     lycaon/internal/api/researchadmin/researchadmin.Handler: 12
     lycaon/internal/api/scanadmin/scanadmin.Handler: 36
@@ -3156,7 +3156,7 @@ go_receiver_methods:
     lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 1
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
     lycaon/internal/secretcap/secretcap.Resolution: 29
-    lycaon/internal/secretcap/secretcap.Service: 74
+    lycaon/internal/secretcap/secretcap.Service: 76
     lycaon/internal/secretcap/secretcap.TokenJar: 4
     lycaon/internal/secretcap/secretcap.ValidationError: 2
     lycaon/internal/secretcap/secretcap.protectedValue: 1
@@ -7223,7 +7223,7 @@ go_struct_fields:
     lycaon/internal/secretcap/secretcap.resolutionContextKey: 0
     lycaon/internal/secretcap/secretcap.resolvedValue: 8
     lycaon/internal/secretcap/secretcap.revealSubject: 3
-    lycaon/internal/secretcap/secretcap.revoker: 2
+    lycaon/internal/secretcap/secretcap.revoker: 3
     lycaon/internal/secretcap/secretcap.secretIdentity: 4
     lycaon/internal/secretcap/secretcap.vaultValues: 1
     lycaon/internal/secretharvest/secretharvest.ContainerRead: 5
@@ -9678,7 +9678,7 @@ source_files:
     lycaon-den/src/api/http-capabilities/mcp.ts: 95
     lycaon-den/src/api/http-capabilities/projects.ts: 161
     lycaon-den/src/api/http-capabilities/search.ts: 86
-    lycaon-den/src/api/http-capabilities/security.ts: 320
+    lycaon-den/src/api/http-capabilities/security.ts: 326
     lycaon-den/src/api/http-capabilities/sessions.ts: 360
     lycaon-den/src/api/http-capabilities/settings.ts: 225
     lycaon-den/src/api/http-capabilities/source-history.ts: 281
@@ -10106,9 +10106,9 @@ source_files:
     lycaon-den/src/components/primitives/VirtualCardList.tsx: 301
     lycaon-den/src/components/project-path-menu-items.ts: 85
     lycaon-den/src/components/project/IgnoredSecretValues.tsx: 235
-    lycaon-den/src/components/project/ManagedSecretDetail.tsx: 340
+    lycaon-den/src/components/project/ManagedSecretDetail.tsx: 356
     lycaon-den/src/components/project/ManagedSecretForms.tsx: 382
-    lycaon-den/src/components/project/ManagedSecretsPanel.tsx: 747
+    lycaon-den/src/components/project/ManagedSecretsPanel.tsx: 766
     lycaon-den/src/components/project/ProjectArtifactsView.tsx: 768
     lycaon-den/src/components/project/ProjectBlueprintsView.tsx: 753
     lycaon-den/src/components/project/ProjectChatsView.tsx: 462
@@ -10805,7 +10805,7 @@ source_files:
     lycaon-den/src/platform/desktop/app-menu.ts: 141
     lycaon-den/src/platform/desktop/badge.ts: 19
     lycaon-den/src/platform/desktop/den-version.ts: 2
-    lycaon-den/src/platform/desktop/external-link.ts: 162
+    lycaon-den/src/platform/desktop/external-link.ts: 179
     lycaon-den/src/platform/desktop/notifications.ts: 139
     lycaon-den/src/platform/desktop/open-browser.ts: 72
     lycaon-den/src/platform/desktop/open-third-party-notices.ts: 8
@@ -10960,8 +10960,8 @@ source_files:
     lycaon-den/src/settings/security/approval-grants-model.ts: 254
     lycaon-den/src/settings/security/approvals-copy.ts: 218
     lycaon-den/src/settings/security/approvals-settings-copy.ts: 199
-    lycaon-den/src/settings/security/managed-secrets-copy.ts: 299
-    lycaon-den/src/settings/security/managed-secrets-model.ts: 145
+    lycaon-den/src/settings/security/managed-secrets-copy.ts: 304
+    lycaon-den/src/settings/security/managed-secrets-model.ts: 152
     lycaon-den/src/settings/security/project-settings-overlay-copy.ts: 69
     lycaon-den/src/settings/security/project-trust.ts: 61
     lycaon-den/src/settings/security/saved-approvals-copy.ts: 133
@@ -11319,7 +11319,7 @@ source_files:
     lycaon/internal/api/projectadmin/project_agent_context.go: 72
     lycaon/internal/api/projectadmin/project_delete.go: 110
     lycaon/internal/api/projectadmin/project_handlers.go: 150
-    lycaon/internal/api/projectadmin/project_managed_secrets.go: 271
+    lycaon/internal/api/projectadmin/project_managed_secrets.go: 283
     lycaon/internal/api/projectadmin/project_mutation.go: 55
     lycaon/internal/api/projectadmin/project_promote_clone.go: 142
     lycaon/internal/api/projectadmin/project_promotion.go: 109
@@ -11367,7 +11367,7 @@ source_files:
     lycaon/internal/api/search_replace_store.go: 44
     lycaon/internal/api/secretview/secretview.go: 166
     lycaon/internal/api/security.go: 67
-    lycaon/internal/api/server.go: 894
+    lycaon/internal/api/server.go: 895
     lycaon/internal/api/sessionadmin/ambient_session_attach.go: 26
     lycaon/internal/api/sessionadmin/handler.go: 58
     lycaon/internal/api/sessionadmin/session_abort.go: 35
@@ -13732,7 +13732,7 @@ source_files:
     lycaon/internal/search/store_query_compile.go: 266
     lycaon/internal/search/symbol_leg.go: 136
     lycaon/internal/search/write_through.go: 57
-    lycaon/internal/secretcap/admin.go: 173
+    lycaon/internal/secretcap/admin.go: 230
     lycaon/internal/secretcap/cookiejar.go: 135
     lycaon/internal/secretcap/cookiejar_save.go: 162
     lycaon/internal/secretcap/create.go: 394
@@ -16295,7 +16295,7 @@ test_files:
     lycaon-den/src-tauri/tests/host_wire_mirrors.rs: 689
     lycaon-den/src/App.boot.test.tsx: 45
     lycaon-den/src/api/client-impl-paths.test.ts: 194
-    lycaon-den/src/api/client-impl.test.ts: 179
+    lycaon-den/src/api/client-impl.test.ts: 183
     lycaon-den/src/api/client.integration.test.ts: 34
     lycaon-den/src/api/client.msw.integration.test.ts: 46
     lycaon-den/src/api/client.test.ts: 304
@@ -16681,7 +16681,7 @@ test_files:
     lycaon-den/src/components/project/IgnoredSecretValues.test.tsx: 71
     lycaon-den/src/components/project/ManagedSecretForms.test.tsx: 33
     lycaon-den/src/components/project/ManagedSecretsPanel.refresh.test.tsx: 69
-    lycaon-den/src/components/project/ManagedSecretsPanel.test.tsx: 727
+    lycaon-den/src/components/project/ManagedSecretsPanel.test.tsx: 745
     lycaon-den/src/components/project/ProjectArtifactsView.test.tsx: 482
     lycaon-den/src/components/project/ProjectBlueprintsView.test.tsx: 668
     lycaon-den/src/components/project/ProjectContextView.test.tsx: 206
@@ -17237,7 +17237,7 @@ test_files:
     lycaon-den/src/platform/desktop/accessibility-text-size.test.ts: 123
     lycaon-den/src/platform/desktop/app-menu.test.ts: 264
     lycaon-den/src/platform/desktop/badge.test.ts: 68
-    lycaon-den/src/platform/desktop/external-link.test.ts: 175
+    lycaon-den/src/platform/desktop/external-link.test.ts: 192
     lycaon-den/src/platform/desktop/notifications.test.ts: 260
     lycaon-den/src/platform/desktop/open-browser.test.ts: 26
     lycaon-den/src/platform/desktop/open-third-party-notices.test.ts: 23
@@ -17384,7 +17384,7 @@ test_files:
     lycaon-den/src/settings/security/approval-grants-cache.test.ts: 142
     lycaon-den/src/settings/security/approval-grants-model.test.ts: 256
     lycaon-den/src/settings/security/approvals-settings-copy.test.ts: 41
-    lycaon-den/src/settings/security/managed-secrets-model.test.ts: 151
+    lycaon-den/src/settings/security/managed-secrets-model.test.ts: 161
     lycaon-den/src/settings/security/project-settings-overlay-copy.test.ts: 44
     lycaon-den/src/settings/security/project-trust.test.ts: 79
     lycaon-den/src/settings/security/trust-item-tree.test.ts: 105
@@ -19975,7 +19975,7 @@ test_files:
     lycaon/internal/secretcap/cookiejar_concurrency_test.go: 192
     lycaon/internal/secretcap/cookiejar_lifecycle_test.go: 153
     lycaon/internal/secretcap/cookiejar_test.go: 98
-    lycaon/internal/secretcap/disclosure_regression_test.go: 257
+    lycaon/internal/secretcap/disclosure_regression_test.go: 286
     lycaon/internal/secretcap/durable_screening_test.go: 152
     lycaon/internal/secretcap/echo_test.go: 73
     lycaon/internal/secretcap/permission_test.go: 30
@@ -19986,7 +19986,7 @@ test_files:
     lycaon/internal/secretcap/tokenjar_test.go: 34
     lycaon/internal/secretcap/unlock_audit_test.go: 42
     lycaon/internal/secretcap/uses_test.go: 114
-    lycaon/internal/secretcap/versions_test.go: 293
+    lycaon/internal/secretcap/versions_test.go: 351
     lycaon/internal/secretharvest/minted_test.go: 63
     lycaon/internal/secretharvest/secretharvest_test.go: 195
     lycaon/internal/secretmatch/classification_test.go: 44
@@ -23638,7 +23638,7 @@ ts_local_dependencies:
     lycaon-den/src/platform/desktop/app-menu.ts: 5
     lycaon-den/src/platform/desktop/badge.ts: 1
     lycaon-den/src/platform/desktop/den-version.ts: 1
-    lycaon-den/src/platform/desktop/external-link.ts: 5
+    lycaon-den/src/platform/desktop/external-link.ts: 6
     lycaon-den/src/platform/desktop/notifications.ts: 2
     lycaon-den/src/platform/desktop/open-browser.ts: 2
     lycaon-den/src/platform/desktop/open-third-party-notices.ts: 1
