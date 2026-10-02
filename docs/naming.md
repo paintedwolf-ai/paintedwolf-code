@@ -31,6 +31,7 @@ The GitHub repository is **`paintedwolf-ai/paintedwolf-code`**. Host config live
 | Engine CLI | **`pw`** — sidecar / terminal CLI in the app bundle (`Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw`) |
 | Capture log CLI | **`pw-logs`** — sibling TUI; `pw logs` execs it |
 | Decision engine | **`bialy`** — sibling sidecar serving the local decision model; the host launches it |
+| Document core | **`pw-document-core`** — sibling process running the editor's text CRDT; the host launches it confined |
 
 Resolution chokepoint: Go [`configdir.UserConfigDir()`](../lycaon/internal/configdir/configdir.go). Den/Tauri and `scripts/config-dir.sh` mirror the same leaf names; Tauri pins `LYCAON_CONFIG_DIR` when it spawns the sidecar. `LYCAON_CONFIG_DIR` as a wholesale override remains tests/harness only.
 

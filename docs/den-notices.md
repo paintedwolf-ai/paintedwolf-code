@@ -17,13 +17,15 @@ Four tiers, escalating by **how much the user can still do**. Pick the tier from
 | Line | `NoticeRail` | Something failed but the app works; often transient | Yes |
 | Card | `SystemNudge` | A capability is unavailable or a suggestion is worth acting on; the app still works | Yes |
 | Stage | `StageErrorBoundary` → `CriticalStop` | **One view's render threw**: that subtree is dead, everything around it works | No; it replaces that stage until reloaded |
-| Window | `CriticalStop` | **There is no using the app to fix it**; engine down is the bright line | No; it replaces the whole window |
+| Window | `CriticalStop` | **There is no using the app to fix it**; an engine that cannot be reached or kept running is the bright line | No; it replaces the whole window |
 
 **One condition, one tier.** A condition that surfaces at two tiers shows the same problem twice in two places that can disagree about how bad it is. The partition is pinned by `lycaon-den/src/notices/notification-tier-invariants.test.ts`:
 
 | Condition | Tier | Not |
 |-----------|------|-----|
-| Backend unreachable (`offline`, browser fetch failure) | `CriticalStop` | Never a dock row: the HTTP boundary reports a browser fetch failure to the app connection state, which changes the window state before the rail can see it |
+| Backend unreachable (`offline`, browser fetch failure) before the window admitted a workspace | `CriticalStop` | Never a dock row: the HTTP boundary reports a browser fetch failure to the app connection state, which changes the window state before the rail can see it. After admission the window stays and reconnects ([host contract](host-contract.md#heartbeat-and-reconnect)) |
+| Engine restarting (`engine-state` `restarting`) | `NoticeRail`, app scope (`engine_restarting`) | Never a stop and never a surface's own failure row: `reportSurfaceFailure` reports nothing while the shell restarts the engine, and the row is withdrawn when the replacement runs |
+| Engine stopped (`engine-state` `stopped`) | `CriticalStop` (`engine_stopped`), even after admission | Never a dock row: only a person's retry starts the engine again |
 | Host-declared `tier: catastrophic` (e.g. `OS_BELOW_FLOOR` / `below_floor`) | `CriticalStop` | Never the Home card; `PreflightNudge` takes `non_catastrophic` only |
 | Host-declared `tier: non_catastrophic`, `scope: app` (e.g. `BROWSER_ENGINE_UNAVAILABLE`) | `PreflightNudge` card on Home | Never a stop; the app still works |
 | Host-declared `tier: non_catastrophic`, `scope: project` | Nothing; no probe declares a project scope (`test/contract/host/preflight_contract_test.go`) | Never the Home card, which cannot say *which* project it means |
@@ -49,7 +51,7 @@ A stop carries at most one secondary action, chosen by recovery, not by code: a 
 
 Recovery copy follows the structured health reason. `schema_mismatch` says the store uses a different data format; `integrity_failed` says the history failed its integrity check. Schema mismatch facts name both sides (`expected schema 1 · found schema 5`) and keep the host's raw mismatch in the selectable diagnostic block. The expected baseline is never mislabeled as the store's schema.
 
-Which stop fills the window is `resolveCriticalStop` (`critical-stop-model.ts`), a pure function of sidecar status plus the readiness report. `lycaonFetch` is the sole REST transport boundary: an HTTP response, including an error response, proves the service is reachable; a browser-level fetch failure reports unreachable to `app-connection.ts`. An unreachable engine outranks a blocked probe, since readiness is served by the engine.
+Which stop fills the window is `resolveCriticalStop` (`critical-stop-model.ts`), a pure function of the shell's engine state, sidecar status, and the readiness report. `lycaonFetch` is the sole REST transport boundary: an HTTP response, including an error response, proves the service is reachable; a browser-level fetch failure reports unreachable to `app-connection.ts`. An unreachable engine outranks a blocked probe, since readiness is served by the engine.
 
 **It blocks the whole window, from one place.** The gate is a `Show` in `App.tsx`, above `Shell`: the nav rail and chat header are siblings of the stage host and the onboarding gate is Shell's outermost fallback, so a per-stage stop would leave all three rendering behind a screen claiming the app is stopped. `ChatDestinationPicker` lives inside that gate, so unmounting cancels a staged destination rather than leaving its portal over a stopped app. `ConfirmDestructiveHost` stays at the app-wide layer because recovery itself can require confirmation; `TextEditContextMenuHost` stays there so stop-screen prose remains copyable. Swapping the gated app out rather than overlaying it also tears down the global shortcut dispatcher and stops Shell's effects retrying against a dead engine. `notification-tier-invariants.test.ts` asserts the stages resolve **no** readiness stop of their own: no `createCriticalStop`, `resolveCriticalStop`, `CriticalStopStage`, or preflight read.
 

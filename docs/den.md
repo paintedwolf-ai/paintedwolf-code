@@ -571,6 +571,8 @@ Quitting asks the bundled engine to stop and waits for the engine's own exit rat
 
 A hard kill is what the budgets exist to avoid: it skips the clean-shutdown marker, so the next launch runs a whole-store integrity and foreign-key check on its startup path, and any violation refuses the store into recovery mode.
 
+An engine that exits while the app runs is the shell's to answer, not the window's to discover through failing requests. The shell reaps it, records how it ended, and starts a replacement on a new port with a new bearer; every window follows `engine-state`, keeps its workspace behind a `Restarting the engine` notice, and rebinds when the replacement runs. An engine that keeps exiting stops the window with the exit and a `Try again`. [Host contract](host-contract.md#supervision) defines the states and the restart policy.
+
 ## Invariants
 
 - One client store serves each domain; no dual project or session catalogs.

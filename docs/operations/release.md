@@ -157,6 +157,23 @@ hosts cannot qualify.
 Unsigned development builds (`./task den:app -- --debug`) use the separate
 development identity backend and cannot qualify this boundary.
 
+### Code signing and runtime code generation
+
+Every executable in the macOS bundle runs under the hardened runtime, and
+`bundle:verify` holds each to an exact entitlement contract: the engine helper
+carries only its provisioning-profile entitlements, `chrome-headless-shell` carries
+exactly `allow-jit` and `allow-unsigned-executable-memory`, and every other
+executable, including `pw-document-core`, carries none. An executable that
+generates machine code at run time is killed by the kernel the first time it
+runs that code, so nothing built from this repository may: the release Go graph
+links no WebAssembly runtime (`TestShippedGoBinariesLinkNoRuntimeCodeGenerator`),
+the document core is native, and development builds are hardened too, so such a
+dependency fails in development first. The signed path is proven by running it:
+`bundle:verify` runs `pw diagnostics document-core` from the packaged engine, which
+confines the sibling core and round-trips a document; on macOS, `test:full` edits a
+document through an ad-hoc hardened engine; and Linux and Windows staging run the
+same probe against their packaged binaries.
+
 ### Provider integration checks
 
 After changing adapters, reasoning controls, or tool-call replay, run the checked-in

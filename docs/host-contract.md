@@ -136,7 +136,7 @@ Class is orthogonal to scope. Resource and collection changes are project-scoped
 
 ### Heartbeat and reconnect
 
-Heartbeat detects a dead stream without changing product state. After a window has admitted a usable workspace, reachability loss keeps the shell and locally recoverable documents available rather than replacing them with the startup stop screen; explicit host, store, and catastrophic readiness failures still block normal use. Reconnect uses bounded exponential backoff. While disconnected, Den periodically reconciles authoritative project and active-session state so a long gap does not freeze the UI; a successful stream open ends that fallback polling. A replay boundary too old for retention triggers full reconciliation before live delivery resumes.
+Heartbeat detects a dead stream without changing product state. After a window has admitted a usable workspace, reachability loss keeps the shell and locally recoverable documents available rather than replacing them with the startup stop screen; explicit host, store, and catastrophic readiness failures, and an engine the shell stopped restarting ([Supervision](#supervision)), still block normal use. Reconnect uses bounded exponential backoff. While disconnected, Den periodically reconciles authoritative project and active-session state so a long gap does not freeze the UI; a successful stream open ends that fallback polling. A replay boundary too old for retention triggers full reconciliation before live delivery resumes.
 
 ### Cache invalidation pattern
 
@@ -195,6 +195,19 @@ Den discovers the sidecar through device-local launch metadata and authenticates
 Managed release startup uses a private, versioned NDJSON stream from the exact child process (`internal/startupprotocol`). The host reports ordered semantic phases, independent heartbeats, and one terminal `ready` or `failed` record; Den validates the protocol version, child PID, sequence, phase vocabulary, and terminal fields. A `ready` record is published only after the loopback listener is bound and the HTTP serving loop has started; `daemon.json` remains discovery metadata for development attach and other local clients, not managed-child readiness.
 
 There is no elapsed-time startup failure. Protocol silence is a non-terminal stalled state that exposes progress, cancellation, and local report export; waiting continues until the child reports a result, exits, violates the protocol, or the person stops the attempt. The ordinary `serve` CLI emits the private stream only when its parent negotiates the protocol version through `LYCAON_STARTUP_PROTOCOL`.
+
+### Supervision
+
+The shell supervises the engine it launched for as long as the app runs. Every launch is a new generation with its own port and bearer, and the shell holds the child's output open after `ready`, so the end of that output is the moment the process exits. An exit the shell did not request is reaped, recorded in `engine.log` with its status or signal, and answered with a bounded run of restarts: three within two minutes, after short delays. One more exit inside that window, or a replacement that cannot start, stops retrying; only a person's retry starts the engine again, and it begins a fresh window. Stops the shell requests — quit, restore, restart, vault reset — advance the generation first, so they are never answered as crashes.
+
+The shell publishes each change as `engine-state` to every window, and `engine_state` reads the current value for a window that opens later:
+
+| State | Meaning | Window behavior |
+|---|---|---|
+| `idle` | No engine of the shell's own: before launch, after a requested stop, or attached to a development engine | None |
+| `running` | Serving generation `generation` | A window bound to an older generation, or one that saw the engine go down, rebinds through `sidecar_info`; `SidecarInfo.generation` names the launch each connection belongs to |
+| `restarting` | Exited unexpectedly; a replacement is starting | Keep the workspace in place behind an app notice; surfaces do not report their failed requests |
+| `stopped` | Exited and will not be restarted | Critical stop with the exit and any start failure as its diagnostic, even after the workspace was admitted |
 
 Health has distinct meanings: transport reachable; store and structural recovery ready; background providers or catalogs still warming; a recovery stop that needs explicit operator action. The client must not turn a warming subsystem into a global offline state. Conversely, a structural recovery failure prevents normal serve and is shown as a blocking host condition.
 
