@@ -40,6 +40,7 @@ esac
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/bialy-${TARGET}${EXE_SUFFIX}"
+DOCUMENT_CORE_BIN="${BINARIES_DIR}/pw-document-core-${TARGET}${EXE_SUFFIX}"
 
 bash "${ROOT}/scripts/sync-den-versions.sh"
 
@@ -188,7 +189,7 @@ elif [[ "${HOST_KIND}" == "windows" ]]; then
       -a "${AZURE_ARTIFACT_SIGNING_ACCOUNT}" \
       -c "${AZURE_ARTIFACT_SIGNING_PROFILE}" \
       -d "Painted Wolf Code" \
-      "${SIDECAR_BIN}" "${LOG_VIEWER_BIN}" "${DECIDE_BIN}" \
+      "${SIDECAR_BIN}" "${LOG_VIEWER_BIN}" "${DOCUMENT_CORE_BIN}" "${DECIDE_BIN}" \
       "${WINDOWS_BUNDLED_EXECUTABLES[@]}"
     BUILD_CONFIG+=(--config "${WINDOWS_CONFIG}")
   fi

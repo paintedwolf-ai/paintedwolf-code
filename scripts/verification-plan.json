@@ -603,6 +603,12 @@
       ],
       "workers": "shared"
     },
+    "build:document-core": {
+      "locks": [
+        "rust"
+      ],
+      "workers": "shared"
+    },
     "decide:test": {
       "locks": [
         "rust"

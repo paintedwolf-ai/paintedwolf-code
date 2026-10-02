@@ -9,13 +9,6 @@ if [[ "${1:-}" == "--frontend" ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == "--documents" ]]; then
-  bash "${ROOT}/scripts/build-document-core.sh" --setup
-  (cd "${ROOT}/lycaon" && go mod download github.com/tetratelabs/wazero)
-  (cd "${ROOT}/lycaon-den" && bun install)
-  exit 0
-fi
-
 version_at_least() {
 	local got="${1#v}" want="${2#v}" i
 	got="${got%%[-+]*}"

@@ -12,6 +12,8 @@ fi
 CAPACITY_SH="${ROOT}/scripts/test-host-capacity.sh"
 # shellcheck source=test-host-capacity.sh
 source "${CAPACITY_SH}"
+# shellcheck source=document-core-env.sh
+source "${ROOT}/scripts/document-core-env.sh"
 
 PKGS=("$@")
 if [[ ${#PKGS[@]} -eq 0 ]]; then

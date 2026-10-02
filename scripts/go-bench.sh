@@ -12,6 +12,8 @@ fi
 
 # shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
+# shellcheck source=document-core-env.sh
+source "${ROOT}/scripts/document-core-env.sh"
 COUNT="${PERF_BENCH_COUNT:-6}"
 OUTPUT="${PERF_BENCH_OUTPUT:-${PW_ARTIFACT_ROOT}/perf/go-bench.json}"
 BASELINE="${PERF_BENCH_BASELINE:-}"

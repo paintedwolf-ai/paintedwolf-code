@@ -127,7 +127,7 @@ class ProfileTests(unittest.TestCase):
     def test_macos_packaging_preserves_the_signed_helper(self):
         import json
         config = json.loads((host.ROOT / "lycaon-den/src-tauri/tauri.macos.conf.json").read_text())
-        self.assertEqual(config["bundle"]["externalBin"], ["binaries/pw-logs", "binaries/bialy"])
+        self.assertEqual(config["bundle"]["externalBin"], ["binaries/pw-logs", "binaries/pw-document-core", "binaries/bialy"])
         self.assertEqual(config["bundle"]["macOS"]["files"], {
             "Helpers/" + host.BUNDLE_NAME: "host-bundle/" + host.BUNDLE_NAME,
         })

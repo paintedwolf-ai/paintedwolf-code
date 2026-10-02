@@ -10,6 +10,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$LogViewerPath,
     [Parameter(Mandatory = $true)]
+    [string]$DocumentCorePath,
+    [Parameter(Mandatory = $true)]
+    [string]$DecisionEnginePath,
+    [Parameter(Mandatory = $true)]
     [string]$GitPath,
     [Parameter(Mandatory = $true)]
     [string]$GitLFSPath,
@@ -51,6 +55,8 @@ $resolvedArchive = (Resolve-Path -LiteralPath $UpdaterArchive).Path
 $resolvedApplication = (Resolve-Path -LiteralPath $ApplicationPath).Path
 $resolvedSidecar = (Resolve-Path -LiteralPath $SidecarPath).Path
 $resolvedLogViewer = (Resolve-Path -LiteralPath $LogViewerPath).Path
+$resolvedDocumentCore = (Resolve-Path -LiteralPath $DocumentCorePath).Path
+$resolvedDecisionEngine = (Resolve-Path -LiteralPath $DecisionEnginePath).Path
 $resolvedGit = (Resolve-Path -LiteralPath $GitPath).Path
 $resolvedGitLFS = (Resolve-Path -LiteralPath $GitLFSPath).Path
 $resolvedOpenGrep = (Resolve-Path -LiteralPath $OpenGrepPath).Path
@@ -60,6 +66,8 @@ Assert-CodeSignature $resolved
 Assert-CodeSignature $resolvedApplication
 Assert-CodeSignature $resolvedSidecar
 Assert-CodeSignature $resolvedLogViewer
+Assert-CodeSignature $resolvedDocumentCore
+Assert-CodeSignature $resolvedDecisionEngine
 Assert-CodeSignature $resolvedGit
 Assert-CodeSignature $resolvedGitLFS
 Assert-CodeSignature $resolvedOpenGrep

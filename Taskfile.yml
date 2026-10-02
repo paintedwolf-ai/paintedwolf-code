@@ -66,16 +66,12 @@ tasks:
     sources:
       - '**/*.go'
       - 'internal/harnessfixture/contract.json'
-      - 'internal/documentcore/**'
-      - '../scripts/build-document-core.sh'
-      - '../scripts/document-core-manifest.py'
       - 'internal/db/*.sql'
       - 'internal/db/released-baselines.json'
       - 'internal/backup/archive-limits.json'
       - go.mod
       - go.sum
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/document-core-manifest.py check
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
 
   build:cross:
@@ -84,9 +80,6 @@ tasks:
     sources:
       - '**/*.go'
       - 'internal/harnessfixture/contract.json'
-      - 'internal/documentcore/**'
-      - '../scripts/build-document-core.sh'
-      - '../scripts/document-core-manifest.py'
       - 'internal/db/*.sql'
       - 'internal/db/released-baselines.json'
       - 'internal/backup/archive-limits.json'
@@ -96,18 +89,18 @@ tasks:
       GOOS: windows
       GOARCH: amd64
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/document-core-manifest.py check
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
 
   build:lycaon-dev:
-    desc: Build lycaon-dev + sibling pw-logs — local den:sidecar + stable @self MCP (not go run)
+    desc: Build lycaon-dev + sibling pw-logs, bialy, and pw-document-core — local den:sidecar + stable @self MCP (not go run)
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
       - 'internal/harnessfixture/contract.json'
-      - 'internal/documentcore/**'
+      - 'internal/documentcore/native/src/**/*.rs'
+      - internal/documentcore/native/Cargo.toml
+      - internal/documentcore/native/Cargo.lock
       - '../scripts/build-document-core.sh'
-      - '../scripts/document-core-manifest.py'
       - 'internal/db/*.sql'
       - 'internal/db/released-baselines.json'
       - 'internal/backup/archive-limits.json'
@@ -123,6 +116,7 @@ tasks:
     generates:
       - '{{.BUILD_DIR}}/lycaon-dev'
       - '{{.BUILD_DIR}}/pw-logs'
+      - '{{.BUILD_DIR}}/pw-document-core'
     status:
       - env -u LYCAON_OPENGREP_CANDIDATE '{{.BUILD_DIR}}/lycaon-dev' scan engines verify-bundled --root {{.ROOT_DIR}}/lycaon-den/src-tauri/engine-root >/dev/null
     cmds:
@@ -142,6 +136,14 @@ tasks:
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
       - bash {{.SCRIPTS_DIR}}/build-decide.sh
+
+  build:document-core:
+    desc: Build the native document core (pw-document-core) for this host and print its path
+    preconditions:
+      - sh: command -v cargo
+        msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/build-document-core.sh
 
   browser:ensure:
     desc: Provision pinned chrome-headless-shell into the development browser cache (download-once)
@@ -618,7 +620,7 @@ tasks:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
     cmds:
-      - bun run test:coverage
+      - bash -c 'source ../scripts/document-core-env.sh && bun run test:coverage'
 
   den:coverage-check:
     desc: Fail if lycaon-den coverage is below DEN_COVERAGE_MIN_* floors

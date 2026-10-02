@@ -113,6 +113,8 @@ TMP_OUT="${TMP_RAW%.json}.out"
 OUT_LOG="${RAW%.json}.out"
 TMP_OUTCOME="${TMP_RAW%.json}.outcome.json"
 OUTCOME_LOG="${RAW%.json}.outcome.json"
+# shellcheck source=document-core-env.sh
+source "${ROOT}/scripts/document-core-env.sh"
 
 cd "${DEN_DIR}"
 NCPU="$(test_host_cpu_count)"
