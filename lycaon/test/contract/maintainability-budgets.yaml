@@ -22121,7 +22121,7 @@ test_files:
     lycaon/test/contract/wire/stub_routes_history.go: 172
     lycaon/test/contract/wire/stub_routes_integrations.go: 112
     lycaon/test/contract/wire/stub_routes_preferences.go: 64
-    lycaon/test/contract/wire/stub_routes_projects.go: 277
+    lycaon/test/contract/wire/stub_routes_projects.go: 282
     lycaon/test/contract/wire/stub_routes_providers.go: 188
     lycaon/test/contract/wire/stub_routes_scanning.go: 184
     lycaon/test/contract/wire/stub_routes_search.go: 123

@@ -53,6 +53,11 @@ func registerStubProjectRoutes(mux *http.ServeMux, now time.Time, writeJSON stub
 	mux.HandleFunc("PATCH /v1/projects/{id}/secrets/{secret_id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, secretForPath(r))
 	})
+	mux.HandleFunc("POST /v1/projects/{id}/secrets/{secret_id}/hold", func(w http.ResponseWriter, r *http.Request) {
+		held := secretForPath(r)
+		held.Custody = "person"
+		writeJSON(w, http.StatusOK, held)
+	})
 	mux.HandleFunc("PUT /v1/projects/{id}/secrets/{secret_id}/value", func(w http.ResponseWriter, r *http.Request) {
 		rotated := secretForPath(r)
 		rotated.Version = 2
