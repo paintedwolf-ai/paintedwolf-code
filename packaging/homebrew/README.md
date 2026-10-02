@@ -8,7 +8,9 @@ brew install --cask <org>/tap/painted-wolf-code
 
 Preview builds use the separate `painted-wolf-code@preview` token. The receipt
 written by each cask selects the matching in-app update channel on first launch;
-the setting remains user-controllable afterward.
+the setting remains user-controllable afterward. Both casks install the same app,
+so each declares `conflicts_with` the other; switching channels means
+uninstalling one cask before installing the other.
 
 ## How it works
 
