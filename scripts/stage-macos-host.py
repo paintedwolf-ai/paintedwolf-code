@@ -105,21 +105,7 @@ def stage(binary, output, version, release):
             raise ValueError("engine signer is not authorized by its provisioning profile")
     subprocess.run(["/usr/bin/codesign", "--verify", "--strict", str(bundle)], check=True)
     # The native probe verifies OS authorization for the signed helper.
-    probe = [str(executable.resolve()), "credentials", "verify-protection"]
-    if os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
-        subprocess.run(probe, check=True, timeout=30)
-        return
-    # Hosted VMs lack an interactive session's data-protection Keychain, so the
-    # probe there is advisory; a real Mac must still qualify the release path.
-    result = subprocess.run(probe, capture_output=True, text=True, timeout=30)
-    if result.returncode != 0:
-        detail = " ".join((result.stderr or result.stdout).split())
-        print(f"::warning title=Keychain probe advisory::verify-protection did not pass on a hosted runner: {detail}")
-        summary = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary:
-            with open(summary, "a", encoding="utf-8") as output:
-                output.write("### Keychain probe advisory\n\nThe signed engine's `verify-protection` probe did not pass on "
-                             f"this hosted runner: `{detail}`. Qualify the release Keychain path on a real Mac.\n")
+    subprocess.run([str(executable.resolve()), "credentials", "verify-protection"], check=True, timeout=30)
 
 
 def main():

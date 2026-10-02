@@ -18,11 +18,19 @@ const (
 	keychainNotFound           keychainStatus = -25300
 	keychainDuplicate          keychainStatus = -25299
 	keychainMissingEntitlement keychainStatus = -34018
+	// Read-back rejections from keychain_darwin.m.
+	keychainUnexpectedAccessibility   keychainStatus = C.PW_KEYCHAIN_UNEXPECTED_ACCESSIBILITY
+	keychainUnexpectedSynchronization keychainStatus = C.PW_KEYCHAIN_UNEXPECTED_SYNCHRONIZATION
 )
 
 func (s keychainStatus) Error() string {
-	if s == keychainMissingEntitlement {
+	switch s {
+	case keychainMissingEntitlement:
 		return "macOS data protection Keychain requires the provisioned, signed host bundle (OSStatus -34018)"
+	case keychainUnexpectedAccessibility:
+		return "macOS data protection Keychain item is not limited to this device while unlocked"
+	case keychainUnexpectedSynchronization:
+		return "macOS data protection Keychain item is synchronizable"
 	}
 	return fmt.Sprintf("macOS data protection Keychain failed (OSStatus %d)", int32(s))
 }
