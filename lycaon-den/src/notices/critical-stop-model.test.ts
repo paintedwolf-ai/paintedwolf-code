@@ -3,6 +3,7 @@ import type { PreflightReport } from "../api/types.ts";
 import { mockPreflightReport } from "../api/mocks/fixtures.ts";
 import {
   ENGINE_LOCKED_STOP_CODE,
+  ENGINE_STOPPED_STOP_CODE,
   HOST_INCOMPATIBLE_STOP_CODE,
   ENGINE_NOT_STARTED_STOP_CODE,
   OFFLINE_STOP_CODE,
@@ -69,6 +70,33 @@ describe("resolveCriticalStop", () => {
     const stop = resolveCriticalStop({ sidecarStatus: "disconnected" });
     expect(stop?.code).toBe(OFFLINE_STOP_CODE);
     expect(stop?.recovery).toBe("reconnect");
+  });
+
+  it("stops a window that already admitted its workspace once the shell gives up on the engine", () => {
+    const exit = { signal: 9, description: "was killed by signal 9 (SIGKILL)" };
+    const stop = resolveCriticalStop({
+      sidecarStatus: "disconnected",
+      offlineAvailable: true,
+      engine: { state: "stopped", exit },
+    });
+    expect(stop).toMatchObject({
+      code: ENGINE_STOPPED_STOP_CODE,
+      title: CLIENT_NOTICES.engine_stopped.title,
+      recovery: "reconnect",
+      diagnostic: "The engine was killed by signal 9 (SIGKILL).",
+    });
+    expect(resolveCriticalStop({
+      sidecarStatus: "disconnected",
+      engine: { state: "stopped", exit, failure: "another engine is already serving this store" },
+    })?.diagnostic).toBe("The engine was killed by signal 9 (SIGKILL). Restarting it failed: another engine is already serving this store");
+  });
+
+  it("holds a window in place while the shell restarts its engine", () => {
+    expect(resolveCriticalStop({
+      sidecarStatus: "disconnected",
+      offlineAvailable: true,
+      engine: { state: "restarting", exit: { code: 2, description: "exited with status 2" }, attempt: 1 },
+    })).toBeUndefined();
   });
 
   it("names a held store lock instead of telling the user to retry", () => {

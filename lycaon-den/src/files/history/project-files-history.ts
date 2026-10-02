@@ -123,7 +123,7 @@ export function createSourceHistoryCommands({ projectId, client, sourceSessionId
   });
   const [historyBusy, setHistoryBusy] = createSignal(false);
   const reportHistoryFailure = (error: unknown) =>
-    reportSurfaceFailure(FILE_HISTORY_ACTION_FAILURE, sourceHistoryErrorMessage(error), projectId());
+    reportSurfaceFailure(FILE_HISTORY_ACTION_FAILURE, error, projectId(), sourceHistoryErrorMessage(error));
   const [historyNotice, setHistoryNotice] = createSignal<{
     label: string;
     action: "undo" | "redo";

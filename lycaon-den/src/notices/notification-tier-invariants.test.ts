@@ -51,6 +51,21 @@ describe("notification tier partition", () => {
     ).toBeUndefined();
   });
 
+  it("rails an engine the shell is restarting and stops the window once it gives up", () => {
+    const exit = { signal: 9, description: "was killed by signal 9 (SIGKILL)" };
+    expect(resolveCriticalStop({
+      sidecarStatus: "disconnected",
+      offlineAvailable: true,
+      engine: { state: "restarting", exit, attempt: 1 },
+    })).toBeUndefined();
+    expect(CLIENT_NOTICES.engine_restarting.scope).toBe("app");
+    expect(resolveCriticalStop({
+      sidecarStatus: "disconnected",
+      offlineAvailable: true,
+      engine: { state: "stopped", exit },
+    })?.code).toBe("engine_stopped");
+  });
+
   it("keeps connectivity off the notice rail", () => {
     expect(
       shouldReportToNoticeRail(

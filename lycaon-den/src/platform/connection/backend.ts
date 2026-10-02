@@ -8,6 +8,8 @@ import {
 export type BackendConnection = {
   baseUrl: string;
   apiToken: string;
+  /** The shell's launch this connection belongs to; absent for an engine the shell did not launch. */
+  engineGeneration?: number;
 };
 
 export type SidecarConnectionStatus = "connected" | "offline";
@@ -16,9 +18,12 @@ import type { HealthResponse } from "../../api/types.ts";
 
 export type { HealthResponse };
 
+/** Mirrors `SidecarInfo` in `src-tauri/src/sidecar.rs`. */
 type SidecarInfo = {
   port: number;
   api_token: string;
+  /** 0 for an engine the shell attached to rather than launched. */
+  generation: number;
 };
 
 const DEFAULT_DEV_BASE = "http://127.0.0.1:8787";
@@ -28,10 +33,12 @@ const DEV_PROBE_INTERVAL_MS = 500;
 let cachedConnection: BackendConnection | null = null;
 
 function mapSidecarInfo(info: SidecarInfo): BackendConnection {
-  return {
+  const connection: BackendConnection = {
     baseUrl: `http://127.0.0.1:${info.port}`,
     apiToken: info.api_token,
   };
+  if (info.generation > 0) connection.engineGeneration = info.generation;
+  return connection;
 }
 
 export async function probeHealth(baseUrl: string, signal?: AbortSignal): Promise<boolean> {

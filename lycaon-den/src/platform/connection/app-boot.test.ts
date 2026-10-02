@@ -6,6 +6,7 @@ import {
   attachKnownBackend,
   connectAppBackend,
   disconnectAppBackend,
+  followEngineState,
 } from "./app-connection.ts";
 import { readSidecarInfo } from "./backend.ts";
 import { dismissBootFallback } from "./boot-fallback.ts";
@@ -30,6 +31,7 @@ import { watchWindowExitForAppState } from "../persistence/app-state-window.ts";
 vi.mock("./app-connection.ts", () => ({
   connectAppBackend: vi.fn().mockResolvedValue({}),
   disconnectAppBackend: vi.fn(),
+  followEngineState: vi.fn().mockResolvedValue(() => {}),
   getLycaonClient: vi.fn().mockReturnValue({}),
   attachKnownBackend: vi.fn(),
   handleSessionGone: vi.fn(),
@@ -225,6 +227,10 @@ describe("startAppBoot", () => {
     expect(dismissBootFallback).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(disconnectAppBackend).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(projects.hydrate).not.toHaveBeenCalled());
+    // The window follows the shell's engine before it connects to one.
+    expect(followEngineState).toHaveBeenCalledWith(appStore);
+    expect(vi.mocked(followEngineState).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(disconnectAppBackend).mock.invocationCallOrder[0]!);
   });
 
   it("dismisses the splash before backend connect finishes", async () => {

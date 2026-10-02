@@ -1,0 +1,12 @@
+# The shell saw the engine exit without being asked and is starting a
+# replacement; the window stays in place and rebinds when it is ready.
+scope: app
+title: Restarting the engine
+message: >-
+  The engine stopped unexpectedly, so the app is starting it again. This
+  window reconnects on its own.
+scenarios:
+  - id: default
+    expect_contains:
+      - stopped unexpectedly
+      - reconnects on its own
