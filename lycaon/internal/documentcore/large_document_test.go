@@ -18,7 +18,7 @@ func TestLargeDocumentKeepsDifferentialUpdatesSmall(t *testing.T) {
 	if len(edited.Update) > 128 || len(edited.Undo) > 2048 || edited.Text != strings.Replace(text, "🐺", "x🐺", 1) {
 		t.Fatalf("large edit failed: delta=%d undo=%d text=%d", len(edited.Update), len(edited.Undo), len(edited.Text))
 	}
-	t.Logf("4 MiB document: initial checkpoint=%d bytes in %s; one-character delta=%d bytes in %s; core memory=%d bytes", len(base.Checkpoint), opened, len(edited.Update), time.Since(started), engine.module.Memory().Size())
+	t.Logf("4 MiB document: initial checkpoint=%d bytes in %s; one-character delta=%d bytes in %s", len(base.Checkpoint), opened, len(edited.Update), time.Since(started))
 	undone := callForTest(t, engine, Request{Action: "undo", Handle: 1, Undo: edited.Undo})
 	if undone.Text != text {
 		t.Fatal("large-document selective undo changed neighboring Unicode")

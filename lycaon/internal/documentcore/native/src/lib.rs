@@ -376,25 +376,11 @@ fn execute(req: Request) -> Result<Response, String> {
     })
 }
 
-#[no_mangle]
-pub extern "C" fn allocate(length: u32) -> u32 {
-    if length as usize > MAX_BYTES * 2 {
-        return 0;
-    }
-    Box::into_raw(vec![0u8; length as usize].into_boxed_slice()) as *mut u8 as u32
-}
+/// Largest request or response frame, in bytes.
+pub const MAX_FRAME_BYTES: usize = MAX_BYTES * 2;
 
-#[no_mangle]
-pub unsafe extern "C" fn release(pointer: u32, length: u32) {
-    drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-        pointer as *mut u8,
-        length as usize,
-    )));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn execute_request(pointer: u32, length: u32) -> u64 {
-    let input = std::slice::from_raw_parts(pointer as *const u8, length as usize);
+/// Answers one encoded request; a rejected request carries its code in `error`.
+pub fn respond(input: &[u8]) -> Vec<u8> {
     let result = serde_json::from_slice(input)
         .map_err(|_| "invalid_request".into())
         .and_then(execute);
@@ -402,10 +388,5 @@ pub unsafe extern "C" fn execute_request(pointer: u32, length: u32) -> u64 {
         error: Some(error),
         ..Response::default()
     });
-    let bytes = serde_json::to_vec(&response)
-        .expect("response is serializable")
-        .into_boxed_slice();
-    let length = bytes.len() as u32;
-    let pointer = Box::into_raw(bytes) as *mut u8 as u32;
-    ((pointer as u64) << 32) | length as u64
+    serde_json::to_vec(&response).expect("response is serializable")
 }

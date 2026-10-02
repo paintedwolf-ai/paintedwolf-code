@@ -25,7 +25,7 @@ const (
 	EnvModelDir = "LYCAON_DECIDE_MODEL_DIR"
 	// EnvHeads names head files, as "turn-load=PATH,code-rank=PATH".
 	EnvHeads = "LYCAON_DECIDE_HEADS"
-	// binaryName is the engine executable beside the host executable.
+	// binaryName is the engine executable shipped beside the host.
 	binaryName = "bialy"
 	// headsDir holds the bundled head files under the engine root.
 	headsDir = "decide/heads"
@@ -155,35 +155,7 @@ func (c Config) Resolve() string {
 		}
 		return ""
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return bundledBinary(exe, runtime.GOOS)
-}
-
-// bundledBinary locates bialy beside the host executable: Contents/MacOS in
-// the app bundle, the same directory elsewhere.
-func bundledBinary(executable, goos string) string {
-	real, err := filepath.EvalSymlinks(executable)
-	if err != nil {
-		real = executable
-	}
-	name := binaryName
-	if goos == "windows" {
-		name += ".exe"
-	}
-	dir := filepath.Dir(real)
-	if goos == "darwin" {
-		if contents := configlayout.MacOSAppContents(real); contents != "" {
-			dir = filepath.Join(contents, "MacOS")
-		}
-	}
-	path := filepath.Join(dir, name)
-	if !isExecutable(path) {
-		return ""
-	}
-	return path
+	return configlayout.SiblingExecutable(binaryName)
 }
 
 // Args builds the engine's serve command line.

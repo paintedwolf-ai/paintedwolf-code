@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/diagnostics"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/upgradefixture"
 )
 
@@ -28,14 +29,28 @@ func runDiagnostics(ctx context.Context, args []string) error {
 	if len(args) == 2 && args[0] == "store-baseline" {
 		return writeStoreBaseline(ctx, args[1], os.Stdout)
 	}
+	if len(args) == 1 && args[0] == "document-core" {
+		return verifyDocumentCore(ctx)
+	}
 	if len(args) != 1 || args[0] != "startup-diagnostics" {
-		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
+		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
 	}
 	dir, err := configdir.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("diagnostics config directory: %w", err)
 	}
 	return writeStartupDiagnostics(ctx, args, dir, os.Stdout, time.Now())
+}
+
+// verifyDocumentCore proves the installed document core runs from this
+// executable, under the confinement and code signing editors run it with.
+func verifyDocumentCore(ctx context.Context) error {
+	verified, err := documentcore.Verify(ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "document core verified: %s (confined=%t)\n", verified.Binary, verified.Confined)
+	return nil
 }
 
 // writeStartupDiagnostics writes one startup diagnostics archive.

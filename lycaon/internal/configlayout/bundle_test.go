@@ -63,3 +63,37 @@ func TestEngineRootExplicitPayloadWins(t *testing.T) {
 		t.Fatalf("engine root = %q, want explicit payload %q", got, root)
 	}
 }
+
+func TestSiblingExecutableFollowsTheHostLayout(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "canonicalize fixture root", err)
+	write := func(path string, mode os.FileMode) {
+		testutil.FailErr(t, "create fixture directory", os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte("fixture"), mode))
+	}
+	contents := filepath.Join(root, "Painted Wolf Code.app", "Contents")
+	host := filepath.Join(contents, "Helpers", "Painted Wolf Code engine.app", "Contents", "MacOS", "pw")
+	write(host, 0o755)
+	write(filepath.Join(contents, "MacOS", "helper"), 0o755)
+	if got, want := siblingExecutable(host, "helper", "darwin"), filepath.Join(contents, "MacOS", "helper"); got != want {
+		t.Errorf("bundled sibling = %q, want %q", got, want)
+	}
+
+	flat := filepath.Join(root, "build", "lycaon-dev")
+	write(flat, 0o755)
+	write(filepath.Join(root, "build", "helper"), 0o755)
+	write(filepath.Join(root, "build", "helper.exe"), 0o644)
+	write(filepath.Join(root, "build", "inert"), 0o644)
+	if got, want := siblingExecutable(flat, "helper", "darwin"), filepath.Join(root, "build", "helper"); got != want {
+		t.Errorf("development sibling = %q, want %q", got, want)
+	}
+	if got, want := siblingExecutable(flat, "helper", "windows"), filepath.Join(root, "build", "helper.exe"); got != want {
+		t.Errorf("windows sibling = %q, want %q", got, want)
+	}
+	if got := siblingExecutable(flat, "inert", "linux"); got != "" {
+		t.Errorf("resolved a file without execute permission: %q", got)
+	}
+	if got := siblingExecutable(flat, "missing", "linux"); got != "" {
+		t.Errorf("resolved a missing sibling: %q", got)
+	}
+}
