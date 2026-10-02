@@ -95,6 +95,16 @@ approvals, where host-classified elevated records appear first. The composer
 does not revoke authority or present a revocation result. Pending or unavailable
 reads never imply revocation.
 
+### Composer chat unlock
+
+`GET /v1/sessions/{id}/vault` resolves the root chat and reports whether it is
+unlocked for values its person stored, with the unlock's idle and ceiling
+deadlines; each `chat_vault` event carries the same complete state. The composer
+shows an unlocked chat and locks it through `POST /v1/sessions/{id}/vault/lock`.
+Den never infers an unlock from a card it resolved: whether an approving option
+goes through the desktop shell follows the host's state, and a stale view that
+the host answers with `presence_required` falls back to the shell.
+
 ### Session recovery (rewind)
 
 Rewind is an idle-session control action that restores the boundary before a selected visible human prompt. Den displays the host's preview of affected files and conflicts, then submits its plan digest with the anchor and a stable operation id; a changed plan requires renewed review. The client does not remove transcript rows optimistically or write restored bytes: filesystem and database recovery are one host journaled transition. See [Session](session.md#session-recovery-rewind).
