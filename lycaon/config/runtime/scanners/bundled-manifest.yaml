@@ -17,4 +17,4 @@ opengrep_selection:
     tag: v1.30.0+paintedwolf.38
     producer_commit: 3e8a55fc1cbdc5403bbfa1256797b6c74ee9167d
     descriptor_sha256: bd5d137fa3181edf9d8abc09fc9eec3a998ceb85d27f87ad23ff122f2ac3011c
-    evidence_sha256: 2bc969b8506ae2df2e2ab0de5c8ae6c73691633ceb0a818a16b9ac9e4d9afad2
+    evidence_sha256: 492b193dee2087d260e0b6a6b475fd8ca1be74dbb35f57427358120c552db510

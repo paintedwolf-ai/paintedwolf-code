@@ -140,3 +140,26 @@ func TestSelectionRequiresIndependentIdentityAndOnlineState(t *testing.T) {
 		})
 	}
 }
+
+func TestReleaseStateEvidenceIgnoresDownloadCounters(t *testing.T) {
+	record := func(downloads int, reactions string) []byte {
+		return []byte(`{"id":401327992,"tag_name":"` + attestationTestTag + `","immutable":true,` + reactions +
+			`"assets":[{"id":604078267,"name":"release.json","digest":"sha256:` + strings.Repeat("a", 64) +
+			`","download_count":` + strings.Repeat("9", downloads) + `0}]}`)
+	}
+	first, err := stableReleaseState(record(0, ""))
+	testutil.FailErr(t, "normalize first release state", err)
+	second, err := stableReleaseState(record(4, `"reactions":{"total_count":3},"mentions_count":1,`))
+	testutil.FailErr(t, "normalize second release state", err)
+	if !bytes.Equal(first, second) {
+		t.Fatalf("release state evidence changed with counters:\n%s\n%s", first, second)
+	}
+	for _, kept := range []string{`"id":401327992`, `"id":604078267`, `"digest":"sha256:`, `"immutable":true`} {
+		if !bytes.Contains(first, []byte(kept)) {
+			t.Fatalf("release state evidence dropped %s: %s", kept, first)
+		}
+	}
+	if bytes.Contains(first, []byte("download_count")) {
+		t.Fatalf("release state evidence kept download_count: %s", first)
+	}
+}
