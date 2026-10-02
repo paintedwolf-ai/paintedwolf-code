@@ -13,6 +13,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "${ROOT}/scripts/upgrade-store-contract.sh"
 # shellcheck source=scripts/artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
+# Sourced here, not in rehearse(): its RETURN trap fires when a sourced file ends.
+# shellcheck source=scripts/config-dir.sh
+source "${ROOT}/scripts/config-dir.sh"
 GO_DIR="${ROOT}/lycaon"
 CORPUS_ROOT="${ROOT}/lycaon/testdata/upgrade-corpus"
 HEAD_SIDECAR="${PW_BUILD_DIR}/lycaon-dev"
@@ -185,7 +188,6 @@ rehearse() {
   mkdir -p "${config_dir}"
   python3 "${ROOT}/scripts/upgrade-fixture-files.py" materialize "${fixture}" "${config_dir}"
   cp -a "${fixture}/project-root" "${project_abs}"
-  source "${ROOT}/scripts/config-dir.sh"
   mv "${project_abs}/${OVERLAY_FIXTURE_DIR}" "${project_abs}/$(lycaon_overlay_dir)"
   project_abs="$(cd "${project_abs}" && pwd -P)"
   sqlite3 "${config_dir}/store.db" \
@@ -247,6 +249,15 @@ rehearse() {
   local restored_dir="${tmp}/restored-config"
   mkdir -p "${restored_dir}"
   boot_engine "${HEAD_SIDECAR}" "${restored_dir}" "${tmp}/restore.log" "${tmp}/restore-health.json" "" "${fixture}/backup.zip" || return 1
+  # Startup installs the staged archive before fixture paths can be relocated.
+  boot_engine "${HEAD_SIDECAR}" "${restored_dir}" "${tmp}/install.log" "${tmp}/install-health.json" "" || return 1
+  local restored_project="${tmp}/restored-project" project_id
+  cp -a "${fixture}/project-root" "${restored_project}"
+  mv "${restored_project}/${OVERLAY_FIXTURE_DIR}" "${restored_project}/$(lycaon_overlay_dir)"
+  restored_project="$(cd "${restored_project}" && pwd -P)"
+  project_id="$(jq -r '.project_id' "${fixture}/MANIFEST.json")"
+  sqlite3 "${restored_dir}/store.db" \
+    "UPDATE project_roots SET path = '${restored_project//\'/\'\'}' WHERE project_id = '${project_id//\'/\'\'}';"
   boot_engine "${HEAD_SIDECAR}" "${restored_dir}" "${tmp}/restored.log" "${tmp}/restored-health.json" "${fixture}" || return 1
 
   echo "upgrade:rehearse — ${tag} (schema ${prior_schema}) → HEAD (schema ${head_schema}): ok" >&2
