@@ -94,7 +94,8 @@ webE2e("trust popup stays compact without scrolling at narrow sizes and enlarged
     }))).toEqual({ x: true, y: true, bounded: true });
     await expect(page.getByTestId("trust-open-review")).toBeVisible();
     await page.getByTestId("trust-open-review").click();
-    await expect(popup.getByRole("alert")).toContainText("Could not open trust changes");
+    // The popup shows the host's reason, however long, without scrolling.
+    await expect(popup.getByRole("alert")).toContainText("Cannot read nested-folder/");
     await expect.poll(() => popup.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
     await expect(page.getByTestId("status-chip-trust")).toHaveAttribute("data-state", "unseen");
     await page.screenshot({ path: testInfo.outputPath(`trust-popup-${size.width}-${size.height}.png`) });

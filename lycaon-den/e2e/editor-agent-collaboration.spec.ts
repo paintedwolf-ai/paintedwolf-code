@@ -40,7 +40,7 @@ webE2e("agent reads unsaved text and edits its pinned snapshot while the person 
     const prompt = await apiPostPrompt(request, sessionId, { text: "Read shared.txt and replace Agent target with Agent changed, preserving the person's edits." });
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
-    await driver.completed(await driver.invoke("request_tools", { requests: ["read", "edit", "write", "update_progress"] }));
+    await driver.loadTools("read", "edit", "write", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Update shared.txt while preserving the person's edits\n- [ ] Verify the shared document\n",
     }));

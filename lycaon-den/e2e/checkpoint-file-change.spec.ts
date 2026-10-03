@@ -3,6 +3,7 @@ import {
   activateProject, apiConfig, apiFindHarnessProject, liveChatStage,
   settledChatSessionId, waitHarnessConnected, webE2e,
 } from "./helpers.ts";
+import type { CheckpointListResponse } from "../src/api/types.ts";
 
 webE2e("file approval opens its proposed diff in Files without resolving the ask", async ({ page, request }) => {
   await page.goto("/");
@@ -38,7 +39,7 @@ webE2e("file approval opens its proposed diff in Files without resolving the ask
   await expect(page.locator(".cm-content").filter({ hasText: "Proposed instruction" }).first()).toBeVisible();
   const pending = await request.get(`${apiUrl}/v1/sessions/${sessionId}/checkpoints?kind=tool_approval`, { headers });
   expect(pending.ok()).toBeTruthy();
-  expect((await pending.json() as Array<{ checkpoint_id: string }>).map((checkpoint) => checkpoint.checkpoint_id)).toContain(checkpointId);
+  expect((await pending.json() as CheckpointListResponse).checkpoints.map((checkpoint) => checkpoint.id)).toContain(checkpointId);
   await page.screenshot({ path: "/tmp/approval-file-change.png", animations: "disabled" });
   await page.getByRole("button", { name: "Back to chat", exact: true }).click();
   await expect(card()).toBeVisible();
@@ -46,5 +47,5 @@ webE2e("file approval opens its proposed diff in Files without resolving the ask
   await expect(card()).toHaveCount(0);
   const resolved = await request.get(`${apiUrl}/v1/sessions/${sessionId}/checkpoints?kind=tool_approval`, { headers });
   expect(resolved.ok()).toBeTruthy();
-  expect((await resolved.json() as Array<{ checkpoint_id: string }>).map((checkpoint) => checkpoint.checkpoint_id)).not.toContain(checkpointId);
+  expect((await resolved.json() as CheckpointListResponse).checkpoints.map((checkpoint) => checkpoint.id)).not.toContain(checkpointId);
 });

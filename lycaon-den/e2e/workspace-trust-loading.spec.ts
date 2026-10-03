@@ -30,7 +30,7 @@ for (const outcome of ["success", "failure"] as const) {
       await page.getByRole("textbox", { name: "Search projects" }).press("Escape");
 
       release();
-      await expect(chip).toHaveText(outcome === "success" ? "Nothing to trust" : "Trust unavailable");
+      await expect(chip).toHaveText(outcome === "success" ? "Trust" : "Trust unavailable");
       await expect(chip).not.toHaveAttribute("aria-busy", "true");
       await expect(page.getByTestId("shell-workspace-veil")).toHaveAttribute("aria-hidden", "true");
     } finally {

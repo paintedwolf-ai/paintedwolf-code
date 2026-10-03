@@ -16,7 +16,7 @@ modelIndependentWebE2e("a restored project joins its selected file without hydra
   await expect(page.getByTestId("files-tab")).toHaveCount(20);
   await page.getByTestId("nav-brand").click();
   const joins: string[] = [];
-  await page.route(/\/(?:editor-documents|source\/open)(?:\?.*)?$/, async route => {
+  await page.route(/\/editor-documents(?:\?.*)?$/, async route => {
     if (route.request().method() === "POST") joins.push(route.request().postDataJSON().path);
     await route.continue();
   });
@@ -47,7 +47,7 @@ modelIndependentWebE2e("duplicate file names and a pending destination retain un
   const originalBounds = await presentation.boundingBox();
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  await page.route(/\/source\/open(?:\?.*)?$/, async route => {
+  await page.route(/\/editor-documents(?:\?.*)?$/, async route => {
     if (route.request().postDataJSON()?.path === "src/AGENTS.md") await gate;
     await route.continue();
   });
@@ -73,7 +73,7 @@ modelIndependentWebE2e("duplicate file names and a pending destination retain un
     await page.screenshot({ path: testInfo.outputPath("duplicate-file-names.png") });
   } finally {
     release();
-    await page.unroute(/\/source\/open(?:\?.*)?$/);
+    await page.unroute(/\/editor-documents(?:\?.*)?$/);
   }
 });
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/lineage"
 )
 
@@ -107,7 +109,8 @@ func runHelper(args []string) error {
 // close-on-exec so every descendant keeps it.
 func placeLineageMarker(fd int) error {
 	if fd != lineage.ChildFD {
-		if err := syscall.Dup2(fd, lineage.ChildFD); err != nil {
+		// linux/arm64 has no dup2 syscall; unix.Dup2 uses dup3 there.
+		if err := unix.Dup2(fd, lineage.ChildFD); err != nil {
 			return fmt.Errorf("place lineage marker: %w", err)
 		}
 		_ = syscall.Close(fd)

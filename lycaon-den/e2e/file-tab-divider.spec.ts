@@ -24,7 +24,7 @@ modelIndependentWebE2e("selected tabs meet the overflow divider at fractional wi
   const strip = page.getByTestId("files-tab-strip");
   const overflow = page.getByTestId("files-tabs-overflow");
   await expect(overflow).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Review step 10, Walk", exact: true }))
+  await expect(page.getByRole("tab", { name: "Review step 10, Group summary", exact: true }))
     .toHaveAttribute("aria-selected", "true");
   await page.emulateMedia({ reducedMotion: "reduce" });
 

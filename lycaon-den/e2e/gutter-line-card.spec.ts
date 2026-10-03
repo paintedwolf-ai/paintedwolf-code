@@ -73,7 +73,7 @@ webE2e("a live read opens its exact tool and returns to the originating file lin
     const prompt = await apiPostPrompt(request, sessionId, { text: "Read lines 2 and 3 of shared.txt." });
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
-    await driver.completed(await driver.invoke("request_tools", { requests: ["read"] }));
+    await driver.loadTools("read");
     const readId = await driver.invoke("read", { path: "shared.txt", offset: 2, limit: 2 });
     await driver.completed(readId);
     const handle = editor.locator('.files-line-gutter__facts[data-line="3"]');
@@ -116,7 +116,7 @@ webE2e("Review expands and focuses the exact pending approval", async ({ page, r
     const prompt = await apiPostPrompt(request, sessionId, { text: "Replace short with clear in AGENTS.md." });
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
-    await driver.completed(await driver.invoke("request_tools", { requests: ["read", "edit", "update_progress"] }));
+    await driver.loadTools("read", "edit", "update_progress");
     await driver.completed(await driver.invoke("update_progress", { content: "## Progress\n- [ ] Update the example instruction\n" }));
     await driver.completed(await driver.invoke("read", { path: "AGENTS.md" }));
     await driver.invoke("edit", { path: "AGENTS.md", old_string: "Keep examples short.", new_string: "Keep examples clear." });
