@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 // Materialize creates an isolated tree of verified snapshot bytes. It never
@@ -34,33 +33,35 @@ func (s *Store) Materialize(ctx context.Context, id, root string, paths []string
 	if !rootFound {
 		return "", fmt.Errorf("root %q is outside snapshot %s", root, id)
 	}
+	tree := materializer{store: s, snapshotID: id, root: root}
+	return tree.create(ctx, paths)
+}
+
+// materializer owns one disposable execution tree while its snapshot is leased.
+type materializer struct {
+	store      *Store
+	snapshotID string
+	root       string
+	dir        string
+}
+
+func (m *materializer) create(ctx context.Context, paths []string) (string, error) {
 	dir, err := os.MkdirTemp("", "paintedwolf-scan-")
 	if err != nil {
 		return "", err
 	}
+	m.dir = dir
 	success := false
 	defer func() {
 		if !success {
 			_ = os.RemoveAll(dir)
 		}
 	}()
-	writeEntry := func(entry Entry) error {
-		if entry.RootPath != root {
-			return nil
-		}
-		if !filepath.IsLocal(filepath.FromSlash(entry.Path)) {
-			return fmt.Errorf("invalid snapshot path %q", entry.Path)
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		return s.materializeEntry(ctx, dir, entry)
-	}
 	if paths == nil {
-		err = s.ForEachEntry(ctx, id, writeEntry)
+		err = m.store.ForEachEntry(ctx, m.snapshotID, func(entry Entry) error { return m.writeEntry(ctx, entry) })
 	} else {
 		for _, rel := range paths {
-			entry, found, lookupErr := s.Lookup(ctx, id, root, rel)
+			entry, found, lookupErr := m.store.Lookup(ctx, m.snapshotID, m.root, rel)
 			if lookupErr != nil {
 				err = lookupErr
 				break
@@ -69,7 +70,7 @@ func (s *Store) Materialize(ctx context.Context, id, root string, paths []string
 				err = fmt.Errorf("snapshot target %q is unavailable", rel)
 				break
 			}
-			if err = writeEntry(entry); err != nil {
+			if err = m.writeEntry(ctx, entry); err != nil {
 				break
 			}
 		}

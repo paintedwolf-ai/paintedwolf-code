@@ -1,7 +1,7 @@
 <!-- lycaon-workflow-runtime:v1 -->
 ## Workflow
 
-Workflows never override user limits: `ask_user` before conflicting action. `topology` is the declared shape; each **gate leaf** is a required phase condition.
+User limits apply: `ask_user` before conflicting action. `topology` defines the shape; each **gate leaf** must pass.
 
 {% if workflow_id %}- **workflow**: `{{ workflow_id }}`{% if workflow_version %}@{{ workflow_version }}{% endif %}
 {% endif %}{% if run_id %}- **run_id**: `{{ run_id }}`

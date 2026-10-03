@@ -14,8 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceblob"
 )
 
-func (s *Store) materializeEntry(ctx context.Context, dir string, entry Entry) error {
-	target := filepath.Join(dir, filepath.FromSlash(entry.Path))
+func (m *materializer) writeEntry(ctx context.Context, entry Entry) error {
+	if entry.RootPath != m.root {
+		return nil
+	}
+	if !filepath.IsLocal(filepath.FromSlash(entry.Path)) {
+		return fmt.Errorf("invalid snapshot path %q", entry.Path)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target := filepath.Join(m.dir, filepath.FromSlash(entry.Path))
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return err
 	}
@@ -27,7 +36,7 @@ func (s *Store) materializeEntry(ctx context.Context, dir string, entry Entry) e
 	// Stream live content so large source files do not determine memory use.
 	err = copyLiveVerified(ctx, entry, output)
 	if errors.Is(err, ErrContentUnavailable) {
-		raw, readErr := s.Bytes(ctx, entry)
+		raw, readErr := m.store.Bytes(ctx, entry)
 		if readErr != nil {
 			return fmt.Errorf("materialize %s: %w", entry.Path, readErr)
 		}

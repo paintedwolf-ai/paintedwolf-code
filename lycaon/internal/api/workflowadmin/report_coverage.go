@@ -3,12 +3,9 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -37,54 +34,11 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	if len(scans) == 0 {
 		return
 	}
-	scanners := map[string]bool{}
-	failed := map[string]bool{}
-	for _, s := range scans {
-		scanners[s.ScannerID] = true
-		a.coverage = append(a.coverage, report.ReportCoverageItem{
-			Subject: s.ScannerID, Status: string(s.Status), Detail: scanCoverageDetail(s),
-		})
+	observed := summarizeScanCoverage(scans)
+	a.coverage = append(a.coverage, observed.coverage...)
+	for _, gap := range observed.gaps {
+		a.gap(gap)
 	}
-	for _, s := range scan.UnrecoveredScans(scans) {
-		failed[s.ScannerID] = true
-	}
-	a.gap(report.ReportGap{Kind: report.GapScansFailed, Count: len(failed), Of: len(scanners), Names: slices.Sorted(maps.Keys(failed))})
-
-	moved := report.ReportGap{Kind: report.GapScansMoved, Of: len(scanners)}
-	standing := report.ReportGap{Kind: report.GapScansStanding, Of: len(scanners)}
-	movedFiles, movedScanners := map[string]bool{}, map[string]bool{}
-	standingFiles, standingScanners := map[string]bool{}, map[string]bool{}
-	for _, s := range scans {
-		for _, w := range s.Warnings {
-			if !scan.WarningRetryable(w.Kind) && w.File != "" {
-				standingFiles[w.File] = true
-			}
-		}
-	}
-	for _, g := range scan.RunCoverageGaps(scans) {
-		if g.Open() {
-			movedScanners[g.Scanner] = true
-			for _, path := range g.Moved {
-				if path == "" {
-					moved.UnknownScope = true
-				} else {
-					movedFiles[path] = true
-				}
-			}
-		}
-		if g.Standing > 0 {
-			standingScanners[g.Scanner] = true
-			standing.Detail += g.Standing
-		}
-	}
-	moved.Count = len(movedScanners)
-	moved.Names = slices.Sorted(maps.Keys(movedScanners))
-	moved.Detail = len(movedFiles)
-	a.gap(moved)
-	standing.Count = len(standingScanners)
-	standing.Names = slices.Sorted(maps.Keys(standingScanners))
-	standing.DetailFiles = len(standingFiles)
-	a.gap(standing)
 
 	sets := append(append([]scanfindings.SetAside(nil), reviewed...), setAsides(completion)...)
 	account := scanfindings.AccountInventory(scanfindings.InventoryGroups(scanfindings.InventoryFindings(scans)),
@@ -115,7 +69,7 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	})
 
 	check := report.ReportCheck{
-		Kind: report.CheckScans, Ran: len(scanners), ScansFailed: len(failed),
+		Kind: report.CheckScans, Ran: observed.scanners, ScansFailed: observed.failed,
 		Used: inv.Linked + inv.SetAside, Total: inv.Total,
 	}
 	switch {
