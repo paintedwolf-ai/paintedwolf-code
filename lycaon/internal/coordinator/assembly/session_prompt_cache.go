@@ -3,7 +3,6 @@ package assembly
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -21,11 +20,6 @@ type TurnAssemblyScratch struct {
 	StablePromptKey            string
 	BoardBlock                 string
 	BoardKey                   string
-	SpawnRosterBlock           string
-	SpawnRosterKey             string
-	WorkerLegBlock             string
-	WorkerLegKey               string
-	WorkerLegVolatileKey       string
 	LastSeenSiblingNoteID      int64
 	PendingSiblingNotes        []inject.SiblingNote
 	ModeTransitionCauses       []surface.ModeTransitionCause
@@ -173,83 +167,6 @@ func (c *SessionPromptCache) StoreStable(sessionID, key, prompt string) {
 
 func boardInjectFingerprint(hash, phase string) string {
 	return hashString(strings.TrimSpace(hash) + "\x00" + strings.TrimSpace(phase))
-}
-
-// WorkerLegFingerprint hashes stable fields rendered into the worker L3 block.
-// Volatile peer state (sibling notes, reservations) uses WorkerLegVolatileFingerprint.
-func WorkerLegFingerprint(ctx inject.WorkerLegContext) string {
-	failed := append([]string(nil), ctx.FailedLeaves...)
-	sort.Strings(failed)
-	tools := append([]string(nil), ctx.LegTools...)
-	sort.Strings(tools)
-	criteria := append([]string(nil), ctx.CompletionCriteria...)
-	sort.Strings(criteria)
-	checklist := append([]string(nil), ctx.Checklist...)
-	sort.Strings(checklist)
-
-	parts := []string{
-		strings.TrimSpace(ctx.LegID),
-		strings.TrimSpace(ctx.AgentType),
-		strings.TrimSpace(ctx.WorkflowID),
-		strings.TrimSpace(ctx.PhaseID),
-		strings.TrimSpace(ctx.TopologyPattern),
-		boolString(ctx.RequiresIsolation),
-		strings.Join(failed, ","),
-		strings.Join(criteria, ","),
-		strings.Join(tools, ","),
-		strings.Join(checklist, ","),
-	}
-	return hashString(strings.Join(parts, "\x1e"))
-}
-
-// WorkerLegVolatileFingerprint hashes peer broadcast state appended to the leg block.
-// Returns empty when there is nothing to deliver this turn.
-func WorkerLegVolatileFingerprint(ctx inject.WorkerLegContext) string {
-	notes := volatileSiblingNotesFingerprint(ctx.SiblingNotes)
-	paths := volatileReservedPathsFingerprint(ctx.ReservedPaths)
-	if notes == "" && paths == "" {
-		return ""
-	}
-	return hashString(notes + "\x1e" + paths)
-}
-
-// volatileSiblingNotesFingerprint preserves feed order.
-func volatileSiblingNotesFingerprint(notes []inject.SiblingNote) string {
-	if len(notes) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(notes))
-	for _, note := range notes {
-		parts = append(parts,
-			strings.TrimSpace(note.Agent)+"\x1f"+
-				strings.TrimSpace(note.Summary)+"\x1f"+
-				strings.TrimSpace(note.Ref),
-		)
-	}
-	return strings.Join(parts, "\x1e")
-}
-
-// volatileReservedPathsFingerprint preserves roster order for the leg inject block.
-func volatileReservedPathsFingerprint(paths []inject.ReservedPath) string {
-	if len(paths) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(paths))
-	for _, hold := range paths {
-		parts = append(parts,
-			strings.TrimSpace(hold.Path)+"\x1f"+
-				strings.TrimSpace(hold.JobID)+"\x1f"+
-				strings.TrimSpace(hold.LegLabel),
-		)
-	}
-	return strings.Join(parts, "\x1e")
-}
-
-func boolString(v bool) string {
-	if v {
-		return "1"
-	}
-	return "0"
 }
 
 func hashString(s string) string {

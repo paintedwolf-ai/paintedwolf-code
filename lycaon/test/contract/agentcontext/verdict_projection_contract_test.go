@@ -85,9 +85,12 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 			}
 		}
 	}
-	before := inject.ActiveWorkflowInjectFingerprint(data, nil)
+	projectedSchema := func() string {
+		return inject.ActiveWorkflowInjectToMap(data, nil, nil)["phase_exit"].(map[string]any)["verdict_schema"].(string)
+	}
+	before := projectedSchema()
 	snapshot.PhaseExit.VerdictSchema["later_snapshot_field"] = "string"
-	if before != inject.ActiveWorkflowInjectFingerprint(data, nil) {
+	if before != projectedSchema() {
 		t.Fatal("render DTO aliases runtime snapshot schema")
 	}
 	phase.ReviewLoop.VerdictSchema["new_required_field"] = "string"
@@ -95,8 +98,8 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 		t.Fatal("projection aliases manifest schema")
 	}
 	data.PhaseExit = workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
-	if before == inject.ActiveWorkflowInjectFingerprint(data, nil) {
-		t.Fatal("schema change did not invalidate prompt fingerprint")
+	if before == projectedSchema() {
+		t.Fatal("schema change did not reach the prompt projection")
 	}
 }
 

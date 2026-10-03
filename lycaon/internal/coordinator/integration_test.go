@@ -588,7 +588,7 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 	}
 }
 
-func TestAssemblyImplementSpawnInjectCacheSecondIteration(t *testing.T) {
+func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
@@ -613,8 +613,8 @@ func TestAssemblyImplementSpawnInjectCacheSecondIteration(t *testing.T) {
 	msgs2, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
 	testutil.FailErr(t, "rt.BuildCompletionMessages failed", err)
 	count2 := countImplementSpawnBlocks(msgs2)
-	if count2 >= count1 && count1 > 0 {
-		t.Fatalf("iteration 2 implement-spawn blocks = %d want fewer than %d", count2, count1)
+	if count1 != 1 || count2 != 1 {
+		t.Fatalf("implement-spawn blocks = (%d, %d), want one per iteration", count1, count2)
 	}
 }
 
