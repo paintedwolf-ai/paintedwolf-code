@@ -25,14 +25,20 @@ window.__scrollThread = {
       await __harness.llm.pending(20000);
       await __harness.llm.respond(reply);
     };
+    const send = async (text) => {
+      const sent = await __harness.sendPrompt(text);
+      if (sent.ok) return;
+      const composer = document.querySelector('[data-testid="chat-composer"]');
+      throw new Error(`${sent.error}; composer reads "${composer?.getAttribute("placeholder") ?? "missing"}"`);
+    };
     for (let i = 0; i < 5; i++) {
       mark(`answering question ${i + 1}`);
-      await __harness.sendPrompt(`Question ${i + 1}: tell me about the layout.`);
+      await send(`Question ${i + 1}: tell me about the layout.`);
       await step({ text: "The layout uses a spacing scale and an icon set. ".repeat(30) });
       await __harness.waitForIdle(30000);
     }
     mark("running the tool turn");
-    await __harness.sendPrompt("Can we improve the interface?");
+    await send("Can we improve the interface?");
     await step({
       toolCalls: [
         { id: "b1", name: "read", args: { path: "README.md" } },
