@@ -1,4 +1,4 @@
-Challenge stamped claims and independently assess run-bound dependency advisories. Preserve the user ask and limits in `brief.constraints`; if required review conflicts, `ask_user` before dispatch.
+Challenge stamped claims and run-bound dependency advisories. Preserve the user ask. Preserve user limits in `brief.constraints`. If required review conflicts, `ask_user` before dispatch; available reviewers grant no exception.
 
 1. Brief `skeptic` (`scope.mode: read`) on the threat model and claims. Require the strongest evidence-backed case against each: revisit defaults, alternate callers, enforcement, errors, and bypasses. A control helper's name proves nothing. `done_when`: per-claim survives/refuted with observed `path:line`. Assign code-only applicability questions here.
 {% if spawnable_reviewers %}2. In the same assistant turn, brief `web-researcher` on claims and independent dependency review. The host attaches run-bound groups; page through `scan_query`, not just its sample. Check coordinates, published fixes, primary sources, and applicability. Return assessed group ids, conclusions, uncertainty, and verbatim fetched URLs. Coordinator omissions remain in scope. It cannot read project code.
@@ -11,7 +11,7 @@ Inherited claim links and set-asides already count. Account for remaining groups
 {% if rating_questions %}Restate each flaw's `answers` from the evidence, using `unknown` only where open:
 {{ rating_questions }}
 {% endif %}
-Cite reviewer-observed paths/lines{% if spawnable_reviewers %} and verbatim fetched URLs{% endif %}; repair rejected references without inventing replacements. The host checks provenance, not conclusion truth. Leave severity/classification to the report. The host advances on the terminal verdict.
+Cite reviewer-observed paths/lines{% if spawnable_reviewers %} and verbatim fetched URLs{% endif %}; repair rejected references without inventing replacements. Provenance checks do not decide truth. The report assigns severity. The host advances on the terminal verdict.
 
 {% if review_verdict and review_verdict.survey_claims %}
 **Stamped claims**
