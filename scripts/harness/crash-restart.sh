@@ -9,6 +9,15 @@ ROOT="$(cd "${SCRIPTS}/.." && pwd)"
 # shellcheck source=scripts/e2e/env.sh
 source "${SCRIPTS}/e2e/env.sh"
 
+if [[ "${LYCAON_E2E_DOCKER_STACK:-0}" == "1" ]]; then
+  # shellcheck source=scripts/e2e/docker-lib.sh
+  source "${SCRIPTS}/e2e/docker-lib.sh"
+  echo "crash-restart: SIGKILL sidecar container project=${LYCAON_E2E_DOCKER_PROJECT:?}" >&2
+  e2e_docker_crash_restart_sidecar
+  echo "crash-restart: ok container"
+  exit 0
+fi
+
 STATE_DIR="${LYCAON_E2E_STATE_DIR:-}"
 if [[ -z "${STATE_DIR}" ]]; then
   echo "error: LYCAON_E2E_STATE_DIR is required (run inside an active den:harness lease)" >&2

@@ -499,6 +499,7 @@ type harnessAskUserReq struct {
 	SessionID    string   `json:"session_id"`
 	Prompt       string   `json:"prompt"`
 	ResponseType string   `json:"response_type"`
+	Purpose      string   `json:"purpose"`
 	Options      []string `json:"options"`
 	Artifacts    []string `json:"artifacts"`
 }
@@ -601,10 +602,8 @@ func (s *Server) handleHarnessAskUser(w http.ResponseWriter, r *http.Request) {
 	if prompt == "" {
 		prompt = "REST or GraphQL?"
 	}
-	rt := workflowdef.FeedbackResponseText
-	if strings.TrimSpace(req.ResponseType) != "" {
-		rt = workflowdef.FeedbackResponseType(strings.TrimSpace(req.ResponseType))
-	}
+	// An omitted type lets the host choose it from the purpose and artifacts, as for ask_user.
+	rt := workflowdef.FeedbackResponseType(strings.TrimSpace(req.ResponseType))
 	artifacts := make([]string, 0, len(req.Artifacts))
 	for _, a := range req.Artifacts {
 		if id := strings.TrimSpace(a); id != "" {
@@ -622,10 +621,7 @@ func (s *Server) handleHarnessAskUser(w http.ResponseWriter, r *http.Request) {
 			ToolCalls: []wire.ToolCall{{
 				ID:   toolCallID,
 				Name: "ask_user",
-				Args: map[string]any{
-					"prompt":    prompt,
-					"artifacts": artifacts,
-				},
+				Args: harnessAskUserArgs(prompt, req.Purpose, artifacts),
 			}},
 		},
 		harnessToolResultMessage(toolMsgID, assistantID, toolCallID, "ask_user", pendingBody),
@@ -637,6 +633,7 @@ func (s *Server) handleHarnessAskUser(w http.ResponseWriter, r *http.Request) {
 	handle, err := mgr.RequestUserInput(r.Context(), sessionID, workflow.UserInputRequest{
 		Prompt:       prompt,
 		ResponseType: rt,
+		Purpose:      req.Purpose,
 		Options:      append([]string(nil), req.Options...),
 		Artifacts:    artifacts,
 		ToolCallID:   toolCallID,
@@ -677,6 +674,14 @@ func (s *Server) handleHarnessAskUser(w http.ResponseWriter, r *http.Request) {
 		"response_type": string(handle.ResponseType),
 		"note":          "pending ask_user WorkflowFeedbackCard",
 	})
+}
+
+func harnessAskUserArgs(prompt, purpose string, artifacts []string) map[string]any {
+	args := map[string]any{"prompt": prompt, "artifacts": artifacts}
+	if purpose = strings.TrimSpace(purpose); purpose != "" {
+		args["purpose"] = purpose
+	}
+	return args
 }
 
 // harnessToolResultMessage keeps synthetic tool receipts attached to their durable call row.

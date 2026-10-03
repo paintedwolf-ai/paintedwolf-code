@@ -89,6 +89,11 @@ source "${ROOT}/scripts/artifact-paths.sh"
 mkdir -p "${PW_ARTIFACT_ROOT}/e2e-state"
 export LYCAON_E2E_STATE_DIR="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/run.XXXXXX")"
 export PLAYWRIGHT_E2E=web
+# Match den:harness:test: browser tests can supply manual model completions.
+export LYCAON_LLM_MANUAL="${LYCAON_LLM_MANUAL:-1}"
+if [[ "${LYCAON_LLM_MANUAL}" == "1" ]]; then
+  export LYCAON_LLM_MOCK=0
+fi
 
 FIXTURE_SRC="${ROOT}/lycaon/test/fixtures/e2e/minimal-go-project"
 export LYCAON_E2E_PROJECT_DIR="${LYCAON_E2E_STATE_DIR}/minimal-go-project"

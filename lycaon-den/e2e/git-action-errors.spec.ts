@@ -39,7 +39,8 @@ for (const operation of ["commit", "stash", "discard", "push", "pull"] as const)
       await route.fulfill({ response, json: { ...await response.json(), upstream: "origin/main", ahead: 1, behind: 0 } });
     });
     let attempts = 0;
-    await page.route(`**/v1/projects/*/git/repos/*/${operation}`, async (route) => {
+    // Git writes carry the chat as a session_id query.
+    await page.route(new RegExp(`/v1/projects/[^/]+/git/repos/[^/]+/${operation}(?:\\?.*)?$`), async (route) => {
       attempts++;
       await route.fulfill({ status: 422, json: {
         code: `git_${operation}_failed`,

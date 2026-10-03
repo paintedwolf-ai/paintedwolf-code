@@ -28,7 +28,7 @@ webE2e("file lifecycle: retained editor follows rename and move, trash is revers
   await page.getByTestId("files-tree-file").filter({ hasText: original }).click();
   await expect(page.locator(".den-files-editor__status:visible")).toHaveAttribute("data-editor-identity", "editing");
   await fileAction(page, original, "Rename");
-  const rename = page.getByRole("textbox", { name: "Rename", exact: true });
+  const rename = page.getByRole("textbox", { name: `Rename ${original}`, exact: true });
   await rename.fill(renamed);
   await rename.press("Enter");
   const crumb = page.getByTestId("files-editor-crumb");
@@ -74,6 +74,7 @@ webE2e("file lifecycle: first create in an unloaded folder retains its name fiel
   });
   for (const kind of ["file", "folder"] as const) {
     const parent = `${kind} parent`;
+    await page.locator(`[data-files-ctx="tree-row"][data-name="${parent}"]`).first().hover();
     await page.getByRole("button", { name: `New ${kind} in ${parent}`, exact: true }).click();
     await expect(page.getByText("Empty folder.", { exact: true }).first()).toBeVisible();
     const input = page.getByRole("textbox", { name: `New ${kind} name in ${parent}`, exact: true });
@@ -85,7 +86,7 @@ webE2e("file lifecycle: first create in an unloaded folder retains its name fiel
     await expect(input).toHaveCount(0);
     await fileAction(page, parent, "Move to trash");
     const confirm = page.getByRole("alertdialog", { name: "Move to trash?", exact: true });
-    await expect(confirm).toContainText(`"${parent}" and its 1 item will move to the Trash.`);
+    await expect(confirm).toContainText(`"${parent}" and its contents will move to the Trash.`);
     await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
   }
 });

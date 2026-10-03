@@ -53,7 +53,7 @@ webE2e(
     );
     const link = card.getByRole("button", {name:`Show all ${HOSTS.length} destinations in Files`,exact:true});
     await expect(link).toBeVisible();
-    await expect(card.locator(".den-approval-card-scroll")).toHaveCount(0);
+    await expect(card.locator(".den-approval-card-scroll")).toHaveCount(1);
     await expect(card.getByTestId("approval-targets")).toHaveCount(0);
     await expect(async () => {
       const fits = await card.evaluate(el => {

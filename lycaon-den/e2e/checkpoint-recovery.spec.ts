@@ -12,6 +12,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
+import type { CheckpointListResponse } from "../src/api/types.ts";
 
 async function foregroundSession(page: Page): Promise<string> {
   const stream = liveChatStage(page).getByTestId("chat-stream").first();
@@ -125,7 +126,7 @@ for (const approval of approvals) {
 
     const pending = await request.get(`${apiUrl}/v1/sessions/${sessionId}/checkpoints?include_children=true`, { headers });
     expect(pending.ok()).toBeTruthy();
-    expect((await pending.json() as Array<{ checkpoint_id: string }>).map((cp) => cp.checkpoint_id)).toEqual([checkpointId]);
+    expect((await pending.json() as CheckpointListResponse).checkpoints.map((cp) => cp.id)).toEqual([checkpointId]);
     const attention = await request.get(`${apiUrl}/v1/attention`, { headers });
     expect(attention.ok()).toBeTruthy();
     expect((await attention.json()).rows).toEqual(expect.arrayContaining([

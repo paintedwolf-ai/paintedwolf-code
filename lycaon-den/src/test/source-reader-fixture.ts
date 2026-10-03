@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { diffLines } from "diff";
 import type { SourceComparison, SourceComparisonDetails, SourceComparisonFrame, SourceComparisonIntent, SourceComparisonSelector, SourceComparisonSummary, SourceComparisonView, SourceReaderRow } from "../api/types.ts";
 import type { LycaonClient } from "../api/client.ts";
@@ -7,11 +6,12 @@ import { sourceReaderAccess } from "../api/source-reader.ts";
 import { stubClient } from "./client-fixture.ts";
 import { sourceChangeFromPresence } from "../components/source/reader/source-reader-change.ts";
 import { retainedFileEditFixtures } from "./file-edit-fixture.ts";
+import { sha256Hex } from "./sha256.ts";
 
 type Document = { summary: SourceComparisonSummary; rows: SourceReaderRow[]; before: string | null; after: string | null; details: SourceComparisonDetails };
 const views = new Map<string, { view: SourceComparisonView; document: Document }>();
 const versions = new Map<string, string>();
-const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+const hash = sha256Hex;
 
 export function sourceReaderFixture(resolve?: (project: string, source: SourceComparisonSelector, sessionId?: string) => Promise<SourceComparison | ComparisonSnapshot>) {
   const prepare = (before: string | null, after: string | null, path = "file.txt"): ComparisonReference => {

@@ -86,9 +86,7 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     const prompt = await apiPostPrompt(request, sessionId, { text: "Configure the local test service and verify authenticated requests." });
     expect(prompt.ok(), await prompt.text()).toBeTruthy();
     const driver = manualHarnessTools(request, sessionId);
-    await driver.completed(await driver.invoke("request_tools", {
-      requests: ["command", "http_request", "update_progress"],
-    }));
+    await driver.loadTools("command", "http_request", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Configure the service\n- [ ] Verify authenticated requests\n",
     }));

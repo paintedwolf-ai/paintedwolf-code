@@ -24,6 +24,29 @@ e2e_docker_compose_port() {
     | sed -E 's/^127\.0\.0\.1://; s/^.*://'
 }
 
+e2e_free_local_port() {
+  python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
+}
+
+# SIGKILL and restart the sidecar container on its fixed host port.
+e2e_docker_crash_restart_sidecar() {
+  local container port
+  container="$(docker compose -f "${LYCAON_E2E_COMPOSE_FILE}" -p "${LYCAON_E2E_DOCKER_PROJECT}" ps -q sidecar)"
+  [[ -n "${container}" ]] || {
+    echo "error: no sidecar container in project ${LYCAON_E2E_DOCKER_PROJECT}" >&2
+    return 1
+  }
+  docker kill --signal KILL "${container}" >/dev/null
+  docker wait "${container}" >/dev/null
+  docker start "${container}" >/dev/null
+  port="$(e2e_docker_compose_port sidecar 8787)"
+  [[ "127.0.0.1:${port}" == "${LYCAON_E2E_ADDR}" ]] || {
+    echo "error: restarted sidecar listens on ${port}, not ${LYCAON_E2E_ADDR}" >&2
+    return 1
+  }
+  e2e_wait_http "${LYCAON_E2E_HEALTH_URL}" "sidecar /health" 300
+}
+
 e2e_refresh_derived_urls() {
   LYCAON_E2E_BASE_URL="http://${LYCAON_E2E_VITE_HOST}:${LYCAON_E2E_VITE_PORT}"
   LYCAON_E2E_API_URL="http://${LYCAON_E2E_ADDR}"
