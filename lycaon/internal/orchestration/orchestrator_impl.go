@@ -499,7 +499,7 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 			if err != nil {
 				return "", err
 			}
-			restorePipelineLegs(state, legs)
+			restoreRecordedLegs(state, legs)
 			return delegationID, nil
 		}
 	}
@@ -513,7 +513,7 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 			if listErr != nil {
 				return "", listErr
 			}
-			restorePipelineLegs(state, legs)
+			restoreRecordedLegs(state, legs)
 			if len(state.stageLegs) != len(stages) {
 				return "", fmt.Errorf("existing delegation has %d legs, pipeline needs %d", len(state.stageLegs), len(stages))
 			}
@@ -526,7 +526,7 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 			if err != nil {
 				return "", err
 			}
-			restorePipelineLegs(state, legs)
+			restoreRecordedLegs(state, legs)
 			if len(state.stageLegs) != len(stages) {
 				return "", fmt.Errorf("existing delegation has %d legs, pipeline needs %d", len(state.stageLegs), len(stages))
 			}
@@ -566,7 +566,7 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 	return created.ID, nil
 }
 
-func restorePipelineLegs(state *runState, legs []api.Leg) {
+func restoreRecordedLegs(state *runState, legs []api.Leg) {
 	for _, leg := range legs {
 		state.stageLegs[leg.Title] = leg.ID
 		if leg.Status != api.LegStatusComplete {
