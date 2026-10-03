@@ -76,6 +76,14 @@ jobs:
             const labels = [];
             const missing = [];
 
+            // Required preflight checkboxes: GitHub enforces these at submission, but a later
+            // edit or an API filing can strip or uncheck them. Checkbox counts differ per
+            // form, so the invariant is simply that no checkbox is left unchecked.
+            const unchecked = [...body.matchAll(/- \[ \]/g)].length;
+            if (unchecked > 0) {
+              missing.push(`every **Before you file** checkbox confirmed (${unchecked} still unchecked)`);
+            }
+
             // System information is machine-generated with a fixed shape.
             const systemInfo = section("System information");
             if (systemInfo !== null) {
@@ -110,7 +118,20 @@ jobs:
             const area = section("Which part of the app");
             if (area) {
               const hit = AREAS[area.trim().toLowerCase()];
-              if (hit) labels.push(hit);
+              if (hit) {
+                labels.push(hit);
+              } else {
+                // An unmatched answer means the form options and this table drifted.
+                // Make that loud here rather than silent in triage.
+                labels.push("needs-triage");
+                await comment(
+                  [
+                    `The **Which part of the app** answer (“${area.trim()}”) does not match a`,
+                    "known area, so no area label was applied. This is usually a form/dropdown",
+                    "drift on our side, not a problem with the report — a maintainer will route it.",
+                  ].join("\n"),
+                );
+              }
             }
 
             if (missing.length) {
