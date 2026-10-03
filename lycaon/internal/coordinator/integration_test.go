@@ -600,9 +600,12 @@ func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 		}},
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   stubWorkspaceRootsOne(),
+		LoadedTools:      workerToolsLoaded,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
-	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
+	workspace := t.TempDir()
+	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
+	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
 	msgs1, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
