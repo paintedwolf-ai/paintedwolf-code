@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	lycaonexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,15 +27,39 @@ const envVictim = "SCANSTRESS_VICTIM"
 // envVictimHandler makes the victim install the sidecar's signal handler.
 const envVictimHandler = "SCANSTRESS_VICTIM_HANDLER"
 
+// envVictimReaper marks the victim's reaper companion.
+const envVictimReaper = "SCANSTRESS_VICTIM_REAPER"
+
+// TestShutdownVictimReaper plays the role the sidecar binary takes under
+// exec.ReaperCommand. It runs only as a victim's companion.
+func TestShutdownVictimReaper(t *testing.T) {
+	if os.Getenv(envVictimReaper) == "" {
+		t.Skip("reaper runs only as a shutdown victim's companion")
+	}
+	os.Exit(lycaonexec.RunReaper(os.Stdin))
+}
+
+// startVictimReaper starts the companion as the sidecar does before serving.
+func startVictimReaper(t *testing.T) {
+	t.Helper()
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate test binary", err)
+	// The companion inherits this environment and so takes the reaper role.
+	t.Setenv(envVictimReaper, "1")
+	testutil.FailErr(t, "start reaper", lycaonexec.StartReaper(self, "-test.run=^TestShutdownVictimReaper$", "-test.v=false"))
+}
+
 // TestShutdownVictimScan is the host under test in the shutdown cases. It runs
-// only when its parent asks for it, and it never asserts anything itself. When
-// asked, it installs the sidecar's own signal handling (cmd/lycaon/main.go
-// notifies a context on SIGINT and SIGTERM) so the graceful case exercises the
+// only when its parent asks for it, and it never asserts anything itself. Like
+// the sidecar (cmd/lycaon/main.go), it starts the process reaper before any
+// scan. When asked, it also installs the sidecar's signal handling, which
+// notifies a context on SIGINT and SIGTERM, so the graceful case exercises the
 // shipped shutdown path rather than Go's default terminate-on-signal.
 func TestShutdownVictimScan(t *testing.T) {
 	if os.Getenv(envVictim) == "" {
 		t.Skip("victim runs only when a shutdown case starts it")
 	}
+	startVictimReaper(t)
 	ctx := t.Context()
 	if os.Getenv(envVictimHandler) != "" {
 		signalled, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -131,8 +157,10 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	}
 	hostGone := time.Since(killAt)
 
-	// Poll only the engine pids this victim owned.
+	// Poll only the engine pids and run directories this victim owned. After an
+	// abrupt exit the reaper removes the directories once the engine is gone.
 	var survivors []int
+	var leaked []string
 	drainDeadline := time.Now().Add(60 * time.Second)
 	for {
 		survivors = survivors[:0]
@@ -142,13 +170,13 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 				survivors = append(survivors, pid)
 			}
 		}
-		if len(survivors) == 0 || time.Now().After(drainDeadline) {
+		leaked = survivingDirs(runDirs)
+		if (len(survivors) == 0 && len(leaked) == 0) || time.Now().After(drainDeadline) {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	drain := time.Since(killAt) - hostGone
-	leaked := survivingDirs(runDirs)
 
 	reportf(t, "signal=%s handler=%t victim=%d engine_pids=%v host_exit=%s engine_drain=%s orphans=%v leaked_run_dirs=%v",
 		sig, handler, victim, enginePIDs, hostGone.Round(time.Millisecond), drain.Round(time.Millisecond), survivors, leaked)
@@ -164,7 +192,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 		for _, dir := range leaked {
 			_ = os.RemoveAll(dir)
 		}
-		t.Errorf("%s to the scan host left run directories behind: %v", sig, leaked)
+		t.Errorf("%s to the scan host left run directories behind for more than 60s: %v", sig, leaked)
 	}
 }
 
@@ -177,7 +205,8 @@ func TestGracefulShutdownReapsEngine(t *testing.T) {
 
 // TestUnhandledTerminationReapsEngine models a host that dies without running
 // its handler — a crash, an OOM kill, or SIGTERM to a build with no handler.
-// Only kernel-level ownership can reap the engine here.
+// Only the reaper companion, woken when the kernel closes the host's end of its
+// pipe, can kill the engine and remove its run directory here.
 func TestUnhandledTerminationReapsEngine(t *testing.T) {
 	runShutdownCase(t, syscall.SIGKILL, false)
 }
