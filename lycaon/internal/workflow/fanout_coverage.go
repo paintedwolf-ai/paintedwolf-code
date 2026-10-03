@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -59,45 +60,57 @@ func FanoutCoverage(plan FanoutPlan, tasks []api.WorkerTask, phase string) []Fan
 	return out
 }
 
-// PlannedFanoutLeg is one leg of the active phase's stamped plan.
-type PlannedFanoutLeg struct {
-	RunID string
-	Phase string
-	Leg   FanoutPlanLeg
+// WorkflowWork binds dispatch to host-owned work in the active phase.
+type WorkflowWork struct {
+	RunID        string
+	Phase        string
+	AgentType    string
+	Scope        *api.TaskScope
+	MaxToolLoops int
 }
 
-// PlannedLeg returns the leg workID names in the session's active planned phase.
-func (m *RunManager) PlannedLeg(ctx context.Context, sessionID, workID string) (PlannedFanoutLeg, bool, error) {
+// WorkflowWork resolves planned survey legs and registered review questions.
+func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string) (WorkflowWork, bool, error) {
 	workID = strings.TrimSpace(workID)
 	if workID == "" {
-		return PlannedFanoutLeg{}, false, nil
+		return WorkflowWork{}, false, nil
 	}
 	run, err := m.Store.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
-		return PlannedFanoutLeg{}, false, err
+		return WorkflowWork{}, false, err
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
-		return PlannedFanoutLeg{}, false, err
+		return WorkflowWork{}, false, err
 	}
 	def, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok {
-		return PlannedFanoutLeg{}, false, nil
+		return WorkflowWork{}, false, nil
 	}
 	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
-		return PlannedFanoutLeg{}, false, err
+		return WorkflowWork{}, false, err
 	}
 	plan, planned := FanoutPlanForPhase(vars, def)
 	if !planned {
-		return PlannedFanoutLeg{}, false, nil
+		if def.ReviewLoop == nil || def.ReviewLoop.FollowupAttempts == 0 {
+			return WorkflowWork{}, false, nil
+		}
+		questions, err := reviewQuestions(vars, def.ID)
+		if err != nil {
+			return WorkflowWork{}, false, err
+		}
+		if slices.ContainsFunc(questions, func(q reviewQuestionWork) bool { return q.ID == workID || q.ID+"/review" == workID }) {
+			return WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, Scope: &api.TaskScope{Mode: "read"}}, true, nil
+		}
+		return WorkflowWork{}, false, nil
 	}
 	for _, leg := range plan.Legs {
 		if leg.ID == workID {
-			return PlannedFanoutLeg{RunID: run.ID, Phase: run.CurrentPhase, Leg: leg}, true, nil
+			return WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}, true, nil
 		}
 	}
-	return PlannedFanoutLeg{}, false, nil
+	return WorkflowWork{}, false, nil
 }
 
 // BindWorkflowTask stamps provenance before the native task enters the queue.
@@ -139,6 +152,9 @@ func (m *RunManager) AssertWorkerTask(ctx context.Context, task *api.WorkerTask)
 	}
 	plan, planned := FanoutPlanForPhase(vars, def)
 	if !planned {
+		if def.ReviewLoop != nil && def.ReviewLoop.FollowupAttempts > 0 && task.WorkflowWorkID != "" {
+			return m.assertQuestionTask(ctx, run, *def.ReviewLoop, vars, task)
+		}
 		if task.WorkflowWorkID != "" {
 			return rejectFanoutTask("not_a_planned_fanout_phase", task)
 		}

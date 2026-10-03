@@ -14,8 +14,8 @@ const (
 	workerResumeChildUnknownCode = "WORKER_RESUME_CHILD_UNKNOWN"
 )
 
-// PlannedLeg is what a fanout plan fixed for one leg of the active phase.
-type PlannedLeg struct {
+// WorkflowWork carries dispatch constraints for host-owned workflow work.
+type WorkflowWork struct {
 	RunID        string
 	Phase        string
 	AgentType    string
@@ -63,7 +63,7 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 		}
 	}
 
-	leg, planned, err := id.plannedLeg(ctx, deps, tctx, id.Prior != nil && !workIDGiven)
+	leg, planned, err := id.workflowWork(ctx, deps, tctx, id.Prior != nil && !workIDGiven)
 	if err != nil {
 		return id, err
 	}
@@ -113,20 +113,19 @@ func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, chil
 	return nil
 }
 
-// plannedLeg looks up the leg a call names or its resumed child belonged to.
-// An inherited leg counts only in the run and phase that planned it; after
-// that phase closes the resume runs unplanned instead of rejecting.
-func (id *taskIdentity) plannedLeg(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (PlannedLeg, bool, error) {
-	if id.WorkflowWorkID == "" || deps.PlannedLeg == nil {
-		return PlannedLeg{}, false, nil
+// workflowWork resolves explicit work and preserves a resumed child's ownership
+// while its run and phase remain active.
+func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (WorkflowWork, bool, error) {
+	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
+		return WorkflowWork{}, false, nil
 	}
-	leg, ok, err := deps.PlannedLeg(ctx, tctx, id.WorkflowWorkID)
+	leg, ok, err := deps.WorkflowWork(ctx, tctx, id.WorkflowWorkID)
 	if err != nil {
-		return PlannedLeg{}, false, err
+		return WorkflowWork{}, false, err
 	}
 	if inherited && (!ok || leg.RunID != id.Prior.WorkflowRunID || leg.Phase != id.Prior.WorkflowPhase) {
 		id.WorkflowWorkID = ""
-		return PlannedLeg{}, false, nil
+		return WorkflowWork{}, false, nil
 	}
 	return leg, ok, nil
 }

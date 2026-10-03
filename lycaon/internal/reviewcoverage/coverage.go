@@ -14,17 +14,22 @@ import (
 
 // Fact is a host observation bound to the review revision.
 type Fact struct {
-	Blocking  bool           `json:"blocking,omitempty"`
-	ID        string         `json:"id"`
-	Kind      string         `json:"kind"`
-	Subject   string         `json:"subject"`
-	FileCount int            `json:"file_count,omitempty"`
-	Count     int            `json:"count,omitempty"`
-	Paths     []string       `json:"paths,omitempty"`
-	Scans     []string       `json:"scans,omitempty"`
-	Tasks     []string       `json:"tasks,omitempty"`
-	Question  string         `json:"question,omitempty"`
-	Scope     *api.TaskScope `json:"scope,omitempty"`
+	InvestigationAttempts int            `json:"investigation_attempts,omitempty"`
+	FollowupLimit         int            `json:"followup_limit,omitempty"`
+	InvestigationActive   bool           `json:"investigation_active,omitempty"`
+	ReviewRequired        bool           `json:"review_required,omitempty"`
+	Obligations           []string       `json:"obligations,omitempty"`
+	Blocking              bool           `json:"blocking,omitempty"`
+	ID                    string         `json:"id"`
+	Kind                  string         `json:"kind"`
+	Subject               string         `json:"subject"`
+	FileCount             int            `json:"file_count,omitempty"`
+	Count                 int            `json:"count,omitempty"`
+	Paths                 []string       `json:"paths,omitempty"`
+	Scans                 []string       `json:"scans,omitempty"`
+	Tasks                 []string       `json:"tasks,omitempty"`
+	Question              string         `json:"question,omitempty"`
+	Scope                 *api.TaskScope `json:"scope,omitempty"`
 }
 
 // Facts identifies the complete input to a coverage review.
@@ -130,6 +135,32 @@ func Validate(f Facts, r Review) error {
 	}
 	if len(seen) != len(known) {
 		return fmt.Errorf("coverage assesses %d of %d current obligations and gaps", len(seen), len(known))
+	}
+	return validateQuestionObligations(f, r)
+}
+
+func validateQuestionObligations(f Facts, r Review) error {
+	assessments := map[string]Assessment{}
+	for _, a := range r.Assessments {
+		assessments[a.ID] = a
+	}
+	for _, fact := range f.Gaps {
+		if fact.Kind != "review_question" {
+			continue
+		}
+		a := assessments[fact.ID]
+		if len(a.Obligations) != len(fact.Obligations) {
+			return fmt.Errorf("question %s must retain its affected obligations", fact.ID)
+		}
+		for _, id := range fact.Obligations {
+			if !slices.Contains(a.Obligations, id) {
+				return fmt.Errorf("question %s must retain obligation %s", fact.ID, id)
+			}
+			parent := assessments[id]
+			if a.Disposition == EssentialOpen && parent.Disposition != EssentialOpen || a.Disposition == MaterialOpen && parent.Disposition == Satisfied {
+				return fmt.Errorf("obligation %s conflicts with open question %s", id, fact.ID)
+			}
+		}
 	}
 	return nil
 }

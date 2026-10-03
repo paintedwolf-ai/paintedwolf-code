@@ -17,13 +17,15 @@ import (
 
 // SubmitVerdictToolResult is returned by submit_verdict.
 type SubmitVerdictToolResult struct {
-	OK           bool   `json:"ok"`
-	Verdict      string `json:"verdict,omitempty"`
-	Terminal     bool   `json:"terminal,omitempty"`
-	Attempt      int    `json:"attempt,omitempty"`
-	IterationCap int    `json:"iteration_cap,omitempty"`
-	EvidenceKey  string `json:"evidence_key,omitempty"`
-	Phase        string `json:"phase,omitempty"`
+	Questions        []reviewQuestionWork `json:"questions,omitempty"`
+	FollowupAttempts int                  `json:"followup_attempts,omitempty"`
+	OK               bool                 `json:"ok"`
+	Verdict          string               `json:"verdict,omitempty"`
+	Terminal         bool                 `json:"terminal,omitempty"`
+	Attempt          int                  `json:"attempt,omitempty"`
+	IterationCap     int                  `json:"iteration_cap,omitempty"`
+	EvidenceKey      string               `json:"evidence_key,omitempty"`
+	Phase            string               `json:"phase,omitempty"`
 }
 
 const (
@@ -94,24 +96,11 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 		if err != nil {
 			return "", err
 		}
-		if outcome.CoverageIssue != "" {
-			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(rl, fmt.Errorf("%s", outcome.CoverageIssue)))
-		}
-		if issue := outcome.InventoryIssue; issue != nil {
-			details := guidance.OffenderHintData(issue.Offenders)
-			details["reason"] = issue.Reason
-			details["offender_count"] = issue.Count
-			details["offenders_omitted"] = max(0, issue.Count-len(issue.Offenders))
-			return rejectSubmitVerdict(tctx, SubmitVerdictInventoryUnaccountedCode, active.CurrentPhase, details)
-		}
-		if len(outcome.MissingAgents) > 0 {
-			return rejectSubmitVerdict(tctx, SubmitVerdictReviewerMissingCode, active.CurrentPhase, map[string]any{
-				"missing_reviewers": outcome.MissingAgents,
-				"expected_call":     describeVerdictCall(rl),
-			})
-		}
-		if outcome.GroundingCode != "" {
-			return rejectSubmitVerdict(tctx, outcome.GroundingCode, active.CurrentPhase, verdictGroundingRejectDetails(rl, outcome))
+		if repairs := verdictRepairs(rl, outcome); len(repairs) > 0 {
+			primary := repairs[0]
+			details := maps.Clone(primary.Details)
+			details["repairs"] = repairs
+			return rejectSubmitVerdict(tctx, primary.Code, active.CurrentPhase, details)
 		}
 		if outcome.IterationCapExceeded {
 			return rejectSubmitVerdict(tctx, SubmitVerdictIterationCapCode, active.CurrentPhase, map[string]any{
@@ -130,6 +119,18 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			IterationCap: reviewLoopIterationCap(rl),
 			EvidenceKey:  outcome.EvidenceKey,
 			Phase:        active.CurrentPhase,
+		}
+		if rl.FollowupAttempts > 0 {
+			vars, err := runs.Store.GetScaffoldVars(ctx, active.ID)
+			if err != nil {
+				return "", err
+			}
+			res.Questions, err = reviewQuestions(vars, active.CurrentPhase)
+			if err != nil {
+				return "", err
+			}
+			res.FollowupAttempts = rl.FollowupAttempts
+			res.IterationCap = 0
 		}
 		return marshalSubmitVerdictResult(res)
 	})
@@ -285,6 +286,9 @@ func describeVerdictSchema(rl workflowdef.ReviewLoopDef) string {
 			parts = append(parts, fmt.Sprintf(
 				"%s: JSON array of {id, title (required when the claim is new), statement, status: one of %s, cited_evidence, answers?, scan_group_ids?}",
 				field, strings.Join(rl.StatusWords(), "|")))
+			if rl.FollowupAttempts > 0 {
+				parts = append(parts, "open claims require question: {missing_fact, obligations} when registering investigation")
+			}
 			continue
 		case workflowdef.VerdictCoverageType:
 			parts = append(parts, field+": {revision, assessments: [{id, disposition: satisfied (obligation) | covered | immaterial (gap) | material_open | essential_open, reason, obligations: [affected obligation ids], cited_evidence}]} from current coverage facts; every obligation and gap requires an assessment")
@@ -364,6 +368,7 @@ func verdictInvalidDetails(rl workflowdef.ReviewLoopDef, err error) map[string]a
 	return map[string]any{
 		"reason":         err.Error(),
 		"verdict_schema": describeVerdictSchema(rl),
+		"example":        VerdictExample(rl),
 		"expected_call":  describeVerdictCall(rl),
 	}
 }
@@ -398,4 +403,58 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 		Phase:        out.Phase,
 		Grounding:    out.Grounding,
 	}
+}
+
+// VerdictExample renders the active manifest's nested submission shape.
+func VerdictExample(def workflowdef.ReviewLoopDef) string {
+	verdict := map[string]any{}
+	for field, kind := range def.VerdictSchema {
+		switch kind {
+		case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType:
+			verdict[field] = []any{}
+		case workflowdef.VerdictCoverageType:
+			verdict[field] = map[string]any{"revision": "<current facts.revision>", "assessments": []any{}}
+		default:
+			verdict[field] = "<" + field + ">"
+		}
+	}
+	if values := VerdictEnum(def); len(values) > 0 {
+		verdict["verdict"] = values[0]
+	}
+	raw, _ := json.Marshal(map[string]any{"verdict": verdict, "cited_evidence": []map[string]string{{"handle": "<observed handle>"}}})
+	return string(raw)
+}
+
+// verdictRepair retains each refusal's code and facts in the same response.
+type verdictRepair struct {
+	Code    string         `json:"code"`
+	Details map[string]any `json:"details"`
+}
+
+func verdictRepairs(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) []verdictRepair {
+	var repairs []verdictRepair
+	if issue := out.InventoryIssue; issue != nil {
+		details := guidance.OffenderHintData(issue.Offenders)
+		details["reason"] = issue.Reason
+		details["offender_count"] = issue.Count
+		details["offenders_omitted"] = max(0, issue.Count-len(issue.Offenders))
+		code := SubmitVerdictInventoryUnaccountedCode
+		if issue.Code == SubmitVerdictScansPendingCode {
+			code = SubmitVerdictScansPendingCode
+		}
+		repairs = append(repairs, verdictRepair{code, details})
+	}
+	if len(out.MissingAgents) > 0 {
+		repairs = append(repairs, verdictRepair{SubmitVerdictReviewerMissingCode, map[string]any{"missing_reviewers": out.MissingAgents, "expected_call": describeVerdictCall(rl)}})
+	}
+	if out.GroundingCode != "" {
+		repairs = append(repairs, verdictRepair{out.GroundingCode, verdictGroundingRejectDetails(rl, out)})
+	}
+	if out.QuestionIssue != nil {
+		repairs = append(repairs, verdictRepair{out.QuestionIssue.Code, out.QuestionIssue.Data})
+	}
+	if out.CoverageIssue != "" {
+		repairs = append(repairs, verdictRepair{ReviewLoopVerdictInvalidCode, verdictInvalidDetails(rl, fmt.Errorf("%s", out.CoverageIssue))})
+	}
+	return repairs
 }

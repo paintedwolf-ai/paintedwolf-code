@@ -43,6 +43,7 @@ func (m *RunManager) CoverageFacts(ctx context.Context, run *api.WorkflowRun, ma
 
 // BuildCoverageFacts keeps full identities while bounding prompt path samples.
 func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, tasks []api.WorkerTask, scans []api.CodeScan) reviewcoverage.Facts {
+	tasks = coverageReviewTasks(manifest, tasks)
 	var facts reviewcoverage.Facts
 	var plans []string
 	for _, phase := range manifest.PhaseDefs {
@@ -54,6 +55,15 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 		} else if workflowdef.PhaseHasGate(phase, "worker_cycle_ready") {
 			facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/plan", Kind: "planned_area", Subject: "The planned review is unavailable", Blocking: true})
 		}
+		if phase.ReviewLoop != nil && phase.ReviewLoop.FollowupAttempts > 0 {
+			questions, err := reviewQuestions(vars, phase.ID)
+			if err != nil {
+				facts.Gaps = append(facts.Gaps, reviewcoverage.Fact{ID: phase.ID + "/questions-unavailable", Kind: "review_state", Subject: err.Error(), Blocking: true})
+			}
+			for _, q := range questions {
+				facts.Gaps = append(facts.Gaps, questionCoverageFact(q, tasks, phase))
+			}
+		}
 		for _, obligation := range phase.OnEnter.Obligations {
 			if obligation.Kind == scan.WorkflowObligationKind {
 				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/scans", Kind: "scan_inventory", Subject: "Assess the required scanner inventory"})
@@ -61,7 +71,7 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 			}
 		}
 	}
-	facts.Gaps = scanCoverageFacts(scans)
+	facts.Gaps = append(facts.Gaps, scanCoverageFacts(scans)...)
 	facts.Gaps = append(facts.Gaps, workerCoverageFacts(tasks)...)
 	facts.Seal()
 	// Evidence identities change even when the summarized state stays the same.
@@ -223,4 +233,23 @@ func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowR
 		return err
 	}
 	return reviewcoverage.Validate(facts, *review)
+}
+
+// Coverage ends at the final assessment phase; report and follow-on work do not
+// rewrite the evidence the assessment was made against.
+func coverageReviewTasks(manifest workflowdef.Manifest, tasks []api.WorkerTask) []api.WorkerTask {
+	last := -1
+	for i, phase := range manifest.PhaseDefs {
+		if phase.ReviewLoop != nil && phase.ReviewLoop.CarriesCoverage() {
+			last = i
+		}
+	}
+	if last < 0 {
+		return tasks
+	}
+	later := map[string]bool{}
+	for _, phase := range manifest.PhaseDefs[last+1:] {
+		later[phase.ID] = true
+	}
+	return slices.DeleteFunc(slices.Clone(tasks), func(task api.WorkerTask) bool { return later[task.WorkflowPhase] })
 }

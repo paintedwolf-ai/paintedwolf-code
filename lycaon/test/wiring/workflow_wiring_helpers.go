@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -228,12 +229,13 @@ func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 }
 
 // appendSucceededReviewAgent records a reviewer leg and its child-session evidence.
-func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, agent string) string {
+func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, agent, workID string) string {
 	t.Helper()
 	task := api.WorkerTask{
 		ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
-		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest,
+		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest, Scope: &api.TaskScope{Mode: "read"},
 	}
+	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.BindWorkflowTask(ctx, tools.ToolContext{SessionID: sess.ID}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
 	workerID, err := h.WorkerQueue.Enqueue(ctx, task)
@@ -241,6 +243,7 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 	child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: agent, Prompt: "review " + agent})
 	testutil.FailErr(t, "CreateChild "+agent, err)
 	testutil.FailErr(t, "link "+agent, h.WorkerQueue.SetChildSessionID(ctx, workerID, child.ID))
+	completeQueuedFixtureWork(t, h, ctx, sess.ProjectID, workerID)
 	testutil.FailErr(t, "AppendMessages "+agent, h.Store.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
@@ -290,5 +293,26 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 	}
 	if _, err := h.WorkflowMgr.TryAutoAdvance(ctx, runID); err != nil {
 		testutil.FailErr(t, "TryAutoAdvance execute", err)
+	}
+}
+
+// completeQueuedFixtureWork settles earlier stubbed legs before the target reviewer.
+func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, projectID, target string) {
+	t.Helper()
+	for {
+		claimed, err := h.WorkerQueue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: projectID, ClaimedBy: "review-fixture", ExecutionTarget: api.ExecutionTargetLocal})
+		testutil.FailErr(t, "claim fixture work", err)
+		if claimed == nil {
+			t.Fatalf("fixture task %s is not claimable", target)
+		}
+		won, err := h.WorkerQueue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+		testutil.FailErr(t, "complete fixture work", err)
+		if !won {
+			t.Fatal("fixture claim lost")
+		}
+		testutil.FailErr(t, "deliver fixture outcome", h.WorkerQueue.MarkOutcomeDelivered(ctx, claimed.ID))
+		if claimed.ID == target {
+			return
+		}
 	}
 }

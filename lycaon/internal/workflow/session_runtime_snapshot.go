@@ -67,7 +67,7 @@ func (m *RunManager) workflowRuntimeSnapshot(
 		snap.BlueprintApproval = m.inheritedBlueprintApprovalSnapshot(ctx, active)
 	}
 	for _, phase := range manifest.PhaseDefs {
-		if phase.ReviewLoop == nil || !phase.ReviewLoop.CarriesCoverage() {
+		if phase.ID != active.CurrentPhase || phase.ReviewLoop == nil || !phase.ReviewLoop.CarriesCoverage() {
 			continue
 		}
 		facts, err := m.CoverageFacts(ctx, active, manifest)

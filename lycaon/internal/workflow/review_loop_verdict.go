@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -50,8 +51,9 @@ func requiredVerdictFields(def workflowdef.ReviewLoopDef) []string {
 // A later phase that restates an earlier claim's id adjudicates it; Status is
 // one of the words that phase declared in claim_statuses.
 type VerdictClaim struct {
-	ScanGroupIDs []string `json:"scan_group_ids,omitempty"`
-	ID           string   `json:"id"`
+	Question     *ReviewQuestion `json:"question,omitempty"`
+	ScanGroupIDs []string        `json:"scan_group_ids,omitempty"`
+	ID           string          `json:"id"`
 	// Title is the claim in one line; the phase that introduces a claim sets it.
 	Title     string `json:"title,omitempty"`
 	Statement string `json:"statement"`
@@ -178,16 +180,16 @@ func ParseVerdictSetAsides(def workflowdef.ReviewLoopDef, verdict map[string]str
 // ValidateReviewLoopVerdict checks the declared verdict schema, then the
 // claims against the phase's statuses and the run's rules.
 func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string]string, rules VerdictRules) error {
+	var issues []error
 	enum := VerdictEnum(def)
-	if len(enum) == 0 {
-		return fmt.Errorf("%s: review_loop verdict_schema declares no verdict enum", ReviewLoopVerdictInvalidCode)
-	}
 	got := strings.TrimSpace(verdict[workflowdef.VerdictDecisionKey])
-	if got == "" {
-		return fmt.Errorf("%s: verdict is empty (want one of %s)", ReviewLoopVerdictInvalidCode, strings.Join(enum, "|"))
-	}
-	if !slices.Contains(enum, got) {
-		return fmt.Errorf("%s: verdict %q not in schema enum %s", ReviewLoopVerdictInvalidCode, got, strings.Join(enum, "|"))
+	switch {
+	case len(enum) == 0:
+		issues = append(issues, fmt.Errorf("%s: review_loop verdict_schema declares no verdict enum", ReviewLoopVerdictInvalidCode))
+	case got == "":
+		issues = append(issues, fmt.Errorf("%s: verdict is empty (want one of %s)", ReviewLoopVerdictInvalidCode, strings.Join(enum, "|")))
+	case !slices.Contains(enum, got):
+		issues = append(issues, fmt.Errorf("%s: verdict %q not in schema enum %s", ReviewLoopVerdictInvalidCode, got, strings.Join(enum, "|")))
 	}
 	var undeclared []string
 	for field := range verdict {
@@ -197,34 +199,38 @@ func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string
 	}
 	if len(undeclared) > 0 {
 		sort.Strings(undeclared)
-		return fmt.Errorf("%s: undeclared verdict field(s): %s", ReviewLoopVerdictInvalidCode, strings.Join(undeclared, ", "))
+		issues = append(issues, fmt.Errorf("%s: undeclared verdict field(s): %s", ReviewLoopVerdictInvalidCode, strings.Join(undeclared, ", ")))
 	}
 	for _, field := range requiredVerdictFields(def) {
 		if strings.TrimSpace(verdict[field]) == "" {
-			return fmt.Errorf("%s: required verdict field %q is empty", ReviewLoopVerdictInvalidCode, field)
+			issues = append(issues, fmt.Errorf("%s: required verdict field %q is empty", ReviewLoopVerdictInvalidCode, field))
 		}
 	}
 	if _, err := ParseVerdictSetAsides(def, verdict); err != nil {
-		return err
+		issues = append(issues, err)
 	}
 	if _, err := ParseVerdictCoverage(def, verdict); err != nil {
-		return err
+		issues = append(issues, err)
 	}
 	byField, err := ParseVerdictClaims(def, verdict)
 	if err != nil {
-		return err
-	}
-	for _, field := range sortedClaimFields(byField) {
-		for _, c := range byField[field] {
-			if err := validateVerdictClaim(def, field, c, rules); err != nil {
-				return err
+		issues = append(issues, err)
+	} else {
+		for _, field := range sortedClaimFields(byField) {
+			for _, claim := range byField[field] {
+				if err := validateVerdictClaim(def, field, claim, rules); err != nil {
+					issues = append(issues, err)
+				}
 			}
 		}
 	}
-	return nil
+	return errors.Join(issues...)
 }
 
 func validateVerdictClaim(def workflowdef.ReviewLoopDef, field string, c VerdictClaim, rules VerdictRules) error {
+	if c.Question != nil && def.FollowupAttempts == 0 {
+		return fmt.Errorf("%s: this phase does not declare question follow-up", ReviewLoopVerdictInvalidCode)
+	}
 	status := strings.ToLower(strings.TrimSpace(c.Status))
 	if status == "" {
 		return fmt.Errorf("%s: verdict field %q claim %q requires status (one of %s)",

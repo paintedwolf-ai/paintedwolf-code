@@ -1,0 +1,22 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_SCANS_PENDING
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_SCANS_PENDING"
+effect: block
+copy:
+  what: The run's scanner inventory is still being collected.
+  cause: One or more bound scans have not settled.
+  why: A terminal review needs the complete inventory to account for its findings.
+  fix: Wait for the bound scans to settle, then inspect their groups and submit the complete verdict.
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: The review is waiting for bound scans.
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-scenarios:
+  - id: pending
+    vars: {}
+    expect_contains: [scans]

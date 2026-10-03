@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,8 +70,10 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	}
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "challenge")
 
-	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic")
-	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher")
+	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "")
+	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher", "")
+
+	investigateSecurityQuestion(t, h, ctx, sess, run.ID)
 
 	// The challenge phase adjudicates each stamped claim by id, so the report
 	// can say which survived rather than printing a lone verdict word.
@@ -168,4 +171,35 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 			t.Fatalf("topology_stages.%s = %v want complete", stage, entry)
 		}
 	}
+}
+
+func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
+	t.Helper()
+	run, err := h.WorkflowMgr.Get(ctx, runID)
+	testutil.FailErr(t, "load question run", err)
+	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	testutil.FailErr(t, "load question manifest", err)
+	facts, err := h.WorkflowMgr.CoverageFacts(ctx, run, manifest)
+	testutil.FailErr(t, "load question obligations", err)
+	obligations := make([]string, 0, len(facts.Obligations))
+	for _, fact := range facts.Obligations {
+		obligations = append(obligations, fact.ID)
+	}
+	claims, err := json.Marshal([]workflow.VerdictClaim{{ID: "c1", Status: "unresolved", Statement: "Trace the request id into the query", Question: &workflow.ReviewQuestion{MissingFact: "Does the public handler pass the request id unchanged?", Obligations: obligations}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "survey#1"}}}})
+	testutil.FailErr(t, "encode question", err)
+	verdict := map[string]string{"verdict": "NEEDS_INVESTIGATION", "challenges": string(claims), "set_asides": "[]", "coverage": securityCoverageFixture(t, h, ctx, runID)}
+	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	testutil.FailErr(t, "register question", err)
+	if !out.Valid || out.Terminal || out.Attempt != 0 {
+		t.Fatalf("question registration = %+v", out)
+	}
+	verdict["verdict"] = "CHALLENGED"
+	verdict["coverage"] = securityCoverageFixture(t, h, ctx, runID)
+	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	testutil.FailErr(t, "reject uninvestigated question", err)
+	if out.Valid || out.CoverageIssue == "" {
+		t.Fatalf("uninvestigated question closed: %+v", out)
+	}
+	appendSucceededReviewAgent(t, h, ctx, sess, "repo-researcher", "question/c1")
+	appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "question/c1/review")
 }

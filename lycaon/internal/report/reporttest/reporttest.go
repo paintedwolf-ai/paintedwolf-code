@@ -156,7 +156,7 @@ func assertBrief(t testing.TB, input report.ReportInput) {
 	}
 	for i, f := range input.Findings {
 		switch f.Disposition {
-		case "", report.DispositionAct, report.DispositionAccept, report.DispositionHeld:
+		case "", report.DispositionAct, report.DispositionAccept, report.DispositionHeld, report.DispositionUnresolved:
 		default:
 			t.Fatalf("findings[%d].disposition = %q", i, f.Disposition)
 		}

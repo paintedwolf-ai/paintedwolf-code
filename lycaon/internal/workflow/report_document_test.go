@@ -87,9 +87,9 @@ func validDocument() guidance.CoordinatorCompletionReport {
 		Synthesis: "done",
 		Findings: []guidance.CoordinatorFinding{
 			{ID: "adjudicated", Title: "Rated by the review", Disposition: "act"},
-			{ID: "open", Title: "Still open", Disposition: "accept",
-				Answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
+			{ID: "open", Title: "Still open", Disposition: "unresolved"},
 			{Title: "Sound surface", Disposition: "held"},
+			{ID: "new-risk", Title: "Additional risk", Disposition: "accept", Answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
 		},
 		Ask: &guidance.CoordinatorAsk{Do: "Approve the fix.", Effort: "small"},
 	}
@@ -135,8 +135,8 @@ func TestCheckReportDocument_RefusesMissingFields(t *testing.T) {
 		"held with answers": func(r *guidance.CoordinatorCompletionReport) {
 			r.Findings[2].Answers = map[string]string{"reachable": "reachable"}
 		},
-		"unrated attention":     func(r *guidance.CoordinatorCompletionReport) { r.Findings[1].Answers = nil },
-		"answers over a review": func(r *guidance.CoordinatorCompletionReport) { r.Findings[0].Answers = r.Findings[1].Answers },
+		"unrated attention":     func(r *guidance.CoordinatorCompletionReport) { r.Findings[3].Answers = nil },
+		"answers over a review": func(r *guidance.CoordinatorCompletionReport) { r.Findings[0].Answers = r.Findings[3].Answers },
 		"act without an ask":    func(r *guidance.CoordinatorCompletionReport) { r.Ask = nil },
 		"ask without do":        func(r *guidance.CoordinatorCompletionReport) { r.Ask.Do = "" },
 		"ask effort off-list":   func(r *guidance.CoordinatorCompletionReport) { r.Ask.Effort = "tiny" },
@@ -182,14 +182,14 @@ func TestCheckReportDocument_SeverityNamesTheRatedLevel(t *testing.T) {
 	}
 
 	doc = validDocument()
-	doc.Findings[1].Answers = map[string]string{"reachable": "reachable", "outcome": "code_runs", "attacker": "already_inside"}
+	doc.Findings[3].Answers = map[string]string{"reachable": "reachable", "outcome": "code_runs", "attacker": "already_inside"}
 	for _, sev := range []string{"Moderate", "medium", ""} {
-		doc.Findings[1].Severity = sev
+		doc.Findings[3].Severity = sev
 		if issue := firstIssue(doc, facts); issue.Code != "" {
 			t.Fatalf("severity %q: issue = %+v, want the Moderate level accepted by label or tone", sev, issue)
 		}
 	}
-	doc.Findings[1].Severity = "high"
+	doc.Findings[3].Severity = "high"
 	if !refused(doc) {
 		t.Fatal("a severity the Moderate level does not declare stood")
 	}

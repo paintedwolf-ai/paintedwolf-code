@@ -25,7 +25,7 @@ coordinator_tripartite:
     plan_research_surface: 13420
     workflow_compose: 7268
 coordinator_injects:
-    active_workflow: 1396
+    active_workflow: 1814
     board_orientation: 1001
     command_jobs: 5130
     implement_spawn: 1311
@@ -38,7 +38,7 @@ coordinator_injects:
 agent_templates:
     coordinator: 5917
 kicks:
-    active-workflow: 443
+    active-workflow: 402
     agents-md: 1
     blueprint: 43
     board-orientation: 59
@@ -75,11 +75,11 @@ kicks:
     coordinator-scan-finished: 492
     coordinator-scheduled: 801
     coordinator-secret-withheld: 503
-    coordinator-security-challenge: 2379
-    coordinator-security-claims: 1647
+    coordinator-security-challenge: 2549
+    coordinator-security-claims: 1334
     coordinator-security-execute: 1688
     coordinator-security-plan: 2872
-    coordinator-security-synthesis: 1743
+    coordinator-security-synthesis: 1767
     coordinator-spend-runway-low: 524
     coordinator-spend-soft-stop: 600
     coordinator-survey-streak: 407
@@ -108,14 +108,14 @@ kicks:
     worker-task-preamble: 41
     worker-task-started: 235
 tool_surfaces:
-    coordinator: 68935
-    editor_file: 29492
-    explore_readonly: 29513
-    implement: 62821
-    plan_review_readonly: 32744
-    plan_write_only: 30119
-    web_research: 17623
-    worker_readonly: 29994
+    coordinator: 69120
+    editor_file: 29638
+    explore_readonly: 29659
+    implement: 62967
+    plan_review_readonly: 32890
+    plan_write_only: 30265
+    web_research: 17769
+    worker_readonly: 30140
 absolute_maximums:
     model: accounts/fireworks/models/kimi-k2p7-code
     model_context_window_tokens: 262144

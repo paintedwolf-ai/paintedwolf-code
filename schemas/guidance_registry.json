@@ -2653,6 +2653,11 @@
       "emit": "guard:workflow",
       "summary": "The review is at attempt {{ paintedwolf.review_attempt }} of {{ paintedwolf.review_iteration_cap }}; another non-terminal verdict cannot open a round."
     },
+    "SUBMIT_VERDICT_QUESTION_INVALID": {
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The follow-up question cannot make this transition{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% endif %}."
+    },
     "SUBMIT_VERDICT_REVIEWER_MISSING": {
       "branch_instruction": "Preserve completed reviews and valid citations. Keep the phase incomplete when required review cannot be obtained.",
       "category": "recoverable",
@@ -2664,6 +2669,11 @@
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
+    },
+    "SUBMIT_VERDICT_SCANS_PENDING": {
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The run's scanner inventory is still being collected."
     },
     "SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN": {
       "branch_instruction": "Keep the assessment and its evidence; correct only the ids and selectors. Do not drop a link to make the call pass.",

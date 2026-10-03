@@ -53,3 +53,32 @@ func TestCoverageReviewFixtureIsComplete(t *testing.T) {
 		t.Fatal("assessed fixture does not represent complete coverage")
 	}
 }
+
+func TestOpenQuestionsUseAssessedMateriality(t *testing.T) {
+	facts := reviewcoverage.Facts{
+		Obligations: []reviewcoverage.Fact{{ID: "boundary"}},
+		Gaps:        []reviewcoverage.Fact{{ID: "question/c6", Kind: "review_question", Subject: "c6", Obligations: []string{"boundary"}}},
+	}
+	facts.Seal()
+	cite := []api.CitationGroundingCitedEvidence{{Handle: "read#1"}}
+	for _, tc := range []struct{ question, obligation, want string }{
+		{reviewcoverage.Immaterial, reviewcoverage.Satisfied, CompletenessComplete},
+		{reviewcoverage.MaterialOpen, reviewcoverage.MaterialOpen, CompletenessMostly},
+		{reviewcoverage.EssentialOpen, reviewcoverage.EssentialOpen, CompletenessIncomplete},
+		{reviewcoverage.MaterialOpen, reviewcoverage.Satisfied, CompletenessIncomplete},
+		{reviewcoverage.EssentialOpen, reviewcoverage.Satisfied, CompletenessIncomplete},
+		{reviewcoverage.Covered, reviewcoverage.Satisfied, CompletenessIncomplete},
+	} {
+		review := reviewcoverage.Review{Revision: facts.Revision, Assessments: []reviewcoverage.Assessment{
+			{ID: "boundary", Disposition: tc.obligation, Reason: "Boundary traced", CitedEvidence: cite},
+			{ID: "question/c6", Disposition: tc.question, Reason: "Remaining uncertainty bounded by observed callers", Obligations: []string{"boundary"}, CitedEvidence: cite},
+		}}
+		input := ReportInput{CoverageFacts: &facts, CoverageReview: &review, Claims: []ReportClaim{{ID: "c6", Class: ClaimOpen}}, Gaps: []ReportGap{{Kind: GapClaimsOpen, Count: 1}}}
+		if tc.want == CompletenessComplete && len(notCoveredItems(input)) != 0 {
+			t.Fatal("immaterial question still presented as remaining work")
+		}
+		if got := input.Completeness(); got != tc.want {
+			t.Fatalf("%s/%s = %s, want %s", tc.question, tc.obligation, got, tc.want)
+		}
+	}
+}

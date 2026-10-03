@@ -242,6 +242,8 @@ func dispositionWord(disposition string) string {
 		return "Needs action"
 	case DispositionAccept:
 		return "Accepted risk"
+	case DispositionUnresolved:
+		return "Unanswered question"
 	case DispositionHeld:
 		return "Sound"
 	default:

@@ -66,6 +66,7 @@ type humanApprovalYAML struct {
 }
 
 type reviewLoopYAML struct {
+	FollowupAttempts          int               `yaml:"followup_attempts,omitempty"`
 	ReconcilesPhase           string            `yaml:"reconciles_phase,omitempty"`
 	RequireInventoryAccounted bool              `yaml:"require_inventory_accounted,omitempty"`
 	IncludeScanInventory      bool              `yaml:"include_scan_inventory,omitempty"`

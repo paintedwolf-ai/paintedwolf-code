@@ -140,21 +140,22 @@ type ReportFinding struct {
 	Action string `json:"action,omitempty"`
 	// Where locates the finding, by place or by evidence handle.
 	Where []ReportClaimCitation `json:"where,omitempty"`
-	// Disposition is act, accept, or held.
+	// Disposition is act, accept, held, or unresolved.
 	Disposition string `json:"disposition,omitempty"`
 }
 
 // Finding dispositions.
 const (
-	DispositionAct    = "act"
-	DispositionAccept = "accept"
-	DispositionHeld   = "held"
+	DispositionAct        = "act"
+	DispositionAccept     = "accept"
+	DispositionHeld       = "held"
+	DispositionUnresolved = "unresolved"
 )
 
 // NeedsAttention reports whether a finding is work to do or a risk kept on
 // purpose. A finding that states no disposition is treated as work to do.
 func (f ReportFinding) NeedsAttention() bool {
-	return f.Disposition != DispositionHeld
+	return f.Disposition != DispositionHeld && f.Disposition != DispositionUnresolved
 }
 
 // ReportBrief is the declared rating, decided.
@@ -268,7 +269,11 @@ func (in ReportInput) Completeness() string {
 			continue
 		}
 		switch g.Kind {
-		case GapInventoryUnaccounted, GapClaimsOpen, GapLegsUnfinished, GapScansFailed:
+		case GapClaimsOpen:
+			if !in.openClaimsAssessed() {
+				return CompletenessIncomplete
+			}
+		case GapInventoryUnaccounted, GapLegsUnfinished, GapScansFailed:
 			return CompletenessIncomplete
 		case GapLegsPartial, GapWorkersPartial, GapScansMoved:
 			level = CompletenessMostly
@@ -537,4 +542,31 @@ type ReportSource struct {
 	Title string `json:"title,omitempty"`
 	// CitedBy names what cited the page: "report" or a phase id.
 	CitedBy []string `json:"cited_by,omitempty"`
+}
+
+// openClaimsAssessed requires an accepted question assessment for every open claim.
+func (in ReportInput) openClaimsAssessed() bool {
+	if in.CoverageFacts == nil || in.CoverageReview == nil || reviewcoverage.Validate(*in.CoverageFacts, *in.CoverageReview) != nil {
+		return false
+	}
+	assessed := map[string]bool{}
+	for _, fact := range in.CoverageFacts.Gaps {
+		if fact.Kind == "review_question" {
+			for _, assessment := range in.CoverageReview.Assessments {
+				if assessment.ID == fact.ID && assessment.Disposition != reviewcoverage.Covered {
+					assessed[fact.Subject] = true
+				}
+			}
+		}
+	}
+	count := 0
+	for _, c := range in.Claims {
+		if c.Class == ClaimOpen {
+			count++
+			if !assessed[c.ID] {
+				return false
+			}
+		}
+	}
+	return count > 0
 }
