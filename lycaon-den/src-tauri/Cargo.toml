@@ -37,7 +37,7 @@ base64 = "0.22"
 minisign-verify = "0.2.5"
 rand = "0.8"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
-which = "7"
+which = "8"
 ureq = "2"
 libc = "0.2"
 # The blocking picker preserves window-level presentation.
