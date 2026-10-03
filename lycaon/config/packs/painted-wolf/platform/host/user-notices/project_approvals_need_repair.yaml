@@ -1,0 +1,14 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: This project's approvals.yaml needs fixing first
+message: >-
+  Parts of this project's approvals.yaml were not applied, so saving here would
+  replace them. The project's approval settings list each part and why.
+suggested_action: >-
+  Fix or remove those parts in .paintedwolf/approvals.yaml, then change the
+  settings again.
+scenarios:
+  - id: default
+    expect_contains:
+      - approvals.yaml
+      - not applied
