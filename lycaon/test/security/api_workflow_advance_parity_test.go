@@ -138,6 +138,10 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		// HTTP advance queues feedback; tool advance returns the gate details directly.
 		parity := newAdvanceParityRig(t)
 		httpRun := parity.startRunHTTP(t, "parity-coord", "1.0.0")
+		// Holding the execution lane keeps the coordinator loop from consuming the
+		// kick before it is read.
+		finishExecution := parity.sessionMgr.BeginPromptExecutionForTest(t.Context(), parity.httpSession.ID)
+		defer finishExecution()
 		// Drain startup feedback to isolate the failed-advance event.
 		parity.sessionMgr.ClearPendingKickForTest(parity.httpSession.ID)
 
