@@ -66,7 +66,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			})
 		}
 		rl := *def.ReviewLoop
-		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(args)
+		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(rl, args)
 		if err != nil {
 			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(rl, err))
 		}
@@ -136,11 +136,8 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 	})
 }
 
-// parseSubmitVerdictArgs decodes {verdict: {…}, cited_evidence: […], cited_urls: […]}.
-// Verdict values are coerced to strings — non-string JSON values keep their compact
-// JSON text, so a model that passes a list for a string field still submits a
-// schema-checkable payload.
-func parseSubmitVerdictArgs(args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
+// Structured verdict fields retain JSON in the durable string-valued record.
+func parseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
 	if args == nil {
 		return nil, nil, nil, fmt.Errorf("verdict object required")
 	}
@@ -152,19 +149,12 @@ func parseSubmitVerdictArgs(args map[string]any) (map[string]string, []api.Citat
 		return nil, nil, nil, fmt.Errorf("verdict must be a non-empty object of schema fields")
 	}
 	verdict := make(map[string]string, len(raw))
-	for k, v := range raw {
-		switch t := v.(type) {
-		case string:
-			verdict[k] = t
-		case nil:
-			verdict[k] = ""
-		default:
-			enc, err := json.Marshal(t)
-			if err != nil {
-				return nil, nil, nil, fmt.Errorf("verdict field %q is not encodable", k)
-			}
-			verdict[k] = string(enc)
+	for key, value := range raw {
+		encoded, err := encodeVerdictField(def.VerdictSchema[key], key, value)
+		if err != nil {
+			return nil, nil, nil, err
 		}
+		verdict[key] = encoded
 	}
 	cited, err := parseVerdictCitedEvidence(args["cited_evidence"])
 	if err != nil {
@@ -175,6 +165,30 @@ func parseSubmitVerdictArgs(args map[string]any) (map[string]string, []api.Citat
 		return nil, nil, nil, err
 	}
 	return verdict, cited, urls, nil
+}
+
+func encodeVerdictField(kind, field string, value any) (string, error) {
+	switch kind {
+	case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType:
+		if _, ok := value.([]any); !ok {
+			return "", fmt.Errorf("verdict field %q must be an array", field)
+		}
+	case workflowdef.VerdictCoverageType:
+		if _, ok := value.(map[string]any); !ok {
+			return "", fmt.Errorf("verdict field %q must be an object", field)
+		}
+	default:
+		text, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("verdict field %q must be a string", field)
+		}
+		return text, nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("encode verdict field %q: %w", field, err)
+	}
+	return string(raw), nil
 }
 
 // parseVerdictCitedURLs decodes the strict URL citation channel.
