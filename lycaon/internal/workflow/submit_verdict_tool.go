@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,9 +27,10 @@ type SubmitVerdictToolResult struct {
 }
 
 const (
-	SubmitVerdictUnavailableCode     = "SUBMIT_VERDICT_UNAVAILABLE"
-	SubmitVerdictReviewerMissingCode = "SUBMIT_VERDICT_REVIEWER_MISSING"
-	SubmitVerdictIterationCapCode    = "SUBMIT_VERDICT_ITERATION_CAP"
+	SubmitVerdictInventoryUnaccountedCode = "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED"
+	SubmitVerdictUnavailableCode          = "SUBMIT_VERDICT_UNAVAILABLE"
+	SubmitVerdictReviewerMissingCode      = "SUBMIT_VERDICT_REVIEWER_MISSING"
+	SubmitVerdictIterationCapCode         = "SUBMIT_VERDICT_ITERATION_CAP"
 )
 
 // RegisterSubmitVerdictTool registers submit_verdict. The host validates the
@@ -91,6 +93,13 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 		outcome, err := runs.RecordReviewLoopVerdict(ctx, tctx.SessionID, verdict, cited, citedURLs)
 		if err != nil {
 			return "", err
+		}
+		if issue := outcome.InventoryIssue; issue != nil {
+			details := guidance.OffenderHintData(issue.Offenders)
+			details["reason"] = issue.Reason
+			details["offender_count"] = issue.Count
+			details["offenders_omitted"] = max(0, issue.Count-len(issue.Offenders))
+			return rejectSubmitVerdict(tctx, SubmitVerdictInventoryUnaccountedCode, active.CurrentPhase, details)
 		}
 		if len(outcome.MissingAgents) > 0 {
 			return rejectSubmitVerdict(tctx, SubmitVerdictReviewerMissingCode, active.CurrentPhase, map[string]any{

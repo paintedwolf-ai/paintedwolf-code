@@ -186,9 +186,10 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 	}
 	if p.ReviewLoop != nil {
 		out.ReviewLoop = &reviewLoopYAML{
-			ReconcilesPhase:      p.ReviewLoop.ReconcilesPhase,
-			IncludeScanInventory: p.ReviewLoop.IncludeScanInventory,
-			EvidenceKey:          p.ReviewLoop.EvidenceKey, IterationCap: p.ReviewLoop.IterationCap,
+			ReconcilesPhase:           p.ReviewLoop.ReconcilesPhase,
+			RequireInventoryAccounted: p.ReviewLoop.RequireInventoryAccounted,
+			IncludeScanInventory:      p.ReviewLoop.IncludeScanInventory,
+			EvidenceKey:               p.ReviewLoop.EvidenceKey, IterationCap: p.ReviewLoop.IterationCap,
 			VerdictSchema:  copyStringMap(p.ReviewLoop.VerdictSchema),
 			RequiredAgents: append([]string(nil), p.ReviewLoop.RequiredAgents...),
 			IfSpawnable:    append([]string(nil), p.ReviewLoop.IfSpawnable...),

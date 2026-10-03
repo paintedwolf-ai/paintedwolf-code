@@ -11,7 +11,7 @@ Do not fill High / Medium / Low to make the report look complete. Do not score a
 
 Carry every review outcome into `findings` as well as the prose, keeping claim ids; every open or overturned claim needs a finding with its id. The host states each rated finding's level from its answers, so leave out `severity`.
 
-Answer without tools, with the report fence shown under Report document. Set aside scanner groups that cannot change the rating, such as test fixtures; claim links and the challenge's set-asides already count. Scanners with zero findings need no set-asides.
+Answer without tools, with the report fence shown under Report document. Claim links and the challenge's set-asides already count toward scan accounting; add fence `set_asides` only for groups they leave unaccounted, as `{scanner, paths, reason}` or `{scan_group_ids, reason}`, with a reason that holds for every group it selects — test-fixture and detection-pack findings usually qualify. Scanners with zero findings need no set-asides.
 
 {% if review_verdict and review_verdict.survey_claims %}
 **Stamped claims**

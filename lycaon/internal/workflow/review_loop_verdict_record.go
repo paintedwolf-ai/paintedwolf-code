@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/guidance"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -80,6 +81,15 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		return ReviewLoopVerdictOutcome{}, err
 	}
 	out.Valid = ValidateReviewLoopVerdict(rl, verdict, rules) == nil
+	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
+		out.InventoryIssue, err = m.checkReviewInventory(ctx, active, rl, verdict)
+		if err != nil {
+			return out, err
+		}
+		if out.InventoryIssue != nil {
+			out.Valid = false
+		}
+	}
 	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
 		owed, captured := effectiveReviewAgents(active.CurrentPhase, rl, vars)
 		if !captured {
@@ -271,7 +281,8 @@ type ReviewLoopVerdictOutcome struct {
 	Phase       string
 	EvidenceKey string
 	// MissingAgents lists required reviewers without succeeded envelopes.
-	MissingAgents []string
+	MissingAgents  []string
+	InventoryIssue *guidance.ReportDocumentIssue
 	// IterationCapExceeded reports a non-terminal verdict rejected because the
 	// phase already reached iteration_cap on a prior attempt.
 	IterationCapExceeded bool
