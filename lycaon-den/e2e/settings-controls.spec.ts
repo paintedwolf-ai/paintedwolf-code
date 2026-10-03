@@ -197,7 +197,7 @@ webE2e("project secrets save metadata, deadlines, and replacement values", async
   await expect.poll(async () => (await readSecret()).agent_use_ends_at).toBeTruthy();
 
   await page.getByRole("button", { name: "Replace stored value", exact: true }).click();
-  await page.getByRole("textbox", { name: "Paste the credential", exact: true }).fill("replacement-fixture-value");
+  await page.getByTestId("managed-secret-new-value").fill("replacement-fixture-value");
   await page.getByRole("button", { name: "Replace stored value", exact: true }).click();
   await expect.poll(readSecret).toMatchObject({ version: 2, reference });
   await expect(page.getByRole("button", { name: "Edit details", exact: true })).toBeVisible();
@@ -261,7 +261,14 @@ webE2e("web provider membership follows the catalog's individual and bundled con
     expect(response.ok()).toBeTruthy();
     return response.json();
   };
+  // The enabled set lives in settings; the provider listing carries metadata and config.
+  const readEnabled = async () => {
+    const response = await request.get(settingsEndpoint, { headers });
+    expect(response.ok()).toBeTruthy();
+    return (await response.json()).enabled_providers;
+  };
   const original = await read();
+  const originalEnabled = await readEnabled();
   const ids: string[] = ["direct", ...original.providers.map((provider: { id: string }) => provider.id)];
   const bundled = new Set(original.providers.filter((provider: { kind: string; default_enabled?: boolean }) =>
     provider.kind === "keyless" && provider.default_enabled,
@@ -273,7 +280,7 @@ webE2e("web provider membership follows the catalog's individual and bundled con
       for (const enabled of [[id], []]) {
         const response = await request.patch(settingsEndpoint, { headers, data: { enabled_providers: enabled } });
         expect(response.ok(), `${id}: ${await response.text()}`).toBeTruthy();
-        expect((await read()).enabled_providers, id).toEqual(bundled.has(id) ? [] : enabled);
+        expect(await readEnabled(), id).toEqual(bundled.has(id) ? [] : enabled);
       }
     }
     for (const [id, config] of [
@@ -291,7 +298,7 @@ webE2e("web provider membership follows the catalog's individual and bundled con
       }
     }
   } finally {
-    const response = await request.patch(settingsEndpoint, { headers, data: { enabled_providers: original.enabled_providers } });
+    const response = await request.patch(settingsEndpoint, { headers, data: { enabled_providers: originalEnabled } });
     expect(response.ok()).toBeTruthy();
   }
   await testInfo.attach("settings-web-provider-coverage", {

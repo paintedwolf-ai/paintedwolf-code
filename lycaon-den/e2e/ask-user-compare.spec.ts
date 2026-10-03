@@ -49,6 +49,7 @@ webE2e(
       data: {
         session_id: sessionId,
         prompt: "Which layout should we ship?",
+        purpose: "compare",
         artifacts: fixtureIds,
       },
     });

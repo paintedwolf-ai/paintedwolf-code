@@ -1,14 +1,14 @@
-import { createHash } from "node:crypto";
 import { diffLines } from "diff";
 import type { FileEditPreview, FileEditSnapshot } from "../api/types.ts";
+import { sha256Hex } from "./sha256.ts";
 
-export const sourceTextHash = (text: string) => createHash("sha256").update(text).digest("hex");
+export const sourceTextHash = sha256Hex;
 
 export const retainedFileEditFixtures = new Map<string, FileEditSnapshot>();
 
 /** Creates a transport fixture from readable test source, retaining the bodies on the mock host. */
 export function fileEditPreviewFixture(edit: FileEditSnapshot): FileEditPreview {
-  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+  const hash = sha256Hex;
   const id = hash(JSON.stringify(edit));
   retainedFileEditFixtures.set(id, edit);
   const changes = diffLines(edit.before ?? "", edit.after);

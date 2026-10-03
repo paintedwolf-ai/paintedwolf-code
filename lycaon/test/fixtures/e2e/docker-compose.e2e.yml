@@ -25,6 +25,8 @@ services:
   document-core:
     # Match rust-toolchain.toml.
     image: rust:1.97.1-bookworm
+    # Host-owned outputs stay readable and removable by the test process.
+    user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace/document-core
     volumes:
       - type: bind
@@ -43,19 +45,24 @@ services:
         target: /cargo-target
     environment:
       CARGO_TARGET_DIR: /cargo-target
+      HOME: /tmp
     command:
       - sh
       - -c
       - |
         set -eu
         echo "e2e-document-core: cargo build…" >&2
-        cargo build --release --locked --bin pw-document-core
+        # Concurrent shards share the registry, which each container's own
+        # CARGO_HOME lock does not cover.
+        flock /cargo-target/.e2e-build.lock cargo build --release --locked --bin pw-document-core
         mkdir -p "${LYCAON_E2E_STATE_DIR}/document-core"
         cp /cargo-target/release/pw-document-core "${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core"
 
   sidecar:
     # Match the module's pinned toolchain.
     image: golang:1.26.8-bookworm
+    # The tests read the store, restore marker, and staging files it writes.
+    user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace/lycaon
     depends_on:
       model-fixture:
@@ -87,36 +94,61 @@ services:
         target: /go/pkg/mod
       - type: bind
         source: ${LYCAON_E2E_GO_CACHE_DIR}/build
-        target: /root/.cache/go-build
+        target: /go-build-cache
     environment:
       LYCAON_ADDR: 0.0.0.0:8787
       LYCAON_BIND_ALL: "1"
       LYCAON_API_TOKEN: ${LYCAON_E2E_TOKEN}
       LYCAON_CONFIG_DIR: ${LYCAON_E2E_CONFIG_DIR}
-      LYCAON_LLM_MOCK: "1"
+      LYCAON_LLM_MOCK: ${LYCAON_LLM_MOCK:-1}
+      LYCAON_LLM_MANUAL: ${LYCAON_LLM_MANUAL:-0}
       LYCAON_HARNESS: "1"
       LYCAON_DEV: "1"
       LYCAON_DEV_CORS: "1"
       LYCAON_DOCUMENT_CORE_BINARY: ${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core
       GOPROXY: https://proxy.golang.org,direct
+      GOCACHE: /go-build-cache
+      HOME: /tmp
     command:
       - sh
       - -c
       - |
         set -eu
-        echo "e2e-sidecar: go build…" >&2
-        go build -o /tmp/lycaon ./cmd/lycaon
+        # A restarted container keeps the binary it built.
+        if [ ! -x /tmp/lycaon ]; then
+          echo "e2e-sidecar: go build…" >&2
+          go build -o /tmp/lycaon.partial ./cmd/lycaon
+          mv /tmp/lycaon.partial /tmp/lycaon
+        fi
         echo "e2e-sidecar: serve…" >&2
         exec /tmp/lycaon serve --db "${LYCAON_E2E_STATE_DIR}/lycaon.db"
     ports:
-      - "127.0.0.1::8787"
+      # A fixed host port survives the container restarts that apply staged restores.
+      - "127.0.0.1:${LYCAON_E2E_SIDECAR_PORT:-}:8787"
 
-  vite:
-    # Match the workspace's pinned runtime.
+  vite-deps:
+    # Match .bun-version.
     image: oven/bun:1.3.14
     working_dir: /workspace/lycaon-den
+    volumes:
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon-den
+        target: /workspace/lycaon-den
+      - type: volume
+        source: vite-node-modules
+        target: /workspace/lycaon-den/node_modules
+    command: [bun, install, --frozen-lockfile]
+
+  vite:
+    # Match .node-version. As in den:harness:test, Vite runs on Node: Bun's
+    # proxy keeps upstream event streams open after the browser leaves.
+    image: node:26.3.0-trixie-slim
+    working_dir: /workspace/lycaon-den
     depends_on:
-      - sidecar
+      sidecar:
+        condition: service_started
+      vite-deps:
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ${LYCAON_REPO_ROOT}/lycaon-den
@@ -138,10 +170,7 @@ services:
       VITE_LYCAON_PROXY: "1"
       VITE_LYCAON_PROXY_TARGET: http://sidecar:8787
       LYCAON_E2E_FROZEN: "1"
-    command:
-      - sh
-      - -c
-      - bun install --frozen-lockfile && exec bun run vite --host 0.0.0.0 --port 1420 --strictPort
+    command: [node, node_modules/vite/bin/vite.js, --host, 0.0.0.0, --port, "1420", --strictPort]
     ports:
       - "127.0.0.1::1420"
 

@@ -25,6 +25,10 @@ mkdir -p "${LYCAON_E2E_GO_CACHE_DIR}/mod" "${LYCAON_E2E_GO_CACHE_DIR}/build" \
   "${LYCAON_E2E_GO_CACHE_DIR}/cargo-registry" "${LYCAON_E2E_GO_CACHE_DIR}/document-core-target"
 export LYCAON_E2E_DOCKER_PROJECT="${LYCAON_E2E_DOCKER_PROJECT:-$(e2e_docker_random_project lycae2e)}"
 export LYCAON_E2E_DOCKER_STACK=1
+export LYCAON_E2E_UID="${LYCAON_E2E_UID:-$(id -u)}"
+export LYCAON_E2E_GID="${LYCAON_E2E_GID:-$(id -g)}"
+# Docker reassigns an ephemeral port on every container start.
+export LYCAON_E2E_SIDECAR_PORT="${LYCAON_E2E_SIDECAR_PORT:-$(e2e_free_local_port)}"
 e2e_docker_persist_project "${LYCAON_E2E_DOCKER_PROJECT}"
 
 echo "e2e-docker-stack-up: project=${LYCAON_E2E_DOCKER_PROJECT}" >&2

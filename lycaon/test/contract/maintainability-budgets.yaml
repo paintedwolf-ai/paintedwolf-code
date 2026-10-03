@@ -38,7 +38,7 @@ go_receiver_lines:
     lycaon/internal/advisory/severity/severity.indexResolver: 21
     lycaon/internal/agentpresence/agentpresence.Tracker: 687
     lycaon/internal/agentpresence/agentpresence.chatPresence: 28
-    lycaon/internal/api/api.Server: 3431
+    lycaon/internal/api/api.Server: 3426
     lycaon/internal/api/api.projectReplaceStore: 16
     lycaon/internal/api/api.searchPageCache: 36
     lycaon/internal/api/capabilityadmin/capabilityadmin.Handler: 1207
@@ -3954,7 +3954,7 @@ go_struct_fields:
     lycaon/internal/api/api.Server: 57
     lycaon/internal/api/api.artifactCursor: 2
     lycaon/internal/api/api.credentialOperationMatcher: 2
-    lycaon/internal/api/api.harnessAskUserReq: 5
+    lycaon/internal/api/api.harnessAskUserReq: 6
     lycaon/internal/api/api.harnessAutoReq: 2
     lycaon/internal/api/api.harnessPendingDTO: 6
     lycaon/internal/api/api.harnessPendingMessage: 3
@@ -11282,7 +11282,7 @@ source_files:
     lycaon/internal/api/gitadmin/worktree_remove.go: 84
     lycaon/internal/api/gitadmin/worktree_scope.go: 55
     lycaon/internal/api/gitadmin/worktree_view.go: 82
-    lycaon/internal/api/harness_control.go: 764
+    lycaon/internal/api/harness_control.go: 767
     lycaon/internal/api/harness_execution.go: 58
     lycaon/internal/api/harness_file_changes.go: 29
     lycaon/internal/api/harness_overlays.go: 38
@@ -11790,7 +11790,7 @@ source_files:
     lycaon/internal/confine/filesystem_rules.go: 260
     lycaon/internal/confine/floor_grants.go: 72
     lycaon/internal/confine/hard_deny_writes.go: 77
-    lycaon/internal/confine/helper.go: 100
+    lycaon/internal/confine/helper.go: 101
     lycaon/internal/confine/helper_windows.go: 2
     lycaon/internal/confine/listen_grants.go: 15
     lycaon/internal/confine/log.go: 96
@@ -15401,7 +15401,7 @@ source_files:
     scripts/document-core-env.sh: 2
     scripts/e2e-cleanup.sh: 15
     scripts/e2e-den-desktop.sh: 50
-    scripts/e2e-den.sh: 138
+    scripts/e2e-den.sh: 142
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 20
     scripts/e2e-sidecar-serve.sh: 70
@@ -15421,7 +15421,7 @@ source_files:
     scripts/go-test-failed.sh: 63
     scripts/gocache-trim.sh: 39
     scripts/govulncheck-gate.py: 197
-    scripts/harness/crash-restart.sh: 28
+    scripts/harness/crash-restart.sh: 35
     scripts/harness/lib.sh: 289
     scripts/harness/seed-hostile-project.sh: 27
     scripts/harness/seed_project.py: 38
@@ -15659,7 +15659,7 @@ test_directories:
     lycaon-den/src/shortcuts: 14
     lycaon-den/src/store: 27
     lycaon-den/src/styling: 20
-    lycaon-den/src/test: 30
+    lycaon-den/src/test: 31
     lycaon-den/src/test/style-contracts: 11
     lycaon-den/src/test/unit: 2
     lycaon-den/src/time: 2
@@ -16119,22 +16119,22 @@ test_files:
     lycaon-den/e2e/approval-grants-revoke.spec.ts: 113
     lycaon-den/e2e/artifact-reference-dedup.spec.ts: 195
     lycaon-den/e2e/ask-user-choice-send.spec.ts: 77
-    lycaon-den/e2e/ask-user-compare.spec.ts: 88
+    lycaon-den/e2e/ask-user-compare.spec.ts: 89
     lycaon-den/e2e/ask-user-feedback.spec.ts: 138
     lycaon-den/e2e/ask-user-visual.spec.ts: 103
     lycaon-den/e2e/backup-export-den.spec.ts: 174
     lycaon-den/e2e/boot-sidecar-restart.spec.ts: 107
     lycaon-den/e2e/boot.spec.ts: 24
     lycaon-den/e2e/buffer-strip-management.spec.ts: 46
-    lycaon-den/e2e/chat-content-scroll.spec.ts: 125
+    lycaon-den/e2e/chat-content-scroll.spec.ts: 126
     lycaon-den/e2e/checkpoint-declared-endpoints.spec.ts: 73
-    lycaon-den/e2e/checkpoint-direct-ip.spec.ts: 84
+    lycaon-den/e2e/checkpoint-direct-ip.spec.ts: 76
     lycaon-den/e2e/checkpoint-edit-review-careful.spec.ts: 14
     lycaon-den/e2e/checkpoint-edit-review-default-off.spec.ts: 16
-    lycaon-den/e2e/checkpoint-file-change.spec.ts: 49
+    lycaon-den/e2e/checkpoint-file-change.spec.ts: 50
     lycaon-den/e2e/checkpoint-high-risk-band.spec.ts: 76
-    lycaon-den/e2e/checkpoint-recovery.spec.ts: 144
-    lycaon-den/e2e/checkpoint-socket-capability.spec.ts: 84
+    lycaon-den/e2e/checkpoint-recovery.spec.ts: 145
+    lycaon-den/e2e/checkpoint-socket-capability.spec.ts: 76
     lycaon-den/e2e/checkpoint-tool-approval.spec.ts: 132
     lycaon-den/e2e/citation-open.spec.ts: 160
     lycaon-den/e2e/commit-review.spec.ts: 42
@@ -16167,8 +16167,8 @@ test_files:
     lycaon-den/e2e/editor-window-presence.spec.ts: 121
     lycaon-den/e2e/extensions-project-controls.spec.ts: 125
     lycaon-den/e2e/extensions-settings.spec.ts: 127
-    lycaon-den/e2e/feedback-whats-new-den.spec.ts: 146
-    lycaon-den/e2e/file-lifecycle-recovery.spec.ts: 85
+    lycaon-den/e2e/feedback-whats-new-den.spec.ts: 145
+    lycaon-den/e2e/file-lifecycle-recovery.spec.ts: 86
     lycaon-den/e2e/file-opening-performance.spec.ts: 193
     lycaon-den/e2e/file-tab-divider.spec.ts: 52
     lycaon-den/e2e/file-truth-encoding.spec.ts: 257
@@ -16198,7 +16198,7 @@ test_files:
     lycaon-den/e2e/inline-diff-remount.spec.ts: 46
     lycaon-den/e2e/keyboard-shortcuts.spec.ts: 177
     lycaon-den/e2e/live-preview-pane.spec.ts: 189
-    lycaon-den/e2e/manual-harness-tools.ts: 39
+    lycaon-den/e2e/manual-harness-tools.ts: 42
     lycaon-den/e2e/markdown-preview-fixture.ts: 6
     lycaon-den/e2e/markdown-preview-scroll.spec.ts: 92
     lycaon-den/e2e/markdown-preview.spec.ts: 104
@@ -16225,7 +16225,7 @@ test_files:
     lycaon-den/e2e/project-create-transcript.spec.ts: 14
     lycaon-den/e2e/project-create.spec.ts: 119
     lycaon-den/e2e/project-registry-live.spec.ts: 54
-    lycaon-den/e2e/project-space.spec.ts: 154
+    lycaon-den/e2e/project-space.spec.ts: 155
     lycaon-den/e2e/project-switch.spec.ts: 43
     lycaon-den/e2e/prompt.spec.ts: 11
     lycaon-den/e2e/prose-arrival.spec.ts: 34
@@ -16245,13 +16245,13 @@ test_files:
     lycaon-den/e2e/search-pagination.spec.ts: 65
     lycaon-den/e2e/search-project-switch.spec.ts: 31
     lycaon-den/e2e/search-replace-across-files.spec.ts: 31
-    lycaon-den/e2e/secret-service-approval.spec.ts: 188
+    lycaon-den/e2e/secret-service-approval.spec.ts: 186
     lycaon-den/e2e/secret-service-fixture.ts: 38
     lycaon-den/e2e/security-findings-pane.spec.ts: 392
     lycaon-den/e2e/selection-prose-draft.spec.ts: 34
     lycaon-den/e2e/session-rename.spec.ts: 112
     lycaon-den/e2e/session-switch.spec.ts: 39
-    lycaon-den/e2e/settings-controls.spec.ts: 432
+    lycaon-den/e2e/settings-controls.spec.ts: 438
     lycaon-den/e2e/settings-layout-switch.spec.ts: 56
     lycaon-den/e2e/settings.spec.ts: 104
     lycaon-den/e2e/shortcut-help-overlay.spec.ts: 35
@@ -17522,6 +17522,7 @@ test_files:
     lycaon-den/src/test/reader-viewport-mock.ts: 13
     lycaon-den/src/test/registration-lifetime.ts: 360
     lycaon-den/src/test/scroll-mock.ts: 15
+    lycaon-den/src/test/sha256.ts: 51
     lycaon-den/src/test/source-client-fixture.ts: 83
     lycaon-den/src/test/source-corpus.test.ts: 102
     lycaon-den/src/test/source-corpus.ts: 146
@@ -22463,9 +22464,9 @@ test_files:
     scripts/coordinator-benchmark/test_workflow_design.py: 139
     scripts/coordinator-benchmark/test_workflow_evidence.py: 106
     scripts/coordinator-benchmark/test_write_boundary_probe.py: 52
-    scripts/e2e/docker-lib.sh: 81
+    scripts/e2e/docker-lib.sh: 101
     scripts/e2e/docker-stack-down.sh: 13
-    scripts/e2e/docker-stack-up.sh: 33
+    scripts/e2e/docker-stack-up.sh: 36
     scripts/e2e/env.sh: 14
     scripts/e2e/model-fixture.ts: 19
     scripts/e2e/sidecar-process.sh: 31
