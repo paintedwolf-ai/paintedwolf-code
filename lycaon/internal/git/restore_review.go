@@ -28,8 +28,25 @@ type RestoreContent struct {
 	Bytes  []byte
 	SHA256 string
 	Size   int64
+	// Mode is a Git file mode; see gitFileMode.
 	Mode   os.FileMode
 	Exists bool
+}
+
+// gitFileMode reduces a mode to what Git records: a symlink, a submodule, or a
+// regular file that is or is not executable. Other permission bits follow the
+// umask, so a file Git rewrites can differ in them without changing.
+func gitFileMode(mode os.FileMode) os.FileMode {
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return os.ModeSymlink | 0o777
+	case mode&os.ModeDir != 0:
+		return os.ModeDir | 0o755
+	case mode&0o111 != 0:
+		return 0o755
+	default:
+		return 0o644
+	}
 }
 
 type restoreReview struct {
@@ -225,7 +242,7 @@ func readRestoreContent(path string) (RestoreContent, error) {
 	if err != nil {
 		return RestoreContent{}, err
 	}
-	content := RestoreContent{Exists: true, Mode: info.Mode()}
+	content := RestoreContent{Exists: true, Mode: gitFileMode(info.Mode())}
 	var reader io.Reader
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:

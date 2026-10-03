@@ -36,6 +36,7 @@ func readRestoreTreeFile(ctx context.Context, dir, tree, path string) (RestoreCo
 	if mode&0o170000 == 0o120000 {
 		fileMode |= os.ModeSymlink
 	}
+	fileMode = gitFileMode(fileMode)
 	writer := &restoreBlobCapture{hash: sha256.New()}
 	diagnostics, code, err := gitexec.RunTo(ctx, dir, []string{"--no-replace-objects", "cat-file", "blob", "--end-of-options", fields[2]}, hermeticOpts(0), writer)
 	if err != nil {

@@ -138,3 +138,22 @@ func TestRestoreIndexPreviewUsesStoredBytes(t *testing.T) {
 		t.Fatal("index restore changed worktree instructions or skipped review")
 	}
 }
+
+// Permission bits beyond the executable bit follow the umask, so a file Git
+// rewrites with 0664 instead of 0644 is not a change.
+func TestRestoreContentRecordsGitModes(t *testing.T) {
+	dir := t.TempDir()
+	for name, perm := range map[string]os.FileMode{"plain": 0o664, "script": 0o775} {
+		path := filepath.Join(dir, name)
+		testutil.FailErr(t, "write "+name, os.WriteFile(path, []byte(name), 0o600))
+		testutil.FailErr(t, "chmod "+name, os.Chmod(path, perm))
+	}
+	testutil.FailErr(t, "link", os.Symlink("plain", filepath.Join(dir, "link")))
+	for name, want := range map[string]os.FileMode{"plain": 0o644, "script": 0o755, "link": os.ModeSymlink | 0o777} {
+		content, err := readRestoreContent(filepath.Join(dir, name))
+		testutil.FailErr(t, "read "+name, err)
+		if content.Mode != want {
+			t.Errorf("%s mode = %v, want %v", name, content.Mode, want)
+		}
+	}
+}
