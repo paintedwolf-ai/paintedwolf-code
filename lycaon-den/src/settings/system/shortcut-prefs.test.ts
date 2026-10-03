@@ -27,6 +27,8 @@ import { setShortcutPlatformForTests } from "../../shortcuts/platform.ts";
 
 describe("shortcut-prefs", () => {
   beforeEach(() => {
+    // Expectations use macOS reservations whatever the test host is.
+    setShortcutPlatformForTests("macos");
     localStorage.clear();
     setAppStateSnapshot({ ...EMPTY_APP_STATE_V1 });
     resetDispatcherForTests();

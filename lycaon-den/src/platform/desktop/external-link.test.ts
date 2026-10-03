@@ -116,7 +116,7 @@ describe("external-link", () => {
     expect(order).toEqual(["confirm", "open"]);
   });
 
-  it("opens app-owned links without confirmation, in the preferred browser", async () => {
+  it("opens the app's own links without confirmation, in the preferred browser", async () => {
     resetExternalOpenPrefsForTests({ browser: "chrome" });
     const confirmSpy = vi.spyOn(window, "confirm");
     const open = vi.fn().mockResolvedValue(undefined);
@@ -125,7 +125,7 @@ describe("external-link", () => {
     expect(open).toHaveBeenCalledWith(REPOSITORY_URL, { browser: "chrome" });
   });
 
-  it("refuses to open anything but app-owned links without confirmation", async () => {
+  it("refuses to open anything but the app's own links without confirmation", async () => {
     const open = vi.fn();
     for (const url of ["https://example.com", `${REPOSITORY_URL}/../evil`, `${WEBSITE_URL}.evil.test`, ` ${WEBSITE_URL}`]) {
       expect(await openAppLink(url, { openInBrowser: open })).toBe(false);

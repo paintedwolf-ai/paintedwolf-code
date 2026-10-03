@@ -23,6 +23,12 @@ GOVULNCHECK_VERSION = "v1.3.0"
 VULN_RE = re.compile(r"^Vulnerability #\d+: (GO-\d{4}-\d+)")
 ALLOW_ID_RE = re.compile(r"^\s{2}(GO-\d{4}-\d+):")
 REASON_RE = re.compile(r"^\s{4}reason:\s*(.+)")
+GOOS_RE = re.compile(r"^\s{4}goos:\s*(\w+)\s*$")
+# One whole-module analysis with tests outgrows a 16 GB hosted runner; each
+# group still analyzes its packages' full dependency graph.
+PACKAGE_GROUPS = 12
+# A soft limit trades collector time for peak memory within a group.
+MEMORY_LIMIT = "8GiB"
 
 
 def go_toolchain() -> str:
@@ -55,11 +61,13 @@ def ensure_govulncheck(toolchain: str) -> None:
     )
 
 
-def load_allowlist() -> dict[str, str]:
+def load_allowlist() -> tuple[dict[str, str], dict[str, str]]:
+    """Returns reasons by ID and, for entries reachable only on one OS, that GOOS."""
     if not ALLOWLIST.is_file():
         raise SystemExit(f"govulncheck gate: missing allowlist {ALLOWLIST}")
 
     allowed: dict[str, str] = {}
+    goos: dict[str, str] = {}
     current_id: str | None = None
     reason_lines: list[str] = []
 
@@ -87,7 +95,10 @@ def load_allowlist() -> dict[str, str]:
             continue
         if current_id is not None:
             reason_match = REASON_RE.match(line)
-            if reason_match:
+            goos_match = GOOS_RE.match(line)
+            if goos_match:
+                goos[current_id] = goos_match.group(1)
+            elif reason_match:
                 reason_lines.append(reason_match.group(1).strip())
             elif line.startswith("    reviewed:"):
                 continue
@@ -95,7 +106,7 @@ def load_allowlist() -> dict[str, str]:
                 reason_lines.append(line.strip())
 
     flush()
-    return allowed
+    return allowed, goos
 
 
 def database_url() -> str:
@@ -111,13 +122,19 @@ def database_url() -> str:
     return VULNDB.as_uri()
 
 
-def run_govulncheck(toolchain: str) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    env["GOTOOLCHAIN"] = toolchain
+def package_groups(env: dict[str, str]) -> list[list[str]]:
+    packages = subprocess.run(
+        ["go", "list", "./..."], cwd=GO_DIR, env=env, check=True, capture_output=True, text=True
+    ).stdout.split()
+    size = -(-len(packages) // PACKAGE_GROUPS)
+    return [packages[start:start + size] for start in range(0, len(packages), size)]
+
+
+def run_govulncheck(env: dict[str, str], packages: list[str]) -> subprocess.CompletedProcess[str]:
     # Stream as it is produced; a run killed by a deadline otherwise leaves an
     # empty log.
     process = subprocess.Popen(
-        [str(GOVULNCHECK), "-db", database_url(), "-test", "./..."],
+        [str(GOVULNCHECK), "-db", database_url(), "-test", *packages],
         cwd=GO_DIR,
         env=env,
         stdout=subprocess.PIPE,
@@ -164,15 +181,25 @@ def parse_reported_ids(output: str) -> list[str]:
 def main() -> int:
     toolchain = go_toolchain()
     ensure_govulncheck(toolchain)
-    allowed = load_allowlist()
+    allowed, allowed_goos = load_allowlist()
+    env = os.environ.copy()
+    env["GOTOOLCHAIN"] = toolchain
+    env.setdefault("GOMEMLIMIT", MEMORY_LIMIT)
+    goos = subprocess.run(
+        ["go", "env", "GOOS"], cwd=GO_DIR, env=env, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
-    proc = run_govulncheck(toolchain)
-    reported = parse_reported_ids(proc.stdout)
-    if proc.returncode not in (0, 3):
-        return proc.returncode if proc.returncode is not None else 1
+    outputs: list[str] = []
+    for packages in package_groups(env):
+        proc = run_govulncheck(env, packages)
+        if proc.returncode not in (0, 3):
+            return proc.returncode if proc.returncode is not None else 1
+        outputs.append(proc.stdout)
+    output = "".join(outputs)
+    reported = parse_reported_ids(output)
 
     unallowlisted = [vid for vid in reported if vid not in allowed]
-    stale = sorted(set(allowed) - set(reported))
+    stale = sorted(vid for vid in set(allowed) - set(reported) if allowed_goos.get(vid, goos) == goos)
 
     if unallowlisted:
         print("govulncheck: unallowlisted vulnerabilities affecting this module:", file=sys.stderr)
@@ -183,7 +210,7 @@ def main() -> int:
             f"{ALLOWLIST.relative_to(ROOT)}.",
             file=sys.stderr,
         )
-        sys.stdout.write(proc.stdout)
+        sys.stdout.write(output)
         return 1
 
     if stale:

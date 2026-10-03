@@ -9,5 +9,9 @@ func availableStorageBytes(path string) (uint64, bool, error) {
 	if err := unix.Statfs(path, &stat); err != nil {
 		return 0, false, err
 	}
-	return stat.Bavail * uint64(stat.Bsize), true, nil
+	size := stat.Bsize
+	if size <= 0 {
+		return 0, false, nil
+	}
+	return stat.Bavail * uint64(size), true, nil
 }

@@ -3,6 +3,7 @@
 package hostprocess
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,7 +32,7 @@ func inspect(pid int) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	start, end := strings.IndexByte(string(raw), '('), strings.LastIndexByte(string(raw), ')')
+	start, end := bytes.IndexByte(raw, '('), bytes.LastIndexByte(raw, ')')
 	if start < 0 || end < start {
 		return Process{}, ErrStale
 	}
@@ -60,7 +61,7 @@ func signalInstance(process Process, name string) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	current, err := inspect(process.PID)
 	if err != nil {
 		return err

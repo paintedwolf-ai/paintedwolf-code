@@ -19,7 +19,7 @@ func processGroupMemory(group int) (processMemorySample, error) {
 			continue
 		}
 		path := filepath.Join("/proc", entry.Name(), "stat")
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) // #nosec G304 -- /proc/<pid>/stat for a numeric directory name
 		if vanishedProcess(err) {
 			continue
 		}
