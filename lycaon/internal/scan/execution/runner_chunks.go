@@ -21,6 +21,12 @@ import (
 // chunkSpillDir retains completed chunks for resumption after a restart.
 const chunkSpillDir = "chunks-v2"
 
+// chunkRecord retains private identity fingerprints omitted from public results.
+type chunkRecord struct {
+	Result           *scanoutput.Result          `json:"result"`
+	SecretIdentities []scanoutput.SecretIdentity `json:"secret_identities,omitempty"`
+}
+
 // runInChunks executes the request as bounded invocations and merges them.
 // A request the chunk size does not split runs as one invocation.
 func (r *Runner) runInChunks(ctx context.Context, job *api.CodeScan, req scanbase.ScanRequest) (*scanoutput.Result, error) {
@@ -112,12 +118,16 @@ func loadChunk(dir string, index int) (*scanoutput.Result, bool, error) {
 		}
 		return nil, false, err
 	}
-	var result scanoutput.Result
-	if err := json.Unmarshal(raw, &result); err != nil {
+	var record chunkRecord
+	if err := json.Unmarshal(raw, &record); err != nil {
 		// Re-run chunks that cannot be decoded.
 		return nil, false, nil //nolint:nilerr // intentional: an unreadable kept chunk is simply run again
 	}
-	return &result, true, nil
+	if record.Result == nil {
+		return nil, false, nil
+	}
+	record.Result.SecretIdentities = record.SecretIdentities
+	return record.Result, true, nil
 }
 
 func saveChunk(dir string, index int, result *scanoutput.Result) error {
@@ -127,7 +137,7 @@ func saveChunk(dir string, index int, result *scanoutput.Result) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	raw, err := surveyjson.Marshal(result)
+	raw, err := surveyjson.Marshal(chunkRecord{Result: result, SecretIdentities: result.SecretIdentities})
 	if err != nil {
 		return err
 	}
