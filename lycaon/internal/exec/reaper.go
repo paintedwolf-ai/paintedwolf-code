@@ -39,7 +39,7 @@ func TrackScratchDir(path string) (remove func()) {
 		untrack = track(reaperDir, path)
 	}
 	return func() {
-		if os.RemoveAll(path) == nil {
+		if os.RemoveAll(path) == nil { // #nosec G703 -- a run directory the caller created with os.MkdirTemp
 			untrack()
 		}
 	}
