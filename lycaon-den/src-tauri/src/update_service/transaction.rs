@@ -264,11 +264,25 @@ fn invalidate_preparation(
 pub async fn resume(app: &AppHandle, error: Option<UpdateError>) {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
-    if inner.state.staged_release_id.is_some() {
-        inner.state.installation = Installation::Staged;
+    resume_state(&mut inner.state, error.clone());
+    if let (Some(error), Some(candidate)) = (error, inner.state.candidate.clone()) {
+        if error.code == Failure::ActivationFailed {
+            invalidate_preparation(&mut inner, &candidate, error);
+        }
     }
-    inner.state.last_error = error;
     emit(app, &mut inner.state);
+}
+fn resume_state(state: &mut super::NativeUpdateState, error: Option<UpdateError>) {
+    if error
+        .as_ref()
+        .is_some_and(|error| error.code == Failure::ActivationFailed)
+    {
+        state.staged_release_id = None;
+        state.installation = Installation::Failed;
+    } else if state.staged_release_id.is_some() {
+        state.installation = Installation::Staged;
+    }
+    state.last_error = error;
 }
 #[tauri::command]
 pub async fn restart_to_update(
@@ -575,6 +589,29 @@ mod tests {
         assert!(!superseded(&t).unwrap());
         fs::write(executable(&t.target), "external signed replacement").unwrap();
         assert!(superseded(&t).unwrap());
+    }
+    #[test]
+    fn failed_helper_launch_offers_retry_while_deferred_shutdown_keeps_restart() {
+        for (failure, restart, download) in [
+            (Failure::ActivationFailed, false, true),
+            (Failure::EngineStopFailed, true, false),
+            (Failure::Cancelled, true, false),
+        ] {
+            let mut state = super::super::NativeUpdateState::new(
+                "1.0.0".into(),
+                super::super::UpdateChannel::Stable,
+                super::super::InstallSource::DirectDownload,
+            );
+            let candidate = super::super::tests::candidate("1.1.0");
+            state.staged_release_id = Some(candidate.release_id.clone());
+            state.candidate = Some(candidate);
+            state.installation = Installation::AwaitingExit;
+            resume_state(&mut state, Some(failure.into()));
+            state.refresh_capabilities(true);
+            assert_eq!(state.capabilities.can_restart_to_update, restart);
+            assert_eq!(state.capabilities.can_download, download);
+            assert_eq!(state.last_error.unwrap().code, failure);
+        }
     }
     fn fixture(root: &Path) -> Transaction {
         let candidate = super::super::tests::candidate("1.1.0");
