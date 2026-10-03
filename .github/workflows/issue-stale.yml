@@ -18,30 +18,21 @@ permissions:
   contents: read
   issues: write
 
+env:
+  ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
+
 jobs:
   stale:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          days-before-stale: 90
-          # issue-sweep closes `stale` after its own grace period.
-          days-before-close: -1
-          # Issues only.
-          days-before-pr-stale: -1
-          days-before-pr-close: -1
-          stale-issue-label: "stale"
-          stale-issue-message: >-
-            This has had no activity for 90 days, so it is being marked stale to keep the
-            tracker honest about what is actually being worked on. If it still matters, a
-            comment removes the label — including just "still happening on <version>".
-            If it stopped happening, feel free to close it yourself.
-          # One human reply exempts the issue permanently.
-          labels-to-add-when-unstale: "never-stale"
-          exempt-issue-labels: "never-stale,accepting-work,security"
-          exempt-all-issue-assignees: true
-          ascending: true
-          operations-per-run: 300
-          enable-statistics: true
-          debug-only: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}
+          persist-credentials: false
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          DEBUG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}
+        with:
+          script: |
+            const { markStale } = require("./.github/scripts/issue-policy.cjs");
+            await markStale({ github, context, core });

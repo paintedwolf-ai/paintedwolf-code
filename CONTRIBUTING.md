@@ -53,3 +53,17 @@ Contributions are licensed under Apache-2.0 for application code and CC BY 4.0 f
 A GitHub DCO check enforces the trailer on every pull request.
 
 See `REPORTING.md`, `AGENTS.md`, and `docs/dev-tasks.md` for more.
+
+## Issue automation exemptions
+
+Issues authored by `chris-beckman` are exempt from automated intake labels and
+replies, lifecycle reminders, stale marking, closing, and locking. To exempt
+additional authors, set the repository Actions variable
+`ISSUE_AUTOMATION_EXEMPT_USERS` to comma- or whitespace-separated GitHub usernames.
+Matching ignores case and accepts an optional `@` prefix. The issue author is
+checked, so a maintainer editing or labeling someone else's issue does not exempt it.
+
+The policy applies to existing issues on subsequent runs. It does not remove old
+comments or labels, reopen closed issues, or unlock issues. Manual triage remains
+available. The shared policy lives in
+[`.github/scripts/issue-policy.cjs`](.github/scripts/issue-policy.cjs).
