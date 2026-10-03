@@ -79,10 +79,24 @@ class HostedVerificationTests(unittest.TestCase):
                 with patch.object(ci, "artifact_root", return_value=root), \
                         patch.object(ci.subprocess, "call", return_value=code) as run:
                     self.assertEqual(ci.run_lane("frontend"), code)
-                    run.assert_called_once_with(["./task", "den:typecheck", "den:lint", "den:test"], cwd=ci.ROOT)
+                    run.assert_called_once()
+                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:test"])
+                    self.assertEqual(run.call_args.kwargs["cwd"], ci.ROOT)
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
+
+    def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
+        minutes = ci.lanes()["behavior"]["minutes"]
+        with tempfile.TemporaryDirectory() as directory:
+            for inherited, expected in [({}, str(minutes * 60)), ({"PW_GO_TEST_TIMEOUT_SECONDS": "60"}, "60")]:
+                with patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                        patch.dict(ci.os.environ, inherited), \
+                        patch.object(ci.subprocess, "call", return_value=0) as run:
+                    if not inherited:
+                        ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
+                    ci.run_lane("behavior")
+                    self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
     def test_interrupted_invocation_leaves_an_unfinished_record(self):
         with tempfile.TemporaryDirectory() as directory:

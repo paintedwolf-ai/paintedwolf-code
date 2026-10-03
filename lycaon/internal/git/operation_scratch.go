@@ -252,7 +252,7 @@ func readOperationContent(root, relative string) (RestoreContent, error) {
 	if err != nil {
 		return RestoreContent{}, err
 	}
-	content := RestoreContent{Exists: true, Mode: info.Mode()}
+	content := RestoreContent{Exists: true, Mode: gitFileMode(info.Mode())}
 	if info.Mode()&os.ModeSymlink != 0 {
 		link, err := scope.Readlink(relative)
 		if err != nil {

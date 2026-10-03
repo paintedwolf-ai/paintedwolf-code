@@ -491,7 +491,7 @@ go_receiver_lines:
     lycaon/internal/exec/exec.sequenceRun: 213
     lycaon/internal/exec/exec.stageFiles: 38
     lycaon/internal/exec/exec.tailLimitedWriter: 24
-    lycaon/internal/exec/exec.unixGuard: 48
+    lycaon/internal/exec/exec.unixGuard: 51
     lycaon/internal/exec/exec.windowsGuard: 43
     lycaon/internal/extensionstate/extensionstate.ApplyMetaOp: 12
     lycaon/internal/extensionstate/extensionstate.ApplyProfileOp: 12
@@ -646,7 +646,7 @@ go_receiver_lines:
     lycaon/internal/hitl/hitl.keyedMutex: 23
     lycaon/internal/hostcmd/hostcmd.Runner: 14
     lycaon/internal/hostidentity/hostidentity.Identity: 3
-    lycaon/internal/hostlock/hostlock.Claim: 62
+    lycaon/internal/hostlock/hostlock.Claim: 78
     lycaon/internal/hostlock/hostlock.ClaimLostError: 7
     lycaon/internal/hostlock/hostlock.StoreLockedError: 11
     lycaon/internal/hostpower/hostpower.Controller: 158
@@ -1262,7 +1262,7 @@ go_receiver_lines:
     lycaon/internal/secretcap/secretcap.HeldUnreleasedError: 3
     lycaon/internal/secretcap/secretcap.ReferenceLimitError: 2
     lycaon/internal/secretcap/secretcap.Resolution: 400
-    lycaon/internal/secretcap/secretcap.Service: 1572
+    lycaon/internal/secretcap/secretcap.Service: 1573
     lycaon/internal/secretcap/secretcap.TokenJar: 33
     lycaon/internal/secretcap/secretcap.ValidationError: 2
     lycaon/internal/secretcap/secretcap.protectedValue: 3
@@ -5604,7 +5604,7 @@ go_struct_fields:
     lycaon/internal/hostctx/hostctx.ambientAttachKey: 0
     lycaon/internal/hostctx/hostctx.workflowStartAuthKey: 0
     lycaon/internal/hostidentity/hostidentity.Identity: 2
-    lycaon/internal/hostlock/hostlock.Claim: 6
+    lycaon/internal/hostlock/hostlock.Claim: 7
     lycaon/internal/hostlock/hostlock.ClaimLostError: 2
     lycaon/internal/hostlock/hostlock.StoreLockedError: 2
     lycaon/internal/hostmarker/hostmarker.Marker: 2
@@ -9292,7 +9292,7 @@ source_directories:
     lycaon/internal/eventoutbox: 1
     lycaon/internal/events: 13
     lycaon/internal/evidence: 41
-    lycaon/internal/exec: 26
+    lycaon/internal/exec: 28
     lycaon/internal/extensionstate: 8
     lycaon/internal/extpacks: 52
     lycaon/internal/filebriefing: 8
@@ -9419,7 +9419,7 @@ source_directories:
     lycaon/internal/projectstack: 5
     lycaon/internal/promptattach: 9
     lycaon/internal/promptattach/attacherr: 1
-    lycaon/internal/promptattach/docext: 11
+    lycaon/internal/promptattach/docext: 12
     lycaon/internal/promptattach/docformat: 1
     lycaon/internal/promptattach/format: 3
     lycaon/internal/promptresult: 1
@@ -11566,7 +11566,7 @@ source_files:
     lycaon/internal/backup/archive_limits.go: 23
     lycaon/internal/backup/artifact_references.go: 52
     lycaon/internal/backup/capacity_other.go: 2
-    lycaon/internal/backup/capacity_unix.go: 9
+    lycaon/internal/backup/capacity_unix.go: 13
     lycaon/internal/backup/create.go: 347
     lycaon/internal/backup/editor_outbox.go: 24
     lycaon/internal/backup/fresh_start.go: 111
@@ -12121,7 +12121,7 @@ source_files:
     lycaon/internal/desktoptrash/trash.go: 16
     lycaon/internal/desktoptrash/trash_darwin.go: 20
     lycaon/internal/desktoptrash/trash_darwin_nocgo.go: 23
-    lycaon/internal/desktoptrash/trash_linux.go: 124
+    lycaon/internal/desktoptrash/trash_linux.go: 127
     lycaon/internal/desktoptrash/trash_other.go: 8
     lycaon/internal/desktoptrash/trash_windows.go: 53
     lycaon/internal/destconfig/destconfig.go: 208
@@ -12316,10 +12316,12 @@ source_files:
     lycaon/internal/exec/env_merge.go: 27
     lycaon/internal/exec/exec.go: 186
     lycaon/internal/exec/guard.go: 8
-    lycaon/internal/exec/guard_unix.go: 64
+    lycaon/internal/exec/guard_unix.go: 67
     lycaon/internal/exec/guard_windows.go: 76
     lycaon/internal/exec/io.go: 175
     lycaon/internal/exec/launch.go: 92
+    lycaon/internal/exec/nice_linux.go: 6
+    lycaon/internal/exec/nice_other.go: 5
     lycaon/internal/exec/own_group.go: 24
     lycaon/internal/exec/pipeline.go: 458
     lycaon/internal/exec/pipeline_background.go: 103
@@ -12482,7 +12484,7 @@ source_files:
     lycaon/internal/git/manager_introspection.go: 311
     lycaon/internal/git/manager_state.go: 118
     lycaon/internal/git/operation.go: 225
-    lycaon/internal/git/operation_index.go: 117
+    lycaon/internal/git/operation_index.go: 118
     lycaon/internal/git/operation_json.go: 42
     lycaon/internal/git/operation_plan.go: 273
     lycaon/internal/git/operation_prepare.go: 386
@@ -12491,8 +12493,8 @@ source_files:
     lycaon/internal/git/operation_stash_save.go: 134
     lycaon/internal/git/repo_set_cache.go: 201
     lycaon/internal/git/repos.go: 189
-    lycaon/internal/git/restore_blob.go: 59
-    lycaon/internal/git/restore_review.go: 297
+    lycaon/internal/git/restore_blob.go: 60
+    lycaon/internal/git/restore_review.go: 309
     lycaon/internal/git/revision_spec.go: 238
     lycaon/internal/git/run.go: 26
     lycaon/internal/git/status_cache.go: 362
@@ -12661,7 +12663,7 @@ source_files:
     lycaon/internal/hostctx/ambient_attach.go: 10
     lycaon/internal/hostctx/workflow_start.go: 10
     lycaon/internal/hostidentity/identity.go: 102
-    lycaon/internal/hostlock/hostlock.go: 176
+    lycaon/internal/hostlock/hostlock.go: 193
     lycaon/internal/hostmarker/hostmarker.go: 42
     lycaon/internal/hostmarker/json_body.go: 58
     lycaon/internal/hostpower/controller.go: 211
@@ -12670,7 +12672,7 @@ source_files:
     lycaon/internal/hostpower/inhibitor_other.go: 7
     lycaon/internal/hostprocess/process.go: 133
     lycaon/internal/hostprocess/process_darwin.go: 65
-    lycaon/internal/hostprocess/process_linux.go: 65
+    lycaon/internal/hostprocess/process_linux.go: 66
     lycaon/internal/hostprocess/process_other.go: 4
     lycaon/internal/hostresources/ambient.go: 107
     lycaon/internal/hostresources/catalog.go: 557
@@ -13334,7 +13336,8 @@ source_files:
     lycaon/internal/promptattach/docext/tabula.go: 17
     lycaon/internal/promptattach/docext/tempfile.go: 23
     lycaon/internal/promptattach/docext/worker.go: 175
-    lycaon/internal/promptattach/docext/worker_limit_unix.go: 9
+    lycaon/internal/promptattach/docext/worker_limit_linux.go: 9
+    lycaon/internal/promptattach/docext/worker_limit_other.go: 9
     lycaon/internal/promptattach/docext/worker_limit_windows.go: 34
     lycaon/internal/promptattach/docformat/format.go: 112
     lycaon/internal/promptattach/format/container.go: 70
@@ -13732,7 +13735,7 @@ source_files:
     lycaon/internal/search/store_query_compile.go: 266
     lycaon/internal/search/symbol_leg.go: 136
     lycaon/internal/search/write_through.go: 57
-    lycaon/internal/secretcap/admin.go: 230
+    lycaon/internal/secretcap/admin.go: 231
     lycaon/internal/secretcap/cookiejar.go: 135
     lycaon/internal/secretcap/cookiejar_save.go: 162
     lycaon/internal/secretcap/create.go: 394
@@ -15188,7 +15191,7 @@ source_files:
     lycaon/internal/workspace/branch_parents.go: 28
     lycaon/internal/workspace/branch_use.go: 144
     lycaon/internal/workspace/capacity_stub.go: 4
-    lycaon/internal/workspace/capacity_unix.go: 9
+    lycaon/internal/workspace/capacity_unix.go: 13
     lycaon/internal/workspace/evict.go: 77
     lycaon/internal/workspace/exact_tree.go: 159
     lycaon/internal/workspace/file_identity_darwin.go: 16
@@ -15275,7 +15278,7 @@ source_files:
     scripts/bundle-smoke.sh: 245
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 114
+    scripts/ci_verification.py: 116
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -15417,7 +15420,7 @@ source_files:
     scripts/go-test-exec.py: 150
     scripts/go-test-failed.sh: 63
     scripts/gocache-trim.sh: 39
-    scripts/govulncheck-gate.py: 175
+    scripts/govulncheck-gate.py: 197
     scripts/harness/crash-restart.sh: 28
     scripts/harness/lib.sh: 289
     scripts/harness/seed-hostile-project.sh: 27
@@ -15902,7 +15905,7 @@ test_directories:
     lycaon/internal/projectroot: 3
     lycaon/internal/projectstack: 2
     lycaon/internal/promptattach: 7
-    lycaon/internal/promptattach/docext: 3
+    lycaon/internal/promptattach/docext: 4
     lycaon/internal/promptattach/format: 1
     lycaon/internal/prompts: 43
     lycaon/internal/promptunit: 1
@@ -17405,7 +17408,7 @@ test_files:
     lycaon-den/src/settings/system/first-time-tips-prefs.test.ts: 48
     lycaon-den/src/settings/system/mount-update-notice.test.ts: 81
     lycaon-den/src/settings/system/onboarding-prefs.test.ts: 40
-    lycaon-den/src/settings/system/shortcut-prefs.test.ts: 247
+    lycaon-den/src/settings/system/shortcut-prefs.test.ts: 248
     lycaon-den/src/settings/system/update-error.test.ts: 19
     lycaon-den/src/settings/system/whats-new-prefs.test.ts: 41
     lycaon-den/src/settings/web-research-catalog.test.ts: 36
@@ -17539,7 +17542,7 @@ test_files:
     lycaon-den/src/test/stylesheet-source.test.ts: 50
     lycaon-den/src/test/stylesheet-source.ts: 92
     lycaon-den/src/test/test-infrastructure-contract.test.ts: 42
-    lycaon-den/src/test/unit/client-store-suite.test.ts: 81
+    lycaon-den/src/test/unit/client-store-suite.test.ts: 82
     lycaon-den/src/test/unit/fail-messages-audit.test.ts: 43
     lycaon-den/src/test/vitest-timeouts.ts: 12
     lycaon-den/src/test/worker-transcript-fixture.ts: 18
@@ -17616,7 +17619,7 @@ test_files:
     lycaon/cmd/opengrep-conformance/diagnostics_test.go: 33
     lycaon/cmd/opengrep-conformance/evidence_test.go: 35
     lycaon/cmd/opengrep-conformance/process_darwin_test.go: 9
-    lycaon/cmd/opengrep-conformance/process_linux_test.go: 17
+    lycaon/cmd/opengrep-conformance/process_linux_test.go: 18
     lycaon/cmd/opengrep-conformance/process_other_test.go: 2
     lycaon/cmd/opengrep-conformance/process_test.go: 105
     lycaon/cmd/opengrep-conformance/process_windows_test.go: 17
@@ -17744,7 +17747,7 @@ test_files:
     lycaon/internal/api/project_secret_ignores_test.go: 94
     lycaon/internal/api/project_secret_screen_test.go: 91
     lycaon/internal/api/project_source_attribution_scope_test.go: 47
-    lycaon/internal/api/project_source_commit_baseline_test.go: 690
+    lycaon/internal/api/project_source_commit_baseline_test.go: 678
     lycaon/internal/api/project_source_commit_review_test.go: 237
     lycaon/internal/api/project_source_comparison_handlers_test.go: 254
     lycaon/internal/api/project_source_editorconfig_handler_test.go: 44
@@ -17861,7 +17864,7 @@ test_files:
     lycaon/internal/api/workflowadmin/report_verdict_test.go: 202
     lycaon/internal/api/workflowadmin/report_workforce_test.go: 26
     lycaon/internal/api/workflowadmin/testing_main_test.go: 14
-    lycaon/internal/api/worktree_handlers_test.go: 676
+    lycaon/internal/api/worktree_handlers_test.go: 664
     lycaon/internal/api/worktree_reach_test.go: 301
     lycaon/internal/app/agent_presence_drafts_test.go: 158
     lycaon/internal/app/build_detections_test.go: 101
@@ -18777,7 +18780,7 @@ test_files:
     lycaon/internal/git/repo_set_cache_test.go: 145
     lycaon/internal/git/repo_set_scope_test.go: 86
     lycaon/internal/git/repos_test.go: 274
-    lycaon/internal/git/restore_review_test.go: 134
+    lycaon/internal/git/restore_review_test.go: 150
     lycaon/internal/git/revision_spec_test.go: 85
     lycaon/internal/git/stash_test.go: 192
     lycaon/internal/git/status_cache_test.go: 431
@@ -18893,7 +18896,7 @@ test_files:
     lycaon/internal/hitl/checkpoint_visibility_test.go: 89
     lycaon/internal/hitl/consequence_merge_test.go: 30
     lycaon/internal/hitl/contained_boundary_test.go: 120
-    lycaon/internal/hitl/contained_test.go: 123
+    lycaon/internal/hitl/contained_test.go: 126
     lycaon/internal/hitl/content_apply_plan_test.go: 57
     lycaon/internal/hitl/content_apply_resolution_test.go: 60
     lycaon/internal/hitl/decision_guidance_test.go: 44
@@ -18927,7 +18930,7 @@ test_files:
     lycaon/internal/hostresources/ambient_test.go: 135
     lycaon/internal/hostresources/connection_modes_test.go: 20
     lycaon/internal/hostresources/exec_path_test.go: 171
-    lycaon/internal/hostresources/host_resources_test.go: 559
+    lycaon/internal/hostresources/host_resources_test.go: 560
     lycaon/internal/hostscope/hostscope_test.go: 100
     lycaon/internal/httpaction/complete_request_test.go: 285
     lycaon/internal/httpaction/cookie_concurrency_test.go: 115
@@ -18978,7 +18981,7 @@ test_files:
     lycaon/internal/jsonshape/decode_test.go: 94
     lycaon/internal/keylock/keylock_test.go: 24
     lycaon/internal/lineage/lineage_test.go: 179
-    lycaon/internal/lineage/probe_internal_test.go: 30
+    lycaon/internal/lineage/probe_internal_test.go: 40
     lycaon/internal/lineage/proc_net_test.go: 48
     lycaon/internal/litprefilter/canonfold_test.go: 58
     lycaon/internal/litprefilter/litprefilter_test.go: 125
@@ -19562,6 +19565,7 @@ test_files:
     lycaon/internal/promptattach/docext/bounds_test.go: 108
     lycaon/internal/promptattach/docext/formats_test.go: 83
     lycaon/internal/promptattach/docext/tabula_pdf_test.go: 27
+    lycaon/internal/promptattach/docext/worker_limit_linux_test.go: 21
     lycaon/internal/promptattach/format/format_test.go: 194
     lycaon/internal/promptattach/forwarding_test.go: 82
     lycaon/internal/promptattach/intake_utf8_test.go: 50
@@ -22300,7 +22304,7 @@ test_files:
     lycaon/test/security/api_worker_persona_e2e_test.go: 97
     lycaon/test/security/api_worker_prompt_runner_test.go: 116
     lycaon/test/security/api_workflow_advance_gate_test.go: 91
-    lycaon/test/security/api_workflow_advance_parity_test.go: 315
+    lycaon/test/security/api_workflow_advance_parity_test.go: 317
     lycaon/test/security/api_workflow_compose_policy_test.go: 110
     lycaon/test/security/api_workflow_compose_test.go: 205
     lycaon/test/security/api_workflow_discovery_test.go: 112
@@ -22478,7 +22482,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 86
+    scripts/verification_tests/test_ci_execution.py: 99
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71

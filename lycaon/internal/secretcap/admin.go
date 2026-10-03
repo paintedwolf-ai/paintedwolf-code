@@ -247,6 +247,7 @@ func (s *Service) HoldValue(ctx context.Context, projectID, reference string) (M
 		return s.metadataRow(ctx, row)
 	case CustodyFile:
 		return Metadata{}, fmt.Errorf("%w: a value marked in a project file is governed by that file", ErrInvalidUpdate)
+	case CustodyChat, CustodyHost:
 	}
 	entry.Custody = CustodyPerson
 	if err := s.values.put(current.ID, entry); err != nil {

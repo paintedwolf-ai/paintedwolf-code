@@ -78,13 +78,16 @@ def invocation(targets):
 
 
 def run_lane(name):
-    targets = lanes()[name]["targets"]
+    lane = lanes()[name]
+    targets = lane["targets"]
     directory = artifact_root(ROOT) / "ci"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "run.json"
     record = {"lane": name, "targets": targets, "started_at": time.time(), "status": "running"}
     path.write_text(json.dumps(record, indent=2) + "\n")
-    code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT)
+    # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
+    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
+    code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT, env=environment)
     record.update(finished_at=time.time(), exit_code=code,
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")
     path.write_text(json.dumps(record, indent=2) + "\n")
