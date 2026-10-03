@@ -117,11 +117,11 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Sessions: &fakeTaskSessions{}, Queue: &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-		WorkflowWork: func(_ context.Context, _ tools.ToolContext, workID string) (worker.WorkflowWork, bool, error) {
+		WorkflowWork: func(_ context.Context, _ string, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID != "leg-2" {
-				return worker.WorkflowWork{}, false, nil
+				return spawn.WorkflowWork{}, false, nil
 			}
-			return worker.WorkflowWork{
+			return spawn.WorkflowWork{
 				RunID: "run-1", Phase: "execute", AgentType: "repo-researcher",
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}, MaxToolLoops: 36,
 			}, true, nil
@@ -163,8 +163,8 @@ func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
 			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 				Sessions: &fakeTaskSessions{}, Queue: &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
 				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-				WorkflowWork: func(context.Context, tools.ToolContext, string) (worker.WorkflowWork, bool, error) {
-					return worker.WorkflowWork{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
+				WorkflowWork: func(context.Context, string, string) (spawn.WorkflowWork, bool, error) {
+					return spawn.WorkflowWork{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
 				},
 				BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, workID string, _ *api.WorkerTask) error {
 					boundWorkID = workID

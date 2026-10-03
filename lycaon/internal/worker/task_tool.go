@@ -32,7 +32,7 @@ type TaskToolDeps struct {
 	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
 	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
 	// WorkflowWork resolves dispatch constraints for an active workflow work id.
-	WorkflowWork func(context.Context, tools.ToolContext, string) (WorkflowWork, bool, error)
+	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
 }
 

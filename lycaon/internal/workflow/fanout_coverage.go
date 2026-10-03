@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -60,57 +61,48 @@ func FanoutCoverage(plan FanoutPlan, tasks []api.WorkerTask, phase string) []Fan
 	return out
 }
 
-// WorkflowWork binds dispatch to host-owned work in the active phase.
-type WorkflowWork struct {
-	RunID        string
-	Phase        string
-	AgentType    string
-	Scope        *api.TaskScope
-	MaxToolLoops int
-}
-
 // WorkflowWork resolves planned survey legs and registered review questions.
-func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string) (WorkflowWork, bool, error) {
+func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string) (spawn.WorkflowWork, bool, error) {
 	workID = strings.TrimSpace(workID)
 	if workID == "" {
-		return WorkflowWork{}, false, nil
+		return spawn.WorkflowWork{}, false, nil
 	}
 	run, err := m.Store.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
-		return WorkflowWork{}, false, err
+		return spawn.WorkflowWork{}, false, err
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
-		return WorkflowWork{}, false, err
+		return spawn.WorkflowWork{}, false, err
 	}
 	def, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok {
-		return WorkflowWork{}, false, nil
+		return spawn.WorkflowWork{}, false, nil
 	}
 	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
-		return WorkflowWork{}, false, err
+		return spawn.WorkflowWork{}, false, err
 	}
 	plan, planned := FanoutPlanForPhase(vars, def)
 	if !planned {
 		if def.ReviewLoop == nil || def.ReviewLoop.FollowupAttempts == 0 {
-			return WorkflowWork{}, false, nil
+			return spawn.WorkflowWork{}, false, nil
 		}
 		questions, err := reviewQuestions(vars, def.ID)
 		if err != nil {
-			return WorkflowWork{}, false, err
+			return spawn.WorkflowWork{}, false, err
 		}
 		if slices.ContainsFunc(questions, func(q reviewQuestionWork) bool { return q.ID == workID || q.ID+"/review" == workID }) {
-			return WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, Scope: &api.TaskScope{Mode: "read"}}, true, nil
+			return spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, Scope: &api.TaskScope{Mode: "read"}}, true, nil
 		}
-		return WorkflowWork{}, false, nil
+		return spawn.WorkflowWork{}, false, nil
 	}
 	for _, leg := range plan.Legs {
 		if leg.ID == workID {
-			return WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}, true, nil
+			return spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}, true, nil
 		}
 	}
-	return WorkflowWork{}, false, nil
+	return spawn.WorkflowWork{}, false, nil
 }
 
 // BindWorkflowTask stamps provenance before the native task enters the queue.

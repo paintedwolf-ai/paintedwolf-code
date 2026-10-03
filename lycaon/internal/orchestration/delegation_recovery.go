@@ -19,6 +19,10 @@ func (o *OrchestratorImpl) restoreWorkflowDelegation(ctx context.Context, runID 
 	if err != nil || !found {
 		return nil, err
 	}
+	return o.restoreDelegation(ctx, id, keys, state)
+}
+
+func (o *OrchestratorImpl) restoreDelegation(ctx context.Context, id string, keys []string, state *runState) (*restoredDelegation, error) {
 	legs, err := o.store.ListLegs(ctx, id)
 	if err != nil {
 		return nil, err

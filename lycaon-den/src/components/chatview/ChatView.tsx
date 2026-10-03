@@ -549,7 +549,7 @@ export function ChatView(props: Props) {
   const sendPromptWithStreamFollow = async (
     payload: import("./Composer.tsx").ComposerSendPayload,
   ): Promise<boolean | void> => {
-    const sendResult = await props.onSend({
+    return props.onSend({
       ...payload,
       onPendingSend: (destination) => {
         payload.onPendingSend?.(destination);
@@ -559,9 +559,6 @@ export function ChatView(props: Props) {
         }
       },
     });
-    if (sendResult === false) return false;
-    // Admission confirmation preserves any intervening reader input.
-    return sendResult;
   };
 
   const sendWithStreamFollow = async (
