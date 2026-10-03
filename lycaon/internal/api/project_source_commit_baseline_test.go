@@ -173,13 +173,7 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 		return strings.TrimSpace(string(out))
 	}
 	commitAll := func(message string) {
-		for _, args := range [][]string{{"add", "-A"}, {"commit", "-m", message}} {
-			cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...)
-			cmd.Env = lyexec.LocalGitEnv()
-			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("git %v: %v %s", args, err, out)
-			}
-		}
+		gittest.CommitAll(t, repo, message)
 	}
 
 	first := revParse()
@@ -333,13 +327,7 @@ func newMergedHistoryFixture(t *testing.T) mergedHistoryFixture {
 
 	gitAt := func(args ...string) string {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
+		return strings.TrimSpace(gittest.Run(t, repo, args...))
 	}
 	commitBytes := func(content, message string) string {
 		t.Helper()

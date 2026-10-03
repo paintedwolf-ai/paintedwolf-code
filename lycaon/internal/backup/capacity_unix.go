@@ -9,5 +9,9 @@ func availableUpgradeBytes(path string) (uint64, bool, error) {
 	if err := unix.Statfs(path, &state); err != nil {
 		return 0, false, err
 	}
-	return state.Bavail * uint64(state.Bsize), true, nil
+	size := state.Bsize
+	if size <= 0 {
+		return 0, false, nil
+	}
+	return state.Bavail * uint64(size), true, nil
 }
