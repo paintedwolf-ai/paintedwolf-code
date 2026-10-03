@@ -21,8 +21,6 @@ type TurnAssemblyScratch struct {
 	StablePromptKey            string
 	BoardBlock                 string
 	BoardKey                   string
-	RunContextBlock            string
-	RunContextKey              string
 	SpawnRosterBlock           string
 	SpawnRosterKey             string
 	WorkerLegBlock             string

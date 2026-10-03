@@ -480,7 +480,7 @@ func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	}
 }
 
-func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
+func TestSessionPromptCacheSecondIterationKeepsRunContext(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
@@ -491,7 +491,7 @@ func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
 		PromptToolLister: prompttest.CoordinatorTools,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
-	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
+	sess := &api.Session{ID: "s1", AgentType: orchestration.ProfileCoordinator, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
 	msgs1, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
@@ -502,8 +502,8 @@ func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
 	msgs2, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
 	testutil.FailErr(t, "rt.BuildCompletionMessages failed", err)
 	runCtxCount2 := countRunContextBlocks(msgs2)
-	if runCtxCount2 >= runCtxCount1 && runCtxCount1 > 0 {
-		t.Fatalf("iteration 2 run context blocks = %d want fewer than %d", runCtxCount2, runCtxCount1)
+	if runCtxCount1 != 1 || runCtxCount2 != 1 {
+		t.Fatalf("each request needs one workflow block: %d -> %d", runCtxCount1, runCtxCount2)
 	}
 }
 
