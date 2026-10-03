@@ -33,6 +33,10 @@ func TestReviewedCoverageKeepsHardFailuresAndDisclosesLimits(t *testing.T) {
 		}
 	}
 	input.Gaps = nil
+	review.Assessments[1].Disposition = reviewcoverage.EssentialOpen
+	if input.Completeness() != CompletenessIncomplete || completenessReason(input, input.Completeness()) == "" || len(notCoveredItems(input)) == 0 {
+		t.Fatal("essential coverage work lacks an incomplete explanation")
+	}
 	review.Revision = "stale"
 	if input.Completeness() != CompletenessIncomplete {
 		t.Fatal("stale review accepted")
