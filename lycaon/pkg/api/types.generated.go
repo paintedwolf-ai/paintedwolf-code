@@ -8820,6 +8820,8 @@ type WorkflowRunPage struct {
 
 // WorkflowRunUi
 type WorkflowRunUi struct {
+	// Selected workflow definition, including versions retired from the start catalog.
+	Definition *WorkflowSummary `json:"definition,omitempty"`
 	// Host-projected activity label from the active workflow manifest phase.
 	CurrentPhaseLabel     string                `json:"current_phase_label"`
 	HumanApprovalAwaiting bool                  `json:"human_approval_awaiting,omitempty"`

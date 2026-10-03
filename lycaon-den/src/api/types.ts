@@ -14056,6 +14056,8 @@ export interface components {
             waits_for?: string[];
         };
         WorkflowRunUi: {
+            /** @description Selected workflow definition, including versions retired from the start catalog. */
+            definition?: components["schemas"]["WorkflowSummary"];
             /** @description Host-projected activity label from the active workflow manifest phase. */
             current_phase_label: string;
             human_approval_awaiting?: boolean;
