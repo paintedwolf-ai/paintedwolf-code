@@ -9419,7 +9419,7 @@ source_directories:
     lycaon/internal/projectstack: 5
     lycaon/internal/promptattach: 9
     lycaon/internal/promptattach/attacherr: 1
-    lycaon/internal/promptattach/docext: 11
+    lycaon/internal/promptattach/docext: 12
     lycaon/internal/promptattach/docformat: 1
     lycaon/internal/promptattach/format: 3
     lycaon/internal/promptresult: 1
@@ -13336,7 +13336,8 @@ source_files:
     lycaon/internal/promptattach/docext/tabula.go: 17
     lycaon/internal/promptattach/docext/tempfile.go: 23
     lycaon/internal/promptattach/docext/worker.go: 175
-    lycaon/internal/promptattach/docext/worker_limit_unix.go: 9
+    lycaon/internal/promptattach/docext/worker_limit_linux.go: 9
+    lycaon/internal/promptattach/docext/worker_limit_other.go: 9
     lycaon/internal/promptattach/docext/worker_limit_windows.go: 34
     lycaon/internal/promptattach/docformat/format.go: 112
     lycaon/internal/promptattach/format/container.go: 70
@@ -15904,7 +15905,7 @@ test_directories:
     lycaon/internal/projectroot: 3
     lycaon/internal/projectstack: 2
     lycaon/internal/promptattach: 7
-    lycaon/internal/promptattach/docext: 3
+    lycaon/internal/promptattach/docext: 4
     lycaon/internal/promptattach/format: 1
     lycaon/internal/prompts: 43
     lycaon/internal/promptunit: 1
@@ -19564,6 +19565,7 @@ test_files:
     lycaon/internal/promptattach/docext/bounds_test.go: 108
     lycaon/internal/promptattach/docext/formats_test.go: 83
     lycaon/internal/promptattach/docext/tabula_pdf_test.go: 27
+    lycaon/internal/promptattach/docext/worker_limit_linux_test.go: 21
     lycaon/internal/promptattach/format/format_test.go: 194
     lycaon/internal/promptattach/forwarding_test.go: 82
     lycaon/internal/promptattach/intake_utf8_test.go: 50
