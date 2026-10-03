@@ -213,7 +213,7 @@ pub(super) async fn run_check(
     let failure = checked.as_ref().err().cloned();
     let mut inner = service.inner.lock().await;
     if !service.current(generation) {
-        // Cancellation resets the owned Checking state before another check can start.
+        // Cancellation resets Checking before another check can start.
         return Ok(inner.state.clone());
     }
     let bucket = inner.preferences.rollout_bucket;
