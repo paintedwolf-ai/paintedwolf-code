@@ -16127,7 +16127,7 @@ test_directories:
     lycaon/test/scanstress: 10
     lycaon/test/security: 118
     lycaon/test/smoke: 6
-    lycaon/test/wiring: 54
+    lycaon/test/wiring: 55
     lycaon/test/wiring/fixtures/coordinator_batch: 1
     lycaon/test/wiring/fixtures/coordinator_coordination_plane: 1
     lycaon/test/wiring/fixtures/synthesis_wrapup_deal_finder: 1
@@ -22394,7 +22394,7 @@ test_files:
     lycaon/test/wiring/custom_workflow_design_doc_test.go: 119
     lycaon/test/wiring/database_baseline.go: 56
     lycaon/test/wiring/deferred_tools_wiring_test.go: 41
-    lycaon/test/wiring/demo_workflows_wiring_test.go: 141
+    lycaon/test/wiring/demo_workflows_wiring_test.go: 146
     lycaon/test/wiring/doc.go: 1
     lycaon/test/wiring/findings_worklog_wiring_test.go: 70
     lycaon/test/wiring/fixtures/coordinator_batch/fixture.go: 71
@@ -22420,6 +22420,7 @@ test_files:
     lycaon/test/wiring/plan_flow_primitives_test.go: 104
     lycaon/test/wiring/progress_completion_wiring_test.go: 56
     lycaon/test/wiring/reservation_visibility_wiring_test.go: 97
+    lycaon/test/wiring/security_coverage_helpers_test.go: 34
     lycaon/test/wiring/session_checkpoint_capture_test.go: 73
     lycaon/test/wiring/session_rewind_state_test.go: 164
     lycaon/test/wiring/stuck_assertions.go: 86
