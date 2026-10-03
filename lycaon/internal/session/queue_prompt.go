@@ -47,7 +47,9 @@ type PromptInput struct {
 	// ProseFinish closes the whole run.
 	ProseFinish bool `json:"prose_finish,omitempty"`
 	// Continuation delivers explicit user direction inside the open visible turn.
-	Continuation bool `json:"continuation,omitempty"`
+	Continuation        bool                `json:"continuation,omitempty"`
+	Recovery            *api.PromptRecovery `json:"recovery,omitempty"`
+	ResumesSubmissionID string              `json:"resumes_submission_id,omitempty"`
 }
 
 func promptUserInstruction(in PromptInput) string {

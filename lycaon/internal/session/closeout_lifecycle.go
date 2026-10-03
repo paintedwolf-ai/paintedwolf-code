@@ -129,7 +129,7 @@ func (c *closeoutLifecycle) recordFrictionLocked(sessionID, rootID string, promp
 
 func (m *Manager) beginCloseoutPrompt(ctx context.Context, sess *api.Session, in PromptInput) {
 	hasInput := strings.TrimSpace(in.Text) != "" || len(in.ContentParts) > 0 || len(in.ArtifactIDs) > 0
-	if in.HostSignal == nil && !sess.IsWorkerChild() && hasInput {
+	if in.HostSignal == nil && !in.Continuation && !sess.IsWorkerChild() && hasInput {
 		m.beginCloseoutIntent(ctx, sess.ID)
 		return
 	}
