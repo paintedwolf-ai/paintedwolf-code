@@ -122,12 +122,13 @@ type BlueprintDef struct {
 
 // ReviewLoopDef defines a bounded parallel review cycle.
 type ReviewLoopDef struct {
-	ReconcilesPhase      string
-	IncludeScanInventory bool
-	EvidenceKey          string
-	IterationCap         int
-	VerdictSchema        map[string]string
-	RequiredAgents       []string
+	ReconcilesPhase           string
+	RequireInventoryAccounted bool
+	IncludeScanInventory      bool
+	EvidenceKey               string
+	IterationCap              int
+	VerdictSchema             map[string]string
+	RequiredAgents            []string
 	// IfSpawnable are reviewers required only when the turn roster can spawn them
 	// at phase enter. The host snapshots that roster; a later Settings flip does
 	// not change the sojourn.

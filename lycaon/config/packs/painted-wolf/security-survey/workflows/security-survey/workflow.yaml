@@ -121,6 +121,7 @@ phases:
         verdict: CLAIMED
         threat_model: string
         claims: claims
+        set_asides: set_asides
       claim_statuses:
         claimed: open
     on_enter:
@@ -135,6 +136,7 @@ phases:
     review_loop:
       evidence_key: survey_challenged
       include_scan_inventory: true
+      require_inventory_accounted: true
       reconciles_phase: claims
       iteration_cap: 1
       required_agents: [skeptic]

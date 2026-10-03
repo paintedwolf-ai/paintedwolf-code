@@ -254,14 +254,15 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	agents := uniqueAgentIDs(raw.RequiredAgents)
 	spawnable := uniqueAgentIDs(raw.IfSpawnable)
 	def := &ReviewLoopDef{
-		ReconcilesPhase:      raw.ReconcilesPhase,
-		IncludeScanInventory: raw.IncludeScanInventory,
-		EvidenceKey:          key,
-		IterationCap:         cap,
-		VerdictSchema:        copyStringMap(raw.VerdictSchema),
-		RequiredAgents:       agents,
-		IfSpawnable:          spawnable,
-		BriefLabel:           strings.TrimSpace(raw.BriefLabel),
+		ReconcilesPhase:           raw.ReconcilesPhase,
+		RequireInventoryAccounted: raw.RequireInventoryAccounted,
+		IncludeScanInventory:      raw.IncludeScanInventory,
+		EvidenceKey:               key,
+		IterationCap:              cap,
+		VerdictSchema:             copyStringMap(raw.VerdictSchema),
+		RequiredAgents:            agents,
+		IfSpawnable:               spawnable,
+		BriefLabel:                strings.TrimSpace(raw.BriefLabel),
 	}
 	statuses, err := parseClaimStatuses(phaseID, raw.ClaimStatuses)
 	if err != nil {

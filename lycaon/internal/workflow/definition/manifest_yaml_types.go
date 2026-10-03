@@ -65,15 +65,16 @@ type humanApprovalYAML struct {
 }
 
 type reviewLoopYAML struct {
-	ReconcilesPhase      string            `yaml:"reconciles_phase,omitempty"`
-	IncludeScanInventory bool              `yaml:"include_scan_inventory,omitempty"`
-	EvidenceKey          string            `yaml:"evidence_key"`
-	IterationCap         int               `yaml:"iteration_cap"`
-	VerdictSchema        map[string]string `yaml:"verdict_schema"`
-	RequiredAgents       []string          `yaml:"required_agents"`
-	IfSpawnable          []string          `yaml:"if_spawnable"`
-	ClaimStatuses        map[string]string `yaml:"claim_statuses,omitempty"`
-	BriefLabel           string            `yaml:"brief_label,omitempty"`
+	ReconcilesPhase           string            `yaml:"reconciles_phase,omitempty"`
+	RequireInventoryAccounted bool              `yaml:"require_inventory_accounted,omitempty"`
+	IncludeScanInventory      bool              `yaml:"include_scan_inventory,omitempty"`
+	EvidenceKey               string            `yaml:"evidence_key"`
+	IterationCap              int               `yaml:"iteration_cap"`
+	VerdictSchema             map[string]string `yaml:"verdict_schema"`
+	RequiredAgents            []string          `yaml:"required_agents"`
+	IfSpawnable               []string          `yaml:"if_spawnable"`
+	ClaimStatuses             map[string]string `yaml:"claim_statuses,omitempty"`
+	BriefLabel                string            `yaml:"brief_label,omitempty"`
 }
 
 type workflowControls struct {

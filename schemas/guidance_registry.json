@@ -2641,6 +2641,12 @@
       "emit": "guard:workflow",
       "summary": "The verdict payload does not match the active review phase contract."
     },
+    "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED": {
+      "branch_instruction": "Keep earlier claim links and inherited set-asides. Do not clear a group merely because it was listed.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "{{ paintedwolf.rejection_reason }}{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %}; {{ paintedwolf.offenders_omitted }} more{% endif %}{% endif %}."
+    },
     "SUBMIT_VERDICT_ITERATION_CAP": {
       "branch_instruction": "If the evidence cannot support a terminal ruling, report the unresolved issue and seek a user decision through the available channel. Do not invent approval or reset the review to evade the cap.",
       "category": "recoverable",

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
@@ -184,4 +185,39 @@ func (m *RunManager) ActiveRunOwnsScanEvidence(ctx context.Context, sessionID st
 		}
 	}
 	return false
+}
+
+// checkReviewInventory checks the proposed verdict before its phase can settle.
+func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*guidance.ReportDocumentIssue, error) {
+	if !def.RequireInventoryAccounted {
+		return nil, nil
+	}
+	inventory, err := LoadRunInventory(ctx, m.Inventory, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !inventory.Settled {
+		return &guidance.ReportDocumentIssue{Reason: "the run's bound scans have not settled"}, nil
+	}
+	manifest, err := m.manifestForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	var phases []PhaseVerdict
+	for _, prior := range ReviewVerdicts(ctx, m, run, manifest) {
+		if prior.Phase != run.CurrentPhase {
+			phases = append(phases, prior)
+		}
+	}
+	phases = append(phases, PhaseVerdict{
+		Phase: run.CurrentPhase, Def: def,
+		Record: evidence.Record{Artifacts: verdictArtifacts(verdict, nil, nil)},
+	})
+	issue := checkInventoryAccounted(guidance.CoordinatorCompletionReport{}, ReportDocumentFacts{
+		Claims: ReconcileClaims(phases), SetAsides: RunSetAsides(phases), Inventory: inventory,
+	})
+	if issue.Code == "" {
+		return nil, nil
+	}
+	return &issue, nil
 }
