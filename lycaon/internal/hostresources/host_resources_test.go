@@ -235,6 +235,7 @@ func TestLoopbackDialRejectsNonLoopbackAddress(t *testing.T) {
 }
 
 func TestServiceCachesAndResolvesExceptionalConnections(t *testing.T) {
+	absent := filepath.Join(t.TempDir(), "absent")
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	lookups := 0
 	service := &Service{
@@ -255,7 +256,8 @@ func TestServiceCachesAndResolvesExceptionalConnections(t *testing.T) {
 			homeDir:  "/Users/me",
 			lookPath: func(string) (string, error) {
 				lookups++
-				return "/usr/bin/docker", nil
+				// A path no host has, so the result never depends on what is installed.
+				return filepath.Join(absent, "docker"), nil
 			},
 		},
 		ttl:               time.Minute,
