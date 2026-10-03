@@ -227,6 +227,28 @@ esac
 
 SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
+python3 - "${ROOT}/packaging/update-limits.json" "${UPDATER}" "${VERSION}" "${PLATFORM}" <<'PYLIMITS'
+import json, pathlib, sys, tarfile
+limits = json.loads(pathlib.Path(sys.argv[1]).read_text())
+artifact = pathlib.Path(sys.argv[2])
+if limits["format_version"] != 1 or artifact.stat().st_size > limits["max_download_bytes"]:
+    raise SystemExit("updater artifact exceeds the client download limit")
+if artifact.name.endswith(".tar.gz"):
+    size = count = 0
+    product_versions = []
+    with tarfile.open(artifact, "r|gz") as archive:
+        for member in archive:
+            if member.name.endswith(".app/Contents/Resources/release-version"):
+                if not member.isfile() or member.size > 128:
+                    raise SystemExit("invalid updater product version resource")
+                product_versions.append(archive.extractfile(member).read().decode().strip())
+            size += member.size
+            count += 1
+            if size > limits["max_expanded_bytes"] or count > limits["max_archive_entries"]:
+                raise SystemExit("updater artifact exceeds the client expansion limit")
+    if sys.argv[4].startswith("darwin-") and product_versions != [sys.argv[3]]:
+        raise SystemExit("updater bundle product version does not match the release")
+PYLIMITS
 bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"
 
 mkdir -p "${OUTPUT}/opengrep"

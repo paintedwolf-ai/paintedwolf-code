@@ -95,6 +95,22 @@ release, update both the host manifest and the action's revision pin together.
    show the intended version, and keep the workflow run link with the release
    notes. Published versions are immutable; corrections use a new version.
 
+## Automatic-update qualification
+
+The first release containing the automatic installer still requires the old client's manual update (or Homebrew). Later direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
+
+Local tests establish state, migration, archive, and transaction invariants. A signed beta and clean VMs must establish the packaged lifecycle before promotion:
+
+1. Install a released app A at a writable application location. Exercise chats, drafts, an editor, and multiple windows without opening update settings.
+2. Offer signed beta B through the release channel; verify background staging and the persistent restart action. Ordinary quit must stop the engine before exchange, install B, and remain closed. The next launch must run B and preserve released history and preferences.
+3. Repeat with explicit restart, opt-out during download and after staging, channel change, a Homebrew receipt, a non-writable application directory, low disk space, and offline quit. Automatic work must never raise an administrator prompt or initiate restart.
+4. Withdraw B after download. Its final offer check must prevent activation. Replace it with C and verify that C does not inherit B's staged identity.
+5. Interrupt the helper before exchange, after exchange, and before the completion journal write; launch concurrently with activation. Both complete bundles must remain identifiable, and no process may start an engine from mixed installation files.
+6. Exercise a supported released-store migration and its recovery snapshot. A failed new-version startup must retain recovery evidence, never downgrade the database or repeatedly relaunch.
+7. Test a skipped signing-key bridge and a second restart into the successor release. Inspect version-bound signatures and package signing on both sides.
+
+Keep results with the release evidence. A local unit pass is not a claim of Gatekeeper, application-translocation, logout, power-loss, or cross-account filesystem behavior; these belong in the beta/VM qualification.
+
 ## If a release needs to be stopped
 
 1. Run [Release halt](../../.github/workflows/release-halt.yml) with `bad_version`.

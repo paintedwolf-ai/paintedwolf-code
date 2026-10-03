@@ -108,6 +108,8 @@ Provider credentials, device model policy, extension desired state, exact grants
 
 The host identity key (`host-identity.pem`) is device configuration too. A store reset keeps it, and backups neither carry nor restore it: a backup restored on another machine becomes a new host with the same people. An unreadable key stops startup rather than silently minting a new identity. The people who author durable facts live in `store.db` and travel with it.
 
+Native update preferences are device configuration too. The released unversioned `{checks_enabled, channel, rollout_bucket}` record has one explicit migration to `updates/preferences.json` format 2. The new boolean governs discovery, background download, and lifecycle installation; an existing opt-out remains off. Unknown versions and malformed records are refused without overwriting them. Update archives are ephemeral, but an unresolved activation journal is recovery-critical operational state and cannot be cleared as a cache. A legacy installation journal is reconciled against the running product version without inventing missing artifacts.
+
 Security-sensitive grants remain exact. A socket-path grant must not widen to its containing directory during evolution. Credentials stay outside backups and diagnostics regardless of format version.
 
 Secret-release leases use `secret_recipients` and a witness bound to that exact recipient set; a destination-only lease cannot establish recipient authority. Startup refuses incompatible entries, including expired ones, and leaves the entire approvals file unchanged. Its error identifies the file and either the invalid YAML line or the invalid grant ID.
