@@ -24,7 +24,8 @@ func (l *PromptLoop) observeCloseoutReport(ctx context.Context, sess *api.Sessio
 	gc.Surface = strings.TrimSpace(surfaceID)
 	var issues []guidance.ReportDocumentIssue
 	if issue, ok := guidance.ReportFenceUnreadable(unread); ok {
-		issues = append(issues, issue)
+		putReportFieldRefusals(gc, []guidance.ReportDocumentIssue{issue})
+		return observation, nil
 	}
 	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(report.Synthesis); len(embeds) > 0 {
 		gc.RejectObservation = "present_markdown_embed"
