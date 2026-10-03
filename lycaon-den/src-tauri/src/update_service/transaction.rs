@@ -61,6 +61,7 @@ impl Activation {
         .await
         .map_err(|_| UpdateError::from(Failure::CheckFailed))??;
         if !offer.is_some_and(|(candidate, _)| candidate.release_id == t.candidate.release_id) {
+            withdraw(app).await?;
             return Err(Failure::ReleaseWithdrawn.into());
         }
         Ok(())
@@ -136,12 +137,7 @@ pub async fn prepare_exit(
     .await
     .map_err(|_| UpdateError::from(Failure::CheckFailed))??;
     if !offer.is_some_and(|(fresh, _)| fresh.release_id == candidate.release_id) {
-        staging::forget_ready()?;
-        let mut inner = service.inner.lock().await;
-        inner.state.installation = Installation::None;
-        inner.state.staged_release_id = None;
-        inner.state.last_error = Some(Failure::ReleaseWithdrawn.into());
-        emit(app, &mut inner.state);
+        withdraw(app).await?;
         return Err(Failure::ReleaseWithdrawn.into());
     }
     let mut inner = service.inner.lock().await;
@@ -160,7 +156,11 @@ pub async fn prepare_exit(
     let target = installer::bundle()?;
     installer::verify_bundle(&target)?;
     let prepared = installer::prepared_path(&target, &candidate)?;
-    installer::verify_bundle(&prepared)?;
+    if let Err(error) = installer::verify_bundle(&prepared) {
+        let error = invalidate_preparation(&mut inner, &candidate, error);
+        emit(app, &mut inner.state);
+        return Err(error);
+    }
     let t = Transaction {
         format_version: 1,
         id: uuid::Uuid::new_v4().to_string(),
@@ -202,6 +202,38 @@ pub async fn prepare_exit(
         _permit: permit,
     }))
 }
+async fn withdraw(app: &AppHandle) -> Result<(), UpdateError> {
+    let service = app.state::<UpdateService>();
+    let mut inner = service.inner.lock().await;
+    let error = staging::forget_ready().err();
+    inner.state.candidate = None;
+    inner.state.installation = Installation::None;
+    inner.state.staged_release_id = None;
+    inner.state.discovery = super::Discovery::Idle;
+    inner.state.last_error = Some(
+        error
+            .clone()
+            .unwrap_or_else(|| Failure::ReleaseWithdrawn.into()),
+    );
+    emit(app, &mut inner.state);
+    error.map_or(Ok(()), Err)
+}
+fn invalidate_preparation(
+    inner: &mut super::Inner,
+    candidate: &Candidate,
+    mut error: UpdateError,
+) -> UpdateError {
+    if let Err(failure) =
+        staging::forget_ready().and_then(|()| staging::reject(candidate.release_id.clone()))
+    {
+        error = error.with_context(failure);
+    }
+    inner.state.staged_release_id = None;
+    inner.state.installation = Installation::Failed;
+    inner.state.last_error = Some(error.clone());
+    inner.blocked_release = Some(candidate.release_id.clone());
+    error
+}
 pub async fn resume(app: &AppHandle, error: Option<UpdateError>) {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
@@ -236,6 +268,7 @@ pub async fn restart_to_update(
 }
 #[cfg(target_os = "macos")]
 fn activate(t: &mut Transaction) -> Result<(), UpdateError> {
+    installer::verify_bundle(&t.target)?;
     activate_using(t, installer::prepare_at, installer::exchange, write)
 }
 #[cfg(target_os = "macos")]
