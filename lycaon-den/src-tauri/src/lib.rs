@@ -375,7 +375,11 @@ pub fn run() {
     let _installation_lease = match update_service::transaction::startup_lease() {
         Ok(lease) => lease,
         Err(error) => {
-            rfd::MessageDialog::new().set_title("Update recovery needed").set_description(format!("Painted Wolf Code could not finish an application update. Your saved work has not been changed. Reinstall the application to continue.\n\n{error}")).set_level(rfd::MessageLevel::Error).show();
+            rfd::MessageDialog::new()
+                .set_title("Update recovery needed")
+                .set_description(update_service::transaction::recovery_guidance(&error))
+                .set_level(rfd::MessageLevel::Error)
+                .show();
             return;
         }
     };
@@ -487,26 +491,7 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             window_appearance::setup(app.handle());
-            let startup = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                match update_service::transaction::prepare_exit(&startup, None, true).await {
-                    Ok(Some(activation)) => {
-                        match app_exit::finish_update(&startup, activation).await {
-                            Ok(()) => return,
-                            Err(error) => {
-                                update_service::transaction::resume(&startup, Some(error)).await
-                            }
-                        }
-                    }
-                    Err(error) => update_service::transaction::resume(&startup, Some(error)).await,
-                    Ok(None) => {}
-                }
-                startup
-                    .state::<update_service::UpdateService>()
-                    .finish_startup(&startup)
-                    .await;
-                update_service::check::start_update_scheduler(startup);
-            });
+            update_service::startup::start(app.handle().clone());
             accessibility_text_size::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             system_appearance::setup(app.handle().clone())

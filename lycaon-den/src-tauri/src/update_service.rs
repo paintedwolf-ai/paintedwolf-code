@@ -8,6 +8,7 @@ mod persistence;
 pub(crate) mod preferences;
 mod scheduler;
 mod staging;
+pub(crate) mod startup;
 #[cfg(test)]
 mod tests;
 pub(crate) mod transaction;

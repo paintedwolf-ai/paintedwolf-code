@@ -42,6 +42,11 @@ pub fn publish(
 }
 pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
     let path = persistence::update_dir()?.join("ready.json");
+    read_ready_at(&path).map_err(|error| error.with_context(format!(
+        "Record: {}. If this record is unreadable or from an incompatible beta, quit every instance of Painted Wolf Code, move this file outside the updates directory to preserve it, then reopen and check for updates. Do not remove transaction.json or user data.", path.display()
+    )))
+}
+fn read_ready_at(path: &std::path::Path) -> Result<Option<Staged>, UpdateError> {
     let bytes = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -170,4 +175,25 @@ pub fn clean_partials(candidate: &Candidate) -> Result<(), UpdateError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn incompatible_ready_records_remain_available_for_manual_recovery() {
+        let root = crate::test_support::TempDir::new("update-ready-recovery");
+        let path = root.join("ready.json");
+        for bytes in [
+            b"not json".as_slice(),
+            br#"{"format_version":99,"future":"retained"}"#,
+        ] {
+            fs::write(&path, bytes).unwrap();
+            assert_eq!(
+                read_ready_at(&path).unwrap_err().code,
+                Failure::JournalUnavailable
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+    }
 }

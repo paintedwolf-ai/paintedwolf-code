@@ -691,3 +691,12 @@ mod tests {
         assert_eq!(error.code, Failure::CandidateChanged);
     }
 }
+
+pub fn recovery_guidance(error: &UpdateError) -> String {
+    let journal = journal::active_path()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|_| {
+            "the transaction.json file in the application's updates directory".into()
+        });
+    format!("Painted Wolf Code could not safely recover an application update. The update record has been preserved.\n\nRecord: {journal}\n\nQuit every instance of Painted Wolf Code. Keep a copy of this record for support. If the record is unreadable or from an incompatible beta, move it out of the updates directory, then reinstall a signed release at the same application location before launching. Reinstalling alone does not replace the update record. Do not remove your saved-work or database files.\n\n{error}")
+}

@@ -127,13 +127,14 @@ pub fn prepare(candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
 }
 pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
     let artifact = staging::root(candidate)?.join("artifact");
-    verification::verify(
+    let verified = verification::verify(
         &artifact,
         &candidate.artifact_signature,
         &super::check::embedded_key().1,
         &candidate.version,
     )
-    .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+    .map_err(|e| UpdateError::new(Failure::VerificationFailed, e));
+    retain_verified_artifact(&artifact, verified)?;
     #[cfg(target_os = "macos")]
     {
         macos::prepare(target, candidate, &artifact)
@@ -144,6 +145,41 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
         Err(Failure::UnsupportedInstallation.into())
     }
 }
+// Eviction belongs to archive verification, independently of UI state or relaunch.
+fn retain_verified_artifact(
+    path: &Path,
+    verified: Result<(), UpdateError>,
+) -> Result<(), UpdateError> {
+    if let Err(error) = verified {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(error.with_context(format!("Could not remove rejected archive: {e}")))
+            }
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+    #[test]
+    fn only_failed_archive_verification_evicts_the_cached_artifact() {
+        let root = crate::test_support::TempDir::new("update-cache-verification");
+        let path = root.join("artifact");
+        fs::write(&path, b"archive").unwrap();
+        retain_verified_artifact(&path, Ok(())).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"archive");
+        let error =
+            retain_verified_artifact(&path, Err(Failure::VerificationFailed.into())).unwrap_err();
+        assert_eq!(error.code, Failure::VerificationFailed);
+        assert!(!path.exists());
+    }
+}
+
 pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
     #[cfg(target_os = "macos")]
     {

@@ -54,19 +54,6 @@ pub async fn retry_update(
         {
             return Err(Failure::CandidateChanged.into());
         }
-        if inner
-            .state
-            .last_error
-            .as_ref()
-            .is_some_and(|error| error.code == Failure::VerificationFailed)
-        {
-            let artifact = staging::root(inner.state.candidate.as_ref().unwrap())?.join("artifact");
-            match std::fs::remove_file(artifact) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(UpdateError::new(Failure::StateUnavailable, error)),
-            }
-        }
         staging::clear_rejected(&expected_release_id)?;
         inner.blocked_release = None;
     }

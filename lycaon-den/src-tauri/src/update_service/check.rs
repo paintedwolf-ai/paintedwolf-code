@@ -203,21 +203,22 @@ pub(super) async fn run_check(
     };
     let failure = checked.as_ref().err().cloned();
     let mut inner = service.inner.lock().await;
-    if service.current(generation) {
-        let bucket = inner.preferences.rollout_bucket;
-        let (source, _, source_error) = super::persistence::detect_install_source();
-        inner.state.install_source = source;
-        apply_offer(&mut inner.state, checked, automatic, bucket);
-        if source_error.is_some() {
-            inner.state.last_error = source_error;
-        }
-        if inner.state.staged_release_id.is_none() {
-            if let Err(error) = super::staging::forget_ready() {
-                inner.state.last_error = Some(error);
-            }
-        }
-        emit(app, &mut inner.state);
+    if !service.current(generation) {
+        return Ok(inner.state.clone());
     }
+    let bucket = inner.preferences.rollout_bucket;
+    let (source, _, source_error) = super::persistence::detect_install_source();
+    inner.state.install_source = source;
+    apply_offer(&mut inner.state, checked, automatic, bucket);
+    if source_error.is_some() {
+        inner.state.last_error = source_error;
+    }
+    if inner.state.staged_release_id.is_none() {
+        if let Err(error) = super::staging::forget_ready() {
+            inner.state.last_error = Some(error);
+        }
+    }
+    emit(app, &mut inner.state);
     failure.map_or_else(|| Ok(inner.state.clone()), Err)
 }
 #[tauri::command]

@@ -59,6 +59,15 @@ impl ExitState {
         labels.difference(&self.ready).cloned().collect()
     }
 
+    fn preserving(&mut self, request_id: u64, labels: &BTreeSet<String>) -> bool {
+        !self.committing
+            && !self.approved
+            && self
+                .pending
+                .is_some_and(|pending| pending.request_id == request_id)
+            && (self.opening > 0 || !self.missing(labels).is_empty())
+    }
+
     fn cancel(&mut self, request_id: u64) -> bool {
         if !self
             .pending
@@ -115,13 +124,12 @@ impl PreparedExit {
         let request = self.request;
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            let waiting = app.state::<ExitCoordinator>().0.lock().is_ok_and(|state| {
-                !state.committing
-                    && !state.approved
-                    && state
-                        .pending
-                        .is_some_and(|pending| pending.request_id == request.request_id)
-            });
+            let labels = app.webview_windows().keys().cloned().collect();
+            let waiting = app
+                .state::<ExitCoordinator>()
+                .0
+                .lock()
+                .is_ok_and(|mut state| state.preserving(request.request_id, &labels));
             if !waiting {
                 return;
             }
@@ -307,6 +315,11 @@ pub fn allow_exit(app: &AppHandle, code: Option<i32>) -> bool {
             {
                 Ok(Some(activation)) => {
                     if prepared.commit_boundary().is_err() {
+                        crate::update_service::transaction::resume(
+                            &prepared.app,
+                            Some(crate::update_service::UpdateErrorCode::Cancelled.into()),
+                        )
+                        .await;
                         return;
                     }
                     if let Err(error) = stop_and_activate(&prepared.app, activation).await {
@@ -352,6 +365,21 @@ pub fn acknowledge_app_exit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preservation_prompt_stops_after_acknowledgements_and_ignores_old_requests() {
+        let mut state = ExitState::default();
+        let request = state.begin().unwrap();
+        let labels = BTreeSet::from(["main".into()]);
+        assert!(state.preserving(request.request_id, &labels));
+        state.acknowledge("main", request.request_id);
+        assert!(!state.preserving(request.request_id, &labels));
+        state.opening = 1;
+        assert!(state.preserving(request.request_id, &labels));
+        state.cancel(request.request_id);
+        state.begin().unwrap();
+        assert!(!state.preserving(request.request_id, &labels));
+    }
 
     #[test]
     fn every_current_window_must_acknowledge_the_current_request() {
