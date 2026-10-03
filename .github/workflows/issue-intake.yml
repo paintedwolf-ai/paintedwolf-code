@@ -1,11 +1,11 @@
 name: issue-intake
 
-# Checks that a new issue carries the machine-generated facts the forms ask for, and
+# Checks that an issue carries the machine-generated facts the forms ask for, and
 # routes it by area. It labels and comments; closing belongs to issue-sweep.
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 
 permissions:
   contents: read
@@ -13,13 +13,20 @@ permissions:
 
 jobs:
   intake:
+    if: github.event.action == 'opened' || github.event.changes.body != null
+    concurrency:
+      group: issue-intake-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const issue = context.payload.issue;
+            const { data: issue } = await github.rest.issues.get({
+              ...context.repo, issue_number: context.payload.issue.number,
+            });
+            if (issue.state !== "open") return;
             const body = issue.body || "";
 
             // Issue forms render as "### <label>" followed by the value. Pull one section out
@@ -47,10 +54,59 @@ jobs:
               }
             };
 
-            const comment = async (text) => {
-              await github.rest.issues.createComment({
-                ...context.repo, issue_number: issue.number, body: text,
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number: issue.number, per_page: 100,
+            });
+            const marker = (kind) => `<!-- paintedwolf-intake:${kind} -->`;
+            const previous = (kind) => comments.find(
+              (c) => c.user?.login === "github-actions[bot]" && c.body?.includes(marker(kind)),
+            );
+            const comment = async (text, kind = "info") => {
+              const body = `${marker(kind)}\n${text}`;
+              const existing = previous(kind);
+              if (existing?.body === body) return;
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  ...context.repo, comment_id: existing.id, body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: issue.number, body,
+                });
+              }
+            };
+            const latestInfoEvent = async () => {
+              const events = await github.paginate(github.rest.issues.listEvents, {
+                ...context.repo, issue_number: issue.number, per_page: 100,
               });
+              return events.filter(
+                (e) => ["labeled", "unlabeled"].includes(e.event) && e.label?.name === "needs-info",
+              ).at(-1);
+            };
+            const needsInfo = async (text) => {
+              let eventId = previous("info")?.body.match(/<!-- intake-label:(\d+) -->/)?.[1];
+              if (!issue.labels.some((l) => l.name === "needs-info")) {
+                await addLabels(["needs-info"]);
+                const event = await latestInfoEvent();
+                eventId = event?.event === "labeled" && event.actor?.login === "github-actions[bot]"
+                  ? String(event.id) : undefined;
+              }
+              await comment(`${text}${eventId ? `\n<!-- intake-label:${eventId} -->` : ""}`);
+            };
+            const resolveInfo = async () => {
+              const existing = previous("info");
+              if (!existing) return;
+              const eventId = existing.body.match(/<!-- intake-label:(\d+) -->/)?.[1];
+              if (eventId) {
+                const event = await latestInfoEvent();
+                // A maintainer's later label application belongs to that maintainer.
+                if (event?.event === "labeled" && String(event.id) === eventId) {
+                  await github.rest.issues.removeLabel({
+                    ...context.repo, issue_number: issue.number, name: "needs-info",
+                  });
+                }
+              }
+              await comment("The required intake information is now complete. Thanks for updating the report.");
             };
 
             // The chooser can be bypassed by navigating straight to /issues/new, so a body-less
@@ -58,8 +114,7 @@ jobs:
             if (body.trim().length < 30) {
               const chooser =
                 `https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new/choose`;
-              await addLabels(["needs-info"]);
-              await comment(
+              await needsInfo(
                 [
                   "Thanks for opening this. This tracker uses issue forms, and it looks like this",
                   "one was filed without going through them.",
@@ -76,12 +131,26 @@ jobs:
             const labels = [];
             const missing = [];
 
-            // Required preflight checkboxes: GitHub enforces these at submission, but a later
-            // edit or an API filing can strip or uncheck them. Checkbox counts differ per
-            // form, so the invariant is simply that no checkbox is left unchecked.
-            const unchecked = [...body.matchAll(/- \[ \]/g)].length;
-            if (unchecked > 0) {
-              missing.push(`every **Before you file** checkbox confirmed (${unchecked} still unchecked)`);
+            const searched = "I searched existing issues and this is not already reported.";
+            const publicCode = "Nothing I am pasting below contains secrets, credentials, or code I cannot publish. This issue will be public forever.";
+            const preflights = {
+              bug: [searched, "This is one bug. I will file separate reports for separate bugs.",
+                "I reproduced this on the latest release.", publicCode],
+              launch: [searched, "Nothing I am pasting below contains secrets or credentials. This issue will be public forever."],
+              agent: ["This is not a containment escape. The agent stayed inside the permissions it was granted.",
+                searched, "I understand a one-off mistake from a model I chose may be closed as expected behaviour.", publicCode],
+              website: [],
+            };
+            const form = section("Page URL") !== null && section("What is wrong") !== null ? "website"
+              : section("Model and provider") !== null || issue.labels.some((l) => l.name === "agent-behavior") ? "agent"
+              : section("Version you tried to install") !== null ? "launch" : "bug";
+            const confirmed = new Set(
+              [...(section("Before you file") || "").matchAll(/^\s*- \[x\] (.+)$/gim)]
+                .map((m) => m[1].trim()),
+            );
+            const unconfirmed = preflights[form].filter((text) => !confirmed.has(text));
+            if (unconfirmed.length) {
+              missing.push(`every **Before you file** checkbox present and confirmed (${unconfirmed.length} missing or unchecked)`);
             }
 
             // System information is machine-generated with a fixed shape.
@@ -120,6 +189,8 @@ jobs:
               const hit = AREAS[area.trim().toLowerCase()];
               if (hit) {
                 labels.push(hit);
+              } else if (area.trim().toLowerCase() === "i don't know") {
+                labels.push("needs-triage");
               } else {
                 // An unmatched answer means the form options and this table drifted.
                 // Make that loud here rather than silent in triage.
@@ -130,12 +201,15 @@ jobs:
                     "known area, so no area label was applied. This is usually a form/dropdown",
                     "drift on our side, not a problem with the report — a maintainer will route it.",
                   ].join("\n"),
+                  "area",
                 );
+              }
+              if ((hit || area.trim().toLowerCase() === "i don't know") && previous("area")) {
+                await comment("The area answer is now a supported form option. Thanks for updating the report.", "area");
               }
             }
 
             if (missing.length) {
-              labels.push("needs-info");
               const wantsDiagnostics = missing.some(
                 (m) => m.includes("app version") || m.includes("den version") || m.includes("support-bundle"),
               );
@@ -158,7 +232,7 @@ jobs:
                   "and a report without that cannot be acted on.",
                 );
               }
-              await comment(
+              await needsInfo(
                 [
                   "Thanks for the report. It is missing a couple of specifics that a maintainer",
                   "would need in order to look at it:",
@@ -171,6 +245,8 @@ jobs:
                   "reopening is one comment away. Filing does not entitle you to a reply.",
                 ].join("\n"),
               );
+            } else {
+              await resolveInfo();
             }
 
             await addLabels(labels);
