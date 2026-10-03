@@ -7,7 +7,13 @@ BINARIES_DIR="${ROOT}/lycaon-den/src-tauri/binaries"
 TARGET="$(rustc --print host-tuple)"
 
 # Native tests compile the same resource manifest as packaged builds.
-cp "${ROOT}/THIRD-PARTY-NOTICES.md" "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
+if [[ ! -f "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
+  if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
+    echo "error: native resources are missing; run ./task licenses:notices after ./task setup-dev -- --frontend" >&2
+    exit 1
+  fi
+  cp "${ROOT}/THIRD-PARTY-NOTICES.md" "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
+fi
 
 for name in pw pw-logs pw-document-core bialy; do
   if [[ ! -x "${BINARIES_DIR}/${name}-${TARGET}" ]]; then
