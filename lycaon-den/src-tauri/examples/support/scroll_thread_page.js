@@ -12,25 +12,29 @@ window.__scrollThread = {
     mark("waiting for the harness API");
     for (let i = 0; i < 120 && !window.__harness; i++) await new Promise((r) => setTimeout(r, 250));
     if (!window.__harness) throw new Error("harness API missing");
+    // Driver steps report failure as { ok: false } rather than throwing.
+    const must = async (label, result) => {
+      const r = await result;
+      if (r && r.ok === false) {
+        const composer = document.querySelector('[data-testid="chat-composer"]');
+        throw new Error(`${label}: ${r.error ?? JSON.stringify(r)}; composer reads "${composer?.getAttribute("placeholder") ?? "missing"}"`);
+      }
+      return r;
+    };
     mark("opening the project");
-    await __harness.openProject("Harness");
+    await must("open project", __harness.openProject("Harness"));
     mark("draining pending completions");
     // Earlier runs can leave completions pending; answer them before scripting this one.
     await __harness.llm.auto("ok");
     await new Promise((r) => setTimeout(r, 2500));
     await __harness.llm.manual();
     mark("opening a session");
-    await __harness.newSession();
+    await must("new session", __harness.newSession());
     const step = async (reply) => {
       await __harness.llm.pending(20000);
       await __harness.llm.respond(reply);
     };
-    const send = async (text) => {
-      const sent = await __harness.sendPrompt(text);
-      if (sent.ok) return;
-      const composer = document.querySelector('[data-testid="chat-composer"]');
-      throw new Error(`${sent.error}; composer reads "${composer?.getAttribute("placeholder") ?? "missing"}"`);
-    };
+    const send = (text) => must("send", __harness.sendPrompt(text));
     for (let i = 0; i < 5; i++) {
       mark(`answering question ${i + 1}`);
       await send(`Question ${i + 1}: tell me about the layout.`);

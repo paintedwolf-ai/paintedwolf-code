@@ -148,7 +148,7 @@ impl Driver {
         self.eval(&format!(
             "window.__driverResult = undefined; (async () => ({expression}))().then(\
              (v) => {{ window.__driverResult = 'ok:' + JSON.stringify(v ?? null); }},\
-             (e) => {{ window.__driverResult = 'error:' + (e && e.stack || e); }}); 0"
+             (e) => {{ window.__driverResult = 'error:' + (e && e.message ? e.message : e); }}); 0"
         ));
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
