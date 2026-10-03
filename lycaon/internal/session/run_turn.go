@@ -61,7 +61,7 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 
 	text := promptUserInstruction(in)
 	hostTurn := in.HostSignal != nil
-	if !hostTurn && m.workflows != nil {
+	if !hostTurn && in.Recovery == nil && m.workflows != nil {
 		if resp, handled, err := m.workflows.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
 			// A parked phase cancels the current turn.
 			return resp, mapPromptRunError(err)
@@ -135,7 +135,7 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 	}
 	finishPreparing := m.beginPreparingContext(ctx, sess, id)
 	defer finishPreparing()
-	newUserTurn := !hostTurn && turnWasIdle
+	newUserTurn := !hostTurn && !in.Continuation && turnWasIdle
 	defer m.beginTurnClock(ctx, id, newUserTurn)()
 	ctx = curationctx.WithSession(ctx, curationctx.Session{
 		SessionID:       id,

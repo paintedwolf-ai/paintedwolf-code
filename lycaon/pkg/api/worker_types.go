@@ -485,3 +485,8 @@ func WorkerOutputState(task *WorkerTask) string {
 	}
 	return "waiting"
 }
+
+// WorkerReviewSucceeded requires a completed review and its accepted full closeout.
+func WorkerReviewSucceeded(task WorkerTask) bool {
+	return task.Status == WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil && task.Result.CompletionReport.LegStatus == "complete" && !WorkerTaskOverlayOpen(&task)
+}
