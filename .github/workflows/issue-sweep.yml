@@ -22,6 +22,7 @@ permissions:
   issues: write
 
 env:
+  ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
   LOCK_CLOSED_AFTER_DAYS: "14"
   UPVOTE_EXEMPT_THRESHOLD: "10"
 
@@ -32,9 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
+            const { isExempt } = require("./.github/scripts/issue-policy.cjs");
             const LIFECYCLE = {
               "needs-info": {
                 days: 7,
@@ -52,6 +57,7 @@ jobs:
               },
             };
 
+            if (isExempt(context.payload.issue)) return;
             const label = context.payload.label?.name;
             const entry = LIFECYCLE[label];
             if (!entry) return;
@@ -72,12 +78,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           # Manual runs default to a dry run; scheduled runs always act.
           DEBUG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}
         with:
           script: |
+            const { isExempt } = require("./.github/scripts/issue-policy.cjs");
             const LIFECYCLE = {
               "needs-info": { days: 7, reason: "we still need a bit more information to move forward" },
               "needs-repro": { days: 7, reason: "we still need reproduction steps to investigate" },
@@ -100,7 +110,7 @@ jobs:
               });
 
               for (const item of found) {
-                if (item.pull_request) continue;
+                if (item.pull_request || isExempt(item)) continue;
                 if (item.assignee || (item.assignees || []).length) continue;
                 if ((item.reactions?.["+1"] || 0) >= upvoteExempt) continue;
 
@@ -158,7 +168,7 @@ jobs:
 
             let locked = 0;
             for (const item of closed) {
-              if (item.pull_request) continue;
+              if (item.pull_request || isExempt(item)) continue;
               // Who closed it? Issues the reporter closed themselves (done, working as
               // intended, no longer reproducible) stay open for anyone to append to —
               // auto-locking them quietly erases a record the reporter may still need.
