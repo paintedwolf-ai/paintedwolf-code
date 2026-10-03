@@ -122,6 +122,7 @@ type BlueprintDef struct {
 
 // ReviewLoopDef defines a bounded parallel review cycle.
 type ReviewLoopDef struct {
+	FollowupAttempts          int
 	ReconcilesPhase           string
 	RequireInventoryAccounted bool
 	IncludeScanInventory      bool

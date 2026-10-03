@@ -30,6 +30,9 @@ func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testin
 	if !legacy.Retired || oldChallenge.ReviewLoop == nil || oldChallenge.ReviewLoop.CarriesCoverage() {
 		t.Fatal("released run acquired new requirements")
 	}
+	if challenge.ReviewLoop.FollowupAttempts != 2 {
+		t.Fatal("new patch lacks bounded follow-up")
+	}
 	registry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load versioned catalog", err)
 	if !registry.CatalogStartable("security-survey", "1.0.1") || registry.CatalogStartable("security-survey", "1.0.0") {

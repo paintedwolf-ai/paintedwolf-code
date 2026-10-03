@@ -111,6 +111,17 @@ func checkReportFindings(report guidance.CoordinatorCompletionReport, facts Repo
 	adjudicated := ClaimAnswers(facts.Claims)
 	var out []guidance.ReportDocumentIssue
 	for _, f := range report.Findings {
+		for _, claim := range facts.Claims {
+			if f.ID != claim.ID {
+				continue
+			}
+			if claim.Class == workflowdef.ClaimOpen && f.Disposition != "unresolved" {
+				out = append(out, invalid("finding %q is an open question; use disposition unresolved", f.ID))
+			}
+			if claim.Class != workflowdef.ClaimOpen && f.Disposition == "unresolved" {
+				out = append(out, invalid("finding %q contradicts its resolved claim", f.ID))
+			}
+		}
 		if issue := checkReportFinding(f, facts.Brief, adjudicated); issue.Code != "" {
 			out = append(out, issue)
 		}
@@ -125,9 +136,9 @@ func checkReportFinding(f guidance.CoordinatorFinding, brief *workflowdef.Brief,
 	}
 	switch api.CompletionReportFindingDisposition(f.Disposition) {
 	case api.CompletionReportFindingDispositionAct, api.CompletionReportFindingDispositionAccept:
-	case api.CompletionReportFindingDispositionHeld:
+	case api.CompletionReportFindingDispositionHeld, api.CompletionReportFindingDispositionUnresolved:
 		if len(f.Answers) > 0 {
-			return invalid("finding %s is held, so it is not rated; remove its answers", name)
+			return invalid("finding %s is %s, so it is not rated; remove its answers", name, f.Disposition)
 		}
 		return guidance.ReportDocumentIssue{}
 	case "":

@@ -20,7 +20,7 @@ schema:
       description: Shared interface agreements and assumptions for this worker, up to 8192 UTF-8 bytes. Copy the same relevant contracts to collaborating assignments; workers do not inherit the parent conversation or sibling files.
     workflow_work_id:
       type: string
-      description: Host-issued fanout plan leg id when dispatching a planned leg. The leg supplies agent_type, scope, and max_tool_loops the call omits. A resume keeps its child's leg without restating it.
+      description: Host-issued work id for a planned leg or registered review question. Planned legs supply omitted agent_type, scope, and max_tool_loops; questions require an explicit agent and read scope. A resume retains its child's work id.
     agent_type:
       description: "Worker agent id. Omit when resuming a child or dispatching a planned leg; either one supplies it."
       type: string

@@ -188,6 +188,7 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 	if p.ReviewLoop != nil {
 		out.ReviewLoop = &reviewLoopYAML{
 			ReconcilesPhase:           p.ReviewLoop.ReconcilesPhase,
+			FollowupAttempts:          p.ReviewLoop.FollowupAttempts,
 			RequireInventoryAccounted: p.ReviewLoop.RequireInventoryAccounted,
 			IncludeScanInventory:      p.ReviewLoop.IncludeScanInventory,
 			EvidenceKey:               p.ReviewLoop.EvidenceKey, IterationCap: p.ReviewLoop.IterationCap,

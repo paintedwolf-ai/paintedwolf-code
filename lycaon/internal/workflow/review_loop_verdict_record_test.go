@@ -325,6 +325,9 @@ func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "judge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1",
 		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil)
 	testutil.FailErr(t, "verdict with skeptic", err)
@@ -381,6 +384,9 @@ func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict with skeptic only", err)
 	if !out.Valid || !out.Terminal || len(out.MissingAgents) != 0 {
@@ -409,6 +415,9 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict without researcher", err)
 	if out.Valid || out.Terminal || len(out.MissingAgents) != 1 || out.MissingAgents[0] != "web-researcher" {
@@ -423,6 +432,9 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}, {WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "web-researcher", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict with researcher", err)
 	if !out.Valid || !out.Terminal {
@@ -451,6 +463,9 @@ func TestRecordReviewLoopVerdictRequiresCapturedOptionalRoster(t *testing.T) {
 		mgr.ReviewSpawnFilter = func(context.Context, string, string, []string) []string {
 			t.Fatal("verdict recomputed phase-entry roster")
 			return nil
+		}
+		mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+			return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
 		}
 		out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 		if err == nil || out.Terminal {

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -71,56 +72,11 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		return ReviewLoopVerdictOutcome{}, err
 	}
 
-	out := ReviewLoopVerdictOutcome{
-		Applied:     true,
-		Phase:       active.CurrentPhase,
-		EvidenceKey: key,
-	}
-	rules, err := m.VerdictRulesFor(ctx, active)
+	checked, err := m.validateReviewSubmission(ctx, active, rl, verdict, vars, citedEvidence, citedURLs)
 	if err != nil {
 		return ReviewLoopVerdictOutcome{}, err
 	}
-	out.Valid = ValidateReviewLoopVerdict(rl, verdict, rules) == nil
-	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
-		if coverageErr := m.checkReviewCoverage(ctx, active, rl, verdict); coverageErr != nil {
-			out.Valid = false
-			out.CoverageIssue = coverageErr.Error()
-		}
-	}
-	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
-		out.InventoryIssue, err = m.checkReviewInventory(ctx, active, rl, verdict)
-		if err != nil {
-			return out, err
-		}
-		if out.InventoryIssue != nil {
-			out.Valid = false
-		}
-	}
-	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
-		owed, captured := effectiveReviewAgents(active.CurrentPhase, rl, vars)
-		if !captured {
-			return out, fmt.Errorf("reviewer roster unavailable for phase %q", active.CurrentPhase)
-		}
-		if missing := m.missingReviewAgents(ctx, sessionID, owed); len(missing) > 0 {
-			out.Valid = false
-			out.MissingAgents = missing
-		} else if m.VerdictGrounding != nil {
-			eval, evalErr := m.VerdictGrounding(ctx, sessionID, allVerdictCitations(rl, verdict, citedEvidence), citedURLs, owed)
-			if evalErr != nil {
-				return out, evalErr
-			}
-			if eval.Code != "" {
-				out.Valid = false
-				out.GroundingCode = eval.Code
-				out.UngroundedCount = eval.UngroundedCount
-				out.UngroundedSample = eval.UngroundedSample
-				out.UncitedReviewers = eval.UncitedReviewers
-				out.ObservedHandles = eval.ObservedHandles
-			} else {
-				out.Grounding = eval.Grounding
-			}
-		}
-	}
+	out, questionVars := checked.Outcome, checked.Vars
 	var committedVars map[string]any
 	attemptSoFar := ReviewLoopAttempt(vars, active.CurrentPhase)
 	switch {
@@ -129,6 +85,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		out.Attempt = attemptSoFar
 		committedVars = StampReviewVerdict(vars, key, verdict)
 		committedVars = SatisfyGateInVars(committedVars, "evidence_passed:"+key)
+	case out.Valid && rl.FollowupAttempts > 0:
+		committedVars = questionVars
+		out.Attempt = attemptSoFar
 	case out.Valid && attemptSoFar >= reviewLoopIterationCap(rl):
 		// At the cap a non-terminal verdict is rejected rather than opening another round.
 		out.Valid = false
@@ -176,6 +135,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
 		m.notifyReviewLoopHeld(ctx, sessionID, out.IterationCapExceeded)
+		return out, nil
+	}
+	if rl.FollowupAttempts > 0 {
 		return out, nil
 	}
 	switch {
@@ -290,6 +252,7 @@ type ReviewLoopVerdictOutcome struct {
 	MissingAgents  []string
 	InventoryIssue *guidance.ReportDocumentIssue
 	CoverageIssue  string
+	QuestionIssue  *tools.ToolReject
 	// IterationCapExceeded reports a non-terminal verdict rejected because the
 	// phase already reached iteration_cap on a prior attempt.
 	IterationCapExceeded bool
@@ -415,41 +378,54 @@ func verdictArtifacts(verdict map[string]string, cited []api.CitationGroundingCi
 const defaultReviewLoopIterationCap = 2
 
 func reviewLoopIterationCap(rl workflowdef.ReviewLoopDef) int {
+	if rl.FollowupAttempts > 0 {
+		return 0
+	}
 	if rl.IterationCap > 0 {
 		return rl.IterationCap
 	}
 	return defaultReviewLoopIterationCap
 }
 
-// missingReviewAgents lists required_agents without a succeeded envelope in the current sojourn.
-func (m *RunManager) missingReviewAgents(ctx context.Context, sessionID string, required []string) []string {
-	if len(required) == 0 || m == nil || m.Sessions == nil {
+// missingReviewAgents reads the phase's completed reviewer tasks from the run ledger.
+func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowRun, required []string) []string {
+	if len(required) == 0 {
 		return nil
 	}
-	msgs, err := m.Sessions.GetMessages(ctx, sessionID)
+	if m == nil || m.WorkerTasks == nil {
+		return append([]string(nil), required...)
+	}
+	tasks, err := m.WorkerTasks(ctx, run.ID)
 	if err != nil {
 		return append([]string(nil), required...)
 	}
-	present := map[string]struct{}{}
-	for _, msg := range msgs[api.UserIntentBoundary(msgs):] {
-		if msg.WorkerSummary == nil {
-			continue
+	var since time.Time
+	ambient := m.IsAmbientRun(run)
+	if ambient {
+		if m.Sessions == nil {
+			return append([]string(nil), required...)
 		}
-		agent := strings.TrimSpace(msg.WorkerSummary.AgentType)
-		if agent == "" {
-			continue
+		history, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		if err != nil {
+			return append([]string(nil), required...)
 		}
-		if api.WorkerSummaryLegSucceeded(msg.WorkerSummary.Status) {
-			present[agent] = struct{}{}
+		if boundary := api.UserIntentBoundary(history); boundary > 0 {
+			since = history[boundary-1].CreatedAt
+		}
+	}
+	present := map[string]bool{}
+	for _, task := range tasks {
+		inScope := task.WorkflowRunID == run.ID && task.WorkflowPhase == run.CurrentPhase
+		if ambient {
+			inScope = !task.CreatedAt.Before(since)
+		}
+		if inScope && api.WorkerReviewSucceeded(task) {
+			present[task.AgentType] = true
 		}
 	}
 	var missing []string
 	for _, agent := range required {
-		agent = strings.TrimSpace(agent)
-		if agent == "" {
-			continue
-		}
-		if _, ok := present[agent]; !ok {
+		if !present[agent] {
 			missing = append(missing, agent)
 		}
 	}

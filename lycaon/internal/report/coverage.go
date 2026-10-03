@@ -19,6 +19,9 @@ func notCoveredItems(input ReportInput) []string {
 			if reviewed && (kind == GapScansMoved || kind == GapLegsPartial || kind == GapWorkersPartial) {
 				continue
 			}
+			if kind == GapClaimsOpen && input.openClaimsAssessed() {
+				continue
+			}
 			if item := gapItem(g); item != "" {
 				out = append(out, item)
 			}
@@ -74,6 +77,9 @@ func coverageAssessmentText(input ReportInput, a reviewcoverage.Assessment) stri
 			for _, f := range rows {
 				if f.ID == a.ID {
 					subject = f.Subject
+					if f.Kind == "review_question" && f.Question != "" {
+						subject = f.Question + " (" + f.Subject + ")"
+					}
 					if len(f.Paths) > 0 {
 						subject += fmt.Sprintf(" · %s: %s", plural(f.FileCount, "affected file", "affected files"), strings.Join(f.Paths, ", "))
 						if f.FileCount > len(f.Paths) {

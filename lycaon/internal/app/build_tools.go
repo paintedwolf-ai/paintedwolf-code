@@ -62,15 +62,15 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	return nil
 }
 
-// plannedWorkflowLeg exposes the active phase's fanout plan to task dispatch.
-func (b *serveBuilder) plannedWorkflowLeg(ctx context.Context, tctx tools.ToolContext, workID string) (worker.PlannedLeg, bool, error) {
-	planned, ok, err := b.workflowMgr.PlannedLeg(ctx, tctx.SessionID, workID)
+// workflowWork exposes active workflow ownership to task dispatch.
+func (b *serveBuilder) workflowWork(ctx context.Context, tctx tools.ToolContext, workID string) (worker.WorkflowWork, bool, error) {
+	planned, ok, err := b.workflowMgr.WorkflowWork(ctx, tctx.SessionID, workID)
 	if err != nil || !ok {
-		return worker.PlannedLeg{}, ok, err
+		return worker.WorkflowWork{}, ok, err
 	}
-	return worker.PlannedLeg{
-		RunID: planned.RunID, Phase: planned.Phase, AgentType: planned.Leg.AgentType,
-		Scope: planned.Leg.Scope, MaxToolLoops: planned.Leg.MaxToolLoops,
+	return worker.WorkflowWork{
+		RunID: planned.RunID, Phase: planned.Phase, AgentType: planned.AgentType,
+		Scope: planned.Scope, MaxToolLoops: planned.MaxToolLoops,
 	}, true, nil
 }
 
@@ -184,7 +184,7 @@ func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
 		Workers:          b.workersCfg,
 		ToolBudget:       b.workerToolBudgetFor,
 		BindWorkflowTask: b.workflowMgr.BindWorkflowTask,
-		PlannedLeg:       b.plannedWorkflowLeg,
+		WorkflowWork:     b.workflowWork,
 		TaskReceipt:      b.workerQueue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
 			if b.mgr == nil || b.mgr.Decisions() == nil {

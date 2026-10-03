@@ -17,6 +17,8 @@ import (
 // scanner groups outside the run's inventory.
 const SubmitVerdictScanGroupUnknownCode = "SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN"
 
+const SubmitVerdictScansPendingCode = "SUBMIT_VERDICT_SCANS_PENDING"
+
 // ScanInventory reads the scans a run's review is accountable for.
 type ScanInventory interface {
 	// RunScans are the scans bound to a run, with their stored findings.
@@ -197,7 +199,7 @@ func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.Workflow
 		return nil, err
 	}
 	if !inventory.Settled {
-		return &guidance.ReportDocumentIssue{Reason: "the run's bound scans have not settled"}, nil
+		return &guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}, nil
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {

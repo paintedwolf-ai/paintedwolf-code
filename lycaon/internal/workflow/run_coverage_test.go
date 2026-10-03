@@ -106,3 +106,41 @@ func TestCoverageRevisionBindsThePlannedQuestionAndThreatModel(t *testing.T) {
 		t.Fatal("changed threat model retained an old coverage judgment")
 	}
 }
+
+func TestCoverageRevisionTracksReviewWorkNotReportProduction(t *testing.T) {
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{
+		{ID: "execute"},
+		{ID: "challenge", ReviewLoop: &workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"coverage": workflowdef.VerdictCoverageType}}},
+		{ID: "synthesis"},
+	}}
+	base := []api.WorkerTask{{ID: "review", WorkflowPhase: "challenge", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}
+	facts := BuildCoverageFacts(manifest, nil, base, nil)
+	for _, status := range []api.WorkerStatus{api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusFailed, api.WorkerStatusComplete} {
+		tasks := append(append([]api.WorkerTask(nil), base...), api.WorkerTask{ID: "report-worker", WorkflowPhase: "synthesis", Status: status})
+		if got := BuildCoverageFacts(manifest, nil, tasks, nil); got.Revision != facts.Revision {
+			t.Fatalf("report worker %s invalidated accepted review", status)
+		}
+		tasks[1].WorkflowPhase = "challenge"
+		if got := BuildCoverageFacts(manifest, nil, tasks, nil); got.Revision == facts.Revision {
+			t.Fatalf("new review work %s did not invalidate review", status)
+		}
+	}
+}
+
+func TestCoverageInjectionOnlyRunsAtReviewBoundary(t *testing.T) {
+	mgr := &RunManager{WorkerTasks: func(context.Context, string) ([]api.WorkerTask, error) {
+		t.Fatal("non-review phase loaded the coverage worker ledger")
+		return nil, nil
+	}}
+	manifest := workflowdef.Manifest{Phases: []string{"execute", "challenge", "synthesis"}, PhaseDefs: []workflowdef.PhaseDef{
+		{ID: "execute"},
+		{ID: "challenge", ReviewLoop: &workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"coverage": workflowdef.VerdictCoverageType}}},
+		{ID: "synthesis"},
+	}}
+	for _, phase := range []string{"execute", "synthesis"} {
+		snap := mgr.workflowRuntimeSnapshot(t.Context(), &api.WorkflowRun{ID: "run", CurrentPhase: phase}, manifest, nil)
+		if snap.CoverageReview != "" {
+			t.Fatalf("%s received review-only coverage facts", phase)
+		}
+	}
+}

@@ -29,6 +29,8 @@ type PhaseExitView struct {
 	ClaimStatuses       []string
 	ReviewLoopKey       string
 	ReviewLoopCap       int
+	FollowupAttempts    int
+	VerdictExample      string
 	// ReviewAgents is the verdict-owed reviewer roster for a review_loop phase.
 	ReviewAgents      []string
 	HumanApproval     bool
@@ -420,6 +422,8 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"claim_statuses":       append([]string(nil), data.PhaseExit.ClaimStatuses...),
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
+			"followup_attempts":    data.PhaseExit.FollowupAttempts,
+			"verdict_example":      data.PhaseExit.VerdictExample,
 			"review_agents":        append([]string(nil), data.PhaseExit.ReviewAgents...),
 			"human_approval":       data.PhaseExit.HumanApproval,
 			"invoke_workflow_id":   data.PhaseExit.InvokeWorkflowID,

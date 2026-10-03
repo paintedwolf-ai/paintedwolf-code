@@ -57,9 +57,11 @@ type PhaseExitView struct {
 	CompleteWhen  string
 	VerdictSchema map[string]string
 	// ClaimStatuses are the status words the phase's claims may take.
-	ClaimStatuses []string
-	ReviewLoopKey string
-	ReviewLoopCap int
+	ClaimStatuses    []string
+	ReviewLoopKey    string
+	ReviewLoopCap    int
+	FollowupAttempts int
+	VerdictExample   string
 	// ReviewAgents is the verdict-owed reviewer roster: required_agents plus the
 	// spawnable if_spawnable subset. A terminal verdict needs a succeeded task()
 	// envelope from each.
@@ -95,6 +97,11 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 		out.Kind = PhaseExitKindReviewLoop
 		out.ReviewLoopKey = strings.TrimSpace(phase.ReviewLoop.EvidenceKey)
 		out.ReviewLoopCap = phase.ReviewLoop.IterationCap
+		if phase.ReviewLoop.FollowupAttempts > 0 {
+			out.ReviewLoopCap = 0
+		}
+		out.FollowupAttempts = phase.ReviewLoop.FollowupAttempts
+		out.VerdictExample = VerdictExample(*phase.ReviewLoop)
 		if len(reviewAgents) == 0 {
 			reviewAgents = dedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
@@ -185,6 +192,8 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		ClaimStatuses:       append([]string(nil), exit.ClaimStatuses...),
 		ReviewLoopKey:       exit.ReviewLoopKey,
 		ReviewLoopCap:       exit.ReviewLoopCap,
+		FollowupAttempts:    exit.FollowupAttempts,
+		VerdictExample:      exit.VerdictExample,
 		ReviewAgents:        append([]string(nil), exit.ReviewAgents...),
 		HumanApproval:       exit.HumanApproval,
 		InvokeWorkflowID:    exit.InvokeWorkflowID,

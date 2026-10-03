@@ -116,6 +116,9 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 		for k, v := range vars {
 			kickVars[k] = v
 		}
+		if id == "coordinator-security-challenge" {
+			kickVars["review_followup_attempts"] = 2
+		}
 		// Kick caps include phase obligations.
 		kickVars["failed_leaves"] = []string{"hitl_consulted:intake"}
 		kickVars["gate_obligations"] = []map[string]any{{

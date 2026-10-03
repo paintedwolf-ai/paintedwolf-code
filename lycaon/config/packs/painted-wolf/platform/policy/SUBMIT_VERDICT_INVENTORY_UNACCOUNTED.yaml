@@ -15,7 +15,7 @@ copy:
   what: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %}; {{ paintedwolf.offenders_omitted }} more{% endif %}{% endif %}.'
   cause: The review must account for the run's scanner inventory before advancing to the report.
   why: The report phase cannot investigate groups the review left unassessed.
-  fix: 'Use scan_query with view groups on the run-bound scan ids to inspect the remaining groups. Link assessed groups through claims scan_group_ids, or supply set_asides with a reason that holds for every selected group. Path selectors must cover every location in a group; mixed-location or locationless groups need explicit scan_group_ids. If scans are still running, wait for them to settle. Resubmit the complete verdict with the accounting corrected.'
+  fix: 'Use scan_query with view groups on the run-bound scan ids to inspect the remaining groups. Link assessed groups through claims scan_group_ids, or supply set_asides with a reason that holds for every selected group. Path selectors must cover every location in a group; mixed-location or locationless groups need explicit scan_group_ids. Resubmit the complete verdict with the accounting corrected.'
   instead: Keep earlier claim links and inherited set-asides. Do not clear a group merely because it was listed.
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
@@ -28,9 +28,3 @@ x-paintedwolf-scenarios:
       offenders_sample: 'group:sample · secrets · high · fixture-token · src/example.go'
       offenders_omitted: 17
     expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'group:sample', 'scan_query', '17 more']
-  - id: unsettled_scans
-    vars:
-      rejection_reason: The run's bound scans have not settled
-      offenders_sample: ''
-      offenders_omitted: 0
-    expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'wait']
