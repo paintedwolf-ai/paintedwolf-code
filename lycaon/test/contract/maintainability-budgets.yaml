@@ -12329,7 +12329,7 @@ source_files:
     lycaon/internal/exec/pty_start.go: 50
     lycaon/internal/exec/pty_unix.go: 23
     lycaon/internal/exec/pty_windows.go: 15
-    lycaon/internal/exec/reaper.go: 35
+    lycaon/internal/exec/reaper.go: 39
     lycaon/internal/exec/reaper_unix.go: 166
     lycaon/internal/exec/reaper_windows.go: 12
     lycaon/internal/exec/resolved_path.go: 51
@@ -18663,7 +18663,7 @@ test_files:
     lycaon/internal/exec/priority_windows_test.go: 35
     lycaon/internal/exec/pty_guard_test.go: 128
     lycaon/internal/exec/pty_test.go: 99
-    lycaon/internal/exec/reaper_unix_test.go: 163
+    lycaon/internal/exec/reaper_unix_test.go: 178
     lycaon/internal/exec/sanitize_env_test.go: 129
     lycaon/internal/exec/separate_stderr_test.go: 58
     lycaon/internal/exec/stage_redirect_test.go: 150
