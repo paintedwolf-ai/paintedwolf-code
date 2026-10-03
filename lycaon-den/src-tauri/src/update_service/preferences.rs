@@ -32,8 +32,26 @@ async fn set(
     if let Some(value) = channel {
         preferences.channel = value;
     }
-    persistence::write_preferences(&persistence::update_dir()?, &preferences)?;
-    service.cancel();
+    persistence::write_preferences(&persistence::preferences_dir()?, &preferences)?;
+    let changed_channel = inner.state.channel != preferences.channel;
+    if changed_channel {
+        service.cancel(&mut inner.state);
+        service
+            .preparation_generation
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+    } else {
+        service.wake_scheduler();
+    }
+    if !preferences.automatic_updates_enabled
+        && !inner.manual_preparation
+        && inner.state.installation.busy()
+    {
+        service
+            .preparation_generation
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        service.wake_scheduler();
+        inner.state.installation = Installation::None;
+    }
     inner.state.automatic_updates_enabled = preferences.automatic_updates_enabled;
     let mut cleanup_error = None;
     if inner.state.channel != preferences.channel {
@@ -41,11 +59,11 @@ async fn set(
         inner.state.staged_release_id = None;
         inner.state.installation = Installation::None;
         cleanup_error = super::staging::forget_ready().err();
-    } else if inner.state.installation.busy() {
-        inner.state.installation = Installation::None;
     }
     inner.state.channel = preferences.channel;
-    inner.state.discovery = Discovery::Idle;
+    if changed_channel {
+        inner.state.discovery = Discovery::Idle;
+    }
     inner.state.last_error = cleanup_error;
     inner.preferences = preferences;
     emit(app, &mut inner.state);

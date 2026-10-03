@@ -15,7 +15,9 @@ pub struct PreparedIdentity {
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{acquire_gate, acquire_lease, exchange, InstallationLease};
+pub use macos::{
+    acquire_gate, acquire_lease, acquire_preparation, exchange, try_activation, InstallationLease,
+};
 
 pub fn bundle() -> Result<PathBuf, UpdateError> {
     let exe = std::env::current_exe()
@@ -127,8 +129,10 @@ pub fn prepare(candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
 }
 pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
     let artifact = staging::root(candidate)?.join("artifact");
-    let verified = verification::verify(
-        &artifact,
+    let mut archive =
+        fs::File::open(&artifact).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    let verified = verification::verify_file(
+        &mut archive,
         &candidate.artifact_signature,
         &super::check::embedded_key().1,
         &candidate.version,
@@ -137,7 +141,7 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
     retain_verified_artifact(&artifact, verified)?;
     #[cfg(target_os = "macos")]
     {
-        macos::prepare(target, candidate, &artifact)
+        macos::prepare(target, candidate, &mut archive)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -193,7 +197,7 @@ pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
             ])
             .arg(path)
             .output()
-            .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         if !output.status.success() {
             return Err(UpdateError::new(
                 Failure::VerificationFailed,

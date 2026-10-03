@@ -7,6 +7,7 @@ pub(super) fn retry_delay(failures: u32) -> u64 {
 pub fn start_update_scheduler(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let service = app.state::<UpdateService>();
+        let mut wake = service.wake.subscribe();
         let mut delay = 30;
         let mut failures = 0;
         loop {
@@ -18,7 +19,7 @@ pub fn start_update_scheduler(app: AppHandle) {
                     .then_some(now() + delay);
                 emit(&app, &mut inner.state);
             }
-            tokio::select! { _ = tokio::time::sleep(Duration::from_secs(delay)) => {}, _ = service.wake.notified() => {} }
+            tokio::select! { _ = tokio::time::sleep(Duration::from_secs(delay)) => {}, _ = wake.changed() => {} }
             let enabled = service.inner.lock().await.state.automatic_updates_enabled;
             if !enabled {
                 delay = 3600;

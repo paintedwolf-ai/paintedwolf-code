@@ -13,14 +13,9 @@ async fn supervise(
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let startup = app.clone();
-        let result = supervise(async move {
-            if let Some(activation) = transaction::prepare_exit(&startup, None, true).await? {
-                crate::app_exit::finish_update(&startup, activation).await?;
-                return Ok(true);
-            }
-            Ok(false)
-        })
-        .await;
+        let result =
+            supervise(async move { crate::app_exit::install_update(&startup, None, true).await })
+                .await;
         match result {
             // A committed restart must not admit an engine into the exiting process.
             Ok(true) => return,

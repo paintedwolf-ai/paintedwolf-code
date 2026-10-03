@@ -96,11 +96,37 @@ struct LegacyPreferences {
     channel: UpdateChannel,
     rollout_bucket: u8,
 }
-pub fn update_dir() -> Result<PathBuf, UpdateError> {
+pub fn preferences_dir() -> Result<PathBuf, UpdateError> {
     crate::den_state_dir()
         .map(|p| p.join("updates"))
         .ok_or_else(|| Failure::StateUnavailable.into())
 }
+static HELPER_INSTALLATION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+pub fn installation_id(target: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "{:x}",
+        Sha256::digest(target.as_os_str().as_encoded_bytes())
+    )
+}
+pub fn helper_installation(id: &str) -> Result<(), UpdateError> {
+    if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(Failure::InvalidTransition.into());
+    }
+    HELPER_INSTALLATION
+        .set(id.into())
+        .map_err(|_| Failure::InvalidTransition.into())
+}
+pub fn update_dir() -> Result<PathBuf, UpdateError> {
+    let id = match HELPER_INSTALLATION.get() {
+        Some(id) => id.clone(),
+        None => installation_id(&super::installer::bundle().or_else(|_| {
+            std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))
+        })?),
+    };
+    Ok(preferences_dir()?.join("installations").join(id))
+}
+
 pub fn write_preferences(dir: &Path, preferences: &Preferences) -> Result<(), UpdateError> {
     write_json_atomic(
         dir,
@@ -167,6 +193,14 @@ fn validate_preferences(p: &Preferences) -> Result<(), UpdateError> {
 mod tests {
     use super::*;
     use crate::test_support::TempDir;
+    #[test]
+    fn installation_namespaces_are_path_bound_and_stable() {
+        let a = Path::new("/Applications/Painted Wolf Code.app");
+        let b = Path::new("/Users/person/Applications/Painted Wolf Code.app");
+        assert_eq!(installation_id(a), installation_id(a));
+        assert_ne!(installation_id(a), installation_id(b));
+        assert_eq!(installation_id(a).len(), 64);
+    }
     #[test]
     fn released_preferences_migrate_without_changing_choices() {
         for enabled in [false, true] {

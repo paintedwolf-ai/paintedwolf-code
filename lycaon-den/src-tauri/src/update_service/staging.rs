@@ -42,10 +42,25 @@ pub fn publish(
 }
 pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
     let path = persistence::update_dir()?.join("ready.json");
-    read_ready_at(&path).map_err(|error| error.with_context(format!(
-        "Record: {}. If this record is unreadable or from an incompatible beta, quit every instance of Painted Wolf Code, move this file outside the updates directory to preserve it, then reopen and check for updates. Do not remove transaction.json or user data.", path.display()
-    )))
+    recover_ready_at(&path)
 }
+fn recover_ready_at(path: &std::path::Path) -> Result<Option<Staged>, UpdateError> {
+    match read_ready_at(path) {
+        Ok(ready) => Ok(ready),
+        Err(error) => {
+            let quarantine =
+                path.with_file_name(format!("ready-quarantined-{}.json", uuid::Uuid::new_v4()));
+            crate::atomic_file::replace(path, &quarantine, true).map_err(|failure| {
+                error.with_context(format!(
+                    "Record: {}. Could not preserve incompatible staging information: {failure}",
+                    path.display()
+                ))
+            })?;
+            Ok(None)
+        }
+    }
+}
+
 fn read_ready_at(path: &std::path::Path) -> Result<Option<Staged>, UpdateError> {
     let bytes = match fs::read(path) {
         Ok(b) => b,
@@ -181,7 +196,7 @@ pub fn clean_partials(candidate: &Candidate) -> Result<(), UpdateError> {
 mod tests {
     use super::*;
     #[test]
-    fn incompatible_ready_records_remain_available_for_manual_recovery() {
+    fn incompatible_ready_records_are_quarantined_without_blocking_updates() {
         let root = crate::test_support::TempDir::new("update-ready-recovery");
         let path = root.join("ready.json");
         for bytes in [
@@ -194,6 +209,12 @@ mod tests {
                 Failure::JournalUnavailable
             );
             assert_eq!(fs::read(&path).unwrap(), bytes);
+            assert!(recover_ready_at(&path).unwrap().is_none());
+            assert!(!path.exists());
+            assert!(fs::read_dir(&*root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
         }
     }
 }

@@ -216,3 +216,72 @@ fn recovery_startup_can_discover_a_fix_without_confirming_the_installed_version(
     s.refresh_capabilities(true);
     assert!(s.capabilities.can_download);
 }
+
+fn service_for_test() -> UpdateService {
+    UpdateService {
+        inner: tokio::sync::Mutex::new(Inner {
+            state: state(),
+            preferences: persistence::Preferences {
+                format_version: 2,
+                automatic_updates_enabled: true,
+                channel: UpdateChannel::Stable,
+                rollout_bucket: 0,
+            },
+            blocked_release: None,
+            preferences_writable: true,
+            manual_preparation: false,
+        }),
+        generation: AtomicU64::new(0),
+        preparation_generation: AtomicU64::new(0),
+        wake: tokio::sync::watch::channel(0).0,
+        startup_ready: tokio::sync::watch::channel(false).0,
+        engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
+        preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+        activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+    }
+}
+#[tokio::test]
+async fn cancelling_a_check_releases_discovery_before_a_new_check_can_start() {
+    let service = service_for_test();
+    let mut inner = service.inner.lock().await;
+    inner.state.discovery = Discovery::Checking;
+    service.cancel(&mut inner.state);
+    assert_eq!(inner.state.discovery, Discovery::Idle);
+    assert!(!service.current(0));
+    inner.state.discovery = Discovery::Checking;
+    assert!(service.current(1));
+    assert!(!service.current(0));
+}
+#[tokio::test]
+async fn scheduler_wakes_survive_the_gap_before_waiting_without_cancelling_preparation() {
+    let service = service_for_test();
+    let mut wake = service.wake.subscribe();
+    service.wake_scheduler();
+    tokio::time::timeout(Duration::from_millis(100), wake.changed())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(service.preparation_generation.load(Ordering::Acquire), 0);
+    assert!(service.current(0));
+}
+
+#[tokio::test]
+async fn closing_engine_admission_drains_existing_starts_and_blocks_new_ones() {
+    let service = service_for_test();
+    service.startup_ready.send_replace(true);
+    let start = service.startup_admission().await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(10), service.close_startup())
+            .await
+            .is_err()
+    );
+    drop(start);
+    service.close_startup().await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(10), service.startup_admission())
+            .await
+            .is_err()
+    );
+    service.startup_ready.send_replace(true);
+    let _resumed = service.startup_admission().await;
+}

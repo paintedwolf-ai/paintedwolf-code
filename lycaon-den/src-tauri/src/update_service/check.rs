@@ -105,6 +105,14 @@ pub(super) async fn fetch_candidate(
     };
     let checked = checked.map_err(UpdateError::check)?;
     if let Some(candidate) = &checked {
+        if channel == UpdateChannel::Stable
+            && !semver::Version::parse(&candidate.version)
+                .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?
+                .pre
+                .is_empty()
+        {
+            return Err(Failure::InvalidRelease.into());
+        }
         if !manifest_offers_update(&candidate.raw_json, embedded_key().0)? {
             return Ok(None);
         }
@@ -181,6 +189,7 @@ pub(super) async fn run_check(
     automatic: bool,
 ) -> Result<NativeUpdateState, UpdateError> {
     let service = app.state::<UpdateService>();
+    let mut wake = service.wake.subscribe();
     let (generation, version, channel) = {
         let mut inner = service.inner.lock().await;
         if (automatic && !inner.state.automatic_updates_enabled)
@@ -199,11 +208,12 @@ pub(super) async fn run_check(
     };
     let checked = tokio::select! {
         result = fetch_candidate(app, version, channel) => result,
-        _ = service.wake.notified() => Err(Failure::Cancelled.into()),
+        _ = wake.wait_for(|_| !service.current(generation)) => Err(Failure::Cancelled.into()),
     };
     let failure = checked.as_ref().err().cloned();
     let mut inner = service.inner.lock().await;
     if !service.current(generation) {
+        // Cancellation resets the owned Checking state before another check can start.
         return Ok(inner.state.clone());
     }
     let bucket = inner.preferences.rollout_bucket;

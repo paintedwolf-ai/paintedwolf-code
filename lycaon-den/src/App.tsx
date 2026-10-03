@@ -10,6 +10,7 @@ import { ConfirmDestructiveHost } from "./components/ConfirmDestructiveDialog.ts
 import { HostFolderDialog } from "./components/HostFolderDialog.tsx";
 import { TextEditContextMenuHost } from "./components/TextEditContextMenuHost.tsx";
 import {
+  connectAppBackend,
   disconnectAppBackend,
   getLycaonClient,
   onAttentionEvent,
@@ -44,6 +45,7 @@ import { ChatDestinationPicker } from "./components/chatview/ChatDestinationPick
 import { startComposerDocumentMirror } from "./chat/composer/composer-document-store.ts";
 import { isTauriRuntime } from "./platform/runtime.ts";
 import { nativeUpdateState } from "./settings/system/update-state.ts";
+import { listenHostEvent } from "./platform/windows/window-channel.ts";
 import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
@@ -116,7 +118,20 @@ function App() {
     const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
       : mountUpdateNotice({ notices: noticeStore });
+    let stopped = false;
+    let stopUpdateRecovery = () => {};
+    if (!subject && isTauriRuntime()) {
+      void listenHostEvent("update-resume-engine", () => {
+        disconnectAppBackend();
+        void connectAppBackend(appStore).catch(() => undefined);
+      }).then((stop) => {
+        if (stopped) stop();
+        else stopUpdateRecovery = stop;
+      });
+    }
     onCleanup(() => {
+      stopped = true;
+      stopUpdateRecovery();
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();

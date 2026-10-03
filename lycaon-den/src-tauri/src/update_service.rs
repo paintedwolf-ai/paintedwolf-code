@@ -30,14 +30,17 @@ pub(super) struct Inner {
     preferences: persistence::Preferences,
     blocked_release: Option<String>,
     preferences_writable: bool,
+    manual_preparation: bool,
 }
 pub struct UpdateService {
     inner: tokio::sync::Mutex<Inner>,
     generation: AtomicU64,
-    wake: tokio::sync::Notify,
+    wake: tokio::sync::watch::Sender<u64>,
+    preparation_generation: AtomicU64,
     preparation: std::sync::Arc<tokio::sync::Mutex<()>>,
     activation: std::sync::Arc<tokio::sync::Mutex<()>>,
     startup_ready: tokio::sync::watch::Sender<bool>,
+    engine_admission: std::sync::Arc<tokio::sync::RwLock<()>>,
 }
 fn default_channel(version: &str) -> Result<UpdateChannel, UpdateError> {
     let version = semver::Version::parse(version)
@@ -62,7 +65,7 @@ impl UpdateService {
             rollout_bucket: check::draw_rollout_bucket(),
         };
         let mut preferences_writable = false;
-        match persistence::update_dir().and_then(|dir| {
+        match persistence::preferences_dir().and_then(|dir| {
             persistence::load_preferences(&dir, channel, preferences.rollout_bucket)
         }) {
             Ok(p) => {
@@ -76,7 +79,7 @@ impl UpdateService {
                 state.last_error = Some(e);
             }
         }
-        if let Err(e) = persistence::update_dir()
+        if let Err(e) = persistence::preferences_dir()
             .and_then(|dir| persistence::reconcile_legacy(&dir, &state.running_version))
         {
             state.last_error = Some(e);
@@ -107,12 +110,33 @@ impl UpdateService {
                 preferences,
                 blocked_release,
                 preferences_writable,
+                manual_preparation: false,
             }),
             generation: AtomicU64::new(0),
-            wake: tokio::sync::Notify::new(),
+            wake: tokio::sync::watch::channel(0).0,
+            preparation_generation: AtomicU64::new(0),
             startup_ready: tokio::sync::watch::channel(false).0,
+            engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
             preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+    pub async fn automatic_install_ready(&self) -> bool {
+        let mut inner = self.inner.lock().await;
+        inner.state.refresh_capabilities(installer::supported());
+        inner.state.capabilities.can_install_automatically
+    }
+    pub async fn close_startup(&self) {
+        let _admission = self.engine_admission.write().await;
+        self.startup_ready.send_replace(false);
+    }
+    pub async fn startup_admission(&self) -> tokio::sync::OwnedRwLockReadGuard<()> {
+        loop {
+            self.wait_for_startup().await;
+            let admission = self.engine_admission.clone().read_owned().await;
+            if *self.startup_ready.borrow() {
+                return admission;
+            }
         }
     }
     pub async fn wait_for_startup(&self) {
@@ -128,13 +152,23 @@ impl UpdateService {
     fn current(&self, generation: u64) -> bool {
         self.generation.load(Ordering::Acquire) == generation
     }
-    fn cancel(&self) {
+    fn wake_scheduler(&self) {
+        self.wake.send_modify(|revision| *revision += 1);
+    }
+    fn cancel(&self, state: &mut NativeUpdateState) {
+        if state.discovery == Discovery::Checking {
+            state.discovery = Discovery::Idle;
+        }
         self.generation.fetch_add(1, Ordering::AcqRel);
-        self.wake.notify_waiters();
+        self.wake.send_modify(|revision| *revision += 1);
     }
 }
 fn emit(app: &AppHandle, state: &mut NativeUpdateState) {
     state.refresh_capabilities(installer::supported());
     state.revision += 1;
     let _ = app.emit(UPDATE_STATE_EVENT, &*state);
+}
+
+pub(crate) fn initialize_helper(installation: &str) -> Result<(), String> {
+    persistence::helper_installation(installation).map_err(|error| error.to_string())
 }

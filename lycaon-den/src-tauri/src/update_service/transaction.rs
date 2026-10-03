@@ -53,6 +53,7 @@ impl Activation {
         let result = std::process::Command::new(&self.helper)
             .arg("--apply-update")
             .arg(&self.transaction.id)
+            .arg(persistence::installation_id(&self.transaction.target))
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -60,8 +61,11 @@ impl Activation {
         if let Err(error) = result {
             self.transaction.phase = Phase::Failed;
             self.transaction.error = Some(error.to_string());
-            write(&self.transaction)?;
-            return Err(UpdateError::new(Failure::ActivationFailed, error));
+            let mut failure = UpdateError::new(Failure::ActivationFailed, error);
+            if let Err(record) = write(&self.transaction) {
+                failure = failure.with_context(record);
+            }
+            return Err(failure);
         }
         Ok(())
     }
@@ -96,11 +100,6 @@ pub async fn prepare_exit(
     };
     if expected.is_some_and(|id| id != candidate.release_id) {
         return Err(Failure::CandidateChanged.into());
-    }
-    if read()?
-        .is_some_and(|t| t.phase == Phase::Failed && t.candidate.release_id == candidate.release_id)
-    {
-        return Err(Failure::ActivationFailed.into());
     }
     let (source, _, error) = persistence::detect_install_source();
     if let Some(error) = error {
@@ -141,17 +140,11 @@ pub async fn prepare_exit(
     let prepared_result = tauri::async_runtime::spawn_blocking(move || {
         let candidate = release;
         let target = installer::bundle()?;
-        installer::verify_bundle(&target)?;
         let prepared = installer::prepared_path(&target, &candidate)?;
         let ready = staging::read_ready()?.ok_or(Failure::CandidateMissing)?;
         if ready.candidate.release_id != candidate.release_id
             || hash(&executable(&prepared))? != ready.executable_hash
         {
-            return Err(Failure::VerificationFailed.into());
-        }
-        installer::verify_bundle(&prepared)?;
-        #[cfg(target_os = "macos")]
-        if installer::bundle_hash(&prepared)? != ready.bundle_hash {
             return Err(Failure::VerificationFailed.into());
         }
         let t = Transaction {
@@ -205,7 +198,7 @@ pub async fn prepare_exit(
         archive_receipt(&previous)?;
     }
     write(&t)?;
-    service.cancel();
+    service.cancel(&mut inner.state);
     inner.state.installation = Installation::AwaitingExit;
     emit(app, &mut inner.state);
     Ok(Some(Activation {
@@ -235,15 +228,24 @@ fn invalidate_preparation(
     candidate: &Candidate,
     mut error: UpdateError,
 ) -> UpdateError {
-    if let Err(failure) =
-        staging::forget_ready().and_then(|()| staging::reject(candidate.release_id.clone()))
-    {
+    let permanent = matches!(
+        error.code,
+        Failure::VerificationFailed | Failure::InvalidRelease
+    );
+    let invalidated = staging::forget_ready().and_then(|()| {
+        if permanent {
+            staging::reject(candidate.release_id.clone())
+        } else {
+            Ok(())
+        }
+    });
+    if let Err(failure) = invalidated {
         error = error.with_context(failure);
     }
     inner.state.staged_release_id = None;
     inner.state.installation = Installation::Failed;
     inner.state.last_error = Some(error.clone());
-    inner.blocked_release = Some(candidate.release_id.clone());
+    inner.blocked_release = permanent.then(|| candidate.release_id.clone());
     error
 }
 pub async fn resume(app: &AppHandle, error: Option<UpdateError>) {
@@ -281,20 +283,19 @@ pub async fn restart_to_update(
             return Err(Failure::CandidateChanged.into());
         }
     }
-    let activation = prepare_exit(&app, Some(&expected_release_id), true)
-        .await?
-        .ok_or(Failure::InvalidTransition)?;
-    match crate::app_exit::finish_update(&app, activation).await {
-        Ok(()) => Ok(()),
+    match crate::app_exit::install_update(&app, Some(&expected_release_id), false).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(Failure::InvalidTransition.into()),
         Err(error) => {
             resume(&app, Some(error.clone())).await;
+            app.state::<UpdateService>().finish_startup(&app).await;
             Err(error)
         }
     }
 }
+
 #[cfg(target_os = "macos")]
 fn activate(t: &mut Transaction) -> Result<(), UpdateError> {
-    installer::verify_bundle(&t.target)?;
     let expected = t.next_hash.clone();
     let expected_bundle = t.next_bundle_hash.clone();
     activate_using(
@@ -359,8 +360,14 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
         if t.id != id || t.phase != Phase::Committed {
             return Err(Failure::InvalidTransition.into());
         }
-        let _gate = installer::acquire_gate(&t.target)?;
-        let _lease = installer::acquire_lease(&t.target, true, false)?;
+        if persistence::update_dir()?
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some(persistence::installation_id(&t.target).as_str())
+        {
+            return Err(Failure::InvalidTransition.into());
+        }
+        let (_gate, _lease) = helper_admission(&t.target)?;
         // Another startup may have completed the committed transaction while this helper waited.
         t = read()?.ok_or(Failure::JournalUnavailable)?;
         if t.id != id {
@@ -447,10 +454,6 @@ pub async fn confirm_startup(
         t.phase = Phase::StartupConfirmed;
         write(&t)?;
         let previous = installer::prepared_path(&t.target, &t.candidate)?;
-        if previous.exists() {
-            fs::remove_dir_all(previous)
-                .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-        }
         if staging::read_ready()?
             .is_some_and(|ready| ready.candidate.release_id == t.candidate.release_id)
         {
@@ -460,6 +463,14 @@ pub async fn confirm_startup(
             inner.state.installation = Installation::None;
             emit(app, &mut inner.state);
         }
+        drop(inner);
+        tauri::async_runtime::spawn_blocking(move || match fs::remove_dir_all(previous) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(UpdateError::new(Failure::StateUnavailable, error)),
+        })
+        .await
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
     }
     Ok(())
 }
@@ -473,12 +484,15 @@ pub fn startup_lease() -> Result<Option<installer::InstallationLease>, UpdateErr
         Ok(lease) => lease,
         Err(error) if error.code == Failure::InvalidTransition => {
             // An existing process already protects the installed files.
-            return installer::acquire_lease(&target, false, false).map(Some);
+            let shared = installer::acquire_lease(&target, false, false)?;
+            require_running_version(&target)?;
+            return Ok(Some(shared));
         }
         Err(error) => return Err(error),
     };
     if let Some(mut t) = read()? {
         if t.target == target && superseded(&t)? {
+            require_running_version(&target)?;
             installer::verify_bundle(&target)?;
             archive_receipt(&t)?;
             fs::remove_file(active_path()?)
@@ -512,7 +526,34 @@ pub fn startup_lease() -> Result<Option<installer::InstallationLease>, UpdateErr
             std::process::exit(0);
         }
     }
+    require_running_version(&target)?;
     downgrade(lease).map(Some)
+}
+#[cfg(target_os = "macos")]
+fn helper_admission(
+    target: &Path,
+) -> Result<(installer::InstallationLease, installer::InstallationLease), UpdateError> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        match installer::try_activation(target)? {
+            Some(leases) => return Ok(leases),
+            None => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(Failure::InvalidTransition.into());
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+}
+#[cfg(target_os = "macos")]
+fn require_running_version(target: &Path) -> Result<(), UpdateError> {
+    let installed = fs::read_to_string(target.join("Contents/Resources/release-version"))
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    if installed.trim() != env!("PAINTED_WOLF_VERSION") {
+        return Err(UpdateError::new(Failure::CandidateChanged, "The installed application changed while this process was launching. Open the installed application again."));
+    }
+    Ok(())
 }
 fn superseded(t: &Transaction) -> Result<bool, UpdateError> {
     let installed = hash(&executable(&t.target))?;
@@ -582,6 +623,19 @@ mod tests {
         assert!(!superseded(&t).unwrap());
         fs::write(executable(&t.target), "external signed replacement").unwrap();
         assert!(superseded(&t).unwrap());
+    }
+    #[test]
+    fn launch_refuses_a_binary_whose_installed_bundle_has_changed() {
+        let root = crate::test_support::TempDir::new("update-launch-version");
+        fs::create_dir_all(root.join("Contents/Resources")).unwrap();
+        let version = root.join("Contents/Resources/release-version");
+        fs::write(&version, env!("PAINTED_WOLF_VERSION")).unwrap();
+        require_running_version(&root).unwrap();
+        fs::write(&version, "99.0.0").unwrap();
+        assert_eq!(
+            require_running_version(&root).unwrap_err().code,
+            Failure::CandidateChanged
+        );
     }
     #[test]
     fn failed_helper_launch_offers_retry_while_deferred_shutdown_keeps_restart() {
@@ -693,10 +747,16 @@ mod tests {
 }
 
 pub fn recovery_guidance(error: &UpdateError) -> String {
+    if error.code == Failure::CandidateChanged {
+        return "Painted Wolf Code was updated while this copy was opening. Close this copy and open the installed application again. Your saved work is unchanged.".into();
+    }
+    if error.code == Failure::StateUnavailable {
+        return format!("Painted Wolf Code could not coordinate safe startup with the updater. Close other copies and reopen the application. If the problem continues, check access to the application's configuration directory.\n\n{error}");
+    }
     let journal = journal::active_path()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|_| {
             "the transaction.json file in the application's updates directory".into()
         });
-    format!("Painted Wolf Code could not safely recover an application update. The update record has been preserved.\n\nRecord: {journal}\n\nQuit every instance of Painted Wolf Code. Keep a copy of this record for support. If the record is unreadable or from an incompatible beta, move it out of the updates directory, then reinstall a signed release at the same application location before launching. Reinstalling alone does not replace the update record. Do not remove your saved-work or database files.\n\n{error}")
+    format!("Painted Wolf Code could not safely recover an application update. The update record has been preserved.\n\nRecord: {journal}\n\nQuit every instance of Painted Wolf Code. Keep a copy of this record for support. If the record is unreadable or from an incompatible beta, move it out of the updates directory, then reinstall the same or a newer signed release at the same application location before launching. Reinstalling alone does not replace the update record. Do not remove your saved-work or database files.\n\n{error}")
 }

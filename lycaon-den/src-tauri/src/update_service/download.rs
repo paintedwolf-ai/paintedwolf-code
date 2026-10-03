@@ -7,6 +7,14 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
 
+#[cfg(target_os = "macos")]
+type PreparationPermit = (
+    tokio::sync::OwnedMutexGuard<()>,
+    super::installer::InstallationLease,
+);
+#[cfg(not(target_os = "macos"))]
+type PreparationPermit = tokio::sync::OwnedMutexGuard<()>;
+
 pub fn start_automatic(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let _ = automatic(&app).await;
@@ -28,14 +36,14 @@ pub async fn automatic(app: &AppHandle) -> Result<(), UpdateError> {
         }
         release
     };
-    prepare(app, &release).await.map(|_| ())
+    prepare(app, &release, false).await.map(|_| ())
 }
 #[tauri::command]
 pub async fn download_update(
     app: AppHandle,
     expected_release_id: String,
 ) -> Result<NativeUpdateState, UpdateError> {
-    prepare(&app, &expected_release_id).await
+    prepare(&app, &expected_release_id, true).await
 }
 #[tauri::command]
 pub async fn retry_update(
@@ -58,9 +66,13 @@ pub async fn retry_update(
         inner.blocked_release = None;
     }
     super::transaction::clear_failed(&expected_release_id)?;
-    prepare(&app, &expected_release_id).await
+    prepare(&app, &expected_release_id, true).await
 }
-async fn prepare(app: &AppHandle, expected: &str) -> Result<NativeUpdateState, UpdateError> {
+async fn prepare(
+    app: &AppHandle,
+    expected: &str,
+    manual: bool,
+) -> Result<NativeUpdateState, UpdateError> {
     let service = app.state::<UpdateService>();
     let (candidate, generation) = {
         let mut inner = service.inner.lock().await;
@@ -83,45 +95,64 @@ async fn prepare(app: &AppHandle, expected: &str) -> Result<NativeUpdateState, U
         if !inner.state.capabilities.can_download {
             return Err(Failure::UnsupportedInstallation.into());
         }
+        inner.manual_preparation = manual;
         inner.state.installation = Installation::Downloading;
         inner.state.downloaded_bytes = 0;
         inner.state.total_bytes = None;
         inner.state.last_error = None;
         emit(app, &mut inner.state);
-        (candidate, service.generation.load(Ordering::Acquire))
+        (
+            candidate,
+            service.preparation_generation.load(Ordering::Acquire),
+        )
     };
+    let mut wake = service.wake.subscribe();
     let result = tokio::select! {
         result = transfer(app, &candidate, generation) => result,
-        _ = service.wake.notified() => Err(Failure::Cancelled.into()),
+        _ = wake.wait_for(|_| service.preparation_generation.load(Ordering::Acquire) != generation) => Err(Failure::Cancelled.into()),
     };
     let mut inner = service.inner.lock().await;
-    if !service.current(generation) {
+    if service.preparation_generation.load(Ordering::Acquire) != generation {
         return Ok(inner.state.clone());
     }
     let mut failure = None;
-    match result.and_then(|identity| staging::publish(&candidate, identity)) {
-        Ok(()) => {
+    match result
+        .and_then(|(identity, permit)| staging::publish(&candidate, identity).map(|()| permit))
+    {
+        Ok(permit) => {
             inner.state.staged_release_id = Some(candidate.release_id.clone());
             inner.state.installation = Installation::Staged;
             inner.state.last_error = None;
-            let mut keep = vec![candidate.release_id];
-            let cleanup = super::transaction::retained_release().and_then(|retained| {
-                if let Some(id) = retained {
+            emit(app, &mut inner.state);
+            drop(inner);
+            let release = candidate.release_id;
+            let keep_release = release.clone();
+            let cleanup = tauri::async_runtime::spawn_blocking(move || {
+                let _permit = permit;
+                let mut keep = vec![keep_release];
+                if let Some(id) = super::transaction::retained_release()? {
                     keep.push(id);
                 }
                 staging::cleanup(&keep)?;
                 super::installer::cleanup_prepared(&super::installer::bundle()?, &keep)
-            });
-            if let Err(error) = cleanup {
-                inner.state.last_error = Some(error);
+            })
+            .await
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))
+            .and_then(|result| result);
+            let mut inner = service.inner.lock().await;
+            if inner.state.staged_release_id.as_deref() == Some(&release) {
+                if let Err(error) = cleanup {
+                    inner.state.last_error = Some(error);
+                    emit(app, &mut inner.state);
+                }
             }
+            return Ok(inner.state.clone());
         }
         Err(mut error) => {
             if matches!(
                 error.code,
                 Failure::VerificationFailed
                     | Failure::UnsupportedInstallation
-                    | Failure::InstallFailed
                     | Failure::InvalidRelease
             ) {
                 if let Err(persist) = staging::reject(candidate.release_id.clone()) {
@@ -141,10 +172,19 @@ async fn transfer(
     app: &AppHandle,
     candidate: &Candidate,
     generation: u64,
-) -> Result<super::installer::PreparedIdentity, UpdateError> {
+) -> Result<(super::installer::PreparedIdentity, PreparationPermit), UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
-    if !service.current(generation) {
+    #[cfg(target_os = "macos")]
+    let permit = {
+        let lease = tauri::async_runtime::spawn_blocking(|| {
+            super::installer::acquire_preparation(&super::installer::bundle()?)
+        })
+        .await
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
+        (permit, lease)
+    };
+    if service.preparation_generation.load(Ordering::Acquire) != generation {
         return Err(Failure::Cancelled.into());
     }
     super::installer::probe_destination()?;
@@ -156,9 +196,8 @@ async fn transfer(
         phase(app, generation, Installation::Preparing).await?;
         let release = candidate.clone();
         return tauri::async_runtime::spawn_blocking(move || {
-            let _permit = permit;
             // Preparation verifies the cached archive before using any of its bytes.
-            super::installer::prepare(&release)
+            super::installer::prepare(&release).map(|identity| (identity, permit))
         })
         .await
         .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
@@ -210,7 +249,7 @@ async fn transfer(
             .await
             .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
         let service = app.state::<UpdateService>();
-        if !service.current(generation) {
+        if service.preparation_generation.load(Ordering::Acquire) != generation {
             return Err(Failure::Cancelled.into());
         }
         let mut inner = service.inner.lock().await;
@@ -226,28 +265,13 @@ async fn transfer(
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(file);
     phase(app, generation, Installation::Verifying).await?;
-    let artifact = partial.clone();
-    let release = candidate.clone();
-    let (permit, verified) = tauri::async_runtime::spawn_blocking(move || {
-        let verified = super::verification::verify(
-            &artifact,
-            &release.artifact_signature,
-            &super::check::embedded_key().1,
-            &release.version,
-        );
-        (permit, verified)
-    })
-    .await
-    .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
-    verified.map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
     phase(app, generation, Installation::Preparing).await?;
     crate::atomic_file::replace(&partial, &dir.join("artifact"), true)
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(cleanup);
     let release = candidate.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let _permit = permit;
-        super::installer::prepare(&release)
+        super::installer::prepare(&release).map(|identity| (identity, permit))
     })
     .await
     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
@@ -255,7 +279,7 @@ async fn transfer(
 async fn phase(app: &AppHandle, generation: u64, phase: Installation) -> Result<(), UpdateError> {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
-    if !service.current(generation) {
+    if service.preparation_generation.load(Ordering::Acquire) != generation {
         return Err(Failure::Cancelled.into());
     }
     inner.state.installation = phase;

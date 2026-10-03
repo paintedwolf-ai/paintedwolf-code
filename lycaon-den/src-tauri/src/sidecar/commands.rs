@@ -12,8 +12,9 @@ pub async fn ipc_start_sidecar(
     app: tauri::AppHandle,
     password: Option<String>,
 ) -> Result<SidecarInfo, SidecarStartError> {
-    app.state::<crate::update_service::UpdateService>()
-        .wait_for_startup()
+    let _admission = app
+        .state::<crate::update_service::UpdateService>()
+        .startup_admission()
         .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
@@ -40,8 +41,9 @@ pub async fn ipc_export_startup_diagnostics() -> Result<Vec<u8>, String> {
 
 #[tauri::command(rename = "restart_sidecar")]
 pub async fn ipc_restart_sidecar(app: tauri::AppHandle) -> Result<SidecarInfo, SidecarStartError> {
-    app.state::<crate::update_service::UpdateService>()
-        .wait_for_startup()
+    let _admission = app
+        .state::<crate::update_service::UpdateService>()
+        .startup_admission()
         .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {

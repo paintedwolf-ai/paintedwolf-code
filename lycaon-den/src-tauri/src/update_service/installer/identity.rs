@@ -10,13 +10,13 @@ pub(crate) fn executable(bundle: &Path) -> PathBuf {
 }
 pub(crate) fn hash(path: &Path) -> Result<String, UpdateError> {
     let mut file =
-        fs::File::open(path).map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+        fs::File::open(path).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     let mut digest = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
         let n = file
             .read(&mut buffer)
-            .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         if n == 0 {
             break;
         }

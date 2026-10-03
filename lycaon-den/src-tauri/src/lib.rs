@@ -949,6 +949,7 @@ mod tests {
 }
 
 /// The installer mode never initializes windows, tools, or the engine.
-pub fn run_update_helper(id: &str) -> Result<(), String> {
+pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {
+    update_service::initialize_helper(installation)?;
     update_service::transaction::run_helper(id).map_err(|e| e.to_string())
 }

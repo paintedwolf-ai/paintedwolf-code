@@ -1,7 +1,11 @@
 //! The artifact signature authenticates bytes and the offered product version.
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use minisign_verify::{PublicKey, Signature};
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    path::Path,
+};
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +36,16 @@ pub fn verify(
     encoded_key: &str,
     version: &str,
 ) -> Result<(), String> {
+    let mut file = File::open(artifact).map_err(|e| e.to_string())?;
+    verify_file(&mut file, encoded_signature, encoded_key, version)
+}
+pub fn verify_file(
+    file: &mut File,
+    encoded_signature: &str,
+    encoded_key: &str,
+    version: &str,
+) -> Result<(), String> {
+    file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
     let key = PublicKey::decode(&decode(encoded_key)?).map_err(|e| e.to_string())?;
     let signature = Signature::decode(&decode(encoded_signature)?).map_err(|e| e.to_string())?;
     let versions: Vec<_> = signature
@@ -43,7 +57,6 @@ pub fn verify(
         return Err("Artifact signature does not bind the offered version".into());
     }
     let mut stream = key.verify_stream(&signature).map_err(|e| e.to_string())?;
-    let mut file = File::open(artifact).map_err(|e| e.to_string())?;
     if !file.metadata().map_err(|e| e.to_string())?.is_file() {
         return Err("Artifact is not a regular file".into());
     }

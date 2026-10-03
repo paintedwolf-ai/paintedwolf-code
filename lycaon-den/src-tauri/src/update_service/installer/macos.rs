@@ -25,6 +25,9 @@ pub fn writable_installation(target: &Path) -> bool {
     }
 }
 
+pub fn acquire_preparation(target: &Path) -> Result<InstallationLease, UpdateError> {
+    acquire_named_lease(target, "preparation", true, true)
+}
 pub fn acquire_gate(target: &Path) -> Result<InstallationLease, UpdateError> {
     acquire_named_lease(target, "gate", true, false)
 }
@@ -35,34 +38,56 @@ pub fn acquire_lease(
 ) -> Result<InstallationLease, UpdateError> {
     acquire_named_lease(target, "lifetime", exclusive, nonblocking)
 }
+pub fn try_activation(
+    target: &Path,
+) -> Result<Option<(InstallationLease, InstallationLease)>, UpdateError> {
+    try_activation_at(&lock_path(target, "gate")?, &lock_path(target, "lifetime")?)
+}
+fn try_activation_at(
+    gate: &Path,
+    lifetime: &Path,
+) -> Result<Option<(InstallationLease, InstallationLease)>, UpdateError> {
+    let gate = acquire_lock(gate, true, false)?;
+    match acquire_lock(lifetime, true, true) {
+        Ok(lease) => Ok(Some((gate, lease))),
+        Err(error) if error.code == Failure::InvalidTransition => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+fn lock_path(target: &Path, kind: &str) -> Result<PathBuf, UpdateError> {
+    let root = super::super::persistence::update_dir()?;
+    if !root.exists() {
+        crate::config_dir::ensure_private_dir(&root)
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    }
+    let id = format!("{:x}", Sha256::digest(target.as_os_str().as_bytes()));
+    Ok(root.join(format!("installation-{id}-{kind}.lock")))
+}
 fn acquire_named_lease(
     target: &Path,
     kind: &str,
     exclusive: bool,
     nonblocking: bool,
 ) -> Result<InstallationLease, UpdateError> {
-    let root = super::super::persistence::update_dir()?;
-    crate::config_dir::ensure_private_dir(&root)
-        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-    let id = format!("{:x}", Sha256::digest(target.as_os_str().as_bytes()));
-    acquire_lock(
-        &root.join(format!("installation-{id}-{kind}.lock")),
-        exclusive,
-        nonblocking,
-    )
+    acquire_lock(&lock_path(target, kind)?, exclusive, nonblocking)
 }
+
 fn acquire_lock(
     path: &Path,
     exclusive: bool,
     nonblocking: bool,
 ) -> Result<InstallationLease, UpdateError> {
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(path)
-        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
+        Err(error) => return Err(UpdateError::new(Failure::StateUnavailable, error)),
+    };
     let mode = if exclusive {
         libc::LOCK_EX
     } else {
@@ -134,9 +159,8 @@ fn safe_link(path: &Path, link: &Path) -> bool {
 pub fn prepare(
     target: &Path,
     candidate: &Candidate,
-    artifact: &Path,
+    artifact: &mut fs::File,
 ) -> Result<PreparedIdentity, UpdateError> {
-    verify_bundle(target)?;
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     check_space(parent, expanded_size(artifact)?)?;
     let preparing_prefix = format!("{}preparing-", prepared_prefix(target));
@@ -158,6 +182,7 @@ pub fn prepare(
         .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     let result = extract(artifact, &temp)
         .and_then(|_| verify_bundle(&temp))
+        .and_then(|_| verify_platform(&temp, &candidate.platform))
         .and_then(|_| {
             let version = fs::read_to_string(temp.join("Contents/Resources/release-version"))
                 .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
@@ -170,13 +195,8 @@ pub fn prepare(
         let _ = fs::remove_dir_all(&temp);
         return Err(error);
     }
-    fs::set_permissions(
-        &temp,
-        fs::metadata(target)
-            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
-            .permissions(),
-    )
-    .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+    fs::set_permissions(&temp, fs::Permissions::from_mode(0o755))
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     let identity = PreparedIdentity {
         executable_hash: hash(&executable(&temp))?,
         bundle_hash: bundle_hash(&temp)?,
@@ -190,8 +210,63 @@ pub fn prepare(
         .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     Ok(identity)
 }
-fn expanded_size(artifact: &Path) -> Result<u64, UpdateError> {
-    let file = fs::File::open(artifact).map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+fn verify_platform(bundle: &Path, platform: &str) -> Result<(), UpdateError> {
+    let cpu = match platform {
+        "darwin-aarch64" if std::env::consts::ARCH == "aarch64" => 0x0100000c,
+        "darwin-x86_64" if std::env::consts::ARCH == "x86_64" => 0x01000007,
+        _ => return Err(Failure::InvalidRelease.into()),
+    };
+    let mut file = fs::File::open(executable(bundle))
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    if !contains_architecture(&mut file, cpu)
+        .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?
+    {
+        return Err(Failure::VerificationFailed.into());
+    }
+    Ok(())
+}
+fn contains_architecture(reader: &mut impl std::io::Read, cpu: u32) -> std::io::Result<bool> {
+    let mut header = [0u8; 8];
+    reader.read_exact(&mut header)?;
+    let little = matches!(
+        &header[..4],
+        [0xcf, 0xfa, 0xed, 0xfe]
+            | [0xce, 0xfa, 0xed, 0xfe]
+            | [0xbe, 0xba, 0xfe, 0xca]
+            | [0xbf, 0xba, 0xfe, 0xca]
+    );
+    let number = |bytes: &[u8]| {
+        let bytes: [u8; 4] = bytes.try_into().unwrap();
+        if little {
+            u32::from_le_bytes(bytes)
+        } else {
+            u32::from_be_bytes(bytes)
+        }
+    };
+    let magic = number(&header[..4]);
+    if matches!(magic, 0xfeedface | 0xfeedfacf) {
+        return Ok(number(&header[4..]) == cpu);
+    }
+    if !matches!(magic, 0xcafebabe | 0xcafebabf) {
+        return Ok(false);
+    }
+    let count = number(&header[4..]);
+    if count == 0 || count > 128 {
+        return Ok(false);
+    }
+    let mut found = false;
+    for _ in 0..count {
+        let mut entry = [0u8; 32];
+        let size = if magic == 0xcafebabf { 32 } else { 20 };
+        reader.read_exact(&mut entry[..size])?;
+        found |= number(&entry[..4]) == cpu;
+    }
+    Ok(found)
+}
+fn expanded_size(file: &mut fs::File) -> Result<u64, UpdateError> {
+    use std::io::{Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(file));
     let mut total = 0u64;
     for entry in archive
@@ -208,8 +283,10 @@ fn expanded_size(artifact: &Path) -> Result<u64, UpdateError> {
     }
     Ok(total)
 }
-fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
-    let file = fs::File::open(artifact).map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+fn extract(file: &mut fs::File, temp: &Path) -> Result<(), UpdateError> {
+    use std::io::{Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(file));
     let mut total = 0u64;
     let mut links = Vec::new();
@@ -283,7 +360,7 @@ fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
             std::io::copy(&mut entry, &mut file)
                 .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
             file.set_permissions(fs::Permissions::from_mode(
-                entry.header().mode().unwrap_or(0o644) & 0o777,
+                entry.header().mode().unwrap_or(0o644) & 0o755,
             ))
             .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
             file.sync_all()
@@ -291,6 +368,19 @@ fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
         }
     }
     for (path, link) in &links {
+        for parent in path
+            .ancestors()
+            .skip(1)
+            .filter(|p| !p.as_os_str().is_empty())
+        {
+            if fs::symlink_metadata(temp.join(parent))
+                .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?
+                .file_type()
+                .is_symlink()
+            {
+                return Err(Failure::InvalidRelease.into());
+            }
+        }
         std::os::unix::fs::symlink(link, temp.join(path))
             .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
     }
@@ -304,6 +394,10 @@ fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
         }
     }
     for directory in directories.iter().rev() {
+        if directory != temp {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o755))
+                .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        }
         fs::File::open(directory)
             .and_then(|f| f.sync_all())
             .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
@@ -313,6 +407,50 @@ fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn signed_executable_architecture_is_checked_independently_of_the_feed() {
+        let mut thin = vec![0xcf, 0xfa, 0xed, 0xfe];
+        thin.extend_from_slice(&0x0100000cu32.to_le_bytes());
+        assert!(contains_architecture(&mut thin.as_slice(), 0x0100000c).unwrap());
+        assert!(!contains_architecture(&mut thin.as_slice(), 0x01000007).unwrap());
+        let mut fat = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 2];
+        for cpu in [0x0100000cu32, 0x01000007u32] {
+            fat.extend_from_slice(&cpu.to_be_bytes());
+            fat.extend_from_slice(&[0; 16]);
+        }
+        assert!(contains_architecture(&mut fat.as_slice(), 0x01000007).unwrap());
+        assert!(contains_architecture(&mut &fat[..20], 0x01000007).is_err());
+        assert!(!contains_architecture(&mut b"notmachO".as_slice(), 0x01000007).unwrap());
+    }
+    #[test]
+    fn existing_locks_do_not_require_write_access() {
+        let root = crate::test_support::TempDir::new("update-readonly-lock");
+        let path = root.join("lock");
+        fs::write(&path, b"").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
+        let shared = acquire_lock(&path, false, true).unwrap();
+        assert!(acquire_lock(&path, true, true).is_err());
+        drop(shared);
+        let _exclusive = acquire_lock(&path, true, true).unwrap();
+    }
+    #[test]
+    fn a_waiting_helper_releases_the_gate_for_new_launches() {
+        let root = crate::test_support::TempDir::new("update-helper-admission");
+        let gate = root.join("gate");
+        let lifetime = root.join("lifetime");
+        let existing = acquire_lock(&lifetime, false, true).unwrap();
+        assert!(try_activation_at(&gate, &lifetime).unwrap().is_none());
+        let launch = acquire_lock(&gate, true, true).unwrap();
+        let second = acquire_lock(&lifetime, false, true).unwrap();
+        drop(launch);
+        drop(existing);
+        assert!(try_activation_at(&gate, &lifetime).unwrap().is_none());
+        drop(second);
+        let activation = try_activation_at(&gate, &lifetime).unwrap().unwrap();
+        assert!(acquire_lock(&gate, true, true).is_err());
+        assert!(acquire_lock(&lifetime, false, true).is_err());
+        drop(activation);
+    }
     #[test]
     fn concurrent_instances_share_lifetime_while_gate_excludes_activation() {
         let root = crate::test_support::TempDir::new("update-locks");
@@ -391,7 +529,7 @@ mod tests {
         let bundle = root.join("bundle");
         fs::create_dir(&bundle).unwrap();
         archive(&artifact, false);
-        extract(&artifact, &bundle).unwrap();
+        extract(&mut fs::File::open(&artifact).unwrap(), &bundle).unwrap();
         assert_eq!(
             fs::read(bundle.join("Contents/MacOS/app")).unwrap(),
             b"program"
@@ -417,7 +555,7 @@ mod tests {
         fs::create_dir(&bundle).unwrap();
         fs::write(root.join("outside"), "untouched").unwrap();
         archive(&artifact, true);
-        assert!(extract(&artifact, &bundle).is_err());
+        assert!(extract(&mut fs::File::open(&artifact).unwrap(), &bundle).is_err());
         assert_eq!(
             fs::read_to_string(root.join("outside")).unwrap(),
             "untouched"
