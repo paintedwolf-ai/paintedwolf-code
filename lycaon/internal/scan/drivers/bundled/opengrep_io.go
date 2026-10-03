@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/exec"
 )
 
 type opengrepRunFiles struct {
@@ -22,7 +24,8 @@ func newOpengrepRunFiles() (files opengrepRunFiles, cleanup func(), err error) {
 		return opengrepRunFiles{}, nil, fmt.Errorf("opengrep run directory: %w", err)
 	}
 	files.runDir = dir
-	cleanup = func() { _ = os.RemoveAll(dir) }
+	// The reaper removes the run directory if the host exits before this cleanup.
+	cleanup = exec.TrackScratchDir(dir)
 
 	files.jsonPath = filepath.Join(dir, "report.json")
 	f, err := os.OpenFile(files.jsonPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)

@@ -168,7 +168,8 @@ func (s *Scanner) newRunFiles() (dir, reportPath string, cleanup func(), err err
 	if err != nil {
 		return "", "", func() {}, fmt.Errorf("%s: create run directory: %w", s.entry.ID, err)
 	}
-	cleanup = func() { _ = os.RemoveAll(dir) }
+	// The reaper removes the run directory if the host exits before this cleanup.
+	cleanup = exec.TrackScratchDir(dir)
 	if !scancatalog.CommandWantsReportFile(s.entry.Command) {
 		return dir, "", cleanup, nil
 	}
