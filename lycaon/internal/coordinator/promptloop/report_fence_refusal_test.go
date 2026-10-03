@@ -42,10 +42,8 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	var rendered string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
-			return []guidance.ReportDocumentIssue{
-				{Code: guidance.ReportDocumentInvalidCode, Reason: "c1 needs rating answers"},
-				{Code: guidance.ReportInventoryUnaccountedCode, Reason: "18 groups unaccounted", Offenders: []string{"group:missing"}, Count: 18},
-			}, nil
+			t.Fatal("document validation ran on an unreadable fence")
+			return nil, nil
 		},
 		HintConfig: hints, RejectFmt: guidance.NewStaticRejectFormatter(hints),
 		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
@@ -83,7 +81,7 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	if kick == nil || kick["run_report"] != true || !strings.Contains(kick["offenders_sample"].(string), "`findings[].ask` (2): `ask` is a top-level report field") {
 		t.Fatalf("kick data = %v, want the grouped member named on a run report", kick)
 	}
-	for _, want := range []string{"findings[].ask", "c1 needs rating answers", "18 groups unaccounted", "group:missing"} {
+	for _, want := range []string{"findings[].ask"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("repair omitted %q: %s", want, rendered)
 		}
@@ -92,5 +90,22 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	testutil.FailErr(t, "decode the retained fence", json.Unmarshal([]byte(kick["retained_document"].(string)), &fence))
 	if len(fence.Findings) != 2 || fence.Findings[0].Disposition != "act" || len(fence.SetAsides) != 1 || fence.Ask != nil {
 		t.Fatalf("retained fence = %+v, want every field the host read and nothing it did not", fence)
+	}
+}
+
+func TestUnreadReportFencePrecedesArtifactEmbed(t *testing.T) {
+	loop := NewPromptLoopForTest(PromptLoopDeps{CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+		t.Fatal("unread document reached semantic validation")
+		return nil, nil
+	}})
+	report := guidance.CoordinatorCompletionReport{Synthesis: "![report](90dcba36-946a-46c6-933d-e94207b897ab)"}
+	read, ok := guidance.ReadCloseoutReport("Report narrative.\n\n```json\n{\"findings\":[{\"id\":\"c1\",\"title\":\"Question\",\"disposition\":\"act\",\"ask\":{\"do\":\"x\"}}]}\n```", "")
+	if !ok || len(read.Unread) == 0 {
+		t.Fatal("fixture must contain an unread report member")
+	}
+	observed, err := loop.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", report, read.Unread, nil, true)
+	testutil.FailErr(t, "observe unread fence with embed", err)
+	if observed.facts.RejectObservation != guidance.ReportDocumentObservation(guidance.ReportFenceUnreadableCode) {
+		t.Fatalf("unread fence was masked by embed: %s", observed.facts.RejectObservation)
 	}
 }
