@@ -21653,7 +21653,7 @@ test_files:
     lycaon/test/contract/architecture/tool_ingest_invariants_test.go: 269
     lycaon/test/contract/architecture/tool_reject_registry_ast.go: 163
     lycaon/test/contract/architecture/tool_reject_registry_contract_test.go: 126
-    lycaon/test/contract/architecture/user_text_behavior_closure_ast.go: 453
+    lycaon/test/contract/architecture/user_text_behavior_closure_ast.go: 454
     lycaon/test/contract/architecture/user_text_behavior_closure_test.go: 76
     lycaon/test/contract/architecture/watch_eligibility_no_ecosystem_names_contract_test.go: 147
     lycaon/test/contract/architecture/wire_enrichment_universal_contract_test.go: 129
