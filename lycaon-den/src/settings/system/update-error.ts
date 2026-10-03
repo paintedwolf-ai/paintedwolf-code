@@ -15,6 +15,12 @@ export const UPDATE_ERROR_MESSAGES = {
   verification_failed: "The update could not be verified and was not installed. Check for updates again. Your installed version is unaffected.",
   install_failed: "The update could not be installed. Check available space and app permissions, then try again. If the app cannot reopen, download a fresh copy.",
   invalid_release: "The update information is not valid for this app. Check for updates again later.",
+  cancelled: "The update was cancelled. Your installed version is unaffected.",
+  disk_space: "There is not enough free space to prepare this update.",
+  unsupported_installation: "This installation needs permission or a supported location to update.",
+  engine_stop_failed: "The engine did not stop cleanly. The update has been deferred.",
+  release_withdrawn: "This update is no longer offered. Check for updates again.",
+  activation_failed: "The update could not be activated. Retry the update or download a fresh copy.",
   service_unavailable: "The updater could not complete this action. Try again, or restart the app if the problem continues.",
 } as const;
 

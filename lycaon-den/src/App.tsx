@@ -42,7 +42,8 @@ import { mountNotificationService } from "./notifications/mount-notification-ser
 import { windowSubject } from "./platform/windows/window-subject.ts";
 import { ChatDestinationPicker } from "./components/chatview/ChatDestinationPicker.tsx";
 import { startComposerDocumentMirror } from "./chat/composer/composer-document-store.ts";
-import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
+import { isTauriRuntime } from "./platform/runtime.ts";
+import { nativeUpdateState } from "./settings/system/update-state.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
 
@@ -111,14 +112,14 @@ function App() {
           waitingCount: () =>
             attentionStore.state.rows.filter((row) => row.class === "needs_you").length,
         });
-    const unmountUpdateNotice = subject
+    const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
-      : mountUpdateNotice({ notices: noticeStore });
+      : nativeUpdateState.mount();
     onCleanup(() => {
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();
-      unmountUpdateNotice();
+      unmountUpdates();
       rememberSessionChatFromStore(appStore);
       void flushTranscriptRowHeightsToDisk().catch(() => undefined);
       disconnectAppBackend();

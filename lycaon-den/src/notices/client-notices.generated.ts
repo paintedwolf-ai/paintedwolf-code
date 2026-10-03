@@ -48,7 +48,6 @@ export type ClientNoticeKind =
   | "store_incompatible_snapshot_incompatible"
   | "transcript_row_gone"
   | "unexpected_client_error"
-  | "update_available"
   | "view_render_failed";
 
 export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>> = {
@@ -220,12 +219,6 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Could not complete request",
     message: "The last action did not complete, and there is no more detail for this one.",
     suggestedAction: "Try again. If it keeps happening, report it from Settings → Advanced → Diagnostics.",
-    scope: "app",
-  },
-  update_available: {
-    title: "Update available",
-    message: "A verified update is ready for Painted Wolf Code.",
-    suggestedAction: "Open Settings → General → Updates to review and install it.",
     scope: "app",
   },
   view_render_failed: {
