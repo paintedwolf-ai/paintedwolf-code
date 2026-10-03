@@ -25,4 +25,11 @@ harness_vite_bg
 
 bash "${ROOT}/scripts/ensure-tauri-binaries.sh"
 cd "${ROOT}/lycaon-den/src-tauri"
-cargo run --quiet --example scroll_thread_invariants -- "${LYCAON_E2E_BASE_URL}"
+status=0
+cargo run --quiet --example scroll_thread_invariants -- "${LYCAON_E2E_BASE_URL}" || status=$?
+if ((status != 0)) && [[ -f "${LYCAON_E2E_STATE_DIR}/sidecar.log" ]]; then
+  # The harness removes its state directory on exit.
+  echo "den:webkit:scroll: sidecar log tail" >&2
+  tail -n 80 "${LYCAON_E2E_STATE_DIR}/sidecar.log" >&2
+fi
+exit "${status}"
