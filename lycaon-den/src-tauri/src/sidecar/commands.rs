@@ -18,6 +18,7 @@ pub async fn ipc_start_sidecar(
         .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
+        let _admission = _admission;
         let state = handle.state::<SidecarState>();
         let progress_handle = handle.clone();
         start_sidecar_with_progress(&state, password, move |progress| {
@@ -47,6 +48,7 @@ pub async fn ipc_restart_sidecar(app: tauri::AppHandle) -> Result<SidecarInfo, S
         .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
+        let _admission = _admission;
         let state = handle.state::<SidecarState>();
         let progress_handle = handle.clone();
         restart_sidecar_with_progress(&state, move |progress| {
