@@ -1,82 +1,70 @@
-use super::persistence::write_preferences;
-use super::check::run_automatic_check;
 use super::{
-    emit_update_state, Failure, NativeUpdateState, UpdateChannel, UpdateError, UpdatePreferences,
-    UpdateService,
+    emit, persistence, Discovery, Failure, Installation, NativeUpdateState, UpdateChannel,
+    UpdateError, UpdateService,
 };
-use tauri::AppHandle;
-
+use tauri::{AppHandle, Manager};
 #[tauri::command]
-pub async fn get_update_state(
-    app: AppHandle,
-    service: tauri::State<'_, UpdateService>,
-) -> Result<NativeUpdateState, UpdateError> {
+pub async fn get_update_state(app: AppHandle) -> NativeUpdateState {
+    let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
-    let current = inner.state.current_version.clone();
-    if let Some(dir) = crate::den_state_dir() {
-        inner.reconcile_state(&dir, &current);
-    }
-    emit_update_state(&app, &mut inner.state);
-    let state = inner.state.clone();
-    drop(inner);
-    Ok(state)
+    inner
+        .state
+        .refresh_capabilities(super::installer::supported());
+    inner.state.clone()
 }
-
+async fn set(
+    app: &AppHandle,
+    enabled: Option<bool>,
+    channel: Option<UpdateChannel>,
+) -> Result<NativeUpdateState, UpdateError> {
+    let service = app.state::<UpdateService>();
+    let mut inner = service.inner.lock().await;
+    if matches!(
+        inner.state.installation,
+        Installation::AwaitingExit | Installation::Activating
+    ) {
+        return Err(Failure::InvalidTransition.into());
+    }
+    if !inner.preferences_writable {
+        return Err(Failure::PreferencesUnavailable.into());
+    }
+    let mut preferences = inner.preferences.clone();
+    if let Some(value) = enabled {
+        preferences.automatic_updates_enabled = value;
+    }
+    if let Some(value) = channel {
+        preferences.channel = value;
+    }
+    persistence::write_preferences(&persistence::update_dir()?, &preferences)?;
+    service.cancel();
+    inner.state.automatic_updates_enabled = preferences.automatic_updates_enabled;
+    let mut cleanup_error = None;
+    if inner.state.channel != preferences.channel {
+        inner.state.candidate = None;
+        inner.state.staged_release_id = None;
+        inner.state.installation = Installation::None;
+        cleanup_error = super::staging::forget_ready().err();
+    } else if inner.state.installation.busy() {
+        inner.state.installation = Installation::None;
+    }
+    inner.state.channel = preferences.channel;
+    inner.state.discovery = Discovery::Idle;
+    inner.state.last_error = cleanup_error;
+    inner.preferences = preferences;
+    emit(app, &mut inner.state);
+    Ok(inner.state.clone())
+}
 #[tauri::command]
-pub async fn set_update_checks_enabled(
+pub async fn set_automatic_updates_enabled(
     app: AppHandle,
-    service: tauri::State<'_, UpdateService>,
     enabled: bool,
 ) -> Result<NativeUpdateState, UpdateError> {
-    let _operation = service.operation.lock().await;
-    let mut inner = service.inner.lock().await;
-    let dir = crate::den_state_dir().ok_or_else(|| UpdateError::from(Failure::StateUnavailable))?;
-    write_preferences(
-        &dir,
-        &UpdatePreferences {
-            checks_enabled: enabled,
-            channel: inner.state.channel,
-            rollout_bucket: inner.rollout_bucket,
-        },
-    )?;
-    inner.set_checks_enabled(enabled);
-    emit_update_state(&app, &mut inner.state);
-    let state = inner.state.clone();
-    drop(inner);
-    if enabled {
-        tauri::async_runtime::spawn(async move {
-            let _ = run_automatic_check(app).await;
-        });
-    }
-    Ok(state)
+    set(&app, Some(enabled), None).await
 }
-
 #[tauri::command]
 pub async fn set_update_channel(
     app: AppHandle,
-    service: tauri::State<'_, UpdateService>,
     channel: UpdateChannel,
 ) -> Result<NativeUpdateState, UpdateError> {
-    let _operation = service.operation.lock().await;
-    let mut inner = service.inner.lock().await;
-    let dir = crate::den_state_dir().ok_or_else(|| UpdateError::from(Failure::StateUnavailable))?;
-    write_preferences(
-        &dir,
-        &UpdatePreferences {
-            checks_enabled: inner.state.checks_enabled,
-            channel,
-            rollout_bucket: inner.rollout_bucket,
-        },
-    )?;
-    inner.set_channel(channel);
-    emit_update_state(&app, &mut inner.state);
-    let state = inner.state.clone();
-    let should_check = state.checks_enabled;
-    drop(inner);
-    if should_check {
-        tauri::async_runtime::spawn(async move {
-            let _ = run_automatic_check(app).await;
-        });
-    }
-    Ok(state)
+    set(&app, None, Some(channel)).await
 }

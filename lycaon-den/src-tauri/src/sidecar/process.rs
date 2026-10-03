@@ -41,18 +41,35 @@ pub(super) fn child_alive(child: Option<&mut Child>) -> bool {
 pub(super) const GRACEFUL_STOP_NOTE_AFTER: Duration = Duration::from_secs(2);
 
 /// Stops the engine gracefully, then kills it after the timeout.
-pub(super) fn kill_child(child: &mut Option<Child>) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StopOutcome {
+    AlreadyStopped,
+    Exited,
+    Failed,
+    ForcedStop,
+}
+pub(super) fn kill_child(child: &mut Option<Child>) -> StopOutcome {
     let Some(mut proc) = child.take() else {
-        return;
+        return StopOutcome::AlreadyStopped;
     };
     let started = Instant::now();
     if request_graceful_stop(&mut proc) && wait_for_exit(&mut proc, GRACEFUL_STOP_TIMEOUT) {
         note_slow_graceful_stop(started.elapsed(), false);
-        return;
+        return if proc
+            .try_wait()
+            .ok()
+            .flatten()
+            .is_some_and(|status| status.success())
+        {
+            StopOutcome::Exited
+        } else {
+            StopOutcome::Failed
+        };
     }
     let _ = proc.kill();
     let _ = proc.wait();
     note_slow_graceful_stop(started.elapsed(), true);
+    StopOutcome::ForcedStop
 }
 
 pub(super) fn note_slow_graceful_stop(waited: Duration, killed: bool) {

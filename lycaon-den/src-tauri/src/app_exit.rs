@@ -19,6 +19,7 @@ struct ExitState {
     pending: Option<ExitRequest>,
     ready: BTreeSet<String>,
     approved: bool,
+    committing: bool,
     opening: usize,
 }
 
@@ -66,6 +67,7 @@ impl ExitState {
             return false;
         }
         self.pending = None;
+        self.committing = false;
         self.ready.clear();
         true
     }
@@ -109,6 +111,29 @@ pub struct PreparedExit {
 
 impl PreparedExit {
     async fn wait(&self) -> Result<(), String> {
+        let app = self.app.clone();
+        let request = self.request;
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let waiting = app.state::<ExitCoordinator>().0.lock().is_ok_and(|state| {
+                !state.committing
+                    && !state.approved
+                    && state
+                        .pending
+                        .is_some_and(|pending| pending.request_id == request.request_id)
+            });
+            if !waiting {
+                return;
+            }
+            let result = rfd::AsyncMessageDialog::new()
+                .set_title("Preserving your work")
+                .set_description("Painted Wolf Code is still preserving work before exit. You can keep waiting or return to your workspace.")
+                .set_buttons(rfd::MessageButtons::OkCancelCustom("Keep waiting".into(), "Keep working".into()))
+                .show().await;
+            if result == rfd::MessageDialogResult::Custom("Keep working".into()) {
+                let _ = cancel_app_exit(app, request.request_id);
+            }
+        });
         loop {
             let (missing, opening) = {
                 let coordinator = self.app.state::<ExitCoordinator>();
@@ -116,6 +141,12 @@ impl PreparedExit {
                     .0
                     .lock()
                     .map_err(|_| "Application preservation lock failed.")?;
+                if !state
+                    .pending
+                    .is_some_and(|request| request.request_id == self.request.request_id)
+                {
+                    return Err("Application exit was cancelled.".into());
+                }
                 let labels = self.app.webview_windows().keys().cloned().collect();
                 (state.missing(&labels), state.opening)
             };
@@ -131,6 +162,21 @@ impl PreparedExit {
         }
     }
 
+    fn commit_boundary(&self) -> Result<(), String> {
+        let coordinator = self.app.state::<ExitCoordinator>();
+        let mut state = coordinator
+            .0
+            .lock()
+            .map_err(|_| "Application preservation lock failed.")?;
+        if !state
+            .pending
+            .is_some_and(|request| request.request_id == self.request.request_id)
+        {
+            return Err("Application exit was cancelled.".into());
+        }
+        state.committing = true;
+        Ok(())
+    }
     fn approve(&mut self) -> Result<(), String> {
         let coordinator = self.app.state::<ExitCoordinator>();
         let mut state = coordinator
@@ -145,12 +191,6 @@ impl PreparedExit {
         }
         state.approved = true;
         self.committed = true;
-        Ok(())
-    }
-
-    pub fn restart(mut self) -> Result<(), String> {
-        self.approve()?;
-        self.app.request_restart();
         Ok(())
     }
 
@@ -191,12 +231,59 @@ fn begin(app: &AppHandle) -> Result<Option<PreparedExit>, String> {
     }))
 }
 
-// The updater calls this after download, before the installer can terminate the
-// process (including Windows installers that do not emit a Tauri exit event).
-pub async fn prepare_install(app: &AppHandle) -> Result<PreparedExit, String> {
-    let prepared = begin(app)?.ok_or("An application exit is already in progress.")?;
-    prepared.wait().await?;
-    Ok(prepared)
+pub async fn finish_update(
+    app: &AppHandle,
+    activation: crate::update_service::transaction::Activation,
+) -> Result<(), crate::update_service::UpdateError> {
+    use crate::update_service::{UpdateError, UpdateErrorCode};
+    let prepared = begin(app)
+        .map_err(|e| UpdateError::new(UpdateErrorCode::StateUnavailable, e))?
+        .ok_or(UpdateError::from(UpdateErrorCode::InvalidTransition))?;
+    prepared
+        .wait()
+        .await
+        .map_err(|e| UpdateError::new(UpdateErrorCode::Cancelled, e))?;
+    activation.revalidate(app).await?;
+    prepared
+        .commit_boundary()
+        .map_err(|e| UpdateError::new(UpdateErrorCode::Cancelled, e))?;
+    if let Err(error) = stop_and_activate(app, activation).await {
+        let _ = crate::sidecar::commands::ipc_start_sidecar(app.clone(), None).await;
+        return Err(error);
+    }
+    prepared
+        .exit(0)
+        .map_err(|e| UpdateError::new(UpdateErrorCode::StateUnavailable, e))
+}
+async fn stop_and_activate(
+    app: &AppHandle,
+    activation: crate::update_service::transaction::Activation,
+) -> Result<(), crate::update_service::UpdateError> {
+    use crate::update_service::{UpdateError, UpdateErrorCode};
+    let handle = app.clone();
+    let stopped = tauri::async_runtime::spawn_blocking(move || {
+        let state = handle.state::<crate::SidecarState>();
+        crate::vault_lock::lock_now(&state, crate::vault_lock::LockReason::AppQuit);
+        crate::sidecar::stop_for_update(&state)
+    })
+    .await
+    .map_err(|e| UpdateError::new(UpdateErrorCode::EngineStopFailed, e))?;
+    if !stopped {
+        return Err(UpdateErrorCode::EngineStopFailed.into());
+    }
+    activation.commit()
+}
+#[tauri::command]
+pub fn cancel_app_exit(app: AppHandle, request_id: u64) -> Result<(), String> {
+    let coordinator = app.state::<ExitCoordinator>();
+    let mut state = coordinator
+        .0
+        .lock()
+        .map_err(|_| "Application preservation lock failed.")?;
+    if !state.approved && !state.committing && state.cancel(request_id) {
+        let _ = app.emit(CANCEL, ExitRequest { request_id });
+    }
+    Ok(())
 }
 
 pub fn allow_exit(app: &AppHandle, code: Option<i32>) -> bool {
@@ -210,9 +297,26 @@ pub fn allow_exit(app: &AppHandle, code: Option<i32>) -> bool {
     }
     if let Ok(Some(prepared)) = begin(app) {
         tauri::async_runtime::spawn(async move {
-            if prepared.wait().await.is_ok() {
-                let _ = prepared.exit(code.unwrap_or(0));
+            if prepared.wait().await.is_err() {
+                return;
             }
+            match crate::update_service::transaction::prepare_exit(&prepared.app, None, false).await
+            {
+                Ok(Some(activation)) => {
+                    if prepared.commit_boundary().is_err() {
+                        return;
+                    }
+                    if let Err(error) = stop_and_activate(&prepared.app, activation).await {
+                        crate::update_service::transaction::resume(&prepared.app, Some(error))
+                            .await;
+                    }
+                }
+                Err(error) => {
+                    crate::update_service::transaction::resume(&prepared.app, Some(error)).await
+                }
+                Ok(None) => {}
+            }
+            let _ = prepared.exit(code.unwrap_or(0));
         });
     }
     false

@@ -1,15 +1,22 @@
-use super::check::ROLLOUT_BUCKETS;
-use super::{
-    Failure, InstallSource, InstallSourceReceipt, InstallSourceReceiptKind, NativeUpdateState,
-    RolloutEligibility, UpdateChannel, UpdateError, UpdateJournal, UpdateJournalPhase, UpdatePhase,
-    UpdatePreferences, INSTALL_SOURCE_FILE, JOURNAL_FILE, JOURNAL_TMP, PREFERENCES_FILE,
-    PREFERENCES_TMP,
+use super::{Failure, InstallSource, UpdateChannel, UpdateError};
+use serde::{Deserialize, Serialize};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
 };
-use serde::Serialize;
-use std::fs;
-use std::io::Write;
-use std::path::Path;
-
+const INSTALL_SOURCE_FILE: &str = "install-source.json";
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstallSourceReceipt {
+    install_source: InstallSourceReceiptKind,
+    release_channel: UpdateChannel,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum InstallSourceReceiptKind {
+    HomebrewCask,
+}
 pub(super) fn read_install_source(
     dir: &Path,
 ) -> Result<(InstallSource, Option<UpdateChannel>), UpdateError> {
@@ -53,10 +60,14 @@ pub(super) fn write_json_atomic<T: Serialize>(
 ) -> Result<(), UpdateError> {
     crate::config_dir::ensure_private_dir(dir).map_err(|err| UpdateError::new(failure, err))?;
     let path = dir.join(file_name);
-    let tmp = dir.join(temp_name);
+    let tmp = dir.join(format!("{temp_name}-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         let raw = serde_json::to_vec_pretty(value).map_err(|err| UpdateError::new(failure, err))?;
-        let mut file = fs::File::create(&tmp).map_err(|err| UpdateError::new(failure, err))?;
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&tmp)
+            .map_err(|err| UpdateError::new(failure, err))?;
         file.write_all(&raw)
             .map_err(|err| UpdateError::new(failure, err))?;
         file.sync_all()
@@ -70,100 +81,187 @@ pub(super) fn write_json_atomic<T: Serialize>(
     result
 }
 
-pub(super) fn write_journal(dir: &Path, journal: &UpdateJournal) -> Result<(), UpdateError> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Preferences {
+    pub format_version: u8,
+    pub automatic_updates_enabled: bool,
+    pub channel: UpdateChannel,
+    pub rollout_bucket: u8,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyPreferences {
+    checks_enabled: bool,
+    channel: UpdateChannel,
+    rollout_bucket: u8,
+}
+pub fn update_dir() -> Result<PathBuf, UpdateError> {
+    crate::den_state_dir()
+        .map(|p| p.join("updates"))
+        .ok_or_else(|| Failure::StateUnavailable.into())
+}
+pub fn write_preferences(dir: &Path, preferences: &Preferences) -> Result<(), UpdateError> {
     write_json_atomic(
         dir,
-        JOURNAL_FILE,
-        JOURNAL_TMP,
-        journal,
-        Failure::JournalUnavailable,
-    )
-}
-
-pub(super) fn load_preferences(
-    dir: &Path,
-    default_channel: UpdateChannel,
-    default_rollout_bucket: u8,
-) -> Result<UpdatePreferences, UpdateError> {
-    let raw = match fs::read(dir.join(PREFERENCES_FILE)) {
-        Ok(raw) => raw,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            let preferences = UpdatePreferences::new(default_channel, default_rollout_bucket);
-            write_preferences(dir, &preferences)?;
-            return Ok(preferences);
-        }
-        Err(err) => return Err(UpdateError::new(Failure::PreferencesUnavailable, err)),
-    };
-    let preferences: UpdatePreferences = serde_json::from_slice(&raw)
-        .map_err(|err| UpdateError::new(Failure::PreferencesUnavailable, err))?;
-    if preferences.rollout_bucket >= ROLLOUT_BUCKETS {
-        return Err(UpdateError::from(Failure::PreferencesUnavailable));
-    }
-    Ok(preferences)
-}
-
-pub(super) fn write_preferences(
-    dir: &Path,
-    preferences: &UpdatePreferences,
-) -> Result<(), UpdateError> {
-    write_json_atomic(
-        dir,
-        PREFERENCES_FILE,
-        PREFERENCES_TMP,
+        "preferences.json",
+        "preferences.tmp",
         preferences,
         Failure::PreferencesUnavailable,
     )
 }
-
-pub(super) fn target_version_is_running(target: &str, current: &str) -> Result<bool, UpdateError> {
-    let target = semver::Version::parse(target)
-        .map_err(|err| UpdateError::new(Failure::JournalUnavailable, err))?;
-    let current = semver::Version::parse(current)
-        .map_err(|err| UpdateError::new(Failure::InvalidVersion, err))?;
-    Ok(current >= target)
+pub fn load_preferences(
+    dir: &Path,
+    channel: UpdateChannel,
+    bucket: u8,
+) -> Result<Preferences, UpdateError> {
+    let path = dir.join("preferences.json");
+    let preferences = match fs::read(&path) {
+        Ok(raw) => serde_json::from_slice::<Preferences>(&raw)
+            .map_err(|e| UpdateError::new(Failure::PreferencesUnavailable, e))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let legacy = dir
+                .parent()
+                .ok_or(Failure::StateUnavailable)?
+                .join("update-preferences.json");
+            let value = match fs::read(&legacy) {
+                Ok(raw) => {
+                    let old: LegacyPreferences = serde_json::from_slice(&raw)
+                        .map_err(|e| UpdateError::new(Failure::PreferencesUnavailable, e))?;
+                    Preferences {
+                        format_version: 2,
+                        automatic_updates_enabled: old.checks_enabled,
+                        channel: old.channel,
+                        rollout_bucket: old.rollout_bucket,
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Preferences {
+                    format_version: 2,
+                    automatic_updates_enabled: true,
+                    channel,
+                    rollout_bucket: bucket,
+                },
+                Err(e) => return Err(UpdateError::new(Failure::PreferencesUnavailable, e)),
+            };
+            validate_preferences(&value)?;
+            write_preferences(dir, &value)?;
+            if legacy.exists() {
+                fs::remove_file(legacy)
+                    .map_err(|e| UpdateError::new(Failure::PreferencesUnavailable, e))?;
+            }
+            value
+        }
+        Err(e) => return Err(UpdateError::new(Failure::PreferencesUnavailable, e)),
+    };
+    validate_preferences(&preferences)?;
+    Ok(preferences)
+}
+fn validate_preferences(p: &Preferences) -> Result<(), UpdateError> {
+    if p.format_version != 2 || p.rollout_bucket >= 100 {
+        return Err(Failure::PreferencesUnavailable.into());
+    }
+    Ok(())
 }
 
-pub(super) fn reconcile_journal(
-    dir: &Path,
-    current_version: &str,
-    state: &mut NativeUpdateState,
-) -> Result<(), UpdateError> {
-    let path = dir.join(JOURNAL_FILE);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::TempDir;
+    #[test]
+    fn released_preferences_migrate_without_changing_choices() {
+        for enabled in [false, true] {
+            let root = TempDir::new("update-preferences-migration");
+            fs::write(
+                root.join("update-preferences.json"),
+                format!(
+                    r#"{{"checks_enabled":{enabled},"channel":"preview","rollout_bucket":79}}"#
+                ),
+            )
+            .unwrap();
+            let dir = root.join("updates");
+            let p = load_preferences(&dir, UpdateChannel::Stable, 1).unwrap();
+            assert_eq!(p.automatic_updates_enabled, enabled);
+            assert_eq!(p.channel, UpdateChannel::Preview);
+            assert_eq!(p.rollout_bucket, 79);
+            assert!(!root.join("update-preferences.json").exists());
+            assert_eq!(
+                load_preferences(&dir, UpdateChannel::Stable, 2)
+                    .unwrap()
+                    .rollout_bucket,
+                79
+            );
+        }
+    }
+    #[test]
+    fn unknown_preferences_are_not_rewritten() {
+        let root = TempDir::new("update-preferences-unknown");
+        let bytes = br#"{"format_version":99,"automatic_updates_enabled":true,"channel":"stable","rollout_bucket":0}"#;
+        fs::write(root.join("preferences.json"), bytes).unwrap();
+        assert!(load_preferences(&root, UpdateChannel::Stable, 0).is_err());
+        assert_eq!(fs::read(root.join("preferences.json")).unwrap(), bytes);
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyJournal {
+    to_version: String,
+    phase: LegacyPhase,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum LegacyPhase {
+    Installing,
+    RestartRequired,
+}
+pub fn reconcile_legacy(dir: &Path, running: &str) -> Result<(), UpdateError> {
+    let path = dir
+        .parent()
+        .ok_or(Failure::StateUnavailable)?
+        .join("update-state.json");
     let raw = match fs::read(&path) {
         Ok(raw) => raw,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(err) => return Err(UpdateError::new(Failure::JournalUnavailable, err)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(UpdateError::new(Failure::JournalUnavailable, e)),
     };
-    let journal: UpdateJournal = serde_json::from_slice(&raw)
-        .map_err(|err| UpdateError::new(Failure::JournalUnavailable, err))?;
-    if target_version_is_running(&journal.to_version, current_version)? {
-        fs::remove_file(path).map_err(|err| UpdateError::new(Failure::JournalUnavailable, err))?;
-        let checks_enabled = state.checks_enabled;
-        let channel = state.channel;
-        *state =
-            NativeUpdateState::idle(current_version.to_string(), state.install_source, channel);
-        state.checks_enabled = checks_enabled;
-        return Ok(());
+    let journal: LegacyJournal = serde_json::from_slice(&raw)
+        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
+    let target = semver::Version::parse(&journal.to_version)
+        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
+    let running = semver::Version::parse(running)
+        .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?;
+    if running < target {
+        return Err(match journal.phase {
+            LegacyPhase::Installing | LegacyPhase::RestartRequired => Failure::Interrupted.into(),
+        });
     }
-    match journal.phase {
-        UpdateJournalPhase::Installing => {
-            fs::remove_file(path)
-                .map_err(|err| UpdateError::new(Failure::JournalUnavailable, err))?;
-            let checks_enabled = state.checks_enabled;
-            let channel = state.channel;
-            *state =
-                NativeUpdateState::idle(current_version.to_string(), state.install_source, channel);
-            state.checks_enabled = checks_enabled;
-            state.error = Some(UpdateError::from(Failure::Interrupted));
-            return Ok(());
+    fs::remove_file(path).map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))
+}
+#[cfg(test)]
+mod legacy_tests {
+    use super::*;
+    #[test]
+    fn released_journal_only_completes_when_target_runs() {
+        let root = crate::test_support::TempDir::new("legacy-update");
+        let dir = root.join("updates");
+        for phase in ["installing", "restart_required"] {
+            let raw = format!(r#"{{"to_version":"1.1.0","phase":"{phase}"}}"#);
+            fs::write(root.join("update-state.json"), &raw).unwrap();
+            assert!(reconcile_legacy(&dir, "1.0.1").is_err());
+            assert_eq!(
+                fs::read_to_string(root.join("update-state.json")).unwrap(),
+                raw
+            );
+            reconcile_legacy(&dir, "1.1.1").unwrap();
+            assert!(!root.join("update-state.json").exists());
         }
-        UpdateJournalPhase::RestartRequired => {}
     }
-    state.phase = UpdatePhase::RestartRequired;
-    state.current_version = current_version.to_string();
-    state.available_version = Some(journal.to_version);
-    state.notes = None;
-    state.error = None;
-    state.rollout_eligibility = RolloutEligibility::Eligible;
-    Ok(())
+    #[test]
+    fn unrecognized_legacy_journal_survives_refusal() {
+        let root = crate::test_support::TempDir::new("legacy-update-unknown");
+        let path = root.join("update-state.json");
+        fs::write(&path, r#"{"to_version":"1.0.0","phase":"unknown"}"#).unwrap();
+        assert!(reconcile_legacy(&root.join("updates"), "2.0.0").is_err());
+        assert!(path.exists());
+    }
 }

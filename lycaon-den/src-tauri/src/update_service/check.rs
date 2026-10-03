@@ -1,15 +1,11 @@
-//! Release discovery: signed manifests, local rollout, and the automatic schedule.
-
-use super::persistence::detect_install_source;
+//! Feed discovery and exact-offer revalidation.
 use super::{
-    emit_update_state, CheckedCandidate, Failure, NativeUpdateState, UpdateChannel, UpdateError,
-    UpdatePhase, UpdateService, CHECK_INTERVAL, CHECK_REQUEST_TIMEOUT, DISABLED_POLL_INTERVAL,
-    DOWNLOAD_REQUEST_TIMEOUT, INITIAL_CHECK_DELAY, RETRY_INTERVAL,
+    emit, Candidate, Discovery, Failure, Installation, NativeUpdateState, RolloutEligibility,
+    UpdateChannel, UpdateError, UpdateService, CHECK_REQUEST_TIMEOUT,
 };
-use std::time::Duration;
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_updater::{Update, UpdaterExt};
-
+use tauri_plugin_updater::UpdaterExt;
 pub(super) fn embedded_key() -> (u64, String) {
     let registry: serde_json::Value =
         serde_json::from_str(include_str!("../../../../packaging/update-keys.json"))
@@ -88,7 +84,7 @@ pub(super) async fn fetch_candidate(
     app: &AppHandle,
     current_version: String,
     channel: UpdateChannel,
-) -> Result<Option<CheckedCandidate<Update>>, UpdateError> {
+) -> Result<Option<(Candidate, Option<u64>)>, UpdateError> {
     let endpoint = channel.endpoint();
     let endpoint = tauri::Url::parse(&endpoint)
         .map_err(|err| UpdateError::new(Failure::InvalidRelease, err))?;
@@ -113,84 +109,122 @@ pub(super) async fn fetch_candidate(
             return Ok(None);
         }
     }
-    checked
-        .map(|mut candidate| {
-            candidate.timeout = Some(DOWNLOAD_REQUEST_TIMEOUT);
-            Ok(CheckedCandidate {
-                current_version,
-                version: candidate.version.clone(),
-                notes: candidate.body.clone(),
-                age_secs: manifest_age_secs(candidate.date.map(|date| date.unix_timestamp())),
-                candidate,
-            })
-        })
-        .transpose()
+    Ok(checked.map(|candidate| {
+        let mut release = Candidate {
+            release_id: String::new(),
+            version: candidate.version.clone(),
+            channel,
+            platform: candidate.target.clone(),
+            signing_generation: embedded_key().0,
+            artifact_url: candidate.download_url.to_string(),
+            artifact_signature: candidate.signature.clone(),
+            notes: candidate.body.clone(),
+            rollout_eligibility: RolloutEligibility::Eligible,
+        };
+        release.release_id = release.identity();
+        (
+            release,
+            manifest_age_secs(candidate.date.map(|date| date.unix_timestamp())),
+        )
+    }))
 }
 
-pub(super) async fn check_update_inner(
+pub(super) fn apply_offer(
+    state: &mut NativeUpdateState,
+    checked: Result<Option<(Candidate, Option<u64>)>, UpdateError>,
+    automatic: bool,
+    bucket: u8,
+) {
+    state.last_check_at = Some(super::now());
+    match checked {
+        Ok(Some((candidate, age))) => {
+            let retained = state.candidate.as_ref().is_some_and(|old| {
+                old.release_id == candidate.release_id
+                    && old.rollout_eligibility == RolloutEligibility::Eligible
+            });
+            if automatic && !retained && !rollout_admits(bucket, age) {
+                state.discovery = Discovery::HeldBack;
+                if state.candidate.is_none() {
+                    let mut held = candidate;
+                    held.rollout_eligibility = RolloutEligibility::HeldBack;
+                    state.candidate = Some(held);
+                }
+                return;
+            }
+            let changed =
+                state.candidate.as_ref().map(|old| &old.release_id) != Some(&candidate.release_id);
+            if changed {
+                state.installation = Installation::None;
+                state.staged_release_id = None;
+            }
+            state.candidate = Some(candidate);
+            state.discovery = Discovery::Available;
+            if state.installation != Installation::Failed {
+                state.last_error = None;
+            }
+        }
+        Ok(None) => {
+            state.discovery = Discovery::UpToDate;
+            state.candidate = None;
+            state.staged_release_id = None;
+            state.installation = Installation::None;
+            state.last_error = None;
+        }
+        Err(error) => {
+            state.discovery = Discovery::Failed;
+            state.last_error = Some(error);
+        }
+    }
+}
+pub(super) async fn run_check(
     app: &AppHandle,
-    service: &UpdateService,
     automatic: bool,
 ) -> Result<NativeUpdateState, UpdateError> {
-    let _operation = service.operation.lock().await;
-    let ticket = {
+    let service = app.state::<UpdateService>();
+    let (generation, version, channel) = {
         let mut inner = service.inner.lock().await;
-        let Some(ticket) = inner.begin_check(automatic)? else {
+        if (automatic && !inner.state.automatic_updates_enabled)
+            || inner.state.installation.busy()
+            || inner.state.discovery == Discovery::Checking
+        {
             return Ok(inner.state.clone());
-        };
-        emit_update_state(app, &mut inner.state);
-        ticket
+        }
+        inner.state.discovery = Discovery::Checking;
+        emit(app, &mut inner.state);
+        (
+            service.generation.load(Ordering::Acquire),
+            inner.state.running_version.clone(),
+            inner.state.channel,
+        )
     };
-
-    let checked = fetch_candidate(
-        app,
-        ticket.previous.current_version.clone(),
-        ticket.previous.channel,
-    )
-    .await;
+    let checked = tokio::select! {
+        result = fetch_candidate(app, version, channel) => result,
+        _ = service.wake.notified() => Err(Failure::Cancelled.into()),
+    };
     let mut inner = service.inner.lock().await;
-    let (install_source, _, install_source_error) = detect_install_source();
-    if !inner.finish_check(ticket, checked, install_source, install_source_error) {
-        return Ok(inner.state.clone());
+    if service.current(generation) {
+        let bucket = inner.preferences.rollout_bucket;
+        let (source, _, source_error) = super::persistence::detect_install_source();
+        inner.state.install_source = source;
+        apply_offer(&mut inner.state, checked, automatic, bucket);
+        if source_error.is_some() {
+            inner.state.last_error = source_error;
+        }
+        if inner.state.staged_release_id.is_none() {
+            if let Err(error) = super::staging::forget_ready() {
+                inner.state.last_error = Some(error);
+            }
+        }
+        emit(app, &mut inner.state);
     }
-    emit_update_state(app, &mut inner.state);
-    let state = inner.state.clone();
-    drop(inner);
+    Ok(inner.state.clone())
+}
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<NativeUpdateState, UpdateError> {
+    let state = run_check(&app, false).await?;
+    if state.automatic_updates_enabled {
+        super::download::start_automatic(app.clone());
+    }
     Ok(state)
 }
-
-#[tauri::command]
-pub async fn check_update(
-    app: AppHandle,
-    service: tauri::State<'_, UpdateService>,
-) -> Result<NativeUpdateState, UpdateError> {
-    check_update_inner(&app, service.inner(), false).await
-}
-
-pub(super) async fn run_automatic_check(app: AppHandle) -> Result<NativeUpdateState, UpdateError> {
-    let service = app.state::<UpdateService>();
-    check_update_inner(&app, service.inner(), true).await
-}
-
-pub(super) fn next_automatic_delay(state: &NativeUpdateState) -> Duration {
-    if !state.checks_enabled {
-        DISABLED_POLL_INTERVAL
-    } else if state.phase == UpdatePhase::Unavailable || state.error.is_some() {
-        RETRY_INTERVAL
-    } else {
-        CHECK_INTERVAL
-    }
-}
-
-pub fn start_update_scheduler(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(INITIAL_CHECK_DELAY).await;
-        loop {
-            let delay = match run_automatic_check(app.clone()).await {
-                Ok(state) => next_automatic_delay(&state),
-                Err(_) => RETRY_INTERVAL,
-            };
-            tokio::time::sleep(delay).await;
-        }
-    });
-}
+pub use super::scheduler::start_update_scheduler;

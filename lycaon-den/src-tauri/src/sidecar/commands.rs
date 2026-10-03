@@ -22,6 +22,9 @@ pub async fn ipc_start_sidecar(
     })
     .await
     .map_err(|e| SidecarStartError::Failed(format!("start task join: {e}")))??;
+    if let Err(error) = crate::update_service::transaction::confirm_startup(&app, &info).await {
+        eprintln!("Update startup receipt: {error}");
+    }
     Ok(info)
 }
 
@@ -44,6 +47,9 @@ pub async fn ipc_restart_sidecar(app: tauri::AppHandle) -> Result<SidecarInfo, S
     })
     .await
     .map_err(|e| SidecarStartError::Failed(format!("restart task join: {e}")))??;
+    if let Err(error) = crate::update_service::transaction::confirm_startup(&app, &info).await {
+        eprintln!("Update startup receipt: {error}");
+    }
     Ok(info)
 }
 

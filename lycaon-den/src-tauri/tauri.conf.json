@@ -55,7 +55,8 @@
     ],
     "resources": {
       "engine-root/": "engine-root/",
-      "THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
+      "THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
+      "../../VERSION": "release-version"
     },
     "icon": [
       "icons/32x32.png",

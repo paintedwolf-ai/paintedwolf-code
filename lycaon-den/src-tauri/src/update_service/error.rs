@@ -1,8 +1,8 @@
 //! Typed failures shared by native commands and update state events.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateErrorCode {
     StateUnavailable,
@@ -20,9 +20,15 @@ pub enum UpdateErrorCode {
     VerificationFailed,
     InstallFailed,
     InvalidRelease,
+    Cancelled,
+    DiskSpace,
+    UnsupportedInstallation,
+    EngineStopFailed,
+    ReleaseWithdrawn,
+    ActivationFailed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateError {
     pub code: UpdateErrorCode,
     #[serde(skip_serializing_if = "Option::is_none")]

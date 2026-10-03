@@ -205,7 +205,11 @@ impl SidecarState {
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
         let message =
             format!("painted-wolf-presence-v1\n{proof_payload}\nauthenticator={authenticator}");
-        URL_SAFE_NO_PAD.encode(self.presence_signing_key.sign(message.as_bytes()).to_bytes())
+        URL_SAFE_NO_PAD.encode(
+            self.presence_signing_key
+                .sign(message.as_bytes())
+                .to_bytes(),
+        )
     }
 }
 
@@ -347,7 +351,8 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     let state = app.state::<SidecarState>();
     let events = app.clone();
     state.observe(Box::new(move |engine| {
-        if let (Some(line), Some(path)) = (supervisor::log_line(engine), logging::engine_log_path()) {
+        if let (Some(line), Some(path)) = (supervisor::log_line(engine), logging::engine_log_path())
+        {
             let _ = logging::append_engine_log(&path, line.as_bytes());
         }
         let _ = events.emit(supervisor::ENGINE_STATE_EVENT, engine);
@@ -358,20 +363,26 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     let handle = app.clone();
     std::thread::spawn(move || {
         let state = handle.state::<SidecarState>();
-        supervisor::supervise(&state, watches, &supervisor::RESTART_POLICY, relaunch_sidecar);
+        supervisor::supervise(
+            &state,
+            watches,
+            &supervisor::RESTART_POLICY,
+            relaunch_sidecar,
+        );
     });
 }
 
-pub(crate) fn stop_sidecar(state: &SidecarState) {
+pub(crate) fn stop_sidecar(state: &SidecarState) -> process::StopOutcome {
     state.cancel_start.store(true, Ordering::Release);
     let _lifecycle = state.lifecycle.lock().unwrap();
-    stop_sidecar_locked(state);
+    stop_sidecar_locked(state)
 }
 
-fn stop_sidecar_locked(state: &SidecarState) {
-    kill_child(&mut *state.process.lock().unwrap());
+fn stop_sidecar_locked(state: &SidecarState) -> process::StopOutcome {
+    let outcome = kill_child(&mut *state.process.lock().unwrap());
     state.retire();
     state.publish(EngineState::Idle);
+    outcome
 }
 
 fn restart_sidecar_with_progress<F>(
@@ -429,4 +440,14 @@ pub fn cancel_sidecar_start(state: &SidecarState) -> bool {
     }
     state.cancel_start.store(true, Ordering::Release);
     true
+}
+
+pub(crate) fn stop_for_update(state: &SidecarState) -> bool {
+    if attach_only_requested() {
+        return false;
+    }
+    matches!(
+        stop_sidecar(state),
+        process::StopOutcome::AlreadyStopped | process::StopOutcome::Exited
+    )
 }

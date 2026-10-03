@@ -11,8 +11,6 @@ mod detect_editors;
 mod document_outbox;
 mod external_attachment_import;
 mod item_windows;
-mod presence;
-mod vault_lock;
 #[cfg(target_os = "macos")]
 mod native_notifications;
 mod open_external;
@@ -20,6 +18,7 @@ mod open_local_path;
 mod open_third_party_notices;
 mod pick_path;
 mod picked_file;
+mod presence;
 mod read_path_bytes;
 mod reveal_in_file_manager;
 mod shared_composer_documents;
@@ -28,7 +27,8 @@ mod sidecar;
 mod system_appearance;
 #[cfg(test)]
 mod test_support;
-mod update_service;
+pub mod update_service;
+mod vault_lock;
 pub mod webkit_features;
 mod webview_policy;
 pub mod wheel_smoothing;
@@ -259,8 +259,12 @@ async fn patch_app_state(
             let current = match fs::read(path) {
                 Ok(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes)
                     .map_err(|error| error.to_string())?
-                    .get("value").cloned().ok_or("invalid_saved_tree_configuration")?,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::Value::Null,
+                    .get("value")
+                    .cloned()
+                    .ok_or("invalid_saved_tree_configuration")?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    serde_json::Value::Null
+                }
                 Err(error) => return Err(error.to_string()),
             };
             let merged = app_state_views::merge_window_intents(current, requested, &label)?;
@@ -367,6 +371,14 @@ async fn den_notify_cancel_sessions(session_ids: Vec<String>) -> Result<(), Stri
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    let _installation_lease = match update_service::transaction::startup_lease() {
+        Ok(lease) => lease,
+        Err(error) => {
+            rfd::MessageDialog::new().set_title("Update recovery needed").set_description(format!("Painted Wolf Code could not finish an application update. Your saved work has not been changed. Reinstall the application to continue.\n\n{error}")).set_level(rfd::MessageLevel::Error).show();
+            return;
+        }
+    };
     #[cfg(not(target_os = "macos"))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -420,10 +432,13 @@ pub fn run() {
             detect_editors::detect_editors,
             open_third_party_notices::open_third_party_notices,
             update_service::preferences::get_update_state,
-            update_service::preferences::set_update_checks_enabled,
+            update_service::preferences::set_automatic_updates_enabled,
             update_service::preferences::set_update_channel,
             update_service::check::check_update,
-            update_service::install::install_update,
+            update_service::download::download_update,
+            update_service::download::retry_update,
+            update_service::transaction::restart_to_update,
+            app_exit::cancel_app_exit,
             shell_command::shell_command_status,
             shell_command::install_shell_command,
             shell_command::uninstall_shell_command,
@@ -466,15 +481,32 @@ pub fn run() {
             app_menu::on_menu_event(app, event.id().as_ref());
         })
         .setup(|app| {
-            // The main window is built here so its web view carries the shell's WebKit features.
-            webkit_features::create_main_window(app.handle())
-                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             backup_transfer_journal::cleanup_on_launch();
             document_outbox::reconcile_windows(app.handle(), None);
             sidecar::layout::setup_bundled_engine_layout(app.handle());
             sidecar::setup_supervision(app.handle());
-            window_appearance::setup(app.handle());
-            update_service::check::start_update_scheduler(app.handle().clone());
+            let startup = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match update_service::transaction::prepare_exit(&startup, None, true).await {
+                    Ok(Some(activation)) => {
+                        if app_exit::finish_update(&startup, activation).await.is_ok() {
+                            return;
+                        }
+                        update_service::transaction::resume(&startup, None).await;
+                    }
+                    Err(error) => update_service::transaction::resume(&startup, Some(error)).await,
+                    Ok(None) => {}
+                }
+                let window_app = startup.clone();
+                let _ = startup.run_on_main_thread(move || {
+                    if let Err(error) = webkit_features::create_main_window(&window_app) {
+                        eprintln!("Could not open application window: {error}");
+                    } else {
+                        window_appearance::setup(&window_app);
+                    }
+                });
+                update_service::check::start_update_scheduler(startup);
+            });
             accessibility_text_size::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             system_appearance::setup(app.handle().clone())
@@ -929,4 +961,9 @@ mod tests {
             .expect_err("a read pick may not be written through");
         assert_eq!(fs::read(&target).expect("unchanged"), b"original".to_vec());
     }
+}
+
+/// The installer mode never initializes windows, tools, or the engine.
+pub fn run_update_helper(id: &str) -> Result<(), String> {
+    update_service::transaction::run_helper(id).map_err(|e| e.to_string())
 }
