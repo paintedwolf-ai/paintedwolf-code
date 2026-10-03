@@ -4746,12 +4746,21 @@ type PromptAttachmentPart struct {
 	BlobID string `json:"blob_id"`
 }
 
+// PromptRecovery
+type PromptRecovery struct {
+	// Continue established progress or retry an interrupted request without progress.
+	Action string `json:"action"`
+	// Last visible transcript message observed when choosing recovery. The host rejects stale actions.
+	AfterMessageID string `json:"after_message_id"`
+}
+
 // PromptRequest
 type PromptRequest struct {
 	// Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
 	OperationID string `json:"operation_id"`
 	// User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
-	Text string `json:"text"`
+	Text     string          `json:"text"`
+	Recovery *PromptRecovery `json:"recovery,omitempty"`
 	// Handles for bodies already streamed to the attachment upload route — text, documents, and rasters alike. No bytes, no URLs, no paths.
 	Attachments []PromptAttachmentPart `json:"attachments,omitempty"`
 	// On-disk, artifact, and search-hit references; no bytes. Counted separately from uploaded attachments.

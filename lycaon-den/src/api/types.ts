@@ -7467,6 +7467,7 @@ export interface components {
             operation_id: string;
             /** @description User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request */
             text: string;
+            recovery?: components["schemas"]["PromptRecovery"];
             /** @description Handles for bodies already streamed to the attachment upload route — text, documents, and rasters alike. No bytes, no URLs, no paths. */
             attachments?: components["schemas"]["PromptAttachmentPart"][];
             /** @description On-disk, artifact, and search-hit references; no bytes. Counted separately from uploaded attachments. */
@@ -10350,10 +10351,10 @@ export interface components {
             line?: number;
         };
         /**
-         * @description What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound.
+         * @description What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
          * @enum {string}
          */
-        CompletionReportFindingDisposition: "act" | "accept" | "held";
+        CompletionReportFindingDisposition: "act" | "accept" | "held" | "unresolved";
         /** @description One assessed conclusion a report states: what it is, how it grades, what it means if nothing is done, and what to do about it. */
         CompletionReportFinding: {
             /** @description Stable reference a reader can quote; shared with a verdict claim when the finding was adjudicated. */
@@ -11197,6 +11198,18 @@ export interface components {
         InvocationReceiptList: {
             invocations: components["schemas"]["InvocationReceipt"][];
             next_cursor?: string;
+        };
+        PromptRecovery: {
+            /**
+             * @description Continue established progress or retry an interrupted request without progress.
+             * @enum {string}
+             */
+            action: "continue" | "retry";
+            /**
+             * Format: uuid
+             * @description Last visible transcript message observed when choosing recovery. The host rejects stale actions.
+             */
+            after_message_id: string;
         };
         PromptReferencePathFile: {
             /**
@@ -29662,6 +29675,7 @@ export type ChatContentPage = components["schemas"]["ChatContentPage"];
 export type ChatContentMatch = components["schemas"]["ChatContentMatch"];
 export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage"];
 export type InvocationReceiptList = components["schemas"]["InvocationReceiptList"];
+export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];
 export type PromptReferencePathFolder = components["schemas"]["PromptReferencePathFolder"];
 export type PromptReferenceArtifact = components["schemas"]["PromptReferenceArtifact"];
