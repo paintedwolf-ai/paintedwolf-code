@@ -317,9 +317,7 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	}
 }
 
-// The memoized shipped accessor must be wired to config.CoordinatorFlow and not
-// to a stale snapshot: parse the named bundled file directly and require the
-// accessor to agree.
+// The shipped accessor and bundled flow definition share one source.
 func TestShippedCoordinatorFlowIsBundledYAML(t *testing.T) {
 	raw, err := config.Read(config.CoordinatorFlow)
 	testutil.FailErr(t, "read bundled coordinator flow", err)

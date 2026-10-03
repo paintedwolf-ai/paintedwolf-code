@@ -83,13 +83,11 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	a.checks = append(a.checks, check)
 }
 
-// scanCoverageDetail states what one bound scan covered. A path scan the run
-// bound closes the gap files that moved during a full scan left, so it is
-// named as that rescan rather than as partial coverage of the project.
+// Path-targeted scans report their declared scope.
 func scanCoverageDetail(s wire.CodeScan) string {
 	if s.TargetKind == wire.ScanTargetPaths {
 		n := len(s.TargetPaths)
-		return fmt.Sprintf("Rescan %s of %d moved %s; %d stored findings", s.ID, n, plural(n, "file", "files"), len(s.Findings))
+		return fmt.Sprintf("Targeted scan %s of %d %s; %d stored findings", s.ID, n, plural(n, "file", "files"), len(s.Findings))
 	}
 	return fmt.Sprintf("Scan %s; source snapshot %s; coverage %s; %d stored findings", s.ID, s.SourceSnapshotID, s.CoverageStatus, len(s.Findings))
 }

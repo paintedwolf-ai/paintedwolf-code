@@ -56,22 +56,18 @@ func LoadRunInventory(ctx context.Context, inv ScanInventory, runID string) (Run
 	return out, nil
 }
 
-// ScanGroupCheck is how a set of cited group ids stands against a run's
-// inventory.
+// ScanGroupCheck identifies citations outside the run's scanner groups.
 type ScanGroupCheck struct {
 	// Unknown ids name no group in the settled inventory.
 	Unknown []string
-	// ScanIDs are cited ids that name a scan, with that scan's groups the run
-	// inventory holds: the ids the citation should have used.
+	// ScanIDs maps misused scan ids to their groups in this run.
 	ScanIDs map[string][]string
 }
 
 // OK reports whether every cited id names a group the run holds.
 func (c ScanGroupCheck) OK() bool { return len(c.Unknown) == 0 && len(c.ScanIDs) == 0 }
 
-// CheckScanGroups classifies cited group ids against the run's inventory. An
-// id that names a scan is always wrong; an id that names nothing is wrong once
-// the bound scans are terminal.
+// Unknown group ids become invalid once the run's scans settle.
 func CheckScanGroups(ctx context.Context, inv ScanInventory, runID string, cited []string) (ScanGroupCheck, error) {
 	var out ScanGroupCheck
 	if inv == nil || len(cited) == 0 {

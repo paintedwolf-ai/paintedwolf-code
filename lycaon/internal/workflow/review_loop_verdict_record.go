@@ -89,7 +89,7 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		committedVars = questionVars
 		out.Attempt = attemptSoFar
 	case out.Valid && attemptSoFar >= reviewLoopIterationCap(rl):
-		// At the cap a non-terminal verdict is rejected rather than opening another round.
+		// Exhausted review rounds retain the current phase.
 		out.Valid = false
 		out.IterationCapExceeded = true
 		out.Attempt = attemptSoFar
@@ -387,7 +387,7 @@ func reviewLoopIterationCap(rl workflowdef.ReviewLoopDef) int {
 	return defaultReviewLoopIterationCap
 }
 
-// missingReviewAgents reads the phase's completed reviewer tasks from the run ledger.
+// Explicit runs own phase reviews; ambient runs use the current user intent.
 func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowRun, required []string) []string {
 	if len(required) == 0 {
 		return nil

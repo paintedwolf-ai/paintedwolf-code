@@ -614,8 +614,7 @@ const (
 	RedactionSourceShapeRule        RedactionSource = "shape_rule"
 	RedactionSourceContainerHarvest RedactionSource = "container_harvest"
 	RedactionSourceRememberedMatch  RedactionSource = "remembered_match"
-	// RedactionSourcePolicy accompanies an observer mask, where the host decided
-	// in advance rather than detecting anything.
+	// RedactionSourcePolicy marks host-declared observer masks.
 	RedactionSourcePolicy RedactionSource = "policy"
 )
 

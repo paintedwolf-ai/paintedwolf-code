@@ -106,7 +106,7 @@ func TestPhaseExitRendersEveryKind(t *testing.T) {
 			},
 			want: []string{"Choice transitions out of this phase",
 				`workflow_transition(transition_id="deepen")`, "you cannot fire it"},
-			// "Leaves" is the gate-tree term; transitions must not borrow it.
+			// Gate leaves and phase transitions use distinct terms.
 			avoid: []string{"Choice leaves"},
 		},
 	}

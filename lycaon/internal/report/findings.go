@@ -8,13 +8,7 @@ import (
 	"github.com/johnfercher/maroto/v2/pkg/props"
 )
 
-// Findings are stated twice: a glance in the working summary carrying grade,
-// title and one place for each finding that needs attention, and a detail
-// entry for every finding carrying impact, action and every place. The
-// numbering ties the two together.
-
-// findingsLabel is what this subject calls its assessed conclusions. A
-// workflow declares the word; the renderer holds the default.
+// findingsLabel uses the workflow's term for assessed conclusions.
 func findingsLabel(input ReportInput) string {
 	if label := strings.TrimSpace(input.FindingsLabel); label != "" {
 		return label
@@ -22,8 +16,7 @@ func findingsLabel(input ReportInput) string {
 	return sectionFindings
 }
 
-// findingsGlanceRows is the working summary's table of findings that need
-// attention. A numbered marker ties a row to the detail entry that expands it.
+// Summary markers retain the finding's detail-section number.
 func findingsGlanceRows(ms *measurer, input ReportInput) []measuredRow {
 	var findings []ReportFinding
 	for _, f := range input.Findings {
@@ -75,8 +68,7 @@ func findingsGlanceRows(ms *measurer, input ReportInput) []measuredRow {
 	return append(rows, spacerRow(spaceAfterParagraph))
 }
 
-// gradeHeader names the grading column for whatever the findings actually
-// carry: a workflow that decides rather than scores grades by status alone.
+// Unrated findings use the status column.
 func gradeHeader(findings []ReportFinding) string {
 	for _, f := range findings {
 		if strings.TrimSpace(f.Severity) != "" {
@@ -86,9 +78,7 @@ func gradeHeader(findings []ReportFinding) string {
 	return "Status"
 }
 
-// gradeCell is the finding's severity; else, for a risk kept on purpose, that
-// it was accepted; else its status; else its disposition; and nothing when it
-// stated none of these.
+// Severity takes precedence over disposition and workflow status.
 func gradeCell(ms *measurer, width float64, f ReportFinding, prop props.Text) cellSpec {
 	if strings.TrimSpace(f.Severity) != "" {
 		return newChipCell(ms, width, severityChip(ms, f), prop)
@@ -163,8 +153,6 @@ func findingBlock(ms *measurer, number int, f ReportFinding) block {
 	if chips := findingChips(ms, f); len(chips) > 0 {
 		rows = append(rows, chipStripRow(ms, chips, 0, spaceBetweenMetaRow))
 	}
-	// Every entry sets its labels the same way, so the findings read as one
-	// list rather than as entries formatted by their own length.
 	for _, line := range [][2]string{{"Impact", f.Impact}, {"Action", f.Action}} {
 		if strings.TrimSpace(line[1]) == "" {
 			continue

@@ -247,8 +247,7 @@ func TestStaticPromptStackWithinModelWindow(t *testing.T) {
 	budgets, err := prompts.LoadPromptBudgets()
 	contractcheck.FailErr(t, "LoadPromptBudgets", err)
 	if os.Getenv("UPDATE_PROMPT_BUDGETS") == "1" {
-		// The refresh writes after compilation; validate the new artifact rather
-		// than the previous caps embedded in this test binary.
+		// Refreshed budgets are newer than this binary's embedded catalog.
 		path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "host", "prompt-budgets.yaml")
 		raw, err := os.ReadFile(path)
 		contractcheck.FailErr(t, "read refreshed prompt budgets", err)

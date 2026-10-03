@@ -1,7 +1,4 @@
-// Package reporttest validates report inputs and loads the shared fixtures for
-// tests in other packages. It is imported only from _test.go files so it stays
-// out of every shipped binary's import graph; tests inside package report use
-// the local loader in render_test.go instead (import cycle).
+// Package reporttest validates shared report fixtures for external tests.
 package reporttest
 
 import (

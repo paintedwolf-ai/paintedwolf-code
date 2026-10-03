@@ -225,17 +225,15 @@ func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 	}
 	needsRevision := map[string]string{"verdict": "NEEDS_REVISION", "winner": "undecided"}
 
-	// Round 1 (attempt 1 < cap 2) → re-loop (continue), holds.
+	// An available round keeps review open.
 	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
 		testutil.FailErr(t, "verdict 1", err)
 	}
-	// Round 2 (attempt 2 == cap 2) → coordinator must decide (decision-required), still holds.
+	// The final round requires a decision.
 	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
 		testutil.FailErr(t, "verdict 2", err)
 	}
-	// Round 3: cap already reached — a further non-terminal verdict is rejected
-	// outright (not silently accepted and bumped past the cap), and the
-	// decision-required nudge fires again rather than going quiet.
+	// Further submissions retain the exhausted count and decision requirement.
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil)
 	testutil.FailErr(t, "verdict 3", err)
 	if out.Valid || !out.IterationCapExceeded || out.Attempt != 2 {

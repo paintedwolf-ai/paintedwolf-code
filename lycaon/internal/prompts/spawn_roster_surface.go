@@ -36,8 +36,7 @@ type SpawnRosterData struct {
 	MaxInFlight        int
 }
 
-// LoadSpawnRosterSurface builds the effective spawn roster. A nil catalog
-// resolves committed device state rather than reading pack directories.
+// LoadSpawnRosterSurface uses committed device state when no catalog is supplied.
 func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTools map[string][]string, catalog *extpacks.EffectiveCatalog, profiles []sandbox.ToolProfile) (SpawnRosterData, error) {
 	if catalog == nil {
 		resolved, err := extpacks.CatalogForConsumers()

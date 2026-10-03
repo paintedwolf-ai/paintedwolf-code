@@ -15,8 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ReviewQuestion is the missing fact an investigation must establish.
-// Its claim ID supplies the host-issued work identity question/<claim ID>.
+// ReviewQuestion binds a missing fact to affected coverage obligations.
 type ReviewQuestion struct {
 	MissingFact string   `json:"missing_fact"`
 	Obligations []string `json:"obligations"`
@@ -63,8 +62,7 @@ func questionClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) ([
 	return out, nil
 }
 
-// prepareReviewQuestions registers work before task dispatch; terminal submissions
-// may only close questions against the registered work and current coverage facts.
+// Registered questions keep their identity through investigation and closure.
 func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string, vars map[string]any) (map[string]any, error) {
 	if def.FollowupAttempts == 0 {
 		return vars, nil

@@ -20,7 +20,7 @@ func rejectReviewQuestion(reason, id string) error {
 	return &tools.ToolReject{Code: submitVerdictQuestionInvalidCode, Data: data}
 }
 
-// A follow-up verdict can request available work, never replenish its budget.
+// Follow-up requires an available investigation or review.
 func checkQuestionContinuation(def workflowdef.ReviewLoopDef, claims []VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string) error {
 	for _, claim := range claims {
 		if def.ClassOf(claim.Status) != workflowdef.ClaimOpen {
