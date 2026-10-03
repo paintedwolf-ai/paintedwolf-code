@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -42,10 +41,8 @@ func (m *RunManager) validateReviewSubmission(ctx context.Context, active *api.W
 	if shapeValid && ReviewLoopVerdictTerminal(rl, verdict) {
 		if coverageErr := m.checkReviewCoverage(ctx, active, rl, verdict); coverageErr != nil {
 			out.Valid = false
-			out.CoverageIssue = strings.TrimSpace(out.CoverageIssue + "\n" + coverageErr.Error())
+			out.CoverageIssue = coverageErr.Error()
 		}
-	}
-	if shapeValid && ReviewLoopVerdictTerminal(rl, verdict) {
 		out.InventoryIssue, err = m.checkReviewInventory(ctx, active, rl, verdict)
 		if err != nil {
 			return reviewValidation{}, err
@@ -53,8 +50,6 @@ func (m *RunManager) validateReviewSubmission(ctx context.Context, active *api.W
 		if out.InventoryIssue != nil {
 			out.Valid = false
 		}
-	}
-	if shapeValid && ReviewLoopVerdictTerminal(rl, verdict) {
 		owed, captured := effectiveReviewAgents(active.CurrentPhase, rl, vars)
 		if !captured {
 			return reviewValidation{}, fmt.Errorf("reviewer roster unavailable for phase %q", active.CurrentPhase)
