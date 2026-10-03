@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -501,128 +499,6 @@ func previewDecisionPhaseIDs(phases []api.ComposeDecisionPhase) []string {
 	return out
 }
 
-// ActiveWorkflowInjectFingerprint hashes inject DTO fields for prompt assembly dedup.
-func ActiveWorkflowInjectFingerprint(data ActiveWorkflowInjectData, hintCodes []string) string {
-	codes := append([]string(nil), hintCodes...)
-	sort.Strings(codes)
-	failed := append([]string(nil), data.FailedLeaves...)
-	sort.Strings(failed)
-	unsatisfied := append([]string(nil), data.UnsatisfiedGateLeaves...)
-	sort.Strings(unsatisfied)
-	allowed := append([]string(nil), data.AllowedAgents...)
-	sort.Strings(allowed)
-	excludedParts := make([]string, len(data.ExcludedAgents))
-	for i, ex := range data.ExcludedAgents {
-		excludedParts[i] = ex.Name + ":" + ex.Code
-	}
-	sort.Strings(excludedParts)
-	allowed = append(allowed, excludedParts...)
-
-	phaseParts := make([]string, len(data.Phases))
-	for i, p := range data.Phases {
-		cur := "0"
-		if p.IsCurrent {
-			cur = "1"
-		}
-		phaseParts[i] = p.ID + ":" + cur + ":" + boolString(p.Terminal)
-	}
-	sort.Strings(phaseParts)
-
-	gateParts := make([]string, len(data.CurrentGates))
-	for i, g := range data.CurrentGates {
-		gateParts[i] = g.ID + ":" + boolString(g.Satisfied)
-	}
-	sort.Strings(gateParts)
-
-	obligationParts := make([]string, len(data.GateObligations))
-	for i, o := range data.GateObligations {
-		obligationParts[i] = strings.Join([]string{
-			o.ID,
-			o.Purpose,
-			strings.Join(o.Satisfy, ","),
-			strings.Join(o.Missing, ","),
-			strings.Join(o.Required, ","),
-		}, ":")
-	}
-	sort.Strings(obligationParts)
-
-	var pendingPhase, pendingPrompt string
-	if data.PendingFeedback != nil {
-		pendingPhase = data.PendingFeedback.PhaseID
-		pendingPrompt = data.PendingFeedback.Prompt
-	}
-	var requestStatus, requestText, requestSource string
-	requestSequence := 0
-	if data.Request != nil {
-		requestStatus = data.Request.Status
-		requestText = data.Request.Text
-		requestSource = data.Request.Source
-		requestSequence = data.Request.Sequence
-	}
-
-	parts := []string{
-		data.WorkflowID,
-		data.WorkflowVersion,
-		data.RunID,
-		data.RunStatus,
-		data.CurrentPhase,
-		data.CompleteWhen,
-		data.Topology,
-		data.TopologyPhaseID,
-		data.CoordinatorBrief,
-		data.FanoutPlan,
-		strings.Join(failed, ","),
-		strings.Join(unsatisfied, ","),
-		strings.Join(allowed, ","),
-		strings.Join(phaseParts, ","),
-		strings.Join(gateParts, ","),
-		strings.Join(obligationParts, ","),
-		data.NextPhase,
-		strings.Join(data.FeedbackPhases, ","),
-		strings.Join(data.DecisionPhases, ","),
-		boolString(data.RequiresIsolation),
-		boolString(data.ReportDocumentEnabled),
-		reportRatingKey(data.ReportRating),
-		pendingPhase,
-		pendingPrompt,
-		requestStatus,
-		requestText,
-		requestSource,
-		strconv.Itoa(requestSequence),
-		strings.Join(codes, ","),
-	}
-	if data.BlueprintApproval != nil {
-		parts = append(parts,
-			data.BlueprintApproval.Status,
-			data.BlueprintApproval.Origin,
-			data.BlueprintApproval.ParentRunID,
-		)
-	}
-	if data.PhaseExit != nil {
-		choiceIDs := make([]string, 0, len(data.PhaseExit.ChoiceTransitions))
-		for _, arm := range data.PhaseExit.ChoiceTransitions {
-			choiceIDs = append(choiceIDs, arm.ID+":"+arm.Label+":"+strings.Join(arm.Actors, "+"))
-		}
-		parts = append(parts,
-			data.PhaseExit.Kind,
-			data.PhaseExit.DepthParam,
-			data.PhaseExit.ReviewLoopKey,
-			strconv.Itoa(data.PhaseExit.ReviewLoopCap),
-			strings.Join(data.PhaseExit.ReviewAgents, "+"),
-			data.PhaseExit.InvokeWorkflowID,
-			boolString(data.PhaseExit.HumanApproval),
-			boolString(data.PhaseExit.CoordinatorAdvances),
-			strings.Join(data.PhaseExit.OpenGates, ","),
-			strings.Join(data.PhaseExit.DormantGates, ","),
-			data.PhaseExit.CompleteWhen,
-			verdictSchemaJSON(data.PhaseExit.VerdictSchema),
-			strings.Join(data.PhaseExit.ClaimStatuses, ","),
-			strings.Join(choiceIDs, ","),
-		)
-	}
-	return hashString(strings.Join(parts, "\x1e"))
-}
-
 // String maps always marshal; encoding/json sorts keys for stable render/cache identity.
 func verdictSchemaJSON(schema map[string]string) string {
 	if len(schema) == 0 {
@@ -640,11 +516,4 @@ func reportRatingRow(r *ReportRatingView) map[string]any {
 		return nil
 	}
 	return map[string]any{"dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
-}
-
-func reportRatingKey(r *ReportRatingView) string {
-	if r == nil {
-		return ""
-	}
-	return r.Questions
 }

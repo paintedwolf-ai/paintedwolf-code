@@ -738,19 +738,17 @@ func (e *AssemblyEngine) prependCoordinatorRunInject(
 		frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
 	}
 
-	// Workflow state is present only for bound sessions.
+	// Workflow state is request-local and must accompany every bound request.
 	if strings.TrimSpace(runCtx.WorkflowID) != "" {
 		hintCodes := surface.StaticWorkflowHintCodes(runCtx, runCtx.HasComposeDraft)
 		hintCodes = anchor.FilterSuppressedHintCodes(hintCodes, runCtx, pendingKickIDs...)
 		snap := frame.Runtime
-		injectData := inject.BuildActiveWorkflowInjectData(frame)
-		injectData = inject.AttachGateObligations(ctx, injectData, deps.GateFeedback, runCtx.AdvanceWhenGateMet, snap.BlueprintBody)
 		// The binding selects the template stem.
 		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, deps.GateFeedback)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
 		}
-		if strings.TrimSpace(block) != "" && e.shouldInjectRunContext(turn, injectData, hintCodes, block) {
+		if strings.TrimSpace(block) != "" {
 			out = append(out, api.Message{Role: api.MessageRoleSystem, Content: block})
 		}
 		if snap.Blueprint != nil {
@@ -823,21 +821,6 @@ func (e *AssemblyEngine) shouldInjectSpawnRoster(
 	if turn.Iteration == 0 || key != turn.SpawnRosterKey {
 		turn.SpawnRosterKey = key
 		turn.SpawnRosterBlock = block
-		return true
-	}
-	return false
-}
-
-func (e *AssemblyEngine) shouldInjectRunContext(
-	turn *TurnAssemblyScratch,
-	injectData inject.ActiveWorkflowInjectData,
-	hintCodes []string,
-	block string,
-) bool {
-	key := inject.ActiveWorkflowInjectFingerprint(injectData, hintCodes)
-	if turn.Iteration == 0 || key != turn.RunContextKey {
-		turn.RunContextKey = key
-		turn.RunContextBlock = block
 		return true
 	}
 	return false

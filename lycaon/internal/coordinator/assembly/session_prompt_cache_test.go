@@ -5,61 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/pkg/api"
 )
-
-func TestRunContextFingerprintChangesOnPhase(t *testing.T) {
-	base := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
-		WorkflowID: "wf-1", RunID: "run-1", CoordinatorBrief: "brief",
-	}})
-	a := inject.ActiveWorkflowInjectFingerprint(base, nil)
-	changed := base
-	changed.CurrentPhase = "implement"
-	b := inject.ActiveWorkflowInjectFingerprint(changed, nil)
-	if a == b {
-		t.Fatalf("phase change should alter fingerprint: %q", a)
-	}
-}
-
-func TestRunContextFingerprintIncludesPendingFeedback(t *testing.T) {
-	ctx := api.CoordinatorRunContext{WorkflowID: "wf-1"}
-	base := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: ctx})
-	a := inject.ActiveWorkflowInjectFingerprint(base, nil)
-	ctx.PendingFeedback = &api.PendingFeedback{PhaseID: "plan", Prompt: "choose"}
-	updated := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: ctx})
-	b := inject.ActiveWorkflowInjectFingerprint(updated, nil)
-	if a == b {
-		t.Fatal("pending feedback should alter fingerprint")
-	}
-}
-
-func TestOmitRunContextOnIterationTwo(t *testing.T) {
-	engine := &AssemblyEngine{}
-	turn := &TurnAssemblyScratch{Iteration: 1}
-	injectData := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "wf-1", CoordinatorBrief: "stay"}})
-	hints := []string{"WORKFLOW_GATE_UNMET"}
-	block := "cached-block"
-	key := inject.ActiveWorkflowInjectFingerprint(injectData, hints)
-	turn.RunContextKey = key
-	turn.RunContextBlock = block
-
-	if engine.shouldInjectRunContext(turn, injectData, hints, block) {
-		t.Fatal("expected run context omitted when fingerprint stable on iteration 1+")
-	}
-}
-
-func TestBoardAndRunContextIndependent(t *testing.T) {
-	runA := inject.ActiveWorkflowInjectFingerprint(inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "a"}}), nil)
-	runB := inject.ActiveWorkflowInjectFingerprint(inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "b"}}), nil)
-	boardA := boardInjectFingerprint("hash-a", "phase-a")
-	boardB := boardInjectFingerprint("hash-b", "phase-b")
-	if runA == runB {
-		t.Fatal("run context fingerprints should differ")
-	}
-	if boardA == boardB {
-		t.Fatal("board fingerprints should differ")
-	}
-}
 
 func TestSessionPromptCacheBeginEndTurn(t *testing.T) {
 	var cache SessionPromptCache
@@ -150,15 +96,5 @@ func TestShouldInjectWorkerLegWhenSiblingNotesArrive(t *testing.T) {
 func TestSessionPromptCacheEnabledAlwaysOn(t *testing.T) {
 	if settings.DefaultSessionLimits().SettingsFingerprint() == "" {
 		t.Fatal("expected non-empty settings fingerprint")
-	}
-}
-
-func TestActiveWorkflowInjectFingerprint_PhaseListChanges(t *testing.T) {
-	snapA := inject.WorkflowRuntimeSnapshot{Phases: []inject.WorkflowPhaseRow{{ID: "research"}}}
-	snapB := inject.WorkflowRuntimeSnapshot{Phases: []inject.WorkflowPhaseRow{{ID: "research"}, {ID: "plan"}}}
-	a := inject.ActiveWorkflowInjectFingerprint(inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "wf"}, Runtime: snapA}), nil)
-	b := inject.ActiveWorkflowInjectFingerprint(inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "wf"}, Runtime: snapB}), nil)
-	if a == b {
-		t.Fatal("phase list change should alter inject fingerprint")
 	}
 }
