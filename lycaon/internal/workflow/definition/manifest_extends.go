@@ -48,6 +48,7 @@ func resolveManifest(m Manifest, catalog map[string]Manifest, depth int, visited
 
 func mergeManifest(parent, child Manifest) Manifest {
 	out := cloneManifest(parent)
+	out.Retired = child.Retired
 	out.ID = child.ID
 	out.Version = child.Version
 	// The child controls attachments.

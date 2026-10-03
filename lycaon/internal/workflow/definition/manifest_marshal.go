@@ -25,6 +25,7 @@ func manifestToWorkflowFile(m Manifest) workflowFile {
 	wf := workflowFile{
 		ID:      m.ID,
 		Version: m.Version,
+		Retired: m.Retired,
 		Attach:  manifestAttachYAML(m.Attach),
 		Request: manifestRequestYAML(m.Request),
 		// Session storage persists the resolved manifest.

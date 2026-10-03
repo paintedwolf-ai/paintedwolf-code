@@ -26,8 +26,8 @@ type reviewLoopFixture struct {
 
 var reviewLoopFixtures = []reviewLoopFixture{
 	{"options", "1.0.0", "judge", "options_judge", "options_judge.json"},
-	{"security-survey", "1.0.0", "claims", "survey_claims", "survey_claims.json"},
-	{"security-survey", "1.0.0", "challenge", "survey_challenged", "survey_challenged.json"},
+	{"security-survey", "1.0.1", "claims", "survey_claims", "survey_claims.json"},
+	{"security-survey", "1.0.1", "challenge", "survey_challenged", "survey_challenged.json"},
 	{"plan", "1.0.0", "review", "plan_review", "plan_review.json"},
 }
 
@@ -170,7 +170,7 @@ func cloneVerdict(in map[string]string) map[string]string {
 
 // challengeVerdict is one challenge claim over the survey's challenge schema.
 func challengeVerdict(claim string) map[string]string {
-	return map[string]string{"verdict": "CHALLENGED", "challenges": "[" + claim + "]", "set_asides": "[]"}
+	return map[string]string{"verdict": "CHALLENGED", "challenges": "[" + claim + "]", "set_asides": "[]", "coverage": `{"revision":"fixture","assessments":[]}`}
 }
 
 // A claim's status is one of the words its phase declared; the host reads the

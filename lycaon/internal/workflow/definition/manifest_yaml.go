@@ -41,6 +41,7 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	m := Manifest{
 		ID:                 strings.TrimSpace(wf.ID),
 		Version:            strings.TrimSpace(wf.Version),
+		Retired:            wf.Retired,
 		Extends:            strings.TrimSpace(wf.Extends),
 		Name:               strings.TrimSpace(wf.Name),
 		Description:        strings.TrimSpace(wf.Description),

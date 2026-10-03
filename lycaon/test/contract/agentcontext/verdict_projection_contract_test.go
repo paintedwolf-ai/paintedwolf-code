@@ -69,6 +69,9 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 				continue
 			}
 			verdict[key] = "bounded evidence"
+			if kind == workflowdef.VerdictCoverageType {
+				verdict[key] = `{ "revision": "fixture", "assessments": [] }`
+			}
 			if kind == workflowdef.VerdictClaimsType || kind == workflowdef.VerdictSetAsidesType {
 				verdict[key] = "[]"
 			}

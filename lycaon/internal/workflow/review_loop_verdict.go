@@ -207,6 +207,9 @@ func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string
 	if _, err := ParseVerdictSetAsides(def, verdict); err != nil {
 		return err
 	}
+	if _, err := ParseVerdictCoverage(def, verdict); err != nil {
+		return err
+	}
 	byField, err := ParseVerdictClaims(def, verdict)
 	if err != nil {
 		return err

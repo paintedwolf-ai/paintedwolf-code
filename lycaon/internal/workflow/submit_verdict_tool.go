@@ -94,6 +94,9 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 		if err != nil {
 			return "", err
 		}
+		if outcome.CoverageIssue != "" {
+			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(rl, fmt.Errorf("%s", outcome.CoverageIssue)))
+		}
 		if issue := outcome.InventoryIssue; issue != nil {
 			details := guidance.OffenderHintData(issue.Offenders)
 			details["reason"] = issue.Reason
@@ -282,6 +285,9 @@ func describeVerdictSchema(rl workflowdef.ReviewLoopDef) string {
 			parts = append(parts, fmt.Sprintf(
 				"%s: JSON array of {id, title (required when the claim is new), statement, status: one of %s, cited_evidence, answers?, scan_group_ids?}",
 				field, strings.Join(rl.StatusWords(), "|")))
+			continue
+		case workflowdef.VerdictCoverageType:
+			parts = append(parts, field+": {revision, assessments: [{id, disposition: satisfied (obligation) | covered | immaterial (gap) | material_open | essential_open, reason, obligations: [affected obligation ids], cited_evidence}]} from current coverage facts; every obligation and gap requires an assessment")
 			continue
 		case workflowdef.VerdictSetAsidesType:
 			parts = append(parts, field+": JSON array of {reason, scan_group_ids} or {reason, scanner, paths}; [] when no group is set aside")

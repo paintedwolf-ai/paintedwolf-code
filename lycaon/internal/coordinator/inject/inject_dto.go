@@ -51,6 +51,7 @@ type WorkflowRuntimeSnapshot struct {
 	ReportDocumentEnabled bool
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.
+	CoverageReview    string
 	ReportRating      *ReportRatingView
 	Topology          string
 	Phases            []WorkflowPhaseRow
@@ -119,6 +120,7 @@ type ReportRatingView struct {
 // ActiveWorkflowInjectData is the pongo data model for inject/active-workflow.md.
 type ActiveWorkflowInjectData struct {
 	ReportDocumentEnabled bool
+	CoverageReview        string
 	ReportRating          *ReportRatingView
 	WorkflowID            string
 	WorkflowVersion       string
@@ -192,6 +194,7 @@ func BuildActiveWorkflowInjectData(frame CoordinatorTurnFrame) ActiveWorkflowInj
 		WorkflowVersion:       strings.TrimSpace(runCtx.WorkflowVersion),
 		RunID:                 strings.TrimSpace(runCtx.RunID),
 		ReportDocumentEnabled: snap.ReportDocumentEnabled,
+		CoverageReview:        snap.CoverageReview,
 		ReportRating:          snap.ReportRating,
 		RunStatus:             strings.TrimSpace(runCtx.RunStatus),
 		CurrentPhase:          strings.TrimSpace(runCtx.CurrentPhase),
@@ -370,6 +373,7 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 		"run_id":                  data.RunID,
 		"run_status":              data.RunStatus,
 		"report_document_enabled": data.ReportDocumentEnabled,
+		"coverage_review":         data.CoverageReview,
 		"report_rating":           reportRatingRow(data.ReportRating),
 		"current_phase":           data.CurrentPhase,
 		"complete_when":           data.CompleteWhen,

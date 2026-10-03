@@ -160,7 +160,7 @@ func TestReportAdvisoryDetailsNameMalwareAndEveryAlias(t *testing.T) {
 func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := manifests.Get("security-survey", "1.0.0")
+	manifest, err := manifests.Get("security-survey", "1.0.1")
 	testutil.FailErr(t, "manifest", err)
 	var phase string
 	for _, p := range manifest.PhaseDefs {
@@ -215,4 +215,22 @@ type coverageWorkers struct {
 
 func (w coverageWorkers) ListByWorkflowRunID(context.Context, string, ...wire.WorkerStatus) ([]wire.WorkerTask, error) {
 	return w.tasks, nil
+}
+
+func TestScanAccountCountsDistinctPathsAndSetAsides(t *testing.T) {
+	finding := scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{DriverID: "sast", RuleID: "fixture", Level: wire.FindingLevelHigh, Locations: []wire.SecurityFindingLocation{{URI: "fixture.go"}}})
+	var scans []wire.CodeScan
+	for _, id := range []string{"sast", "sca", "secrets"} {
+		scans = append(scans, wire.CodeScan{ID: id, ScannerID: id, Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoveragePartial, Warnings: []wire.ScanWarning{{Kind: wire.ScanWarningSourceMoved, File: "fixture.go"}}})
+	}
+	scans[0].Findings = []wire.SecurityFinding{finding}
+	id := scanfindings.FindingGroupID(finding)
+	var account runAccount
+	account.scanAccount(scans, nil, nil, []scanfindings.SetAside{{GroupIDs: []string{id}, Reason: "fixture"}, {GroupIDs: []string{id}, Reason: "reviewed fixture"}})
+	if len(account.gaps) != 1 || account.gaps[0].Detail != 1 || account.gaps[0].Count != 3 {
+		t.Fatalf("paths counted per scanner: %+v", account.gaps)
+	}
+	if len(account.inventory.SetAsides) != 1 || account.inventory.SetAsides[0].Groups != 1 {
+		t.Fatalf("overlapping exclusions counted twice: %+v", account.inventory)
+	}
 }

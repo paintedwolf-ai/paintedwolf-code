@@ -268,6 +268,15 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	if err != nil {
 		return nil, err
 	}
+	coverageFields := 0
+	for _, kind := range def.VerdictSchema {
+		if kind == VerdictCoverageType {
+			coverageFields++
+		}
+	}
+	if coverageFields > 1 {
+		return nil, fmt.Errorf("phase %q: review_loop declares multiple coverage reviews", phaseID)
+	}
 	def.ClaimStatuses = statuses
 	if def.CarriesClaims() && len(statuses) == 0 {
 		return nil, fmt.Errorf("phase %q: review_loop carries claims and must declare claim_statuses", phaseID)

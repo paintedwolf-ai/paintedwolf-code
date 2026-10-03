@@ -146,6 +146,9 @@ func (m *RunManager) startAdmitted(ctx context.Context, sessionID string, req ap
 	if err != nil {
 		return nil, err
 	}
+	if manifest.Retired {
+		return nil, workflowdef.ErrUnknownWorkflow
+	}
 	if err := m.validateActiveRunForStart(active, m.IsAmbientRun(active), manifest, humanStart); err != nil {
 		return nil, err
 	}

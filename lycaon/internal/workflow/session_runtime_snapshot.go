@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -64,6 +65,25 @@ func (m *RunManager) workflowRuntimeSnapshot(
 	}
 	if workflowdef.RunHasParent(active) && runHasBlueprint(active) && manifest.Blueprint == nil {
 		snap.BlueprintApproval = m.inheritedBlueprintApprovalSnapshot(ctx, active)
+	}
+	for _, phase := range manifest.PhaseDefs {
+		if phase.ReviewLoop == nil || !phase.ReviewLoop.CarriesCoverage() {
+			continue
+		}
+		facts, err := m.CoverageFacts(ctx, active, manifest)
+		if err != nil {
+			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
+		} else {
+			prior := RunCoverageReview(ReviewVerdicts(ctx, m, active, manifest))
+			raw, marshalErr := json.Marshal(struct {
+				Facts any `json:"facts"`
+				Prior any `json:"prior_review,omitempty"`
+			}{facts, prior})
+			if marshalErr == nil {
+				snap.CoverageReview = string(raw)
+			}
+		}
+		break
 	}
 	var currentGates []PhaseGateSnapshot
 	for _, id := range manifest.Phases {

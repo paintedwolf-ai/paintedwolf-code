@@ -133,3 +133,11 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 {% endif %}- `ask` is required when a finding is `act`, written for a reader who has never seen the work; `effort` is small, medium, or large.
 - When the run has bound scans, every scanner group is accounted for: a finding's `scan_group_ids` link the groups it assesses, and `set_asides`, each with a `reason`, account for the rest by `scanner` and `paths` or by `scan_group_ids`. Clean scans with zero findings need no set-asides.
 {% endif %}
+
+{% if coverage_review %}
+## Coverage review
+
+{{ coverage_review }}
+
+Assess each obligation and gap in the declared `coverage_review` verdict member using the current revision. `satisfied` means the planned question is answered; gaps use `covered` for alternative evidence or `immaterial` with an evidence-backed reason. `material_open` leaves bounded work unanswered; `essential_open` leaves the review incomplete. Name affected obligation IDs and cite evidence for every assessment. Scanner limits and small counts alone establish neither completion nor failure. Path lists are samples; inspect the named scans for the full affected scope. Include unexamined in-scope areas in their obligation assessments. During a reconciling review, give the reviewer the candidate coverage assessments and challenge exclusions as well as findings. Carry the accepted assessment into the report; disclose limitations without treating accounted scanner findings as uncovered work.
+{% endif %}

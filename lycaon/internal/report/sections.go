@@ -23,7 +23,7 @@ const (
 	sectionVisuals      = "Visuals"
 	sectionSources      = "Sources"
 	sectionColophon     = "About this document"
-	sectionLimits       = "Not covered"
+	sectionLimits       = "Scope and limits"
 	seeAppendixPointer  = "see appendix"
 )
 
