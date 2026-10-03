@@ -76,10 +76,12 @@ func TestSummary_NotCoveredInFull(t *testing.T) {
 		sectionLimits,
 		"232 of 232 scanner result groups have no assessment and no set-aside. Unassessed is not cleared.",
 		"1 claim still open: Dependency exposure.",
-		"Scanner inventory: 16 of 232 result groups assessed by a claim or finding, 210 set aside, 6 unaccounted.",
-		"210 result groups set aside: test fixtures.",
-		"Known scanner limits, the same on every run: lycaon-sast could not fully analyze 3431 constructs in 60 files.",
-		"Not examined, per the closeout: MCP consent flow.",
+		"Assessed exclusions",
+ "Remaining work",
+ "Scanner limitations",
+		"210 result groups accounted for: test fixtures",
+		"Recorded scanner limits: lycaon-sast could not fully analyze 3431 constructs in 60 files.",
+		"MCP consent flow",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("summary = %q, want %q", joined, want)

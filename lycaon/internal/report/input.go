@@ -3,13 +3,21 @@
 // The workflow authorizes generation before assembling the input.
 package report
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
+)
 
 // ReportInput is the host-managed shape rendered into a PDF.
 //
 // The first page is the brief, the second the working summary; later sections
 // are the record behind them. Optional sections follow the durable records.
 type ReportInput struct {
+	// CoverageReview is present only for workflows declaring reviewed coverage.
+	CoverageReview *reviewcoverage.Review `json:"coverage_review,omitempty"`
+	CoverageFacts  *reviewcoverage.Facts  `json:"coverage_facts,omitempty"`
+
 	// Title names the workflow document.
 	Title string `json:"title"`
 	// Headline is the closeout's one-sentence conclusion. It opens the working
@@ -236,8 +244,9 @@ type ReportGap struct {
 	Names []string `json:"names,omitempty"`
 	// Detail counts what inside the named things is affected: moved files,
 	// or engine limits and the files they touch.
-	Detail      int `json:"detail,omitempty"`
-	DetailFiles int `json:"detail_files,omitempty"`
+	Detail       int  `json:"detail,omitempty"`
+	DetailFiles  int  `json:"detail_files,omitempty"`
+	UnknownScope bool `json:"unknown_scope,omitempty"`
 }
 
 // Completeness levels.
@@ -247,12 +256,10 @@ const (
 	CompletenessIncomplete = "incomplete"
 )
 
-// Completeness decides how complete the work is. A report that failed its
-// acceptance checks is incomplete; otherwise its gaps decide. Scanner limits
-// that recur on every run describe the scanner, not the work, and leave it
-// complete.
+// Completeness retains hard failures, then applies the accepted coverage review.
+// Workflows without a declared review use the observed gap classification.
 func (in ReportInput) Completeness() string {
-	if len(in.Defects) > 0 {
+	if len(in.Defects) > 0 || in.UnreportedClaims > 0 || (in.Inventory != nil && in.Inventory.Unaccounted > 0) {
 		return CompletenessIncomplete
 	}
 	level := CompletenessComplete
@@ -266,6 +273,12 @@ func (in ReportInput) Completeness() string {
 		case GapLegsPartial, GapWorkersPartial, GapScansMoved:
 			level = CompletenessMostly
 		}
+	}
+	if in.CoverageFacts != nil {
+		if in.CoverageReview == nil || reviewcoverage.Validate(*in.CoverageFacts, *in.CoverageReview) != nil {
+			return CompletenessIncomplete
+		}
+		return in.CoverageReview.Completeness()
 	}
 	return level
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
+
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 )
 
 // The second page is the working summary. Every part is a declared field or a
@@ -23,7 +25,11 @@ func summaryBlocks(ms *measurer, input ReportInput) []block {
 	out = append(out, claimListBlocks(ms, "Overturned by the review", input.Claims, ClaimFailed)...)
 	out = append(out, claimListBlocks(ms, "Confirmed by the review", input.Claims, ClaimHeld)...)
 	out = append(out, soundBlocks(ms, input)...)
-	out = append(out, boxedListBlocks(ms, sectionLimits, notCoveredItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Remaining work", notCoveredItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Scanner limitations", scannerLimitItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Assessed exclusions", exclusionItems(input))...)
+	out = append(out, boxedListBlocks(ms, sectionLimits, input.Limits)...)
+	out = append(out, boxedListBlocks(ms, "Coverage assessment", coverageAssessmentItems(input))...)
 	if len(input.Coverage) > 0 {
 		out = append(out, subsectionTitle(ms, "Recorded coverage"))
 		var records []tableRecord
@@ -161,33 +167,92 @@ func soundBlocks(ms *measurer, input ReportInput) []block {
 	return append(out, newTable(ms, []string{"Finding", "What was sound"}, records, noChipColumn, nil).blocks()...)
 }
 
-// notCoveredItems states everything the work did not cover: the host's gaps
-// with what they touch, the scanner groups set aside and why, the scanner's
-// own standing limits, and the areas the closeout declared it did not examine.
+// notCoveredItems separates unresolved work from disclosed tool limitations.
 func notCoveredItems(input ReportInput) []string {
 	var out []string
-	for _, kind := range append(append([]string(nil), gapOrder...), GapScansStanding) {
+	reviewed := input.CoverageFacts != nil && input.CoverageReview != nil && reviewcoverage.Validate(*input.CoverageFacts, *input.CoverageReview) == nil
+	for _, kind := range gapOrder {
 		for _, g := range input.Gaps {
-			if g.Kind == kind && g.Count > 0 {
-				if item := gapItem(g); item != "" {
-					out = append(out, item)
+			if g.Kind != kind || g.Count == 0 {
+				continue
+			}
+			if reviewed && (kind == GapScansMoved || kind == GapLegsPartial || kind == GapWorkersPartial) {
+				continue
+			}
+			if item := gapItem(g); item != "" {
+				out = append(out, item)
+			}
+		}
+	}
+	if reviewed {
+		for _, a := range input.CoverageReview.Assessments {
+			if a.Disposition == reviewcoverage.MaterialOpen || a.Disposition == reviewcoverage.EssentialOpen {
+				out = append(out, coverageAssessmentText(input, a))
+			}
+		}
+	}
+	return out
+}
+
+func scannerLimitItems(input ReportInput) []string {
+	var out []string
+	for _, g := range input.Gaps {
+		if g.Kind == GapScansStanding && g.Count > 0 {
+			out = append(out, gapItem(g))
+		}
+	}
+	return out
+}
+
+func exclusionItems(input ReportInput) []string {
+	var out []string
+	if inv := input.Inventory; inv != nil {
+		for _, sa := range inv.SetAsides {
+			if sa.Groups > 0 {
+				out = append(out, fmt.Sprintf("%s accounted for: %s", plural(sa.Groups, "result group", "result groups"), sa.Reason))
+			}
+		}
+	}
+	return out
+}
+
+func coverageAssessmentItems(input ReportInput) []string {
+	if input.CoverageReview == nil {
+		return nil
+	}
+	var out []string
+	for _, a := range input.CoverageReview.Assessments {
+		out = append(out, coverageAssessmentText(input, a))
+	}
+	return out
+}
+
+func coverageAssessmentText(input ReportInput, a reviewcoverage.Assessment) string {
+	subject := a.ID
+	if input.CoverageFacts != nil {
+		for _, rows := range [][]reviewcoverage.Fact{input.CoverageFacts.Obligations, input.CoverageFacts.Gaps} {
+			for _, f := range rows {
+				if f.ID == a.ID {
+					subject = f.Subject
+					if len(f.Paths) > 0 {
+						subject += fmt.Sprintf(" · %s: %s", plural(f.FileCount, "affected file", "affected files"), strings.Join(f.Paths, ", "))
+						if f.FileCount > len(f.Paths) {
+							subject += fmt.Sprintf(" (and %d more)", f.FileCount-len(f.Paths))
+						}
+					}
 				}
 			}
 		}
 	}
-	if inv := input.Inventory; inv != nil && inv.Total > 0 {
-		out = append(out, fmt.Sprintf("Scanner inventory: %d of %d result groups assessed by a claim or finding, %d set aside, %d unaccounted.",
-			inv.Linked, inv.Total, inv.SetAside, inv.Unaccounted))
-		for _, sa := range inv.SetAsides {
-			out = append(out, fmt.Sprintf("%s set aside: %s.", plural(sa.Groups, "result group", "result groups"), strings.TrimSuffix(sa.Reason, ".")))
+	var cites []string
+	for _, c := range a.CitedEvidence {
+		if c.Handle != "" {
+			cites = append(cites, c.Handle)
+		} else {
+			cites = append(cites, fmt.Sprintf("%s:%d", c.Path, c.Line))
 		}
 	}
-	for _, l := range input.Limits {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, "Not examined, per the closeout: "+strings.TrimSuffix(l, ".")+".")
-		}
-	}
-	return out
+	return subject + " — " + strings.ReplaceAll(a.Disposition, "_", " ") + ": " + a.Reason + " Evidence: " + strings.Join(cites, ", ") + "."
 }
 
 func gapItem(g ReportGap) string {
@@ -206,10 +271,13 @@ func gapItem(g ReportGap) string {
 	case GapScansFailed:
 		return "Scans that failed: " + names + "."
 	case GapScansMoved:
+		if g.UnknownScope {
+			return names + ": source changed during scanning; the full affected scope is unknown and has not been rescanned."
+		}
 		return fmt.Sprintf("%s: %s changed while the scan ran and %s not rescanned.",
 			names, plural(g.Detail, "file", "files"), noun(g.Detail, "was", "were"))
 	case GapScansStanding:
-		return fmt.Sprintf("Known scanner limits, the same on every run: %s could not fully analyze %s in %s.",
+		return fmt.Sprintf("Recorded scanner limits: %s could not fully analyze %s in %s.",
 			names, plural(g.Detail, "construct", "constructs"), plural(g.DetailFiles, "file", "files"))
 	default:
 		return ""

@@ -44,28 +44,46 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 		a.coverage = append(a.coverage, report.ReportCoverageItem{
 			Subject: s.ScannerID, Status: string(s.Status), Detail: scanCoverageDetail(s),
 		})
-		if s.Status != wire.CodeScanStatusComplete {
-			failed[s.ScannerID] = true
-		}
+	}
+	for _, s := range scan.UnrecoveredScans(scans) {
+		failed[s.ScannerID] = true
 	}
 	a.gap(report.ReportGap{Kind: report.GapScansFailed, Count: len(failed), Of: len(scanners), Names: slices.Sorted(maps.Keys(failed))})
 
 	moved := report.ReportGap{Kind: report.GapScansMoved, Of: len(scanners)}
 	standing := report.ReportGap{Kind: report.GapScansStanding, Of: len(scanners)}
-	for _, g := range scan.RunCoverageGaps(scans) {
-		if g.Open() {
-			moved.Count++
-			moved.Names = append(moved.Names, g.Scanner)
-			moved.Detail += len(g.Moved)
-		}
-		if g.Standing > 0 {
-			standing.Count++
-			standing.Names = append(standing.Names, g.Scanner)
-			standing.Detail += g.Standing
-			standing.DetailFiles += g.StandingFiles
+	movedFiles, movedScanners := map[string]bool{}, map[string]bool{}
+	standingFiles, standingScanners := map[string]bool{}, map[string]bool{}
+	for _, s := range scans {
+		for _, w := range s.Warnings {
+			if !scan.WarningRetryable(w.Kind) && w.File != "" {
+				standingFiles[w.File] = true
+			}
 		}
 	}
+	for _, g := range scan.RunCoverageGaps(scans) {
+		if g.Open() {
+			movedScanners[g.Scanner] = true
+			for _, path := range g.Moved {
+				if path == "" {
+					moved.UnknownScope = true
+				} else {
+					movedFiles[path] = true
+				}
+			}
+		}
+		if g.Standing > 0 {
+			standingScanners[g.Scanner] = true
+			standing.Detail += g.Standing
+		}
+	}
+	moved.Count = len(movedScanners)
+	moved.Names = slices.Sorted(maps.Keys(movedScanners))
+	moved.Detail = len(movedFiles)
 	a.gap(moved)
+	standing.Count = len(standingScanners)
+	standing.Names = slices.Sorted(maps.Keys(standingScanners))
+	standing.DetailFiles = len(standingFiles)
 	a.gap(standing)
 
 	sets := append(append([]scanfindings.SetAside(nil), reviewed...), setAsides(completion)...)
@@ -77,9 +95,15 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 		SetAside:    account.SetAsideCount(),
 		Unaccounted: len(account.Unaccounted()),
 	}
+	counts := make([]int, len(sets))
+	for id, index := range account.SetAsideBy {
+		if !account.Linked[id] {
+			counts[index]++
+		}
+	}
 	for i, sa := range sets {
-		if i < len(account.SetAsideCounts) {
-			inv.SetAsides = append(inv.SetAsides, report.ReportSetAside{Reason: sa.Reason, Groups: account.SetAsideCounts[i]})
+		if counts[i] > 0 {
+			inv.SetAsides = append(inv.SetAsides, report.ReportSetAside{Reason: sa.Reason, Groups: counts[i]})
 		}
 	}
 	a.inventory = inv
@@ -113,7 +137,7 @@ func scanCoverageDetail(s wire.CodeScan) string {
 		n := len(s.TargetPaths)
 		return fmt.Sprintf("Rescan %s of %d moved %s; %d stored findings", s.ID, n, plural(n, "file", "files"), len(s.Findings))
 	}
-	return fmt.Sprintf("Scan %s; coverage %s; %d stored findings", s.ID, s.CoverageStatus, len(s.Findings))
+	return fmt.Sprintf("Scan %s; source snapshot %s; coverage %s; %d stored findings", s.ID, s.SourceSnapshotID, s.CoverageStatus, len(s.Findings))
 }
 
 func plural(n int, one, many string) string {

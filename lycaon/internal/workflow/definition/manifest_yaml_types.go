@@ -12,6 +12,7 @@ type workflowFile struct {
 	Request            *requestYAML                     `yaml:"request"`
 	Extends            string                           `yaml:"extends"`
 	Name               string                           `yaml:"name"`
+	Retired            bool                             `yaml:"retired,omitempty"`
 	Description        string                           `yaml:"description"`
 	Trigger            string                           `yaml:"trigger"`
 	InitialPosture     string                           `yaml:"initial_posture"`

@@ -112,7 +112,7 @@ func TestBrief_UnreadFenceIsNamed(t *testing.T) {
 // to do it.
 func TestBrief_CompletenessReasonNamesGapsNotTasks(t *testing.T) {
 	joined := joinRowValues(briefBlocks(testMeasurer(t), briefInput()))
-	want := "The review didn't use the automated scan results, and 1 question is still open. The rating could change."
+	want := "The review didn't use the automated scan results, and 1 question is still open."
 	if !strings.Contains(joined, want) {
 		t.Fatalf("brief = %q, want %q", joined, want)
 	}
@@ -241,7 +241,7 @@ func TestBrief_WithoutARatingStatesCompleteness(t *testing.T) {
 	if strings.Contains(joined, "How serious is it?") || strings.Contains(joined, "risk") {
 		t.Fatalf("brief without a rating = %q, want no rating", joined)
 	}
-	for _, want := range []string{"The check is complete.", "Everything planned was checked. Nothing is open."} {
+	for _, want := range []string{"The check is complete.", "The planned review is complete. Its scope and limitations are documented below."} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("brief = %q, want %q", joined, want)
 		}

@@ -82,6 +82,12 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	}
 	out.Valid = ValidateReviewLoopVerdict(rl, verdict, rules) == nil
 	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
+		if coverageErr := m.checkReviewCoverage(ctx, active, rl, verdict); coverageErr != nil {
+			out.Valid = false
+			out.CoverageIssue = coverageErr.Error()
+		}
+	}
+	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) {
 		out.InventoryIssue, err = m.checkReviewInventory(ctx, active, rl, verdict)
 		if err != nil {
 			return out, err
@@ -144,7 +150,7 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	op = *stored
 	if op.Status == "prepared" && out.Valid {
 		// Validated provenance supersedes the raw citation args once the audit ran.
-		persistCited := citedEvidence
+		persistCited := allVerdictCitations(rl, verdict, citedEvidence)
 		if out.Grounding != nil && len(out.Grounding.CitedEvidence) > 0 {
 			persistCited = out.Grounding.CitedEvidence
 		}
@@ -283,6 +289,7 @@ type ReviewLoopVerdictOutcome struct {
 	// MissingAgents lists required reviewers without succeeded envelopes.
 	MissingAgents  []string
 	InventoryIssue *guidance.ReportDocumentIssue
+	CoverageIssue  string
 	// IterationCapExceeded reports a non-terminal verdict rejected because the
 	// phase already reached iteration_cap on a prior attempt.
 	IterationCapExceeded bool
@@ -311,6 +318,11 @@ func allVerdictCitations(
 	for _, list := range claims {
 		for _, claim := range list {
 			out = append(out, claim.CitedEvidence...)
+		}
+	}
+	if review, err := ParseVerdictCoverage(rl, verdict); err == nil && review != nil {
+		for _, assessment := range review.Assessments {
+			out = append(out, assessment.CitedEvidence...)
 		}
 	}
 	return out
