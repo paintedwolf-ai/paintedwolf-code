@@ -78,10 +78,8 @@ type PhaseGateSnapshot struct {
 	Dormant   bool
 }
 
-// ProjectPhaseExit derives leave steps from phase state.
-// A nil snapshot treats declared gates as open. reviewAgents is the resolved
-// verdict-owed reviewer roster for a review_loop phase (required_agents plus the
-// spawnable if_spawnable subset); empty means the declared roster.
+// ProjectPhaseExit derives phase controls from gates and the resolved reviewer roster.
+// Nil gates remain open; an empty roster uses the phase declaration.
 func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef, gates []PhaseGateSnapshot, reviewAgents []string) PhaseExitView {
 	auth := string(workflowdef.EffectiveAdvancePolicy(manifest, phase))
 	out := PhaseExitView{

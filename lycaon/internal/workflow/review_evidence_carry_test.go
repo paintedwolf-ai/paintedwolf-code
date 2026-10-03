@@ -88,7 +88,6 @@ func TestStampedReviewVerdictsFollowPhaseOrder(t *testing.T) {
 	}
 }
 
-// A session with no run carries nothing rather than failing the dispatch.
 func TestStampedReviewVerdictsIsInertWithoutARun(t *testing.T) {
 	mgr, _, sessions, sqlDB := newRunManagerForEvents(t, "review-evidence-carry-inert.db")
 	ctx := context.Background()

@@ -13,10 +13,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// A report with both a citation defect and a document defect is refused for
-// the document first: its repair returns the whole fence, citations included,
-// so a citation refusal must never set the loop's direction and assemble the
-// defective draft.
+// Document repair replaces the whole fence, including citations.
 func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	hints := loadCoordinatorTestHintConfig(t)

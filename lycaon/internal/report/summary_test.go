@@ -89,8 +89,6 @@ func TestSummary_NotCoveredInFull(t *testing.T) {
 	}
 }
 
-// A report with nothing to summarise renders no section rather than an empty
-// heading.
 func TestSummary_AbsentWithoutContent(t *testing.T) {
 	if got := summaryBlocks(testMeasurer(t), ReportInput{}); got != nil {
 		t.Fatalf("summary blocks = %+v, want none", got)

@@ -47,7 +47,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 		"threat_model": "HTTP service; unauthenticated clients on the public internet; session cookie is the auth boundary",
 		"claims":       `[{"id":"c1","title":"Request id reaches a formatted SQL query","status":"claimed","statement":"SQLi in internal/store/query.go:88 — attacker-controlled id reaches Sprintf","cited_evidence":[{"path":"internal/store/query.go","line":88,"excerpt":"id reaches Sprintf in query.go:88"}]}]`,
 	}
-	// Coverage citations must resolve through the production grounding floor.
+	// Coverage citations use production grounding.
 	uncited := map[string]string{"verdict": "CLAIMED", "set_asides": "[]", "threat_model": claimed["threat_model"], "claims": `[{"id":"c1","title":"SQL injection","status":"claimed","statement":"SQLi"}]`}
 	uncited["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
 	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, uncited, nil, nil)
@@ -75,8 +75,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 
 	investigateSecurityQuestion(t, h, ctx, sess, run.ID)
 
-	// The challenge phase adjudicates each stamped claim by id, so the report
-	// can say which survived rather than printing a lone verdict word.
+	// Claim ids link review outcomes to report findings.
 	challenged := map[string]string{
 		"verdict": "CHALLENGED",
 		"challenges": `[{"id":"c1","status":"survives","statement":"the id still reaches Sprintf on every request",` +

@@ -46,10 +46,7 @@ func requiredVerdictFields(def workflowdef.ReviewLoopDef) []string {
 	return out
 }
 
-// VerdictClaim is one entry of a claims-typed verdict field. Each claim cites
-// the evidence that backs its statement, so the adjudication traces per claim.
-// A later phase that restates an earlier claim's id adjudicates it; Status is
-// one of the words that phase declared in claim_statuses.
+// VerdictClaim retains claim identity and cited evidence across review phases.
 type VerdictClaim struct {
 	Question     *ReviewQuestion `json:"question,omitempty"`
 	ScanGroupIDs []string        `json:"scan_group_ids,omitempty"`
@@ -67,15 +64,13 @@ type VerdictClaim struct {
 // maxClaimTitleRunes bounds a claim title to one line of a report table.
 const maxClaimTitleRunes = 120
 
-// VerdictRules are the run-dependent checks a verdict must also pass: which
-// claim ids earlier phases introduced, and the workflow's rating questions.
+// VerdictRules binds claim validation to run history and the declared rating.
 type VerdictRules struct {
 	KnownClaims map[string]bool
 	Brief       *workflowdef.Brief
 }
 
-// ParseVerdictClaims decodes every claims-typed verdict field. The submit
-// parser coerces array values to compact JSON, so claims arrive as JSON text.
+// ParseVerdictClaims decodes the stored JSON arrays for claim fields.
 func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) (map[string][]VerdictClaim, error) {
 	var out map[string][]VerdictClaim
 	for field, kind := range def.VerdictSchema {
@@ -257,10 +252,7 @@ func validateVerdictClaim(def workflowdef.ReviewLoopDef, field string, c Verdict
 	return nil
 }
 
-// ReviewLoopVerdictTerminal reports whether a validated verdict is the terminal/passing
-// value (the first declared enum value) that satisfies the gate. A non-terminal verdict
-// (e.g. NEEDS_REVISION) re-loops the phase up to iteration_cap. Call only after
-// ValidateReviewLoopVerdict has passed.
+// The first declared decision value is terminal.
 func ReviewLoopVerdictTerminal(def workflowdef.ReviewLoopDef, verdict map[string]string) bool {
 	enum := VerdictEnum(def)
 	if len(enum) == 0 {

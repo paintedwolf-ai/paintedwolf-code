@@ -59,8 +59,7 @@ func summaryProseRows(ms *measurer, input ReportInput) []measuredRow {
 	return rows
 }
 
-// ratingBlocks show each rated finding's answers and the level they decided,
-// so a reader can check the rating rather than take it.
+// Rating details pair each conclusion with its deciding answers.
 func ratingBlocks(ms *measurer, input ReportInput) []block {
 	b := input.Brief
 	if b == nil || len(b.Rated) == 0 {

@@ -15,10 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// A closeout whose fence has members the report does not take is refused by
-// name, ahead of every other check, and repaired from the fields the host
-// read: the kick returns them as the fence, and the cycle keeps the unread
-// members for the report stored if repair runs out.
+// Unread members take precedence and survive document repair.
 func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	hints := loadCoordinatorTestHintConfig(t)

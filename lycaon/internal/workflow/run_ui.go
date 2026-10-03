@@ -79,8 +79,7 @@ func (m *RunManager) ComputeRunUI(ctx context.Context, run *api.WorkflowRun) (*a
 	return ui, nil
 }
 
-// topologyLegsUI projects the run's planned legs. A read failure leaves the
-// projection out rather than failing the run's chrome.
+// Unavailable topology details leave the rest of the run view intact.
 func (m *RunManager) topologyLegsUI(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) []api.WorkflowTopologyLeg {
 	topologyID := strings.TrimSpace(manifest.Topology)
 	if m.TopologyLegs == nil || topologyID == "" {

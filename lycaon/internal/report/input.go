@@ -9,10 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 )
 
-// ReportInput is the host-managed shape rendered into a PDF.
-//
-// The first page is the brief, the second the working summary; later sections
-// are the record behind them. Optional sections follow the durable records.
+// ReportInput contains the host-assembled report and its supporting records.
 type ReportInput struct {
 	// CoverageReview is present only for workflows declaring reviewed coverage.
 	CoverageReview *reviewcoverage.Review `json:"coverage_review,omitempty"`
@@ -72,8 +69,7 @@ type ReportInput struct {
 	// Verdicts are every review verdict the subject recorded, in phase order.
 	Verdicts []ReportVerdict `json:"verdicts,omitempty"`
 	Scan     *ReportScan     `json:"scan,omitempty"`
-	// ScanRules are the rules ScanRows reference, so a rule's description
-	// prints once rather than under every location.
+	// Shared scan rules print once across their locations.
 	ScanRules []ReportScanRule `json:"scan_rules,omitempty"`
 	// ScanRows are the scanner rows the report lists — a bounded selection of
 	// what the scan stored, with Scan carrying the counts behind it.
@@ -84,10 +80,7 @@ type ReportInput struct {
 	EvidenceTotal int `json:"evidence_total,omitempty"`
 	// Sources are the web pages the subject cited.
 	Sources []ReportSource `json:"sources,omitempty"`
-	// Artifacts are the durable visuals the subject produced. Captures
-	// (non-empty evidence_handle) land in the evidence appendix; renders
-	// (no handle) in a featured Visuals section. Bytes are host-resolved
-	// at assembly time; fixtures may omit bytes or supply base64.
+	// Evidence handles distinguish appendix captures from featured renders.
 	Artifacts []ReportArtifact `json:"artifacts,omitempty"`
 }
 
@@ -192,8 +185,7 @@ type ReportRated struct {
 	// Worst and Best index the brief's Levels.
 	Worst int `json:"worst"`
 	Best  int `json:"best"`
-	// Adjudicated marks answers a review phase stated for a claim with the
-	// finding's id, rather than the closeout alone.
+	// Adjudicated marks answers accepted in a review phase for this claim id.
 	Adjudicated bool `json:"adjudicated,omitempty"`
 	// Unreported marks a claim the review left open or overturned that no
 	// finding carries; it has no number in the findings.
@@ -354,15 +346,12 @@ type ReportArtifact struct {
 	ID             string `json:"id"`
 	Caption        string `json:"caption"`
 	EvidenceHandle string `json:"evidence_handle,omitempty"`
-	// Mime and Bytes are filled by assembly from the durable overlay; omitted
-	// when the blob is missing/evicted (section shrinks — never a broken image).
+	// Missing artifact bytes omit the visual from the report.
 	Mime  string `json:"mime,omitempty"`
 	Bytes []byte `json:"bytes,omitempty"`
 }
 
-// ReportVerdict is one review verdict a phase recorded. A phase declares its
-// own `verdict_schema`, so members arrive as ordered name/value pairs rather
-// than as a fixed field list.
+// ReportVerdict retains the phase's declared field names and display order.
 type ReportVerdict struct {
 	ReconcilesPhase string `json:"reconciles_phase,omitempty"`
 	// Phase is the manifest phase id that stamped the verdict; Label its
@@ -373,10 +362,7 @@ type ReportVerdict struct {
 	Decision string `json:"decision"`
 	// RecordedAt is when the record was stamped, RFC 3339.
 	RecordedAt string `json:"recorded_at,omitempty"`
-	// Fields are the schema's other members, in the order assembly recorded
-	// them (decision first, then the rest alphabetically). A claims-typed
-	// member is not repeated here, and the reserved citation channels never
-	// appear.
+	// Fields exclude claims and citation channels and retain assembly order.
 	Fields []ReportVerdictField `json:"fields,omitempty"`
 	// Claims are the adjudicated statements from every claims-typed member,
 	// each tracing to its own evidence.

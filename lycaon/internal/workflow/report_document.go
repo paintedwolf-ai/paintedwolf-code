@@ -44,11 +44,7 @@ func ReportSetAsides(report guidance.CoordinatorCompletionReport) []scanfindings
 	return out
 }
 
-// CheckReportDocument lists the requirements a run's closeout document fails,
-// in the order a repair addresses them: every finding states a disposition,
-// rated findings answer the declared questions, an ask accompanies work to do,
-// set-asides name their groups, every unsettled claim is carried, and every
-// scanner group is accounted for. None means the document stands.
+// CheckReportDocument returns document defects in repair order.
 func CheckReportDocument(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) []guidance.ReportDocumentIssue {
 	out := checkReportFindings(report, facts)
 	for _, issue := range []guidance.ReportDocumentIssue{

@@ -81,9 +81,7 @@ func TestBrief_RangeWhenAnOpenAnswerCouldDecide(t *testing.T) {
 	}
 }
 
-// When only the mildest level is certain and an open answer could decide a
-// worse one, the page says the work is not rated rather than stating the mild
-// level as its conclusion.
+// Open answers prevent a conclusive rating.
 func TestBrief_OpenRatingIsNotRated(t *testing.T) {
 	in := briefInput()
 	in.Brief.Best, in.Brief.Worst = 4, 0
