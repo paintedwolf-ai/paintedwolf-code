@@ -4,6 +4,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -78,7 +79,38 @@ func TestReaperHoldsAGroupTrackedTwiceUntilBothForgetIt(t *testing.T) {
 	}
 }
 
-// A SIGKILLed engine runs no cleanup of its own; only the reaper ends its groups.
+func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
+	leader, descendant := startGroup(t)
+	scratch := filepath.Join(t.TempDir(), "scratch")
+	testutil.FailErr(t, "create scratch", os.MkdirAll(filepath.Join(scratch, "nested"), 0o700))
+	testutil.FailErr(t, "write scratch file", os.WriteFile(filepath.Join(scratch, "nested", "report.json"), []byte("{}"), 0o600))
+	reapLines(fmt.Sprintf("+g%d\n", leader), "+d"+scratch+"\n")
+	for _, pid := range []int{leader, descendant} {
+		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+			testutil.FailErr(t, "tracked group outlived the engine", err)
+		}
+	}
+	if _, err := os.Stat(scratch); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("tracked directory survived the engine: stat err=%v", err)
+	}
+}
+
+func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
+	root := t.TempDir()
+	forgotten := filepath.Join(root, "forgotten")
+	testutil.FailErr(t, "create forgotten dir", os.Mkdir(forgotten, 0o700))
+	unclean := filepath.Join(root, "unclean")
+	testutil.FailErr(t, "create unclean dir", os.Mkdir(unclean, 0o700))
+	reapLines("+d"+forgotten+"\n", "-d"+forgotten+"\n", "+d"+root+"/unclean/.\n", "+drelative\n")
+	for _, dir := range []string{forgotten, unclean} {
+		if _, err := os.Stat(dir); err != nil {
+			testutil.FailErr(t, "reaper removed an untracked directory", err)
+		}
+	}
+}
+
+// A SIGKILLed engine runs no cleanup of its own; only the reaper ends its
+// groups and removes its scratch directories.
 func TestEngineKilledOutrightTakesItsTrackedGroupsWithIt(t *testing.T) {
 	dir := t.TempDir()
 	self, err := os.Executable()
@@ -100,6 +132,18 @@ func TestEngineKilledOutrightTakesItsTrackedGroupsWithIt(t *testing.T) {
 		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
 			testutil.FailErr(t, "tracked group outlived a SIGKILLed engine", err)
 		}
+	}
+	scratch := filepath.Join(dir, "scratch")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		_, err := os.Stat(scratch)
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tracked directory outlived a SIGKILLed engine: stat err=%v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -132,9 +176,31 @@ func TestReaperHelperProcess(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "start pipeline: %v\n", err)
 		os.Exit(1)
 	}
+	scratch := filepath.Join(dir, "scratch")
+	if err := os.Mkdir(scratch, 0o700); err != nil {
+		os.Exit(1)
+	}
+	TrackScratchDir(scratch)
 	if err := os.WriteFile(filepath.Join(dir, "tracked.pid"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		os.Exit(1)
 	}
 	time.Sleep(90 * time.Second)
 	os.Exit(0)
+}
+
+// The reaper deletes only directories inside the temp root.
+func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
+	root := filepath.Clean(os.TempDir())
+	for path, want := range map[string]bool{
+		filepath.Join(root, "scan-run"):   true,
+		root:                              false,
+		filepath.Dir(root):                false,
+		"/usr/bin":                        false,
+		filepath.Join(root, "..", "else"): false,
+		"relative/scan-run":               false,
+	} {
+		if got := reaperDirPath(path); got != want {
+			t.Errorf("reaperDirPath(%q) = %v, want %v", path, got, want)
+		}
+	}
 }
