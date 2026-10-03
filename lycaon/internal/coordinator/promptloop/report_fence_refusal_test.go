@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,7 +38,15 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 		unread []jsonshape.Issue
 	}
 	var kick map[string]any
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	var rendered string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
+		CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+			return []guidance.ReportDocumentIssue{
+				{Code: guidance.ReportDocumentInvalidCode, Reason: "c1 needs rating answers"},
+				{Code: guidance.ReportInventoryUnaccountedCode, Reason: "18 groups unaccounted", Offenders: []string{"group:missing"}, Count: 18},
+			}, nil
+		},
 		HintConfig: hints, RejectFmt: guidance.NewStaticRejectFormatter(hints),
 		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			code := guidance.ReportFenceUnreadableCode
@@ -54,7 +63,9 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 			if _, ok := data["retained_document"]; ok {
 				kick = data
 			}
-			return "kick", nil
+			var err error
+			rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
+			return rendered, err
 		},
 		AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
 		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
@@ -71,6 +82,11 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	}
 	if kick == nil || kick["run_report"] != true || !strings.Contains(kick["offenders_sample"].(string), "`findings[].ask` (2): `ask` is a top-level report field") {
 		t.Fatalf("kick data = %v, want the grouped member named on a run report", kick)
+	}
+	for _, want := range []string{"findings[].ask", "c1 needs rating answers", "18 groups unaccounted", "group:missing"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("repair omitted %q: %s", want, rendered)
+		}
 	}
 	var fence guidance.CoordinatorCompletionReport
 	testutil.FailErr(t, "decode the retained fence", json.Unmarshal([]byte(kick["retained_document"].(string)), &fence))
