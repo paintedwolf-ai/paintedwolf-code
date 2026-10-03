@@ -18981,7 +18981,7 @@ test_files:
     lycaon/internal/jsonshape/decode_test.go: 94
     lycaon/internal/keylock/keylock_test.go: 24
     lycaon/internal/lineage/lineage_test.go: 179
-    lycaon/internal/lineage/probe_internal_test.go: 30
+    lycaon/internal/lineage/probe_internal_test.go: 40
     lycaon/internal/lineage/proc_net_test.go: 48
     lycaon/internal/litprefilter/canonfold_test.go: 58
     lycaon/internal/litprefilter/litprefilter_test.go: 125
