@@ -1,8 +1,6 @@
 package prompts
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -247,26 +245,4 @@ func spawnAgentTemplateVars(a SpawnAgentView) map[string]any {
 		"delegates":        a.Delegates,
 		"surface_variable": a.SurfaceVariable,
 	}
-}
-
-// SpawnRosterFingerprint hashes roster inputs for assembly cache invalidation.
-func SpawnRosterFingerprint(data SpawnRosterData, excludedDisclosures []SpawnAgentView) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "max_in_flight=%d\n", data.MaxInFlight)
-	for _, a := range data.SpawnAgents {
-		writeSpawnAgentFingerprint(&b, a)
-	}
-	for _, a := range excludedDisclosures {
-		writeSpawnAgentFingerprint(&b, a)
-	}
-	sum := sha256.Sum256([]byte(b.String()))
-	return hex.EncodeToString(sum[:])
-}
-
-func writeSpawnAgentFingerprint(b *strings.Builder, a SpawnAgentView) {
-	fmt.Fprintf(b, "id=%s profile=%s edit=%t command=%t delegates=%t variable=%t desc=%s tools=%s denied=%s\n",
-		a.ID, a.ToolProfile, a.CanEdit, a.CanCommand, a.Delegates, a.SurfaceVariable, a.Description,
-		strings.Join(a.EnabledTools, ","),
-		strings.Join(a.DeniedTools, ","),
-	)
 }
