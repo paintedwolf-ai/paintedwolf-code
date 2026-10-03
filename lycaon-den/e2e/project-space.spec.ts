@@ -81,8 +81,10 @@ webE2e.describe("project space", () => {
     await row.getByTestId(`project-list-menu-${project.id}`).click();
     // The row menu is an anchored surface on the document body.
     await page.getByTestId(`project-list-delete-${project.id}`).click();
-    await expect(page.getByTestId("confirm-destructive-dialog")).toBeVisible();
-    await page.getByTestId("confirm-destructive-ok").click();
+    const removal = page.getByTestId("project-removal-dialog");
+    await expect(removal).toBeVisible();
+    // The project has no extensions to remove once its assessment loads.
+    await removal.getByRole("button", { name: "Delete project", exact: true }).click();
     await expect(page.getByTestId(`project-list-row-${project.id}`)).toHaveCount(0);
   });
 

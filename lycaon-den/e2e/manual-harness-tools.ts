@@ -22,6 +22,10 @@ export function manualHarnessTools(request: APIRequestContext, sessionId: string
       expect(reply.ok(), await reply.text()).toBeTruthy();
       return id;
     },
+    // An exact tool name loads that tool without ranking, so each name is one call.
+    async loadTools(...names: string[]) {
+      for (const need of names) await this.completed(await this.invoke("request_tools", { need }));
+    },
     async completed(callId: string) {
       let result: { outcome?: string; content: string } | undefined;
       await expect.poll(async () => {

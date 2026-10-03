@@ -8,6 +8,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
+import type { CheckpointListResponse } from "../src/api/types.ts";
 
 /**
  * Direct IP approval exposes scoped reuse and a one-action option while
@@ -49,17 +50,8 @@ webE2e(
             { headers: auth },
           );
           if (!res.ok()) return `http ${res.status()}`;
-          const body = (await res.json()) as Array<{
-            tool_approval?: {
-              plan?: {
-                subject?: {
-                  kind?: string;
-                  targets?: Array<{ details?: Record<string, unknown> }>;
-                };
-              };
-            };
-          }>;
-          const hit = (Array.isArray(body) ? body : []).some(
+          const body = (await res.json()) as CheckpointListResponse;
+          const hit = body.checkpoints.some(
             (c) =>
               c.tool_approval?.plan?.subject?.kind === "direct_ip" &&
               c.tool_approval.plan.subject.targets?.some(

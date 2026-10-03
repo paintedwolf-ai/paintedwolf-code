@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
 import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
@@ -9,6 +10,11 @@ import {
 const WHATS_NEW_STATE_KEY = appStateStorageSliceKey("whatsNew");
 
 const ISSUES_URL = "https://github.com/paintedwolf-ai/paintedwolf-code/issues";
+
+// What's New shows only a version whose notes the changelog carries.
+const RELEASED_VERSION = /^## \[([^\]]+)\]/m.exec(
+  readFileSync(new URL("../../CHANGELOG.md", import.meta.url), "utf8"),
+)?.[1] ?? "";
 
 async function openAboutPanel(page: Page) {
   await page
@@ -92,12 +98,8 @@ webE2e.describe("feedback + what's new den", () => {
         /GitHub Issues/i,
       );
 
+      // The app's own Issues page opens without a confirmation step.
       await page.getByTestId("report-bug-open-issues").click();
-      await expect(page.getByTestId("confirm-destructive-dialog")).toBeVisible();
-      await expect(page.getByTestId("confirm-destructive-dialog")).toContainText(
-        ISSUES_URL,
-      );
-      await page.getByTestId("confirm-destructive-ok").click();
       await expect
         .poll(() => opened.some((u) => u.startsWith(ISSUES_URL)))
         .toBe(true);
@@ -115,7 +117,7 @@ webE2e.describe("feedback + what's new den", () => {
         await route.fulfill({
           status: res.status(),
           contentType: "application/json",
-          body: JSON.stringify({ ...json, version: "1.0.0-rc.1" }),
+          body: JSON.stringify({ ...json, version: RELEASED_VERSION }),
         });
       });
 
@@ -133,13 +135,13 @@ webE2e.describe("feedback + what's new den", () => {
         timeout: 30_000,
       });
       await expect(page.getByTestId("whats-new-nudge")).toContainText(
-        /What’s new in 1\.0\.0-rc\.1/,
+        `What’s new in ${RELEASED_VERSION}`,
       );
       await expect(page.getByTestId("whats-new-got-it")).toBeVisible();
       await page.getByTestId("whats-new-got-it").click();
       await expect(page.getByTestId("whats-new-card")).toHaveCount(0);
 
-      expect(await whatsNewLatch(page)).toBe("1.0.0-rc.1");
+      expect(await whatsNewLatch(page)).toBe(RELEASED_VERSION);
     },
   );
 

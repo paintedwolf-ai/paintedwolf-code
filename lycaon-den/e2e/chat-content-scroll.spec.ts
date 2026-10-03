@@ -79,7 +79,9 @@ modelIndependentWebE2e("approval documents open in Files without approving or ad
   await page.getByRole("button", {name:"Show approvals",exact:true}).click();
   const card = page.getByTestId("tool-approval-card");
   await expect(card.getByTestId("approval-approve-primary")).toBeVisible();
-  expect(await card.locator(".den-approval-card-scroll, [data-testid=virtual-card-list]").count()).toBe(0);
+  // The card scrolls its subject and context once; long target lists open in Files.
+  await expect(card.locator(".den-approval-card-scroll")).toHaveCount(1);
+  await expect(card.getByTestId("virtual-card-list")).toHaveCount(0);
   const targets = card.getByRole("button", {name:"Show all 1000 destinations in Files",exact:true});
   await targets.focus();
   await targets.press("Enter");

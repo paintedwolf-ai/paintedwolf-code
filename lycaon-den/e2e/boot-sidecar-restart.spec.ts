@@ -28,7 +28,7 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
   let pending = await apiJson<Pending>(request, "GET", pendingPath);
   expect(pending.session_id).toBe(sessionId);
   await apiJson(request, "POST", "/harness/llm/respond", {
-    id: pending.id, tool_calls: [{ id: "load-command", name: "request_tools", args: { requests: ["command"] } }],
+    id: pending.id, tool_calls: [{ id: "load-command", name: "request_tools", args: { need: "command" } }],
   });
   pending = await apiJson<Pending>(request, "GET", pendingPath);
   expect(pending.session_id).toBe(sessionId);

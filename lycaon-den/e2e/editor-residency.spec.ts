@@ -201,7 +201,7 @@ modelIndependentWebE2e("a dirty suspended tab resumes offline with undo and late
   }, { projectId: project.id, rootId })).toBe(true);
   await page.route("**/health", route => route.abort("failed"));
   let hostOpens = 0;
-  await page.route(/\/source\/open(?:\?.*)?$/, async route => { hostOpens++; await route.abort("failed"); });
+  await page.route(/\/editor-documents(?:\?.*)?$/, async route => { hostOpens++; await route.abort("failed"); });
   await page.locator('[data-testid="files-tab"][data-path="draft.txt"]').click();
   await expect(editor).toContainText("Preserved before suspension");
   await expect(editor).toBeEditable();
@@ -216,7 +216,7 @@ modelIndependentWebE2e("a dirty suspended tab resumes offline with undo and late
   await editor.press("ControlOrMeta+Shift+z");
   await page.unroute("**/editor-documents/*/updates");
   await page.unroute("**/editor-documents/*/sync");
-  await page.unroute(/\/source\/open(?:\?.*)?$/);
+  await page.unroute(/\/editor-documents(?:\?.*)?$/);
   await page.unroute("**/health");
   await page.getByTestId("files-editor-save").click();
   await expect.poll(() => readFileSync(path.join(root, "draft.txt"), "utf8"), { timeout: 15000 })
