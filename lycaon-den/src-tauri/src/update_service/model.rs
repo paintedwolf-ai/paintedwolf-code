@@ -47,7 +47,6 @@ pub enum Installation {
     Preparing,
     Staged,
     AwaitingExit,
-    Activating,
     AwaitingStartup,
     Failed,
 }
@@ -55,18 +54,13 @@ impl Installation {
     pub fn busy(self) -> bool {
         matches!(
             self,
-            Self::Downloading
-                | Self::Verifying
-                | Self::Preparing
-                | Self::AwaitingExit
-                | Self::Activating
+            Self::Downloading | Self::Verifying | Self::Preparing | Self::AwaitingExit
         )
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RolloutEligibility {
-    NotApplicable,
     Eligible,
     HeldBack,
 }

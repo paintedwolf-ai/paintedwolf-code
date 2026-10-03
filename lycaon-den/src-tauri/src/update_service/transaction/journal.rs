@@ -28,7 +28,10 @@ pub(super) fn active_path() -> Result<PathBuf, UpdateError> {
     Ok(super::super::persistence::update_dir()?.join("transaction.json"))
 }
 pub(super) fn read() -> Result<Option<Transaction>, UpdateError> {
-    let raw = match fs::read(active_path()?) {
+    read_at(&active_path()?)
+}
+fn read_at(path: &std::path::Path) -> Result<Option<Transaction>, UpdateError> {
+    let raw = match fs::read(path) {
         Ok(raw) => raw,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(UpdateError::new(Failure::JournalUnavailable, e)),
@@ -80,4 +83,18 @@ pub(super) fn archive_receipt(transaction: &Transaction) -> Result<(), UpdateErr
             .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unknown_journal_shape_is_refused_without_modification() {
+        let root = crate::test_support::TempDir::new("update-journal-future");
+        let path = root.join("transaction.json");
+        let bytes = br#"{"format_version":99,"future_transaction":"retained"}"#;
+        fs::write(&path, bytes).unwrap();
+        assert!(read_at(&path).is_err());
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
 }

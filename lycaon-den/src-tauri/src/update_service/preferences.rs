@@ -19,10 +19,7 @@ async fn set(
 ) -> Result<NativeUpdateState, UpdateError> {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
-    if matches!(
-        inner.state.installation,
-        Installation::AwaitingExit | Installation::Activating
-    ) {
+    if matches!(inner.state.installation, Installation::AwaitingExit) {
         return Err(Failure::InvalidTransition.into());
     }
     if !inner.preferences_writable {

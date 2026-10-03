@@ -189,3 +189,30 @@ fn manifest_age_clamps_future_dates_to_zero() {
     assert!(manifest_age_secs(Some(now - 3600)).expect("past date") >= 3600);
     assert_eq!(manifest_age_secs(None), None);
 }
+
+#[test]
+fn discovery_does_not_clear_an_installation_failure_for_the_same_release() {
+    let mut s = state();
+    offered(&mut s, "1.1.0", false, 0);
+    s.installation = Installation::Failed;
+    s.last_error = Some(Failure::VerificationFailed.into());
+    offered(&mut s, "1.1.0", true, 0);
+    assert_eq!(
+        s.last_error.as_ref().unwrap().code,
+        Failure::VerificationFailed
+    );
+    offered(&mut s, "1.2.0", true, 0);
+    assert_eq!(s.installation, Installation::None);
+    assert!(s.last_error.is_none());
+}
+
+#[test]
+fn recovery_startup_can_discover_a_fix_without_confirming_the_installed_version() {
+    let mut s = state();
+    s.installation = Installation::AwaitingStartup;
+    s.refresh_capabilities(true);
+    assert!(s.capabilities.can_check);
+    offered(&mut s, "1.2.0", false, 0);
+    s.refresh_capabilities(true);
+    assert!(s.capabilities.can_download);
+}

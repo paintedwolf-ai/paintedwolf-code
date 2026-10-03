@@ -19,6 +19,7 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
         .join(&candidate.release_id))
 }
 pub fn publish(candidate: &Candidate) -> Result<(), UpdateError> {
+    read_ready()?;
     let staged = Staged {
         format_version: 1,
         candidate: candidate.clone(),
@@ -47,6 +48,7 @@ pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
     Ok(Some(staged))
 }
 pub fn forget_ready() -> Result<(), UpdateError> {
+    read_ready()?;
     match fs::remove_file(persistence::update_dir()?.join("ready.json")) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -124,6 +126,7 @@ pub fn rejected() -> Result<Option<String>, UpdateError> {
     Ok(Some(rejected.release_id))
 }
 pub fn reject(release_id: String) -> Result<(), UpdateError> {
+    rejected()?;
     persistence::write_json_atomic(
         &persistence::update_dir()?,
         "rejected.json",
