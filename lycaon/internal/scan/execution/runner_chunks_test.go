@@ -39,7 +39,7 @@ func (r *chunkRecorder) Run(_ context.Context, req scanbase.ScanRequest) (*scano
 	for _, p := range req.Paths {
 		findings = append(findings, api.SecurityFinding{RuleID: "r", Locations: []api.SecurityFindingLocation{{URI: p}}})
 	}
-	return &scanoutput.Result{ScannedPaths: req.Paths, FindingsCount: len(findings), Findings: findings, Raw: map[string]any{"engine": "chunky"}}, nil
+	return &scanoutput.Result{ScannedPaths: req.Paths, FindingsCount: len(findings), Findings: findings, SecretIdentities: []scanoutput.SecretIdentity{{FindingIndex: 0, ValueFingerprint: "private-hash"}}, Raw: map[string]any{"engine": "chunky"}}, nil
 }
 
 func newChunkRunner(t *testing.T, engine *chunkRecorder, chunk int) (*Runner, *api.CodeScan) {
@@ -98,6 +98,9 @@ func TestRunInChunksResumesFromKeptChunksAfterAFailure(t *testing.T) {
 	testutil.FailErr(t, "resume", err)
 	if len(engine.batches) != 4 {
 		t.Fatalf("invocations = %d, want 4: the first chunk was not run again", len(engine.batches))
+	}
+	if len(result.SecretIdentities) != 3 || result.SecretIdentities[0].ValueFingerprint != "private-hash" || result.SecretIdentities[1].FindingIndex != 4 || result.SecretIdentities[2].FindingIndex != 8 {
+		t.Fatalf("resumed secret identities lost or misaligned: %+v", result.SecretIdentities)
 	}
 	if result.FindingsCount != 10 {
 		t.Fatalf("resumed result findings = %d, want 10", result.FindingsCount)
