@@ -59,22 +59,22 @@ func StartReaper(name string, args ...string) error {
 	return nil
 }
 
-func track(kind byte, id int) func() {
-	if id <= 0 || !sendReaper('+', kind, id) {
+func track(kind byte, payload string) func() {
+	if !sendReaper('+', kind, payload) {
 		return func() {}
 	}
 	var once sync.Once
-	return func() { once.Do(func() { sendReaper('-', kind, id) }) }
+	return func() { once.Do(func() { sendReaper('-', kind, payload) }) }
 }
 
-func sendReaper(op, kind byte, id int) bool {
+func sendReaper(op, kind byte, payload string) bool {
 	reaper.mu.Lock()
 	defer reaper.mu.Unlock()
 	if reaper.pipe == nil {
 		return false
 	}
 	_ = reaper.pipe.SetWriteDeadline(time.Now().Add(reaperWriteTimeout))
-	if _, err := reaper.pipe.WriteString(string([]byte{op, kind}) + strconv.Itoa(id) + "\n"); err != nil {
+	if _, err := reaper.pipe.WriteString(string([]byte{op, kind}) + payload + "\n"); err != nil {
 		slog.Warn("process reaper unavailable; engine children can outlive an abrupt exit", "err", err)
 		_ = reaper.pipe.Close()
 		reaper.pipe = nil
@@ -83,16 +83,22 @@ func sendReaper(op, kind byte, id int) bool {
 	return true
 }
 
+// reaperDrainTimeout bounds the wait for killed processes to exit before the
+// directories they may still be writing are removed.
+const reaperDrainTimeout = 5 * time.Second
+
 type reaperEntry struct {
 	kind  byte
 	id    int
 	start int64
+	path  string
 	count int
 }
 
 // RunReaper is the companion's main loop. It records what the engine tracks and,
 // once the engine is gone, kills each entry whose leader is still the process
-// that was registered, so a pid reused after an exit is never signalled.
+// that was registered, so a pid reused after an exit is never signalled, and
+// then removes each directory still tracked.
 func RunReaper(in io.Reader) int {
 	// Only the engine's exit ends reaping, so stray signals are ignored.
 	signal.Ignore(syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM)
@@ -100,33 +106,59 @@ func RunReaper(in io.Reader) int {
 	return 0
 }
 
-// reap blocks until in closes, then kills what is still tracked.
+// reap blocks until in closes, then kills what is still tracked and removes
+// tracked directories once the killed processes are gone.
 func reap(in io.Reader) {
+	entries := readReaperEntries(in)
+	var killed []int
+	var dirs []string
+	for _, entry := range entries {
+		if entry.kind == reaperDir {
+			dirs = append(dirs, entry.path)
+			continue
+		}
+		if start, alive := osprocess.StartTime(entry.id); !alive || start != entry.start {
+			continue
+		}
+		target := entry.id
+		if entry.kind == reaperGroup {
+			target = -entry.id
+		}
+		if syscall.Kill(target, syscall.SIGKILL) == nil {
+			killed = append(killed, target)
+		}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	awaitSignalledGone(killed, reaperDrainTimeout)
+	for _, dir := range dirs {
+		_ = os.RemoveAll(dir)
+	}
+}
+
+// readReaperEntries replays the engine's registrations until in closes and
+// returns what is still tracked.
+func readReaperEntries(in io.Reader) map[string]*reaperEntry {
 	entries := map[string]*reaperEntry{}
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) < 3 || (line[1] != reaperGroup && line[1] != reaperProcess) {
-			continue
-		}
-		id, err := strconv.Atoi(line[2:])
-		if err != nil || id <= 0 {
+		if len(line) < 3 {
 			continue
 		}
 		key := line[1:]
 		switch line[0] {
 		case '+':
-			start, alive := osprocess.StartTime(id)
-			if !alive {
-				// Already exited; nothing of it is left to reap by this identity.
+			entry := parseReaperEntry(line[1], line[2:])
+			if entry == nil {
 				continue
 			}
-			entry := entries[key]
-			if entry == nil || entry.start != start {
-				// A reused id replaces the stale incarnation.
-				entry = &reaperEntry{kind: line[1], id: id, start: start}
-				entries[key] = entry
+			if prior := entries[key]; prior != nil && prior.start == entry.start {
+				entry = prior
 			}
+			// A reused pid replaces the stale incarnation.
+			entries[key] = entry
 			entry.count++
 		case '-':
 			if entry := entries[key]; entry != nil {
@@ -136,14 +168,39 @@ func reap(in io.Reader) {
 			}
 		}
 	}
-	for _, entry := range entries {
-		if start, alive := osprocess.StartTime(entry.id); !alive || start != entry.start {
-			continue
+	return entries
+}
+
+// parseReaperEntry returns nil for a malformed registration or a process that
+// already exited, since nothing of it is left to reap by that identity.
+func parseReaperEntry(kind byte, payload string) *reaperEntry {
+	switch kind {
+	case reaperDir:
+		if !reaperDirPath(payload) {
+			return nil
 		}
-		target := entry.id
-		if entry.kind == reaperGroup {
-			target = -entry.id
+		return &reaperEntry{kind: kind, path: payload}
+	case reaperGroup, reaperProcess:
+		id, err := strconv.Atoi(payload)
+		if err != nil || id <= 0 {
+			return nil
 		}
-		_ = syscall.Kill(target, syscall.SIGKILL)
+		start, alive := osprocess.StartTime(id)
+		if !alive {
+			return nil
+		}
+		return &reaperEntry{kind: kind, id: id, start: start}
+	}
+	return nil
+}
+
+// awaitSignalledGone waits, within one shared bound, until no killed process
+// or group member remains.
+func awaitSignalledGone(targets []int, within time.Duration) {
+	deadline := time.Now().Add(within)
+	for _, target := range targets {
+		for syscall.Kill(target, 0) == nil && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 }
