@@ -59,15 +59,21 @@ impl Activation {
             .stderr(std::process::Stdio::null())
             .spawn();
         if let Err(error) = result {
-            self.transaction.phase = Phase::Failed;
-            self.transaction.error = Some(error.to_string());
-            let mut failure = UpdateError::new(Failure::ActivationFailed, error);
-            if let Err(record) = write(&self.transaction) {
-                failure = failure.with_context(record);
-            }
-            return Err(failure);
+            return Err(record_spawn_failure(&mut self.transaction, error, write));
         }
         Ok(())
+    }
+}
+fn record_spawn_failure(
+    t: &mut Transaction,
+    error: std::io::Error,
+    record: impl FnOnce(&Transaction) -> Result<(), UpdateError>,
+) -> UpdateError {
+    t.phase = Phase::Failed;
+    t.error = Some(error.to_string());
+    match record(t) {
+        Ok(()) => UpdateError::new(Failure::ActivationFailed, error),
+        Err(record) => UpdateError::new(Failure::RecoveryRequired, error).with_context(record),
     }
 }
 pub async fn prepare_exit(
@@ -261,6 +267,12 @@ pub async fn resume(app: &AppHandle, error: Option<UpdateError>) {
 }
 fn resume_state(state: &mut super::NativeUpdateState, error: Option<UpdateError>) {
     if error
+        .as_ref()
+        .is_some_and(|error| error.code == Failure::RecoveryRequired)
+    {
+        state.staged_release_id = None;
+        state.installation = Installation::RecoveryRequired;
+    } else if error
         .as_ref()
         .is_some_and(|error| error.code == Failure::ActivationFailed)
     {
@@ -636,6 +648,36 @@ mod tests {
             require_running_version(&root).unwrap_err().code,
             Failure::CandidateChanged
         );
+    }
+    #[test]
+    fn failed_spawn_with_failed_record_requires_recovery_instead_of_retry() {
+        let root = crate::test_support::TempDir::new("update-spawn-record-failure");
+        let mut transaction = fixture(&root);
+        transaction.phase = Phase::Committed;
+        let error = record_spawn_failure(
+            &mut transaction,
+            std::io::Error::other("spawn failed"),
+            |attempt| {
+                assert_eq!(attempt.phase, Phase::Failed);
+                Err(Failure::JournalUnavailable.into())
+            },
+        );
+        assert_eq!(error.code, Failure::RecoveryRequired);
+        let mut state = super::super::NativeUpdateState::new(
+            "1.0.0".into(),
+            super::super::UpdateChannel::Stable,
+            super::super::InstallSource::DirectDownload,
+        );
+        state.candidate = Some(transaction.candidate.clone());
+        state.staged_release_id = Some(transaction.candidate.release_id);
+        state.installation = Installation::AwaitingExit;
+        resume_state(&mut state, Some(error));
+        state.refresh_capabilities(true);
+        assert_eq!(state.installation, Installation::RecoveryRequired);
+        assert!(!state.capabilities.can_check);
+        assert!(!state.capabilities.can_download);
+        assert!(!state.capabilities.can_restart_to_update);
+        assert!(!state.capabilities.can_install_automatically);
     }
     #[test]
     fn failed_helper_launch_offers_retry_while_deferred_shutdown_keeps_restart() {

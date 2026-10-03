@@ -124,8 +124,9 @@ impl PreparedExit {
         let request = self.request;
         if prompt {
             tauri::async_runtime::spawn(async move {
+                let mut reminder_delay = 5;
                 loop {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    tokio::time::sleep(Duration::from_secs(reminder_delay)).await;
                     let labels = app.webview_windows().keys().cloned().collect();
                     let waiting = app
                         .state::<ExitCoordinator>()
@@ -144,6 +145,7 @@ impl PreparedExit {
                         let _ = cancel_app_exit(app.clone(), request.request_id);
                         return;
                     }
+                    reminder_delay = 30;
                 }
             });
         }

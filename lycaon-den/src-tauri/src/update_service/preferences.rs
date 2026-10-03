@@ -19,6 +19,9 @@ async fn set(
 ) -> Result<NativeUpdateState, UpdateError> {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
+    if inner.state.installation == Installation::RecoveryRequired {
+        return Err(Failure::RecoveryRequired.into());
+    }
     if matches!(inner.state.installation, Installation::AwaitingExit) {
         return Err(Failure::InvalidTransition.into());
     }

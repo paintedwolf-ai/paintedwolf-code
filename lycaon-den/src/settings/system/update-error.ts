@@ -20,6 +20,7 @@ export const UPDATE_ERROR_MESSAGES = {
   unsupported_installation: "This installation needs permission or a supported location to update.",
   engine_stop_failed: "The engine did not stop cleanly. The update has been deferred.",
   release_withdrawn: "This update is no longer offered. Check for updates again.",
+  recovery_required: "The update handoff could not be recorded. Close and reopen Painted Wolf Code to recover. If recovery fails, check available space and storage permissions.",
   activation_failed: "The update could not be activated. Retry the update or download a fresh copy.",
   service_unavailable: "The updater could not complete this action. Try again, or restart the app if the problem continues.",
 } as const;

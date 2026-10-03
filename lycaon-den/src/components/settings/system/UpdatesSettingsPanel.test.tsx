@@ -41,6 +41,15 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture()} />);
     expect((await screen.findByTestId("updates-release-notes")).textContent).toContain("A new release.");
   });
+  it("keeps a committed recovery failure distinct from an installed update", async () => {
+    const state = updateFixture({ installation: "recovery_required", last_error: { code: "recovery_required" }, capabilities: { can_check: false, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "recovery_required" } });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Close and reopen");
+    expect(screen.queryByText(/The update is installed/)).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
+  });
   it("shows typed recovery guidance and keeps diagnostic detail separate", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "disk_space", detail: "test detail" } }) })} />);
     expect((await screen.findByRole("alert")).textContent).toContain("free space"); expect(screen.getByText("Technical details")).toBeTruthy();

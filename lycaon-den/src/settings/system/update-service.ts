@@ -15,7 +15,7 @@ export type NativeUpdateState = {
   capabilities: { can_check: boolean; can_download: boolean; can_restart_to_update: boolean; can_install_automatically: boolean; blocked_reason: string | null };
   discovery: "idle" | "checking" | "up_to_date" | "available" | "held_back" | "failed";
   candidate: UpdateCandidate | null;
-  installation: "none" | "downloading" | "verifying" | "preparing" | "staged" | "awaiting_exit" | "awaiting_startup" | "failed";
+  installation: "none" | "downloading" | "verifying" | "preparing" | "staged" | "awaiting_exit" | "awaiting_startup" | "recovery_required" | "failed";
   staged_release_id: string | null; downloaded_bytes: number; total_bytes: number | null;
   last_check_at: number | null; next_check_at: number | null; last_error: UpdateError | null;
 };

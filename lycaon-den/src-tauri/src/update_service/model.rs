@@ -48,13 +48,18 @@ pub enum Installation {
     Staged,
     AwaitingExit,
     AwaitingStartup,
+    RecoveryRequired,
     Failed,
 }
 impl Installation {
     pub fn busy(self) -> bool {
         matches!(
             self,
-            Self::Downloading | Self::Verifying | Self::Preparing | Self::AwaitingExit
+            Self::Downloading
+                | Self::Verifying
+                | Self::Preparing
+                | Self::AwaitingExit
+                | Self::RecoveryRequired
         )
     }
 }
@@ -149,6 +154,13 @@ impl NativeUpdateState {
         }
     }
     pub fn refresh_capabilities(&mut self, supported: bool) {
+        if self.installation == Installation::RecoveryRequired {
+            self.capabilities = Capabilities {
+                blocked_reason: Some("recovery_required".into()),
+                ..Capabilities::default()
+            };
+            return;
+        }
         let direct = self.install_source == InstallSource::DirectDownload;
         let ready = self.installation == Installation::Staged
             && self

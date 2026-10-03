@@ -26,6 +26,7 @@ pub enum UpdateErrorCode {
     EngineStopFailed,
     ReleaseWithdrawn,
     ActivationFailed,
+    RecoveryRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
