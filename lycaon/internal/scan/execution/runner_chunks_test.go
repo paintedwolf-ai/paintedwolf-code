@@ -125,3 +125,20 @@ func TestChunkPathsSplitsEvenly(t *testing.T) {
 		t.Fatalf("empty chunks = %v", got)
 	}
 }
+
+func TestChunkResumeKeepsProjectPathsAcrossExecutionTrees(t *testing.T) {
+	engine := &chunkRecorder{failOn: 2}
+	runner, job := newChunkRunner(t, engine, 1)
+	first := t.TempDir()
+	_, err := runner.runInChunks(t.Context(), job, scanbase.ScanRequest{ProjectDir: first, Paths: []string{filepath.Join(first, "a.go"), filepath.Join(first, "b.go")}})
+	if err == nil {
+		t.Fatal("fixture did not interrupt after the first chunk")
+	}
+	engine.failOn = 0
+	second := t.TempDir()
+	got, err := runner.runInChunks(t.Context(), job, scanbase.ScanRequest{ProjectDir: second, Paths: []string{filepath.Join(second, "a.go"), filepath.Join(second, "b.go")}})
+	testutil.FailErr(t, "resume with another execution tree", err)
+	if len(got.Findings) != 2 || got.Findings[0].Locations[0].URI != "a.go" || got.Findings[1].Locations[0].URI != "b.go" {
+		t.Fatalf("temporary paths survived resume: %+v", got)
+	}
+}

@@ -19,7 +19,7 @@ import (
 )
 
 // chunkSpillDir retains completed chunks for resumption after a restart.
-const chunkSpillDir = "chunks"
+const chunkSpillDir = "chunks-v2"
 
 // runInChunks executes the request as bounded invocations and merges them.
 // A request the chunk size does not split runs as one invocation.
@@ -49,6 +49,7 @@ func (r *Runner) runInChunks(ctx context.Context, job *api.CodeScan, req scanbas
 			if err != nil {
 				return nil, fmt.Errorf("chunk %d of %d: %w", i+1, len(chunks), err)
 			}
+			scanoutput.NormalizeResultPaths(result, req.ProjectDir)
 			if err := saveChunk(dir, i, result); err != nil {
 				slog.WarnContext(ctx, "keep scan chunk", "scan_id", job.ID, "chunk", i, "error", err)
 			}
