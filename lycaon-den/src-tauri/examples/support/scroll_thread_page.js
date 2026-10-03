@@ -6,23 +6,32 @@ window.__scrollThread = {
 
   /** A chat long enough to scroll, ending in a turn with tool cards. */
   async seed() {
+    const t0 = performance.now();
+    // A seed that stalls reports the last step it reached.
+    const mark = (step) => { this.progress = `${step} at ${Math.round(performance.now() - t0)} ms`; };
+    mark("waiting for the harness API");
     for (let i = 0; i < 120 && !window.__harness; i++) await new Promise((r) => setTimeout(r, 250));
     if (!window.__harness) throw new Error("harness API missing");
+    mark("opening the project");
     await __harness.openProject("Harness");
+    mark("draining pending completions");
     // Earlier runs can leave completions pending; answer them before scripting this one.
     await __harness.llm.auto("ok");
     await new Promise((r) => setTimeout(r, 2500));
     await __harness.llm.manual();
+    mark("opening a session");
     await __harness.newSession();
     const step = async (reply) => {
       await __harness.llm.pending(20000);
       await __harness.llm.respond(reply);
     };
     for (let i = 0; i < 5; i++) {
+      mark(`answering question ${i + 1}`);
       await __harness.sendPrompt(`Question ${i + 1}: tell me about the layout.`);
       await step({ text: "The layout uses a spacing scale and an icon set. ".repeat(30) });
       await __harness.waitForIdle(30000);
     }
+    mark("running the tool turn");
     await __harness.sendPrompt("Can we improve the interface?");
     await step({
       toolCalls: [
@@ -33,6 +42,7 @@ window.__scrollThread = {
     });
     await step({ text: "Done." });
     await __harness.waitForIdle(30000);
+    mark("waiting for transcript rows");
     for (let i = 0; i < 60 && document.querySelectorAll(".transcript-viewport-row").length < 3; i++) {
       await new Promise((r) => setTimeout(r, 250));
     }
