@@ -128,33 +128,8 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	input.Gaps = account.gaps
 	input.Checks = account.checks
 	input.Inventory = account.inventory
-	for _, phase := range manifest.PhaseDefs {
-		if phase.ReviewLoop == nil || !phase.ReviewLoop.CarriesCoverage() {
-			continue
-		}
-		facts, coverageErr := s.Workflows.CoverageFacts(ctx, run, manifest)
-		if coverageErr != nil {
-			return report.ReportInput{}, false, coverageErr
-		}
-		input.CoverageFacts = &facts
-		input.CoverageReview = workflow.RunCoverageReview(phaseVerdicts)
-		// The last declared assessment phase must have recorded its own decision.
-		last := ""
-		for _, p := range manifest.PhaseDefs {
-			if p.ReviewLoop != nil && p.ReviewLoop.CarriesCoverage() {
-				last = p.ID
-			}
-		}
-		present := false
-		for _, v := range phaseVerdicts {
-			if v.Phase == last && v.Record.GateVerdict == "approved" {
-				present = true
-			}
-		}
-		if !present {
-			input.CoverageReview = nil
-		}
-		break
+	if err := appendCoverageReview(ctx, &input, s.Workflows, run, manifest, phaseVerdicts); err != nil {
+		return report.ReportInput{}, false, err
 	}
 	input.Artifacts = s.artifactsForRun(ctx, run, msgs)
 	return input, true, nil
