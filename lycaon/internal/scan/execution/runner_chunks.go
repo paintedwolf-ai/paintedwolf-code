@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -23,6 +24,7 @@ const chunkSpillDir = "chunks-v2"
 
 // chunkRecord retains private identity fingerprints omitted from public results.
 type chunkRecord struct {
+	Paths            []string                    `json:"paths"`
 	Result           *scanoutput.Result          `json:"result"`
 	SecretIdentities []scanoutput.SecretIdentity `json:"secret_identities,omitempty"`
 }
@@ -42,7 +44,8 @@ func (r *Runner) runInChunks(ctx context.Context, job *api.CodeScan, req scanbas
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		result, kept, err := loadChunk(dir, i)
+		inputs := chunkInputPaths(req.ProjectDir, chunk)
+		result, kept, err := loadChunk(dir, i, inputs)
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +59,7 @@ func (r *Runner) runInChunks(ctx context.Context, job *api.CodeScan, req scanbas
 				return nil, fmt.Errorf("chunk %d of %d: %w", i+1, len(chunks), err)
 			}
 			scanoutput.NormalizeResultPaths(result, req.ProjectDir)
-			if err := saveChunk(dir, i, result); err != nil {
+			if err := saveChunk(dir, i, inputs, result); err != nil {
 				slog.WarnContext(ctx, "keep scan chunk", "scan_id", job.ID, "chunk", i, "error", err)
 			}
 		}
@@ -107,7 +110,7 @@ func chunkFile(dir string, index int) string {
 	return filepath.Join(dir, strconv.Itoa(index)+".json")
 }
 
-func loadChunk(dir string, index int) (*scanoutput.Result, bool, error) {
+func loadChunk(dir string, index int, inputs []string) (*scanoutput.Result, bool, error) {
 	if dir == "" {
 		return nil, false, nil
 	}
@@ -123,21 +126,21 @@ func loadChunk(dir string, index int) (*scanoutput.Result, bool, error) {
 		// Re-run chunks that cannot be decoded.
 		return nil, false, nil //nolint:nilerr // intentional: an unreadable kept chunk is simply run again
 	}
-	if record.Result == nil {
+	if record.Result == nil || !slices.Equal(record.Paths, inputs) {
 		return nil, false, nil
 	}
 	record.Result.SecretIdentities = record.SecretIdentities
 	return record.Result, true, nil
 }
 
-func saveChunk(dir string, index int, result *scanoutput.Result) error {
+func saveChunk(dir string, index int, inputs []string, result *scanoutput.Result) error {
 	if dir == "" || result == nil {
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	raw, err := surveyjson.Marshal(chunkRecord{Result: result, SecretIdentities: result.SecretIdentities})
+	raw, err := surveyjson.Marshal(chunkRecord{Paths: inputs, Result: result, SecretIdentities: result.SecretIdentities})
 	if err != nil {
 		return err
 	}
@@ -164,4 +167,18 @@ func mergeScanResult(into, part *scanoutput.Result) {
 	if len(into.Categories) == 0 {
 		into.Categories = append([]api.ScanCategory(nil), part.Categories...)
 	}
+}
+
+// Chunk identity uses source-relative inputs, independent of the execution tree.
+func chunkInputPaths(root string, paths []string) []string {
+	out := make([]string, len(paths))
+	for i, path := range paths {
+		if filepath.IsAbs(path) {
+			if rel, err := filepath.Rel(root, path); err == nil {
+				path = rel
+			}
+		}
+		out[i] = filepath.ToSlash(filepath.Clean(path))
+	}
+	return out
 }

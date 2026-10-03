@@ -145,3 +145,23 @@ func TestChunkResumeKeepsProjectPathsAcrossExecutionTrees(t *testing.T) {
 		t.Fatalf("temporary paths survived resume: %+v", got)
 	}
 }
+
+func TestChunkResumeRechecksInputsWhenBatchSizeChanges(t *testing.T) {
+	engine := &chunkRecorder{failOn: 2}
+	runner, job := newChunkRunner(t, engine, 4)
+	req := scanbase.ScanRequest{ProjectDir: job.CanonicalPath, Paths: paths(10)}
+	if _, err := runner.runInChunks(t.Context(), job, req); err == nil {
+		t.Fatal("fixture did not interrupt after the first chunk")
+	}
+	engine.failOn, runner.ChunkFiles = 0, 3
+	result, err := runner.runInChunks(t.Context(), job, req)
+	testutil.FailErr(t, "resume with changed batching", err)
+	if len(result.Findings) != len(req.Paths) || len(engine.batches) != 6 {
+		t.Fatalf("reused a chunk with different inputs: findings=%d batches=%d", len(result.Findings), len(engine.batches))
+	}
+	for i, finding := range result.Findings {
+		if finding.Locations[0].URI != req.Paths[i] {
+			t.Fatalf("path %d duplicated or skipped: %s", i, finding.Locations[0].URI)
+		}
+	}
+}
