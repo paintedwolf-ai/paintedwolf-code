@@ -9602,8 +9602,8 @@ source_files:
     lycaon-den/shared/brand.ts: 13
     lycaon-den/shared/stage-selectors.ts: 2
     lycaon-den/src-tauri/build.rs: 13
-    lycaon-den/src-tauri/examples/scroll_thread_invariants.rs: 299
-    lycaon-den/src-tauri/examples/support/scroll_thread_page.js: 200
+    lycaon-den/src-tauri/examples/scroll_thread_invariants.rs: 308
+    lycaon-den/src-tauri/examples/support/scroll_thread_page.js: 218
     lycaon-den/src-tauri/examples/support/web_view_driver.rs: 208
     lycaon-den/src-tauri/examples/verify_updater_signature.rs: 187
     lycaon-den/src-tauri/examples/webkit_features_probe.rs: 20
@@ -15391,7 +15391,7 @@ source_files:
     scripts/den-harness-test.sh: 42
     scripts/den-harness.sh: 15
     scripts/den-sidecar-stop.sh: 107
-    scripts/den-webkit-scroll.sh: 19
+    scripts/den-webkit-scroll.sh: 25
     scripts/dev-signing-config.sh: 2
     scripts/dev-signing-identity.sh: 87
     scripts/diff-openapi.sh: 27
@@ -15404,7 +15404,7 @@ source_files:
     scripts/e2e-den.sh: 142
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 20
-    scripts/e2e-sidecar-serve.sh: 70
+    scripts/e2e-sidecar-serve.sh: 71
     scripts/e2e-sidecar-stop.sh: 15
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
