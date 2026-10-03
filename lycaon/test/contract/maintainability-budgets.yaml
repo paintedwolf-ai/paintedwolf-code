@@ -22304,7 +22304,7 @@ test_files:
     lycaon/test/security/api_worker_persona_e2e_test.go: 97
     lycaon/test/security/api_worker_prompt_runner_test.go: 116
     lycaon/test/security/api_workflow_advance_gate_test.go: 91
-    lycaon/test/security/api_workflow_advance_parity_test.go: 315
+    lycaon/test/security/api_workflow_advance_parity_test.go: 317
     lycaon/test/security/api_workflow_compose_policy_test.go: 110
     lycaon/test/security/api_workflow_compose_test.go: 205
     lycaon/test/security/api_workflow_discovery_test.go: 112
