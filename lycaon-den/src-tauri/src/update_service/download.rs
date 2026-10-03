@@ -154,7 +154,7 @@ async fn transfer(
     app: &AppHandle,
     candidate: &Candidate,
     generation: u64,
-) -> Result<String, UpdateError> {
+) -> Result<super::installer::PreparedIdentity, UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
     if !service.current(generation) {

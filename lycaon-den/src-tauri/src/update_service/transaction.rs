@@ -3,35 +3,15 @@ use super::{
     check, emit, installer, persistence, staging, Candidate, Failure, Installation, UpdateError,
     UpdateService,
 };
-use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
     time::Duration,
 };
 use tauri::{AppHandle, Manager};
 mod journal;
+use installer::{executable, hash};
 use journal::{active_path, archive_receipt, read, write, Phase, Transaction};
-pub(super) fn executable(bundle: &Path) -> PathBuf {
-    bundle.join("Contents/MacOS/painted-wolf-code")
-}
-pub(super) fn hash(path: &Path) -> Result<String, UpdateError> {
-    let mut file =
-        fs::File::open(path).map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
-    let mut digest = Sha256::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        let n = file
-            .read(&mut buffer)
-            .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
-        if n == 0 {
-            break;
-        }
-        digest.update(&buffer[..n]);
-    }
-    Ok(format!("{:x}", digest.finalize()))
-}
 pub fn clear_failed(release: &str) -> Result<(), UpdateError> {
     if let Some(t) = read()? {
         if t.phase == Phase::Failed && t.candidate.release_id == release {
@@ -170,12 +150,17 @@ pub async fn prepare_exit(
             return Err(Failure::VerificationFailed.into());
         }
         installer::verify_bundle(&prepared)?;
+        #[cfg(target_os = "macos")]
+        if installer::bundle_hash(&prepared)? != ready.bundle_hash {
+            return Err(Failure::VerificationFailed.into());
+        }
         let t = Transaction {
             format_version: 1,
             id: uuid::Uuid::new_v4().to_string(),
             candidate: candidate.clone(),
             previous_hash: hash(&executable(&target))?,
             next_hash: ready.executable_hash,
+            next_bundle_hash: ready.bundle_hash,
             target,
             phase: Phase::Prepared,
             relaunch,
@@ -311,17 +296,23 @@ pub async fn restart_to_update(
 fn activate(t: &mut Transaction) -> Result<(), UpdateError> {
     installer::verify_bundle(&t.target)?;
     let expected = t.next_hash.clone();
+    let expected_bundle = t.next_bundle_hash.clone();
     activate_using(
         t,
         |target, candidate| {
             let prepared = installer::prepared_path(target, candidate)?;
-            // The recorded executable binds its code signature and sealed resources.
+            // The preparation receipt binds every file, link, and permission.
             if hash(&executable(&prepared)).is_ok_and(|actual| actual == expected)
+                && installer::bundle_hash(&prepared).is_ok_and(|actual| actual == expected_bundle)
                 && installer::verify_bundle(&prepared).is_ok()
             {
                 return Ok(());
             }
-            installer::prepare_at(target, candidate).map(|_| ())
+            let rebuilt = installer::prepare_at(target, candidate)?;
+            if rebuilt.executable_hash != expected || rebuilt.bundle_hash != expected_bundle {
+                return Err(Failure::VerificationFailed.into());
+            }
+            Ok(())
         },
         installer::exchange,
         write,
@@ -345,6 +336,8 @@ fn activate_using(
             return Err(Failure::VerificationFailed.into());
         }
         exchange(&t.target, &prepared)?;
+    } else if installer::bundle_hash(&t.target)? != t.next_bundle_hash {
+        return Err(Failure::VerificationFailed.into());
     }
     t.phase = Phase::Activated;
     record(t)
@@ -628,6 +621,7 @@ mod tests {
             candidate,
             previous_hash: hash(&executable(&target)).unwrap(),
             next_hash: hash(&executable(&staged)).unwrap(),
+            next_bundle_hash: installer::bundle_hash(&staged).unwrap(),
             target,
             phase: Phase::Committed,
             relaunch: false,

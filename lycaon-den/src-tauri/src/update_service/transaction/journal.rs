@@ -19,6 +19,7 @@ pub(super) struct Transaction {
     pub(super) target: PathBuf,
     pub(super) previous_hash: String,
     pub(super) next_hash: String,
+    pub(super) next_bundle_hash: String,
     pub(super) phase: Phase,
     pub(super) relaunch: bool,
     pub(super) recovery_relaunch_attempted: bool,
@@ -38,7 +39,10 @@ fn read_at(path: &std::path::Path) -> Result<Option<Transaction>, UpdateError> {
     };
     let t: Transaction = serde_json::from_slice(&raw)
         .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if t.format_version != 1
+    if [&t.previous_hash, &t.next_hash, &t.next_bundle_hash]
+        .iter()
+        .any(|hash| hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        || t.format_version != 1
         || uuid::Uuid::parse_str(&t.id).is_err()
         || !t.candidate.valid_identity()
         || !t.target.is_absolute()

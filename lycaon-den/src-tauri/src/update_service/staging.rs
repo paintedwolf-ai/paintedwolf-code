@@ -10,6 +10,7 @@ pub struct Staged {
     pub candidate: Candidate,
     pub verified_at: u64,
     pub executable_hash: String,
+    pub bundle_hash: String,
 }
 pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
     if !candidate.valid_identity() {
@@ -19,13 +20,17 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
         .join("staging")
         .join(&candidate.release_id))
 }
-pub fn publish(candidate: &Candidate, executable_hash: String) -> Result<(), UpdateError> {
+pub fn publish(
+    candidate: &Candidate,
+    identity: super::installer::PreparedIdentity,
+) -> Result<(), UpdateError> {
     read_ready()?;
     let staged = Staged {
         format_version: 1,
         candidate: candidate.clone(),
         verified_at: super::now(),
-        executable_hash,
+        executable_hash: identity.executable_hash,
+        bundle_hash: identity.bundle_hash,
     };
     persistence::write_json_atomic(
         &persistence::update_dir()?,
@@ -44,7 +49,9 @@ pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
     };
     let staged: Staged = serde_json::from_slice(&bytes)
         .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if staged.format_version != 1
+    if staged.bundle_hash.len() != 64
+        || !staged.bundle_hash.bytes().all(|b| b.is_ascii_hexdigit())
+        || staged.format_version != 1
         || !staged.candidate.valid_identity()
         || staged.executable_hash.len() != 64
         || !staged

@@ -135,7 +135,7 @@ pub fn prepare(
     target: &Path,
     candidate: &Candidate,
     artifact: &Path,
-) -> Result<String, UpdateError> {
+) -> Result<PreparedIdentity, UpdateError> {
     verify_bundle(target)?;
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     check_space(parent, expanded_size(artifact)?)?;
@@ -177,8 +177,10 @@ pub fn prepare(
             .permissions(),
     )
     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-    let executable_hash =
-        super::super::transaction::hash(&super::super::transaction::executable(&temp))?;
+    let identity = PreparedIdentity {
+        executable_hash: hash(&executable(&temp))?,
+        bundle_hash: bundle_hash(&temp)?,
+    };
     let destination = prepared_path(target, candidate)?;
     if destination.exists() {
         fs::remove_dir_all(&destination)
@@ -186,7 +188,7 @@ pub fn prepare(
     }
     crate::atomic_file::replace(&temp, &destination, true)
         .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-    Ok(executable_hash)
+    Ok(identity)
 }
 fn expanded_size(artifact: &Path) -> Result<u64, UpdateError> {
     let file = fs::File::open(artifact).map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;

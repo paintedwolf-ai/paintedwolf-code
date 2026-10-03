@@ -4,6 +4,14 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+mod identity;
+#[cfg(target_os = "macos")]
+pub(super) use identity::bundle_hash;
+pub(super) use identity::{executable, hash};
+pub struct PreparedIdentity {
+    pub executable_hash: String,
+    pub bundle_hash: String,
+}
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -114,10 +122,10 @@ pub fn probe_destination() -> Result<(), UpdateError> {
     fs::create_dir(&probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
     fs::remove_dir(probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
 }
-pub fn prepare(candidate: &Candidate) -> Result<String, UpdateError> {
+pub fn prepare(candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
     prepare_at(&bundle()?, candidate)
 }
-pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<String, UpdateError> {
+pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
     let artifact = staging::root(candidate)?.join("artifact");
     verification::verify(
         &artifact,
