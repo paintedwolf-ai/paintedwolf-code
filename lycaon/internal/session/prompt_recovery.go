@@ -13,8 +13,7 @@ import (
 // ErrPromptRecoveryStale rejects recovery after the interrupted work has changed.
 var ErrPromptRecoveryStale = errors.New("the interrupted turn has changed; refresh the chat before continuing")
 
-// preparePromptRecovery binds a user action to the latest unsettled outcome.
-// The existing receipt JSON retains this relationship across process restarts.
+// Recovery admission binds the action to the interrupted turn and transcript.
 func (m *Manager) preparePromptRecovery(ctx context.Context, sessionID string, in PromptInput) (PromptInput, error) {
 	action := in.Recovery
 	if action.Action != "continue" && action.Action != "retry" {
@@ -27,7 +26,7 @@ func (m *Manager) preparePromptRecovery(ctx context.Context, sessionID string, i
 	if err != nil {
 		return in, err
 	}
-	var failedID string
+	recoverable := false
 	for _, s := range state.Sessions {
 		if s.ID == sessionID && s.Status == api.SessionStatusBusy {
 			return in, ErrPromptRecoveryStale
@@ -39,12 +38,12 @@ func (m *Manager) preparePromptRecovery(ctx context.Context, sessionID string, i
 		}
 		switch s.Status {
 		case store.PromptSubmissionFailed, store.PromptSubmissionInterrupted, store.PromptSubmissionCanceled:
-			failedID = s.ID
+			recoverable = true
 		default:
 			return in, ErrPromptRecoveryStale
 		}
 	}
-	if failedID == "" {
+	if !recoverable {
 		return in, ErrPromptRecoveryStale
 	}
 	history, err := m.store.GetMessages(ctx, sessionID)
@@ -79,6 +78,5 @@ func (m *Manager) preparePromptRecovery(ctx context.Context, sessionID string, i
 		in.Text = "Keep going"
 	}
 	in.Continuation = true
-	in.ResumesSubmissionID = failedID
 	return in, nil
 }

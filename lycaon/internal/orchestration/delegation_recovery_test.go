@@ -21,7 +21,7 @@ func (s recoveryLegStore) DelegationByWorkflowRunID(_ context.Context, runID str
 }
 
 func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
-	for _, pattern := range []string{"fan_out", "pack"} {
+	for _, pattern := range []string{"fan_out", "pack", "pipeline"} {
 		t.Run(pattern, func(t *testing.T) {
 			ctx := context.Background()
 			store := recoveryLegStore{newPipelineStoreStub()}
@@ -29,14 +29,18 @@ func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
 			wf := &workflowRunContext{runID: "workflow-run", id: "workflow", version: "1.0.0"}
 			req := RunRequest{Input: map[string]any{"project_id": "project"}}
 			setup := func() (string, []string, *runState, error) {
-				state := &runState{stageLegs: map[string]string{}, completed: map[string]bool{}, outputs: map[string]string{}}
+				state := &runState{stageLegs: map[string]string{}, completed: map[string]bool{}, outputs: map[string]string{}, workflowRunID: wf.runID}
 				var id string
 				var legs []string
 				var err error
 				if pattern == "fan_out" {
 					id, legs, err = o.setupFanOutDelegation(ctx, req, wf, "session", "/repo", "task", "agent", FanOutSpec{Subtasks: []string{"first", "second"}}, state)
-				} else {
+				} else if pattern == "pack" {
 					id, legs, err = o.setupPackDelegation(ctx, req, wf, "session", "/repo", "task", "agent", 2, nil, state)
+				} else {
+					stages := []PipelineStage{{Name: "first", AgentProfile: "agent"}, {Name: "second", AgentProfile: "agent"}}
+					id, err = o.setupPipelineDelegation(ctx, req, "session", "/repo", stages, state)
+					legs = []string{state.stageLegs["first"], state.stageLegs["second"]}
 				}
 				return id, legs, state, err
 			}
@@ -57,7 +61,7 @@ func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
 			for i, legID := range resumedLegs {
 				if pattern == "fan_out" {
 					err = o.dispatchFanOutLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
-				} else {
+				} else if pattern == "pack" {
 					err = o.dispatchPackLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
 				}
 				testutil.FailErr(t, "reuse already dispatched leg", err)

@@ -62,18 +62,6 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	return nil
 }
 
-// workflowWork exposes active workflow ownership to task dispatch.
-func (b *serveBuilder) workflowWork(ctx context.Context, tctx tools.ToolContext, workID string) (worker.WorkflowWork, bool, error) {
-	planned, ok, err := b.workflowMgr.WorkflowWork(ctx, tctx.SessionID, workID)
-	if err != nil || !ok {
-		return worker.WorkflowWork{}, ok, err
-	}
-	return worker.WorkflowWork{
-		RunID: planned.RunID, Phase: planned.Phase, AgentType: planned.AgentType,
-		Scope: planned.Scope, MaxToolLoops: planned.MaxToolLoops,
-	}, true, nil
-}
-
 func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := delegation.RegisterDelegationTools(b.toolRuntime.Registry, b.delegationMgr); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
@@ -184,7 +172,7 @@ func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
 		Workers:          b.workersCfg,
 		ToolBudget:       b.workerToolBudgetFor,
 		BindWorkflowTask: b.workflowMgr.BindWorkflowTask,
-		WorkflowWork:     b.workflowWork,
+		WorkflowWork:     b.workflowMgr.WorkflowWork,
 		TaskReceipt:      b.workerQueue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
 			if b.mgr == nil || b.mgr.Decisions() == nil {

@@ -44,7 +44,7 @@ func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
 			}
 			var saved PromptInput
 			testutil.FailErr(t, "decode durable recovery", json.Unmarshal([]byte(resumed.InputJSON), &saved))
-			if !saved.Continuation || saved.ResumesSubmissionID != original.ID {
+			if !saved.Continuation || saved.Recovery == nil || saved.Recovery.AfterMessageID != action.AfterMessageID {
 				t.Fatalf("recovery lost intent: %+v", saved)
 			}
 			replay, created, err := mgr.AdmitPrompt(ctx, sess.ID, operation, input, input)
@@ -87,7 +87,7 @@ func TestPromptRetryRestoresOriginalInputFromReceipt(t *testing.T) {
 	testutil.FailErr(t, "retry after manager restart", err)
 	var saved PromptInput
 	testutil.FailErr(t, "decode retry", json.Unmarshal([]byte(resumed.InputJSON), &saved))
-	if saved.Text != originalInput.Text || !slices.Equal(saved.ArtifactIDs, originalInput.ArtifactIDs) || saved.ResumesSubmissionID != original.ID || !saved.Continuation {
+	if saved.Text != originalInput.Text || !slices.Equal(saved.ArtifactIDs, originalInput.ArtifactIDs) || saved.Recovery == nil || saved.Recovery.AfterMessageID != original.ID || !saved.Continuation {
 		t.Fatalf("retry did not restore original request: %+v", saved)
 	}
 }
