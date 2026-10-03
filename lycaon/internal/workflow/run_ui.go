@@ -39,6 +39,8 @@ func (m *RunManager) ComputeRunUI(ctx context.Context, run *api.WorkflowRun) (*a
 	if err != nil {
 		return nil, err
 	}
+	summary := manifest.Summary()
+	ui.Definition = &summary
 	ui.Request = manifest.Request.Summary()
 	phase, ok := manifest.PhaseForRun(run, run.CurrentPhase)
 	if !ok {

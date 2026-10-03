@@ -289,7 +289,6 @@ export function ChatView(props: Props) {
     catalogWorkflowRun(
       activeRun(),
       props.appStore.state.workflowRuns,
-      props.appStore.state.workflowCatalog,
     );
 
   const tabs = createChatTabsState({
