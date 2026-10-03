@@ -91,15 +91,9 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 // honest timeout and a fully reaped tree. The limit is derived from the
 // measured baseline, not chosen to fire during startup.
 func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
-	hard := 45
-	if v := os.Getenv("SCANSTRESS_HARD_LIMIT_SEC"); v != "" {
-		var n int
-		if _, err := fmtSscan(v, &n); err == nil && n > 0 {
-			hard = n
-		}
-	}
-	scanner := newScanner(t, "stress-timeout", scancatalog.RuntimePolicy{SoftLimitSec: hard / 2, HardLimitSec: hard})
 	project := writeCorpus(t, corpusSpec{Files: corpusFiles(), VulnPerFile: 3})
+	hard := hardLimitWithinEngineWork(t, project)
+	scanner := newScanner(t, "stress-timeout", scancatalog.RuntimePolicy{SoftLimitSec: max(1, hard/2), HardLimitSec: hard})
 
 	obs := startObserver(t, 200*time.Millisecond)
 	start := time.Now()
@@ -135,4 +129,44 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 	}
 	reportf(t, "hard_limit_sec=%d elapsed=%s overshoot=%s drain=%s owned_run_dirs=%d err=%v",
 		hard, elapsed.Round(time.Millisecond), overshoot.Round(time.Millisecond), drain.Round(time.Millisecond), len(owned), err)
+}
+
+// hardLimitWithinEngineWork times one unlimited scan of project and returns the
+// whole-second limit at or below the midpoint between the first engine process
+// and completion, so the limit binds during engine work at any engine speed.
+// SCANSTRESS_HARD_LIMIT_SEC overrides the measurement.
+func hardLimitWithinEngineWork(t *testing.T, project string) int {
+	t.Helper()
+	if v := os.Getenv("SCANSTRESS_HARD_LIMIT_SEC"); v != "" {
+		var n int
+		if _, err := fmtSscan(v, &n); err == nil && n > 0 {
+			return n
+		}
+	}
+	scanner := newScanner(t, "stress-timeout-baseline", scancatalog.RuntimePolicy{})
+	obs := startObserver(t, 100*time.Millisecond)
+	start := time.Now()
+	_, err := scanner.Run(t.Context(), scan.ScanRequest{ProjectDir: project, Categories: []api.ScanCategory{api.ScanCategorySAST}})
+	elapsed := time.Since(start)
+	samples := obs.finish()
+	if err != nil {
+		t.Fatalf("baseline scan for the hard limit: %v", err)
+	}
+	engineAt := time.Duration(-1)
+	for _, s := range samples {
+		if s.EngineProcs > 0 {
+			engineAt = s.At.Sub(start)
+			break
+		}
+	}
+	if engineAt < 0 {
+		t.Fatalf("baseline scan finished in %s without an observed engine process", elapsed)
+	}
+	hard := int((engineAt + elapsed) / 2 / time.Second)
+	if time.Duration(hard)*time.Second <= engineAt {
+		t.Fatalf("engine phase %s..%s is too short for a whole-second hard limit; raise SCANSTRESS_FILES", engineAt, elapsed)
+	}
+	reportf(t, "baseline elapsed=%s engine_at=%s hard_limit_sec=%d",
+		elapsed.Round(time.Millisecond), engineAt.Round(time.Millisecond), hard)
+	return hard
 }

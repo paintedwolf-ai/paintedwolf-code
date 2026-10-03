@@ -5140,7 +5140,7 @@ go_struct_fields:
     lycaon/internal/exec/exec.cappedOutput: 4
     lycaon/internal/exec/exec.limitedWriter: 4
     lycaon/internal/exec/exec.ptySession: 8
-    lycaon/internal/exec/exec.reaperEntry: 4
+    lycaon/internal/exec/exec.reaperEntry: 5
     lycaon/internal/exec/exec.redirectFiles: 3
     lycaon/internal/exec/exec.sequenceRun: 16
     lycaon/internal/exec/exec.stageFiles: 4
@@ -12329,8 +12329,8 @@ source_files:
     lycaon/internal/exec/pty_start.go: 50
     lycaon/internal/exec/pty_unix.go: 23
     lycaon/internal/exec/pty_windows.go: 15
-    lycaon/internal/exec/reaper.go: 8
-    lycaon/internal/exec/reaper_unix.go: 122
+    lycaon/internal/exec/reaper.go: 35
+    lycaon/internal/exec/reaper_unix.go: 166
     lycaon/internal/exec/reaper_windows.go: 12
     lycaon/internal/exec/resolved_path.go: 51
     lycaon/internal/exec/sanitize_env.go: 99
@@ -13553,7 +13553,7 @@ source_files:
     lycaon/internal/scan/doc.go: 1
     lycaon/internal/scan/drilldown_reject.go: 38
     lycaon/internal/scan/drivers/bundled/opengrep.go: 268
-    lycaon/internal/scan/drivers/bundled/opengrep_io.go: 62
+    lycaon/internal/scan/drivers/bundled/opengrep_io.go: 63
     lycaon/internal/scan/drivers/bundled/opengrep_targets.go: 56
     lycaon/internal/scan/drivers/external/scanner.go: 294
     lycaon/internal/scan/drivers/library/gitleaks_lycaon.go: 21
@@ -18663,7 +18663,7 @@ test_files:
     lycaon/internal/exec/priority_windows_test.go: 35
     lycaon/internal/exec/pty_guard_test.go: 128
     lycaon/internal/exec/pty_test.go: 99
-    lycaon/internal/exec/reaper_unix_test.go: 117
+    lycaon/internal/exec/reaper_unix_test.go: 163
     lycaon/internal/exec/sanitize_env_test.go: 129
     lycaon/internal/exec/separate_stderr_test.go: 58
     lycaon/internal/exec/stage_redirect_test.go: 150
@@ -22201,11 +22201,11 @@ test_files:
     lycaon/test/scanstress/contention_test.go: 105
     lycaon/test/scanstress/fixture_test.go: 134
     lycaon/test/scanstress/harness_test.go: 252
-    lycaon/test/scanstress/interrupt_test.go: 114
+    lycaon/test/scanstress/interrupt_test.go: 143
     lycaon/test/scanstress/leak_test.go: 109
     lycaon/test/scanstress/output_test.go: 88
     lycaon/test/scanstress/scan_helpers_test.go: 3
-    lycaon/test/scanstress/shutdown_test.go: 145
+    lycaon/test/scanstress/shutdown_test.go: 163
     lycaon/test/scanstress/sidecar_shutdown.sh: 117
     lycaon/test/security/agentsmd_governance_e2e_test.go: 148
     lycaon/test/security/api_agent_system_prompt_test.go: 56
