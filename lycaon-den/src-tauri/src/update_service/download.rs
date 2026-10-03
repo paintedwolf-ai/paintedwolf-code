@@ -54,6 +54,19 @@ pub async fn retry_update(
         {
             return Err(Failure::CandidateChanged.into());
         }
+        if inner
+            .state
+            .last_error
+            .as_ref()
+            .is_some_and(|error| error.code == Failure::VerificationFailed)
+        {
+            let artifact = staging::root(inner.state.candidate.as_ref().unwrap())?.join("artifact");
+            match std::fs::remove_file(artifact) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(UpdateError::new(Failure::StateUnavailable, error)),
+            }
+        }
         staging::clear_rejected(&expected_release_id)?;
         inner.blocked_release = None;
     }
@@ -98,7 +111,8 @@ async fn prepare(app: &AppHandle, expected: &str) -> Result<NativeUpdateState, U
     if !service.current(generation) {
         return Ok(inner.state.clone());
     }
-    match result.and_then(|()| staging::publish(&candidate)) {
+    let mut failure = None;
+    match result.and_then(|identity| staging::publish(&candidate, identity)) {
         Ok(()) => {
             inner.state.staged_release_id = Some(candidate.release_id.clone());
             inner.state.installation = Installation::Staged;
@@ -116,33 +130,52 @@ async fn prepare(app: &AppHandle, expected: &str) -> Result<NativeUpdateState, U
             }
         }
         Err(mut error) => {
-            if error.code == Failure::VerificationFailed {
+            if matches!(
+                error.code,
+                Failure::VerificationFailed
+                    | Failure::UnsupportedInstallation
+                    | Failure::InstallFailed
+                    | Failure::InvalidRelease
+            ) {
                 if let Err(persist) = staging::reject(candidate.release_id.clone()) {
                     error = error.with_context(persist);
                 }
                 inner.blocked_release = Some(candidate.release_id);
             }
             inner.state.installation = Installation::Failed;
+            failure = Some(error.clone());
             inner.state.last_error = Some(error);
         }
     }
     emit(app, &mut inner.state);
-    Ok(inner.state.clone())
+    failure.map_or_else(|| Ok(inner.state.clone()), Err)
 }
 async fn transfer(
     app: &AppHandle,
     candidate: &Candidate,
     generation: u64,
-) -> Result<(), UpdateError> {
+) -> Result<String, UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
     if !service.current(generation) {
         return Err(Failure::Cancelled.into());
     }
+    super::installer::probe_destination()?;
     let dir = staging::root(candidate)?;
     crate::config_dir::ensure_private_dir(&dir)
         .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     staging::clean_partials(candidate)?;
+    if dir.join("artifact").is_file() {
+        phase(app, generation, Installation::Preparing).await?;
+        let release = candidate.clone();
+        return tauri::async_runtime::spawn_blocking(move || {
+            let _permit = permit;
+            // Preparation verifies the cached archive before using any of its bytes.
+            super::installer::prepare(&release)
+        })
+        .await
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+    }
     let partial = dir.join(format!("{}.partial", uuid::Uuid::new_v4()));
     let cleanup = Partial(partial.clone());
     let url = tauri::Url::parse(&candidate.artifact_url)
@@ -230,8 +263,7 @@ async fn transfer(
         super::installer::prepare(&release)
     })
     .await
-    .map_err(|e| UpdateError::new(Failure::InstallFailed, e))??;
-    Ok(())
+    .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
 }
 async fn phase(app: &AppHandle, generation: u64, phase: Installation) -> Result<(), UpdateError> {
     let service = app.state::<UpdateService>();

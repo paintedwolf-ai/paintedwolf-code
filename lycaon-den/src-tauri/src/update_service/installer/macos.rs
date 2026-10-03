@@ -8,8 +8,36 @@ use std::{
     },
 };
 pub struct InstallationLease(pub fs::File);
+
+pub fn writable_installation(target: &Path) -> bool {
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    let Ok(parent) = CString::new(parent.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // Translocated and disk-image applications reside on a read-only mount.
+    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    unsafe {
+        libc::statvfs(parent.as_ptr(), stat.as_mut_ptr()) == 0
+            && stat.assume_init().f_flag & libc::ST_RDONLY == 0
+            && libc::access(parent.as_ptr(), libc::W_OK | libc::X_OK) == 0
+    }
+}
+
+pub fn acquire_gate(target: &Path) -> Result<InstallationLease, UpdateError> {
+    acquire_named_lease(target, "gate", true, false)
+}
 pub fn acquire_lease(
     target: &Path,
+    exclusive: bool,
+    nonblocking: bool,
+) -> Result<InstallationLease, UpdateError> {
+    acquire_named_lease(target, "lifetime", exclusive, nonblocking)
+}
+fn acquire_named_lease(
+    target: &Path,
+    kind: &str,
     exclusive: bool,
     nonblocking: bool,
 ) -> Result<InstallationLease, UpdateError> {
@@ -17,12 +45,23 @@ pub fn acquire_lease(
     crate::config_dir::ensure_private_dir(&root)
         .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     let id = format!("{:x}", Sha256::digest(target.as_os_str().as_bytes()));
+    acquire_lock(
+        &root.join(format!("installation-{id}-{kind}.lock")),
+        exclusive,
+        nonblocking,
+    )
+}
+fn acquire_lock(
+    path: &Path,
+    exclusive: bool,
+    nonblocking: bool,
+) -> Result<InstallationLease, UpdateError> {
     let file = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(root.join(format!("installation-{id}.lock")))
+        .open(path)
         .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     let mode = if exclusive {
         libc::LOCK_EX
@@ -30,10 +69,13 @@ pub fn acquire_lease(
         libc::LOCK_SH
     } | if nonblocking { libc::LOCK_NB } else { 0 };
     if unsafe { libc::flock(file.as_raw_fd(), mode) } != 0 {
-        return Err(UpdateError::new(
-            Failure::InvalidTransition,
-            std::io::Error::last_os_error(),
-        ));
+        let error = std::io::Error::last_os_error();
+        let code = if error.kind() == std::io::ErrorKind::WouldBlock {
+            Failure::InvalidTransition
+        } else {
+            Failure::StateUnavailable
+        };
+        return Err(UpdateError::new(code, error));
     }
     Ok(InstallationLease(file))
 }
@@ -89,7 +131,11 @@ fn safe_link(path: &Path, link: &Path) -> bool {
     }
     true
 }
-pub fn prepare(target: &Path, candidate: &Candidate, artifact: &Path) -> Result<(), UpdateError> {
+pub fn prepare(
+    target: &Path,
+    candidate: &Candidate,
+    artifact: &Path,
+) -> Result<String, UpdateError> {
     verify_bundle(target)?;
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     check_space(parent, expanded_size(artifact)?)?;
@@ -131,13 +177,16 @@ pub fn prepare(target: &Path, candidate: &Candidate, artifact: &Path) -> Result<
             .permissions(),
     )
     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+    let executable_hash =
+        super::super::transaction::hash(&super::super::transaction::executable(&temp))?;
     let destination = prepared_path(target, candidate)?;
     if destination.exists() {
         fs::remove_dir_all(&destination)
             .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
     }
     crate::atomic_file::replace(&temp, &destination, true)
-        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+    Ok(executable_hash)
 }
 fn expanded_size(artifact: &Path) -> Result<u64, UpdateError> {
     let file = fs::File::open(artifact).map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
@@ -262,6 +311,32 @@ fn extract(artifact: &Path, temp: &Path) -> Result<(), UpdateError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn concurrent_instances_share_lifetime_while_gate_excludes_activation() {
+        let root = crate::test_support::TempDir::new("update-locks");
+        let lifetime = root.join("lifetime");
+        let gate = root.join("gate");
+        let first = acquire_lock(&lifetime, false, true).unwrap();
+        assert!(acquire_lock(&lifetime, true, true).is_err());
+        let second = acquire_lock(&lifetime, false, true).unwrap();
+        drop(first);
+        assert!(acquire_lock(&lifetime, true, true).is_err());
+        drop(second);
+        let admission = acquire_lock(&gate, true, true).unwrap();
+        let exclusive = acquire_lock(&lifetime, true, true).unwrap();
+        assert_eq!(
+            unsafe { libc::flock(exclusive.0.as_raw_fd(), libc::LOCK_UN) },
+            0
+        );
+        assert!(acquire_lock(&gate, true, true).is_err());
+        assert_eq!(
+            unsafe { libc::flock(exclusive.0.as_raw_fd(), libc::LOCK_SH) },
+            0
+        );
+        drop(admission);
+        let _helper = acquire_lock(&gate, true, true).unwrap();
+        assert!(acquire_lock(&lifetime, true, true).is_err());
+    }
     #[test]
     fn archive_paths_cannot_escape_the_bundle() {
         for bad in [

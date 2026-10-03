@@ -485,26 +485,26 @@ pub fn run() {
             document_outbox::reconcile_windows(app.handle(), None);
             sidecar::layout::setup_bundled_engine_layout(app.handle());
             sidecar::setup_supervision(app.handle());
+            webkit_features::create_main_window(app.handle())?;
+            window_appearance::setup(app.handle());
             let startup = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 match update_service::transaction::prepare_exit(&startup, None, true).await {
                     Ok(Some(activation)) => {
-                        if app_exit::finish_update(&startup, activation).await.is_ok() {
-                            return;
+                        match app_exit::finish_update(&startup, activation).await {
+                            Ok(()) => return,
+                            Err(error) => {
+                                update_service::transaction::resume(&startup, Some(error)).await
+                            }
                         }
-                        update_service::transaction::resume(&startup, None).await;
                     }
                     Err(error) => update_service::transaction::resume(&startup, Some(error)).await,
                     Ok(None) => {}
                 }
-                let window_app = startup.clone();
-                let _ = startup.run_on_main_thread(move || {
-                    if let Err(error) = webkit_features::create_main_window(&window_app) {
-                        eprintln!("Could not open application window: {error}");
-                    } else {
-                        window_appearance::setup(&window_app);
-                    }
-                });
+                startup
+                    .state::<update_service::UpdateService>()
+                    .finish_startup(&startup)
+                    .await;
                 update_service::check::start_update_scheduler(startup);
             });
             accessibility_text_size::setup(app.handle().clone())

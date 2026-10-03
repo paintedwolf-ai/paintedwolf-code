@@ -36,6 +36,7 @@ pub struct UpdateService {
     wake: tokio::sync::Notify,
     preparation: std::sync::Arc<tokio::sync::Mutex<()>>,
     activation: std::sync::Arc<tokio::sync::Mutex<()>>,
+    startup_ready: tokio::sync::watch::Sender<bool>,
 }
 fn default_channel(version: &str) -> Result<UpdateChannel, UpdateError> {
     let version = semver::Version::parse(version)
@@ -108,9 +109,20 @@ impl UpdateService {
             }),
             generation: AtomicU64::new(0),
             wake: tokio::sync::Notify::new(),
+            startup_ready: tokio::sync::watch::channel(false).0,
             preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         }
+    }
+    pub async fn wait_for_startup(&self) {
+        let mut ready = self.startup_ready.subscribe();
+        let _ = ready.wait_for(|ready| *ready).await;
+    }
+    pub async fn finish_startup(&self, app: &AppHandle) {
+        let mut inner = self.inner.lock().await;
+        inner.state.startup_pending = false;
+        emit(app, &mut inner.state);
+        self.startup_ready.send_replace(true);
     }
     fn current(&self, generation: u64) -> bool {
         self.generation.load(Ordering::Acquire) == generation

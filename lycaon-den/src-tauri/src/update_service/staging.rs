@@ -9,6 +9,7 @@ pub struct Staged {
     pub format_version: u8,
     pub candidate: Candidate,
     pub verified_at: u64,
+    pub executable_hash: String,
 }
 pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
     if !candidate.valid_identity() {
@@ -18,12 +19,13 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
         .join("staging")
         .join(&candidate.release_id))
 }
-pub fn publish(candidate: &Candidate) -> Result<(), UpdateError> {
+pub fn publish(candidate: &Candidate, executable_hash: String) -> Result<(), UpdateError> {
     read_ready()?;
     let staged = Staged {
         format_version: 1,
         candidate: candidate.clone(),
         verified_at: super::now(),
+        executable_hash,
     };
     persistence::write_json_atomic(
         &persistence::update_dir()?,
@@ -42,7 +44,14 @@ pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
     };
     let staged: Staged = serde_json::from_slice(&bytes)
         .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if staged.format_version != 1 || !staged.candidate.valid_identity() {
+    if staged.format_version != 1
+        || !staged.candidate.valid_identity()
+        || staged.executable_hash.len() != 64
+        || !staged
+            .executable_hash
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit())
+    {
         return Err(Failure::JournalUnavailable.into());
     }
     Ok(Some(staged))
@@ -67,14 +76,7 @@ pub fn restore(state: &mut NativeUpdateState) -> Result<(), UpdateError> {
         forget_ready()?;
         return Ok(());
     }
-    let artifact = root(&staged.candidate)?.join("artifact");
-    super::verification::verify(
-        &artifact,
-        &staged.candidate.artifact_signature,
-        &super::check::embedded_key().1,
-        &staged.candidate.version,
-    )
-    .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+    // Activation validates the prepared executable against this authenticated receipt.
     state.staged_release_id = Some(staged.candidate.release_id.clone());
     state.candidate = Some(staged.candidate);
     state.discovery = Discovery::Available;

@@ -8,12 +8,14 @@ import {
   clearEngineStartupProgress,
   noteEngineStartupProgress,
 } from "../platform/connection/engine-startup.ts";
+import { nativeUpdateState as sharedUpdates } from "../settings/system/update-state.ts";
 import { EngineStartupStage } from "./EngineStartupStage.tsx";
 
 
 const checkNativeUpdate = vi.fn();
 const installNativeUpdate = vi.fn();
-const nativeUpdateState = () => updateFixture({ automatic_updates_enabled: false });
+let updateStartupPending = false;
+const nativeUpdateState = () => updateFixture({ automatic_updates_enabled: false, startup_pending: updateStartupPending });
 vi.mock("../settings/system/update-service.ts", () => ({
   nativeUpdateService: {
     getState: async () => nativeUpdateState(),
@@ -58,7 +60,21 @@ const base = {
 };
 
 describe("EngineStartupStage", () => {
+  it("shows the native update decision before any engine progress exists", async () => {
+    updateStartupPending = true;
+    const stop = sharedUpdates.mount();
+    try {
+      await waitFor(() => expect(sharedUpdates.state()?.startup_pending).toBe(true));
+      render(() => <EngineStartupStage />);
+      expect(screen.getByTestId("update-startup")).toBeTruthy();
+      expect(screen.queryByTestId("engine-startup")).toBeNull();
+    } finally {
+      await sharedUpdates.run(async () => updateFixture({ startup_pending: false }));
+      stop();
+    }
+  });
   beforeEach(() => {
+    updateStartupPending = false;
     checkNativeUpdate.mockReset();
     installNativeUpdate.mockReset();
     checkNativeUpdate.mockResolvedValue(nativeUpdateState());

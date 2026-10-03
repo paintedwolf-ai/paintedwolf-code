@@ -201,6 +201,7 @@ pub(super) async fn run_check(
         result = fetch_candidate(app, version, channel) => result,
         _ = service.wake.notified() => Err(Failure::Cancelled.into()),
     };
+    let failure = checked.as_ref().err().cloned();
     let mut inner = service.inner.lock().await;
     if service.current(generation) {
         let bucket = inner.preferences.rollout_bucket;
@@ -217,7 +218,7 @@ pub(super) async fn run_check(
         }
         emit(app, &mut inner.state);
     }
-    Ok(inner.state.clone())
+    failure.map_or_else(|| Ok(inner.state.clone()), Err)
 }
 #[tauri::command]
 pub async fn check_update(app: AppHandle) -> Result<NativeUpdateState, UpdateError> {

@@ -248,6 +248,9 @@ pub async fn finish_update(
         .commit_boundary()
         .map_err(|e| UpdateError::new(UpdateErrorCode::Cancelled, e))?;
     if let Err(error) = stop_and_activate(app, activation).await {
+        app.state::<crate::update_service::UpdateService>()
+            .finish_startup(app)
+            .await;
         let _ = crate::sidecar::commands::ipc_start_sidecar(app.clone(), None).await;
         return Err(error);
     }

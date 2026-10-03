@@ -102,12 +102,17 @@ The first release containing the automatic installer still requires the old clie
 Local tests establish state, migration, archive, and transaction invariants. A signed beta and clean VMs must establish the packaged lifecycle before promotion:
 
 1. Install a released app A at a writable application location. Exercise chats, drafts, an editor, and multiple windows without opening update settings.
-2. Offer signed beta B through the release channel; verify background staging and the persistent restart action. Ordinary quit must stop the engine before exchange, install B, and remain closed. The next launch must run B and preserve released history and preferences.
+2. Offer signed beta B through the release channel; verify background staging and the update-ready notification and existing Settings restart action. Ordinary quit must stop the engine before exchange, install B, and remain closed. The next launch must run B and preserve released history and preferences.
 3. Repeat with explicit restart, opt-out during download and after staging, channel change, a Homebrew receipt, a non-writable application directory, low disk space, and offline quit. Automatic work must never raise an administrator prompt or initiate restart.
 4. Withdraw B after download. Its final offer check must prevent activation. Replace it with C and verify that C does not inherit B's staged identity.
 5. Interrupt the helper before exchange, after exchange, and before the completion journal write; launch concurrently with activation. Both complete bundles must remain identifiable, and no process may start an engine from mixed installation files.
 6. Exercise a supported released-store migration and its recovery snapshot. A failed new-version startup must retain recovery evidence, never downgrade the database or repeatedly relaunch.
-7. Test a skipped signing-key bridge and a second restart into the successor release. Inspect version-bound signatures and package signing on both sides.
+7. Leave B's activation unconfirmed, then reinstall a different signed version at the same location, including A. The stale receipt must be archived, startup must work, and a later fix-forward update must remain available.
+8. Run as a standard user with an unwritable application directory, from a mounted DMG, and under App Translocation. Observe multiple scheduler attempts: unsupported locations must not download repeatedly. After correcting the location, an explicit retry must reuse a valid cached archive and replace a corrupt one.
+9. Start a second process from the same installed app while the first remains open. It must not hang awaiting an exclusive lifetime lease. Race a launch with helper activation and lease downgrade; no engine may start while an exchange is possible.
+10. Download a quarantined, notarized beta through a browser. Verify that the copied helper runs directly from private staging with quarantine and signing attributes intact, including Gatekeeper assessment and executable-relative libraries. Exercise ordinary quit and explicit restart. Reuse of prepared files must survive a full signed-resource validation; tampering with resources or the main executable must prevent reuse.
+11. Launch with a staged update while offline, and inject a helper-spawn failure. The first window must remain responsive, normal engine startup must resume, and Settings must retain the actual failure.
+12. Test a skipped signing-key bridge and a second restart into the successor release. Inspect version-bound signatures and package signing on both sides.
 
 Keep results with the release evidence. A local unit pass is not a claim of Gatekeeper, application-translocation, logout, power-loss, or cross-account filesystem behavior; these belong in the beta/VM qualification.
 

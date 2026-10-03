@@ -44,6 +44,7 @@ import { ChatDestinationPicker } from "./components/chatview/ChatDestinationPick
 import { startComposerDocumentMirror } from "./chat/composer/composer-document-store.ts";
 import { isTauriRuntime } from "./platform/runtime.ts";
 import { nativeUpdateState } from "./settings/system/update-state.ts";
+import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
 
@@ -114,7 +115,7 @@ function App() {
         });
     const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
-      : nativeUpdateState.mount();
+      : mountUpdateNotice({ notices: noticeStore });
     onCleanup(() => {
       stopDocumentDelivery();
       stopComposerDocumentMirror();
@@ -132,7 +133,7 @@ function App() {
     <>
       {/* Managed startup and critical stops replace Shell while context actions remain available. */}
       <Show
-        when={engineStartupState().status === "idle"}
+        when={engineStartupState().status === "idle" && !nativeUpdateState.state()?.startup_pending}
         fallback={<EngineStartupStage />}
       >
         <Show when={!criticalStop.spec()} fallback={criticalStop.view()}>

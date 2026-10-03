@@ -12,6 +12,9 @@ pub async fn ipc_start_sidecar(
     app: tauri::AppHandle,
     password: Option<String>,
 ) -> Result<SidecarInfo, SidecarStartError> {
+    app.state::<crate::update_service::UpdateService>()
+        .wait_for_startup()
+        .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<SidecarState>();
@@ -37,6 +40,9 @@ pub async fn ipc_export_startup_diagnostics() -> Result<Vec<u8>, String> {
 
 #[tauri::command(rename = "restart_sidecar")]
 pub async fn ipc_restart_sidecar(app: tauri::AppHandle) -> Result<SidecarInfo, SidecarStartError> {
+    app.state::<crate::update_service::UpdateService>()
+        .wait_for_startup()
+        .await;
     let handle = app.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<SidecarState>();
@@ -69,7 +75,12 @@ pub fn ipc_cancel_sidecar_start(state: tauri::State<'_, SidecarState>) -> bool {
 }
 
 #[tauri::command(rename = "attach_existing_daemon")]
-pub async fn ipc_attach_existing_daemon() -> Result<Option<SidecarInfo>, String> {
+pub async fn ipc_attach_existing_daemon(
+    app: tauri::AppHandle,
+) -> Result<Option<SidecarInfo>, String> {
+    app.state::<crate::update_service::UpdateService>()
+        .wait_for_startup()
+        .await;
     tauri::async_runtime::spawn_blocking(|| attach_existing_daemon())
         .await
         .map_err(|e| format!("attach task join: {e}"))?
@@ -77,8 +88,12 @@ pub async fn ipc_attach_existing_daemon() -> Result<Option<SidecarInfo>, String>
 
 #[tauri::command(rename = "sidecar_info")]
 pub async fn ipc_sidecar_info(
+    app: tauri::AppHandle,
     state: tauri::State<'_, SidecarState>,
 ) -> Result<Option<SidecarInfo>, String> {
+    app.state::<crate::update_service::UpdateService>()
+        .wait_for_startup()
+        .await;
     if let Some(info) = state.cached_info() {
         return Ok(Some(info));
     }

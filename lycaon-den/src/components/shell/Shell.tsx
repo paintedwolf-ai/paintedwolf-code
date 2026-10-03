@@ -1,4 +1,3 @@
-import { UpdateStatusControl } from "../update/UpdateStatusControl.tsx";
 import { registerShellCommands } from "./shell-commands.ts";
 import { registerShellDismissCommand } from "./shell-dismiss-command.ts";
 import { createShellWorkspaceContext } from "./shell-workspace-context.ts";
@@ -1968,7 +1967,6 @@ export function Shell(props: Props) {
               />
             </NavFold>
             <div class="den-shell-nav-dock-row">
-              <UpdateStatusControl />
               <button
                 type="button"
                 class="den-shell-dock-link"

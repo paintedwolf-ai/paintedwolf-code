@@ -13,10 +13,10 @@ use std::{
 use tauri::{AppHandle, Manager};
 mod journal;
 use journal::{active_path, archive_receipt, read, write, Phase, Transaction};
-fn executable(bundle: &Path) -> PathBuf {
+pub(super) fn executable(bundle: &Path) -> PathBuf {
     bundle.join("Contents/MacOS/painted-wolf-code")
 }
-fn hash(path: &Path) -> Result<String, UpdateError> {
+pub(super) fn hash(path: &Path) -> Result<String, UpdateError> {
     let mut file =
         fs::File::open(path).map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
     let mut digest = Sha256::new();
@@ -140,7 +140,7 @@ pub async fn prepare_exit(
         withdraw(app).await?;
         return Err(Failure::ReleaseWithdrawn.into());
     }
-    let mut inner = service.inner.lock().await;
+    let inner = service.inner.lock().await;
     if inner.state.staged_release_id.as_ref() != Some(&candidate.release_id)
         || (!explicit && !inner.state.automatic_updates_enabled)
     {
@@ -153,40 +153,67 @@ pub async fn prepare_exit(
     if source != super::InstallSource::DirectDownload {
         return Err(Failure::PackageManaged.into());
     }
-    let target = installer::bundle()?;
-    installer::verify_bundle(&target)?;
-    let prepared = installer::prepared_path(&target, &candidate)?;
-    if let Err(error) = installer::verify_bundle(&prepared) {
-        let error = invalidate_preparation(&mut inner, &candidate, error);
-        emit(app, &mut inner.state);
-        return Err(error);
-    }
-    let t = Transaction {
-        format_version: 1,
-        id: uuid::Uuid::new_v4().to_string(),
-        candidate: candidate.clone(),
-        previous_hash: hash(&executable(&target))?,
-        next_hash: hash(&executable(&prepared))?,
-        target,
-        phase: Phase::Prepared,
-        relaunch,
-        recovery_relaunch_attempted: false,
-        error: None,
-    };
-    let helper = staging::root(&candidate)?.join("update-helper");
-    fs::copy(
-        std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
-        &helper,
-    )
-    .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-    fs::File::open(&helper)
-        .and_then(|f| f.sync_all())
+    let generation = service
+        .generation
+        .load(std::sync::atomic::Ordering::Acquire);
+    drop(inner);
+    let release = candidate.clone();
+    let prepared_result = tauri::async_runtime::spawn_blocking(move || {
+        let candidate = release;
+        let target = installer::bundle()?;
+        installer::verify_bundle(&target)?;
+        let prepared = installer::prepared_path(&target, &candidate)?;
+        let ready = staging::read_ready()?.ok_or(Failure::CandidateMissing)?;
+        if ready.candidate.release_id != candidate.release_id
+            || hash(&executable(&prepared))? != ready.executable_hash
+        {
+            return Err(Failure::VerificationFailed.into());
+        }
+        installer::verify_bundle(&prepared)?;
+        let t = Transaction {
+            format_version: 1,
+            id: uuid::Uuid::new_v4().to_string(),
+            candidate: candidate.clone(),
+            previous_hash: hash(&executable(&target))?,
+            next_hash: ready.executable_hash,
+            target,
+            phase: Phase::Prepared,
+            relaunch,
+            recovery_relaunch_attempted: false,
+            error: None,
+        };
+        let helper = staging::root(&candidate)?.join("update-helper");
+        fs::copy(
+            std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
+            &helper,
+        )
         .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        fs::File::open(&helper)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        Ok::<_, UpdateError>((t, helper))
+    })
+    .await
+    .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+    let mut inner = service.inner.lock().await;
+    if !service.current(generation)
+        || inner.state.staged_release_id.as_ref() != Some(&candidate.release_id)
+        || (!explicit && !inner.state.automatic_updates_enabled)
+    {
+        return Ok(None);
+    }
+    let (t, helper) = match prepared_result {
+        Ok(result) => result,
+        Err(error) => {
+            let error = invalidate_preparation(&mut inner, &candidate, error);
+            emit(app, &mut inner.state);
+            return Err(error);
+        }
+    };
     if let Some(previous) = read()? {
         if previous.phase == Phase::Committed
             || (previous.phase == Phase::Activated
-                && (previous.target != t.target
-                    || hash(&executable(&t.target))? != previous.next_hash))
+                && (previous.target != t.target || t.previous_hash != previous.next_hash))
         {
             return Err(Failure::InvalidTransition.into());
         }
@@ -269,7 +296,22 @@ pub async fn restart_to_update(
 #[cfg(target_os = "macos")]
 fn activate(t: &mut Transaction) -> Result<(), UpdateError> {
     installer::verify_bundle(&t.target)?;
-    activate_using(t, installer::prepare_at, installer::exchange, write)
+    let expected = t.next_hash.clone();
+    activate_using(
+        t,
+        |target, candidate| {
+            let prepared = installer::prepared_path(target, candidate)?;
+            // The recorded executable binds its code signature and sealed resources.
+            if hash(&executable(&prepared)).is_ok_and(|actual| actual == expected)
+                && installer::verify_bundle(&prepared).is_ok()
+            {
+                return Ok(());
+            }
+            installer::prepare_at(target, candidate).map(|_| ())
+        },
+        installer::exchange,
+        write,
+    )
 }
 #[cfg(target_os = "macos")]
 fn activate_using(
@@ -310,6 +352,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
         if t.id != id || t.phase != Phase::Committed {
             return Err(Failure::InvalidTransition.into());
         }
+        let _gate = installer::acquire_gate(&t.target)?;
         let _lease = installer::acquire_lease(&t.target, true, false)?;
         // Another startup may have completed the committed transaction while this helper waited.
         t = read()?.ok_or(Failure::JournalUnavailable)?;
@@ -418,8 +461,23 @@ pub fn startup_lease() -> Result<Option<installer::InstallationLease>, UpdateErr
     let Ok(target) = installer::bundle() else {
         return Ok(None);
     };
-    let lease = installer::acquire_lease(&target, true, false)?;
+    let _gate = installer::acquire_gate(&target)?;
+    let lease = match installer::acquire_lease(&target, true, true) {
+        Ok(lease) => lease,
+        Err(error) if error.code == Failure::InvalidTransition => {
+            // An existing process already protects the installed files.
+            return installer::acquire_lease(&target, false, false).map(Some);
+        }
+        Err(error) => return Err(error),
+    };
     if let Some(mut t) = read()? {
+        if t.target == target && superseded(&t)? {
+            installer::verify_bundle(&target)?;
+            archive_receipt(&t)?;
+            fs::remove_file(active_path()?)
+                .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
+            return downgrade(lease).map(Some);
+        }
         if t.target == target && t.phase == Phase::Committed {
             if let Err(error) = activate(&mut t) {
                 record_activation_failure(&mut t, &error)?;
@@ -447,16 +505,32 @@ pub fn startup_lease() -> Result<Option<installer::InstallationLease>, UpdateErr
             std::process::exit(0);
         }
     }
+    downgrade(lease).map(Some)
+}
+fn superseded(t: &Transaction) -> Result<bool, UpdateError> {
+    let installed = hash(&executable(&t.target))?;
+    Ok(installed != t.next_hash && (t.phase == Phase::Activated || installed != t.previous_hash))
+}
+#[cfg(target_os = "macos")]
+fn downgrade(
+    lease: installer::InstallationLease,
+) -> Result<installer::InstallationLease, UpdateError> {
     use std::os::fd::AsRawFd;
+    // The gate excludes helpers while BSD releases and reacquires this lock.
     if unsafe { libc::flock(lease.0.as_raw_fd(), libc::LOCK_SH) } != 0 {
         return Err(Failure::StateUnavailable.into());
     }
-    Ok(Some(lease))
+    Ok(lease)
 }
 
 pub(super) fn retained_release() -> Result<Option<String>, UpdateError> {
     Ok(read()?
-        .filter(|t| t.phase == Phase::Activated)
+        .filter(|t| {
+            matches!(
+                t.phase,
+                Phase::Prepared | Phase::Committed | Phase::Activated
+            )
+        })
         .map(|t| t.candidate.release_id))
 }
 pub(super) fn restore_failure(
@@ -490,6 +564,18 @@ pub(super) fn restore_failure(
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
+    #[test]
+    fn external_reinstall_retires_unconfirmed_activation_even_when_returning_to_previous_version() {
+        let root = crate::test_support::TempDir::new("update-reinstall");
+        let mut t = fixture(&root);
+        assert!(!superseded(&t).unwrap());
+        t.phase = Phase::Activated;
+        assert!(superseded(&t).unwrap());
+        fs::write(executable(&t.target), "new engine").unwrap();
+        assert!(!superseded(&t).unwrap());
+        fs::write(executable(&t.target), "external signed replacement").unwrap();
+        assert!(superseded(&t).unwrap());
+    }
     fn fixture(root: &Path) -> Transaction {
         let candidate = super::super::tests::candidate("1.1.0");
         let target = root.join("Painted Wolf Code.app");

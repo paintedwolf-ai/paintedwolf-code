@@ -1,3 +1,4 @@
+import { nativeUpdateState } from "../settings/system/update-state.ts";
 import { RecoveryUpdates } from "./update/RecoveryUpdates.tsx";
 import { Show, createSignal } from "solid-js";
 import type { JSX } from "solid-js";
@@ -77,7 +78,14 @@ export function EngineStartupStage(): JSX.Element {
 
   return (
     <WindowHost testId="engine-startup-host">
-      <Show when={progress()}>
+      <Show when={nativeUpdateState.state()?.startup_pending}>
+        <div class="den-engine-startup" data-testid="update-startup" {...tauriDragRegionProps({ deep: true })}>
+          <div class="den-engine-startup__pulse" aria-hidden="true" />
+          <p class="den-engine-startup__title">Preparing Painted Wolf Code</p>
+          <p class="den-engine-startup__message" role="status">Checking the prepared update before starting the engine.</p>
+        </div>
+      </Show>
+      <Show when={!nativeUpdateState.state()?.startup_pending && progress()}>
         {(state) => (
           <div
             class="den-engine-startup"

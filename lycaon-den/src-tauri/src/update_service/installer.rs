@@ -7,7 +7,7 @@ use std::{
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{acquire_lease, exchange, InstallationLease};
+pub use macos::{acquire_gate, acquire_lease, exchange, InstallationLease};
 
 pub fn bundle() -> Result<PathBuf, UpdateError> {
     let exe = std::env::current_exe()
@@ -23,7 +23,14 @@ pub fn bundle() -> Result<PathBuf, UpdateError> {
     fs::canonicalize(root).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
 }
 pub fn supported() -> bool {
-    cfg!(target_os = "macos") && bundle().is_ok()
+    #[cfg(target_os = "macos")]
+    {
+        bundle().is_ok_and(|target| macos::writable_installation(&target))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {
     if !candidate.valid_identity() {
@@ -96,10 +103,21 @@ pub fn check_space(path: &Path, required: u64) -> Result<(), UpdateError> {
     #[allow(unreachable_code)]
     Ok(())
 }
-pub fn prepare(candidate: &Candidate) -> Result<(), UpdateError> {
+pub fn probe_destination() -> Result<(), UpdateError> {
+    let target = bundle()?;
+    let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
+    let probe = parent.join(format!(
+        "{}probe-{}",
+        prepared_prefix(&target),
+        uuid::Uuid::new_v4()
+    ));
+    fs::create_dir(&probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
+    fs::remove_dir(probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
+}
+pub fn prepare(candidate: &Candidate) -> Result<String, UpdateError> {
     prepare_at(&bundle()?, candidate)
 }
-pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<(), UpdateError> {
+pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<String, UpdateError> {
     let artifact = staging::root(candidate)?.join("artifact");
     verification::verify(
         &artifact,
@@ -127,7 +145,7 @@ pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
                 "--deep",
                 "--strict",
                 "-R",
-                "identifier \"dev.paintedwolf.code\"",
+                &signing_requirement()?,
             ])
             .arg(path)
             .output()
@@ -144,5 +162,52 @@ pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
     {
         let _ = path;
         Err(Failure::UnsupportedInstallation.into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn signing_requirement() -> Result<String, UpdateError> {
+    static REQUIREMENT: std::sync::LazyLock<Result<String, UpdateError>> =
+        std::sync::LazyLock::new(|| {
+            let executable = std::env::current_exe()
+                .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+            let output = std::process::Command::new("/usr/bin/codesign")
+                .args(["--display", "--verbose=4"])
+                .arg(executable)
+                .output()
+                .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+            if !output.status.success() {
+                return Err(Failure::VerificationFailed.into());
+            }
+            let metadata = String::from_utf8_lossy(&output.stderr);
+            let team = metadata
+                .lines()
+                .find_map(|line| line.strip_prefix("TeamIdentifier="));
+            publisher_requirement(team, cfg!(debug_assertions))
+        });
+    REQUIREMENT.clone()
+}
+#[cfg(target_os = "macos")]
+fn publisher_requirement(team: Option<&str>, development: bool) -> Result<String, UpdateError> {
+    let identifier = "identifier \"dev.paintedwolf.code\"";
+    match team {
+        Some(team) if team.len() == 10 && team.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+            Ok(format!("{identifier} and anchor apple generic and certificate leaf[subject.OU] = \"{team}\"")),
+        Some("not set") | None if development => Ok(identifier.into()),
+        _ => Err(Failure::VerificationFailed.into()),
+    }
+}
+#[cfg(all(test, target_os = "macos"))]
+mod signing_tests {
+    use super::*;
+    #[test]
+    fn production_requires_a_concrete_publisher_and_cannot_inject_a_requirement() {
+        assert!(publisher_requirement(Some("TEAM123456"), false)
+            .unwrap()
+            .contains("certificate leaf[subject.OU] = \"TEAM123456\""));
+        assert!(publisher_requirement(Some("not set"), false).is_err());
+        assert!(publisher_requirement(None, false).is_err());
+        assert!(publisher_requirement(Some("TEAM\" or true"), false).is_err());
+        assert!(publisher_requirement(Some("not set"), true).is_ok());
     }
 }

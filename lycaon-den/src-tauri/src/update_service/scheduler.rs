@@ -27,13 +27,13 @@ pub fn start_update_scheduler(app: AppHandle) {
             let generation = service
                 .generation
                 .load(std::sync::atomic::Ordering::Acquire);
-            let _ = check::run_check(&app, true).await;
-            let _ = download::automatic(&app).await;
+            let checked = check::run_check(&app, true).await;
+            let downloaded = download::automatic(&app).await;
             if !service.current(generation) {
                 delay = 0;
                 continue;
             }
-            let failed = service.inner.lock().await.state.last_error.is_some();
+            let failed = checked.is_err() || downloaded.is_err();
             if failed {
                 failures += 1;
                 delay = retry_delay(failures) + rand::random::<u8>() as u64;

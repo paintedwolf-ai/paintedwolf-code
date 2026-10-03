@@ -11,7 +11,7 @@ export type UpdateCandidate = {
 };
 export type NativeUpdateState = {
   service_instance_id: string; revision: number; running_version: string; channel: UpdateChannel;
-  automatic_updates_enabled: boolean; install_source: InstallSource;
+  startup_pending: boolean; automatic_updates_enabled: boolean; install_source: InstallSource;
   capabilities: { can_check: boolean; can_download: boolean; can_restart_to_update: boolean; can_install_automatically: boolean; blocked_reason: string | null };
   discovery: "idle" | "checking" | "up_to_date" | "available" | "held_back" | "failed";
   candidate: UpdateCandidate | null;
