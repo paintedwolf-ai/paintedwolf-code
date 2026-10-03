@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -84,6 +85,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 	if !ok {
 		return
 	}
+	defer func() { _ = os.RemoveAll(source.ProjectDir) }()
 	req := scanbase.ScanRequest{
 		ProjectDir:  source.ProjectDir,
 		Categories:  job.Categories,
@@ -130,10 +132,6 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 		return
 	}
 	scanoutput.NormalizeResultPaths(result, source.ProjectDir)
-	if engineRan {
-		// The engine read the live tree; what moved under it is named.
-		r.fenceMovedSource(ctx, job, source, result)
-	}
 	if engineRan {
 		r.cacheCurrentFindings(scanCtx, job, contract, result)
 	}
