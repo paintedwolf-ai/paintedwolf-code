@@ -360,6 +360,8 @@ const (
 	CompletionReportFindingDispositionAccept CompletionReportFindingDisposition = "accept"
 	// CompletionReportFindingDispositionHeld is a surface found sound.
 	CompletionReportFindingDispositionHeld CompletionReportFindingDisposition = "held"
+	// CompletionReportFindingDispositionUnresolved is an unanswered review question.
+	CompletionReportFindingDispositionUnresolved CompletionReportFindingDisposition = "unresolved"
 )
 
 // CompletionReportAskEffort is how much work a report's ask commits to.
