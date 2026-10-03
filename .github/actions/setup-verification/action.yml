@@ -55,7 +55,6 @@ runs:
       uses: ./.github/actions/cache-decide
 
     - name: Set up maintained OpenGrep
-      if: runner.os == 'macOS'
       uses: ./.github/actions/setup-opengrep
 
     # Source-scanning frontend tests shell out to ripgrep.

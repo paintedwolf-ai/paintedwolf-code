@@ -61,6 +61,9 @@ func TestContainedCarriesDirectIPNarrowing(t *testing.T) {
 	if !reflect.DeepEqual(gate, hitl.ContainedFromConfinement(c, ok)) {
 		t.Fatal("gate stamp must equal the projection of the confinement the executor applies")
 	}
+	if !ok {
+		t.Skip("confinement unavailable on this platform")
+	}
 	if !gate.DirectIP {
 		t.Fatalf("narrowing must reach the approval fact: %+v", gate)
 	}

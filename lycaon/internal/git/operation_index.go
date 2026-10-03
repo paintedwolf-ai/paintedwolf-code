@@ -50,6 +50,7 @@ func readOperationIndex(ctx context.Context, dir string, opts gitexec.Opts, path
 		case 0o160000:
 			fileMode |= os.ModeDir
 		}
+		fileMode = gitFileMode(fileMode)
 		entries[operationIndexKey{path, stage}] = operationIndexEntry{fields[1], fileMode}
 		if len(entries) > 100000 {
 			return operationRefusal("repository_entry_limit")

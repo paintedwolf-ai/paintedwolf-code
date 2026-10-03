@@ -134,7 +134,7 @@ export async function confirmAndOpenExternalLink(
 /** Destinations the app itself defines; only these open without the prompt. */
 const APP_LINK_URLS: ReadonlySet<string> = new Set([WEBSITE_URL, REPOSITORY_URL, ISSUES_URL]);
 
-/** Opens an app-owned destination in the preferred browser without confirmation; false for any other URL. */
+/** Opens one of the app's own destinations in the preferred browser without confirmation; false for any other URL. */
 export async function openAppLink(
   url: string,
   options?: Pick<ConfirmAndOpenExternalLinkOptions, "openInBrowser">,
