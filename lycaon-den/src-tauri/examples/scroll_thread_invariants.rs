@@ -87,6 +87,11 @@ mod macos {
             println!("FAIL: harness chat did not load: {error}");
             return 1;
         }
+        // Without threaded scrolling, as on virtualized CI hosts, WebKit builds no scrolling tree.
+        if den.scrolling_tree().trim().is_empty() {
+            println!("SKIP: WebKit built no scrolling tree on this host, so there is no scrolling thread to check");
+            return 0;
+        }
         let mut failures = Vec::new();
         den.eval("__scrollThread.journal(), 0");
         check_in_sync(&den, "seeded chat at the tail", &mut failures);
