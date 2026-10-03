@@ -11,12 +11,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
@@ -25,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -181,12 +180,7 @@ func createBoundSession(t *testing.T, srv *Server, projectID string) (wire.Sessi
 
 func runGitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = lyexec.LocalGitEnv()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v %s", args, err, out)
-	}
+	gittest.Run(t, dir, args...)
 }
 
 func TestGitWorktreeBindHappyPath(t *testing.T) {
@@ -337,13 +331,7 @@ func TestGitWorktreeBindRejectsDetachedHead(t *testing.T) {
 
 func mustGitOutput(t *testing.T, dir string, args ...string) []byte {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = lyexec.LocalGitEnv()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v %s", args, err, out)
-	}
-	return out
+	return []byte(gittest.Run(t, dir, args...))
 }
 
 func TestGitWorktreeBindLeavesConfigUntouched(t *testing.T) {
