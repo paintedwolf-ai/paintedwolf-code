@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { bootstrapChatSession, expectShellReady } from "./helpers.ts";
+import { bootstrapChatSession, expectShellReady, seedAppState } from "./helpers.ts";
 
 const scriptsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -18,6 +18,7 @@ function runScript(name: string) {
 
 test.describe("reconnect desktop", () => {
   test("kill sidecar → offline → restart → reconnected", async ({ page }) => {
+    await seedAppState(page);
     // An open project's event stream is what retries the engine after it returns.
     await bootstrapChatSession(page);
 
