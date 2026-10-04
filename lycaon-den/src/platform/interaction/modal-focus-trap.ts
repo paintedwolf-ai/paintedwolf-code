@@ -3,7 +3,6 @@ import { useResidentInteractive } from "../../ui/resident-presence-context.tsx";
 import {
   activateFocusTrap,
   focusableElements,
-  type FocusTrapHandle,
   type FocusTrapOptions,
 } from "./focus-trap.ts";
 import {
@@ -31,35 +30,18 @@ function createFocusTrap(
   const interactive = useResidentInteractive();
   createEffect(() => {
     if (!open() || !interactive()) return;
-    let handle: FocusTrapHandle | undefined;
-    const attach = (element: HTMLElement) => {
-      handle = activateFocusTrap(element, {
-        onEscape: options.onEscape,
-        returnFocus: options.returnFocus,
-        initialFocus: options.initialFocus,
-        autoFocus: options.autoFocus,
-        inertTarget: options.inertTarget?.() ?? null,
-      });
-    };
     const element = container();
-    if (element) {
-      attach(element);
-    } else {
-      let cancelled = false;
-      queueMicrotask(() => {
-        if (cancelled || !open() || !interactive()) return;
-        const deferred = container();
-        if (deferred) attach(deferred);
-      });
-      onCleanup(() => {
-        cancelled = true;
-      });
-    }
-    onCleanup(() =>
-      handle?.deactivate({
-        restoreFocus: interactive() && (options.restoreFocus?.() ?? true),
-      }),
-    );
+    if (!element) return;
+    const handle = activateFocusTrap(element, {
+      onEscape: options.onEscape,
+      returnFocus: options.returnFocus,
+      initialFocus: options.initialFocus,
+      autoFocus: options.autoFocus,
+      inertTarget: options.inertTarget?.() ?? null,
+    });
+    onCleanup(() => handle.deactivate({
+      restoreFocus: interactive() && (options.restoreFocus?.() ?? true),
+    }));
   });
 }
 
@@ -144,23 +126,9 @@ export function createModalFocusTrap(
     });
   createFocusTrap(open, container, { ...options, inertTarget });
   createEffect(() => {
-    if (!open() || !interactive()) return;
-    let release: (() => void) | undefined;
-    const acquire = () => {
-      if (!release && container()) release = claimShortcutBoundary();
-    };
-    acquire();
-    if (!release) {
-      let cancelled = false;
-      queueMicrotask(() => {
-        if (cancelled || !open() || !interactive()) return;
-        acquire();
-      });
-      onCleanup(() => {
-        cancelled = true;
-      });
-    }
-    onCleanup(() => release?.());
+    if (!open() || !interactive() || !container()) return;
+    const release = claimShortcutBoundary();
+    onCleanup(release);
   });
 }
 
