@@ -102,7 +102,8 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 		Trigger:    wire.ScanTriggerManual,
 	})
 	testutil.FailErr(t, "enqueue scan fixture", err)
-	if created.Status != wire.CodeScanStatusPending {
+	// Enqueue rereads the committed scan, which the runner may already have finished.
+	if created.Status != wire.CodeScanStatusPending && created.Status != wire.CodeScanStatusRunning && created.Status != wire.CodeScanStatusComplete {
 		t.Fatalf("created status = %q", created.Status)
 	}
 

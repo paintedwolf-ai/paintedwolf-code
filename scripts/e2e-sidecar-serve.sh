@@ -15,13 +15,14 @@ mkdir -p "${STATE_DIR}"
 DB_PATH="${STATE_DIR}/lycaon.db"
 
 SOURCE_CONFIG="${LYCAON_CONFIG_DIR:-}"
+# Scripted and mocked runs need a provider discovery can answer, not this machine's settings.
 case "${LYCAON_HARNESS_MODE:-}" in
-  manual)
-    SOURCE_CONFIG="${DIR}/harness/device-config"
+  manual|mock)
+    SOURCE_CONFIG="${ROOT}/lycaon/test/fixtures/e2e/config"
+    MODEL_FIXTURE=1
     ;;
-  mock|"")
-    # Mock runs need a provider discovery can answer, not this machine's settings.
-    if [[ "${LYCAON_HARNESS_MODE:-}" == mock || ( -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ) ]]; then
+  "")
+    if [[ -z "${SOURCE_CONFIG}" && "${LYCAON_LLM_MOCK:-1}" == "1" ]]; then
       SOURCE_CONFIG="${ROOT}/lycaon/test/fixtures/e2e/config"
       MODEL_FIXTURE=1
     fi
