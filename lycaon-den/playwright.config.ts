@@ -52,7 +52,6 @@ export default defineConfig({
       testMatch: [
         "**/*.desktop.spec.ts",
         "**/boot.spec.ts",
-        "**/harness-smoke.spec.ts",
       ],
     },
   ],

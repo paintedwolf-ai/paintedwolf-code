@@ -9598,7 +9598,7 @@ source_directories:
 source_files:
     .github/scripts/issue-policy.cjs: 54
     lycaon-den/eslint.config.js: 99
-    lycaon-den/playwright.config.ts: 52
+    lycaon-den/playwright.config.ts: 51
     lycaon-den/shared/app-state-storage.ts: 7
     lycaon-den/shared/app-state-types.ts: 389
     lycaon-den/shared/brand.ts: 13
