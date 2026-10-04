@@ -30,13 +30,18 @@ export LYCAON_E2E_UID="${LYCAON_E2E_UID:-$(id -u)}"
 export LYCAON_E2E_GID="${LYCAON_E2E_GID:-$(id -g)}"
 # Docker reassigns an ephemeral port on every container start.
 export LYCAON_E2E_SIDECAR_PORT="${LYCAON_E2E_SIDECAR_PORT:-$(e2e_free_local_port)}"
+e2e_docker_select_network
 e2e_docker_persist_project "${LYCAON_E2E_DOCKER_PROJECT}"
 
-echo "e2e-docker-stack-up: project=${LYCAON_E2E_DOCKER_PROJECT}" >&2
+echo "e2e-docker-stack-up: project=${LYCAON_E2E_DOCKER_PROJECT} network=${LYCAON_E2E_NETWORK_MODE:-bridge}" >&2
 
 docker compose -f "${LYCAON_E2E_COMPOSE_FILE}" -p "${LYCAON_E2E_DOCKER_PROJECT}" up -d sidecar
 
-SIDECAR_PORT="$(e2e_docker_compose_port sidecar 8787)"
+if e2e_docker_host_network; then
+  SIDECAR_PORT="${LYCAON_E2E_SIDECAR_PORT}"
+else
+  SIDECAR_PORT="$(e2e_docker_compose_port sidecar 8787)"
+fi
 export LYCAON_E2E_ADDR="127.0.0.1:${SIDECAR_PORT}"
 e2e_refresh_derived_urls
 
@@ -45,7 +50,11 @@ e2e_wait_http "${LYCAON_E2E_HEALTH_URL}" "sidecar /health" 600
 export VITE_LYCAON_API_URL="${LYCAON_E2E_API_URL}"
 docker compose -f "${LYCAON_E2E_COMPOSE_FILE}" -p "${LYCAON_E2E_DOCKER_PROJECT}" up -d vite
 
-VITE_PORT="$(e2e_docker_compose_port vite 1420)"
+if e2e_docker_host_network; then
+  VITE_PORT="${LYCAON_E2E_VITE_LISTEN_PORT}"
+else
+  VITE_PORT="$(e2e_docker_compose_port vite 1420)"
+fi
 export LYCAON_E2E_VITE_PORT="${VITE_PORT}"
 e2e_refresh_derived_urls
 

@@ -163,10 +163,20 @@ test("expands a generated repository beyond the directory and child cache limits
     seed(root) {
       const payload = path.join(root, ".payload.ts"); writeFileSync(payload, "export const value = 1;\n");
       writeFileSync(path.join(root, "z-last.ts"), "export {};\n");
+      // ext4 caps one inode at 65,000 links, so each group links to its own first file.
+      let source = "";
       for (let group = 0; group < 160; group++) for (let folder = 0; folder < 100; folder++) {
         const directory = path.join(root, `group-${String(group).padStart(4, "0")}`, `folder-${String(folder).padStart(4, "0")}`);
         mkdirSync(directory, { recursive: true });
-        for (let file = 0; file < 10; file++) linkSync(payload, path.join(directory, `file-${String(file).padStart(2, "0")}.ts`));
+        for (let file = 0; file < 10; file++) {
+          const target = path.join(directory, `file-${String(file).padStart(2, "0")}.ts`);
+          if (folder === 0 && file === 0) {
+            writeFileSync(target, "export const value = 1;\n");
+            source = target;
+          } else {
+            linkSync(source, target);
+          }
+        }
       }
     },
   });

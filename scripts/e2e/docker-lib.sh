@@ -28,6 +28,31 @@ e2e_free_local_port() {
   python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
 }
 
+# Specs serve fixtures on host loopback and call the engine's loopback
+# callbacks, so Linux runs the stack on the host's network. Docker Desktop
+# shares it only with host networking enabled: set LYCAON_E2E_NETWORK_MODE=host.
+e2e_docker_select_network() {
+  if [[ -z "${LYCAON_E2E_NETWORK_MODE+set}" && "$(uname -s)" == Linux ]]; then
+    LYCAON_E2E_NETWORK_MODE=host
+  fi
+  export LYCAON_E2E_NETWORK_MODE="${LYCAON_E2E_NETWORK_MODE:-}"
+  e2e_docker_host_network || return 0
+  # Services share the host's ports, so each listens on loopback at a probed port.
+  export LYCAON_E2E_LISTEN_HOST=127.0.0.1
+  export LYCAON_E2E_SIDECAR_LISTEN_PORT="${LYCAON_E2E_SIDECAR_PORT}"
+  export LYCAON_E2E_VITE_LISTEN_PORT="${LYCAON_E2E_VITE_LISTEN_PORT:-$(e2e_free_local_port)}"
+  export LYCAON_E2E_MODEL_FIXTURE_PORT="${LYCAON_E2E_MODEL_FIXTURE_PORT:-$(e2e_free_local_port)}"
+  export LYCAON_E2E_PROXY_TARGET="http://127.0.0.1:${LYCAON_E2E_SIDECAR_PORT}"
+  local providers="${LYCAON_E2E_CONFIG_DIR:?}/providers.local.yaml"
+  sed -e "s#http://model-fixture:11434#http://127.0.0.1:${LYCAON_E2E_MODEL_FIXTURE_PORT}#" \
+    "${providers}" >"${providers}.tmp"
+  mv "${providers}.tmp" "${providers}"
+}
+
+e2e_docker_host_network() {
+  [[ "${LYCAON_E2E_NETWORK_MODE:-}" == host ]]
+}
+
 # SIGKILL the container's recorded sidecar; its serve loop starts the next one.
 e2e_docker_crash_restart_sidecar() {
   local container previous current i
