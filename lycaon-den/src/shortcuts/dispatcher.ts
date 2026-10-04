@@ -592,6 +592,16 @@ function onWindowKeyDown(event: KeyboardEvent): void {
   }
 }
 
+// An armed leader takes the next key before closer handlers, such as tree type-ahead, see it.
+function onWindowKeyDownCapture(event: KeyboardEvent): void {
+  if (!pendingLeader || captureActive) return;
+  const result = dispatchKeyboardEvent(event);
+  if (result.handled) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
 function onWindowBlur(): void {
   clearPendingLeader();
 }
@@ -599,6 +609,7 @@ function onWindowBlur(): void {
 function unbindKeydown(): void {
   if (typeof window === "undefined") return;
   attachCount = 0;
+  window.removeEventListener("keydown", onWindowKeyDownCapture, true);
   window.removeEventListener("keydown", onWindowKeyDown);
   window.removeEventListener("blur", onWindowBlur);
 }
@@ -607,6 +618,7 @@ function unbindKeydown(): void {
 export function attachDispatcher(): () => void {
   if (typeof window === "undefined") return () => {};
   if (attachCount === 0) {
+    window.addEventListener("keydown", onWindowKeyDownCapture, true);
     window.addEventListener("keydown", onWindowKeyDown);
     window.addEventListener("blur", onWindowBlur);
   }

@@ -1,19 +1,19 @@
-import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 
+/** A local service whose password is whatever its first configuration sets. */
 export async function startSecretService() {
-  const password = randomBytes(24).toString("hex");
-  let configured = false;
+  let password = "";
   let authenticatedRequests = 0;
   const server = createServer(async (request, response) => {
     if (request.method === "POST" && request.url === "/configure") {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      configured = Buffer.concat(chunks).toString() === password;
-      response.writeHead(configured ? 204 : 403).end();
+      const offered = Buffer.concat(chunks).toString();
+      if (!password && offered) password = offered;
+      response.writeHead(password && offered === password ? 204 : 403).end();
       return;
     }
-    const authorized = configured && request.headers.authorization ===
+    const authorized = password !== "" && request.headers.authorization ===
       `Basic ${Buffer.from(`test:${password}`).toString("base64")}`;
     if (authorized) authenticatedRequests++;
     response.writeHead(authorized ? 200 : 403, { "Content-Type": "text/plain" });
@@ -26,10 +26,10 @@ export async function startSecretService() {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Missing service port");
   return {
-    password,
     port: address.port,
     origin: `http://127.0.0.1:${address.port}`,
-    configured: () => configured,
+    password: () => password,
+    configured: () => password !== "",
     authenticatedRequests: () => authenticatedRequests,
     close: () => new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());

@@ -12,7 +12,7 @@ source "${SCRIPTS}/e2e/env.sh"
 if [[ "${LYCAON_E2E_DOCKER_STACK:-0}" == "1" ]]; then
   # shellcheck source=scripts/e2e/docker-lib.sh
   source "${SCRIPTS}/e2e/docker-lib.sh"
-  echo "crash-restart: SIGKILL sidecar container project=${LYCAON_E2E_DOCKER_PROJECT:?}" >&2
+  echo "crash-restart: SIGKILL sidecar in container project=${LYCAON_E2E_DOCKER_PROJECT:?}" >&2
   e2e_docker_crash_restart_sidecar
   echo "crash-restart: ok container"
   exit 0

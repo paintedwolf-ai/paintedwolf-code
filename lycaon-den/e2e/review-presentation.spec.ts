@@ -18,7 +18,10 @@ modelIndependentWebE2e("review clears on close, reopens cleanly, and keeps histo
   }, { timeout: 30_000 }).toBe(true);
   const sourceUrl = `${apiUrl}/v1/projects/${project.id}/source`;
   const params = { path: "review.ts", root_id: project.roots[0]!.id };
-  expect((await request.get(sourceUrl, { headers, params })).ok()).toBe(true);
+  // A source read records nothing; opening the file is what tracks its outside drift.
+  await page.getByTestId("files-tree-file").filter({ hasText: "review.ts" }).click();
+  await expect(page.getByTestId("files-editor-host").filter({ visible: true })).toContainText("export const value = 1;");
+  await page.getByTestId("files-tab-close").filter({ visible: true }).click();
   await page.evaluate((id) => {
     const h = (window as unknown as { __harness: { openReviewLens(id: string, scope: { kind: string }): unknown } }).__harness;
     h.openReviewLens(id, { kind: "new" });

@@ -6,7 +6,7 @@ import { FilesTree } from "./FilesTree.tsx";
 import type { FilesTreeEntrySelection, FilesTreeFolderScope, FilesTreeHandle } from "./files-tree-context.ts";
 import { treeRow, treeViewFixture, TREE_ROOTS } from "../../test/source-tree-view-fixture.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
-import { receiveSourceViewEvent } from "../../ui/paged-view/source-view-session.ts";
+import { receiveSourceViewEvent, resyncSourceViews } from "../../ui/paged-view/source-view-session.ts";
 import { resetFilesTreeViewStateForTests, setFilesTreeScrollTop } from "./files-tree-view-state.ts";
 import { findFileRow, getFileRow, queryFileRow } from "../../test/files-tree-queries.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
@@ -650,6 +650,22 @@ describe("Files presentation lifecycle", () => {
     fireEvent.click(button("README.md"), { detail: 2 });
     expect(view.onOpenFile).toHaveBeenCalledTimes(1);
   });
+});
+
+it("reads a replacement view instead of keeping the expired view's rows", async () => {
+  const fixture = treeViewFixture();
+  const [retain, setRetain] = createSignal(false);
+  mount(fixture, { get retainPresentation() { return retain(); } });
+  await waitFor(() => expect(button(".").textContent).toContain("@repo"));
+  // A root relabel ends the host view while the workspace revalidates; the
+  // replacement names the root anew.
+  setRetain(true);
+  fixture.rows([{ ...treeRow(".", "directory", true), name: "renamed" }, treeRow("README.md")]);
+  fixture.expire();
+  resyncSourceViews("p1");
+  await waitFor(() => expect(fixture.requests.filter(request => request.method === "POST" && request.path.endsWith("/views"))).toHaveLength(2));
+  setRetain(false);
+  await waitFor(() => expect(button(".").textContent).toContain("@renamed"));
 });
 
 it("keeps the visible position when expansion finishes after a scroll to the old bottom", async () => {

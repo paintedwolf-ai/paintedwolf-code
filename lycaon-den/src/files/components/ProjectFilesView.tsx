@@ -194,7 +194,7 @@ export function ProjectFilesView(props: Props) {
   /** Requests name the chat selected when they run; nothing observes it. */
   const sourceSessionId = () => untrack(chatSessionId);
   const { filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
-    treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor, directoryEntries, observeDirectory,
+    treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor, directoryEntries, confirmDirectoryChange, observeDirectory,
   } = createFilesWorkspace({
     projectId: props.projectId, roots: () => props.roots, client, chatSessionId,
     reachable: () => isBackendReachable(props.appStore.state.sidecarStatus),
@@ -302,6 +302,8 @@ export function ProjectFilesView(props: Props) {
     const displayed = parsed ? state().byKey[parsed.key] : undefined;
     return displayed && hasFilesTreeAddress(displayed) ? { rootId: displayed.rootId, path: displayed.path, revision: state().aimRevision } : null;
   });
+  // Automatic tree motion follows the editor once its destination publishes.
+  const publishedTreeFile = () => editorPresentationPending() ? null : displayedTreeFile();
   const activePane = createMemo(() => {
     const key = state().activeKey;
     if (!key) return undefined;
@@ -563,7 +565,10 @@ export function ProjectFilesView(props: Props) {
         setDeleteGuard({ rootId, path, resolve });
       });
     },
-    confirmChange: (change: SourceChange) => tree?.confirmChange(change),
+    confirmChange: (change: SourceChange) => {
+      confirmDirectoryChange(change);
+      tree?.confirmChange(change);
+    },
     openFile: (args: { rootId: string; rootLabel: string; path: string }) =>
       openFilesBuffer(props.projectId, { ...args, intent: "permanent" }),
     rootLabelFor: scope.rootLabelFor,
@@ -596,12 +601,18 @@ export function ProjectFilesView(props: Props) {
   const [requestedTreeReveal, setRequestedTreeReveal] = createSignal<{
     rootId: string; path: string; isDir: boolean; current: () => boolean;
   } | null>(null);
+  // An explicit reveal selects its file until the reader navigates again.
+  const [explicitTreeReveal, setExplicitTreeReveal] = createSignal<{
+    rootId: string; path: string; revision: number;
+  } | null>(null);
   const revealInTree = (rootId: string, path: string, isDir = false) => {
     const intent = beginSourceNavigation();
     showFilesTree();
     setFilesStagePaneMode(props.projectId, "files");
     setFilterQuery("");
-    setRequestedTreeReveal({ rootId: resolveRootId(rootId), path, isDir, current: intent.current });
+    const resolved = resolveRootId(rootId);
+    setExplicitTreeReveal(isDir ? null : { rootId: resolved, path, revision: state().aimRevision });
+    setRequestedTreeReveal({ rootId: resolved, path, isDir, current: intent.current });
   };
   createEffect(() => {
     const request = requestedTreeReveal();
@@ -1264,11 +1275,14 @@ export function ProjectFilesView(props: Props) {
                   autoReveal={editorRevealInTreePref()}
                   navigationRevision={state().aimRevision}
                   navigationOrigin={state().aimOrigin}
-                  activeFile={editorRevealInTreePref() ? displayedTreeFile() : null}
+                  activeFile={editorRevealInTreePref() ? publishedTreeFile() : null}
                   onRevealMotionStart={scrollActiveTabIntoView}
                   selectedEntry={(() => {
                     const selected = selectedEntry();
                     if (!editorRevealInTreePref() || selected?.kind !== "file") return selected;
+                    const explicit = explicitTreeReveal();
+                    if (explicit?.revision === state().aimRevision && explicit.rootId === selected.rootId &&
+                      explicit.path === selected.path) return selected;
                     const displayed = displayedTreeFile();
                     return displayed ? { ...displayed, kind: "file" as const } : selected;
                   })()}

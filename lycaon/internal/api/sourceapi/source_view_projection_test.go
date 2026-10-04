@@ -27,7 +27,7 @@ func TestMountedComparisonsShareBoundedContentAndSmallPresentations(t *testing.T
 			document, releaseDocument, err := cache.Prepare(t.Context(), scope.Person, scope.Project, before, after, nil)
 			testutil.FailErr(t, "prepare shared content", err)
 			key := sourceViewCreateKey{scope: scope, client: "window", operation: fmt.Sprintf("%d/%d", i, fork)}
-			view, release, _, err := service.create(t.Context(), key, []byte("intent"), func() *sourceView {
+			view, release, _, err := service.create(t.Context(), key, []byte("intent"), 0, func() *sourceView {
 				ctx, cancel := context.WithCancel(t.Context())
 				return &sourceView{ctx: ctx, cancel: cancel, state: "ready", comparison: document,
 					comparisonBudget: budget, comparisonRelease: releaseDocument, commands: pagedview.NewCommands[string](&service.receipts)}

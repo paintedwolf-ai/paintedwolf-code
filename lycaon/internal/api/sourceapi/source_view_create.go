@@ -1,9 +1,11 @@
 package sourceapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -13,7 +15,14 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// maxSourceViewCreateAttempts bounds re-reads while project folders keep changing.
+const maxSourceViewCreateAttempts = 3
+
 func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request) {
+	// The generation precedes the project read, so a view built from folders
+	// that change before it is registered is rebuilt rather than retained.
+	projectID := strings.TrimSpace(chi.URLParam(r, "id"))
+	generation := s.sourceViewRegistry().projectGeneration(projectID)
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -23,38 +32,55 @@ func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request)
 		s.responses.DecodeError(w, r, err)
 		return
 	}
+	for attempt := 1; ; attempt++ {
+		if s.createSourceView(w, r, p, request, generation, attempt == maxSourceViewCreateAttempts) {
+			return
+		}
+		generation = s.sourceViewRegistry().projectGeneration(projectID)
+		if p, ok = requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r); !ok {
+			return
+		}
+	}
+}
+
+// createSourceView answers the request, or reports false when the project's
+// folders changed while the view was built and the caller should retry.
+func (s *Handler) createSourceView(w http.ResponseWriter, r *http.Request, p *project.Project, request wire.SourceViewCreate, generation uint64, final bool) bool {
 	if err := validateSourceViewCreate(p, request); err != nil {
 		s.writeSourceViewError(w, r, err)
-		return
+		return true
 	}
 	operationID, clientID, sessionID := sourceViewCreateIdentity(request)
 	scoped, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, sessionID)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
-		return
+		return true
 	}
 	p = scoped.Project
 	if request.Tree != nil && request.Tree.WorkspaceID != p.WorkspaceID() {
 		s.writeSourceWorkspaceMismatch(w, request.Tree.WorkspaceID, p.WorkspaceID())
-		return
+		return true
 	}
 	canonical, err := sourceViewCanonical(request)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
-		return
+		return true
 	}
 	scope := pagedview.Scope{Person: requestscope.Caller(r).ID, Project: p.ID}
 	key := sourceViewCreateKey{scope: scope, client: clientID, operation: operationID}
 	//nolint:contextcheck // Accepted views follow server shutdown and explicit release, not request cancellation.
-	view, release, created, err := s.sourceViewRegistry().create(r.Context(), key, canonical, func() *sourceView {
+	view, release, created, err := s.sourceViewRegistry().create(r.Context(), key, canonical, generation, func() *sourceView {
 		if request.Tree != nil {
 			return s.newTreeView(scope, p, *request.Tree)
 		}
 		return s.newComparisonView(scope, p, *request.Comparison)
 	})
+	if errors.Is(err, errSourceViewProjectChanged) && !final {
+		return false
+	}
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
-		return
+		return true
 	}
 	// The preparation pin protects accepted-state construction.
 	if _, err := s.sourceViewProject(r.Context(), p, view); err != nil {
@@ -64,7 +90,7 @@ func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request)
 		}
 		release()
 		s.writeSourceViewError(w, r, err)
-		return
+		return true
 	}
 	snapshot, snapshotErr := view.snapshot(r.Context())
 	if created {
@@ -78,10 +104,11 @@ func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request)
 	}
 	if snapshotErr != nil {
 		s.writeSourceViewError(w, r, snapshotErr)
-		return
+		return true
 	}
 	w.Header().Set("Location", SourceViewURL(p.ID, view.id))
 	httpio.WriteJSON(w, http.StatusCreated, snapshot)
+	return true
 }
 
 func SourceViewURL(projectID, viewID string) string {

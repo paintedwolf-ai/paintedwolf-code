@@ -49,11 +49,15 @@ webE2e("file lifecycle: retained editor follows rename and move, trash is revers
   await expect(crumb.getByRole("button", { name: folder, exact: true })).toHaveCount(0);
   await expect.poll(() => existsSync(path.join(seeded.root, folder, renamed))).toBe(false);
 
+  // A copy sorts above its source and shifts the rows below, so act once the tree lists it.
+  const treeRow = (name: string) => page.locator(`[data-files-ctx="tree-row"][data-name="${name}"]`).first();
   await fileAction(page, renamed, "Duplicate");
   await expect.poll(() => existsSync(path.join(seeded.root, duplicate)) ? readFileSync(path.join(seeded.root, duplicate), "utf8") : null).toBe(content);
+  await expect(treeRow(duplicate)).toBeVisible();
   const secondDuplicate = "renamed café 🐺 copy 2.md";
   await fileAction(page, renamed, "Duplicate");
   await expect.poll(() => existsSync(path.join(seeded.root, secondDuplicate)) ? readFileSync(path.join(seeded.root, secondDuplicate), "utf8") : null).toBe(content);
+  await expect(treeRow(secondDuplicate)).toBeVisible();
   await fileAction(page, duplicate, "Move to trash");
   await page.getByRole("alertdialog", { name: "Move to trash?", exact: true })
     .getByRole("button", { name: "Move to trash", exact: true }).click();

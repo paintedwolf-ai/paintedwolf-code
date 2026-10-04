@@ -9,8 +9,8 @@ const scriptsDir = path.resolve(
   "../../scripts",
 );
 
-function runScript(name: string) {
-  execSync(`bash ${path.join(scriptsDir, name)}`, {
+function runScript(name: string, ...args: string[]) {
+  execSync(`bash ${path.join(scriptsDir, name)} ${args.join(" ")}`.trimEnd(), {
     stdio: "inherit",
     env: process.env,
   });
@@ -28,7 +28,7 @@ test.describe("reconnect desktop", () => {
     await expect(shell).toHaveAttribute("data-sidecar-status", /^(reconnecting|disconnected)$/, { timeout: 30_000 });
     await expect(page.getByTestId("critical-stop")).toHaveCount(0);
 
-    runScript("e2e-sidecar-bg.sh");
+    runScript("e2e-sidecar-bg.sh", "--reuse-built");
     await expect(shell).toHaveAttribute("data-sidecar-status", "connected", { timeout: 60_000 });
     await expectShellReady(page);
   });

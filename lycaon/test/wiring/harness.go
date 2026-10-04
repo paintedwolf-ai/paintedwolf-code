@@ -64,11 +64,11 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	// Isolate device configuration for deterministic tests.
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	// The process source catalog caches trees under <config>/cache; its builds
-	// outlive the app, so finish them before TempDir removal.
+	// outlive the app, so finish and retire them before TempDir removal.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		testutil.FailErr(t, "drain source catalog", sourcecatalog.Process().Drain(ctx))
+		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().ClearTreeStores(ctx, nil))
 	})
 
 	o := defaultOptions()

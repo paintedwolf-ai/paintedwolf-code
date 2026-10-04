@@ -17,7 +17,7 @@ import (
 type ManualProvider struct {
 	mu          sync.Mutex
 	queue       []*ManualPending
-	waiters     []chan *ManualPending
+	waiters     []manualWaiter
 	autoEnabled bool
 	autoText    string
 	timeout     time.Duration
@@ -33,6 +33,12 @@ type ManualPending struct {
 	Messages  []api.Message
 	Tools     []tools.ToolMeta
 	respond   chan manualResponse
+}
+
+// manualWaiter takes the next matching request; an empty sessionID matches any.
+type manualWaiter struct {
+	sessionID string
+	notify    chan *ManualPending
 }
 
 type manualResponse struct {
@@ -203,27 +209,36 @@ func emitCompletionChunks(ctx context.Context, ch chan<- modelcall.StreamChunk, 
 }
 
 // Pending returns the oldest waiting request, blocking up to wait for one.
-func (p *ManualProvider) Pending(ctx context.Context, wait time.Duration) (*ManualPending, bool) {
+// A non-empty sessionID admits only that session's requests.
+func (p *ManualProvider) Pending(ctx context.Context, sessionID string, wait time.Duration) (*ManualPending, bool) {
 	p.mu.Lock()
-	if len(p.queue) > 0 {
-		pend := p.queue[0]
-		p.mu.Unlock()
-		return pend, true
+	for _, pend := range p.queue {
+		if sessionID == "" || pend.SessionID == sessionID {
+			p.mu.Unlock()
+			return pend, true
+		}
 	}
 	if wait <= 0 {
 		p.mu.Unlock()
 		return nil, false
 	}
-	notify := make(chan *ManualPending, 1)
-	p.waiters = append(p.waiters, notify)
+	waiter := manualWaiter{sessionID: sessionID, notify: make(chan *ManualPending, 1)}
+	p.waiters = append(p.waiters, waiter)
 	p.mu.Unlock()
 
 	select {
-	case pend := <-notify:
+	case pend := <-waiter.notify:
 		return pend, true
 	case <-time.After(wait):
-		return nil, false
 	case <-ctx.Done():
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.removeWaiterLocked(waiter.notify)
+	select {
+	case pend := <-waiter.notify:
+		return pend, true
+	default:
 		return nil, false
 	}
 }
@@ -251,16 +266,36 @@ func (p *ManualProvider) SetAuto(enabled bool, text string) {
 	if text != "" {
 		p.autoText = text
 	}
+	if !enabled {
+		return
+	}
+	// Requests already waiting get the auto reply too; otherwise a turn queued just before
+	// auto-reply resumed would block its session until the manual timeout.
+	for _, pend := range p.queue {
+		pend.respond <- manualResponse{content: p.autoText}
+	}
+	p.queue = nil
 }
 
 func (p *ManualProvider) notifyWaitersLocked(pend *ManualPending) {
+	kept := make([]manualWaiter, 0, len(p.waiters))
 	for _, w := range p.waiters {
-		select {
-		case w <- pend:
-		default:
+		if w.sessionID != "" && w.sessionID != pend.SessionID {
+			kept = append(kept, w)
+			continue
+		}
+		w.notify <- pend
+	}
+	p.waiters = kept
+}
+
+func (p *ManualProvider) removeWaiterLocked(notify chan *ManualPending) {
+	for i, w := range p.waiters {
+		if w.notify == notify {
+			p.waiters = append(p.waiters[:i], p.waiters[i+1:]...)
+			return
 		}
 	}
-	p.waiters = nil
 }
 
 func (p *ManualProvider) dropFromQueue(id string) {

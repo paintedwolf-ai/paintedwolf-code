@@ -64,7 +64,11 @@ import {
   saveEditorRevealInTree,
   saveEditorVersionComparison,
   syncEditorPrefsFromSnapshot,
+  defaultEditorKeymap,
+  editorKeymapPref,
+  resolveEditorKeymap,
 } from "./editor-prefs.ts";
+import { setShortcutPlatformForTests } from "../../shortcuts/platform.ts";
 
 vi.mock("../../platform/persistence/app-state.ts", () => ({
   loadAppState: vi.fn().mockResolvedValue({ ...EMPTY_APP_STATE_V1 }),
@@ -168,6 +172,27 @@ describe("editor-prefs", () => {
       windows: true,
       agents: true,
     });
+  });
+
+  it("resolves an unset editing style by platform and keeps a chosen one everywhere", () => {
+    expect(defaultEditorKeymap("macos")).toBe("emacs");
+    expect(defaultEditorKeymap("linux")).toBe("standard");
+    expect(defaultEditorKeymap("windows")).toBe("standard");
+    for (const platform of ["macos", "linux", "windows"] as const) {
+      expect(resolveEditorKeymap(undefined, platform)).toBe(defaultEditorKeymap(platform));
+      expect(resolveEditorKeymap({}, platform)).toBe(defaultEditorKeymap(platform));
+      for (const keymap of ["standard", "emacs", "vim"] as const) {
+        expect(resolveEditorKeymap({ keymap }, platform)).toBe(keymap);
+      }
+    }
+    setShortcutPlatformForTests("linux");
+    try {
+      resetEditorPrefsForTests();
+      expect(editorKeymapPref()).toBe("standard");
+    } finally {
+      setShortcutPlatformForTests(null);
+      resetEditorPrefsForTests();
+    }
   });
 
   it("hides every tick kind behind the master switch and keeps the picks", async () => {

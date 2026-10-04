@@ -24,6 +24,12 @@ async function openTreeFile(page: Page, name: string) {
   await file.click();
 }
 
+// The binary card keeps BOM-less UTF-16 decoding behind its secondary text menu.
+async function openBinaryAs(page: Page, encoding: "UTF-16 LE" | "UTF-16 BE") {
+  await page.getByRole("button", { name: "Open as text…", exact: true }).click();
+  await page.getByRole("menuitem", { name: `Open as ${encoding}`, exact: true }).click();
+}
+
 type EncodingCase = {
   id: string;
   chip: string | null;
@@ -101,11 +107,7 @@ webE2e(
 
     for (const encoding of encodings) {
       await openTreeFile(page, `${encoding.id}.txt`);
-      if (encoding.openAs) {
-        await page
-          .getByRole("button", { name: `Open as ${encoding.openAs}` })
-          .click();
-      }
+      if (encoding.openAs) await openBinaryAs(page, encoding.openAs);
       const host = page.getByTestId("files-editor-host").filter({ visible: true });
       await expect(host).toBeVisible({ timeout: 15_000 });
       const chip = page.getByTestId("files-editor-encoding-chip").filter({ visible: true });
@@ -240,7 +242,8 @@ webE2e("file truth: open tabs recover as external file types change", async ({ p
   await expect(host.locator(".cm-content")).toContainText("converted to UTF-8");
 
   writeFileSync(file, "x".repeat(4 * 1024 * 1024 + 1));
-  await expect(explanation).toContainText("4 MB", { timeout: 15_000 });
+  // Text past the editor limit opens in the paged read-only reader.
+  await expect(page.getByTestId("source-reader").filter({ visible: true })).toContainText("Read-only · 4.0 MB", { timeout: 15_000 });
   writeFileSync(file, "small again\n");
   await expect(host).toBeVisible({ timeout: 15_000 });
   await expect(host.locator(".cm-content")).toContainText("small again");
@@ -257,7 +260,7 @@ webE2e("file truth: remembered byte order survives refresh and reopening", async
     ),
   });
   await openTreeFile(page, "wide.txt");
-  await page.getByRole("button", { name: "Open as UTF-16 LE", exact: true }).click();
+  await openBinaryAs(page, "UTF-16 LE");
   const host = page.getByTestId("files-editor-host").filter({ visible: true });
   await expect(host).toBeVisible({ timeout: 15_000 });
   writeFileSync(path.join(seeded.root, "wide.txt"), utf16("changed externally\n", false, false));

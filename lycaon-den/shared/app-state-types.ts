@@ -272,7 +272,8 @@ export type DenWalkControlsLocation =
 
 export const DEN_FILES_TREE_LEVELS = { min: 3, max: 10, default: 5 } as const;
 
-export type DenEditorKeymap = "emacs" | "vim";
+/** "standard" uses the platform's own text keys; an unset preference resolves by platform. */
+export type DenEditorKeymap = "standard" | "emacs" | "vim";
 
 export type DenEditorPrefs = {
   keymap?: DenEditorKeymap;

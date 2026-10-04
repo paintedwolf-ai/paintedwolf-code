@@ -63,7 +63,7 @@ go_receiver_lines:
     lycaon/internal/api/sessionadmin/sessionadmin.Handler: 1019
     lycaon/internal/api/sessionview/sessionview.Projector: 49
     lycaon/internal/api/settingsadmin/settingsadmin.Handler: 573
-    lycaon/internal/api/sourceapi/sourceapi.Handler: 5776
+    lycaon/internal/api/sourceapi/sourceapi.Handler: 5800
     lycaon/internal/api/sourceapi/sourceapi.SymbolExecutor: 108
     lycaon/internal/api/sourceapi/sourceapi.arrivalAnchor: 55
     lycaon/internal/api/sourceapi/sourceapi.commitReviewPath: 1
@@ -80,7 +80,7 @@ go_receiver_lines:
     lycaon/internal/api/sourceapi/sourceapi.sourceView: 177
     lycaon/internal/api/sourceapi/sourceapi.sourceViewProjection: 11
     lycaon/internal/api/sourceapi/sourceapi.sourceViewRead: 291
-    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 77
+    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 85
     lycaon/internal/api/sourceapi/sourceapi.warmupClock: 22
     lycaon/internal/api/taskgroup/taskgroup.Group: 70
     lycaon/internal/api/workflowadmin/workflowadmin.Handler: 1272
@@ -716,7 +716,7 @@ go_receiver_lines:
     lycaon/internal/llm/llm.CurationFocus: 33
     lycaon/internal/llm/llm.EndpointStyle: 14
     lycaon/internal/llm/llm.KickDrivenMock: 58
-    lycaon/internal/llm/llm.ManualProvider: 146
+    lycaon/internal/llm/llm.ManualProvider: 171
     lycaon/internal/llm/llm.MockProvider: 122
     lycaon/internal/llm/llm.ModelCatalogUnavailableError: 4
     lycaon/internal/llm/llm.ModelPolicyPatch: 3
@@ -1957,7 +1957,7 @@ go_receiver_methods:
     lycaon/internal/api/sessionadmin/sessionadmin.Handler: 32
     lycaon/internal/api/sessionview/sessionview.Projector: 5
     lycaon/internal/api/settingsadmin/settingsadmin.Handler: 19
-    lycaon/internal/api/sourceapi/sourceapi.Handler: 212
+    lycaon/internal/api/sourceapi/sourceapi.Handler: 213
     lycaon/internal/api/sourceapi/sourceapi.SymbolExecutor: 3
     lycaon/internal/api/sourceapi/sourceapi.arrivalAnchor: 3
     lycaon/internal/api/sourceapi/sourceapi.commitReviewPath: 1
@@ -1974,7 +1974,7 @@ go_receiver_methods:
     lycaon/internal/api/sourceapi/sourceapi.sourceView: 11
     lycaon/internal/api/sourceapi/sourceapi.sourceViewProjection: 2
     lycaon/internal/api/sourceapi/sourceapi.sourceViewRead: 8
-    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 3
+    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 4
     lycaon/internal/api/sourceapi/sourceapi.warmupClock: 2
     lycaon/internal/api/taskgroup/taskgroup.Group: 6
     lycaon/internal/api/workflowadmin/workflowadmin.Handler: 45
@@ -2610,7 +2610,7 @@ go_receiver_methods:
     lycaon/internal/llm/llm.CurationFocus: 2
     lycaon/internal/llm/llm.EndpointStyle: 2
     lycaon/internal/llm/llm.KickDrivenMock: 3
-    lycaon/internal/llm/llm.ManualProvider: 8
+    lycaon/internal/llm/llm.ManualProvider: 9
     lycaon/internal/llm/llm.MockProvider: 6
     lycaon/internal/llm/llm.ModelCatalogUnavailableError: 2
     lycaon/internal/llm/llm.ModelPolicyPatch: 1
@@ -4074,7 +4074,7 @@ go_struct_fields:
     lycaon/internal/api/sourceapi/sourceapi.sourceViewRead: 21
     lycaon/internal/api/sourceapi/sourceapi.sourceViewSearchCursor: 3
     lycaon/internal/api/sourceapi/sourceapi.sourceViewSearchQuery: 3
-    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 12
+    lycaon/internal/api/sourceapi/sourceapi.sourceViewService: 13
     lycaon/internal/api/sourceapi/sourceapi.sourceViewerWorkspace: 3
     lycaon/internal/api/sourceapi/sourceapi.sourceWalkPosition: 1
     lycaon/internal/api/sourceapi/sourceapi.sourceWalkQuery: 3
@@ -5853,6 +5853,7 @@ go_struct_fields:
     lycaon/internal/llm/llm.loggingClient: 2
     lycaon/internal/llm/llm.loggingProvider: 1
     lycaon/internal/llm/llm.manualResponse: 3
+    lycaon/internal/llm/llm.manualWaiter: 2
     lycaon/internal/llm/llm.mergeResult: 6
     lycaon/internal/llm/llm.messageProvenance: 5
     lycaon/internal/llm/llm.messageRedactor: 2
@@ -9407,7 +9408,7 @@ source_directories:
     lycaon/internal/platform: 2
     lycaon/internal/platformfloor: 1
     lycaon/internal/pongoplain: 3
-    lycaon/internal/preflight: 6
+    lycaon/internal/preflight: 7
     lycaon/internal/presence: 5
     lycaon/internal/pricing: 15
     lycaon/internal/progress: 17
@@ -9820,7 +9821,7 @@ source_files:
     lycaon-den/src/chat/stream/transcript-day-chip.tsx: 53
     lycaon-den/src/chat/stream/transcript-runtime.ts: 19
     lycaon-den/src/chat/stream/transcript-viewport-state.ts: 221
-    lycaon-den/src/chat/stream/transcript-viewport.tsx: 867
+    lycaon-den/src/chat/stream/transcript-viewport.tsx: 874
     lycaon-den/src/chat/task/task-card-model.ts: 162
     lycaon-den/src/chat/task/task-result-model.ts: 21
     lycaon-den/src/chat/tool/activity-span-accordion.ts: 56
@@ -9950,7 +9951,7 @@ source_files:
     lycaon-den/src/components/CriticalStopStage.tsx: 463
     lycaon-den/src/components/EngineStartupStage.tsx: 129
     lycaon-den/src/components/FileEditDiff.tsx: 69
-    lycaon-den/src/components/GitCheckout.tsx: 765
+    lycaon-den/src/components/GitCheckout.tsx: 770
     lycaon-den/src/components/GitStrip.tsx: 775
     lycaon-den/src/components/HostFolderDialog.tsx: 79
     lycaon-den/src/components/ListRowActions.tsx: 44
@@ -10188,7 +10189,7 @@ source_files:
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.tsx: 600
     lycaon-den/src/components/settings/appearance/KeyboardSettingsPanel.tsx: 561
     lycaon-den/src/components/settings/appearance/TypographySettings.tsx: 179
-    lycaon-den/src/components/settings/budgets/BudgetsEditor.tsx: 388
+    lycaon-den/src/components/settings/budgets/BudgetsEditor.tsx: 390
     lycaon-den/src/components/settings/budgets/CostSourcesPanel.tsx: 255
     lycaon-den/src/components/settings/extensions/ExtensionsConfigurationPanel.tsx: 250
     lycaon-den/src/components/settings/extensions/ExtensionsSettingsPanel.tsx: 1571
@@ -10316,11 +10317,11 @@ source_files:
     lycaon-den/src/components/source/editor/editor-commands.ts: 336
     lycaon-den/src/components/source/editor/editor-csp-nonce.ts: 7
     lycaon-den/src/components/source/editor/editor-display-prefs.ts: 15
-    lycaon-den/src/components/source/editor/editor-editing-style.ts: 121
+    lycaon-den/src/components/source/editor/editor-editing-style.ts: 124
     lycaon-den/src/components/source/editor/editor-history.ts: 12
     lycaon-den/src/components/source/editor/editor-line-height.ts: 5
     lycaon-den/src/components/source/editor/editor-scroll-lifecycle.ts: 26
-    lycaon-den/src/components/source/editor/editor-scroll-paint.ts: 13
+    lycaon-den/src/components/source/editor/editor-scroll-paint.ts: 14
     lycaon-den/src/components/source/editor/editor-scroll-position.ts: 28
     lycaon-den/src/components/source/editor/editor-standard-commands.ts: 26
     lycaon-den/src/components/source/editor/editor-theme-rules.ts: 275
@@ -10351,7 +10352,7 @@ source_files:
     lycaon-den/src/components/source/reader/source-line-anchors.ts: 47
     lycaon-den/src/components/source/reader/source-reader-change.ts: 26
     lycaon-den/src/components/source/reader/source-reader-document.ts: 118
-    lycaon-den/src/components/source/reader/source-reader-editor.ts: 468
+    lycaon-den/src/components/source/reader/source-reader-editor.ts: 469
     lycaon-den/src/components/source/reader/source-reader-facts.tsx: 46
     lycaon-den/src/components/source/reader/source-reader-find.ts: 61
     lycaon-den/src/components/source/reader/source-reader-selection.ts: 8
@@ -10496,7 +10497,7 @@ source_files:
     lycaon-den/src/files/components/FilesScopeChangeMark.tsx: 35
     lycaon-den/src/files/components/FilesStageDialogs.tsx: 144
     lycaon-den/src/files/components/FilesTreePane.tsx: 218
-    lycaon-den/src/files/components/ProjectFilesView.tsx: 1405
+    lycaon-den/src/files/components/ProjectFilesView.tsx: 1417
     lycaon-den/src/files/components/agent-presence-store.ts: 108
     lycaon-den/src/files/components/agent-presence.ts: 316
     lycaon-den/src/files/components/artifact-reference-impact.ts: 62
@@ -10523,7 +10524,7 @@ source_files:
     lycaon-den/src/files/documents/document-causality.ts: 26
     lycaon-den/src/files/documents/document-change-highlights.ts: 32
     lycaon-den/src/files/documents/document-command.ts: 85
-    lycaon-den/src/files/documents/document-editor-binding.ts: 46
+    lycaon-den/src/files/documents/document-editor-binding.ts: 62
     lycaon-den/src/files/documents/document-format.ts: 77
     lycaon-den/src/files/documents/document-outbox-relay.ts: 104
     lycaon-den/src/files/documents/document-outbox.ts: 291
@@ -10541,7 +10542,7 @@ source_files:
     lycaon-den/src/files/documents/file-merge-commands.ts: 114
     lycaon-den/src/files/documents/files-buffer-change.ts: 30
     lycaon-den/src/files/documents/files-buffer-demand.ts: 118
-    lycaon-den/src/files/documents/files-buffer-loading.ts: 227
+    lycaon-den/src/files/documents/files-buffer-loading.ts: 241
     lycaon-den/src/files/documents/files-buffer-refresh.ts: 204
     lycaon-den/src/files/documents/files-buffer-request-tracking.ts: 69
     lycaon-den/src/files/documents/files-buffer-state.ts: 160
@@ -10638,9 +10639,9 @@ source_files:
     lycaon-den/src/files/review/revision-diffs.ts: 56
     lycaon-den/src/files/review/turn-diffs.ts: 115
     lycaon-den/src/files/source/file-open-target.ts: 21
-    lycaon-den/src/files/source/files-source-read.ts: 114
+    lycaon-den/src/files/source/files-source-read.ts: 115
     lycaon-den/src/files/source/files-workspace-fault.ts: 20
-    lycaon-den/src/files/source/files-workspace.ts: 309
+    lycaon-den/src/files/source/files-workspace.ts: 311
     lycaon-den/src/files/source/source-cache-size.ts: 21
     lycaon-den/src/files/source/source-command-window.ts: 39
     lycaon-den/src/files/source/source-comparison-cache.ts: 90
@@ -10669,7 +10670,7 @@ source_files:
     lycaon-den/src/files/tabs/files-tab-strip.ts: 91
     lycaon-den/src/files/tabs/files-tab-trailing.ts: 25
     lycaon-den/src/files/tabs/project-files-buffer-menu.ts: 129
-    lycaon-den/src/files/tree/FilesTree.tsx: 849
+    lycaon-den/src/files/tree/FilesTree.tsx: 855
     lycaon-den/src/files/tree/FilesTreeRows.tsx: 763
     lycaon-den/src/files/tree/FilesTreeStickyOverlay.tsx: 31
     lycaon-den/src/files/tree/file-inventory.ts: 133
@@ -10682,7 +10683,7 @@ source_files:
     lycaon-den/src/files/tree/files-tree-keys.ts: 13
     lycaon-den/src/files/tree/files-tree-navigation.ts: 139
     lycaon-den/src/files/tree/files-tree-paged-model.ts: 166
-    lycaon-den/src/files/tree/files-tree-paged-session.ts: 143
+    lycaon-den/src/files/tree/files-tree-paged-session.ts: 144
     lycaon-den/src/files/tree/files-tree-reveal.ts: 93
     lycaon-den/src/files/tree/files-tree-scrolling.ts: 397
     lycaon-den/src/files/tree/files-tree-source.ts: 238
@@ -10696,13 +10697,13 @@ source_files:
     lycaon-den/src/files/tree/project-files-tree-flat.ts: 13
     lycaon-den/src/files/tree/scope-resolution.ts: 575
     lycaon-den/src/files/tree/selection-outline.ts: 45
-    lycaon-den/src/files/tree/source-tree-store.ts: 716
+    lycaon-den/src/files/tree/source-tree-store.ts: 733
     lycaon-den/src/files/tree/tree-typeahead.ts: 29
     lycaon-den/src/files/walk/StepBar.tsx: 585
     lycaon-den/src/files/walk/WalkButton.tsx: 67
     lycaon-den/src/files/walk/WalkChapterHeading.tsx: 38
     lycaon-den/src/files/walk/WalkGitReview.tsx: 214
-    lycaon-den/src/files/walk/WalkPosition.tsx: 94
+    lycaon-den/src/files/walk/WalkPosition.tsx: 100
     lycaon-den/src/files/walk/WalkStepPage.tsx: 289
     lycaon-den/src/files/walk/WalkTransport.tsx: 404
     lycaon-den/src/files/walk/create-step-rail.ts: 93
@@ -10929,7 +10930,7 @@ source_files:
     lycaon-den/src/settings/chat/chat-prefs.ts: 26
     lycaon-den/src/settings/chat/notification-prefs.ts: 105
     lycaon-den/src/settings/editor/context-nav-prefs.ts: 67
-    lycaon-den/src/settings/editor/editor-prefs.ts: 405
+    lycaon-den/src/settings/editor/editor-prefs.ts: 415
     lycaon-den/src/settings/editor/external-open-prefs.ts: 151
     lycaon-den/src/settings/editor/file-summary-settings.ts: 84
     lycaon-den/src/settings/editor/settings-editor-copy.ts: 3
@@ -11019,7 +11020,7 @@ source_files:
     lycaon-den/src/shortcuts/binding-policy.ts: 50
     lycaon-den/src/shortcuts/chord.ts: 332
     lycaon-den/src/shortcuts/command-display.ts: 106
-    lycaon-den/src/shortcuts/dispatcher.ts: 511
+    lycaon-den/src/shortcuts/dispatcher.ts: 521
     lycaon-den/src/shortcuts/display-binding-for.ts: 89
     lycaon-den/src/shortcuts/focus-region.ts: 129
     lycaon-den/src/shortcuts/keymap.ts: 288
@@ -11065,7 +11066,7 @@ source_files:
     lycaon-den/src/ui/paged-view/controller.ts: 174
     lycaon-den/src/ui/paged-view/geometry.ts: 26
     lycaon-den/src/ui/paged-view/interest.ts: 20
-    lycaon-den/src/ui/paged-view/source-view-session.ts: 553
+    lycaon-den/src/ui/paged-view/source-view-session.ts: 554
     lycaon-den/src/ui/paged-view/viewport-interest.ts: 80
     lycaon-den/src/ui/presentation-context.tsx: 15
     lycaon-den/src/ui/presentation.ts: 94
@@ -11430,7 +11431,7 @@ source_files:
     lycaon/internal/api/sourceapi/source_search.go: 97
     lycaon/internal/api/sourceapi/source_view_access.go: 185
     lycaon/internal/api/sourceapi/source_view_comparison.go: 190
-    lycaon/internal/api/sourceapi/source_view_create.go: 167
+    lycaon/internal/api/sourceapi/source_view_create.go: 187
     lycaon/internal/api/sourceapi/source_view_current.go: 85
     lycaon/internal/api/sourceapi/source_view_filter.go: 103
     lycaon/internal/api/sourceapi/source_view_live.go: 56
@@ -11442,7 +11443,7 @@ source_files:
     lycaon/internal/api/sourceapi/source_view_rows.go: 247
     lycaon/internal/api/sourceapi/source_view_screening.go: 114
     lycaon/internal/api/sourceapi/source_view_search.go: 146
-    lycaon/internal/api/sourceapi/source_view_service.go: 244
+    lycaon/internal/api/sourceapi/source_view_service.go: 262
     lycaon/internal/api/sourceapi/source_view_state.go: 180
     lycaon/internal/api/sourceapi/source_view_tree.go: 81
     lycaon/internal/api/sourceapi/source_view_update.go: 150
@@ -12797,7 +12798,7 @@ source_files:
     lycaon/internal/llm/logging_capture.go: 186
     lycaon/internal/llm/logging_client.go: 34
     lycaon/internal/llm/logging_provider.go: 35
-    lycaon/internal/llm/manual_provider.go: 241
+    lycaon/internal/llm/manual_provider.go: 270
     lycaon/internal/llm/message_redaction.go: 508
     lycaon/internal/llm/mock_config.go: 41
     lycaon/internal/llm/mock_kick_driven.go: 128
@@ -13183,6 +13184,7 @@ source_files:
     lycaon/internal/preflight/catastrophic.go: 71
     lycaon/internal/preflight/env.go: 21
     lycaon/internal/preflight/env_darwin.go: 14
+    lycaon/internal/preflight/env_linux.go: 16
     lycaon/internal/preflight/env_other.go: 5
     lycaon/internal/preflight/preflight.go: 129
     lycaon/internal/preflight/probes.go: 243
@@ -15403,7 +15405,7 @@ source_files:
     scripts/document-core-env.sh: 2
     scripts/e2e-cleanup.sh: 15
     scripts/e2e-den-desktop.sh: 50
-    scripts/e2e-den.sh: 142
+    scripts/e2e-den.sh: 184
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 20
     scripts/e2e-sidecar-serve.sh: 71
@@ -15594,7 +15596,7 @@ test_directories:
     lycaon-den/src/components/source: 1
     lycaon-den/src/components/source/annotations: 12
     lycaon-den/src/components/source/diff: 7
-    lycaon-den/src/components/source/editor: 30
+    lycaon-den/src/components/source/editor: 31
     lycaon-den/src/components/source/inline-edit: 10
     lycaon-den/src/components/source/reader: 12
     lycaon-den/src/components/source/secrets: 3
@@ -15610,7 +15612,7 @@ test_directories:
     lycaon-den/src/cost: 3
     lycaon-den/src/files/commands: 6
     lycaon-den/src/files/components: 39
-    lycaon-den/src/files/documents: 25
+    lycaon-den/src/files/documents: 26
     lycaon-den/src/files/editor: 30
     lycaon-den/src/files/history: 15
     lycaon-den/src/files/review: 21
@@ -15895,7 +15897,7 @@ test_directories:
     lycaon/internal/platform: 1
     lycaon/internal/platformfloor: 1
     lycaon/internal/pongoplain: 1
-    lycaon/internal/preflight: 2
+    lycaon/internal/preflight: 3
     lycaon/internal/presence: 2
     lycaon/internal/pricing: 4
     lycaon/internal/progress: 12
@@ -16133,7 +16135,7 @@ test_files:
     lycaon-den/e2e/checkpoint-direct-ip.spec.ts: 76
     lycaon-den/e2e/checkpoint-edit-review-careful.spec.ts: 14
     lycaon-den/e2e/checkpoint-edit-review-default-off.spec.ts: 16
-    lycaon-den/e2e/checkpoint-file-change.spec.ts: 50
+    lycaon-den/e2e/checkpoint-file-change.spec.ts: 46
     lycaon-den/e2e/checkpoint-high-risk-band.spec.ts: 76
     lycaon-den/e2e/checkpoint-recovery.spec.ts: 145
     lycaon-den/e2e/checkpoint-socket-capability.spec.ts: 76
@@ -16143,7 +16145,7 @@ test_files:
     lycaon-den/e2e/composer-editing.spec.ts: 19
     lycaon-den/e2e/composer-elevated-access.spec.ts: 90
     lycaon-den/e2e/composer-height-motion.spec.ts: 197
-    lycaon-den/e2e/context-menus-reveal.spec.ts: 86
+    lycaon-den/e2e/context-menus-reveal.spec.ts: 90
     lycaon-den/e2e/coordination-fixtures.ts: 113
     lycaon-den/e2e/coordination-ui.spec.ts: 102
     lycaon-den/e2e/cost-tracking.spec.ts: 115
@@ -16157,26 +16159,26 @@ test_files:
     lycaon-den/e2e/editor-agent-collaboration.spec.ts: 92
     lycaon-den/e2e/editor-collaboration.spec.ts: 204
     lycaon-den/e2e/editor-diff-scroll.spec.ts: 120
-    lycaon-den/e2e/editor-keyboard-styles.spec.ts: 60
-    lycaon-den/e2e/editor-opening-recovery.spec.ts: 61
+    lycaon-den/e2e/editor-keyboard-styles.spec.ts: 64
+    lycaon-den/e2e/editor-opening-recovery.spec.ts: 72
     lycaon-den/e2e/editor-reactive-lifetime.spec.ts: 39
     lycaon-den/e2e/editor-residency.spec.ts: 255
     lycaon-den/e2e/editor-scroll-paint.spec.ts: 294
     lycaon-den/e2e/editor-scroll-retention.spec.ts: 37
     lycaon-den/e2e/editor-scroll-selection.spec.ts: 65
-    lycaon-den/e2e/editor-source-refresh.spec.ts: 61
+    lycaon-den/e2e/editor-source-refresh.spec.ts: 65
     lycaon-den/e2e/editor-tab-navigation.spec.ts: 45
-    lycaon-den/e2e/editor-window-presence.spec.ts: 121
-    lycaon-den/e2e/extensions-project-controls.spec.ts: 125
+    lycaon-den/e2e/editor-window-presence.spec.ts: 128
+    lycaon-den/e2e/extensions-project-controls.spec.ts: 124
     lycaon-den/e2e/extensions-settings.spec.ts: 127
     lycaon-den/e2e/feedback-whats-new-den.spec.ts: 145
-    lycaon-den/e2e/file-lifecycle-recovery.spec.ts: 86
+    lycaon-den/e2e/file-lifecycle-recovery.spec.ts: 89
     lycaon-den/e2e/file-opening-performance.spec.ts: 193
     lycaon-den/e2e/file-tab-divider.spec.ts: 52
     lycaon-den/e2e/file-truth-encoding.spec.ts: 257
     lycaon-den/e2e/file-version-loading.spec.ts: 119
     lycaon-den/e2e/files-trash.spec.ts: 70
-    lycaon-den/e2e/files-tree-expansion.spec.ts: 541
+    lycaon-den/e2e/files-tree-expansion.spec.ts: 559
     lycaon-den/e2e/files-tree-initial-scroll.spec.ts: 185
     lycaon-den/e2e/files-tree-reveal.spec.ts: 199
     lycaon-den/e2e/files-tree-segmented-reveal.spec.ts: 75
@@ -16189,7 +16191,7 @@ test_files:
     lycaon-den/e2e/fixtures/inline-diff-remount.tsx: 56
     lycaon-den/e2e/free-chat-implement.spec.ts: 24
     lycaon-den/e2e/git-action-errors.spec.ts: 73
-    lycaon-den/e2e/git-worktree-strip.spec.ts: 322
+    lycaon-den/e2e/git-worktree-strip.spec.ts: 330
     lycaon-den/e2e/gutter-line-card.spec.ts: 142
     lycaon-den/e2e/harness-smoke.spec.ts: 51
     lycaon-den/e2e/heavy-binary-hot-exit.spec.ts: 59
@@ -16202,7 +16204,7 @@ test_files:
     lycaon-den/e2e/live-preview-pane.spec.ts: 189
     lycaon-den/e2e/manual-harness-tools.ts: 42
     lycaon-den/e2e/markdown-preview-fixture.ts: 6
-    lycaon-den/e2e/markdown-preview-scroll.spec.ts: 92
+    lycaon-den/e2e/markdown-preview-scroll.spec.ts: 93
     lycaon-den/e2e/markdown-preview.spec.ts: 104
     lycaon-den/e2e/mcp-settings-access.spec.ts: 37
     lycaon-den/e2e/mcp-sign-in-cancellation.spec.ts: 85
@@ -16214,15 +16216,15 @@ test_files:
     lycaon-den/e2e/notifications-den.spec.ts: 34
     lycaon-den/e2e/onboarding-first-run.spec.ts: 189
     lycaon-den/e2e/outside-write.spec.ts: 73
-    lycaon-den/e2e/pending-transcript-time.spec.ts: 296
+    lycaon-den/e2e/pending-transcript-time.spec.ts: 302
     lycaon-den/e2e/performance-history.spec.ts: 54
     lycaon-den/e2e/performance-lifecycle.spec.ts: 202
     lycaon-den/e2e/performance-repository.spec.ts: 88
-    lycaon-den/e2e/performance-transcript.spec.ts: 44
+    lycaon-den/e2e/performance-transcript.spec.ts: 45
     lycaon-den/e2e/plan-full-lifecycle.spec.ts: 200
     lycaon-den/e2e/presentation-layout.spec.ts: 80
     lycaon-den/e2e/presentation.spec.ts: 278
-    lycaon-den/e2e/project-artifacts-gallery.spec.ts: 102
+    lycaon-den/e2e/project-artifacts-gallery.spec.ts: 82
     lycaon-den/e2e/project-blueprints-launch.spec.ts: 112
     lycaon-den/e2e/project-create-transcript.spec.ts: 14
     lycaon-den/e2e/project-create.spec.ts: 119
@@ -16231,13 +16233,13 @@ test_files:
     lycaon-den/e2e/project-switch.spec.ts: 43
     lycaon-den/e2e/prompt.spec.ts: 11
     lycaon-den/e2e/prose-arrival.spec.ts: 34
-    lycaon-den/e2e/prose-completion.spec.ts: 49
+    lycaon-den/e2e/prose-completion.spec.ts: 47
     lycaon-den/e2e/queue-send.spec.ts: 97
-    lycaon-den/e2e/reconnect.desktop.spec.ts: 29
+    lycaon-den/e2e/reconnect.desktop.spec.ts: 28
     lycaon-den/e2e/reconnect.spec.ts: 9
     lycaon-den/e2e/recording-encoding-measurement.spec.ts: 184
     lycaon-den/e2e/review-lens.spec.ts: 178
-    lycaon-den/e2e/review-presentation.spec.ts: 117
+    lycaon-den/e2e/review-presentation.spec.ts: 119
     lycaon-den/e2e/routed-return.spec.ts: 91
     lycaon-den/e2e/scalable-layout.spec.ts: 65
     lycaon-den/e2e/scroll-wheel-boundaries.spec.ts: 69
@@ -16247,16 +16249,16 @@ test_files:
     lycaon-den/e2e/search-pagination.spec.ts: 65
     lycaon-den/e2e/search-project-switch.spec.ts: 31
     lycaon-den/e2e/search-replace-across-files.spec.ts: 31
-    lycaon-den/e2e/secret-service-approval.spec.ts: 186
-    lycaon-den/e2e/secret-service-fixture.ts: 38
+    lycaon-den/e2e/secret-service-approval.spec.ts: 214
+    lycaon-den/e2e/secret-service-fixture.ts: 37
     lycaon-den/e2e/security-findings-pane.spec.ts: 392
-    lycaon-den/e2e/selection-prose-draft.spec.ts: 34
+    lycaon-den/e2e/selection-prose-draft.spec.ts: 35
     lycaon-den/e2e/session-rename.spec.ts: 112
     lycaon-den/e2e/session-switch.spec.ts: 39
     lycaon-den/e2e/settings-controls.spec.ts: 438
     lycaon-den/e2e/settings-layout-switch.spec.ts: 56
     lycaon-den/e2e/settings.spec.ts: 104
-    lycaon-den/e2e/shortcut-help-overlay.spec.ts: 35
+    lycaon-den/e2e/shortcut-help-overlay.spec.ts: 36
     lycaon-den/e2e/sidebar-pins.spec.ts: 102
     lycaon-den/e2e/sidecar-cors.spec.ts: 115
     lycaon-den/e2e/skills-settings.spec.ts: 87
@@ -16276,12 +16278,12 @@ test_files:
     lycaon-den/e2e/transcript-reading-position.spec.ts: 135
     lycaon-den/e2e/transcript-scale-den.spec.ts: 906
     lycaon-den/e2e/transcript-spacing-helpers.ts: 9
-    lycaon-den/e2e/transcript-spacing.spec.ts: 245
+    lycaon-den/e2e/transcript-spacing.spec.ts: 256
     lycaon-den/e2e/transcript-streaming-cost.spec.ts: 134
     lycaon-den/e2e/transcript-streaming-requests.spec.ts: 76
     lycaon-den/e2e/trust-review.spec.ts: 100
     lycaon-den/e2e/untrusted-content-den.spec.ts: 64
-    lycaon-den/e2e/walk-file-navigation.spec.ts: 120
+    lycaon-den/e2e/walk-file-navigation.spec.ts: 128
     lycaon-den/e2e/walk-git-review-journey.ts: 161
     lycaon-den/e2e/walk-git-review.spec.ts: 2
     lycaon-den/e2e/walk-git-review.webkit.spec.ts: 2
@@ -16426,7 +16428,7 @@ test_files:
     lycaon-den/src/chat/stream/transcript-day-chip.test.tsx: 46
     lycaon-den/src/chat/stream/transcript-runtime.test.ts: 48
     lycaon-den/src/chat/stream/transcript-viewport-state.test.ts: 102
-    lycaon-den/src/chat/stream/transcript-viewport.test.ts: 941
+    lycaon-den/src/chat/stream/transcript-viewport.test.ts: 952
     lycaon-den/src/chat/task/task-card-model.test.ts: 187
     lycaon-den/src/chat/task/task-result-model.test.ts: 51
     lycaon-den/src/chat/test/session-msw-fixtures.ts: 116
@@ -16730,13 +16732,13 @@ test_files:
     lycaon-den/src/components/settings/UnderlineTabs.test.tsx: 67
     lycaon-den/src/components/settings/appearance/AppearanceSettings.test.tsx: 122
     lycaon-den/src/components/settings/appearance/EditReviewSettingsPanel.test.tsx: 23
-    lycaon-den/src/components/settings/appearance/EditorSettingsPanel.test.tsx: 296
+    lycaon-den/src/components/settings/appearance/EditorSettingsPanel.test.tsx: 297
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.layout.test.tsx: 78
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.message-times.test.tsx: 40
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.notifications.test.tsx: 128
     lycaon-den/src/components/settings/appearance/KeyboardSettingsPanel.test.tsx: 474
     lycaon-den/src/components/settings/appearance/TypographySettings.test.tsx: 165
-    lycaon-den/src/components/settings/budgets/BudgetsEditor.test.tsx: 227
+    lycaon-den/src/components/settings/budgets/BudgetsEditor.test.tsx: 252
     lycaon-den/src/components/settings/budgets/CostSourcesPanel.test.tsx: 206
     lycaon-den/src/components/settings/extensions/ExtensionsConfigurationPanel.test.tsx: 186
     lycaon-den/src/components/settings/extensions/ExtensionsSettingsPanel.test.tsx: 1241
@@ -16815,6 +16817,7 @@ test_files:
     lycaon-den/src/components/source/diff/word-changes.test.ts: 20
     lycaon-den/src/components/source/editor/UnsavedChangesDialog.test.tsx: 68
     lycaon-den/src/components/source/editor/buffer-word-completion.test.ts: 61
+    lycaon-den/src/components/source/editor/codemirror-emacs-patch.test.ts: 18
     lycaon-den/src/components/source/editor/codemirror-highlight-ready.test.ts: 34
     lycaon-den/src/components/source/editor/codemirror-lang.test.ts: 185
     lycaon-den/src/components/source/editor/codemirror-scrollbars.test.ts: 102
@@ -16823,9 +16826,9 @@ test_files:
     lycaon-den/src/components/source/editor/cursor-margin.test.ts: 76
     lycaon-den/src/components/source/editor/editor-command-bridge.test.ts: 92
     lycaon-den/src/components/source/editor/editor-commands.test.ts: 81
-    lycaon-den/src/components/source/editor/editor-editing-style.test.ts: 164
+    lycaon-den/src/components/source/editor/editor-editing-style.test.ts: 185
     lycaon-den/src/components/source/editor/editor-scroll-lifecycle.test.ts: 41
-    lycaon-den/src/components/source/editor/editor-scroll-paint.test.ts: 145
+    lycaon-den/src/components/source/editor/editor-scroll-paint.test.ts: 146
     lycaon-den/src/components/source/editor/editor-scroll-position.test.ts: 21
     lycaon-den/src/components/source/editor/editor-view-state.test.ts: 140
     lycaon-den/src/components/source/editor/editor-viewport-pool.test.ts: 78
@@ -16974,11 +16977,11 @@ test_files:
     lycaon-den/src/files/components/ProjectFilesView.aim-liveness.test.tsx: 444
     lycaon-den/src/files/components/ProjectFilesView.classification.test.tsx: 231
     lycaon-den/src/files/components/ProjectFilesView.comparison.test.tsx: 570
-    lycaon-den/src/files/components/ProjectFilesView.coordinated-presentation.test.tsx: 183
+    lycaon-den/src/files/components/ProjectFilesView.coordinated-presentation.test.tsx: 196
     lycaon-den/src/files/components/ProjectFilesView.editing.test.tsx: 292
     lycaon-den/src/files/components/ProjectFilesView.history-review.test.tsx: 545
     lycaon-den/src/files/components/ProjectFilesView.keyboard.test.tsx: 107
-    lycaon-den/src/files/components/ProjectFilesView.loading.test.tsx: 185
+    lycaon-den/src/files/components/ProjectFilesView.loading.test.tsx: 204
     lycaon-den/src/files/components/ProjectFilesView.presence.test.tsx: 84
     lycaon-den/src/files/components/ProjectFilesView.review-scope.test.tsx: 668
     lycaon-den/src/files/components/ProjectFilesView.stage.test.tsx: 664
@@ -17009,6 +17012,7 @@ test_files:
     lycaon-den/src/files/documents/document-agent-presence.test.ts: 122
     lycaon-den/src/files/documents/document-command.test.ts: 71
     lycaon-den/src/files/documents/document-core.test.ts: 61
+    lycaon-den/src/files/documents/document-editor-binding.test.ts: 55
     lycaon-den/src/files/documents/document-format.test.ts: 51
     lycaon-den/src/files/documents/document-outbox-relay.test.ts: 188
     lycaon-den/src/files/documents/document-outbox.test.ts: 51
@@ -17096,9 +17100,9 @@ test_files:
     lycaon-den/src/files/review/revision-diffs.test.ts: 91
     lycaon-den/src/files/review/turn-diffs.test.ts: 63
     lycaon-den/src/files/source/file-open-target.test.ts: 17
-    lycaon-den/src/files/source/files-source-read.test.ts: 139
+    lycaon-den/src/files/source/files-source-read.test.ts: 149
     lycaon-den/src/files/source/files-workspace-fault.test.ts: 50
-    lycaon-den/src/files/source/files-workspace.test.tsx: 184
+    lycaon-den/src/files/source/files-workspace.test.tsx: 211
     lycaon-den/src/files/source/source-comparison-cache.test.ts: 136
     lycaon-den/src/files/source/source-comparison.test.ts: 41
     lycaon-den/src/files/source/source-content-availability.test.ts: 29
@@ -17115,13 +17119,13 @@ test_files:
     lycaon-den/src/files/tabs/files-tab-trailing.test.ts: 72
     lycaon-den/src/files/tabs/project-files-close.test.ts: 348
     lycaon-den/src/files/tree/FilesTree.navigation.test.tsx: 255
-    lycaon-den/src/files/tree/FilesTree.test.tsx: 908
+    lycaon-den/src/files/tree/FilesTree.test.tsx: 921
     lycaon-den/src/files/tree/file-inventory-refresh.test.ts: 51
     lycaon-den/src/files/tree/file-inventory.test.ts: 69
     lycaon-den/src/files/tree/files-tree-intent-state.test.ts: 58
     lycaon-den/src/files/tree/files-tree-move.test.ts: 36
     lycaon-den/src/files/tree/files-tree-paged-model.test.ts: 79
-    lycaon-den/src/files/tree/files-tree-paged-session.test.ts: 577
+    lycaon-den/src/files/tree/files-tree-paged-session.test.ts: 593
     lycaon-den/src/files/tree/files-tree-reveal.test.tsx: 84
     lycaon-den/src/files/tree/files-tree-scope-precedence.test.ts: 31
     lycaon-den/src/files/tree/files-tree-sticky.test.ts: 466
@@ -17133,7 +17137,7 @@ test_files:
     lycaon-den/src/files/tree/project-files-reveal.test.ts: 34
     lycaon-den/src/files/tree/scope-resolution.test.ts: 909
     lycaon-den/src/files/tree/selection-outline.test.ts: 49
-    lycaon-den/src/files/tree/source-tree-store.test.ts: 436
+    lycaon-den/src/files/tree/source-tree-store.test.ts: 494
     lycaon-den/src/files/tree/tree-typeahead.test.ts: 23
     lycaon-den/src/files/walk/StepBar.overflow.test.tsx: 156
     lycaon-den/src/files/walk/StepBar.test.tsx: 736
@@ -17367,7 +17371,7 @@ test_files:
     lycaon-den/src/settings/chat/chat-prefs.test.ts: 33
     lycaon-den/src/settings/chat/notification-prefs.test.ts: 96
     lycaon-den/src/settings/editor/context-nav-prefs.test.ts: 53
-    lycaon-den/src/settings/editor/editor-prefs.test.ts: 276
+    lycaon-den/src/settings/editor/editor-prefs.test.ts: 300
     lycaon-den/src/settings/editor/external-open-prefs.test.ts: 86
     lycaon-den/src/settings/editor/file-summary-settings.test.ts: 133
     lycaon-den/src/settings/extensions/extension-suggestions-model.test.ts: 35
@@ -17445,7 +17449,7 @@ test_files:
     lycaon-den/src/shortcuts/adoption-shell-composer.test.ts: 169
     lycaon-den/src/shortcuts/app-menu-model.test.ts: 257
     lycaon-den/src/shortcuts/chord-platform.test.ts: 335
-    lycaon-den/src/shortcuts/dispatcher.test.ts: 894
+    lycaon-den/src/shortcuts/dispatcher.test.ts: 919
     lycaon-den/src/shortcuts/display-binding-for.test.ts: 82
     lycaon-den/src/shortcuts/focus-region.test.ts: 320
     lycaon-den/src/shortcuts/global-handler-ownership-invariants.test.ts: 113
@@ -17530,7 +17534,7 @@ test_files:
     lycaon-den/src/test/source-corpus.ts: 146
     lycaon-den/src/test/source-reader-fixture.ts: 197
     lycaon-den/src/test/source-tree-client-fixture.ts: 116
-    lycaon-den/src/test/source-tree-view-fixture.ts: 134
+    lycaon-den/src/test/source-tree-view-fixture.ts: 142
     lycaon-den/src/test/style-contracts/animation.ts: 124
     lycaon-den/src/test/style-contracts/browser.ts: 100
     lycaon-den/src/test/style-contracts/catalog.ts: 61
@@ -17558,7 +17562,7 @@ test_files:
     lycaon-den/src/ui/min-visible-hold.test.ts: 120
     lycaon-den/src/ui/paged-view/controller.test.ts: 147
     lycaon-den/src/ui/paged-view/interest.test.ts: 25
-    lycaon-den/src/ui/paged-view/source-view-session.test.ts: 520
+    lycaon-den/src/ui/paged-view/source-view-session.test.ts: 534
     lycaon-den/src/ui/paged-view/viewport-interest.test.ts: 86
     lycaon-den/src/ui/presentation-waiting.test.tsx: 35
     lycaon-den/src/ui/presentation.test.ts: 91
@@ -17836,7 +17840,7 @@ test_files:
     lycaon/internal/api/sourceapi/source_view_access_test.go: 55
     lycaon/internal/api/sourceapi/source_view_comparison_test.go: 36
     lycaon/internal/api/sourceapi/source_view_events_test.go: 83
-    lycaon/internal/api/sourceapi/source_view_lifecycle_test.go: 104
+    lycaon/internal/api/sourceapi/source_view_lifecycle_test.go: 136
     lycaon/internal/api/sourceapi/source_view_live_test.go: 42
     lycaon/internal/api/sourceapi/source_view_projection_test.go: 78
     lycaon/internal/api/sourceapi/source_view_receipts_test.go: 35
@@ -19073,7 +19077,7 @@ test_files:
     lycaon/internal/llm/live_budget_test.go: 102
     lycaon/internal/llm/logging_capture_test.go: 272
     lycaon/internal/llm/logging_client_test.go: 153
-    lycaon/internal/llm/manual_provider_test.go: 162
+    lycaon/internal/llm/manual_provider_test.go: 220
     lycaon/internal/llm/mock_gate_test.go: 52
     lycaon/internal/llm/mock_kick_driven_test.go: 104
     lycaon/internal/llm/mock_provider_test.go: 142
@@ -19476,6 +19480,7 @@ test_files:
     lycaon/internal/platformfloor/floor_test.go: 68
     lycaon/internal/pongoplain/pongoplain_test.go: 200
     lycaon/internal/preflight/catastrophic_test.go: 121
+    lycaon/internal/preflight/env_linux_test.go: 16
     lycaon/internal/preflight/probes_test.go: 392
     lycaon/internal/presence/broker_test.go: 120
     lycaon/internal/presence/unlocks_test.go: 111
@@ -22466,9 +22471,9 @@ test_files:
     scripts/coordinator-benchmark/test_workflow_design.py: 139
     scripts/coordinator-benchmark/test_workflow_evidence.py: 106
     scripts/coordinator-benchmark/test_write_boundary_probe.py: 52
-    scripts/e2e/docker-lib.sh: 101
+    scripts/e2e/docker-lib.sh: 127
     scripts/e2e/docker-stack-down.sh: 13
-    scripts/e2e/docker-stack-up.sh: 36
+    scripts/e2e/docker-stack-up.sh: 46
     scripts/e2e/env.sh: 14
     scripts/e2e/model-fixture.ts: 19
     scripts/e2e/sidecar-process.sh: 31
@@ -23362,7 +23367,7 @@ ts_local_dependencies:
     lycaon-den/src/files/documents/document-causality.ts: 0
     lycaon-den/src/files/documents/document-change-highlights.ts: 1
     lycaon-den/src/files/documents/document-command.ts: 4
-    lycaon-den/src/files/documents/document-editor-binding.ts: 2
+    lycaon-den/src/files/documents/document-editor-binding.ts: 4
     lycaon-den/src/files/documents/document-format.ts: 5
     lycaon-den/src/files/documents/document-outbox-relay.ts: 8
     lycaon-den/src/files/documents/document-outbox.ts: 5
@@ -23380,7 +23385,7 @@ ts_local_dependencies:
     lycaon-den/src/files/documents/file-merge-commands.ts: 9
     lycaon-den/src/files/documents/files-buffer-change.ts: 6
     lycaon-den/src/files/documents/files-buffer-demand.ts: 7
-    lycaon-den/src/files/documents/files-buffer-loading.ts: 17
+    lycaon-den/src/files/documents/files-buffer-loading.ts: 18
     lycaon-den/src/files/documents/files-buffer-refresh.ts: 18
     lycaon-den/src/files/documents/files-buffer-request-tracking.ts: 2
     lycaon-den/src/files/documents/files-buffer-state.ts: 13
@@ -23768,7 +23773,7 @@ ts_local_dependencies:
     lycaon-den/src/settings/chat/chat-prefs.ts: 3
     lycaon-den/src/settings/chat/notification-prefs.ts: 4
     lycaon-den/src/settings/editor/context-nav-prefs.ts: 3
-    lycaon-den/src/settings/editor/editor-prefs.ts: 5
+    lycaon-den/src/settings/editor/editor-prefs.ts: 7
     lycaon-den/src/settings/editor/external-open-prefs.ts: 3
     lycaon-den/src/settings/editor/file-summary-settings.ts: 2
     lycaon-den/src/settings/editor/settings-editor-copy.ts: 0
