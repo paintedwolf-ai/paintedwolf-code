@@ -196,8 +196,8 @@ func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, 
 	verdict["coverage"] = securityCoverageFixture(t, h, ctx, runID)
 	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
 	testutil.FailErr(t, "reject uninvestigated question", err)
-	if out.Valid || out.CoverageIssue == "" {
-		t.Fatalf("uninvestigated question closed: %+v", out)
+	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != "SUBMIT_VERDICT_QUESTION_INVALID" || out.QuestionIssue.Data["reason"] != "investigation_required" {
+		t.Fatalf("uninvestigated question outcome = %+v, want investigation-required rejection", out)
 	}
 	appendSucceededReviewAgent(t, h, ctx, sess, "repo-researcher", "question/c1")
 	appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "question/c1/review")
