@@ -237,7 +237,9 @@ webE2e(
     await expect(page.getByTestId("git-branch")).toContainText("main");
 
     await page.getByTestId("git-branch").click();
+    await expect(page.getByTestId("git-worktree-bind-open")).toBeVisible();
     await page.getByTestId("git-worktree-bind-open").click();
+    await expect(page.getByTestId("git-checkout-create-modal")).toBeVisible();
     await expect(page.getByTestId("git-checkout-create-modal")).toContainText(
       "1 changed file stays in the project folder and is not copied.",
     );
@@ -247,7 +249,9 @@ webE2e(
     await expect(page.getByTestId("git-branch")).toBeFocused();
 
     await page.getByTestId("git-branch").click();
+    await expect(page.getByTestId("git-worktree-bind-open")).toBeVisible();
     await page.getByTestId("git-worktree-bind-open").click();
+    await expect(page.getByTestId("git-checkout-create-modal")).toBeVisible();
     await page.getByLabel("New branch name").fill("main");
     await page.getByTestId("git-worktree-create").click();
     await expect(
