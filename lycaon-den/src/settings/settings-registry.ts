@@ -77,7 +77,7 @@ const BUDGETS = { section: "debug", tab: "budgets" } as const;
 const DIAGNOSTICS = { section: "debug", tab: "diagnostics" } as const;
 
 const SETTING_SPECS = [
-  { ...EDITOR, id: "editor-keymap", label: "Editing style", keywords: ["emacs", "vim", "keymap", "keyboard", "modal editing"] },
+  { ...EDITOR, id: "editor-keymap", label: "Editing style", keywords: ["standard", "emacs", "vim", "keymap", "keyboard", "select all", "modal editing"] },
   { ...EDITOR, id: "editor-tab-focus", label: "Tab moves focus", keywords: ["keyboard", "indent", "accessibility", "tab"] },
   // General · Display
   { ...DISPLAY, id: "appearance", label: "Appearance", keywords: ["theme", "dark mode", "light mode", "color scheme", "match system"] },

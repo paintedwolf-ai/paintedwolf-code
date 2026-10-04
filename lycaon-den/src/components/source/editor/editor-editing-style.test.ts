@@ -17,7 +17,7 @@ import { buildEditorCommandBridge } from "./editor-command-bridge.ts";
 let view: EditorView;
 beforeEach(() => { setDispatcherPlatformForTests("macos"); resetEditorPrefsForTests(); seedStockFrame(); setFilesStageActive(true); });
 afterEach(() => { view?.destroy(); document.body.replaceChildren(); resetDispatcherForTests(); resetContributionStoreForTest(); });
-function create(style: "emacs" | "vim", step?: (direction: "undo" | "redo") => void) {
+function create(style: "standard" | "emacs" | "vim", step?: (direction: "undo" | "redo") => void) {
   resetEditorPrefsForTests({ keymap: style });
   view = new EditorView({ parent: document.body, state: EditorState.create({ doc: "one two\nthree four\n",
     extensions: [javascript(), EditorState.allowMultipleSelections.of(true), step ? editorHistory.of(step) : history(),
@@ -30,7 +30,7 @@ function key(key: string, init: KeyboardEventInit = {}) {
 }
 
 describe("editing styles", () => {
-  it("defaults to Emacs and supports mark, kill, and yank", () => {
+  it("supports Emacs mark, kill, and yank", () => {
     create("emacs");
     key("f", { ctrlKey: true });
     expect(view.state.selection.main.head).toBe(1);
@@ -96,6 +96,28 @@ describe("editing styles", () => {
     create("vim");
     Vim.handleEx(getCM(view)! as CodeMirrorV, "w"); Vim.handleEx(getCM(view)! as CodeMirrorV, "wq");
     expect(save).toHaveBeenCalledOnce(); expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the standard style to the editor's own platform keys", () => {
+    create("standard");
+    expect(getCM(view)).toBeNull();
+    expect(view.dom.querySelector(".cm-vimCursorLayer, .cm-panels, .den-editor-mode")).toBeNull();
+    key("k", { ctrlKey: true });
+    key("y", { ctrlKey: true });
+    expect(view.state.doc.toString()).toBe("one two\nthree four\n");
+    key("a", { ctrlKey: true });
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(view.state.doc.length);
+  });
+
+  it("removes Emacs keys when the style changes to standard", () => {
+    create("emacs");
+    key("k", { ctrlKey: true });
+    expect(view.state.doc.toString()).toBe("\nthree four\n");
+    applyEditorEditingStyle(view, "standard", false);
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    key("y", { ctrlKey: true });
+    expect(view.state.doc.toString()).toBe("\nthree four\n");
   });
 
   it("changes style without replacing text or selections", () => {
