@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -62,6 +63,13 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Setenv("LYCAON_LOG_LEVEL", "error")
 	// Isolate device configuration for deterministic tests.
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	// The process source catalog caches trees under <config>/cache; its builds
+	// outlive the app, so finish them before TempDir removal.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		testutil.FailErr(t, "drain source catalog", sourcecatalog.Process().Drain(ctx))
+	})
 
 	o := defaultOptions()
 	for _, opt := range opts {
