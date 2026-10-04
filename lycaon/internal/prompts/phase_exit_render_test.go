@@ -53,6 +53,14 @@ func TestPhaseExitRendersEveryKind(t *testing.T) {
 				"submit_verdict", "CHALLENGED", "evidence_passed:survey_challenged"},
 		},
 		{
+			name: "review_loop with structured coverage and set-asides",
+			exit: map[string]any{
+				"kind":           "review_loop",
+				"verdict_schema": `{"verdict":"CHALLENGED","challenges":"claims","coverage":"coverage_review","set_asides":"set_asides"}`,
+			},
+			want: []string{"`coverage_review` is an object with `revision` and `assessments`", "`set_asides` is an array"},
+		},
+		{
 			name: "review_loop with no reviewers still names the verdict channel",
 			exit: map[string]any{"kind": "review_loop", "review_loop_key": "claims"},
 			want: []string{"submit_verdict", "evidence_passed:claims"},
