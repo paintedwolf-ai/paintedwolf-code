@@ -87,6 +87,11 @@ mod macos {
             println!("FAIL: harness chat did not load: {error}");
             return 1;
         }
+        // Without threaded scrolling, as on virtualized CI hosts, WebKit builds no scrolling tree.
+        if den.scrolling_tree().trim().is_empty() {
+            println!("SKIP: WebKit built no scrolling tree on this host, so there is no scrolling thread to check");
+            return 0;
+        }
         let mut failures = Vec::new();
         den.eval("__scrollThread.journal(), 0");
         check_in_sync(&den, "seeded chat at the tail", &mut failures);
@@ -195,19 +200,24 @@ mod macos {
     }
 
     fn boot(den: &Driver) -> Result<(), String> {
-        let mut last = String::new();
+        let mut attempts = Vec::new();
         for _ in 0..3 {
             den.spin(Duration::from_secs(2));
             den.eval(PAGE);
-            match den.eval_async("__scrollThread.seed()", Duration::from_secs(120)) {
+            let outcome = match den.eval_async("__scrollThread.seed()", Duration::from_secs(120)) {
                 Ok(rows) if rows.parse::<u32>().unwrap_or(0) >= 3 => return Ok(()),
-                Ok(rows) => last = format!("{rows} transcript rows"),
-                Err(error) => last = error,
-            }
+                Ok(rows) => format!("{rows} transcript rows"),
+                Err(error) => error,
+            };
+            let progress = den.eval("String(__scrollThread.progress)").unwrap_or_default();
+            let state = den
+                .eval("window.__harness ? JSON.stringify(__harness.state()) : 'no harness'")
+                .unwrap_or_default();
+            attempts.push(format!("{outcome} (last step: {progress}; state: {state})"));
             // SAFETY: reloads the page this driver loaded.
             let _ = unsafe { den.web.reload() };
         }
-        Err(last)
+        Err(attempts.join("\n  "))
     }
 
     fn geometry(den: &Driver) -> Option<Geometry> {
