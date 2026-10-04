@@ -169,6 +169,9 @@ export type TranscriptViewportController = {
 
 const controllerRegistry = new Map<string, Set<TranscriptViewportController>>();
 
+/** How long a reveal waits for its row to arrive and then to mount and settle. */
+const REVEAL_SETTLE_TIMEOUT_MS = 6_000;
+
 function normalizedSessionId(value: string): string {
   return value.trim();
 }
@@ -872,7 +875,14 @@ export function createTranscriptViewportController(opts: {
       ) {
         return false;
       }
-      const index = resolveRevealIndex(view.items(), anchor);
+      let index = resolveRevealIndex(view.items(), anchor);
+      // A walk can select an action whose row is still streaming into the transcript.
+      const arrivalDeadline = performance.now() + REVEAL_SETTLE_TIMEOUT_MS;
+      while (index < 0 && performance.now() < arrivalDeadline) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (sequence !== revealSequence || revealOpts.signal?.aborted || sessionGeneration !== revealGeneration || virtualWindow !== view) return false;
+        index = resolveRevealIndex(view.items(), anchor);
+      }
       if (index < 0) return false;
       const align = revealOpts.align ?? "start";
       const needsMount = !revealOpts.element?.()?.isConnected;
@@ -880,7 +890,7 @@ export function createTranscriptViewportController(opts: {
         view.scrollToIndex(index, { align });
       }
       if (revealOpts.element) {
-        const deadline = performance.now() + 6_000;
+        const deadline = performance.now() + REVEAL_SETTLE_TIMEOUT_MS;
         let element = revealOpts.element();
         let quietFrames = needsMount ? 0 : 3;
         let previousGeometry = "";
