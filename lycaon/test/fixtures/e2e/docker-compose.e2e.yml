@@ -153,16 +153,22 @@ services:
       - -c
       - |
         set -eu
-        # A restarted container keeps the binary it built.
-        if [ ! -x /tmp/lycaon ]; then
-          echo "e2e-sidecar: go build…" >&2
-          go build -o /tmp/lycaon.partial ./cmd/lycaon
-          mv /tmp/lycaon.partial /tmp/lycaon
-        fi
-        echo "e2e-sidecar: serve…" >&2
-        exec /tmp/lycaon serve --db "${LYCAON_E2E_STATE_DIR}/lycaon.db"
+        echo "e2e-sidecar: go build…" >&2
+        go build -o /tmp/lycaon ./cmd/lycaon
+        # A crash restart kills the recorded sidecar and this loop serves again
+        # on the same store. Restarting the container instead rebuilds its
+        # network link, and Chromium aborts in-flight requests when the host's
+        # network changes.
+        child=
+        trap 'kill -TERM "$$child" 2>/dev/null || true; wait "$$child" || true; exit 0' TERM INT
+        while :; do
+          echo "e2e-sidecar: serve…" >&2
+          /tmp/lycaon serve --db "${LYCAON_E2E_STATE_DIR}/lycaon.db" &
+          child=$$!
+          echo "$$child" >/tmp/lycaon.pid
+          wait "$$child" || true
+        done
     ports:
-      # A fixed host port survives the container restarts that apply staged restores.
       - "127.0.0.1:${LYCAON_E2E_SIDECAR_PORT:-}:8787"
 
   vite-deps:

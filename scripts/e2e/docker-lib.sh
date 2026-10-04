@@ -28,20 +28,28 @@ e2e_free_local_port() {
   python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
 }
 
-# SIGKILL and restart the sidecar container on its fixed host port.
+# SIGKILL the container's recorded sidecar; its serve loop starts the next one.
 e2e_docker_crash_restart_sidecar() {
-  local container port
+  local container previous current i
   container="$(docker compose -f "${LYCAON_E2E_COMPOSE_FILE}" -p "${LYCAON_E2E_DOCKER_PROJECT}" ps -q sidecar)"
   [[ -n "${container}" ]] || {
     echo "error: no sidecar container in project ${LYCAON_E2E_DOCKER_PROJECT}" >&2
     return 1
   }
-  docker kill --signal KILL "${container}" >/dev/null
-  docker wait "${container}" >/dev/null
-  docker start "${container}" >/dev/null
-  port="$(e2e_docker_compose_port sidecar 8787)"
-  [[ "127.0.0.1:${port}" == "${LYCAON_E2E_ADDR}" ]] || {
-    echo "error: restarted sidecar listens on ${port}, not ${LYCAON_E2E_ADDR}" >&2
+  previous="$(docker exec "${container}" cat /tmp/lycaon.pid)"
+  [[ "${previous}" =~ ^[0-9]+$ ]] || {
+    echo "error: sidecar container recorded no pid" >&2
+    return 1
+  }
+  docker exec "${container}" sh -c "kill -KILL ${previous}"
+  # A new pid means the killed process has exited, so health answers come from its successor.
+  for ((i = 1; i <= 600; i++)); do
+    current="$(docker exec "${container}" cat /tmp/lycaon.pid 2>/dev/null || true)"
+    [[ -n "${current}" && "${current}" != "${previous}" ]] && break
+    sleep 0.1
+  done
+  [[ -n "${current}" && "${current}" != "${previous}" ]] || {
+    echo "error: sidecar pid ${previous} was not replaced" >&2
     return 1
   }
   e2e_wait_http "${LYCAON_E2E_HEALTH_URL}" "sidecar /health" 300

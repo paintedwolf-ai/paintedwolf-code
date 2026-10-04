@@ -7,7 +7,7 @@ export function manualHarnessTools(request: APIRequestContext, sessionId: string
   const headers = { Authorization: `Bearer ${token}` };
   return {
     async invoke(name: string, args: Record<string, unknown>) {
-      const response = await request.get(`${apiUrl}/harness/llm/pending?wait=30000`, { headers });
+      const response = await request.get(`${apiUrl}/harness/llm/pending?wait=30000&session_id=${sessionId}`, { headers });
       expect(response.ok(), await response.text()).toBeTruthy();
       const pending = await response.json() as {
         pending: boolean; id: string; session_id: string; tools: string[];

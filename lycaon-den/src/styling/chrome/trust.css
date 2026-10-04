@@ -52,7 +52,15 @@
   color: var(--den-text-muted);
   white-space: nowrap;
 }
-.trust-popover__error { overflow-wrap: anywhere; }
+/* A host reason of any length keeps the popover compact; its tip carries the rest. */
+.trust-popover__error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  flex-shrink: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 
 .extension-suggestions__list {
   list-style: none;

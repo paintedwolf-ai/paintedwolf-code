@@ -43,7 +43,7 @@ func TestManualProviderInterceptAndRespond(t *testing.T) {
 		done <- c
 	}()
 
-	pend, ok := p.Pending(context.Background(), 2*time.Second)
+	pend, ok := p.Pending(context.Background(), "", 2*time.Second)
 	if !ok {
 		t.Fatal("expected a pending completion")
 	}
@@ -105,7 +105,7 @@ func TestManualProviderDirtyStreamChunks(t *testing.T) {
 		done <- got
 	}()
 
-	pend, ok := p.Pending(context.Background(), 2*time.Second)
+	pend, ok := p.Pending(context.Background(), "", 2*time.Second)
 	if !ok {
 		t.Fatal("expected a pending completion")
 	}
@@ -153,7 +153,7 @@ func TestManualProviderStreamsPlainContentByteForByte(t *testing.T) {
 		}
 		done <- result{chunks: got}
 	}()
-	pend, ok := p.Pending(context.Background(), 2*time.Second)
+	pend, ok := p.Pending(context.Background(), "", 2*time.Second)
 	if !ok {
 		t.Fatal("expected a pending completion")
 	}
@@ -174,5 +174,37 @@ func TestManualProviderStreamsPlainContentByteForByte(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("stream did not finish after Respond")
+	}
+}
+
+func TestManualProviderPendingFiltersBySession(t *testing.T) {
+	p := NewManualProvider()
+	p.SetAuto(false, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	complete := func(sessionID string) {
+		_, _ = p.Complete(ctx, modelcall.CompletionRequest{Debug: modelcall.RequestDebug{SessionID: sessionID}})
+	}
+	go complete("stale")
+	stale, ok := p.Pending(ctx, "", 2*time.Second)
+	if !ok || stale.SessionID != "stale" {
+		t.Fatalf("unfiltered pending = %+v, %v; want the stale session's request", stale, ok)
+	}
+	if _, ok := p.Pending(ctx, "current", 0); ok {
+		t.Fatal("filtered pending returned another session's request")
+	}
+	found := make(chan *ManualPending, 1)
+	go func() {
+		pend, _ := p.Pending(ctx, "current", 2*time.Second)
+		found <- pend
+	}()
+	go complete("current")
+	select {
+	case pend := <-found:
+		if pend == nil || pend.SessionID != "current" {
+			t.Fatalf("filtered pending = %+v; want the current session's request", pend)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("filtered pending did not receive the current session's request")
 	}
 }
