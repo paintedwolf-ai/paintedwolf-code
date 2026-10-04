@@ -137,7 +137,6 @@ export function animateHeightToggle(
   const radius = computedRadius(shell);
   // Read before the lock writes, so a collapse shares the start height's layout.
   const collapsedHeight = opening ? 0 : ctrl.collapsedHeight();
-  previous?.supersede();
 
   shell.dataset.animating = "true";
   shell.style.height = `${startHeight}px`;
@@ -145,6 +144,9 @@ export function animateHeightToggle(
   shell.style.borderRadius = radius;
   // The clip keeps rounded overflow stable during interpolation.
   shell.style.clipPath = roundedInset(radius);
+  // A reversal cancels the old animation under the new lock. Cancelling first would
+  // restore the old start height while the scrollport resizes its held range.
+  previous?.supersede();
 
   if (opening) {
     delete shell.dataset.closing;

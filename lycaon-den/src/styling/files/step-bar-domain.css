@@ -51,6 +51,11 @@
   font-weight: 600;
 }
 
+/* Sizers stay out of the counter's text. */
+.den-step-bar__count-size::before {
+  content: attr(data-sizer);
+}
+
 .den-step-bar__read {
   min-height: 24px;
   padding: 2px 4px;

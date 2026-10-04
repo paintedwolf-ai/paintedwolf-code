@@ -59,6 +59,12 @@ function WalkNavigator(props: Props & { onClose: () => void; availableHeight: nu
   </div>;
 }
 
+/** Labels whose widest bounds every position: hinted digit advances differ even with tabular figures. */
+function countSizers(total: number): string[] {
+  const digits = String(total).length;
+  return Array.from({ length: 10 }, (_, digit) => `${String(digit).repeat(digits)} of ${total}`);
+}
+
 export function WalkPosition(props: Props) {
   const [open, setOpen] = createSignal(false);
   const [surface, setSurface] = createSignal<HTMLDivElement>();
@@ -76,7 +82,9 @@ export function WalkPosition(props: Props) {
       aria-label={`Step ${props.at + 1} of ${props.walk.steps.length}. Browse walk history`}
       onClick={() => setOpen(!open())}>
       <b class="den-step-bar__count">
-        <span class="den-step-bar__count-size" aria-hidden="true">{props.walk.steps.length} of {props.walk.steps.length}</span>
+        <For each={countSizers(props.walk.steps.length)}>{(sizer) =>
+          <span class="den-step-bar__count-size" aria-hidden="true" data-sizer={sizer} />
+        }</For>
         <span class="den-step-bar__count-value" aria-live="polite" aria-atomic="true">{props.at + 1} of {props.walk.steps.length}</span>
       </b>
       <ThemeIcon slot="chevron-down" size={12} />

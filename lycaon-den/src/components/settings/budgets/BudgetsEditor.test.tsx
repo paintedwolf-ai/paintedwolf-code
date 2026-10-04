@@ -91,6 +91,33 @@ describe("BudgetsEditor", () => {
     expect(input).toHaveProperty("value", "500");
   });
 
+  it("keeps the enabled ceiling unlocked while its save is acknowledged", async () => {
+    let finishFirst!: (limits: SettingsLimitsResponse) => void;
+    const updateLimitsSettings = vi.fn()
+      .mockImplementationOnce(() => new Promise<SettingsLimitsResponse>((resolve) => { finishFirst = resolve; }))
+      .mockImplementation(async (body) => ({ ...sampleLimits(), spend_ceiling_enabled: true, ...body }));
+    const settingsStore = createSettingsStore({ providers: [], limits: sampleLimits() });
+    render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
+    fireEvent.click(await screen.findByTestId("spend-ceiling-enabled"));
+    await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith({ spend_ceiling_enabled: true }));
+    const input = screen.getByTestId("spend-ceiling-usd");
+    const group = input.closest("fieldset")!;
+    expect(group.disabled).toBe(false);
+    input.focus();
+    fireEvent.input(input, { target: { value: "12.5" } });
+    // A disabled fieldset blurs the field being typed in.
+    const locked: boolean[] = [];
+    const observer = new MutationObserver(() => locked.push(group.disabled));
+    observer.observe(group, { attributes: true, attributeFilter: ["disabled"] });
+    finishFirst({ ...sampleLimits(), spend_ceiling_enabled: true });
+    await waitFor(() => expect(updateLimitsSettings).toHaveBeenNthCalledWith(2, {
+      session_spend_ceiling_nano_usd: Math.round(12.5 * NANO_PER_USD),
+    }));
+    observer.disconnect();
+    expect(locked).toEqual([]);
+    expect(document.activeElement).toBe(input);
+  });
+
   it("keeps numeric inputs mounted and focused through edits and saves", async () => {
     const updateLimitsSettings = vi.fn().mockImplementation(async (body) => ({
       ...sampleLimits(), ...body,

@@ -104,7 +104,7 @@ describe("parseAppState editor", () => {
 });
 
 it("keeps editing styles and Tab focus preferences, rejecting unknown styles", () => {
-  for (const keymap of ["emacs", "vim"]) {
+  for (const keymap of ["standard", "emacs", "vim"]) {
     const editor = parseAppState({ version: 1, recents: [], editor: { keymap, tabMovesFocus: true } }).editor;
     expect(editor).toMatchObject({ keymap, tabMovesFocus: true });
   }

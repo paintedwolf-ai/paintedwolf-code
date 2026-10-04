@@ -21,6 +21,13 @@ groups:
           The patch adds a measure-timing facet, line-padding measurement, and scroll and
           wrapped-line height changes, duplicated across `dist/index.cjs` and `dist/index.js`.
         updates: hold
+      '@replit/codemirror-emacs':
+        urgency: low
+        friction: moderate
+        friction_reason: |
+          The patch drops the pure annotations on key and command registration, which
+          otherwise let bundlers remove every Emacs command.
+        updates: hold
       overlayscrollbars:
         urgency: low
         friction: high

@@ -45,10 +45,12 @@ type ListingRecord = {
 };
 
 type FlightStatus = {
-  /** A change landed while this listing was on the wire. */
+  /** A change the response cannot be reconciled with landed while it was on the wire. */
   raced: boolean;
   /** Removed directories discard their pending responses. */
   abandoned: boolean;
+  /** Membership patches applied while on the wire, replayed over the response. */
+  patches: DirectPatch[];
 };
 
 type ListingFlight = {
@@ -297,12 +299,14 @@ async function loadListing(
   if (currentFlight) return currentFlight.promise;
 
   const flightToken = Symbol(key);
-  const status: FlightStatus = { raced: false, abandoned: false };
+  const status: FlightStatus = { raced: false, abandoned: false, patches: [] };
   // Register after browse so its response covers synchronous source events.
   const request = connection.browse(rootId, dir);
   const promise = (async () => {
-    const listing = validateListing(state, rootId, dir, await request);
-    if (!status.abandoned) storeListing(state, listing, { stale: status.raced });
+    const response = validateListing(state, rootId, dir, await request);
+    if (status.abandoned) return response;
+    const { listing, unresolved } = replayPatches(response, status.patches);
+    storeListing(state, listing, { stale: status.raced || unresolved });
     return listing;
   })().finally(() => {
     if (state.flights.get(key)?.token === flightToken) state.flights.delete(key);
@@ -387,6 +391,20 @@ function applyBatchedDirectPatches(
   };
 }
 
+/** A response may predate changes already shown; patches are idempotent, so replay keeps them. */
+function replayPatches(
+  listing: SourceDirListing,
+  patches: readonly DirectPatch[],
+): { listing: SourceDirListing; unresolved: boolean } {
+  if (patches.length === 0) return { listing, unresolved: false };
+  const record = { listing, staleSince: null, loadedAt: 0, lastUsed: 0 };
+  const outcome = applyBatchedDirectPatches(record, patches);
+  return {
+    listing: outcome?.entries ? { ...listing, entries: outcome.entries } : listing,
+    unresolved: outcome?.unresolved ?? false,
+  };
+}
+
 function applyDirectPatches(
   state: WorkspaceState,
   patches: DirectPatch[],
@@ -403,18 +421,19 @@ function applyDirectPatches(
   }
   let changed = false;
   for (const [key, direct] of grouped) {
+    // An in-flight response may predate these; it replays them on arrival.
+    const flight = state.flights.get(key);
+    flight?.status.patches.push(...direct);
     const record = state.listings.get(key);
     if (!record) {
-      // An initial listing may omit an in-flight change.
-      if (state.flights.has(key)) noteDivergence(state, key);
+      if (flight) state.lastDivergenceAt = Date.now();
       continue;
     }
     const outcome = direct.length === 1
       ? applySingleDirectPatch(record, direct[0]!)
       : applyBatchedDirectPatches(record, direct);
-    // Matching events leave the current request valid.
     if (!outcome) continue;
-    noteDivergence(state, key);
+    state.lastDivergenceAt = Date.now();
     const { entries } = outcome;
     const staleSince = outcome.unresolved
       ? (record.staleSince ?? Date.now())

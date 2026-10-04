@@ -92,7 +92,9 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
     try {
       const previous = this.presentation();
       const total = previous.state?.extent.rows ?? 0;
-      if (previous.frames.some(frame => frame.span.start <= offset && frame.span.end > offset && frame.span.end >= Math.min(offset + 200, total))) return true;
+      // Rows painted by a replaced view do not cover the view that replaced it.
+      const current = previous.state?.id === this.state()?.id ? previous.frames : [];
+      if (current.some(frame => frame.span.start <= offset && frame.span.end > offset && frame.span.end >= Math.min(offset + 200, total))) return true;
       await this.loadFrame({ offset, limit: 200 }, signal, { foreground: false });
       return true;
     } catch (error) {

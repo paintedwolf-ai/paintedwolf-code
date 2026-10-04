@@ -24,7 +24,9 @@ webE2e.describe("nav single selection", () => {
       const style = getComputedStyle(element);
       return { visibility: style.visibility, clip: style.clipPath, content: style.contentVisibility };
     });
-    expect(hidden).toEqual({ visibility: "hidden", clip: "inset(50%)", content: "hidden" });
+    // Idle surfaces stay rendered so their scroll offsets survive; WebKit
+    // never resumes compositor animations inside revealed skipped content.
+    expect(hidden).toEqual({ visibility: "hidden", clip: "inset(50%)", content: "visible" });
   });
 
   webE2e("opening search clears the configuration selection", async ({ page }) => {

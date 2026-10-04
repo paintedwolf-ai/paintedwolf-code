@@ -386,8 +386,9 @@
 }
 .files-line-gutter__facts { position: absolute; inset: 0; width: 100%; border: 0; margin: 0; padding: 0; background-color: transparent; cursor: default; }
 .files-line-gutter__facts:focus-visible { outline: 1px solid var(--den-accent-signal); outline-offset: -1px; }
+/* The open handle matches the shared popup-trigger bevel in ui-chrome.css and follows it, so it stays flat. */
 .cm-editor:not(.cm-agent-file) .cm-scroller:not([data-den-scrolling]) .files-line-gutter__cell--facts:not(.files-line-gutter__cell--read):hover .files-line-gutter__facts,
-.files-line-gutter__facts[aria-haspopup][aria-expanded="true"]:not(:disabled) {
+button.files-line-gutter__facts[aria-haspopup][aria-expanded="true"]:not(:disabled) {
   background-color: color-mix(in srgb, var(--den-text-muted) 10%, transparent);
   box-shadow: none;
 }

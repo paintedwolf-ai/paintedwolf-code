@@ -172,7 +172,32 @@ describe("source-tree-store", () => {
     connection.disconnect();
   });
 
-  it("keeps a listing that raced an event, marked for revalidation", async () => {
+  it("reconciles a listing with a change that raced it", async () => {
+    vi.useFakeTimers();
+    let firstResolve!: (value: SourceDirListing) => void;
+    const browse = vi.fn()
+      .mockImplementationOnce(() => new Promise<SourceDirListing>((done) => {
+        firstResolve = done;
+      }));
+    const connection = connectSourceTreeWorkspace({
+      projectId: PROJECT, workspaceId: WORKSPACE, browse,
+    });
+    const pending = connection.load("root-1", ".");
+    connection.observe(["root-1\0."], true);
+    applySourceTreeChanges(event([change("new.ts")]));
+    firstResolve(listing(".", []));
+
+    await expect(pending).resolves.toEqual(listing(".", [{ name: "new.ts", is_dir: false }]));
+    expect(connection.get("root-1", ".")).toMatchObject({
+      stale: false,
+      listing: { entries: [{ name: "new.ts", is_dir: false }] },
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(browse).toHaveBeenCalledOnce();
+    connection.disconnect();
+  });
+
+  it("keeps a listing that raced an unresolved change, marked for revalidation", async () => {
     vi.useFakeTimers();
     let firstResolve!: (value: SourceDirListing) => void;
     const browse = vi.fn()
@@ -185,7 +210,7 @@ describe("source-tree-store", () => {
     });
     const pending = connection.load("root-1", ".");
     connection.observe(["root-1\0."], true);
-    applySourceTreeChanges(event([change("new.ts")]));
+    applySourceTreeChanges(event([change("new.ts", { is_dir: undefined })]));
     firstResolve(listing(".", []));
 
     // Raced responses keep rows visible until revalidation.
@@ -204,6 +229,45 @@ describe("source-tree-store", () => {
     expect(browse).toHaveBeenCalledTimes(2);
     connection.disconnect();
   });
+
+  it("keeps confirmed changes over an older in-flight response", async () => {
+    vi.useFakeTimers();
+    let olderResolve!: (value: SourceDirListing) => void;
+    const browse = vi.fn()
+      .mockResolvedValueOnce(listing(".", [
+        { name: "a.md", is_dir: false },
+        { name: "gone.md", is_dir: false },
+      ]))
+      .mockImplementationOnce(() => new Promise<SourceDirListing>((done) => {
+        olderResolve = done;
+      }));
+    const connection = connectSourceTreeWorkspace({
+      projectId: PROJECT, workspaceId: WORKSPACE, browse,
+    });
+    await connection.load("root-1", ".");
+    connection.observe(["root-1\0."], true);
+    const pending = connection.load("root-1", ".", true);
+    connection.confirm(change("a copy.md", { origin: "user" }));
+    connection.confirm(change("gone.md", { op: "delete", origin: "user" }));
+    olderResolve(listing(".", [
+      { name: "a.md", is_dir: false },
+      { name: "gone.md", is_dir: false },
+    ]));
+    await pending;
+
+    // The duplicate picker reads trusted entries; they must include the copy.
+    expect(connection.get("root-1", ".")).toEqual({
+      stale: false,
+      listing: listing(".", [
+        { name: "a copy.md", is_dir: false },
+        { name: "a.md", is_dir: false },
+      ]),
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(browse).toHaveBeenCalledTimes(2);
+    connection.disconnect();
+  });
+
 
   it("absorbs membership churn without re-reading the directory", async () => {
     vi.useFakeTimers();

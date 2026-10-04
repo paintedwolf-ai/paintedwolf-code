@@ -183,6 +183,20 @@ describe("Files tree and editor navigation", () => {
     await waitFor(() => expect(row()?.getAttribute("aria-current")).toBe("true"));
   });
 
+  it("selects an explicitly revealed file until the reader navigates again", async () => {
+    const view = await setup();
+    view.tree.resolve(listing("nested"));
+    await view.resolveSource();
+    await waitFor(() => expect(view.pane.dataset.pending).toBe("false"));
+    const file = (path: string) => document.querySelector(`.den-files-tree__label--file[data-path="${path}"]`);
+    await waitFor(() => expect(file("nested/second.ts")?.getAttribute("aria-current")).toBe("true"));
+    setProjectFilesRevealRequest({ projectId: PROJECT, rootId: "r1", path: "first.ts", isDir: false });
+    await waitFor(() => expect(file("first.ts")?.getAttribute("aria-current")).toBe("true"));
+    expect(view.pane.querySelector('[data-resident="active"]')?.getAttribute("data-resident-key")).toContain("nested/second.ts");
+    openFilesBuffer(PROJECT, { intent: "permanent", rootId: "r1", rootLabel: "repo", path: "nested/second.ts" });
+    await waitFor(() => expect(file("nested/second.ts")?.getAttribute("aria-current")).toBe("true"));
+  });
+
   it("keeps the active file selected after an abandoned reveal finishes", async () => {
     const view = await setup();
     await view.resolveSource();

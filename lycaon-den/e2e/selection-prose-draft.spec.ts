@@ -17,9 +17,11 @@ for (const action of ["Explain in context", "Give me the gist"]) {
       await composer.fill("My next question stays here.");
       await page.getByTestId("files-tree-file").filter({ hasText: /^README\.md$/ }).click();
       const editor = page.getByTestId("split-col-stage").locator(".cm-content[contenteditable=true]");
-      await editor.click();
+      // Pressing the content's center scrolls a wide line horizontally, and that scroll dismisses the menu.
+      const firstLine = { x: 8, y: 8 };
+      await editor.click({ position: firstLine });
       await editor.press("ControlOrMeta+a");
-      await editor.click({ button: "right" });
+      await editor.click({ button: "right", position: firstLine });
       await page.getByRole("menuitem", { name: "Ask about selection", exact: true }).click();
       await page.getByRole("menuitem", { name: action, exact: true }).click();
       await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText("Selection explanation fixture.", { timeout: 45_000 });

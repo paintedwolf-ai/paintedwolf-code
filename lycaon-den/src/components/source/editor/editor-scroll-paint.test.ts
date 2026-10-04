@@ -9,7 +9,7 @@ import { bindEditorScrollPaint } from "./editor-scroll-paint.ts";
 import { editorScrollPosition, readEditorScrollPosition } from "./editor-scroll-position.ts";
 
 describe("editor scroll paint", () => {
-  it("requests a measure at each input offset and releases the subscription", () => {
+  it("measures at each input offset before the frame paints and releases the subscription", () => {
     const view = new EditorView({ doc: "one\ntwo\n", extensions: editorScrollPosition });
     Object.defineProperties(view.scrollDOM, {
       clientHeight: { value: 100 },
@@ -19,12 +19,12 @@ describe("editor scroll paint", () => {
     });
     const motion = bindScrollportMotion(view.dom, view.scrollDOM, view.scrollDOM);
     const stop = bindEditorScrollPaint(view);
-    // Plugin measurements carry a request; the paint path asks for a bare frame measure.
     const painted: number[][] = [];
-    const requestMeasure = view.requestMeasure.bind(view);
-    vi.spyOn(view, "requestMeasure").mockImplementation((request) => {
-      if (!request) painted.push([view.scrollDOM.scrollLeft, view.scrollDOM.scrollTop]);
-      requestMeasure(request);
+    const internals = view as unknown as { measure(): void };
+    const measure = internals.measure.bind(view);
+    vi.spyOn(internals, "measure").mockImplementation(() => {
+      painted.push([view.scrollDOM.scrollLeft, view.scrollDOM.scrollTop]);
+      measure();
     });
     const noteScrollJump = vi.spyOn(view, "noteScrollJump");
     const scrollbarScroll = vi.fn();

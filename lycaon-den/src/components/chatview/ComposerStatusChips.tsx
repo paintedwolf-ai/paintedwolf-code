@@ -448,7 +448,7 @@ export function ComposerStatusChips(props: Props) {
                   : TRUST_COPY.popoverLoading}
               </p>
             </Show>
-            <Show when={trustOpenError()}>{message => <p class="den-settings-warn trust-popover__error" role="alert" data-tip={message()}>
+            <Show when={trustOpenError()}>{message => <p class="den-settings-warn trust-popover__error" role="alert" data-tip={message()} data-tip-when-clipped>
               {message()}
             </p>}</Show>
             <button type="button" class="den-status-popover__manage" data-testid="trust-open-review" disabled={!client() || openingTrust() || markingAllTrusted()}

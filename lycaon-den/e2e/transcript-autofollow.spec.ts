@@ -89,7 +89,8 @@ modelIndependentWebE2e("a layout clamp at the followed tail returns to the tail"
 });
 
 modelIndependentWebE2e("expanded action lists scroll with the transcript and resume autofollow", async ({ page, request }) => {
-  const { sessionId, activity, stream, nextSeq } = await seedConversation(page, request, 24);
+  // Activity cards virtualize their actions past 100 entries.
+  const { sessionId, activity, stream, nextSeq } = await seedConversation(page, request, 120);
   await activity.locator(":scope > summary").click();
   await expect(activity).not.toHaveAttribute("data-animating", "true");
   await stream.focus();

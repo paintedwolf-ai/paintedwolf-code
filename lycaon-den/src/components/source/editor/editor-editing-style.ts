@@ -2,16 +2,16 @@ import { completionStatus } from "@codemirror/autocomplete";
 import { insertNewlineAndIndent, selectGroupForward } from "@codemirror/commands";
 import { Compartment, Facet, Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, panels, type ViewUpdate } from "@codemirror/view";
-import { EmacsHandler, emacsKeys } from "@replit/codemirror-emacs";
+import { EmacsHandler } from "@replit/codemirror-emacs";
 import { CodeMirror, Vim, getCM, vim } from "@replit/codemirror-vim";
 import type { DenEditorKeymap } from "../../../../shared/app-state-types.ts";
 import { invokeCommand } from "../../../shortcuts/dispatcher.ts";
-import { editorKeymapPref } from "../../../settings/editor/editor-prefs.ts";
+import { defaultEditorKeymap, editorKeymapPref } from "../../../settings/editor/editor-prefs.ts";
 import { editorHistory, stepEditorHistory } from "./editor-history.ts";
 
 const editingStyle = new Compartment();
 const promptContainer = new Compartment();
-const installedStyle = Facet.define<DenEditorKeymap, DenEditorKeymap>({ combine: values => values[0] ?? "emacs" });
+const installedStyle = Facet.define<DenEditorKeymap, DenEditorKeymap>({ combine: values => values[0] ?? defaultEditorKeymap() });
 const run = (command: string) => () => { invokeCommand(command); return true; };
 let configured = false;
 
@@ -19,8 +19,6 @@ let configured = false;
 function configureStyles(): void {
   if (configured) return;
   configured = true;
-  // Explicit registration survives dependency tree shaking.
-  for (const [keys, command] of Object.entries(emacsKeys)) EmacsHandler.bindKey(keys, command);
   const rotateYank = EmacsHandler.commands.yankRotate;
   EmacsHandler.commands.yankRotate = { ...rotateYank, exec: (handler: EmacsHandler, args: unknown) => {
     // Collaborative history lives in the document replica.
@@ -112,10 +110,15 @@ export function observeEditorEditingStatus(view: EditorView, update: (label: str
 
 function extensions(style: DenEditorKeymap): Extension {
   configureStyles();
-  return [installedStyle.of(style), Prec.high(style === "vim" ? [vim(), modeStatus, EditorView.theme({
-    ".cm-vimMode .cm-cursorLayer:not(.cm-vimCursorLayer)": { display: "block" },
-    ".cm-vimCursorLayer": { display: "none" },
-  })] : emacsCommands)];
+  switch (style) {
+    // The editor's stock keymap supplies the platform's text keys.
+    case "standard": return installedStyle.of(style);
+    case "emacs": return [installedStyle.of(style), Prec.high(emacsCommands)];
+    case "vim": return [installedStyle.of(style), Prec.high([vim(), modeStatus, EditorView.theme({
+      ".cm-vimMode .cm-cursorLayer:not(.cm-vimCursorLayer)": { display: "block" },
+      ".cm-vimCursorLayer": { display: "none" },
+    })])];
+  }
 }
 
 export function editorEditingStyle(): Extension {

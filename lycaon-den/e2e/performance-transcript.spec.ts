@@ -20,8 +20,10 @@ test("republishes settled transcript geometry across resize and restoration", as
       const moduleUrl = "/src/chat/transcript/layout/transcript-row-heights-persist.ts";
       const heights = await import(/* @vite-ignore */ moduleUrl) as typeof import("../src/chat/transcript/layout/transcript-row-heights-persist.ts");
       const host = [...document.querySelectorAll<HTMLElement>(".den-chat-stream")].find(element => !element.closest('[data-resident="idle"]') && element.clientHeight > 0)!;
+      // The cache holds row interiors; a row's seam is padding above its interior.
+      const seamPx = (element: HTMLElement) => element.dataset.seam ? Number.parseFloat(getComputedStyle(element).paddingTop) : 0;
       return [...host.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]")].map(element => ({
-        id: element.dataset.msgId!, key: element.dataset.rowHeightKey, measured: element.getBoundingClientRect().height,
+        id: element.dataset.msgId!, key: element.dataset.rowHeightKey, measured: element.getBoundingClientRect().height - seamPx(element),
         cached: heights.transcriptRowHeightForScope({ projectId, sessionId }, element.dataset.msgId!, element.dataset.rowHeightKey ?? ""),
       }));
     }, { projectId: project.id, sessionId });

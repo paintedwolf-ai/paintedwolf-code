@@ -59,6 +59,10 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
+      # The containers' engine runs the maintained scanner.
+      - name: Set up maintained OpenGrep
+        uses: ./.github/actions/setup-opengrep
+
       - name: Playwright web E2E (Tier B)
         timeout-minutes: 90
         env:

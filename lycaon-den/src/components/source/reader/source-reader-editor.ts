@@ -483,11 +483,13 @@ export class ReaderEditor {
             return [{ slot, offset }];
           });
           const height = this.options.heightChanged ? this.view.lineBlockAt(this.view.state.doc.length).bottom : 0;
-          return { ranges, height };
+          return { ranges, height, scrollTop: this.view.scrollDOM.scrollTop };
         },
         write: measured => queueMicrotask(() => {
           if (this.destroyed || !measured) return;
           this.options.heightChanged?.(this, measured.height);
+          // A write in the same measure cycle, such as a restored viewport, moved the ranges this read found.
+          if (this.view.scrollDOM.scrollTop !== measured.scrollTop) { this.scheduleViewport("viewport"); return; }
           for (const { slot, offset } of measured.ranges) this.options.load(slot, offset);
         }),
       });

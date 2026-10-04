@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect } from "@playwright/test";
 import { apiConfig, modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
-import type { CreateSessionRequest, ProjectSourceReadResponse, SourceWorkspace } from "../src/api/types.ts";
+import type { CreateSessionRequest, ProjectSourceReadResponse, SourceViewCreate, SourceWalkResponse, SourceWorkspace } from "../src/api/types.ts";
 
 modelIndependentWebE2e.use({ browserName: "webkit" });
 
@@ -44,6 +44,24 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
   });
   expect(sessionResponse.ok(), await sessionResponse.text()).toBeTruthy();
   const { id: sessionId } = await sessionResponse.json() as { id: string };
+  const walkResponse = await request.get(`${base}/walk`, { headers, params: { baseline: `pin:${pinId}`, limit: 500 } });
+  expect(walkResponse.ok(), await walkResponse.text()).toBeTruthy();
+  const secondEffectId = ((await walkResponse.json()) as SourceWalkResponse).files
+    .find((file) => file.path === "b.ts")?.effects[0]?.id;
+  expect(secondEffectId).toBeTruthy();
+
+  // Walk warms neighboring comparisons as source views on entry, so the hold precedes it.
+  let releaseComparison!: () => void;
+  const comparisonReady = new Promise<void>((resolve) => { releaseComparison = resolve; });
+  let comparisonRequested = false;
+  await page.route("**/source/views", async (route) => {
+    const create = route.request().method() === "POST" ? route.request().postDataJSON() as SourceViewCreate : null;
+    if (create?.kind === "comparison" && create.source.kind === "effect" && create.source.effect_id === secondEffectId) {
+      comparisonRequested = true;
+      await comparisonReady;
+    }
+    await route.continue();
+  });
 
   let releaseSources!: () => void;
   const sourcesReady = new Promise<void>((resolve) => { releaseSources = resolve; });
@@ -66,7 +84,6 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
       const state = await walk.enterWalk(projectId, {
         ...client,
         listProjectSourceWalk: (id, options) => client.listProjectSourceWalk(id, { ...options, baseline: `pin:${pinId}`, sessionId: undefined, includeOutsideChanges: undefined }),
-        getProjectSourceComparison: (id, target) => client.getProjectSourceComparison(id, target),
       }, sessionId);
       if (state.status !== "ready") throw new Error(state.notice ?? "Walk did not become ready");
       if (state.walk.steps.length !== 2) throw new Error(`Expected two recorded edits, got ${state.walk.steps.length}`);
@@ -90,14 +107,6 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
     await expect(selected).toHaveAttribute("data-path", "a.ts");
     await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"a.ts"');
 
-    let releaseComparison!: () => void;
-    const comparisonReady = new Promise<void>((resolve) => { releaseComparison = resolve; });
-    let comparisonRequested = false;
-    await page.route("**/source/comparison?*", async (route) => {
-      comparisonRequested = true;
-      await comparisonReady;
-      await route.continue();
-    });
     const selectSecond = async () => page.evaluate(async (projectId) => {
       const url = "/src/files/walk/walk-store.ts";
       const walk = await import(/* @vite-ignore */ url) as typeof import("../src/files/walk/walk-store.ts");
@@ -119,6 +128,7 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
     await expect(selected).toHaveAttribute("data-path", "b.ts");
     await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"b.ts"');
   } finally {
+    releaseComparison();
     releaseSources();
   }
 });

@@ -114,7 +114,8 @@ webE2e.describe("extensions settings", () => {
     await expect(palette.getByRole("textbox", { name: /Additional instruction/ })).toBeVisible();
     await palette.getByRole("button", { name: "Close", exact: true }).click();
 
-    await editor.press("ControlOrMeta+Shift+y");
+    // A keyboard reports the shifted capital; Ctrl with a lowercase y is redo off macOS.
+    await editor.press("ControlOrMeta+Shift+Y");
     await expect(palette.getByRole("textbox", { name: /Additional instruction/ })).toBeVisible();
     const invoked = page.waitForResponse((response) =>
       response.request().method() === "POST" &&

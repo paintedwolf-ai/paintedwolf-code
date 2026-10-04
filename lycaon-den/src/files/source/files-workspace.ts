@@ -2,6 +2,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } fro
 import type { LycaonClient } from "../../api/client.ts";
 import type {
   ProjectRoot,
+  SourceChange,
   SourceWatchCoverage,
   SourceWorkspace,
   SourceWorkspaceRoot
@@ -315,9 +316,11 @@ export function createFilesWorkspace(options: {
     const snapshot = listingConnection()?.get(rootId, dir);
     return snapshot && !snapshot.stale ? snapshot.listing.entries : undefined;
   };
+  /** Host-confirmed lifecycle results reach listings before their watcher event. */
+  const confirmDirectoryChange = (change: SourceChange) => listingConnection()?.confirm(change);
 
   return {
-    directoryEntries, observeDirectory, filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
+    directoryEntries, confirmDirectoryChange, observeDirectory, filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
     treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor
   };
 }

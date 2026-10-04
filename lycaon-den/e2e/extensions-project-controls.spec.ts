@@ -4,22 +4,21 @@ import type { Error as WireError, UpdateExtensionUnitRequest } from "../src/api/
 import {
   expect,
   type APIRequestContext,
-  type TestInfo,
 } from "@playwright/test";
 import {
   activateProject,
   apiConfig,
   apiCreateProjectWithRoot,
   CONTEXT_NAV_WITH,
+  e2eTempDir,
   e2eUniqueLabel,
   gotoShell,
   seedAppState,
   webE2e,
 } from "./helpers.ts";
 
-function projectRoot(testInfo: TestInfo, name: string) {
-  const root = testInfo.outputPath(name);
-  mkdirSync(root, { recursive: true });
+function projectRoot(request: APIRequestContext, name: string) {
+  const root = e2eTempDir(request, name);
   writeFileSync(path.join(root, "README.md"), `# ${name}\n`);
   return root;
 }
@@ -57,8 +56,8 @@ async function expectProjectDisableRejected(
 webE2e.describe("project extension controls", () => {
   webE2e(
     "Context Extensions shows Not applied from this project for a floor refusal",
-    async ({ page, request }, testInfo) => {
-      const root = projectRoot(testInfo, "project-refusal");
+    async ({ page, request }) => {
+      const root = projectRoot(request, "project-refusal");
       const project = await apiCreateProjectWithRoot(
         request,
         root,
@@ -118,8 +117,8 @@ webE2e.describe("project extension controls", () => {
   );
 });
 
-webE2e("disabling and enabling an extension unit keeps its detail usable", async ({ page, request }, testInfo) => {
-  const project = await apiCreateProjectWithRoot(request, projectRoot(testInfo, "unit-toggle"), e2eUniqueLabel("Extension unit"));
+webE2e("disabling and enabling an extension unit keeps its detail usable", async ({ page, request }) => {
+  const project = await apiCreateProjectWithRoot(request, projectRoot(request, "unit-toggle"), e2eUniqueLabel("Extension unit"));
   await seedAppState(page, { contextNav: CONTEXT_NAV_WITH("extensions") });
   await gotoShell(page);
   await activateProject(page, project.id);

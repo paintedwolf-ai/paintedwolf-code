@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -38,6 +39,18 @@ type sourceViewService struct {
 	registry          *pagedview.Registry[*sourceView]
 	presentations     *pagedview.Registry[*sourcePresentation]
 	closed            bool
+	// generations counts folder changes per project, under mu.
+	generations map[string]uint64
+}
+
+// errSourceViewProjectChanged reports that a project's folders changed after
+// its view creation read them; the view would outlive the invalidation.
+var errSourceViewProjectChanged = fmt.Errorf("%w: project folders changed during view creation", pagedview.ErrRevision)
+
+func (service *sourceViewService) projectGeneration(project string) uint64 {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return service.generations[project]
 }
 
 type sourceView struct {
@@ -125,11 +138,14 @@ func (s *Handler) sourceViewRegistry() *sourceViewService {
 
 // create retains the accepted descriptor before work begins. The returned pin
 // lasts until the caller transfers it to preparation or releases it.
-func (service *sourceViewService) create(ctx context.Context, key sourceViewCreateKey, canonical []byte, build func() *sourceView) (*sourceView, func(), bool, error) {
+func (service *sourceViewService) create(ctx context.Context, key sourceViewCreateKey, canonical []byte, generation uint64, build func() *sourceView) (*sourceView, func(), bool, error) {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	if service.closed {
 		return nil, nil, false, pagedview.ErrExpired
+	}
+	if service.generations[key.scope.Project] != generation {
+		return nil, nil, false, errSourceViewProjectChanged
 	}
 	namespaceBytes, err := json.Marshal(struct {
 		Scope  pagedview.Scope
@@ -207,6 +223,13 @@ func (service *sourceViewService) close() {
 
 // InvalidateProjectSourceViews ends every view of a project whose folders changed.
 func (s *Handler) InvalidateProjectSourceViews(projectID string) {
+	service := s.sourceViewRegistry()
+	service.mu.Lock()
+	if service.generations == nil {
+		service.generations = make(map[string]uint64)
+	}
+	service.generations[projectID]++
+	service.mu.Unlock()
 	s.invalidateSourceViews(func(view *sourceView) bool { return view.scope.Project == projectID })
 }
 

@@ -24,6 +24,15 @@ async function setWrap(page: Page, enabled: boolean) {
   await expect(toggle).toHaveAttribute("aria-pressed", String(enabled));
 }
 
+// The local selection mixes its fill with color-mix, which serializes as color(srgb …) rather than rgba().
+function colorChannels(color: string): number[] {
+  const srgb = /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/.exec(color);
+  if (srgb) return srgb.slice(1, 4).map(channel => Math.round(Number(channel) * 255));
+  const rgb = /^rgba?\((\d+), (\d+), (\d+)/.exec(color);
+  if (rgb) return rgb.slice(1, 4).map(Number);
+  throw new Error(`Unrecognized color ${color}`);
+}
+
 async function rulerHasColor(page: Page, color: string): Promise<boolean> {
   return editor(page).getByTestId("files-overview-ruler").evaluate((canvas, hex) => {
     if (!(canvas instanceof HTMLCanvasElement)) return false;
@@ -89,14 +98,14 @@ modelIndependentWebE2e("three windows share labeled selections and preserve colo
     const peerCaret = editor(page).locator(".cm-document-caret").last();
     await expect.poll(() => peerCaret.evaluate(el => (el as HTMLElement).style.getPropertyValue("--den-window-caret"))).toBe(thirdColor);
     const caretColor = await peerCaret.evaluate(el => getComputedStyle(el).borderInlineStartColor);
-    await expect.poll(() => third.locator(".den-files-tab--active:visible").first()
+    await expect.poll(() => third.locator(".den-files-tab--active:visible .den-files-tab__body").first()
       .evaluate(el => getComputedStyle(el).backgroundImage)).toContain(caretColor);
-    const tabFill = await third.locator(".den-files-tab--active:visible").first().evaluate(el => getComputedStyle(el).backgroundColor);
+    const tabFill = await third.locator(".den-files-tab--active:visible .den-files-tab__body").first().evaluate(el => getComputedStyle(el).backgroundColor);
     const thirdClient = await peerCaret.getAttribute("data-window-client");
     const thirdRange = editor(page).locator(`.cm-document-selection[data-window-client="${thirdClient}"]`).first();
     await expect.poll(() => thirdRange.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(tabFill);
     const localFill = await editor(third).locator(".cm-selectionBackground").first().evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(localFill.replace(/, [\d.]+\)$/, ")")).toBe(tabFill.replace(/, [\d.]+\)$/, ")"));
+    expect(colorChannels(localFill)).toEqual(colorChannels(tabFill));
     const remoteFill = await editor(third).locator(".cm-document-selection").first().evaluate(el => getComputedStyle(el).backgroundColor);
     expect(localFill).not.toBe(remoteFill);
     const label = await peerCaret.getAttribute("aria-label");

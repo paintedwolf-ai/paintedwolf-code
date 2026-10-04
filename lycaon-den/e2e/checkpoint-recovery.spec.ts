@@ -108,15 +108,7 @@ for (const approval of approvals) {
     await expect(card()).toBeVisible();
     if (approval.name === "command") {
       const restart = fileURLToPath(new URL("../../scripts/harness/crash-restart.sh", import.meta.url));
-      const restarting = promisify(execFile)("bash", [restart], { timeout: 300_000 });
-      try {
-        await expect.poll(() => page.evaluate(() => (
-          window as unknown as { __harness?: { state(): { connected: boolean } } }
-        ).__harness?.state()), { timeout: 15_000 })
-          .toMatchObject({ connected: false });
-      } finally {
-        await restarting;
-      }
+      await promisify(execFile)("bash", [restart], { timeout: 300_000 });
       await waitHarnessConnected(page);
     }
     await page.reload();

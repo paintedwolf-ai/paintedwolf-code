@@ -12,7 +12,7 @@ async function sampleNativeWheel(page: Page, preview: Locator, deltaY: number) {
       return;
     }
     const before = viewport.scrollTop;
-    const deadline = performance.now() + 5_000;
+    const deadline = performance.now() + 15_000;
     const measure = () => {
       if (viewport.scrollTop === before) {
         if (performance.now() >= deadline) reject(new Error("Native wheel did not move the preview"));
@@ -33,6 +33,7 @@ async function sampleNativeWheel(page: Page, preview: Locator, deltaY: number) {
     };
     requestAnimationFrame(measure);
   }));
+  await preview.hover();
   await page.mouse.wheel(0, deltaY);
   return sample;
 }

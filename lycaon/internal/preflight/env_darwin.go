@@ -7,7 +7,7 @@ import (
 )
 
 // osProductVersion reads the macOS marketing version from the kernel.
-func osProductVersion() (string, error) {
+var osProductVersion = func() (string, error) {
 	return unix.Sysctl("kern.osproductversion")
 }
 

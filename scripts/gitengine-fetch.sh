@@ -4,7 +4,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIN="${ROOT}/lycaon/config/gitengine/pin.yaml"
-DEST="${ROOT}/lycaon-den/src-tauri/engine-root/gitengine"
+# The Docker E2E tier stages a Linux toolchain outside the checkout.
+DEST="${GITENGINE_DEST:-${ROOT}/lycaon-den/src-tauri/engine-root/gitengine}"
 TARGET="$(rustc --print host-tuple)"
 PLATFORM_KEY=""
 LAYOUT="unix"
@@ -43,11 +44,12 @@ read_pin() {
   ' "${PIN}"
 }
 
+# Debian bookworm's mawk has no interval expressions.
 read_platform() {
   local key="$1"
   awk -v platform="${PLATFORM_KEY}" -v want="${key}" '
-    $0 ~ "^[[:space:]]{2}" platform ":" { in_plat = 1; next }
-    in_plat && /^[[:space:]]{2}[a-z0-9_-]+:/ { exit }
+    $0 ~ "^[[:space:]][[:space:]]" platform ":" { in_plat = 1; next }
+    in_plat && /^[[:space:]][[:space:]][a-z0-9_-]+:/ { exit }
     in_plat && $1 == want ":" {
       line = $0
       sub(/^[^:]+:[[:space:]]*/, "", line)

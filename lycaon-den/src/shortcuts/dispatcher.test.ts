@@ -723,6 +723,37 @@ describe("attachDispatcher", () => {
     detach();
   });
 
+  it("gives an armed leader the next key before a focused control consumes it", () => {
+    setDispatcherPlatformForTests("linux");
+    const goChat = vi.fn();
+    registerCommandHandler("go.chat", goChat);
+    const detach = attachDispatcher();
+    // A type-ahead control claims every bare character it receives.
+    const row = document.createElement("button");
+    const typeahead = vi.fn();
+    row.addEventListener("keydown", (event) => {
+      if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return;
+      typeahead();
+      event.preventDefault();
+    });
+    document.body.append(row);
+
+    const press = (init: KeyboardEventInit) =>
+      row.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+    press({ key: ";", code: "Semicolon", ctrlKey: true });
+    press({ key: "c", code: "KeyC" });
+    expect(goChat).toHaveBeenCalledOnce();
+    expect(typeahead).not.toHaveBeenCalled();
+
+    // Without an armed leader the control keeps its keys.
+    press({ key: "c", code: "KeyC" });
+    expect(goChat).toHaveBeenCalledOnce();
+    expect(typeahead).toHaveBeenCalledOnce();
+
+    row.remove();
+    detach();
+  });
+
   it("keeps the listener while any holder remains", () => {
     setDispatcherPlatformForTests("macos");
     const spy = vi.fn();

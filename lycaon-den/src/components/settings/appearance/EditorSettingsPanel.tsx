@@ -190,11 +190,11 @@ export function EditorSettingsPanel() {
         <div class="den-settings-pref-row" {...settingAnchor("editor-keymap")}>
           <div class="den-settings-pref-copy">
             <span class="den-settings-pref-label">{settingLabel("editor-keymap")}</span>
-            <p class="den-settings-hint">Choose standard text editing or modal editing with normal, insert, and visual modes.</p>
+            <p class="den-settings-hint">Choose your system's text keys, Emacs movement and kill keys, or modal editing with normal, insert, and visual modes.</p>
           </div>
           <DenSelect aria-label={settingLabel("editor-keymap")} data-testid="editor-keymap" value={editorKeymapPref()}
-            options={[{ value: "emacs", label: "Default" }, { value: "vim", label: "Vim" }]}
-            onValueChange={value => { if (value === "emacs" || value === "vim") void saveEditorKeymap(value); }} />
+            options={[{ value: "standard", label: "Standard" }, { value: "emacs", label: "Emacs" }, { value: "vim", label: "Vim" }]}
+            onValueChange={value => { if (value === "standard" || value === "emacs" || value === "vim") void saveEditorKeymap(value); }} />
         </div>
         <div class="den-settings-pref-row" {...settingAnchor("editor-tab-focus")}>
           <div class="den-settings-pref-copy">

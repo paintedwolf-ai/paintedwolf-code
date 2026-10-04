@@ -51,6 +51,35 @@ describe("mounted workspace root metadata", () => {
     mounted.unmount();
   });
 
+  it("lists a host-confirmed duplicate before its watcher event arrives", async () => {
+    const rootId = ROOTS[0]!.id;
+    const browseProjectSource = vi.fn(async (_project: string, input: SourceBrowseTarget = {}) => ({
+      workspace_id: "listing-confirmed", root_id: input.rootId ?? rootId, dir: input.dir ?? ".",
+      watch_complete: true, entries: [{ name: "draft.md", is_dir: false }],
+    }));
+    const client = stubClient({
+      ...getLycaonClient()!,
+      getSourceWorkspace: async () => sourceWorkspace("listing-confirmed", ROOTS),
+      browseProjectSource,
+    });
+    let confirm!: ReturnType<typeof createFilesWorkspace>["confirmDirectoryChange"];
+    const mounted = render(() => {
+      const workspace = createFilesWorkspace({
+        projectId: PROJECT, roots: () => ROOTS, client: () => client, chatSessionId: () => undefined,
+        reachable: () => true, restoreHotExit: () => false,
+      });
+      confirm = workspace.confirmDirectoryChange;
+      return <output data-testid="directory">{JSON.stringify(workspace.directoryEntries(rootId, ".")?.map((entry) => entry.name))}</output>;
+    });
+    await waitFor(() => expect(screen.getByTestId("directory").textContent).toBe('["draft.md"]'));
+    const listings = browseProjectSource.mock.calls.length;
+
+    confirm({ root_id: rootId, op: "create", path: "draft copy.md", is_dir: false, origin: "user", changed_at: new Date().toISOString() });
+    expect(screen.getByTestId("directory").textContent).toBe('["draft copy.md","draft.md"]');
+    expect(browseProjectSource).toHaveBeenCalledTimes(listings);
+    mounted.unmount();
+  });
+
   it("follows worktree creation and removal without navigation and isolates other scopes", async () => {
     let bound = false;
     const sessionId = "chat-worktree";

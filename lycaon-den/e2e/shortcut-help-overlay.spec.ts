@@ -25,8 +25,10 @@ webE2e("den:harness — shortcut help overlay light/dark", async ({ page }) => {
   const overlay = page.getByTestId("shortcut-help-overlay");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId(`shortcut-help-row-${SEARCH_BINDING_ID}`)).toBeVisible();
-  await expect(page.getByTestId(`shortcut-help-chord-${SEARCH_BINDING_ID}`)).toContainText(
-    /⌘K|Ctrl\+K/,
+  // Keycaps render as separate caps; data-binding carries the joined display form.
+  await expect(page.getByTestId(`shortcut-help-chord-${SEARCH_BINDING_ID}`)).toHaveAttribute(
+    "data-binding",
+    /^(⌘K|Ctrl\+K)$/,
   );
 
   await page.keyboard.press("Escape");

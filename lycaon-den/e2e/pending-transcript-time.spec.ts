@@ -281,6 +281,15 @@ webE2e.describe("pending transcript time", () => {
     ));
     const stage = liveChatStage(page);
     await expect(stage.locator("[data-msg-id]").first()).toBeVisible();
+    // The reader starts once the seeded history has arrived. While rows still stream in, the
+    // tail pin writes the offset, and a wheel the browser applies before dispatching it to the
+    // page merges with that write instead of reaching the top.
+    await expect(stage.locator(".transcript-viewport-row").getByText("Reading 39:", { exact: false })).toBeAttached();
+    await expect.poll(() => stage.locator(".den-chat-stream").evaluate(async (host) => {
+      const extent = host.scrollHeight;
+      for (let frame = 0; frame < 5; frame++) await new Promise(requestAnimationFrame);
+      return host.scrollHeight === extent;
+    })).toBe(true);
     const box = await stage.locator(".den-chat-stream").boundingBox();
     if (!box) throw new Error("Missing scrollport");
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

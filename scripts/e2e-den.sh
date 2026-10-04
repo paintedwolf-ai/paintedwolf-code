@@ -38,6 +38,39 @@ pull_e2e_images() {
   done <<<"${images}"
 }
 
+# Specs that start their own engine run the host build. The containers' engine
+# runs the maintained scanner for the container's platform.
+prepare_engine() {
+  local prepared="$1" arch target goarch
+  LYCAON_E2E_STATE_DIR="${prepared}" bash "${ROOT}/scripts/e2e-sidecar-build.sh"
+  export LYCAON_E2E_PREPARED_DIR="${prepared}"
+  arch="$(docker info --format '{{.Architecture}}')"
+  case "${arch}" in
+    x86_64|amd64) target=x86_64-unknown-linux-gnu goarch=amd64 ;;
+    aarch64|arm64) target=aarch64-unknown-linux-gnu goarch=arm64 ;;
+    *) echo "error: unsupported Docker architecture: ${arch}" >&2; return 1 ;;
+  esac
+  if ! awk -v arch="${goarch}" '$2 == "goos:" { os = $3 } $1 == "goarch:" && os == "linux" && $2 == arch { found = 1 } END { exit !found }' \
+    "${ROOT}/lycaon/config/runtime/scanners/bundled-manifest.yaml"; then
+    echo "e2e-den: no maintained scanner release for linux/${goarch}; scanner specs will fail" >&2
+    return 0
+  fi
+  export LYCAON_E2E_OPENGREP_TARGET="${target}"
+  LYCAON_E2E_OPENGREP_ARTIFACT_DIR="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --target "${target}")"
+  export LYCAON_E2E_OPENGREP_ARTIFACT_DIR
+  LYCAON_E2E_OPENGREP_IDENTITY="$(cd "${ROOT}/lycaon" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact \
+    -mode identity -target "${target}" -artifact-directory "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR}")"
+  export LYCAON_E2E_OPENGREP_IDENTITY
+}
+
+stage_shard_engine() {
+  cp -R "${LYCAON_E2E_PREPARED_DIR}/runtime" "${LYCAON_E2E_STATE_DIR}/runtime"
+  [[ -n "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR:-}" ]] || return 0
+  (cd "${ROOT}/lycaon" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact -mode stage \
+    -target "${LYCAON_E2E_OPENGREP_TARGET}" -artifact-directory "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR}" \
+    -root "${LYCAON_E2E_STATE_DIR}/engine-root" >/dev/null)
+}
+
 # Each shard uses a separate stack, state, ports, and artifacts.
 if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
   shard_count="${LYCAON_E2E_SHARDS:-2}"
@@ -53,6 +86,10 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     fi
     pull_e2e_images
     rm -rf "${ROOT}/lycaon-den/test-results" "${ROOT}/lycaon-den/playwright-report"
+    mkdir -p "${PW_ARTIFACT_ROOT}/e2e-state"
+    prepared="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/prepared.XXXXXX")"
+    trap 'rm -rf "${prepared}"' EXIT
+    prepare_engine "${prepared}"
     pids=()
     stop_shards() {
       if ((${#pids[@]} > 0)); then
@@ -105,6 +142,7 @@ export LYCAON_E2E_CONFIG_DIR="${LYCAON_E2E_STATE_DIR}/config"
 mkdir -p "${LYCAON_E2E_CONFIG_DIR}"
 cp "${CONFIG_FIXTURE}/providers.local.yaml" "${CONFIG_FIXTURE}/model-policy.yaml" "${LYCAON_E2E_CONFIG_DIR}/"
 
+owned_prepared=""
 cleanup_done=0
 cleanup() {
   if [[ "${cleanup_done}" == "1" ]]; then
@@ -112,6 +150,9 @@ cleanup() {
   fi
   cleanup_done=1
   bash "${E2E_DIR}/docker-stack-down.sh" || true
+  if [[ -n "${owned_prepared}" ]]; then
+    rm -rf "${owned_prepared}"
+  fi
   if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
     rm -rf "${LYCAON_E2E_STATE_DIR}"
   fi
@@ -123,6 +164,12 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
+
+if [[ -z "${LYCAON_E2E_PREPARED_DIR:-}" ]]; then
+  owned_prepared="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/prepared.XXXXXX")"
+  prepare_engine "${owned_prepared}"
+fi
+stage_shard_engine
 
 FILTER="${LYCAON_E2E_GREP:-}"
 EXTRA=()

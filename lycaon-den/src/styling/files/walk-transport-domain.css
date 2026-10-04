@@ -1,6 +1,8 @@
 .den-walk-transport {
   position: absolute;
   z-index: 24;
+  /* Without a line box, inherited text size cannot pad the controls. */
+  display: flex;
   left: 50%;
   bottom: 64px;
   transform: translateX(-50%);

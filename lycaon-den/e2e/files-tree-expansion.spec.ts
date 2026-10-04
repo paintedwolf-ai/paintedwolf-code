@@ -163,10 +163,20 @@ test("expands a generated repository beyond the directory and child cache limits
     seed(root) {
       const payload = path.join(root, ".payload.ts"); writeFileSync(payload, "export const value = 1;\n");
       writeFileSync(path.join(root, "z-last.ts"), "export {};\n");
+      // ext4 caps one inode at 65,000 links, so each group links to its own first file.
+      let source = "";
       for (let group = 0; group < 160; group++) for (let folder = 0; folder < 100; folder++) {
         const directory = path.join(root, `group-${String(group).padStart(4, "0")}`, `folder-${String(folder).padStart(4, "0")}`);
         mkdirSync(directory, { recursive: true });
-        for (let file = 0; file < 10; file++) linkSync(payload, path.join(directory, `file-${String(file).padStart(2, "0")}.ts`));
+        for (let file = 0; file < 10; file++) {
+          const target = path.join(directory, `file-${String(file).padStart(2, "0")}.ts`);
+          if (folder === 0 && file === 0) {
+            writeFileSync(target, "export const value = 1;\n");
+            source = target;
+          } else {
+            linkSync(source, target);
+          }
+        }
       }
     },
   });
@@ -347,8 +357,18 @@ test("the thumb addresses a million-row tree and contracts after collapse", asyn
   await page.getByTestId("files-ctx-collapse-all").click();
   await expect.poll(() => page.getByTestId("files-tree-scroll").evaluate(element => element.scrollHeight)).toBe(101 * 26 + 16);
   await expect(page.locator('.den-files-tree__label--dir[data-path="folder-099"]')).toBeVisible();
+  // Expansion keeps the row at the top of the viewport where it was.
+  const topRow = () => page.getByTestId("files-tree-scroll").evaluate(element => {
+    const top = element.getBoundingClientRect().top;
+    const rows = [...element.querySelectorAll<HTMLElement>(".den-files-tree-virtual__row")]
+      .map(row => ({ path: row.querySelector<HTMLElement>(".den-files-tree__label")?.dataset.path, top: row.getBoundingClientRect().top - top }))
+      .filter(row => row.top > -26).sort((a, b) => a.top - b.top);
+    return rows[0] && { path: rows[0].path, top: Math.round(rows[0].top) };
+  });
+  const anchored = await topRow();
+  expect(anchored?.path).toMatch(/^folder-0\d\d$/);
   await expand(page, project.id);
-  await expect(page.locator('.den-files-tree__label--dir[data-path="folder-099"]')).toBeVisible();
+  await expect.poll(topRow).toEqual(anchored);
   await page.locator('.den-files-tree__label--dir[data-path="."]:visible').first().press("End");
   await expect(page.locator('.den-files-tree__label--file[data-path="folder-099/file-9998.ts"]')).toBeVisible();
 });

@@ -1,14 +1,20 @@
 # Tier B browser E2E with random host ports.
+# LYCAON_E2E_NETWORK_MODE=host puts the services on the host's network, where
+# the engine reaches fixtures that specs serve on host loopback.
 services:
   model-fixture:
     image: oven/bun:1.3.14
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
+    environment:
+      LISTEN_HOST: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
+      LISTEN_PORT: ${LYCAON_E2E_MODEL_FIXTURE_PORT:-11434}
     command:
       - bun
       - -e
       - |
         Bun.serve({
-          hostname: "0.0.0.0",
-          port: 11434,
+          hostname: process.env.LISTEN_HOST,
+          port: Number(process.env.LISTEN_PORT),
           fetch(request) {
             const path = new URL(request.url).pathname;
             if (request.method === "GET" && path === "/api/tags") {
@@ -58,9 +64,46 @@ services:
         mkdir -p "${LYCAON_E2E_STATE_DIR}/document-core"
         cp /cargo-target/release/pw-document-core "${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core"
 
+  # Git surfaces require the pinned toolchain for the container's platform.
+  gitengine:
+    # Reuses the document-core image, which has rustc for the platform probe.
+    image: rust:1.97.1-bookworm
+    user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
+    working_dir: /workspace
+    volumes:
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/scripts/gitengine-fetch.sh
+        target: /workspace/scripts/gitengine-fetch.sh
+        read_only: true
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon/config/gitengine/pin.yaml
+        target: /workspace/lycaon/config/gitengine/pin.yaml
+        read_only: true
+      - type: bind
+        source: ${LYCAON_E2E_STATE_DIR}
+        target: ${LYCAON_E2E_STATE_DIR}
+      - type: bind
+        source: ${LYCAON_E2E_GO_CACHE_DIR}/gitengine
+        target: /gitengine-cache
+    environment:
+      GITENGINE_DEST: /gitengine-cache/gitengine
+      HOME: /tmp
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        # Shards share the cached tree; a fetch reshapes it in place.
+        flock /gitengine-cache/.e2e-fetch.lock sh -ec '
+          bash /workspace/scripts/gitengine-fetch.sh
+          mkdir -p "${LYCAON_E2E_STATE_DIR}/engine-root"
+          cp -a /gitengine-cache/gitengine "${LYCAON_E2E_STATE_DIR}/engine-root/gitengine"
+        '
+
   sidecar:
     # Match the module's pinned toolchain.
     image: golang:1.26.8-bookworm
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     # The tests read the store, restore marker, and staging files it writes.
     user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace/lycaon
@@ -68,6 +111,8 @@ services:
       model-fixture:
         condition: service_started
       document-core:
+        condition: service_completed_successfully
+      gitengine:
         condition: service_completed_successfully
     volumes:
       - type: bind
@@ -88,6 +133,11 @@ services:
       - type: bind
         source: ${LYCAON_E2E_PROJECT_DIR}
         target: ${LYCAON_E2E_PROJECT_DIR}
+      # Specs install the example packs from their checkout paths.
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon/config/fixtures/example-packs
+        target: ${LYCAON_REPO_ROOT}/lycaon/config/fixtures/example-packs
+        read_only: true
       # Module and build caches outlive the per-run compose project.
       - type: bind
         source: ${LYCAON_E2E_GO_CACHE_DIR}/mod
@@ -96,7 +146,7 @@ services:
         source: ${LYCAON_E2E_GO_CACHE_DIR}/build
         target: /go-build-cache
     environment:
-      LYCAON_ADDR: 0.0.0.0:8787
+      LYCAON_ADDR: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}:${LYCAON_E2E_SIDECAR_LISTEN_PORT:-8787}
       LYCAON_BIND_ALL: "1"
       LYCAON_API_TOKEN: ${LYCAON_E2E_TOKEN}
       LYCAON_CONFIG_DIR: ${LYCAON_E2E_CONFIG_DIR}
@@ -106,6 +156,7 @@ services:
       LYCAON_DEV: "1"
       LYCAON_DEV_CORS: "1"
       LYCAON_DOCUMENT_CORE_BINARY: ${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core
+      LYCAON_ENGINE_ROOT: ${LYCAON_E2E_STATE_DIR}/engine-root
       GOPROXY: https://proxy.golang.org,direct
       GOCACHE: /go-build-cache
       HOME: /tmp
@@ -114,16 +165,24 @@ services:
       - -c
       - |
         set -eu
-        # A restarted container keeps the binary it built.
-        if [ ! -x /tmp/lycaon ]; then
-          echo "e2e-sidecar: go build…" >&2
-          go build -o /tmp/lycaon.partial ./cmd/lycaon
-          mv /tmp/lycaon.partial /tmp/lycaon
-        fi
-        echo "e2e-sidecar: serve…" >&2
-        exec /tmp/lycaon serve --db "${LYCAON_E2E_STATE_DIR}/lycaon.db"
+        echo "e2e-sidecar: go build…" >&2
+        # The staged scanner verifies against the identity it was built with.
+        go build -ldflags "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${LYCAON_E2E_OPENGREP_IDENTITY:-}" \
+          -o /tmp/lycaon ./cmd/lycaon
+        # A crash restart kills the recorded sidecar and this loop serves again
+        # on the same store. Restarting the container instead rebuilds its
+        # network link, and Chromium aborts in-flight requests when the host's
+        # network changes.
+        child=
+        trap 'kill -TERM "$$child" 2>/dev/null || true; wait "$$child" || true; exit 0' TERM INT
+        while :; do
+          echo "e2e-sidecar: serve…" >&2
+          /tmp/lycaon serve --db "${LYCAON_E2E_STATE_DIR}/lycaon.db" &
+          child=$$!
+          echo "$$child" >/tmp/lycaon.pid
+          wait "$$child" || true
+        done
     ports:
-      # A fixed host port survives the container restarts that apply staged restores.
       - "127.0.0.1:${LYCAON_E2E_SIDECAR_PORT:-}:8787"
 
   vite-deps:
@@ -143,6 +202,7 @@ services:
     # Match .node-version. As in den:harness:test, Vite runs on Node: Bun's
     # proxy keeps upstream event streams open after the browser leaves.
     image: node:26.3.0-trixie-slim
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     working_dir: /workspace/lycaon-den
     depends_on:
       sidecar:
@@ -168,9 +228,16 @@ services:
       VITE_LYCAON_API_URL: ${LYCAON_E2E_API_URL}
       VITE_LYCAON_API_TOKEN: ${LYCAON_E2E_TOKEN}
       VITE_LYCAON_PROXY: "1"
-      VITE_LYCAON_PROXY_TARGET: http://sidecar:8787
+      VITE_LYCAON_PROXY_TARGET: ${LYCAON_E2E_PROXY_TARGET:-http://sidecar:8787}
       LYCAON_E2E_FROZEN: "1"
-    command: [node, node_modules/vite/bin/vite.js, --host, 0.0.0.0, --port, "1420", --strictPort]
+    command:
+      - node
+      - node_modules/vite/bin/vite.js
+      - --host
+      - ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
+      - --port
+      - ${LYCAON_E2E_VITE_LISTEN_PORT:-1420}
+      - --strictPort
     ports:
       - "127.0.0.1::1420"
 

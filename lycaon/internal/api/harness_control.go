@@ -175,7 +175,7 @@ func (s *Server) handleHarnessLLMPending(w http.ResponseWriter, r *http.Request)
 			wait = time.Duration(min(ms, 30_000)) * time.Millisecond
 		}
 	}
-	pend, ok := s.manualLLM.Pending(r.Context(), wait)
+	pend, ok := s.manualLLM.Pending(r.Context(), strings.TrimSpace(r.URL.Query().Get("session_id")), wait)
 	if !ok {
 		httpio.WriteJSON(w, http.StatusOK, harnessPendingDTO{Pending: false})
 		return

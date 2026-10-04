@@ -195,7 +195,8 @@ webE2e("den:harness — chat focus shortcuts reveal an inline-stage chat", async
   const chat = liveChatStage(page).getByTestId("chat-view");
   await expect(chat).toBeVisible();
   await expect(chat).toHaveAttribute("aria-label", "Chat");
-  await expect(chat).toBeFocused();
+  // Focusing the chat lands in its composer.
+  await expect(liveChatStage(page).getByTestId("chat-composer")).toBeFocused();
 
   await page.getByTestId("project-files-entry").click();
   await expect(page.getByTestId("project-files-view")).toBeVisible();

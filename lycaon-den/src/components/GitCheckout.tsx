@@ -77,7 +77,7 @@ export function GitCheckout(props: Props) {
     createSignal<ReturnType<typeof formatWorktreeLandResult>>();
   let trigger: HTMLButtonElement | undefined;
   let panel: HTMLDivElement | undefined;
-  let modal: HTMLDivElement | undefined;
+  const [modal, setModal] = createSignal<HTMLDivElement | undefined>();
   let container: HTMLDivElement | undefined;
   let viewVersion = 0;
   let branchVersion = 0;
@@ -232,10 +232,11 @@ export function GitCheckout(props: Props) {
     if (pending()) return;
     setDialog(undefined);
     setActionError(undefined);
+    setModal(undefined);
   };
   createModalFocusTrap(
     () => dialog() !== undefined,
-    () => modal,
+    modal,
     {
       onEscape: closeDialog,
     },
@@ -246,6 +247,7 @@ export function GitCheckout(props: Props) {
     setName("");
     setActionError(undefined);
     setResult(undefined);
+    setModal(undefined);
     setDialog(next);
   };
 
@@ -575,7 +577,10 @@ export function GitCheckout(props: Props) {
           >
             <ChromeDragSurface class="den-dialog-backdrop__chrome-drag" />
             <div
-              ref={modal}
+              ref={(el) => {
+                setModal(el);
+                onCleanup(() => setModal(undefined));
+              }}
               class="den-dialog git-checkout-dialog"
               role="dialog"
               aria-modal="true"

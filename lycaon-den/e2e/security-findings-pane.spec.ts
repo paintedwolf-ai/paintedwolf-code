@@ -52,7 +52,8 @@ async function selectRunsView(page: Page) {
 }
 
 async function installScanRoutes(page: Page, findings = scanFindings, partial = false) {
-  await page.route("**/v1/projects/*/findings/query", async (route) => {
+  // The pane reads the ledger with and without its folder's root_id.
+  await page.route((url) => /^\/v1\/projects\/[^/]+\/findings\/query$/.test(url.pathname), async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;

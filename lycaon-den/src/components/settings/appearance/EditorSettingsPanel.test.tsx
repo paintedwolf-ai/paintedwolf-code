@@ -22,6 +22,7 @@ vi.mock("../../../platform/files/detect-editors.ts", () => ({
 
 vi.mock("../../../platform/runtime.ts", () => ({
   tauriPlatform: () => "macos",
+  detectedPlatform: () => "macos",
   isTauriRuntime: () => true,
 }));
 

@@ -14,6 +14,8 @@ import {
   getAppStateSnapshot,
 } from "../../store/app-state-snapshot.ts";
 import { persistAppStateInBackground } from "../../store/app-state-background-write.ts";
+import { shortcutPlatform } from "../../shortcuts/platform.ts";
+import type { TauriPlatform } from "../../platform/runtime.ts";
 import {
   bundledFontsInRole,
   lookupBundledFont,
@@ -93,11 +95,21 @@ export async function saveEditorTreeVisibleLevels(value: number): Promise<void> 
   setTreeVisibleLevels(next);
   await patchEditor({ treeVisibleLevels: next });
 }
-const [editorKeymapPref, setEditorKeymapPref] = createSignal<DenEditorKeymap>("emacs");
+/** macOS text fields already follow Emacs keys; Linux and Windows keep Control for select all, copy, and paste. */
+export function defaultEditorKeymap(platform: TauriPlatform = shortcutPlatform()): DenEditorKeymap {
+  return platform === "macos" ? "emacs" : "standard";
+}
+function chosenEditorKeymap(prefs?: DenEditorPrefs): DenEditorKeymap | undefined {
+  const keymap = prefs?.keymap;
+  return keymap === "standard" || keymap === "emacs" || keymap === "vim" ? keymap : undefined;
+}
+// An unchosen style resolves on read, once the runtime reports its platform.
+const [chosenKeymap, setEditorKeymapPref] = createSignal<DenEditorKeymap>();
+const editorKeymapPref = (): DenEditorKeymap => chosenKeymap() ?? defaultEditorKeymap();
 const [editorTabMovesFocusPref, setEditorTabMovesFocusPref] = createSignal(false);
 export { editorKeymapPref, editorTabMovesFocusPref };
-export function resolveEditorKeymap(prefs?: DenEditorPrefs): DenEditorKeymap {
-  return prefs?.keymap === "vim" ? "vim" : "emacs";
+export function resolveEditorKeymap(prefs?: DenEditorPrefs, platform?: TauriPlatform): DenEditorKeymap {
+  return chosenEditorKeymap(prefs) ?? defaultEditorKeymap(platform);
 }
 export async function saveEditorKeymap(value: DenEditorKeymap): Promise<void> {
   setEditorKeymapPref(value);
@@ -296,7 +308,7 @@ export function syncEditorPrefsFromSnapshot(): void {
   const editor = getAppStateSnapshot().editor;
   setRevealInTree(editor?.revealInTree ?? true);
   setTreeVisibleLevels(resolveEditorTreeVisibleLevels(editor));
-  setEditorKeymapPref(resolveEditorKeymap(editor));
+  setEditorKeymapPref(chosenEditorKeymap(editor));
   setEditorTabMovesFocusPref(editor?.tabMovesFocus ?? false);
   setWordWrap(resolveEditorWordWrap(editor));
   setLineNumbers(resolveEditorLineNumbers(editor));
@@ -407,7 +419,7 @@ export async function saveEditorAgentActivityKind(
 export function resetEditorPrefsForTests(prefs?: DenEditorPrefs): void {
   setRevealInTree(prefs?.revealInTree ?? true);
   setTreeVisibleLevels(resolveEditorTreeVisibleLevels(prefs));
-  setEditorKeymapPref(resolveEditorKeymap(prefs));
+  setEditorKeymapPref(chosenEditorKeymap(prefs));
   setEditorTabMovesFocusPref(prefs?.tabMovesFocus ?? false);
   setWordWrap(resolveEditorWordWrap(prefs));
   setLineNumbers(resolveEditorLineNumbers(prefs));

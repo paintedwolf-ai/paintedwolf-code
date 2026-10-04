@@ -90,7 +90,8 @@ webE2e.describe("presentation stability", () => {
       const nav = page.getByTestId("focused-project-nav");
       let releaseIndex!: () => void;
       const indexHeld = new Promise<void>((resolve) => { releaseIndex = resolve; });
-      await page.route("**/source/index?**", async (route) => {
+      // A shared checkout reads its index without a chat address.
+      await page.route((url) => url.pathname.endsWith("/source/index"), async (route) => {
         await indexHeld;
         await route.continue();
       });
@@ -99,7 +100,7 @@ webE2e.describe("presentation stability", () => {
       let scannerReads = 0;
       let historyReads = 0;
       let workspaceReads = 0;
-      await page.route("**/v1/scanners?**", async (route) => {
+      await page.route((url) => /^\/v1\/projects\/[^/]+\/scanners$/.test(url.pathname), async (route) => {
         scannerReads++;
         await scannersHeld;
         await route.continue();

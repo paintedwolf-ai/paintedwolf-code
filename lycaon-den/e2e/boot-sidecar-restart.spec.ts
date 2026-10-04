@@ -23,7 +23,7 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
   const composer = await waitForChatComposerReady(page);
   await composer.fill("Run one bounded command for interruption recovery.");
   await composer.press("Enter");
-  const pendingPath = "/harness/llm/pending?wait=30000";
+  const pendingPath = `/harness/llm/pending?wait=30000&session_id=${sessionId}`;
   type Pending = { pending: boolean; id: string; session_id: string };
   let pending = await apiJson<Pending>(request, "GET", pendingPath);
   expect(pending.session_id).toBe(sessionId);

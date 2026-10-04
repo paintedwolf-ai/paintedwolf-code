@@ -93,6 +93,7 @@
   },
   "patchedDependencies": {
     "@codemirror/view@6.43.6": "patches/@codemirror+view@6.43.6-scroll-and-wrap-heights.patch",
-    "overlayscrollbars@2.16.0": "patches/overlayscrollbars@2.16.0.patch"
+    "overlayscrollbars@2.16.0": "patches/overlayscrollbars@2.16.0.patch",
+    "@replit/codemirror-emacs@6.1.0": "patches/@replit+codemirror-emacs@6.1.0-registration-side-effects.patch"
   }
 }

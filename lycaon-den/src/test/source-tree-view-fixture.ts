@@ -11,7 +11,9 @@ export function treeRow(path: string, kind: "file" | "directory" = "file", expan
 
 /** Scripted host frames keep DOM tests independent of filesystem traversal. */
 export function treeViewFixture(initial = [treeRow(".", "directory", true), treeRow("README.md")]) {
-  const id = crypto.randomUUID();
+  let id = crypto.randomUUID();
+  // The host answers an expired handle as no longer retained.
+  const expired = new Set<string>();
   let rows = initial;
   let total = initial.length;
   let rowAt = (index: number): SourceTreeRow => initial[index]!;
@@ -59,7 +61,13 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
     requests.push({ method, path: raw, body, signal: init?.signal });
-    if (method === "POST" && url.pathname.endsWith("/views")) workspace = body?.workspace_id as string ?? "ws1";
+    if ([...expired].some(handle => url.pathname.includes(`/source/views/${handle}`))) {
+      throw Object.assign(new Error("Source view not found"), { code: "source_view_not_found" });
+    }
+    if (method === "POST" && url.pathname.endsWith("/views")) {
+      workspace = body?.workspace_id as string ?? "ws1";
+      if (expired.has(id)) id = crypto.randomUUID();
+    }
     if (url.pathname.endsWith("/presentations") && method === "POST") {
       if (!complete) throw Object.assign(new Error("Preparing"), { code: "source_view_preparing" });
       keep();
@@ -129,7 +137,9 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
     keep();
     return state() as T;
   });
-  return { client, id, requests, commands, state, notify,
+  return { client, get id() { return id; }, requests, commands, state, notify,
+    /** Ends the current handle; the next create answers with a new view. */
+    expire: () => { expired.add(id); revision++; },
     update: (handler: typeof update) => { update = handler; },
     read: (handler: typeof read) => { read = handler; },
     rows: (next: SourceTreeRow[]) => { knownRows.clear(); rows = next; rank = undefined; total = rows.length; rowAt = index => next[index]!; },

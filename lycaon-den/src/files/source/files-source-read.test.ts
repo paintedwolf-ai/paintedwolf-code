@@ -133,6 +133,16 @@ describe("file acquisition", () => {
     }
     expect(openEditorDocument).toHaveBeenCalledOnce();
   });
+  it("reads a deleted path the host holds no document for as source", async () => {
+    const deleted = source({ content: "", deleted: { deleted_at: "2026-10-03T00:00:00Z" } as ProjectSourceReadResponse["deleted"] });
+    const openEditorDocument = vi.fn().mockRejectedValue(new LycaonApiError("Not found", 404, "editor_document_not_found"));
+    const getProjectSource = vi.fn(async () => deleted);
+    const result = await openFileBufferSource(stubClient({ openEditorDocument, getProjectSource }), "p1", buffer, "s1");
+    result.reservation?.release();
+    expect(result.source).toBe(deleted);
+    expect(result.document).toBeUndefined();
+    expect(getProjectSource).toHaveBeenCalledWith("p1", "wide.txt", { rootId: "r1", sessionId: "s1", includeDeleted: true });
+  });
   it("keeps worker files on the read-only source path", async () => {
     const getProjectSource = vi.fn().mockResolvedValue(source());
     (await openFileBufferSource(stubClient({ getProjectSource }), "p1", { ...buffer, jobId: "job1" })).reservation?.release();

@@ -925,6 +925,18 @@ describe("transcript viewport reveal", () => {
     }
   });
 
+  it("reveals a row that streams in after the reveal starts", async () => {
+    const controller = createTranscriptViewportController({ sessionId: () => "s1" });
+    const scrollToIndex = vi.fn();
+    let items = [userItem("a")];
+    controller.attachVirtualWindow(virtualWindow({ items: () => items, scrollToIndex }));
+    const revealing = controller.revealAnchor({ chicklet: "tool", anchorId: "call-late" });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    items = [userItem("a"), toolItem("b", "call-late")];
+    await expect(revealing).resolves.toBe(true);
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "start" });
+  });
+
   it("does not reveal through another session's viewport", () => {
     const controller = createTranscriptViewportController({ sessionId: () => "s1" });
     const releaseController = registerTranscriptViewport(controller);

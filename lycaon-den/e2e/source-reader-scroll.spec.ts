@@ -198,14 +198,15 @@ modelIndependentWebE2e("large historical replacements keep continuous inline sha
   const { project } = await openProjectFilesFixture(page, request, {
     prefix: "historical-highlights", name: "Historical highlights", seed: root => writeFileSync(path.join(root, "policy.md"), "# Policy\n"),
   });
+  // Each line keeps words, so its rewritten middle carries word shading rather than the line fill alone.
   const before = "# Policy\n" + "Read applicable nested policy before backend work.\n".repeat(80);
-  const after = "# Policy\n" + "Keep verification receipts available during review.\n".repeat(80);
+  const after = "# Policy\n" + "Read verification receipts available during review work.\n".repeat(80);
   await openReaderViewer(page, project.id, { kind: "text", path: "policy.md", before, after });
   const reader = page.getByTestId("source-reader").filter({ visible: true });
   const first = reader.locator('[data-source-row="1"]');
   await expect(first).toContainText("Read applicable nested policy before backend work.");
   await expect(first.locator(".cm-deletedText")).toHaveCount(1);
-  await expect(first.locator(".cm-deletedText")).toContainText("Read applicable nested policy before backend work");
+  await expect(first.locator(".cm-deletedText")).toHaveText("applicable nested policy before backend");
   await page.screenshot({ path: testInfo.outputPath("historical-highlights.png") });
 });
 

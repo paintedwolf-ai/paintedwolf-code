@@ -9,9 +9,14 @@ async function openContextMenu(page: Page, target: Locator) {
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("context-menu")).toHaveCount(0);
   }
-  const box = await target.boundingBox();
-  expect(box).toBeTruthy();
-  await page.mouse.click(box!.x + Math.min(20, box!.width / 2), box!.y + 8, {
+  // A row can re-render between the visibility check and the measurement.
+  let box!: NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+  await expect(async () => {
+    const measured = await target.boundingBox();
+    expect(measured).toBeTruthy();
+    box = measured!;
+  }).toPass({ timeout: 10_000 });
+  await page.mouse.click(box.x + Math.min(20, box.width / 2), box.y + 8, {
     button: "right",
   });
   await expect(page.getByTestId("context-menu")).toBeVisible({

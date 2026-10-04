@@ -229,6 +229,21 @@ it("a reconnect resynchronizes active views and marks detached views for return"
   again(); await session.close();
 });
 
+it("reads a preparing view again when its readiness event does not arrive", async () => {
+  vi.useFakeTimers();
+  let current: SourceTreeView = { ...state(), state: "preparing" };
+  const client = createSourceViewsClient(async <T>(): Promise<T> => current as T);
+  const session = new SourceViewSession(client, "project", { kind: "tree", client_id: "window:main", operation_id: "create", workspace_id: "workspace", intent: {} }, frame => ({ rows: frame.rows.length, bytes: 256 }));
+  try {
+    const ready = session.ready();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(session.state()?.state).toBe("preparing");
+    current = state("ready");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await ready).state).toBe("ready");
+  } finally { await session.close(); vi.useRealTimers(); }
+});
+
 it("preparation waiters can cancel independently without canceling the accepted view", async () => {
   let current: SourceTreeView = { ...state(), state: "preparing" };
   const calls: string[] = [];

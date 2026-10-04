@@ -15,7 +15,7 @@ webE2e("a tool-only forced final response shows an error and permits recovery", 
     const composer = await waitForChatComposerReady(page);
     await composer.fill("Read the fixture README.");
     await composer.press("Enter");
-    const pending = await apiJson<{ pending: boolean; id: string; session_id: string; tools: string[] }>(request, "GET", "/harness/llm/pending?wait=30000");
+    const pending = await apiJson<{ pending: boolean; id: string; session_id: string; tools: string[] }>(request, "GET", `/harness/llm/pending?wait=30000&session_id=${sessionId}`);
     expect(pending.pending).toBe(true);
     expect(pending.session_id).toBe(sessionId);
     expect(pending.tools).toContain("read");
@@ -23,12 +23,11 @@ webE2e("a tool-only forced final response shows an error and permits recovery", 
       id: pending.id, content: "", tool_calls: [{ id: crypto.randomUUID(), name: "read", args: { path: "README.md" } }],
     });
     await expect(page.getByRole("status", { name: "Status messages", exact: true })).toContainText("Model returned no response", { timeout: 30_000 });
-    const followup = await apiJson<{ pending: boolean; id: string; session_id: string }>(request, "GET", "/harness/llm/pending?wait=30000");
-    expect(followup.pending).toBe(true);
-    expect(followup.session_id).toBe(sessionId);
-    await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The queued host follow-up completed." });
-    await apiJson(request, "POST", "/harness/llm/respond", { id: followup.id, content: "The queued host follow-up completed." });
+    // The failed closeout ends the turn without a blank answer or another model request.
     await expect.poll(async () => (await apiJson<{ status: string }>(request, "GET", `/v1/sessions/${sessionId}`)).status).toBe("idle");
+    const followup = await apiJson<{ pending: boolean }>(request, "GET", `/harness/llm/pending?session_id=${sessionId}`);
+    expect(followup.pending).toBe(false);
+    await expect(liveChatStage(page).getByTestId("transcript-article-assistant")).toHaveCount(0);
     await apiJson(request, "PATCH", "/v1/settings/limits", { max_iterations: limits.max_iterations });
     await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The conversation can continue." });
     await composer.fill("Continue with a brief acknowledgement.");

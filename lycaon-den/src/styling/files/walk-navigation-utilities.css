@@ -10,6 +10,8 @@
 @utility den-step-bar__count {
   display: inline-grid;
   text-align: start;
+  /* Unkerned, a label is no wider than its widest single-digit sizer. */
+  font-kerning: none;
 }
 
 @utility den-step-bar__count-size {

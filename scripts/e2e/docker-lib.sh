@@ -28,20 +28,53 @@ e2e_free_local_port() {
   python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
 }
 
-# SIGKILL and restart the sidecar container on its fixed host port.
+# Specs serve fixtures on host loopback and call the engine's loopback
+# callbacks, so Linux runs the stack on the host's network. Docker Desktop
+# shares it only with host networking enabled: set LYCAON_E2E_NETWORK_MODE=host.
+e2e_docker_select_network() {
+  if [[ -z "${LYCAON_E2E_NETWORK_MODE+set}" && "$(uname -s)" == Linux ]]; then
+    LYCAON_E2E_NETWORK_MODE=host
+  fi
+  export LYCAON_E2E_NETWORK_MODE="${LYCAON_E2E_NETWORK_MODE:-}"
+  e2e_docker_host_network || return 0
+  # Services share the host's ports, so each listens on loopback at a probed port.
+  export LYCAON_E2E_LISTEN_HOST=127.0.0.1
+  export LYCAON_E2E_SIDECAR_LISTEN_PORT="${LYCAON_E2E_SIDECAR_PORT}"
+  export LYCAON_E2E_VITE_LISTEN_PORT="${LYCAON_E2E_VITE_LISTEN_PORT:-$(e2e_free_local_port)}"
+  export LYCAON_E2E_MODEL_FIXTURE_PORT="${LYCAON_E2E_MODEL_FIXTURE_PORT:-$(e2e_free_local_port)}"
+  export LYCAON_E2E_PROXY_TARGET="http://127.0.0.1:${LYCAON_E2E_SIDECAR_PORT}"
+  local providers="${LYCAON_E2E_CONFIG_DIR:?}/providers.local.yaml"
+  sed -e "s#http://model-fixture:11434#http://127.0.0.1:${LYCAON_E2E_MODEL_FIXTURE_PORT}#" \
+    "${providers}" >"${providers}.tmp"
+  mv "${providers}.tmp" "${providers}"
+}
+
+e2e_docker_host_network() {
+  [[ "${LYCAON_E2E_NETWORK_MODE:-}" == host ]]
+}
+
+# SIGKILL the container's recorded sidecar; its serve loop starts the next one.
 e2e_docker_crash_restart_sidecar() {
-  local container port
+  local container previous current i
   container="$(docker compose -f "${LYCAON_E2E_COMPOSE_FILE}" -p "${LYCAON_E2E_DOCKER_PROJECT}" ps -q sidecar)"
   [[ -n "${container}" ]] || {
     echo "error: no sidecar container in project ${LYCAON_E2E_DOCKER_PROJECT}" >&2
     return 1
   }
-  docker kill --signal KILL "${container}" >/dev/null
-  docker wait "${container}" >/dev/null
-  docker start "${container}" >/dev/null
-  port="$(e2e_docker_compose_port sidecar 8787)"
-  [[ "127.0.0.1:${port}" == "${LYCAON_E2E_ADDR}" ]] || {
-    echo "error: restarted sidecar listens on ${port}, not ${LYCAON_E2E_ADDR}" >&2
+  previous="$(docker exec "${container}" cat /tmp/lycaon.pid)"
+  [[ "${previous}" =~ ^[0-9]+$ ]] || {
+    echo "error: sidecar container recorded no pid" >&2
+    return 1
+  }
+  docker exec "${container}" sh -c "kill -KILL ${previous}"
+  # A new pid means the killed process has exited, so health answers come from its successor.
+  for ((i = 1; i <= 600; i++)); do
+    current="$(docker exec "${container}" cat /tmp/lycaon.pid 2>/dev/null || true)"
+    [[ -n "${current}" && "${current}" != "${previous}" ]] && break
+    sleep 0.1
+  done
+  [[ -n "${current}" && "${current}" != "${previous}" ]] || {
+    echo "error: sidecar pid ${previous} was not replaced" >&2
     return 1
   }
   e2e_wait_http "${LYCAON_E2E_HEALTH_URL}" "sidecar /health" 300
