@@ -2,7 +2,7 @@ import { completionStatus } from "@codemirror/autocomplete";
 import { insertNewlineAndIndent, selectGroupForward } from "@codemirror/commands";
 import { Compartment, Facet, Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, panels, type ViewUpdate } from "@codemirror/view";
-import { EmacsHandler, emacsKeys } from "@replit/codemirror-emacs";
+import { EmacsHandler } from "@replit/codemirror-emacs";
 import { CodeMirror, Vim, getCM, vim } from "@replit/codemirror-vim";
 import type { DenEditorKeymap } from "../../../../shared/app-state-types.ts";
 import { invokeCommand } from "../../../shortcuts/dispatcher.ts";
@@ -19,8 +19,6 @@ let configured = false;
 function configureStyles(): void {
   if (configured) return;
   configured = true;
-  // Explicit registration survives dependency tree shaking.
-  for (const [keys, command] of Object.entries(emacsKeys)) EmacsHandler.bindKey(keys, command);
   const rotateYank = EmacsHandler.commands.yankRotate;
   EmacsHandler.commands.yankRotate = { ...rotateYank, exec: (handler: EmacsHandler, args: unknown) => {
     // Collaborative history lives in the document replica.

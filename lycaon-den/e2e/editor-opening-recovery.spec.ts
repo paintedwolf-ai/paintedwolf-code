@@ -1,7 +1,17 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { activateProject, openProjectFilesFixture, webE2e } from "./helpers.ts";
+
+/** Messages of the opening failures the Files editor reported to the notice store. */
+function fileFailures(page: Page, code: "files_editing_unavailable" | "files_document_unavailable"): Promise<string[]> {
+  return page.evaluate(async (code) => {
+    const url = "/src/platform/connection/app-connection.ts";
+    const { getRegisteredNoticeStore } = await import(/* @vite-ignore */ url) as typeof import("../src/platform/connection/app-connection.ts");
+    const notices = [...(getRegisteredNoticeStore()?.index().values() ?? [])].flat();
+    return notices.filter(notice => notice.code === code).map(notice => notice.message);
+  }, code);
+}
 
 webE2e("editor opening: restored YAML draft survives a failed join and retry", async ({ page, request }) => {
   const { root } = await openProjectFilesFixture(page, request, {
@@ -25,7 +35,11 @@ webE2e("editor opening: restored YAML draft survives a failed join and retry", a
   await page.reload();
   await page.getByTestId("project-files-entry").click();
   await page.getByTestId("files-tree-file").filter({ hasText: "customization.yaml" }).dblclick();
-  await expect(page.getByTestId("files-editor-opening-error")).toContainText("Document storage is unavailable", { timeout: 30_000 });
+  // The editor marks the failure and offers the retry; the host's reason goes to the project's notices,
+  // which Home and the chat dock present.
+  await expect(page.getByTestId("files-editor-mode").filter({ visible: true }))
+    .toHaveAttribute("data-editor-identity", "editing-error", { timeout: 30_000 });
+  await expect.poll(() => fileFailures(page, "files_editing_unavailable")).toContain("Document storage is unavailable.");
   unavailable = false;
   await page.getByRole("button", { name: "Retry editing", exact: true }).click();
   await expect(editor).toBeEditable({ timeout: 15_000 });
@@ -57,7 +71,8 @@ for (const failure of ["transport", "workspace"] as const) {
     await page.getByTestId("project-files-entry").click();
     await expect(editor).toBeEditable({ timeout: 20_000 });
     expect(requests).toBe(2);
-    await expect(page.getByTestId("files-editor-opening-error")).toHaveCount(0);
+    expect(await fileFailures(page, "files_document_unavailable")).toEqual([]);
+    expect(await fileFailures(page, "files_editing_unavailable")).toEqual([]);
     await editor.fill("editing recovered\n");
     await expect(editor).toContainText("editing recovered");
   });

@@ -1,7 +1,9 @@
 import { retainFileDocument } from "../documents/files-residency.ts";
 import { DocumentCapacityError, type DocumentReservation } from "../documents/document-residency.ts";
+import { onCleanup } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { LycaonApiError } from "../../api/http.ts";
+import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { loadEditorConfigForBuffer } from "../../components/source/editor/editorconfig-load.ts";
 import { sourceSaveErrorMessage } from "../../components/source/editor/source-editor-model.ts";
 import { evictEditorDocument } from "../documents/editor-document.ts";
@@ -18,6 +20,9 @@ import { setProjectFilesRevealRequest } from "../tree/project-files-reveal.ts";
 import { bufferRequestIdentity, sharedBufferLoadRequests as bufferLoadRequests } from "./files-buffer-request-tracking.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 
+/** Transport failures reopen a file this many times before its read reports the failure. */
+const TRANSPORT_RETRY_LIMIT = 4;
+
 type BufferLoadingDependencies = Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "live" |
   "filesWorkspaceId" | "dropFileVersionState" | "loadVersionHistory" | "setSaveError"> & {
   refreshProjectWorkspace: (workspaceId: string) => boolean;
@@ -26,7 +31,9 @@ type BufferLoadingDependencies = Pick<FilesScope, "projectId" | "client" | "sour
 export function createBufferLoading({ projectId, client, sourceSessionId, dropFileVersionState,
   loadVersionHistory, setSaveError, live, filesWorkspaceId,
   refreshProjectWorkspace }: BufferLoadingDependencies) {
-  const loadBuffer = (buf: FileBuffer) => {
+  const retries = new Set<ReturnType<typeof setTimeout>>();
+  onCleanup(() => { for (const retry of retries) clearTimeout(retry); retries.clear(); });
+  const loadBuffer = (buf: FileBuffer, transportFailures = 0) => {
     if (isComposedBufferKind(buf.kind)) return;
     const c = client();
     if (!c) {
@@ -164,6 +171,16 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
             });
             return;
           }
+        }
+        if (!sourceLoaded && err instanceof BackendTransportError && transportFailures < TRANSPORT_RETRY_LIMIT) {
+          // The buffer stays loading, so a dropped open retries instead of replacing the file with an error.
+          const retry = setTimeout(() => {
+            retries.delete(retry);
+            const pending = projectFilesState(projectId()).byKey[bufferKey];
+            if (pending?.loading && live()) loadBuffer(pending, transportFailures + 1);
+          }, 1000 * 2 ** transportFailures);
+          retries.add(retry);
+          return;
         }
         if (!sourceLoaded) {
           applyProjectSourceLoadFailure(projectId(), bufferKey, err);

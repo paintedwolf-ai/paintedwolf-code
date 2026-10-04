@@ -33,6 +33,7 @@ updates:
           - patch
     ignore:
       - dependency-name: "@codemirror/view"
+      - dependency-name: "@replit/codemirror-emacs"
       - dependency-name: "overlayscrollbars"
       - dependency-name: "typescript"
         update-types:
