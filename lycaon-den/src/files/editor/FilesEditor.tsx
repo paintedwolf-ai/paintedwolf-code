@@ -333,12 +333,13 @@ export function FilesEditor(props: FilesEditorProps) {
   });
   createResidentFocus(() => {
     const target = activeEditorView()?.contentDOM;
-    if (historicalActive()) versionHandle()?.focus();
     const active = document.activeElement;
-    const filesView = target?.closest<HTMLElement>(".project-files-view");
+    // A historical version has no editor target, so the host locates the view.
+    const filesView = (target ?? hostEl)?.closest<HTMLElement>(".project-files-view");
     if (active instanceof HTMLElement && filesView?.contains(active)) {
       return undefined;
     }
+    if (historicalActive()) versionHandle()?.focus();
     return target;
   });
   const bindView = (next: EditorView | undefined) => {

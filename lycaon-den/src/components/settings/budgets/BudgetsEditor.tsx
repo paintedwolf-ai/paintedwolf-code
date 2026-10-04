@@ -1,5 +1,5 @@
 import { settingAnchor, settingLabel } from "../../../settings/settings-registry.ts";
-import { createEffect, createMemo, Show } from "solid-js";
+import { batch, createEffect, createMemo, Show } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { SettingsLimitsPatch } from "../../../api/types.ts";
 import { createLimitsDraft } from "../../../settings/budgets/limits-model.ts";
@@ -41,8 +41,11 @@ export function BudgetsEditor(props: Props) {
       props.settingsStore.actions.setError(undefined);
       try {
         const updated = await props.client.updateLimitsSettings(body);
-        draftState.acknowledge(body);
-        props.settingsStore.actions.setLimits(updated);
+        // Acknowledging alone would briefly render the stale host value.
+        batch(() => {
+          draftState.acknowledge(body);
+          props.settingsStore.actions.setLimits(updated);
+        });
       } catch (err) {
         props.settingsStore.actions.setError(
           err instanceof Error ? err.message : String(err),

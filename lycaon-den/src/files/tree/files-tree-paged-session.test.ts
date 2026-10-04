@@ -109,6 +109,23 @@ function scriptedHost(options: { command?: (path: string) => void } = {}) {
   return { client, patches, expire: (id: string) => { expired = id; }, creates: () => views.size };
 }
 
+it("reads a replacement view even where the expired view's rows are still painted", async () => {
+  const host = treeViewFixture();
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
+  const detach = session.attach();
+  try {
+    await session.range(0, 2, new AbortController().signal);
+    const expired = session.state()!.id;
+    host.rows([{ ...treeRow(".", "directory", true), name: "renamed" }, treeRow("README.md")]);
+    host.expire();
+    await session.refresh();
+    expect(session.state()!.id).not.toBe(expired);
+    expect(session.presentation().state?.id).toBe(expired);
+    expect(await session.prefetch(0, new AbortController().signal)).toBe(true);
+    expect(session.frames.frames().find(frame => frame.view_id === session.state()!.id)?.rows[0]?.name).toBe("renamed");
+  } finally { detach(); await session.close(); }
+});
+
 it("keeps its view when a command names something absent", async () => {
   const host = scriptedHost({ command: () => { throw Object.assign(new Error("Not found"), { code: "not_found" }); } });
   const session = new FilesTreeSession(host.client, "project", "workspace", undefined, {});

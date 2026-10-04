@@ -74,9 +74,13 @@ function holdsDraft(document: EditorDocument): boolean {
   return !document.absent || document.dirty || !!document.held_agent_version_id;
 }
 
-/** The host opens only editable text as a document; any other file is read as source. */
+/**
+ * The host opens only editable text as a document; any other file is read as source.
+ * A deleted path without a draft has no document, and its source read carries the retained deletion.
+ */
 function isSourceOnly(error: unknown): boolean {
-  return error instanceof LycaonApiError && (error.code === "source_binary" || error.code === "source_content_too_large" || error.code === "source_read_only");
+  return error instanceof LycaonApiError && (error.code === "source_binary" || error.code === "source_content_too_large" ||
+    error.code === "source_read_only" || error.code === "editor_document_not_found");
 }
 
 /** One round trip opens an editable file's host document, requesting only missing state. */

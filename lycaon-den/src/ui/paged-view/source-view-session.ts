@@ -13,6 +13,8 @@ const projectListeners = new Map<string, Set<() => void>>();
 const chatViews = new Map<string, Set<{ close(): Promise<void> }>>();
 /** An attached view reads itself this often so the host keeps its lease. */
 const LEASE_RENEWAL_MS = 60_000;
+/** A preparing view is read until it settles: its readiness event can trail behind on a quiet stream. */
+const PREPARING_REFRESH_MS = 1_000;
 
 function sourceViewError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error("Could not prepare source.", { cause });
@@ -614,7 +616,7 @@ export class SourceViewSession<K extends Kind> {
   /** Host events carry every change; the idle read renews the lease. */
   private scheduleRefresh(): void {
     if (!this.active || this.closed || this.errorValue) return;
-    const delay = this.dirty ? 250 : LEASE_RENEWAL_MS;
+    const delay = this.dirty ? 250 : this.value?.state === "preparing" ? PREPARING_REFRESH_MS : LEASE_RENEWAL_MS;
     const due = Date.now() + delay;
     if (this.timer && this.refreshDue <= due) return;
     clearTimeout(this.timer);
