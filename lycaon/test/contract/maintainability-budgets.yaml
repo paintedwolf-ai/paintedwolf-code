@@ -9821,7 +9821,7 @@ source_files:
     lycaon-den/src/chat/stream/transcript-day-chip.tsx: 53
     lycaon-den/src/chat/stream/transcript-runtime.ts: 19
     lycaon-den/src/chat/stream/transcript-viewport-state.ts: 221
-    lycaon-den/src/chat/stream/transcript-viewport.tsx: 867
+    lycaon-den/src/chat/stream/transcript-viewport.tsx: 874
     lycaon-den/src/chat/task/task-card-model.ts: 162
     lycaon-den/src/chat/task/task-result-model.ts: 21
     lycaon-den/src/chat/tool/activity-span-accordion.ts: 56
@@ -16216,7 +16216,7 @@ test_files:
     lycaon-den/e2e/notifications-den.spec.ts: 34
     lycaon-den/e2e/onboarding-first-run.spec.ts: 189
     lycaon-den/e2e/outside-write.spec.ts: 73
-    lycaon-den/e2e/pending-transcript-time.spec.ts: 296
+    lycaon-den/e2e/pending-transcript-time.spec.ts: 302
     lycaon-den/e2e/performance-history.spec.ts: 54
     lycaon-den/e2e/performance-lifecycle.spec.ts: 202
     lycaon-den/e2e/performance-repository.spec.ts: 88
@@ -16428,7 +16428,7 @@ test_files:
     lycaon-den/src/chat/stream/transcript-day-chip.test.tsx: 46
     lycaon-den/src/chat/stream/transcript-runtime.test.ts: 48
     lycaon-den/src/chat/stream/transcript-viewport-state.test.ts: 102
-    lycaon-den/src/chat/stream/transcript-viewport.test.ts: 941
+    lycaon-den/src/chat/stream/transcript-viewport.test.ts: 952
     lycaon-den/src/chat/task/task-card-model.test.ts: 187
     lycaon-den/src/chat/task/task-result-model.test.ts: 51
     lycaon-den/src/chat/test/session-msw-fixtures.ts: 116
