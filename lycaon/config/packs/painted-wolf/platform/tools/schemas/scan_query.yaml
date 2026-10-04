@@ -1,6 +1,6 @@
 tags: [scans]
 description: >-
-  Page findings for one or more scans. One id queries one scan; the exact id array
+  Page findings or coverage diagnostics for one or more scans. One id queries one scan; the exact id array
   returned by scan_pack queries that pack as a cross-engine aggregate. Narrow with
   rule_id, path, code, or level rather than reading every finding. When a result is
   truncated, page it with offset — do not re-run the scan.
@@ -19,7 +19,7 @@ schema:
       description: Return only findings from this rule.
     path:
       type: string
-      description: Return only findings under this project-relative path.
+      description: Return findings or coverage diagnostics under this project-relative path.
     code:
       type: string
       description: Return only findings carrying this engine code.
@@ -30,7 +30,7 @@ schema:
       description: Return only findings at this severity level.
     offset:
       type: integer
-      description: Skip this many matching findings (use when the previous page was truncated).
+      description: Skip this many matching rows.
     kind:
       type: string
       description: Finding kind, for example sca or secret.
@@ -42,11 +42,17 @@ schema:
       description: Exact primary finding fingerprint.
     view:
       type: string
-      enum: [findings, groups]
-      description: Groups returns a compact rule or advisory/package index with occurrence counts and representative locations; pagination applies to groups.
+      enum: [findings, groups, coverage]
+      description: Groups pages the rule/advisory index. Coverage returns full-scope distributions and paginated diagnostic locations; filter by path, warning_kind, construct, or rule_id. Samples do not establish the rest of the scope.
+    warning_kind:
+      type: string
+      description: Exact structured warning kind in coverage view.
+    construct:
+      type: string
+      description: Exact structured construct code in coverage view.
     limit:
       type: integer
-      description: Maximum findings per page.
+      description: Maximum rows per page (host capped).
     dedupe:
       type: boolean
       description: Collapse duplicate rule+path rows.
