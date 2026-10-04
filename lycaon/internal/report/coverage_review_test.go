@@ -12,7 +12,7 @@ func TestReviewedCoverageKeepsHardFailuresAndDisclosesLimits(t *testing.T) {
 	facts := reviewcoverage.Facts{Obligations: []reviewcoverage.Fact{{ID: "boundary", Subject: "API boundary"}}, Gaps: []reviewcoverage.Fact{{ID: "parser", Subject: "SAST parser", FileCount: 1, Paths: []string{"fixture.go"}}}}
 	facts.Seal()
 	cite := []api.CitationGroundingCitedEvidence{{Handle: "file#1"}}
-	review := reviewcoverage.Review{Revision: facts.Revision, Assessments: []reviewcoverage.Assessment{
+	review := api.CoverageReview{Revision: facts.Revision, Assessments: []api.CoverageAssessment{
 		{ID: "boundary", Disposition: reviewcoverage.Satisfied, Reason: "Boundary traced", CitedEvidence: cite},
 		{ID: "parser", Disposition: reviewcoverage.Immaterial, Reason: "Fixture is outside the shipped path", Obligations: []string{"boundary"}, CitedEvidence: cite},
 	}}
@@ -69,7 +69,7 @@ func TestOpenQuestionsUseAssessedMateriality(t *testing.T) {
 		{reviewcoverage.EssentialOpen, reviewcoverage.Satisfied, CompletenessIncomplete},
 		{reviewcoverage.Covered, reviewcoverage.Satisfied, CompletenessIncomplete},
 	} {
-		review := reviewcoverage.Review{Revision: facts.Revision, Assessments: []reviewcoverage.Assessment{
+		review := api.CoverageReview{Revision: facts.Revision, Assessments: []api.CoverageAssessment{
 			{ID: "boundary", Disposition: tc.obligation, Reason: "Boundary traced", CitedEvidence: cite},
 			{ID: "question/c6", Disposition: tc.question, Reason: "Remaining uncertainty bounded by observed callers", Obligations: []string{"boundary"}, CitedEvidence: cite},
 		}}

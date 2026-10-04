@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
+	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -66,7 +67,12 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 		}
 		for _, obligation := range phase.OnEnter.Obligations {
 			if obligation.Kind == scan.WorkflowObligationKind {
-				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/scans", Kind: "scan_inventory", Subject: "Assess the required scanner inventory"})
+				ids := make([]string, 0, len(scans))
+				for _, scan := range scans {
+					ids = append(ids, scan.ID)
+				}
+				slices.Sort(ids)
+				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/scans", Kind: "scan_inventory", Subject: "Assess the required scanner inventory", Scans: ids})
 				break
 			}
 		}
@@ -137,6 +143,8 @@ func scanCoverageFacts(scans []api.CodeScan) []reviewcoverage.Fact {
 			})
 			fact := coverageGap(kind, s.ScannerID, paths, []string{s.ID}, warnings)
 			fact.Count = len(warnings)
+			scope := scancoverage.Summarize(warnings)
+			fact.Distribution = &scope.Profile
 			gaps = append(gaps, fact)
 		}
 	}
@@ -154,6 +162,7 @@ func workerCoverageFacts(tasks []api.WorkerTask) []reviewcoverage.Fact {
 		}
 		fact := coverageGap("supporting_work", task.AgentType, nil, nil, task)
 		fact.Tasks = []string{task.ID}
+		fact.Phase = task.WorkflowPhase
 		gaps = append(gaps, fact)
 	}
 	return gaps
@@ -168,15 +177,13 @@ func coverageGap(kind, scanner string, paths, scans []string, evidence any) revi
 		Fact     reviewcoverage.Fact
 		Evidence any
 	}{fact, evidence})
-	if len(fact.Paths) > 12 {
-		fact.Paths = fact.Paths[:12]
-	}
+	fact.Paths = scancoverage.Sample(fact.Paths)
 	return fact
 }
 
 // ParseVerdictCoverage reads the single coverage_review field declared by a phase.
-func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]string) (*reviewcoverage.Review, error) {
-	var out *reviewcoverage.Review
+func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]string) (*api.CoverageReview, error) {
+	var out *api.CoverageReview
 	for field, kind := range def.VerdictSchema {
 		if kind != workflowdef.VerdictCoverageType {
 			continue
@@ -201,8 +208,8 @@ func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]stri
 
 // RunCoverageReview returns only the latest phase's accepted coverage review.
 // A reconciling phase cannot inherit an unchallenged candidate assessment.
-func RunCoverageReview(verdicts []PhaseVerdict) *reviewcoverage.Review {
-	var out *reviewcoverage.Review
+func RunCoverageReview(verdicts []PhaseVerdict) *api.CoverageReview {
+	var out *api.CoverageReview
 	for _, v := range verdicts {
 		if !v.Def.CarriesCoverage() {
 			continue
@@ -232,7 +239,10 @@ func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowR
 	if err != nil {
 		return err
 	}
-	return reviewcoverage.Validate(facts, *review)
+	if err := reviewcoverage.Validate(facts, *review); err != nil {
+		return err
+	}
+	return m.checkCoverageReviewers(ctx, run, manifest, def)
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not

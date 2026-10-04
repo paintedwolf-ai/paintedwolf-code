@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string, review *reviewcoverage.Review) error {
+func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string, review *api.CoverageReview) error {
 	if review == nil {
 		return rejectReviewQuestion("coverage_required", "")
 	}
@@ -29,7 +29,7 @@ func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []VerdictClaim, 
 		open := def.ClassOf(claims[index].Status) == workflowdef.ClaimOpen
 		var disposition string
 		if open {
-			a := slices.IndexFunc(review.Assessments, func(a reviewcoverage.Assessment) bool { return a.ID == q.ID })
+			a := slices.IndexFunc(review.Assessments, func(a api.CoverageAssessment) bool { return a.ID == q.ID })
 			if a < 0 {
 				return rejectReviewQuestion("assessment_required", q.ID)
 			}

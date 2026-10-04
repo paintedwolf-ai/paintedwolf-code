@@ -33,7 +33,7 @@ coordinator_injects:
     tool_procedures: 4596
     worker_command_jobs: 5130
     worker_leg: 334
-    worker_task_assignment: 1302
+    worker_task_assignment: 3589
     worker_task_preamble: 657
 agent_templates:
     coordinator: 5917
@@ -109,12 +109,12 @@ kicks:
     worker-task-started: 235
 tool_surfaces:
     coordinator: 69120
-    editor_file: 29638
-    explore_readonly: 29659
-    implement: 62967
-    plan_review_readonly: 32890
-    plan_write_only: 30265
-    web_research: 17769
+    editor_file: 29926
+    explore_readonly: 30593
+    implement: 63901
+    plan_review_readonly: 33824
+    plan_write_only: 31199
+    web_research: 18991
     worker_readonly: 30140
 absolute_maximums:
     model: accounts/fireworks/models/kimi-k2p7-code

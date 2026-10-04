@@ -113,7 +113,7 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 			Roots:        in.ProjectRoots,
 			ActiveRootID: in.ActiveRootID,
 		},
-		workerFindingsInput(report.Findings),
+		workerReportCitations(report),
 		report.CitedURLs,
 		workerNarrativeInput(report),
 		audit.ev,
@@ -326,4 +326,16 @@ func (r WorkerSummaryEvalResult) PolicyFeedback() *api.WorkerPolicyFeedback {
 		return nil
 	}
 	return &api.WorkerPolicyFeedback{Code: r.HintCode, Effect: string(r.HintEffect), Copy: maps.Clone(r.HintCopy), Details: jsonvalue.CloneMap(r.HintData)}
+}
+
+func workerReportCitations(report WorkerCompletionReport) []guidance.WorkerFindingInput {
+	out := workerFindingsInput(report.Findings)
+	if report.CoverageReview != nil {
+		for _, assessment := range report.CoverageReview.Assessments {
+			for _, citation := range assessment.CitedEvidence {
+				out = append(out, guidance.WorkerFindingInput{Path: citation.Path, Evidence: citation.Handle, Line: citation.Line, Excerpt: citation.Excerpt})
+			}
+		}
+	}
+	return out
 }

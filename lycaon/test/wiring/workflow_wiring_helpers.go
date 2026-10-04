@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -305,7 +306,19 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		if claimed == nil {
 			t.Fatalf("fixture task %s is not claimable", target)
 		}
-		won, err := h.WorkerQueue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+		report := &api.WorkerCompletionReport{LegStatus: "complete"}
+		if claimed.WorkflowRunID != "" {
+			run, err := h.WorkflowMgr.Get(ctx, claimed.WorkflowRunID)
+			testutil.FailErr(t, "load fixture review run", err)
+			manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, run.ID)
+			testutil.FailErr(t, "load fixture review manifest", err)
+			assignment, err := h.WorkflowMgr.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
+			testutil.FailErr(t, "load fixture coverage assignment", err)
+			if assignment != nil {
+				report.CoverageReview = coverageReviewFixture(assignment.Facts)
+			}
+		}
+		won, err := h.WorkerQueue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
 		testutil.FailErr(t, "complete fixture work", err)
 		if !won {
 			t.Fatal("fixture claim lost")
@@ -315,4 +328,23 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 			return
 		}
 	}
+}
+
+func coverageReviewFixture(facts reviewcoverage.Facts) *api.CoverageReview {
+	review := api.CoverageReview{Revision: facts.Revision}
+	for _, rows := range [][]reviewcoverage.Fact{facts.Obligations, facts.Gaps} {
+		for _, fact := range rows {
+			// This wiring fixture settles scanners as failed and stubs worker execution.
+			disposition := reviewcoverage.EssentialOpen
+			assessment := api.CoverageAssessment{ID: fact.ID, Disposition: disposition,
+				Reason:        "The fixture does not execute the required scans or survey workers.",
+				CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "survey#1"}}}
+			for _, obligation := range facts.Obligations {
+				assessment.Obligations = append(assessment.Obligations, obligation.ID)
+			}
+			review.Assessments = append(review.Assessments, assessment)
+		}
+	}
+
+	return &review
 }

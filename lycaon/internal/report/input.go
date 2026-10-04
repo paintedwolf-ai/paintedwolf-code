@@ -4,6 +4,7 @@
 package report
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
@@ -12,8 +13,8 @@ import (
 // ReportInput contains the host-assembled report and its supporting records.
 type ReportInput struct {
 	// CoverageReview is present only for workflows declaring reviewed coverage.
-	CoverageReview *reviewcoverage.Review `json:"coverage_review,omitempty"`
-	CoverageFacts  *reviewcoverage.Facts  `json:"coverage_facts,omitempty"`
+	CoverageReview *api.CoverageReview   `json:"coverage_review,omitempty"`
+	CoverageFacts  *reviewcoverage.Facts `json:"coverage_facts,omitempty"`
 
 	// Title names the workflow document.
 	Title string `json:"title"`
@@ -275,7 +276,7 @@ func (in ReportInput) Completeness() string {
 		if in.CoverageReview == nil || reviewcoverage.Validate(*in.CoverageFacts, *in.CoverageReview) != nil {
 			return CompletenessIncomplete
 		}
-		return in.CoverageReview.Completeness()
+		return reviewcoverage.Completeness(*in.CoverageReview)
 	}
 	return level
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,7 +33,7 @@ func TestCoverageFactsDeduplicateMovedFilesAndFenceRescans(t *testing.T) {
 
 func TestCoverageVerdictCitationsJoinGrounding(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"coverage": workflowdef.VerdictCoverageType}}
-	review := reviewcoverage.Review{Revision: "current", Assessments: []reviewcoverage.Assessment{{ID: "auth", CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "file#1"}}}}}
+	review := api.CoverageReview{Revision: "current", Assessments: []api.CoverageAssessment{{ID: "auth", CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "file#1"}}}}}
 	raw, err := json.Marshal(review)
 	if err != nil {
 		t.Fatalf("coverage fixture: %v", err)
@@ -80,7 +79,7 @@ func TestCoverageAdmissionRejectsStaleReviewWithoutSpendingRound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coverage fixture: %v", err)
 	}
-	raw, err := json.Marshal(reviewcoverage.Review{Revision: facts.Revision, Assessments: []reviewcoverage.Assessment{}})
+	raw, err := json.Marshal(api.CoverageReview{Revision: facts.Revision, Assessments: []api.CoverageAssessment{}})
 	if err != nil {
 		t.Fatalf("coverage fixture: %v", err)
 	}

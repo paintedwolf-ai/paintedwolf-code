@@ -261,7 +261,7 @@ func completenessReason(input ReportInput, level string) string {
 		if input.CoverageReview == nil || reviewcoverage.Validate(*input.CoverageFacts, *input.CoverageReview) != nil {
 			return "Coverage has not been accepted for the current review evidence."
 		}
-		if input.CoverageReview.Completeness() == CompletenessIncomplete {
+		if reviewcoverage.Completeness(*input.CoverageReview) == CompletenessIncomplete {
 			return "Essential review work remains unresolved. See remaining work."
 		}
 		if level == CompletenessMostly {

@@ -2,6 +2,7 @@ package definition
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -258,6 +259,7 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	agents := uniqueAgentIDs(raw.RequiredAgents)
 	spawnable := uniqueAgentIDs(raw.IfSpawnable)
 	def := &ReviewLoopDef{
+		CoverageReviewers:         uniqueAgentIDs(raw.CoverageReviewers),
 		ReconcilesPhase:           raw.ReconcilesPhase,
 		FollowupAttempts:          raw.FollowupAttempts,
 		RequireInventoryAccounted: raw.RequireInventoryAccounted,
@@ -287,6 +289,11 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	}
 	if def.FollowupAttempts > 0 && (!def.CarriesClaims() || !def.CarriesCoverage() || def.ReconcilesPhase == "" || len(agents) == 0 || len(strings.Split(def.VerdictSchema[VerdictDecisionKey], "|")) < 2) {
 		return nil, fmt.Errorf("phase %q: follow-up requires reconciled claims, coverage, a reviewer, and a non-terminal verdict", phaseID)
+	}
+	for _, agent := range def.CoverageReviewers {
+		if !slices.Contains(agents, agent) || !def.CarriesCoverage() || def.ReconcilesPhase == "" {
+			return nil, fmt.Errorf("phase %q: coverage_reviewers requires coverage, reconciles_phase, and required_agents membership", phaseID)
+		}
 	}
 	def.ClaimStatuses = statuses
 	if def.CarriesClaims() && len(statuses) == 0 {
