@@ -22,6 +22,7 @@ permissions:
   issues: write
 
 env:
+  ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
   LOCK_CLOSED_AFTER_DAYS: "14"
   UPVOTE_EXEMPT_THRESHOLD: "10"
 
@@ -32,9 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
+            const { isExempt } = require("./.github/scripts/issue-policy.cjs");
             const LIFECYCLE = {
               "needs-info": {
                 days: 7,
@@ -52,6 +57,7 @@ jobs:
               },
             };
 
+            if (isExempt(context.payload.issue)) return;
             const label = context.payload.label?.name;
             const entry = LIFECYCLE[label];
             if (!entry) return;
@@ -72,12 +78,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           # Manual runs default to a dry run; scheduled runs always act.
           DEBUG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}
         with:
           script: |
+            const { isExempt } = require("./.github/scripts/issue-policy.cjs");
             const LIFECYCLE = {
               "needs-info": { days: 7, reason: "we still need a bit more information to move forward" },
               "needs-repro": { days: 7, reason: "we still need reproduction steps to investigate" },
@@ -92,19 +102,21 @@ jobs:
             const days = (ms) => ms / 86400000;
 
             // ---- close expired lifecycle labels -------------------------------------------
-            for (const [label, cfg] of Object.entries(LIFECYCLE)) {
+            let closedCount = 0;
+            outer: for (const [label, cfg] of Object.entries(LIFECYCLE)) {
               const found = await github.paginate(github.rest.search.issuesAndPullRequests, {
                 q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open is:unlocked label:"${label}"`,
                 per_page: 100,
               });
 
               for (const item of found) {
-                if (item.pull_request) continue;
+                if (item.pull_request || isExempt(item)) continue;
                 if (item.assignee || (item.assignees || []).length) continue;
                 if ((item.reactions?.["+1"] || 0) >= upvoteExempt) continue;
 
-                // When was the label applied? Anything the reporter said after that point means
-                // the ball is back with us, not with them.
+                // When was the label applied? A reply from the reporter after that point means
+                // the ball is back with them. Replies from bystanders do not reset the clock —
+                // they would keep a dead issue open forever.
                 const events = await github.paginate(github.rest.issues.listEvents, {
                   ...context.repo, issue_number: item.number, per_page: 100,
                 });
@@ -119,13 +131,17 @@ jobs:
                   ...context.repo, issue_number: item.number, since: new Date(labeledAt).toISOString(),
                   per_page: 100,
                 });
-                const humanReplied = comments.some(
-                  (c) => c.user?.type !== "Bot" && new Date(c.created_at).getTime() > labeledAt,
+                const authorReplied = comments.some(
+                  (c) =>
+                    c.user?.type !== "Bot" &&
+                    c.user?.login === item.user?.login &&
+                    new Date(c.created_at).getTime() > labeledAt,
                 );
-                if (humanReplied) continue;
+                if (authorReplied) continue;
 
                 core.info(`${debugOnly ? "[dry-run] " : ""}close #${item.number} (${label})`);
                 if (debugOnly) continue;
+                if (closedCount >= 250) { core.info("close cap reached; remainder next run"); break; }
 
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number: item.number,
@@ -135,6 +151,11 @@ jobs:
                   ...context.repo, issue_number: item.number,
                   state: "closed", state_reason: "not_planned",
                 });
+                closedCount += 1;
+                if (closedCount >= 250) {
+                  core.info("close cap reached; remainder next run");
+                  break outer;
+                }
               }
             }
 
@@ -147,7 +168,14 @@ jobs:
 
             let locked = 0;
             for (const item of closed) {
-              if (item.pull_request) continue;
+              if (item.pull_request || isExempt(item)) continue;
+              // Who closed it? Issues the reporter closed themselves (done, working as
+              // intended, no longer reproducible) stay open for anyone to append to —
+              // auto-locking them quietly erases a record the reporter may still need.
+              const full = await github.rest.issues.get({
+                ...context.repo, issue_number: item.number,
+              });
+              if (full.data.closed_by?.login === full.data.user?.login) continue;
               if (locked >= 250) { core.info("lock cap reached; remainder next run"); break; }
               core.info(`${debugOnly ? "[dry-run] " : ""}lock #${item.number}`);
               if (debugOnly) continue;
