@@ -1,6 +1,7 @@
 package sourceapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -112,5 +113,41 @@ func TestPresentationBelongsToOneView(t *testing.T) {
 	}
 	if _, _, err := server.acquireBasisPresentation(owner, uuid.NewString()); !errors.Is(err, pagedview.ErrRevision) {
 		t.Fatalf("unretained basis: %v", err)
+	}
+}
+
+// relabelOnFirstRead renames a root and invalidates the project's views right
+// after the first read returns the pre-rename project, as a concurrent PATCH does.
+type relabelOnFirstRead struct {
+	project.Registry
+	change func()
+}
+
+func (r *relabelOnFirstRead) Get(ctx context.Context, id string) (*project.Project, error) {
+	p, err := r.Registry.Get(ctx, id)
+	if change := r.change; change != nil {
+		r.change = nil
+		change()
+	}
+	return p, err
+}
+
+func TestSourceViewCreatedAcrossARootChangeUsesTheChangedFolders(t *testing.T) {
+	registry := &relabelOnFirstRead{Registry: project.NewMemoryRegistry()}
+	server := newSourceHandlerFixture(t, func(deps *Deps) { deps.ProjectRegistry = registry })
+	p := sourceViewFixtureProject(t, server)
+	label := "renamed-root"
+	registry.change = func() {
+		_, err := registry.Registry.PatchRoot(t.Context(), p.ID, p.Roots[0].ID, project.PatchRootParams{Label: &label})
+		testutil.FailErr(t, "rename root", err)
+		server.InvalidateProjectSourceViews(p.ID)
+	}
+	created := readSourceViewResponse(t, createTreeView(t, server, p, ""), http.StatusCreated).Tree
+	if got := created.Roots[0].Label; got != label {
+		t.Fatalf("view root label=%q, want %q", got, label)
+	}
+	retained := readSourceViewResponse(t, callSourceViewHandler(t, server.HandleGetSourceView, p.ID, created.ID, nil), http.StatusOK).Tree
+	if got := retained.Roots[0].Label; got != label {
+		t.Fatalf("retained view root label=%q, want %q", got, label)
 	}
 }

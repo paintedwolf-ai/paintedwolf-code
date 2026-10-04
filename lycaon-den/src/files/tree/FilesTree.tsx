@@ -406,17 +406,24 @@ export function FilesTree(props: FilesTreeProps) {
     setViewportReader(reader);
     onCleanup(() => reader.clear());
   });
+  // A painting from a replaced view only bridges the gap; reads follow the view that replaced it.
+  const readerPresentation = createMemo(() => {
+    const presented = presentedTree().presentation?.state;
+    const current = state();
+    return presented && current && presented.id !== current.id ? undefined : presented;
+  });
   // Read-ahead fills the presented coordinates; its window resets only when they change.
   createEffect(() => {
     const reader = viewportReader();
     const window = virtualWindow();
-    const revision = presentedIdentity() || projectionIdentity();
+    const presented = readerPresentation();
+    const revision = presented ? presentedIdentity() : projectionIdentity();
     if (!reader || !revision || preparingNavigation()) return;
     const model = untrack(displayModel);
     const start = model.sourceIndex(Math.min(window?.startIndex ?? 0, model.length));
     const end = model.sourceIndex(Math.min(window ? window.endIndex + 1 : Math.min(model.length, 200), model.length));
-    const presented = untrack(() => presentedTree().presentation?.state ?? state());
-    reader.seek(start, Math.max(start + 1, end), presented?.extent.rows ?? 0, revision);
+    const extent = untrack(() => (presented ?? state())?.extent.rows ?? 0);
+    reader.seek(start, Math.max(start + 1, end), extent, revision);
   });
 
   const scrollToDisplayIndex = (

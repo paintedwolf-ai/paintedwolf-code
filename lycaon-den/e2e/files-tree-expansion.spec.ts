@@ -357,8 +357,18 @@ test("the thumb addresses a million-row tree and contracts after collapse", asyn
   await page.getByTestId("files-ctx-collapse-all").click();
   await expect.poll(() => page.getByTestId("files-tree-scroll").evaluate(element => element.scrollHeight)).toBe(101 * 26 + 16);
   await expect(page.locator('.den-files-tree__label--dir[data-path="folder-099"]')).toBeVisible();
+  // Expansion keeps the row at the top of the viewport where it was.
+  const topRow = () => page.getByTestId("files-tree-scroll").evaluate(element => {
+    const top = element.getBoundingClientRect().top;
+    const rows = [...element.querySelectorAll<HTMLElement>(".den-files-tree-virtual__row")]
+      .map(row => ({ path: row.querySelector<HTMLElement>(".den-files-tree__label")?.dataset.path, top: row.getBoundingClientRect().top - top }))
+      .filter(row => row.top > -26).sort((a, b) => a.top - b.top);
+    return rows[0] && { path: rows[0].path, top: Math.round(rows[0].top) };
+  });
+  const anchored = await topRow();
+  expect(anchored?.path).toMatch(/^folder-0\d\d$/);
   await expand(page, project.id);
-  await expect(page.locator('.den-files-tree__label--dir[data-path="folder-099"]')).toBeVisible();
+  await expect.poll(topRow).toEqual(anchored);
   await page.locator('.den-files-tree__label--dir[data-path="."]:visible').first().press("End");
   await expect(page.locator('.den-files-tree__label--file[data-path="folder-099/file-9998.ts"]')).toBeVisible();
 });
