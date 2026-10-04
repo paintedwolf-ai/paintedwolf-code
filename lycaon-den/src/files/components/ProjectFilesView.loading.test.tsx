@@ -12,6 +12,7 @@ import { openSourceInFilesStage } from "./project-files-open.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 import { LycaonApiError } from "../../api/http.ts";
+import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { filesBufferBase } from "../documents/project-files-buffers.ts";
 
 describe("ProjectFilesView single buffer loader", () => {
@@ -179,6 +180,27 @@ describe("ProjectFilesView buffer loader workspace transitions", () => {
       expect(buf?.loadError).toBe(null);
       expect(buf?.documentId).toBe(null);
     });
+  });
+
+  it("reopens a file whose first open the transport dropped", async () => {
+    const base = getLycaonClient()!;
+    let opens = 0;
+    const openEditorDocument = vi.fn(async (...args: Parameters<typeof base.openEditorDocument>) => {
+      if (++opens === 1) throw new BackendTransportError(new TypeError("Failed to fetch"), "reachable");
+      return base.openEditorDocument(...args);
+    });
+    mountWith({ openEditorDocument });
+    await Promise.resolve();
+
+    openPath("a.txt");
+
+    await waitFor(() => {
+      const key = projectFilesState(PROJECT).activeKey;
+      const buf = key ? projectFilesState(PROJECT).byKey[key] : undefined;
+      expect(buf?.loading).toBe(false);
+      expect(buf?.loadError).toBe(null);
+    }, { timeout: 3000 });
+    expect(openEditorDocument).toHaveBeenCalledTimes(2);
   });
 
   it("does not let a superseded read overwrite the buffer that replaced it", async () => {
