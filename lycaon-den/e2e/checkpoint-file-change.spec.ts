@@ -1,15 +1,12 @@
 import { expect } from "@playwright/test";
 import {
-  activateProject, apiConfig, apiFindHarnessProject, liveChatStage,
-  settledChatSessionId, waitHarnessConnected, webE2e,
+  apiConfig, bootstrapChatSession, liveChatStage, settledChatSessionId, webE2e,
 } from "./helpers.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 webE2e("file approval opens its proposed diff in Files without resolving the ask", async ({ page, request }) => {
-  await page.goto("/");
-  await waitHarnessConnected(page);
-  const project = await apiFindHarnessProject(request);
-  await activateProject(page, project.id);
+  // A fresh project keeps earlier specs' sessions and approvals out of this chat.
+  await bootstrapChatSession(page, request);
   const sessionId = await settledChatSessionId(page);
   const { apiUrl, token } = apiConfig();
   const headers = { Authorization: `Bearer ${token}` };

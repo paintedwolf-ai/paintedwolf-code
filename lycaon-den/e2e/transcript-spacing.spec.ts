@@ -46,6 +46,7 @@ async function trace(stream: Locator) {
   return stream.evaluate((host) => {
     const samples: { time: number; tail: number; offset: number; key?: string; phase?: string; scrollTop: number; scrollHeight: number; viewportHeight: number; row?: string }[] = [];
     let active = true;
+    let settled: (typeof samples)[number] | undefined;
     const sample = () => {
       if (!active) return;
       const frame = host.getBoundingClientRect();
@@ -53,11 +54,11 @@ async function trace(stream: Locator) {
       const row = rows.find((row) => row.getBoundingClientRect().bottom > frame.top);
       const end = host.querySelector<HTMLElement>("[data-transcript-end]")!;
       const body = host.querySelector<HTMLElement>(".den-chat-stream-body")!;
-      samples.push({ time: performance.now(), tail: end.getBoundingClientRect().bottom + Number.parseFloat(getComputedStyle(body).paddingBottom) - frame.bottom,
+      settled = { time: performance.now(), tail: end.getBoundingClientRect().bottom + Number.parseFloat(getComputedStyle(body).paddingBottom) - frame.bottom,
         offset: row ? row.getBoundingClientRect().top - frame.top : 0, key: row?.dataset.msgId,
         phase: (window as unknown as { __geometryPhase?: string }).__geometryPhase,
         scrollTop: host.scrollTop, scrollHeight: host.scrollHeight, viewportHeight: frame.height,
-        row: row?.textContent?.slice(0, 80) });
+        row: row?.textContent?.slice(0, 80) };
     };
     // Sample layout deliveries after the application's pre-paint reconciliation.
     // A timer can force fresh layout before ResizeObserver has seen that layout.
@@ -71,10 +72,22 @@ async function trace(stream: Locator) {
     for (const child of host.querySelectorAll(".den-chat-stream-body, .den-chat-stream-inner")) {
       observer.observe(child, { box: "border-box" });
     }
+    // A frame paints its last delivery: rows measured late in one delivery publish the
+    // extent the application reconciles in a later delivery of the same frame.
+    const publish = () => {
+      if (settled) samples.push(settled);
+      settled = undefined;
+    };
+    const frame = () => {
+      publish();
+      if (active) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
     (window as unknown as { __geometryDetails: () => unknown }).__geometryDetails = () => ({ samples });
     (window as unknown as { __geometryTrace: () => typeof samples }).__geometryTrace = () => {
       active = false;
       observer.disconnect();
+      publish();
       return samples;
     };
   });
