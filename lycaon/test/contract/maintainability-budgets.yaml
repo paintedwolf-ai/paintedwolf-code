@@ -10317,7 +10317,7 @@ source_files:
     lycaon-den/src/components/source/editor/editor-commands.ts: 336
     lycaon-den/src/components/source/editor/editor-csp-nonce.ts: 7
     lycaon-den/src/components/source/editor/editor-display-prefs.ts: 15
-    lycaon-den/src/components/source/editor/editor-editing-style.ts: 120
+    lycaon-den/src/components/source/editor/editor-editing-style.ts: 124
     lycaon-den/src/components/source/editor/editor-history.ts: 12
     lycaon-den/src/components/source/editor/editor-line-height.ts: 5
     lycaon-den/src/components/source/editor/editor-scroll-lifecycle.ts: 26
@@ -10930,7 +10930,7 @@ source_files:
     lycaon-den/src/settings/chat/chat-prefs.ts: 26
     lycaon-den/src/settings/chat/notification-prefs.ts: 105
     lycaon-den/src/settings/editor/context-nav-prefs.ts: 67
-    lycaon-den/src/settings/editor/editor-prefs.ts: 405
+    lycaon-den/src/settings/editor/editor-prefs.ts: 415
     lycaon-den/src/settings/editor/external-open-prefs.ts: 151
     lycaon-den/src/settings/editor/file-summary-settings.ts: 84
     lycaon-den/src/settings/editor/settings-editor-copy.ts: 3
@@ -16159,7 +16159,7 @@ test_files:
     lycaon-den/e2e/editor-agent-collaboration.spec.ts: 92
     lycaon-den/e2e/editor-collaboration.spec.ts: 204
     lycaon-den/e2e/editor-diff-scroll.spec.ts: 120
-    lycaon-den/e2e/editor-keyboard-styles.spec.ts: 60
+    lycaon-den/e2e/editor-keyboard-styles.spec.ts: 64
     lycaon-den/e2e/editor-opening-recovery.spec.ts: 72
     lycaon-den/e2e/editor-reactive-lifetime.spec.ts: 39
     lycaon-den/e2e/editor-residency.spec.ts: 255
@@ -16732,7 +16732,7 @@ test_files:
     lycaon-den/src/components/settings/UnderlineTabs.test.tsx: 67
     lycaon-den/src/components/settings/appearance/AppearanceSettings.test.tsx: 122
     lycaon-den/src/components/settings/appearance/EditReviewSettingsPanel.test.tsx: 23
-    lycaon-den/src/components/settings/appearance/EditorSettingsPanel.test.tsx: 296
+    lycaon-den/src/components/settings/appearance/EditorSettingsPanel.test.tsx: 297
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.layout.test.tsx: 78
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.message-times.test.tsx: 40
     lycaon-den/src/components/settings/appearance/GeneralSettingsPanel.notifications.test.tsx: 128
@@ -16826,7 +16826,7 @@ test_files:
     lycaon-den/src/components/source/editor/cursor-margin.test.ts: 76
     lycaon-den/src/components/source/editor/editor-command-bridge.test.ts: 92
     lycaon-den/src/components/source/editor/editor-commands.test.ts: 81
-    lycaon-den/src/components/source/editor/editor-editing-style.test.ts: 164
+    lycaon-den/src/components/source/editor/editor-editing-style.test.ts: 184
     lycaon-den/src/components/source/editor/editor-scroll-lifecycle.test.ts: 41
     lycaon-den/src/components/source/editor/editor-scroll-paint.test.ts: 146
     lycaon-den/src/components/source/editor/editor-scroll-position.test.ts: 21
@@ -17370,7 +17370,7 @@ test_files:
     lycaon-den/src/settings/chat/chat-prefs.test.ts: 33
     lycaon-den/src/settings/chat/notification-prefs.test.ts: 96
     lycaon-den/src/settings/editor/context-nav-prefs.test.ts: 53
-    lycaon-den/src/settings/editor/editor-prefs.test.ts: 276
+    lycaon-den/src/settings/editor/editor-prefs.test.ts: 300
     lycaon-den/src/settings/editor/external-open-prefs.test.ts: 86
     lycaon-den/src/settings/editor/file-summary-settings.test.ts: 133
     lycaon-den/src/settings/extensions/extension-suggestions-model.test.ts: 35
@@ -23772,7 +23772,7 @@ ts_local_dependencies:
     lycaon-den/src/settings/chat/chat-prefs.ts: 3
     lycaon-den/src/settings/chat/notification-prefs.ts: 4
     lycaon-den/src/settings/editor/context-nav-prefs.ts: 3
-    lycaon-den/src/settings/editor/editor-prefs.ts: 5
+    lycaon-den/src/settings/editor/editor-prefs.ts: 7
     lycaon-den/src/settings/editor/external-open-prefs.ts: 3
     lycaon-den/src/settings/editor/file-summary-settings.ts: 2
     lycaon-den/src/settings/editor/settings-editor-copy.ts: 0
