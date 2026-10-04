@@ -22,7 +22,8 @@ fi
 export LYCAON_REPO_ROOT="${_e2e_root}"
 export LYCAON_E2E_COMPOSE_FILE="${_e2e_root}/lycaon/test/fixtures/e2e/docker-compose.e2e.yml"
 mkdir -p "${LYCAON_E2E_GO_CACHE_DIR}/mod" "${LYCAON_E2E_GO_CACHE_DIR}/build" \
-  "${LYCAON_E2E_GO_CACHE_DIR}/cargo-registry" "${LYCAON_E2E_GO_CACHE_DIR}/document-core-target"
+  "${LYCAON_E2E_GO_CACHE_DIR}/cargo-registry" "${LYCAON_E2E_GO_CACHE_DIR}/document-core-target" \
+  "${LYCAON_E2E_GO_CACHE_DIR}/gitengine"
 export LYCAON_E2E_DOCKER_PROJECT="${LYCAON_E2E_DOCKER_PROJECT:-$(e2e_docker_random_project lycae2e)}"
 export LYCAON_E2E_DOCKER_STACK=1
 export LYCAON_E2E_UID="${LYCAON_E2E_UID:-$(id -u)}"

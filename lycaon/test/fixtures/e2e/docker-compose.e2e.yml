@@ -58,6 +58,42 @@ services:
         mkdir -p "${LYCAON_E2E_STATE_DIR}/document-core"
         cp /cargo-target/release/pw-document-core "${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core"
 
+  # Git surfaces require the pinned toolchain for the container's platform.
+  gitengine:
+    # Reuses the document-core image, which has rustc for the platform probe.
+    image: rust:1.97.1-bookworm
+    user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
+    working_dir: /workspace
+    volumes:
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/scripts/gitengine-fetch.sh
+        target: /workspace/scripts/gitengine-fetch.sh
+        read_only: true
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon/config/gitengine/pin.yaml
+        target: /workspace/lycaon/config/gitengine/pin.yaml
+        read_only: true
+      - type: bind
+        source: ${LYCAON_E2E_STATE_DIR}
+        target: ${LYCAON_E2E_STATE_DIR}
+      - type: bind
+        source: ${LYCAON_E2E_GO_CACHE_DIR}/gitengine
+        target: /gitengine-cache
+    environment:
+      GITENGINE_DEST: /gitengine-cache/gitengine
+      HOME: /tmp
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        # Shards share the cached tree; a fetch reshapes it in place.
+        flock /gitengine-cache/.e2e-fetch.lock sh -ec '
+          bash /workspace/scripts/gitengine-fetch.sh
+          mkdir -p "${LYCAON_E2E_STATE_DIR}/engine-root"
+          cp -a /gitengine-cache/gitengine "${LYCAON_E2E_STATE_DIR}/engine-root/gitengine"
+        '
+
   sidecar:
     # Match the module's pinned toolchain.
     image: golang:1.26.8-bookworm
@@ -68,6 +104,8 @@ services:
       model-fixture:
         condition: service_started
       document-core:
+        condition: service_completed_successfully
+      gitengine:
         condition: service_completed_successfully
     volumes:
       - type: bind
@@ -106,6 +144,7 @@ services:
       LYCAON_DEV: "1"
       LYCAON_DEV_CORS: "1"
       LYCAON_DOCUMENT_CORE_BINARY: ${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core
+      LYCAON_ENGINE_ROOT: ${LYCAON_E2E_STATE_DIR}/engine-root
       GOPROXY: https://proxy.golang.org,direct
       GOCACHE: /go-build-cache
       HOME: /tmp
