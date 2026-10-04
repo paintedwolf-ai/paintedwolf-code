@@ -9951,7 +9951,7 @@ source_files:
     lycaon-den/src/components/CriticalStopStage.tsx: 463
     lycaon-den/src/components/EngineStartupStage.tsx: 129
     lycaon-den/src/components/FileEditDiff.tsx: 69
-    lycaon-den/src/components/GitCheckout.tsx: 765
+    lycaon-den/src/components/GitCheckout.tsx: 770
     lycaon-den/src/components/GitStrip.tsx: 775
     lycaon-den/src/components/HostFolderDialog.tsx: 79
     lycaon-den/src/components/ListRowActions.tsx: 44
