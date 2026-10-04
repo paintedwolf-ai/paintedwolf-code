@@ -138,7 +138,7 @@ func TestSourceViewCreatedAcrossARootChangeUsesTheChangedFolders(t *testing.T) {
 	p := sourceViewFixtureProject(t, server)
 	label := "renamed-root"
 	registry.change = func() {
-		_, err := registry.Registry.PatchRoot(t.Context(), p.ID, p.Roots[0].ID, project.PatchRootParams{Label: &label})
+		_, err := registry.PatchRoot(t.Context(), p.ID, p.Roots[0].ID, project.PatchRootParams{Label: &label})
 		testutil.FailErr(t, "rename root", err)
 		server.InvalidateProjectSourceViews(p.ID)
 	}
