@@ -307,7 +307,7 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	body, _, err := prompts.DefaultBundledLayout().ReadBundled(ModeTemplateRef(profile.ModeRefs[0]))
 	testutil.FailErr(t, "read review adjudicate mode", err)
 	text := string(body)
-	for _, want := range []string{`"cited_evidence"`, `"handle"`, "never fields inside it", "Do not use an `evidence` key"} {
+	for _, want := range []string{`"cited_evidence"`, `"handle"`, "Claims and coverage assessments also carry their own", "Do not use an `evidence` key"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("review adjudicate mode missing %q", want)
 		}
