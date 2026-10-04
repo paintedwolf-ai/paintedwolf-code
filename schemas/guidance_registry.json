@@ -560,6 +560,12 @@
       "emit": "guard:complete_leg",
       "summary": "This session has no worker leg to close."
     },
+    "COMPLETE_LEG_COVERAGE_INVALID": {
+      "branch_instruction": "Repair the coverage assessment and resubmit complete_leg within this leg.",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The coverage assessment is missing, incomplete, or stale."
+    },
     "COMPLETE_LEG_STATUS_REQUIRED": {
       "branch_instruction": "Correct the report shape and actual status, then submit complete_leg",
       "category": "recoverable",

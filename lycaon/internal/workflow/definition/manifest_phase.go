@@ -122,6 +122,7 @@ type BlueprintDef struct {
 
 // ReviewLoopDef defines a bounded parallel review cycle.
 type ReviewLoopDef struct {
+	CoverageReviewers         []string
 	FollowupAttempts          int
 	ReconcilesPhase           string
 	RequireInventoryAccounted bool
@@ -383,13 +384,7 @@ func MergePhaseDef(parent, child PhaseDef) PhaseDef {
 		}
 	}
 	if child.ReviewLoop != nil {
-		out.ReviewLoop = &ReviewLoopDef{
-			EvidenceKey:    child.ReviewLoop.EvidenceKey,
-			IterationCap:   child.ReviewLoop.IterationCap,
-			VerdictSchema:  copyStringMap(child.ReviewLoop.VerdictSchema),
-			RequiredAgents: append([]string(nil), child.ReviewLoop.RequiredAgents...),
-			IfSpawnable:    append([]string(nil), child.ReviewLoop.IfSpawnable...),
-		}
+		out.ReviewLoop = cloneReviewLoop(child.ReviewLoop)
 	}
 	if child.DepthParam != "" {
 		out.DepthParam = child.DepthParam

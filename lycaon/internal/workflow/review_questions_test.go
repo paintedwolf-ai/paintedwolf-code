@@ -14,7 +14,7 @@ func TestQuestionClosureRequiresInvestigationOrBoundedImmateriality(t *testing.T
 	def := workflowdef.ReviewLoopDef{FollowupAttempts: 2, ClaimStatuses: map[string]workflowdef.ClaimClass{"unresolved": workflowdef.ClaimOpen, "refuted": workflowdef.ClaimFailed}}
 	claims := []VerdictClaim{{ID: "c6", Status: "unresolved"}}
 	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6", ReviewQuestion: ReviewQuestion{MissingFact: "First admission consent", Obligations: []string{"execute/leg-1"}}}}
-	review := &reviewcoverage.Review{Assessments: []reviewcoverage.Assessment{{ID: "question/c6", Disposition: reviewcoverage.EssentialOpen}}}
+	review := &api.CoverageReview{Assessments: []api.CoverageAssessment{{ID: "question/c6", Disposition: reviewcoverage.EssentialOpen}}}
 	if err := checkQuestionClosure(def, claims, questions, nil, "challenge", review); err == nil {
 		t.Fatal("uninvestigated question closed")
 	}
@@ -47,7 +47,7 @@ func TestQuestionClosureRequiresFreshSuccessfulReview(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{FollowupAttempts: 2, RequiredAgents: []string{"skeptic"}, ClaimStatuses: map[string]workflowdef.ClaimClass{"unresolved": workflowdef.ClaimOpen, "refuted": workflowdef.ClaimFailed}}
 	claims := []VerdictClaim{{ID: "c6", Status: "refuted"}}
 	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6"}}
-	review := &reviewcoverage.Review{Assessments: []reviewcoverage.Assessment{{ID: "question/c6", Disposition: reviewcoverage.Covered}}}
+	review := &api.CoverageReview{Assessments: []api.CoverageAssessment{{ID: "question/c6", Disposition: reviewcoverage.Covered}}}
 	now := time.Now().UTC()
 	tasks := []api.WorkerTask{{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, CompletedAt: &now}}
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err == nil {

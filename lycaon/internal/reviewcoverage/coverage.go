@@ -9,27 +9,30 @@ import (
 	"slices"
 	"strings"
 
+	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Fact is a host observation bound to the review revision.
 type Fact struct {
-	InvestigationAttempts int            `json:"investigation_attempts,omitempty"`
-	FollowupLimit         int            `json:"followup_limit,omitempty"`
-	InvestigationActive   bool           `json:"investigation_active,omitempty"`
-	ReviewRequired        bool           `json:"review_required,omitempty"`
-	Obligations           []string       `json:"obligations,omitempty"`
-	Blocking              bool           `json:"blocking,omitempty"`
-	ID                    string         `json:"id"`
-	Kind                  string         `json:"kind"`
-	Subject               string         `json:"subject"`
-	FileCount             int            `json:"file_count,omitempty"`
-	Count                 int            `json:"count,omitempty"`
-	Paths                 []string       `json:"paths,omitempty"`
-	Scans                 []string       `json:"scans,omitempty"`
-	Tasks                 []string       `json:"tasks,omitempty"`
-	Question              string         `json:"question,omitempty"`
-	Scope                 *api.TaskScope `json:"scope,omitempty"`
+	Phase                 string                `json:"phase,omitempty"`
+	Distribution          *scancoverage.Profile `json:"distribution,omitempty"`
+	InvestigationAttempts int                   `json:"investigation_attempts,omitempty"`
+	FollowupLimit         int                   `json:"followup_limit,omitempty"`
+	InvestigationActive   bool                  `json:"investigation_active,omitempty"`
+	ReviewRequired        bool                  `json:"review_required,omitempty"`
+	Obligations           []string              `json:"obligations,omitempty"`
+	Blocking              bool                  `json:"blocking,omitempty"`
+	ID                    string                `json:"id"`
+	Kind                  string                `json:"kind"`
+	Subject               string                `json:"subject"`
+	FileCount             int                   `json:"file_count,omitempty"`
+	Count                 int                   `json:"count,omitempty"`
+	Paths                 []string              `json:"paths,omitempty"`
+	Scans                 []string              `json:"scans,omitempty"`
+	Tasks                 []string              `json:"tasks,omitempty"`
+	Question              string                `json:"question,omitempty"`
+	Scope                 *api.TaskScope        `json:"scope,omitempty"`
 }
 
 // Facts identifies the complete input to a coverage review.
@@ -37,21 +40,6 @@ type Facts struct {
 	Revision    string `json:"revision"`
 	Obligations []Fact `json:"obligations"`
 	Gaps        []Fact `json:"gaps"`
-}
-
-// Assessment states whether an obligation or observed limitation leaves work open.
-type Assessment struct {
-	ID            string                               `json:"id"`
-	Disposition   string                               `json:"disposition"`
-	Reason        string                               `json:"reason"`
-	Obligations   []string                             `json:"obligations,omitempty"`
-	CitedEvidence []api.CitationGroundingCitedEvidence `json:"cited_evidence"`
-}
-
-// Review is persisted inside the declaring workflow's verdict evidence.
-type Review struct {
-	Revision    string       `json:"revision"`
-	Assessments []Assessment `json:"assessments"`
 }
 
 const (
@@ -82,7 +70,7 @@ func (f *Facts) Seal() {
 
 // Validate requires an explicit assessment of every current fact. Evidence is
 // resolved by the workflow's grounding audit after this structural check.
-func Validate(f Facts, r Review) error {
+func Validate(f Facts, r api.CoverageReview) error {
 	if r.Revision != f.Revision || r.Revision == "" {
 		return fmt.Errorf("coverage revision is stale; assess the current coverage facts")
 	}
@@ -139,8 +127,8 @@ func Validate(f Facts, r Review) error {
 	return validateQuestionObligations(f, r)
 }
 
-func validateQuestionObligations(f Facts, r Review) error {
-	assessments := map[string]Assessment{}
+func validateQuestionObligations(f Facts, r api.CoverageReview) error {
+	assessments := map[string]api.CoverageAssessment{}
 	for _, a := range r.Assessments {
 		assessments[a.ID] = a
 	}
@@ -166,7 +154,7 @@ func validateQuestionObligations(f Facts, r Review) error {
 }
 
 // Completeness reflects reviewed work; callers retain independent hard failures.
-func (r Review) Completeness() string {
+func Completeness(r api.CoverageReview) string {
 	level := "complete"
 	for _, a := range r.Assessments {
 		switch a.Disposition {

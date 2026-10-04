@@ -1951,6 +1951,21 @@ type CostSummary struct {
 	HostMeasuredTokens int `json:"host_measured_tokens,omitempty"`
 }
 
+// CoverageAssessment
+type CoverageAssessment struct {
+	ID            string                           `json:"id"`
+	Disposition   string                           `json:"disposition"`
+	Reason        string                           `json:"reason"`
+	Obligations   []string                         `json:"obligations,omitempty"`
+	CitedEvidence []CitationGroundingCitedEvidence `json:"cited_evidence"`
+}
+
+// CoverageReview
+type CoverageReview struct {
+	Revision    string               `json:"revision"`
+	Assessments []CoverageAssessment `json:"assessments"`
+}
+
 // CreateApprovalGrantRequest Deliberate Settings creation of one durable grant with scope project or device. Category socket_path takes socket_path; category host takes host_pattern. Execution cards and model tools cannot call this.
 type CreateApprovalGrantRequest struct {
 	Category ApprovalGrantCategory `json:"category"`
@@ -8473,6 +8488,7 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
+	CoverageReview      *CoverageReview            `json:"coverage_review,omitempty"`
 	LegStatus           string                     `json:"leg_status"`
 	FilesModified       []string                   `json:"files_modified,omitempty"`
 	ObjectivesMet       []string                   `json:"objectives_met,omitempty"`

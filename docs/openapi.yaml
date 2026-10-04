@@ -27923,6 +27923,50 @@ components:
             Empty means "based on primary." Must be a non-terminal overlay
             (pending, applying, rebasing) on the same parent session, else
             spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
+    CoverageAssessment:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - disposition
+        - reason
+        - cited_evidence
+      properties:
+        id:
+          type: string
+        disposition:
+          type: string
+          enum:
+            - satisfied
+            - covered
+            - immaterial
+            - material_open
+            - essential_open
+        reason:
+          type: string
+        obligations:
+          type: array
+          items:
+            type: string
+        cited_evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitationGroundingCitedEvidence'
+    CoverageReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - assessments
+      properties:
+        revision:
+          type: string
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoverageAssessment'
     WorkerCompletionFinding:
       x-go-generate: true
       type: object
@@ -27973,6 +28017,9 @@ components:
       required:
         - leg_status
       properties:
+        coverage_review:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CoverageReview'
         leg_status:
           type: string
         files_modified:

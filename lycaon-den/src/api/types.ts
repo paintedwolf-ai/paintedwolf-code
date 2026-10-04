@@ -10888,6 +10888,18 @@ export interface components {
              */
             base_overlay_id?: string;
         };
+        CoverageAssessment: {
+            id: string;
+            /** @enum {string} */
+            disposition: "satisfied" | "covered" | "immaterial" | "material_open" | "essential_open";
+            reason: string;
+            obligations?: string[];
+            cited_evidence: components["schemas"]["CitationGroundingCitedEvidence"][];
+        };
+        CoverageReview: {
+            revision: string;
+            assessments: components["schemas"]["CoverageAssessment"][];
+        };
         WorkerCompletionFinding: {
             path: string;
             evidence?: string;
@@ -10906,6 +10918,7 @@ export interface components {
             reason?: string;
         };
         WorkerCompletionReport: {
+            coverage_review?: components["schemas"]["CoverageReview"];
             leg_status: string;
             files_modified?: string[];
             objectives_met?: string[];
@@ -29648,6 +29661,8 @@ export type WorkspaceProvisionStrategy = components["schemas"]["WorkspaceProvisi
 export type WorkspacePreparation = components["schemas"]["WorkspacePreparation"];
 export type TaskScopeMode = components["schemas"]["TaskScopeMode"];
 export type TaskScope = components["schemas"]["TaskScope"];
+export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
+export type CoverageReview = components["schemas"]["CoverageReview"];
 export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
 export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
 export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];

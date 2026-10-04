@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // notCoveredItems separates unresolved work from disclosed tool limitations.
@@ -70,7 +71,7 @@ func coverageAssessmentItems(input ReportInput) []string {
 	return out
 }
 
-func coverageAssessmentText(input ReportInput, a reviewcoverage.Assessment) string {
+func coverageAssessmentText(input ReportInput, a api.CoverageAssessment) string {
 	subject := a.ID
 	if input.CoverageFacts != nil {
 		for _, rows := range [][]reviewcoverage.Fact{input.CoverageFacts.Obligations, input.CoverageFacts.Gaps} {

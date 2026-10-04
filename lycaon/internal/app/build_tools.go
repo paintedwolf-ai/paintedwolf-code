@@ -214,6 +214,10 @@ func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
 				if err != nil {
 					return "", err
 				}
+				in.CoverageAssignment, err = b.workflowMgr.CoverageAssignment(ctx, run, manifest, agentType)
+				if err != nil {
+					return "", err
+				}
 				if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory {
 					inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanStore, run.ID)
 					if err != nil {

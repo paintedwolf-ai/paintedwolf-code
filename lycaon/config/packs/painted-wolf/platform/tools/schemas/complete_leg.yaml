@@ -2,6 +2,40 @@ description: Finish this worker leg. Call once when the assignment is done or bl
 schema:
   type: object
   properties:
+    coverage_review:
+      type: object
+      description: Required when the host assignment declares coverage review. Use its revision and assess every supplied id, including exclusions, against full-scope facts.
+      properties:
+        revision:
+          type: string
+        assessments:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              disposition:
+                type: string
+                enum: [satisfied, covered, immaterial, material_open, essential_open]
+              reason: { type: string, maxLength: 1200 }
+              obligations:
+                type: array
+                items: { type: string }
+              cited_evidence:
+                type: array
+                maxItems: 12
+                items:
+                  type: object
+                  properties:
+                    handle: { type: string }
+                    path: { type: string }
+                    line: { type: integer }
+                    excerpt: { type: string }
+                  additionalProperties: false
+            required: [id, disposition, reason, cited_evidence]
+            additionalProperties: false
+      required: [revision, assessments]
+      additionalProperties: false
     verification:
       type: object
       description: Validation chosen for this assignment. The host derives outcomes from receipts; this never waives a workflow gate.

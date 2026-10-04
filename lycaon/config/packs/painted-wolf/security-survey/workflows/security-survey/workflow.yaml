@@ -141,6 +141,7 @@ phases:
       reconciles_phase: claims
       followup_attempts: 2
       required_agents: [skeptic]
+      coverage_reviewers: [skeptic]
       if_spawnable: [web-researcher]
       verdict_schema:
         verdict: CHALLENGED|NEEDS_INVESTIGATION

@@ -18,23 +18,21 @@ type CompleteLegRecord struct {
 }
 
 // CompleteLegDecoder validates the report stored with an accepted call.
-type CompleteLegDecoder func(args map[string]any) (CompleteLegRecord, bool)
+type CompleteLegDecoder func(context.Context, map[string]any, tools.ToolContext) (CompleteLegRecord, error)
 
 func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
-	return func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if tools.OutOfSessionScope(CompleteLegTool, tctx) {
 			return "", &tools.ToolReject{
 				Code: "COMPLETE_LEG_ADDRESSED_SESSION",
 				Data: map[string]any{"tool": CompleteLegTool},
 			}
 		}
-		record, ok := decode(args)
-		if !ok {
-			return "", &tools.ToolReject{
-				Code: "COMPLETE_LEG_STATUS_REQUIRED",
-				Data: map[string]any{"tool": CompleteLegTool},
-			}
+		record, err := decode(ctx, args, tctx)
+		if err != nil {
+			return "", err
 		}
+
 		raw, err := surveyjson.Marshal(map[string]any{
 			"recorded":          true,
 			"leg_status":        record.LegStatus,

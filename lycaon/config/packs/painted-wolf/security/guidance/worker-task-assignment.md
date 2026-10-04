@@ -11,6 +11,14 @@ Blocked? **`request_decision`** then stop. Set **blocker_class** from the struct
 
 Use `scan_query` with these `scan_ids`, `kind: sca`, `view: groups` and `offset: next_offset` to retrieve remaining groups. Check applicability, fixed versions and current primary sources independently of proposed claims. Return each assessed group id and its conclusion; unread or inconclusive groups remain unassessed. Published `fixed_versions` are range boundaries, not a guaranteed recommended upgrade.
 
+{% endif %}{% if coverage_assignment %}Coverage review assignment (host scope; candidate judgments remain claims):
+
+{{ coverage_assignment }}
+
+Assess every fact in `facts` independently. Check exclusions against the full directory, extension and construct counts; path samples do not establish the role of unsampled files. Use `scan_query(view: coverage, scan_ids, warning_kind, path?, construct?, offset?, limit?)` for bounded drilldown, then inspect relevant source or build configuration. Do not enumerate every warning. Reuse this leg's evidence and tool budget; identify remaining material or essential uncertainty explicitly.
+
+Return `complete_leg.coverage_review` with `facts.revision` and one assessment per fact: id, disposition, reason, affected obligations for gaps, and cited_evidence. Use satisfied for obligations, covered or immaterial for resolved gaps, material_open or essential_open for unfinished work. Explain why evidence supports the affected scope, not only a sampled file.
+
 {% endif %}Leg assignment ({{ agent_type }}):
 {% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay){% endif %}.
 
