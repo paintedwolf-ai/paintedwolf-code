@@ -194,7 +194,7 @@ export function ProjectFilesView(props: Props) {
   /** Requests name the chat selected when they run; nothing observes it. */
   const sourceSessionId = () => untrack(chatSessionId);
   const { filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
-    treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor, directoryEntries, observeDirectory,
+    treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor, directoryEntries, confirmDirectoryChange, observeDirectory,
   } = createFilesWorkspace({
     projectId: props.projectId, roots: () => props.roots, client, chatSessionId,
     reachable: () => isBackendReachable(props.appStore.state.sidecarStatus),
@@ -565,7 +565,10 @@ export function ProjectFilesView(props: Props) {
         setDeleteGuard({ rootId, path, resolve });
       });
     },
-    confirmChange: (change: SourceChange) => tree?.confirmChange(change),
+    confirmChange: (change: SourceChange) => {
+      confirmDirectoryChange(change);
+      tree?.confirmChange(change);
+    },
     openFile: (args: { rootId: string; rootLabel: string; path: string }) =>
       openFilesBuffer(props.projectId, { ...args, intent: "permanent" }),
     rootLabelFor: scope.rootLabelFor,
