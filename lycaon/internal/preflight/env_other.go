@@ -1,14 +1,12 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package preflight
 
 import "errors"
 
-// The probe set is macOS-shaped; these stubs keep the package building on Linux
-// CI. Probes treat an error here as "no evidence", never as a failure.
+// The disk probe treats this error as "no evidence", never as a failure.
+var errNoHostFacts = errors.New("preflight: host facts are unavailable on this platform")
 
-var errNotDarwin = errors.New("preflight: host facts are macOS-only")
+var osProductVersion func() (string, error)
 
-func osProductVersion() (string, error) { return "", errNotDarwin }
-
-func freeBytes(string) (uint64, error) { return 0, errNotDarwin }
+func freeBytes(string) (uint64, error) { return 0, errNoHostFacts }

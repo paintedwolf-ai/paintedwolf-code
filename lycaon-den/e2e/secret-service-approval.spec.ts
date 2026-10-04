@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { managedSecretId } from "../src/api/managed-secret-reference.ts";
 import type { ApprovalGrantsResponse, ManagedSecret, ManagedSecretUseList } from "../src/api/types.ts";
 import {
@@ -9,6 +9,30 @@ import {
 } from "./helpers.ts";
 import { startSecretService } from "./secret-service-fixture.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
+
+/** Resolves true when the call waits on an unconfined-run card, false once it has a result. */
+async function awaitUnconfinedRun(request: APIRequestContext, sessionId: string, callId: string) {
+  const { apiUrl, token } = apiConfig();
+  const headers = { Authorization: `Bearer ${token}` };
+  let unconfined: boolean | undefined;
+  await expect.poll(async () => {
+    const checkpoints = await request.get(`${apiUrl}/v1/sessions/${sessionId}/checkpoints`, { headers });
+    expect(checkpoints.ok(), await checkpoints.text()).toBeTruthy();
+    const { checkpoints: pending } = await checkpoints.json() as {
+      checkpoints: Array<{ status: string; tool_approval?: { tool_call_id?: string; plan?: { presentation?: { gate?: string } } } }>;
+    };
+    if (pending.some((checkpoint) => checkpoint.status === "pending" && checkpoint.tool_approval?.tool_call_id === callId &&
+      checkpoint.tool_approval.plan?.presentation?.gate === "unobserved_channel")) {
+      return unconfined = true;
+    }
+    const messages = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, { headers });
+    expect(messages.ok(), await messages.text()).toBeTruthy();
+    const { messages: rows } = await messages.json() as { messages: Array<{ tool_result?: { tool_call_id?: string } }> };
+    if (rows.some((message) => message.tool_result?.tool_call_id === callId)) return unconfined = false;
+    return undefined;
+  }, { timeout: 45_000 }).not.toBeUndefined();
+  return unconfined!;
+}
 
 webE2e("managed service approval shows recipients and a stable chat primary", async ({ page, request }) => {
   await page.goto("/");
@@ -73,23 +97,25 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     });
     expect(posture.ok(), await posture.text()).toBeTruthy();
     const name = `Live service password ${randomUUID().slice(0, 8)}`;
-    const created = await request.post(`${apiUrl}/v1/projects/${project.id}/secrets`, {
-      headers,
-      data: { operation_id: randomUUID(), name, purpose: "Live service verification", secret_value: service.password },
-    });
-    expect(created.ok(), await created.text()).toBeTruthy();
-    const secret = await created.json() as ManagedSecret;
-    const secretId = managedSecretId(secret.reference);
-    expect(secretId).toBeTruthy();
     const manual = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: false } });
     expect(manual.ok(), await manual.text()).toBeTruthy();
     const prompt = await apiPostPrompt(request, sessionId, { text: "Configure the local test service and verify authenticated requests." });
     expect(prompt.ok(), await prompt.text()).toBeTruthy();
     const driver = manualHarnessTools(request, sessionId);
-    await driver.loadTools("command", "http_request", "update_progress");
+    await driver.loadTools("secret_generate", "command", "http_request", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Configure the service\n- [ ] Verify authenticated requests\n",
     }));
+    // A person-held value needs desktop presence; a project-scoped generated value asks through the ordinary card.
+    await driver.completed(await driver.invoke("secret_generate", {
+      name, purpose: "Live service verification", scope: "project", format: "alphanumeric",
+    }));
+    const listed = await request.get(`${apiUrl}/v1/projects/${project.id}/secrets`, { headers });
+    expect(listed.ok(), await listed.text()).toBeTruthy();
+    const secret = (await listed.json() as { secrets: ManagedSecret[] }).secrets.find((entry) => entry.name === name);
+    expect(secret).toMatchObject({ origin: "generated", scope: "project" });
+    const secretId = managedSecretId(secret!.reference);
+    expect(secretId).toBeTruthy();
     const capability = { loopback_connect: { ports: [service.port] } };
     const python = [
       "import http.client, os",
@@ -100,7 +126,7 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     ].join("; ");
     const setup = await driver.invoke("command", {
       command: "/usr/bin/python3 -", stdin: python, cwd: ".",
-      env: { SERVICE_PASSWORD: secret.reference }, secret_use: { services: [service.origin] },
+      env: { SERVICE_PASSWORD: secret!.reference }, secret_use: { services: [service.origin] },
       capability_request: capability,
     });
     const cards = () => liveChatStage(page).getByTestId("tool-approval-card");
@@ -109,19 +135,25 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     await expect(cards().getByTestId("approval-location-destination")).toContainText([service.origin]);
     await expect(cards().getByTestId("approval-approve-primary")).toContainText("Allow for this chat");
     expect(service.configured()).toBe(false);
-    await expect(page.locator("body")).not.toContainText(service.password);
     await expect(page.getByTestId("shell-workspace-veil")).toHaveAttribute("aria-hidden", "true", { timeout: 30_000 });
     await cards().screenshot({ path: "/tmp/secret-service-live-approval.png", animations: "disabled" });
     await cards().getByTestId("approval-approve-primary").click();
+    // A host without a command sandbox (Linux) asks once more to run the setup unconfined.
+    if (await awaitUnconfinedRun(request, sessionId, setup)) {
+      await expect(cards()).toHaveCount(1);
+      await expect(cards().getByTestId("approval-secret-names")).toHaveCount(0);
+      await cards().getByTestId("approval-approve-primary").click();
+    }
     const setupOutput = await driver.completed(setup);
     const setupResult = JSON.parse(setupOutput.slice(setupOutput.indexOf("{"))) as { ok: boolean; tail: string };
     expect(setupResult.ok, setupResult.tail).toBe(true);
     expect(setupResult.tail).toContain("service configured");
     expect(service.configured()).toBe(true);
     await expect(cards()).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText(service.password());
 
     const httpArgs = {
-      url: `${service.origin}/data`, auth: { scheme: "basic", username: "test", password: secret.reference },
+      url: `${service.origin}/data`, auth: { scheme: "basic", username: "test", password: secret!.reference },
       capability_request: capability,
     };
     for (let index = 0; index < 3; index++) {
@@ -161,7 +193,7 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     await cards().getByTestId("approval-approve-primary").click();
     expect(await driver.completed(next)).toContain("authenticated");
     expect(service.authenticatedRequests()).toBe(4);
-    await expect(page.locator("body")).not.toContainText(service.password);
+    await expect(page.locator("body")).not.toContainText(service.password());
     const usesResponse = await request.get(`${apiUrl}/v1/projects/${project.id}/secrets/${secretId}/uses`, { headers });
     expect(usesResponse.ok(), await usesResponse.text()).toBeTruthy();
     const uses = await usesResponse.json() as ManagedSecretUseList;

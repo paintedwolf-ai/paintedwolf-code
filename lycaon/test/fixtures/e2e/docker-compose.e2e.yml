@@ -1,14 +1,20 @@
 # Tier B browser E2E with random host ports.
+# LYCAON_E2E_NETWORK_MODE=host puts the services on the host's network, where
+# the engine reaches fixtures that specs serve on host loopback.
 services:
   model-fixture:
     image: oven/bun:1.3.14
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
+    environment:
+      LISTEN_HOST: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
+      LISTEN_PORT: ${LYCAON_E2E_MODEL_FIXTURE_PORT:-11434}
     command:
       - bun
       - -e
       - |
         Bun.serve({
-          hostname: "0.0.0.0",
-          port: 11434,
+          hostname: process.env.LISTEN_HOST,
+          port: Number(process.env.LISTEN_PORT),
           fetch(request) {
             const path = new URL(request.url).pathname;
             if (request.method === "GET" && path === "/api/tags") {
@@ -97,6 +103,7 @@ services:
   sidecar:
     # Match the module's pinned toolchain.
     image: golang:1.26.8-bookworm
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     # The tests read the store, restore marker, and staging files it writes.
     user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace/lycaon
@@ -126,6 +133,11 @@ services:
       - type: bind
         source: ${LYCAON_E2E_PROJECT_DIR}
         target: ${LYCAON_E2E_PROJECT_DIR}
+      # Specs install the example packs from their checkout paths.
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/lycaon/config/fixtures/example-packs
+        target: ${LYCAON_REPO_ROOT}/lycaon/config/fixtures/example-packs
+        read_only: true
       # Module and build caches outlive the per-run compose project.
       - type: bind
         source: ${LYCAON_E2E_GO_CACHE_DIR}/mod
@@ -134,7 +146,7 @@ services:
         source: ${LYCAON_E2E_GO_CACHE_DIR}/build
         target: /go-build-cache
     environment:
-      LYCAON_ADDR: 0.0.0.0:8787
+      LYCAON_ADDR: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}:${LYCAON_E2E_SIDECAR_LISTEN_PORT:-8787}
       LYCAON_BIND_ALL: "1"
       LYCAON_API_TOKEN: ${LYCAON_E2E_TOKEN}
       LYCAON_CONFIG_DIR: ${LYCAON_E2E_CONFIG_DIR}
@@ -154,7 +166,9 @@ services:
       - |
         set -eu
         echo "e2e-sidecar: go build…" >&2
-        go build -o /tmp/lycaon ./cmd/lycaon
+        # The staged scanner verifies against the identity it was built with.
+        go build -ldflags "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${LYCAON_E2E_OPENGREP_IDENTITY:-}" \
+          -o /tmp/lycaon ./cmd/lycaon
         # A crash restart kills the recorded sidecar and this loop serves again
         # on the same store. Restarting the container instead rebuilds its
         # network link, and Chromium aborts in-flight requests when the host's
@@ -188,6 +202,7 @@ services:
     # Match .node-version. As in den:harness:test, Vite runs on Node: Bun's
     # proxy keeps upstream event streams open after the browser leaves.
     image: node:26.3.0-trixie-slim
+    network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     working_dir: /workspace/lycaon-den
     depends_on:
       sidecar:
@@ -213,9 +228,16 @@ services:
       VITE_LYCAON_API_URL: ${LYCAON_E2E_API_URL}
       VITE_LYCAON_API_TOKEN: ${LYCAON_E2E_TOKEN}
       VITE_LYCAON_PROXY: "1"
-      VITE_LYCAON_PROXY_TARGET: http://sidecar:8787
+      VITE_LYCAON_PROXY_TARGET: ${LYCAON_E2E_PROXY_TARGET:-http://sidecar:8787}
       LYCAON_E2E_FROZEN: "1"
-    command: [node, node_modules/vite/bin/vite.js, --host, 0.0.0.0, --port, "1420", --strictPort]
+    command:
+      - node
+      - node_modules/vite/bin/vite.js
+      - --host
+      - ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
+      - --port
+      - ${LYCAON_E2E_VITE_LISTEN_PORT:-1420}
+      - --strictPort
     ports:
       - "127.0.0.1::1420"
 
