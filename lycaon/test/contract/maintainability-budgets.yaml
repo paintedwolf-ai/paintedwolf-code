@@ -16191,7 +16191,7 @@ test_files:
     lycaon-den/e2e/fixtures/inline-diff-remount.tsx: 56
     lycaon-den/e2e/free-chat-implement.spec.ts: 24
     lycaon-den/e2e/git-action-errors.spec.ts: 73
-    lycaon-den/e2e/git-worktree-strip.spec.ts: 322
+    lycaon-den/e2e/git-worktree-strip.spec.ts: 330
     lycaon-den/e2e/gutter-line-card.spec.ts: 142
     lycaon-den/e2e/harness-smoke.spec.ts: 51
     lycaon-den/e2e/heavy-binary-hot-exit.spec.ts: 59
