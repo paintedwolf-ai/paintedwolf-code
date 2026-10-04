@@ -132,6 +132,7 @@ describe("editing styles", () => {
   });
 
   it("rotates the kill ring through document history without duplicating text", () => {
+    resetEditorPrefsForTests({ keymap: "emacs" });
     const historyDoc = new DocumentHistory(); historyDoc.reset("alpha\nbeta\n");
     view = new EditorView({ parent: document.body, state: EditorState.create({ doc: historyDoc.state.doc,
       extensions: [editorEditingStyle(), editorHistory.of(direction => {

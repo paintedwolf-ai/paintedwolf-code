@@ -53,11 +53,16 @@ modelIndependentWebE2e("outside write immediately after a host write reaches the
   const read = await request.get(`${apiUrl}/v1/projects/${project.id}/source?path=sample.txt&root_id=${rootId}`, { headers });
   expect(read.ok()).toBe(true);
   const before = await read.json();
-  const write = await request.put(`${apiUrl}/v1/projects/${project.id}/source`, {
-    headers,
-    data: { operation_id: crypto.randomUUID(), root_id: rootId, path: "sample.txt", content: "host text\n", encoding: "utf-8", base_sha256: before.sha256 },
-  });
-  expect(write.ok(), await write.text()).toBe(true);
+  // The open editor's document can hold the path briefly; the host answers that with a retryable source_path_busy.
+  await expect.poll(async () => {
+    const write = await request.put(`${apiUrl}/v1/projects/${project.id}/source`, {
+      headers,
+      data: { operation_id: crypto.randomUUID(), root_id: rootId, path: "sample.txt", content: "host text\n", encoding: "utf-8", base_sha256: before.sha256 },
+    });
+    if (write.ok()) return "written";
+    const refusal = await write.json() as { code?: string; retryable?: boolean };
+    return refusal.code === "source_path_busy" && refusal.retryable ? "busy" : JSON.stringify(refusal);
+  }, { timeout: 15_000 }).toBe("written");
   writeFileSync(path.join(root, "sample.txt"), "outside edit immediately after save\n");
   await expect(content).toContainText("outside edit immediately after save", { timeout: 15_000 });
 });

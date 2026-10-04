@@ -592,7 +592,7 @@ function onWindowKeyDown(event: KeyboardEvent): void {
   }
 }
 
-// An armed leader owns the next key before closer handlers, such as tree type-ahead, see it.
+// An armed leader takes the next key before closer handlers, such as tree type-ahead, see it.
 function onWindowKeyDownCapture(event: KeyboardEvent): void {
   if (!pendingLeader || captureActive) return;
   const result = dispatchKeyboardEvent(event);
