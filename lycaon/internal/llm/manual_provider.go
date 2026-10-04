@@ -266,6 +266,15 @@ func (p *ManualProvider) SetAuto(enabled bool, text string) {
 	if text != "" {
 		p.autoText = text
 	}
+	if !enabled {
+		return
+	}
+	// Requests already waiting get the auto reply too; otherwise a turn queued just before
+	// auto-reply resumed would block its session until the manual timeout.
+	for _, pend := range p.queue {
+		pend.respond <- manualResponse{content: p.autoText}
+	}
+	p.queue = nil
 }
 
 func (p *ManualProvider) notifyWaitersLocked(pend *ManualPending) {

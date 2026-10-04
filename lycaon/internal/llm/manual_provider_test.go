@@ -208,3 +208,31 @@ func TestManualProviderPendingFiltersBySession(t *testing.T) {
 		t.Fatal("filtered pending did not receive the current session's request")
 	}
 }
+
+func TestManualProviderAutoReplyReleasesWaitingRequests(t *testing.T) {
+	p := NewManualProvider()
+	p.SetAuto(false, "")
+	done := make(chan *modelcall.Completion, 1)
+	go func() {
+		c, err := p.Complete(context.Background(), modelcall.CompletionRequest{Debug: modelcall.RequestDebug{SessionID: "s1"}})
+		if err != nil {
+			t.Errorf("complete: %v", err)
+		}
+		done <- c
+	}()
+	if _, ok := p.Pending(context.Background(), "s1", 2*time.Second); !ok {
+		t.Fatal("expected a pending completion")
+	}
+	p.SetAuto(true, "resumed")
+	select {
+	case c := <-done:
+		if c == nil || c.Content != "resumed" {
+			t.Fatalf("released completion = %+v; want the auto reply", c)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiting request was not released when auto-reply resumed")
+	}
+	if _, ok := p.Pending(context.Background(), "", 0); ok {
+		t.Fatal("released request is still pending")
+	}
+}
