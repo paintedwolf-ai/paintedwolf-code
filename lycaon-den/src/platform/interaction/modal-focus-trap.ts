@@ -3,6 +3,7 @@ import { useResidentInteractive } from "../../ui/resident-presence-context.tsx";
 import {
   activateFocusTrap,
   focusableElements,
+  type FocusTrapHandle,
   type FocusTrapOptions,
 } from "./focus-trap.ts";
 import {
