@@ -8974,6 +8974,7 @@ go_struct_fields:
     scripts/commentlint/main.syntaxParser: 2
 source_directories:
     .: 1
+    .github/scripts: 1
     lycaon-den: 10
     lycaon-den/shared: 4
     lycaon-den/src: 4
@@ -9595,6 +9596,7 @@ source_directories:
     scripts/coordinator-benchmark: 80
     scripts/harness: 5
 source_files:
+    .github/scripts/issue-policy.cjs: 54
     lycaon-den/eslint.config.js: 99
     lycaon-den/playwright.config.ts: 52
     lycaon-den/shared/app-state-storage.ts: 7
