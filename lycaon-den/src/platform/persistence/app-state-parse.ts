@@ -139,7 +139,7 @@ function parseEditor(value: unknown): DenEditorPrefs | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const row = value as Record<string, unknown>;
   const editor: DenEditorPrefs = {};
-  if (row.keymap === "emacs" || row.keymap === "vim") editor.keymap = row.keymap;
+  if (row.keymap === "standard" || row.keymap === "emacs" || row.keymap === "vim") editor.keymap = row.keymap;
   if (typeof row.tabMovesFocus === "boolean") editor.tabMovesFocus = row.tabMovesFocus;
   if (typeof row.treeVisibleLevels === "number" && Number.isInteger(row.treeVisibleLevels) &&
       (row.treeVisibleLevels === 0 || row.treeVisibleLevels >= DEN_FILES_TREE_LEVELS.min && row.treeVisibleLevels <= DEN_FILES_TREE_LEVELS.max)) {

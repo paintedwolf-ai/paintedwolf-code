@@ -1,7 +1,15 @@
 import { writeFileSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
+
+async function selectEditingStyle(page: Page, style: "emacs" | "vim") {
+  await page.evaluate(async (style) => {
+    const url = "/src/settings/editor/editor-prefs.ts";
+    const prefs = await import(/* @vite-ignore */ url) as typeof import("../src/settings/editor/editor-prefs.ts");
+    await prefs.saveEditorKeymap(style);
+  }, style);
+}
 
 modelIndependentWebE2e("keyboard editing preserves the existing chrome and document history", async ({ page, request }) => {
   let file = "";
@@ -9,6 +17,8 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
     prefix: "keyboard-styles", name: "Keyboard editing",
     seed(root) { file = path.join(root, "sample.ts"); writeFileSync(file, "one two\nthree four\n"); },
   });
+  // Emacs is the macOS default only; Linux and Windows start in the standard style.
+  await selectEditingStyle(page, "emacs");
   const treeFile = page.locator('.den-files-tree__label--file[data-path="sample.ts"]');
   await treeFile.focus();
   await page.keyboard.press("Enter");
@@ -39,11 +49,7 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   await page.keyboard.press("Control+s");
   await expect.poll(() => readFileSync(file, "utf8")).toContain("saved one two");
 
-  await page.evaluate(async () => {
-    const url = "/src/settings/editor/editor-prefs.ts";
-    const prefs = await import(/* @vite-ignore */ url) as typeof import("../src/settings/editor/editor-prefs.ts");
-    await prefs.saveEditorKeymap("vim");
-  });
+  await selectEditingStyle(page, "vim");
   const state = page.getByTestId("files-editor-editing-state").filter({ visible: true });
   await expect(state).toHaveText("Normal");
   await editor.focus();
