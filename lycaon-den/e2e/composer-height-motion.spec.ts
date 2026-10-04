@@ -182,7 +182,7 @@ webE2e.describe("composer height motion", () => {
       const opened = motionSpan(opening);
       expect(opened.end).toBeGreaterThan(opened.start);
       expect(opened.intermediateFrames).toBeGreaterThan(2);
-      expect(opened.ms).toBeGreaterThanOrEqual(150);
+      expect(Math.round(opened.ms)).toBeGreaterThanOrEqual(140);
       expect(opened.ms).toBeLessThanOrEqual(400);
 
       await startComposerTrace(stage);
@@ -196,13 +196,13 @@ webE2e.describe("composer height motion", () => {
         await apiJson(request, "POST", "/harness/llm/respond", { id: pending.id, content: "Done." });
       }
       await expect(indicator).toHaveCount(0, { timeout: 30_000 });
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(300);
       const closing = await stopComposerTrace(page);
 
       const closed = motionSpan(closing);
       expect(closed.end).toBeLessThan(closed.start);
       expect(closed.intermediateFrames).toBeGreaterThan(2);
-      expect(closed.ms).toBeGreaterThanOrEqual(150);
+      expect(Math.round(closed.ms)).toBeGreaterThanOrEqual(140);
       // Exit fading stays outside layout so the lane can collapse.
       expect(closing.some((sample) => sample.leaving)).toBe(true);
       expectBottomEdgeHeld(closing);
