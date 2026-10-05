@@ -323,7 +323,7 @@ func (m *RunManager) TryAutoAdvance(ctx context.Context, runID string) (*api.Wor
 	if err != nil || run == nil || IsTerminal(run.Status) {
 		return run, err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func (m *RunManager) tryAutoAdvanceOne(ctx context.Context, runID string) (*api.
 	if run.Status != api.WorkflowRunStatusRunning {
 		return run, nil
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}

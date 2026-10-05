@@ -53,7 +53,7 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		out.AllowedAgents = spawn.AmbientAllowedAgents()
 		return inject.CoordinatorTurnFrame{RunContext: out}, nil
 	}
-	manifest, err := l.Runs.manifestForRun(ctx, active)
+	manifest, err := l.Runs.runnableManifestForRun(ctx, active)
 	if err != nil {
 		return inject.CoordinatorTurnFrame{WorkflowRevision: active.Revision, RunContext: out}, err
 	}

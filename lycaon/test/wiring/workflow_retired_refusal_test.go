@@ -101,7 +101,7 @@ func TestWorkflowRetiredRefusal_AdvanceRefusesUnsealedRetiredVersion(t *testing.
 func TestWorkflowRetiredRefusal_ResumeRefusesUnsealedRetiredVersion(t *testing.T) {
 	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
 	ctx := context.Background()
-	dir := h.ProjectDir(t, "security-survey")
+	dir := h.ProjectDir(t, "security-survey-resume")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
@@ -246,4 +246,110 @@ func TestWorkflowRetiredRefusal_ResolveFeedbackRefusesMissingWorkflow(t *testing
 		t.Fatalf("expected WorkflowVersionUnavailableError for missing workflow feedback, got %T: %v", err, err)
 	}
 }
+
+func TestWorkflowRetiredRefusal_AutoAdvanceRefusesUnsealedRetiredVersion(t *testing.T) {
+	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	ctx := context.Background()
+	dir := h.ProjectDir(t, "security-survey-autoadvance")
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
+	testutil.FailErr(t, "create session", err)
+
+	entries := h.WorkflowMgr.Manifests.All()
+	unsealedRetired := workflowdef.Manifest{
+		ID:      "unsealed-retired-autoadvance-test",
+		Version: "1.0.0",
+		Name:    "Unsealed retired autoadvance test",
+		Retired: true,
+		PhaseDefs: []workflowdef.PhaseDef{
+			{ID: "intake", Next: "review"},
+			{ID: "review", Terminal: true},
+		},
+	}
+	entries[workflowdef.ManifestKey(unsealedRetired.ID, unsealedRetired.Version)] = unsealedRetired
+	h.WorkflowMgr.Manifests = workflowdef.NewRegistry(entries)
+
+	now := time.Now().UTC()
+	runID := "run-" + uuid.NewString()
+	run := &api.WorkflowRun{
+		ID:              runID,
+		SessionID:       sess.ID,
+		WorkflowID:      "unsealed-retired-autoadvance-test",
+		WorkflowVersion: "1.0.0",
+		Status:          api.WorkflowRunStatusRunning,
+		CurrentPhase:    "intake",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Revision:        1,
+	}
+	err = h.WorkflowMgr.Store.CreateState(ctx, run, dir, map[string]any{})
+	testutil.FailErr(t, "create state for unsealed retired run", err)
+
+	_, err = h.WorkflowMgr.TryAutoAdvance(ctx, runID)
+	if err == nil {
+		t.Fatal("expected TryAutoAdvance to fail for unsealed retired workflow, got nil error")
+	}
+	var unavailErr *workflow.WorkflowVersionUnavailableError
+	if !errors.As(err, &unavailErr) {
+		t.Fatalf("expected WorkflowVersionUnavailableError for TryAutoAdvance, got %T: %v", err, err)
+	}
+	if unavailErr.RejectionCode() != "WORKFLOW_VERSION_UNAVAILABLE" {
+		t.Fatalf("expected code WORKFLOW_VERSION_UNAVAILABLE, got %q", unavailErr.RejectionCode())
+	}
+}
+
+func TestWorkflowRetiredRefusal_AssertRunnableRefusesUnsealedRetiredVersion(t *testing.T) {
+	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	ctx := context.Background()
+	dir := h.ProjectDir(t, "security-survey-assert-runnable")
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
+	testutil.FailErr(t, "create session", err)
+
+	entries := h.WorkflowMgr.Manifests.All()
+	unsealedRetired := workflowdef.Manifest{
+		ID:      "unsealed-retired-assert-runnable-test",
+		Version: "1.0.0",
+		Name:    "Unsealed retired assert runnable test",
+		Retired: true,
+		PhaseDefs: []workflowdef.PhaseDef{
+			{ID: "intake", Next: "review"},
+			{ID: "review", Terminal: true},
+		},
+	}
+	entries[workflowdef.ManifestKey(unsealedRetired.ID, unsealedRetired.Version)] = unsealedRetired
+	h.WorkflowMgr.Manifests = workflowdef.NewRegistry(entries)
+
+	now := time.Now().UTC()
+	runID := "run-" + uuid.NewString()
+	run := &api.WorkflowRun{
+		ID:              runID,
+		SessionID:       sess.ID,
+		WorkflowID:      "unsealed-retired-assert-runnable-test",
+		WorkflowVersion: "1.0.0",
+		Status:          api.WorkflowRunStatusRunning,
+		CurrentPhase:    "intake",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Revision:        1,
+	}
+	err = h.WorkflowMgr.Store.CreateState(ctx, run, dir, map[string]any{})
+	testutil.FailErr(t, "create state for unsealed retired run", err)
+
+	err = h.WorkflowMgr.AssertRunnable(ctx, runID)
+	if err == nil {
+		t.Fatal("expected AssertRunnable to fail for unsealed retired workflow, got nil error")
+	}
+	var unavailErr *workflow.WorkflowVersionUnavailableError
+	if !errors.As(err, &unavailErr) {
+		t.Fatalf("expected WorkflowVersionUnavailableError for AssertRunnable, got %T: %v", err, err)
+	}
+
+	err = h.WorkflowMgr.AssertSessionRunnable(ctx, sess.ID)
+	if err == nil {
+		t.Fatal("expected AssertSessionRunnable to fail for unsealed retired workflow, got nil error")
+	}
+	if !errors.As(err, &unavailErr) {
+		t.Fatalf("expected WorkflowVersionUnavailableError for AssertSessionRunnable, got %T: %v", err, err)
+	}
+}
+
 

@@ -256,7 +256,8 @@ func (m *RunManager) AssertRunnable(ctx context.Context, runID string) error {
 	}
 	switch run.Status {
 	case api.WorkflowRunStatusRunning:
-		return nil
+		_, err := m.runnableManifestForRun(ctx, run)
+		return err
 	case api.WorkflowRunStatusPaused:
 		return &NotRunnableError{RunID: runID, Status: run.Status, Reason: "paused"}
 	case api.WorkflowRunStatusPausedOnChild:

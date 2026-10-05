@@ -64,7 +64,7 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 		if scaffoldvars.HasPendingUserInput(vars) {
 			return marshalAdvanceToolResult(tctx.Out, advanceBlockedPendingInput(vars, active.CurrentPhase))
 		}
-		manifest, err := runs.manifestForRun(ctx, active)
+		manifest, err := runs.runnableManifestForRun(ctx, active)
 		if err != nil {
 			return "", err
 		}

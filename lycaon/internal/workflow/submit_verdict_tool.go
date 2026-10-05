@@ -55,7 +55,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 				"reason": "no_active_workflow_run",
 			})
 		}
-		manifest, err := runs.manifestForRun(ctx, active)
+		manifest, err := runs.runnableManifestForRun(ctx, active)
 		if err != nil {
 			return "", err
 		}
