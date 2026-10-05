@@ -34,15 +34,26 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	if err := validateWorkflowFileHeader(wf); err != nil {
 		return Manifest{}, err
 	}
+	ApplyFormatDefaults(&wf)
+	if err := ValidateManifestFormat(wf.ID, wf.Format); err != nil {
+		return Manifest{}, err
+	}
 	allowedAgents, agentToolAccess, err := parseAgentBindings(wf.ID, wf.Agents)
 	if err != nil {
 		return Manifest{}, err
 	}
+	ext := strings.TrimSpace(wf.Extends)
+	if ext != "" {
+		if !strings.Contains(ext, "@") || strings.HasPrefix(ext, "@") || strings.HasSuffix(ext, "@") {
+			return Manifest{}, fmt.Errorf("workflow manifest %s: extends must pin an exact version (e.g. id@version), got %q", wf.ID, ext)
+		}
+	}
 	m := Manifest{
 		ID:                 strings.TrimSpace(wf.ID),
 		Version:            strings.TrimSpace(wf.Version),
+		Format:             wf.Format,
 		Retired:            wf.Retired,
-		Extends:            strings.TrimSpace(wf.Extends),
+		Extends:            ext,
 		Name:               strings.TrimSpace(wf.Name),
 		Description:        strings.TrimSpace(wf.Description),
 		Trigger:            strings.TrimSpace(wf.Trigger),
@@ -274,7 +285,7 @@ func assignWorkflowInjects(m *Manifest, raw []anchor.WorkflowInject) error {
 	}
 	m.Injects = append([]anchor.WorkflowInject(nil), raw...)
 	for i := range m.Injects {
-		if _, err := m.Injects[i].Binding(m.ID); err != nil {
+		if _, err := anchor.NewWorkflowBinding(m.Injects[i], m.ID, m.Version); err != nil {
 			return fmt.Errorf("workflow manifest %s: injects[%d]: %w", m.ID, i, err)
 		}
 	}

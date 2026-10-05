@@ -1,0 +1,176 @@
+# extension_api: 1.1.0
+# format_range: 1..1
+id string required
+version string required
+format int optional default=1
+attach block optional
+attach.policy string optional
+request block optional
+request.cadence string optional
+request.question string optional
+request.default string optional
+extends string optional
+name string optional
+retired bool optional default=false
+description string optional
+trigger string optional
+initial_posture string optional
+icon string optional
+featured bool optional
+requires_repo bool optional
+coordinator_profile string optional
+surface_profile string optional
+agents []block optional default=[]
+agents.id string required
+agents.tools string optional
+agents.spawn bool optional
+gates []string optional default=[]
+rules []string optional default=[]
+topology string optional
+controls block optional
+controls.phase_advance string optional
+controls.default_execution_mode string optional
+controls.on_decision_reject block optional
+controls.on_decision_reject.pause bool optional default=false
+controls.on_decision_reject.cancel bool optional default=false
+controls.on_pause block optional
+controls.on_pause.hold_pending bool optional default=false
+controls.on_pause.cancel_running bool optional default=false
+controls.on_stop block optional
+controls.on_stop.cancel_workers bool optional default=false
+controls.on_stop.abort_delegation bool optional default=false
+controls.on_stop.session_abort bool optional default=false
+controls.content_review block optional
+controls.content_review.tools []string optional default=[]
+controls.content_review.paths []string optional default=[]
+controls.report block optional
+controls.report.enabled bool optional default=false
+controls.report.findings_label string optional
+controls.report.brief block optional
+controls.report.brief.question string optional
+controls.report.brief.dimensions []block optional default=[]
+controls.report.brief.dimensions.id string required
+controls.report.brief.dimensions.label string required
+controls.report.brief.dimensions.question string required
+controls.report.brief.dimensions.allow_unknown bool optional default=false
+controls.report.brief.dimensions.values []block optional default=[]
+controls.report.brief.dimensions.values.id string required
+controls.report.brief.dimensions.values.label string required
+controls.report.brief.dimensions.values.phrase string optional
+controls.report.brief.levels []block optional default=[]
+controls.report.brief.levels.label string required
+controls.report.brief.levels.answer string optional
+controls.report.brief.levels.means string required
+controls.report.brief.levels.tone string optional
+controls.report.brief.levels.when []map[string][]string optional default=[]
+controls.report.brief.basis []string optional default=[]
+phases []block required
+phases.id string required
+phases.activity_label string required
+phases.complete_when string optional
+phases.entry_when string optional
+phases.invoke_workflow block optional
+phases.invoke_workflow.workflow_id string optional
+phases.invoke_workflow.version string optional
+phases.invoke_workflow.blueprint string optional
+phases.invoke_trigger string optional
+phases.next string optional
+phases.child_next string optional
+phases.child_complete_when string optional
+phases.child_gates []string optional default=[]
+phases.on_enter block optional
+phases.on_enter.set_posture string optional
+phases.on_enter.set_execution_mode string optional
+phases.on_enter.prompt_coordinator bool optional default=false
+phases.on_enter.request_user_feedback block optional
+phases.on_enter.request_user_feedback.prompt string optional
+phases.on_enter.request_user_feedback.response_type string optional
+phases.on_enter.request_user_feedback.options []string optional default=[]
+phases.on_enter.request_user_feedback.allow_other bool optional default=false
+phases.on_enter.obligations []block optional default=[]
+phases.on_enter.obligations.kind string optional
+phases.on_reenter block optional
+phases.on_reenter.inject_kick string optional
+phases.on_reenter.reenter_leg string optional
+phases.controls block optional
+phases.controls.content_review block optional
+phases.controls.content_review.tools []string optional default=[]
+phases.controls.content_review.paths []string optional default=[]
+phases.controls.closeout string optional
+phases.gates []string optional default=[]
+phases.bind_topology_stage string optional
+phases.bind_parallel_group []string optional default=[]
+phases.parallel_task block optional
+phases.parallel_task.max_workers int optional default=0
+phases.parallel_task.max_read_workers int optional default=0
+phases.parallel_task.max_write_workers int optional default=0
+phases.fanout block optional
+phases.fanout.require_threat_model bool optional default=false
+phases.fanout.max_attempts int optional default=0
+phases.touch block optional
+phases.touch.paths []string optional default=[]
+phases.terminal bool optional default=false
+phases.coordinator_surface string optional
+phases.surface_template string optional
+phases.mode_refs []string optional default=[]
+phases.advance block optional
+phases.advance.when_gate_met string optional
+phases.loop block optional
+phases.loop.exit string optional
+phases.intake []string optional default=[]
+phases.human_approval block optional
+phases.human_approval.blueprint string optional
+phases.human_approval.readiness string optional
+phases.review_loop block optional
+phases.review_loop.coverage_reviewers []string optional default=[]
+phases.review_loop.followup_attempts int optional default=0
+phases.review_loop.reconciles_phase string optional
+phases.review_loop.require_inventory_accounted bool optional default=false
+phases.review_loop.include_scan_inventory bool optional default=false
+phases.review_loop.evidence_key string required
+phases.review_loop.iteration_cap int optional default=3
+phases.review_loop.verdict_schema map[string]string optional
+phases.review_loop.required_agents []string optional default=[]
+phases.review_loop.if_spawnable []string optional default=[]
+phases.review_loop.claim_statuses map[string]string optional
+phases.review_loop.brief_label string optional
+phases.depth_param string optional
+phases.transitions []block optional default=[]
+phases.transitions.id string required
+phases.transitions.to string required
+phases.transitions.actors []string required
+phases.transitions.label string required
+phases.transitions.when string optional
+phases.blueprint_write bool optional default=false
+phases.explain block optional
+phases.explain.summary string optional
+phases.explain.body string optional
+parameters map[string]block optional
+parameters.type string optional
+parameters.default string optional
+blueprint block optional
+blueprint.id string required
+blueprint.file string optional
+blueprint.frontmatter []string optional default=[]
+presets []block optional default=[]
+presets.id string required
+presets.name string optional
+presets.description string optional
+presets.trigger string optional
+presets.params map[string]string required
+injects []block optional default=[]
+injects.on string required
+injects.selector block required
+injects.selector.surface string optional
+injects.selector.phase string optional
+injects.selector.workflow string optional
+injects.selector.tool string optional
+injects.selector.tools []string optional default=[]
+injects.selector.profiles []string optional default=[]
+injects.selector.surfaces []string optional default=[]
+injects.selector.session_posture []string optional default=[]
+injects.effect string required
+injects.when string optional
+injects.render string optional
+injects.tier string optional
+injects.dedup yaml optional

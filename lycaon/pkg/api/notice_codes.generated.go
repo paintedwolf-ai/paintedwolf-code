@@ -27,6 +27,7 @@ const (
 	NoticeCodeUserImageNotVisible          NoticeCode = "user_image_not_visible"
 	NoticeCodeWorkflowActive               NoticeCode = "workflow_active"
 	NoticeCodeWorkflowNotRunnable          NoticeCode = "workflow_not_runnable"
+	NoticeCodeWorkflowVersionUnavailable   NoticeCode = "workflow_version_unavailable"
 	NoticeCodeWorktreeStale                NoticeCode = "worktree_stale"
 )
 

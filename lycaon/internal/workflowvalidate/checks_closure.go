@@ -30,6 +30,9 @@ func checkClosure(
 	m workflowdef.Manifest,
 	overlayRules bool,
 ) []api.ComposeValidationError {
+	if m.Sealed {
+		return checkSealedClosure(path, m)
+	}
 	var out []api.ComposeValidationError
 	out = append(out, checkInvoke(opts, path, m)...)
 	out = append(out, checkPrompts(opts, path, m)...)
@@ -349,6 +352,33 @@ func knownEvidenceKeys() map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, k := range evidence.AllGateTypes() {
 		out[string(k)] = struct{}{}
+	}
+	return out
+}
+
+func checkSealedClosure(path string, m workflowdef.Manifest) []api.ComposeValidationError {
+	var out []api.ComposeValidationError
+	if strings.TrimSpace(m.ArchiveDir) == "" {
+		return append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"),
+			path, map[string]any{"detail": fmt.Sprintf("%s: sealed archive directory not set", path)}))
+	}
+	if _, err := os.Stat(m.ArchiveDir); err != nil {
+		return append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"),
+			path, map[string]any{"detail": fmt.Sprintf("%s: sealed archive directory %q does not exist: %v", path, m.ArchiveDir, err)}))
+	}
+	for _, inj := range m.Injects {
+		render := strings.TrimSpace(inj.Render)
+		if render == "" {
+			continue
+		}
+		candidateMD := filepath.Join(m.ArchiveDir, "guidance", render+".md")
+		candidateYAML := filepath.Join(m.ArchiveDir, "guidance", render+".yaml")
+		_, errMD := os.Stat(candidateMD)
+		_, errYAML := os.Stat(candidateYAML)
+		if errMD != nil && errYAML != nil {
+			out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"),
+				path, map[string]any{"detail": fmt.Sprintf("%s: sealed workflow missing prompt %q in archive", path, render)}))
+		}
 	}
 	return out
 }

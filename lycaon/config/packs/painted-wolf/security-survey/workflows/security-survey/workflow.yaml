@@ -1,5 +1,5 @@
 id: security-survey
-version: 1.0.1
+version: 2.0.0
 name: Security
 description: Survey a project against its threat model.
 trigger: /security-survey

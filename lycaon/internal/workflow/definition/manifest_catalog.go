@@ -1,11 +1,15 @@
 package definition
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 )
 
@@ -104,6 +108,65 @@ func parsePackManifestsWithCatalog(catalog *extpacks.EffectiveCatalog) (map[stri
 		}
 		entries[key] = m
 		sources[key] = ManifestSource{Key: key, Path: at.String(), Origin: origin}
+	}
+
+	packs, err := extpacks.DiscoverEffective(catalog)
+	if err != nil {
+		return nil, nil, fmt.Errorf("discover packs for workflow archive copies: %w", err)
+	}
+	for _, p := range packs {
+		archiveSource := p.Root.Join("archive")
+		if !archiveSource.IsDir() {
+			continue
+		}
+		versionEntries, err := archiveSource.List()
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: list archive versions: %w", archiveSource, err)
+		}
+		for _, ve := range versionEntries {
+			if !ve.IsDir() {
+				continue
+			}
+			versionName := strings.TrimSpace(ve.Name())
+			wfSource := archiveSource.Join(versionName, "workflow.yaml")
+			data, err := wfSource.Read()
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				return nil, nil, fmt.Errorf("%s: read archive workflow manifest: %w", wfSource, err)
+			}
+			m, err := ParseManifestYAML(data)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %w", wfSource, err)
+			}
+			if strings.TrimSpace(m.Version) != versionName {
+				return nil, nil, fmt.Errorf("%s: manifest version %q does not match archive directory %q", wfSource, m.Version, versionName)
+			}
+			key := ManifestKey(m.ID, m.Version)
+			if live, dup := entries[key]; dup && !live.Sealed {
+				return nil, nil, fmt.Errorf("sealed workflow version %s from pack %s is also live", key, p.ID)
+			}
+			if _, dup := entries[key]; dup {
+				return nil, nil, fmt.Errorf("sealed workflow version %s from pack %s collides with an already-loaded manifest", key, p.ID)
+			}
+			m.Sealed = true
+			m.Retired = true
+
+			// Resolve archive folder path on disk
+			archiveDir := archiveSource.Join(versionName).String()
+			if wfSource.IsBundled() {
+				archiveDir = filepath.Join(configlayout.FindModuleRoot(), "config", archiveSource.Join(versionName).String())
+			}
+			m.ArchiveDir = archiveDir
+
+			origin := OriginDisk
+			if wfSource.IsBundled() {
+				origin = OriginBundled
+			}
+			entries[key] = m
+			sources[key] = ManifestSource{Key: key, Path: wfSource.String(), Origin: origin}
+		}
 	}
 	return entries, sources, nil
 }

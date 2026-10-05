@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -52,7 +53,19 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
+		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+			return nil, &WorkflowVersionUnavailableError{
+				WorkflowID: run.WorkflowID,
+				Version:    run.WorkflowVersion,
+			}
+		}
 		return nil, err
+	}
+	if manifest.Retired && !manifest.Sealed {
+		return nil, &WorkflowVersionUnavailableError{
+			WorkflowID: run.WorkflowID,
+			Version:    run.WorkflowVersion,
+		}
 	}
 	cur, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok {
@@ -132,11 +145,12 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	if def, ok := manifest.PhaseByID(edge.To); ok && !terminalSink {
 		m.triggerPhaseEnter(ctx, run, projectDir, def)
 		rc := &RunContext{
-			SessionID:     run.SessionID,
-			RunID:         run.ID,
-			WorkflowID:    run.WorkflowID,
-			Phase:         edge.To,
-			PreviousPhase: prevPhase,
+			SessionID:       run.SessionID,
+			RunID:           run.ID,
+			WorkflowID:      run.WorkflowID,
+			WorkflowVersion: run.WorkflowVersion,
+			Phase:           edge.To,
+			PreviousPhase:   prevPhase,
 		}
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, rc, def)

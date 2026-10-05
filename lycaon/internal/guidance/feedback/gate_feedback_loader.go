@@ -3,6 +3,8 @@ package feedback
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -90,6 +92,45 @@ func LoadGateFeedbackCatalogWithCatalog(catalog *extpacks.EffectiveCatalog) (*Ga
 		return nil, fmt.Errorf("gate feedback template: %w", err)
 	}
 	return &GateFeedbackCatalog{defs: defs, template: tmpl}, nil
+}
+
+// WithWorkflowArchive returns a derived catalog with sealed copy overrides.
+func (c *GateFeedbackCatalog) WithWorkflowArchive(archiveDir string) (*GateFeedbackCatalog, error) {
+	if c == nil || strings.TrimSpace(archiveDir) == "" {
+		return c, nil
+	}
+	archiveDir = filepath.Clean(strings.TrimSpace(archiveDir))
+	fbDir := filepath.Join(archiveDir, "guidance", "gate-feedback")
+	if _, err := os.Stat(fbDir); os.IsNotExist(err) {
+		return c, nil
+	}
+	entries, err := os.ReadDir(fbDir)
+	if err != nil {
+		return nil, fmt.Errorf("read sealed gate feedback dir: %w", err)
+	}
+	derivedDefs := make(map[string]GateFeedbackDef, len(c.defs))
+	for k, v := range c.defs {
+		derivedDefs[k] = v
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		path := filepath.Join(fbDir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read sealed gate feedback %s: %w", path, err)
+		}
+		var def GateFeedbackDef
+		if err := config.DecodeYAML(data, &def); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		if err := validateGateFeedbackDef(extpacks.OnDisk(path), entry.Name(), def); err != nil {
+			return nil, err
+		}
+		derivedDefs[def.ID] = def
+	}
+	return &GateFeedbackCatalog{defs: derivedDefs, template: c.template}, nil
 }
 
 func validateGateFeedbackDef(at extpacks.Source, name string, def GateFeedbackDef) error {

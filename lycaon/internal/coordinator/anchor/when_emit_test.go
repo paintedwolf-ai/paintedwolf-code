@@ -75,3 +75,31 @@ func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 		t.Fatalf("when phase==plan must queue, got %q", id)
 	}
 }
+
+func TestEmitMatchWorkflowVersionMissingQueuesStructuredGuidance(t *testing.T) {
+	kicks := &kick.KickEngine{}
+	bus := anchor.NewBus(kicks)
+	reg := loadTestRegistry(t)
+	bus.SetRegistry(reg)
+
+	// An active run specifying a workflow without a workflow version
+	matchCtx := anchor.MatchContext{
+		Surface:  "phase",
+		Workflow: "security-survey",
+		Phase:    "challenge",
+	}
+	bus.EmitMatch(context.Background(), "sess-missing-ver", anchor.PhaseEntered, anchor.Envelope{}, matchCtx)
+
+	kickID, ok := kicks.PeekPendingKickID("sess-missing-ver")
+	if !ok {
+		t.Fatal("expected pending guidance for missing workflow version")
+	}
+	if kickID != "guidance:WORKFLOW_VERSION_MISSING" {
+		t.Fatalf("expected guidance:WORKFLOW_VERSION_MISSING, got %q", kickID)
+	}
+	text := kicks.TakePendingKickID("sess-missing-ver")
+	if text != "guidance:WORKFLOW_VERSION_MISSING" {
+		t.Fatalf("expected staged kick guidance:WORKFLOW_VERSION_MISSING, got %q", text)
+	}
+}
+

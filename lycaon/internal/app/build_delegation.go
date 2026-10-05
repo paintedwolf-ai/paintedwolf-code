@@ -266,6 +266,9 @@ func (b *serveBuilder) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.Ru
 			env.Vars["review_verdict"] = verdicts
 		}
 		if manifest, err := b.workflowMgr.ManifestForRunID(ctx, rc.RunID); err == nil {
+			if rc.WorkflowVersion == "" {
+				rc.WorkflowVersion = manifest.Version
+			}
 			if phase, ok := manifest.PhaseByID(rc.Phase); ok {
 				if plan, found := workflow.FanoutPlanForPhase(vars, phase); found {
 					env.FanoutPlanText = workflow.FormatFanoutPlan(plan)
@@ -284,11 +287,7 @@ func (b *serveBuilder) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.Ru
 			}
 		}
 	}
-	b.mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
-		Surface:  "phase",
-		Phase:    rc.Phase,
-		Workflow: rc.WorkflowID,
-	})
+	b.mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.RunMatch(rc, "phase", rc.Phase))
 	// Host-held phases park the coordinator.
 	heldByHost := false
 	if def.MayHostHold() {

@@ -258,7 +258,7 @@ func validatePackYAMLConsumption(p Pack) error {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", "vendor", "node_modules":
+			case ".git", "vendor", "node_modules", "archive":
 				return filepath.SkipDir
 			default:
 				return nil

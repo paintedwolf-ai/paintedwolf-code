@@ -860,6 +860,91 @@ func (q *Queries) ListRunningWorkflowRuns(ctx context.Context) ([]WorkflowRuns, 
 	return items, nil
 }
 
+const listWorkflowRunUnitProvenance = `-- name: ListWorkflowRunUnitProvenance :many
+SELECT id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
+FROM workflow_run_unit_provenance
+WHERE run_id = ?
+ORDER BY created_at ASC, id ASC
+`
+
+func (q *Queries) ListWorkflowRunUnitProvenance(ctx context.Context, runID string) ([]WorkflowRunUnitProvenance, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkflowRunUnitProvenance, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowRunUnitProvenance
+	for rows.Next() {
+		var i WorkflowRunUnitProvenance
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.Phase,
+			&i.UnitKind,
+			&i.UnitID,
+			&i.SourceTier,
+			&i.SourcePath,
+			&i.ContentSha256,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkflowRunUnitProvenanceByPhase = `-- name: ListWorkflowRunUnitProvenanceByPhase :many
+SELECT id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
+FROM workflow_run_unit_provenance
+WHERE run_id = ? AND phase = ?
+ORDER BY created_at ASC, id ASC
+`
+
+type ListWorkflowRunUnitProvenanceByPhaseParams struct {
+	RunID string `json:"run_id"`
+	Phase string `json:"phase"`
+}
+
+func (q *Queries) ListWorkflowRunUnitProvenanceByPhase(ctx context.Context, arg ListWorkflowRunUnitProvenanceByPhaseParams) ([]WorkflowRunUnitProvenance, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkflowRunUnitProvenanceByPhase, arg.RunID, arg.Phase)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowRunUnitProvenance
+	for rows.Next() {
+		var i WorkflowRunUnitProvenance
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.Phase,
+			&i.UnitKind,
+			&i.UnitID,
+			&i.SourceTier,
+			&i.SourcePath,
+			&i.ContentSha256,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkflowRunsBySession = `-- name: ListWorkflowRunsBySession :many
 
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
@@ -1199,6 +1284,40 @@ func (q *Queries) RebaseWorkflowVerdictOperation(ctx context.Context, arg Rebase
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const recordWorkflowRunUnitProvenance = `-- name: RecordWorkflowRunUnitProvenance :exec
+INSERT INTO workflow_run_unit_provenance (
+    id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (run_id, phase, unit_kind, unit_id, content_sha256) DO NOTHING
+`
+
+type RecordWorkflowRunUnitProvenanceParams struct {
+	ID            string `json:"id"`
+	RunID         string `json:"run_id"`
+	Phase         string `json:"phase"`
+	UnitKind      string `json:"unit_kind"`
+	UnitID        string `json:"unit_id"`
+	SourceTier    string `json:"source_tier"`
+	SourcePath    string `json:"source_path"`
+	ContentSha256 string `json:"content_sha256"`
+	CreatedAt     string `json:"created_at"`
+}
+
+func (q *Queries) RecordWorkflowRunUnitProvenance(ctx context.Context, arg RecordWorkflowRunUnitProvenanceParams) error {
+	_, err := q.db.ExecContext(ctx, recordWorkflowRunUnitProvenance,
+		arg.ID,
+		arg.RunID,
+		arg.Phase,
+		arg.UnitKind,
+		arg.UnitID,
+		arg.SourceTier,
+		arg.SourcePath,
+		arg.ContentSha256,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const releaseWorkflowWorkers = `-- name: ReleaseWorkflowWorkers :exec

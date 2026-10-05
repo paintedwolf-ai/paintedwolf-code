@@ -40,6 +40,8 @@ type AgentProfileResolver interface {
 // ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
 type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
+	Sealed             bool
+	ArchiveDir         string
 }
 
 // WorkflowManifestSource supplies active workflow manifest fields for assembly.
@@ -216,6 +218,11 @@ func (e *AssemblyEngine) projectPrompts(ctx context.Context, sess *api.Session) 
 	fe, ok := pe.(*prompts.FileTemplateEngine)
 	if !ok || fe == nil || sess == nil {
 		return pe
+	}
+	if e != nil && e.deps().Workflows != nil {
+		if manifest, ok := e.deps().Workflows.ActiveManifest(ctx, sess.ID); ok && manifest.Sealed && manifest.ArchiveDir != "" {
+			fe = fe.WithWorkflowArchive(manifest.ArchiveDir)
+		}
 	}
 	// Empty trusted roots disable project prompt layers.
 	if resolve := e.deps().ProjectOverlayRootPaths; resolve != nil {
@@ -744,7 +751,15 @@ func (e *AssemblyEngine) prependCoordinatorRunInject(
 		hintCodes = anchor.FilterSuppressedHintCodes(hintCodes, runCtx, pendingKickIDs...)
 		snap := frame.Runtime
 		// The binding selects the template stem.
-		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, deps.GateFeedback)
+		gateFeedback := deps.GateFeedback
+		if deps.Workflows != nil {
+			if manifest, ok := deps.Workflows.ActiveManifest(ctx, sess.ID); ok && manifest.Sealed && manifest.ArchiveDir != "" {
+				if derived, err := gateFeedback.WithWorkflowArchive(manifest.ArchiveDir); err == nil {
+					gateFeedback = derived
+				}
+			}
+		}
+		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, gateFeedback)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
 		}

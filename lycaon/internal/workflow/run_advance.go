@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,7 +34,19 @@ func (m *RunManager) Advance(ctx context.Context, runID string) (*api.WorkflowRu
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
+		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+			return nil, &WorkflowVersionUnavailableError{
+				WorkflowID: run.WorkflowID,
+				Version:    run.WorkflowVersion,
+			}
+		}
 		return nil, err
+	}
+	if manifest.Retired && !manifest.Sealed {
+		return nil, &WorkflowVersionUnavailableError{
+			WorkflowID: run.WorkflowID,
+			Version:    run.WorkflowVersion,
+		}
 	}
 	vars, err := m.Store.GetScaffoldVars(ctx, runID)
 	if err != nil {
@@ -168,11 +181,12 @@ func (m *RunManager) advanceToNextPhase(ctx context.Context, run *api.WorkflowRu
 		if def, found := manifest.PhaseByID(next); found && !terminalSink {
 			m.triggerPhaseEnter(ctx, run, projectDir, def)
 			rc := &RunContext{
-				SessionID:     run.SessionID,
-				RunID:         run.ID,
-				WorkflowID:    run.WorkflowID,
-				Phase:         next,
-				PreviousPhase: prevPhase,
+				SessionID:       run.SessionID,
+				RunID:           run.ID,
+				WorkflowID:      run.WorkflowID,
+				WorkflowVersion: run.WorkflowVersion,
+				Phase:           next,
+				PreviousPhase:   prevPhase,
 			}
 			sameReenter := strings.TrimSpace(prevPhase) == strings.TrimSpace(next) && prevPhase != ""
 			if sameReenter {

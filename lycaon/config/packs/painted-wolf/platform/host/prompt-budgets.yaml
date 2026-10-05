@@ -75,11 +75,11 @@ kicks:
     coordinator-scan-finished: 492
     coordinator-scheduled: 801
     coordinator-secret-withheld: 503
-    coordinator-security-challenge: 2549
-    coordinator-security-claims: 1334
+    coordinator-security-challenge: 3600
+    coordinator-security-claims: 1750
     coordinator-security-execute: 1688
     coordinator-security-plan: 2872
-    coordinator-security-synthesis: 1767
+    coordinator-security-synthesis: 2200
     coordinator-spend-runway-low: 524
     coordinator-spend-soft-stop: 600
     coordinator-survey-streak: 407

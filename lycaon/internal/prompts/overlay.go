@@ -20,11 +20,12 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-// PromptLayers resolves prompt assets with site > project > bundled precedence.
+// PromptLayers resolves prompt assets with archive > site > project > bundled precedence.
 type PromptLayers struct {
-	Site           string // distribution overlay
-	ProjectPrimary string // primary project overlay
-	ProjectActive  string // active project overlay
+	WorkflowArchive string // sealed workflow archive copy (highest precedence)
+	Site            string // distribution overlay
+	ProjectPrimary  string // primary project overlay
+	ProjectActive   string // active project overlay
 	// ModuleRoot anchors host configuration reads.
 	ModuleRoot string
 	// Catalog selects effective bundled units.
@@ -127,93 +128,192 @@ func SitePromptFilesDir(configRoot string) string {
 	return filepath.Join(filepath.Clean(configRoot), protectedpath.PromptFilesDirName)
 }
 
+// UnitProvenanceRecord captures resolved tier, location, and hash of a template or partial.
+type UnitProvenanceRecord struct {
+	UnitKind      string `json:"unit_kind"`
+	UnitID        string `json:"unit_id"`
+	SourceTier    string `json:"source_tier"`
+	SourcePath    string `json:"source_path"`
+	ContentSha256 string `json:"content_sha256"`
+}
+
+type rootTier struct {
+	root string
+	tier string
+}
+
+func (l PromptLayers) rootsWithTiers() []rootTier {
+	var out []rootTier
+	if archive := strings.TrimSpace(l.WorkflowArchive); archive != "" {
+		out = append(out, rootTier{root: archive, tier: "archive"})
+	}
+	if site := strings.TrimSpace(l.Site); site != "" {
+		out = append(out, rootTier{root: site, tier: "site"})
+	}
+	active := strings.TrimSpace(l.ProjectActive)
+	primary := strings.TrimSpace(l.ProjectPrimary)
+	if active != "" {
+		out = append(out, rootTier{root: active, tier: "project"})
+	}
+	if primary != "" && primary != active {
+		out = append(out, rootTier{root: primary, tier: "project"})
+	}
+	return out
+}
+
 // ReadFile returns the first matching file for ref across overlay layers.
 func (l PromptLayers) ReadFile(ref string) ([]byte, error) {
+	data, _, err := l.ReadFileWithProvenance(ref)
+	return data, err
+}
+
+// ReadFileWithProvenance returns the first matching file for ref across overlay layers,
+// along with its provenance details.
+func (l PromptLayers) ReadFileWithProvenance(ref string) ([]byte, UnitProvenanceRecord, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return nil, fmt.Errorf("empty template ref")
+		return nil, UnitProvenanceRecord{}, fmt.Errorf("empty template ref")
+	}
+	kind, _, ok := kindForRef(ref)
+	if !ok {
+		kind = "prompt"
 	}
 	if l.overlaySnapshot != nil {
 		if data, ok := l.overlaySnapshot[ref]; ok {
-			return append([]byte(nil), data...), nil
+			sum := sha256.Sum256(data)
+			return append([]byte(nil), data...), UnitProvenanceRecord{
+				UnitKind:      kind,
+				UnitID:        ref,
+				SourceTier:    "snapshot",
+				SourcePath:    ref,
+				ContentSha256: hex.EncodeToString(sum[:]),
+			}, nil
 		}
-		return l.readBundled(ref)
+		return l.readBundledWithProvenance(ref)
 	}
 	var lastErr error
-	for _, root := range l.roots() {
-		data, err := l.readFileFromRoot(root, ref)
+	for _, rt := range l.rootsWithTiers() {
+		data, resolvedPath, err := l.readFileFromRootWithPath(rt.root, ref)
 		if err == nil {
-			return data, nil
+			sum := sha256.Sum256(data)
+			return data, UnitProvenanceRecord{
+				UnitKind:      kind,
+				UnitID:        ref,
+				SourceTier:    rt.tier,
+				SourcePath:    resolvedPath,
+				ContentSha256: hex.EncodeToString(sum[:]),
+			}, nil
 		}
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		return nil, err
+		return nil, UnitProvenanceRecord{}, err
 	}
-	if data, err := l.readBundled(ref); err == nil {
-		return data, nil
+	data, prov, err := l.readBundledWithProvenance(ref)
+	if err == nil {
+		return data, prov, nil
 	} else if errors.Is(err, ErrTemplateNotEffective) {
 		// Preserve explicit disabled-unit errors.
-		return nil, err
+		return nil, UnitProvenanceRecord{}, err
 	} else if !os.IsNotExist(err) {
 		lastErr = err
 	}
 	if lastErr != nil {
 		// Preserve the bundled resolution error.
-		return nil, fmt.Errorf("template %q not found in prompt overlay layers: %w", ref, lastErr)
+		return nil, UnitProvenanceRecord{}, fmt.Errorf("template %q not found in prompt overlay layers: %w", ref, lastErr)
 	}
-	return nil, fmt.Errorf("template %q not found", ref)
+	return nil, UnitProvenanceRecord{}, fmt.Errorf("template %q not found", ref)
 }
 
 func (l PromptLayers) readBundled(ref string) ([]byte, error) {
-	data, _, err := BundledLayout{Catalog: l.Catalog}.ReadBundled(ref)
-	if err == nil && len(data) > pongoplain.MaxSourceBytes {
-		return nil, fmt.Errorf("template %q: %w", ref, pongoplain.ErrSourceLimit)
-	}
+	data, _, err := l.readBundledWithProvenance(ref)
 	return data, err
 }
 
+func (l PromptLayers) readBundledWithProvenance(ref string) ([]byte, UnitProvenanceRecord, error) {
+	data, src, err := BundledLayout{Catalog: l.Catalog}.ReadBundled(ref)
+	if err != nil {
+		return nil, UnitProvenanceRecord{}, err
+	}
+	if len(data) > pongoplain.MaxSourceBytes {
+		return nil, UnitProvenanceRecord{}, fmt.Errorf("template %q: %w", ref, pongoplain.ErrSourceLimit)
+	}
+	kind, _, ok := kindForRef(ref)
+	if !ok {
+		kind = "prompt"
+	}
+	sum := sha256.Sum256(data)
+	return data, UnitProvenanceRecord{
+		UnitKind:      kind,
+		UnitID:        ref,
+		SourceTier:    "bundled",
+		SourcePath:    src.String(),
+		ContentSha256: hex.EncodeToString(sum[:]),
+	}, nil
+}
+
 func (l PromptLayers) readFileFromRoot(root, ref string) ([]byte, error) {
+	data, _, err := l.readFileFromRootWithPath(root, ref)
+	return data, err
+}
+
+func (l PromptLayers) readFileFromRootWithPath(root, ref string) ([]byte, string, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return nil, os.ErrNotExist
+		return nil, "", os.ErrNotExist
 	}
+	data, path, err := l.readFromPathWithPath(root, ref)
+	if err == nil {
+		return data, path, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, "", err
+	}
+	if kind, rel, ok := kindForRef(ref); ok {
+		candidate := kind + "/" + rel
+		if candidate != ref {
+			if candData, candPath, candErr := l.readFromPathWithPath(root, candidate); candErr == nil {
+				return candData, candPath, nil
+			}
+		}
+	}
+	return nil, "", os.ErrNotExist
+}
+
+func (l PromptLayers) readFromPath(root, ref string) ([]byte, error) {
+	data, _, err := l.readFromPathWithPath(root, ref)
+	return data, err
+}
+
+func (l PromptLayers) readFromPathWithPath(root, ref string) ([]byte, string, error) {
 	path, err := validatePromptsPath(root, ref)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	rel, err := filepath.Rel(filepath.Clean(root), path)
 	if err != nil {
-		return nil, fmt.Errorf("template path relative to prompts dir: %w", err)
+		return nil, "", fmt.Errorf("template path relative to prompts dir: %w", err)
 	}
 	file, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Clean(root), Rel: rel})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, pongoplain.MaxSourceBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read template %q: %w", ref, err)
+		return nil, "", fmt.Errorf("read template %q: %w", ref, err)
 	}
 	if len(data) > pongoplain.MaxSourceBytes {
-		return nil, fmt.Errorf("template %q: %w", ref, pongoplain.ErrSourceLimit)
+		return nil, "", fmt.Errorf("template %q: %w", ref, pongoplain.ErrSourceLimit)
 	}
 	// Expand overlay placeholders in copied template overrides.
-	return config.ExpandOverlayDir(data), nil
+	return config.ExpandOverlayDir(data), path, nil
 }
 
 func (l PromptLayers) roots() []string {
 	var out []string
-	if site := strings.TrimSpace(l.Site); site != "" {
-		out = append(out, site)
-	}
-	active := strings.TrimSpace(l.ProjectActive)
-	primary := strings.TrimSpace(l.ProjectPrimary)
-	if active != "" {
-		out = append(out, active)
-	}
-	if primary != "" && primary != active {
-		out = append(out, primary)
+	for _, rt := range l.rootsWithTiers() {
+		out = append(out, rt.root)
 	}
 	return out
 }

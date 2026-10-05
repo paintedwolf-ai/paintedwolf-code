@@ -118,7 +118,11 @@ func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID s
 	if !ok {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
-	return assembly.ActiveWorkflowManifest{CoordinatorProfile: manifest.CoordinatorProfile}, true
+	return assembly.ActiveWorkflowManifest{
+		CoordinatorProfile: manifest.CoordinatorProfile,
+		Sealed:             manifest.Sealed,
+		ArchiveDir:         manifest.ArchiveDir,
+	}, true
 }
 
 func (w sessionWorkflowManifest) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {

@@ -19,7 +19,7 @@ func TestShippedEffectiveManifestsRoundTripWithoutSemanticLoss(t *testing.T) {
 			testutil.FailErr(t, "MarshalManifestYAML", err)
 			reloaded, err := ParseManifestYAML([]byte(raw))
 			testutil.FailErr(t, "ParseManifestYAML", err)
-			if diff := cmp.Diff(original, reloaded, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(original, reloaded, cmpopts.EquateEmpty(), cmpopts.IgnoreFields(Manifest{}, "Sealed", "ArchiveDir")); diff != "" {
 				t.Fatalf("effective manifest changed across persistence (-original +reloaded):\n%s\nyaml:\n%s", diff, raw)
 			}
 		})

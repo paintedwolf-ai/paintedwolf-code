@@ -117,6 +117,16 @@ A `claims`-typed member is a JSON array of `{id, title, statement, status, answe
 
 The rejection details include the active phase, exact expected call shape, and bounded offender or reviewer facts. Independent acceptance failures appear together as typed `repairs` entries, each retaining its code and details; the primary refusal keeps its specific code. Running scans use `SUBMIT_VERDICT_SCANS_PENDING`, distinct from unaccounted groups. Correct the named condition and resubmit. A verdict rejection is not a completed review round and does not authorize abandoning the phase exit.
 
+### Workflow version rejections
+
+When an agent attempts to advance or transition a workflow run whose version is retired and marked non-resumable, the host returns `WORKFLOW_VERSION_UNAVAILABLE`.
+
+- **Code:** `WORKFLOW_VERSION_UNAVAILABLE`
+- **Cause:** The workflow version is retired and cannot be resumed or advanced.
+- **Why:** Incompatible workflow definitions that are retired without resumption support cannot transition to subsequent phases safely.
+- **Fix:** Start a new workflow run on an active, supported workflow version, or consult project administrators if this run needs manual recovery.
+- **Instead:** Do not retry advancing the retired workflow run.
+
 ## Spawn and history hygiene
 
 Worker creation and history reads produce their own structured outcomes: invalid or unavailable worker type, concurrency or wave limit, incomplete task charter, forbidden scope or resource, stale batch state, missing result or evidence handle, and history trimmed but still addressable. The remedy points to the batch or task assignee and never suggests bypassing the ledger with an untracked parallel action.

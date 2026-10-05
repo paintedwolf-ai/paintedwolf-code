@@ -14,15 +14,24 @@ const InjectTemplatePrefix = "inject/"
 const GuidanceTemplatePrefix = "guidance/"
 
 func (e *FileTemplateEngine) executeTemplate(ctx context.Context, ref string, data map[string]any) (string, error) {
-	tpl, err := e.compiledTemplate(ctx, ref)
+	out, _, err := e.executeTemplateWithProvenance(ctx, ref, data)
+	return out, err
+}
+
+func (e *FileTemplateEngine) executeTemplateWithProvenance(ctx context.Context, ref string, data map[string]any) (string, []UnitProvenanceRecord, error) {
+	entry, err := e.compiledTemplateEntry(ctx, ref)
 	if err != nil {
-		return "", wrapPongoError(ref, err)
+		return "", nil, wrapPongoError(ref, err)
 	}
-	out, err := pongoplain.Execute(ctx, tpl, withAgentSkillMembershipVars(data))
+	out, err := pongoplain.Execute(ctx, entry.tpl, withAgentSkillMembershipVars(data))
 	if err != nil {
-		return "", wrapPongoError(ref, err)
+		return "", nil, wrapPongoError(ref, err)
 	}
-	return out, nil
+	prov := append([]UnitProvenanceRecord(nil), entry.provenance...)
+	if e.onRender != nil {
+		e.onRender(ref, prov)
+	}
+	return out, prov, nil
 }
 
 func wrapPongoError(ref string, err error) error {

@@ -6,7 +6,7 @@ missing_signals:
   - id: challenge_incomplete
     when: "true"
     detail: "The challenge wave has not recorded a terminal verdict."
-    fix: "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %} on the stamped claims, wait for their envelopes, then submit CHALLENGED — a terminal verdict needs a succeeded envelope from each."
+    fix: "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %} on the stamped claims, wait for their envelopes, then submit CHALLENGED or NEEDS_INVESTIGATION — a terminal verdict needs a succeeded envelope from each."
 satisfy:
   - "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %} as `task` legs in one assistant message and wait for their envelopes."
-  - "Then call `submit_verdict` with `verdict: CHALLENGED` and one `challenges` entry per stamped claim id (`status` survives or refuted, the skeptic's statement, and its `path:line`)."
+  - "Then call `submit_verdict` with `verdict: CHALLENGED` or `NEEDS_INVESTIGATION` and one `challenges` entry per stamped claim id (`status` survives or refuted, the skeptic's statement, and its `path:line`)."

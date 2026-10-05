@@ -96,6 +96,20 @@ Structured tool names, `Code:` meanings, rule effects, theme tokens, and other m
 
 Free-form display copy is not agent-public vocabulary. The structured id behind it is.
 
+## Workflows and extensions
+
+Workflows and extensions follow the **sealed archive** and **governed manifest contract** model:
+
+- **Manifest format as contract**: The workflow manifest format is the sole contract between the host Go engine and declarative workflows, versioned by `extension_api`. It adheres strictly to the "only grows" rule: missing or zero values preserve pre-existing behavior, semantics never change within a format, and new behavior requires a new field, a new value, or a new manifest `format:` integer.
+- **Sealed archive copies**: When a released workflow undergoes a major version bump, the superseded release is stored byte-for-byte under `archive/<version>/` inside its pack directory, with integrity guaranteed by `SHA256SUMS`. The live workflow owns standard unit names (e.g. `coordinator-security-challenge.md`). Active runs on sealed versions resolve prompts and gate feedback from `archive/<version>/` first, taking precedence over project and site overlays.
+- **Surface templates as living shared chrome**: Phase `surface_template` files (e.g. `agents/coordinator-surface-vet.md`) represent living host presentation chrome, alongside posture rules, worker personas, and rating questions. They are not sealed inside the archive. Resumed runs present phase surfaces using the host's current surface templates.
+- **Retirement and resumption semantics**:
+  - Sealed versions (`Sealed: true, Retired: true`) refuse starting new runs, but permit in-flight runs to resume, evaluate gates, and advance through all remaining phases.
+  - Live retired manifests (`Sealed: false, Retired: true`) represent decommissioned workflows and refuse both new starts and resumption of existing runs (`WORKFLOW_VERSION_UNAVAILABLE`).
+- **Cross-pack namespacing**: References crossing pack boundaries must use `<pack>:<unit>` (split on the first colon). Bare names resolve strictly within the local pack. Project overrides name explicit targets (`overrides: <pack>:<unit>`).
+- **Four categories of evolution**: Go implementation bugs are fixed directly with app patches; workflow content refinements release new workflow versions; field default improvements increment manifest `format:` with an explicit defaults table; and unsafe execution deletes the sealed copy and records a `routing:` removal entry, refusing resumption fail-closed.
+
+
 ## Device configuration
 
 Provider credentials, device model policy, extension desired state, exact grants, and application state are not contained in `store.db`. Deleting the database must not silently erase or reinterpret them.

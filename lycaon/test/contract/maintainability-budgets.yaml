@@ -12574,7 +12574,7 @@ source_files:
     lycaon/internal/guidance/evidence_ledger_reader.go: 14
     lycaon/internal/guidance/feedback/actionable_leaves.go: 22
     lycaon/internal/guidance/feedback/doc.go: 1
-    lycaon/internal/guidance/feedback/gate_feedback_loader.go: 325
+    lycaon/internal/guidance/feedback/gate_feedback_loader.go: 410
     lycaon/internal/guidance/feedback/gate_signal_when.go: 72
     lycaon/internal/guidance/feedback/plan_stub_gate.go: 36
     lycaon/internal/guidance/feedback/progress.go: 44

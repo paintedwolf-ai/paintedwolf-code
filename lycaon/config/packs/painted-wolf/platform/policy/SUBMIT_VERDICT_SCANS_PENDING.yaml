@@ -12,6 +12,7 @@ copy:
   cause: One or more bound scans have not settled.
   why: A terminal review needs the complete inventory to account for its findings.
   fix: Wait for the bound scans to settle, then inspect their groups and submit the complete verdict.
+  instead: Wait for bound scans to complete before submitting a terminal verdict.
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
 x-paintedwolf-message: The review is waiting for bound scans.
@@ -19,4 +20,5 @@ x-paintedwolf-emit: guard:workflow
 x-paintedwolf-scenarios:
   - id: pending
     vars: {}
-    expect_contains: [scans]
+    expect_contains: ['Code: SUBMIT_VERDICT_SCANS_PENDING', scans]
+

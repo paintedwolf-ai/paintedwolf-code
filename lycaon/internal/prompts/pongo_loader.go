@@ -1,10 +1,13 @@
 package prompts
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/pongoplain"
@@ -15,10 +18,28 @@ type layeredLoader struct {
 	layers     PromptLayers
 	registered map[string]string
 	sources    map[string]string
+	provenance map[string]UnitProvenanceRecord
 }
 
 func newLayeredLoader(layers PromptLayers, registered map[string]string) *layeredLoader {
-	return &layeredLoader{layers: layers, registered: registered, sources: make(map[string]string)}
+	return &layeredLoader{
+		layers:     layers,
+		registered: registered,
+		sources:    make(map[string]string),
+		provenance: make(map[string]UnitProvenanceRecord),
+	}
+}
+
+// Provenance returns sorted provenance records for all preflighted assets in the template graph.
+func (l *layeredLoader) Provenance() []UnitProvenanceRecord {
+	out := make([]UnitProvenanceRecord, 0, len(l.provenance))
+	for _, p := range l.provenance {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].UnitID < out[j].UnitID
+	})
+	return out
 }
 
 // Abs keeps dependencies root-relative.
@@ -68,7 +89,7 @@ func (l *layeredLoader) Preflight(root string) (string, error) {
 			return fmt.Errorf("%w: graph exceeds %d files", pongoplain.ErrComposition, pongoplain.MaxCompositionFiles)
 		}
 
-		source, err := l.read(ref)
+		source, prov, err := l.read(ref)
 		if err != nil {
 			return fmt.Errorf("template dependency %q: %w", ref, err)
 		}
@@ -77,6 +98,7 @@ func (l *layeredLoader) Preflight(root string) (string, error) {
 			return fmt.Errorf("template dependency %q: %w", ref, err)
 		}
 		l.sources[ref] = source
+		l.provenance[ref] = prov
 		active[ref] = len(stack)
 		stack = append(stack, ref)
 		for _, dependency := range analysis.Dependencies {
@@ -99,15 +121,22 @@ func (l *layeredLoader) Preflight(root string) (string, error) {
 	return root, nil
 }
 
-func (l *layeredLoader) read(ref string) (string, error) {
+func (l *layeredLoader) read(ref string) (string, UnitProvenanceRecord, error) {
 	if source, ok := l.registered[ref]; ok {
-		return source, nil
+		sum := sha256.Sum256([]byte(source))
+		return source, UnitProvenanceRecord{
+			UnitKind:      "registered",
+			UnitID:        ref,
+			SourceTier:    "registered",
+			SourcePath:    ref,
+			ContentSha256: hex.EncodeToString(sum[:]),
+		}, nil
 	}
-	raw, err := l.layers.ReadFile(ref)
+	raw, prov, err := l.layers.ReadFileWithProvenance(ref)
 	if err != nil {
-		return "", err
+		return "", UnitProvenanceRecord{}, err
 	}
-	return string(raw), nil
+	return string(raw), prov, nil
 }
 
 func normalizeTemplateRef(ref string) (string, error) {

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -229,6 +230,14 @@ func (m *RunManager) Get(ctx context.Context, runID string) (*api.WorkflowRun, e
 		return nil, err
 	}
 	return run, nil
+}
+
+// RecordUnitProvenance records execution provenance for an asset.
+func (m *RunManager) RecordUnitProvenance(ctx context.Context, runID, phase string, rec prompts.UnitProvenanceRecord) error {
+	if m == nil || m.Store == nil {
+		return nil
+	}
+	return m.Store.RecordUnitProvenance(ctx, runID, phase, rec)
 }
 
 // GetActive returns the unadorned active leaf for a session.

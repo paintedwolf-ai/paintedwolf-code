@@ -10,9 +10,9 @@ import (
 
 func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	run, err := startRun(t.Context(), mgr, "sess-1", "security-survey", "1.0.1")
+	run, err := startRun(t.Context(), mgr, "sess-1", "security-survey", "2.0.0")
 	testutil.FailErr(t, "start patch workflow", err)
-	if run.WorkflowVersion != "1.0.1" {
+	if run.WorkflowVersion != "2.0.0" {
 		t.Fatalf("started version = %s", run.WorkflowVersion)
 	}
 	if _, err := mgr.StartHuman(t.Context(), "sess-1", api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "1.0.0"}); err == nil {
@@ -35,7 +35,7 @@ func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testin
 	}
 	registry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load versioned catalog", err)
-	if !registry.CatalogStartable("security-survey", "1.0.1") || registry.CatalogStartable("security-survey", "1.0.0") {
+	if !registry.CatalogStartable("security-survey", "2.0.0") || registry.CatalogStartable("security-survey", "1.0.0") {
 		t.Fatal("start catalog exposes wrong security version")
 	}
 	var versions []string
@@ -44,7 +44,7 @@ func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testin
 			versions = append(versions, m.Version)
 		}
 	}
-	if len(versions) != 2 || versions[0] != "1.0.1" || versions[1] != "1.0.0" {
+	if len(versions) != 2 || versions[0] != "2.0.0" || versions[1] != "1.0.0" {
 		t.Fatalf("semantic version ordering = %v", versions)
 	}
 	rows := FilterProductCatalogSummaries(registry.SummariesWithScopes(map[string]string{}), registry.All())
@@ -52,7 +52,7 @@ func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testin
 	for _, row := range rows {
 		if row.ID == "security-survey" {
 			found++
-			if row.Version != "1.0.1" {
+			if row.Version != "2.0.0" {
 				t.Fatalf("start catalog selected %s", row.Version)
 			}
 		}
@@ -64,7 +64,7 @@ func TestSecurityPatchVersionStartsAndReleasedVersionRemainsResolvable(t *testin
 
 func TestRetiredSecurityRunProjectsItsSelectedDefinition(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	run, err := startRun(t.Context(), mgr, "sess-1", "security-survey", "1.0.1")
+	run, err := startRun(t.Context(), mgr, "sess-1", "security-survey", "2.0.0")
 	testutil.FailErr(t, "start patch workflow", err)
 	run.WorkflowVersion = "1.0.0"
 	ui, err := mgr.ComputeRunUI(t.Context(), run)

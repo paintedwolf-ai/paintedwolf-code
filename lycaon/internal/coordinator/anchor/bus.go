@@ -2,6 +2,7 @@ package anchor
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -71,8 +72,16 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	if reg == nil {
 		return
 	}
-	binding, ok := reg.ResolveInform(id, match)
-	if !ok || binding == nil || binding.Render == "" {
+	binding, err := reg.ResolveInform(id, match)
+	if err != nil {
+		if errors.Is(err, ErrWorkflowVersionMissing) && b.kicks != nil {
+			b.kicks.QueuePendingGuidance(sessionID, "Workflow version is missing; runs must be bound to an exact workflow version.", api.ToolFeedback{
+				Code: "WORKFLOW_VERSION_MISSING",
+			})
+		}
+		return
+	}
+	if binding == nil || binding.Render == "" {
 		return
 	}
 	gc := oar.NewGuardContext()
@@ -111,8 +120,8 @@ func (b *Bus) EmitEager(ctx context.Context, sessionID string, id ID, data map[s
 	if reg == nil {
 		return
 	}
-	binding, ok := reg.ResolveInform(id, MatchContext{SessionID: sessionID, Surface: anchorcatalog.SurfaceFor(string(id))})
-	if !ok || binding == nil || strings.TrimSpace(binding.Render) == "" {
+	binding, err := reg.ResolveInform(id, MatchContext{SessionID: sessionID, Surface: anchorcatalog.SurfaceFor(string(id))})
+	if err != nil || binding == nil || strings.TrimSpace(binding.Render) == "" {
 		return
 	}
 	b.kicks.QueueEager(sessionID, binding.Render, data)

@@ -120,9 +120,9 @@ Coverage facts include full-scope file distributions by directory and extension,
 
 Reports derive completion from that accepted review: complete means the planned obligations are satisfied with evidenced immaterial limitations disclosed; mostly means bounded material work remains; incomplete means essential work or coverage acceptance remains. Failed required scans, missing planned work, unaccounted scanner groups, and document defects remain independent failures. Open claims without an accepted question assessment also remain incomplete. The report separates remaining work, scanner limitations, assessed exclusions, and the evidence for coverage judgments. Set-aside findings are accounted inventory, not uncovered work. A retired manifest (`retired: true`) remains available to existing runs but is absent from the start catalog. Each run projects its selected definition into its UI state, so retirement preserves its name, phase progress, and controls. Run visibility follows its attachment policy and ancestry, independently of start-catalog membership.
 
-Security survey 1.0.1 adds `followup_attempts: 2` to its challenge phase. A non-terminal verdict registers each open claim's `question: {missing_fact, obligations}` in host-owned state. The returned `question/<claim id>` work ID binds focused read tasks; its `/review` work ID binds the required reviewers' reassessment. Completed investigations consume the allowance; failed providers and invalid submissions do not. The host prevents duplicate active work, requires fresh review after investigation, and permits an essential-open report for a recorded execution blocker. Otherwise material questions require resolution, evidenced immateriality, or exhausted investigation. An exhausted question cannot open another non-terminal follow-up; it must receive an explicit terminal outcome and coverage assessment. A question's materiality must agree with the obligations it affects. The report's `unresolved` finding disposition preserves unanswered questions without calling them sound or accepted risk.
+Security survey 2.0.0 adds `followup_attempts: 2` to its challenge phase. A non-terminal verdict registers each open claim's `question: {missing_fact, obligations}` in host-owned state. The returned `question/<claim id>` work ID binds focused read tasks; its `/review` work ID binds the required reviewers' reassessment. Completed investigations consume the allowance; failed providers and invalid submissions do not. The host prevents duplicate active work, requires fresh review after investigation, and permits an essential-open report for a recorded execution blocker. Otherwise material questions require resolution, evidenced immateriality, or exhausted investigation. An exhausted question cannot open another non-terminal follow-up; it must receive an explicit terminal outcome and coverage assessment. A question's materiality must agree with the obligations it affects. The report's `unresolved` finding disposition preserves unanswered questions without calling them sound or accepted risk.
 
-The retired 1.0.0 definition remains resolvable for existing runs and retains its coverage contract; no history, database schema revision, or recorded verdict is rewritten. Patch versions use the same semantic-version parsing and catalog ordering as other workflow versions.
+The superseded 1.0.0 definition remains resolvable for existing runs as a sealed archive copy in `archive/1.0.0/` and retains its coverage contract; no history, database schema revision, or recorded verdict is rewritten. Active runs on sealed copies evaluate their original prompts and gate feedback from the archive.
 
 `verdict_schema` names each member and its type: the decision enum under `verdict`, free text for any other type word, `claims` for typed claims, and `set_asides` for scanner groups the review accounts for without assessing them one by one. A set-aside is `{reason, scan_group_ids}` or `{reason, scanner, paths}`, the reason holding for every group it selects; `submit_verdict` refuses one that names a group outside the run's inventory or selects nothing once the bound scans settle. Every declared member is required, so a phase that declares set-asides states `[]` when it sets none aside. Set-asides accumulate across phases and the run report inherits them. A phase with `require_inventory_accounted: true` cannot submit a terminal verdict until the bound scans settle and every group is linked by a claim or selected by a set-aside. This check includes earlier verdicts and runs while investigation tools remain available; a rejected accounting attempt does not consume a review round.
 
@@ -326,3 +326,184 @@ One proof cannot stand in for another. A successful command does not approve its
 ## Session concurrency
 
 A session admits one coordinator turn at a time. Workers execute as durable child sessions with bounded concurrency and private state. Human control actions use workflow revisions. Concurrency exists in worker jobs and independent background operations, not as competing writers to one coordinator transcript or workflow run.
+
+---
+
+## Manifest field reference
+
+The manifest format is versioned by `extension_api` (current format range `1..1`, `extension_api: 1.1.0`). In accordance with the "only grows" rule, omitted optional fields evaluate to their zero-value or format default, preserving the behavior in effect before the field was introduced.
+
+### Top-level workflow definition
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `id` | `string` | Required | None | Unique identifier for the workflow within its pack (e.g. `security-survey`). |
+| `version` | `string` | Required | None | Semantic version string (`X.Y.Z`). |
+| `format` | `int` | Optional | `1` | Manifest format version. Missing format defaults to `1`. |
+| `name` | `string` | Optional | Empty | User-facing display name in sentence case. |
+| `description` | `string` | Optional | Empty | Summary of workflow objective and operation. |
+| `retired` | `bool` | Optional | `false` | When `true`, hides the workflow from start catalogs while keeping it loadable for historical runs. |
+| `trigger` | `string` | Optional | Empty | Trigger keyword or slash command activating this workflow. |
+| `initial_posture` | `string` | Optional | Empty | Initial session posture applied on workflow start (e.g. `read_only`). |
+| `icon` | `string` | Optional | Empty | UI icon identifier for catalog display. |
+| `featured` | `bool` | Optional | `false` | When `true`, prominently highlights the workflow in start dialogs. |
+| `requires_repo` | `bool` | Optional | `false` | When `true`, requires an open Git repository in workspace to start. |
+| `coordinator_profile` | `string` | Optional | Empty | Profile defining the default tools and capabilities for the coordinator. |
+| `surface_profile` | `string` | Optional | Empty | Surface profile governing session presentation chrome. |
+| `extends` | `string` | Optional | Empty | Exact `<pack>:<workflow>@<version>` manifest this workflow extends. |
+| `gates` | `[]string` | Optional | `[]` | Top-level workflow completion gates. |
+| `rules` | `[]string` | Optional | `[]` | Workflow-level posture and constraint rules. |
+| `topology` | `string` | Optional | Empty | Named execution topology bound to the workflow run. |
+
+### Attachment and request contracts
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `attach.policy` | `string` | Optional | Empty | Activation policy (e.g. `ambient`, `manual`). |
+| `request.cadence` | `string` | Optional | `once` | When to collect request text (`once` at start, or `each_turn`). |
+| `request.question` | `string` | Optional | Empty | Question prompt presented to user when starting with an empty request. |
+| `request.default` | `string` | Optional | Empty | Default request text used if no explicit text or answer is provided. |
+
+### Agents and parameters
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `agents[].id` | `string` | Required | None | Unique identifier of the declared worker or coordinator agent. |
+| `agents[].tools` | `string` | Optional | `all` | Tool profile or `all` for the full phase tool surface. |
+| `agents[].spawn` | `bool` | Optional | `false` | Whether this agent can be dynamically spawned as a subagent. |
+| `parameters.<key>.type` | `string` | Optional | `string` | Parameter data type (e.g. `string`, `int`, `bool`). |
+| `parameters.<key>.default` | `string` | Optional | Empty | Default value if parameter is not supplied. |
+
+### Blueprints and presets
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `blueprint.id` | `string` | Required | None | Identifier for the governing Blueprint. |
+| `blueprint.file` | `string` | Optional | Empty | Relative filename for the Blueprint Markdown file. |
+| `blueprint.frontmatter` | `[]string` | Optional | `[]` | Required frontmatter keys present in the Blueprint document. |
+| `presets[].id` | `string` | Required | None | Unique preset identifier. |
+| `presets[].name` | `string` | Optional | Empty | Display name for the preset. |
+| `presets[].description` | `string` | Optional | Empty | Explanatory description of the preset. |
+| `presets[].trigger` | `string` | Optional | Empty | Slash command triggering this preset. |
+| `presets[].params` | `map[string]string`| Required | None | Preset parameter value bindings. |
+
+### Controls and report configuration
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `controls.phase_advance` | `string` | Optional | `automatic` | Default phase advancement policy (`automatic` or `coordinator`). |
+| `controls.default_execution_mode` | `string` | Optional | Empty | Default execution mode (e.g. `await_coordinator`). |
+| `controls.on_decision_reject.pause` | `bool` | Optional | `false` | Pause workflow run if a human decision is rejected. |
+| `controls.on_decision_reject.cancel` | `bool` | Optional | `false` | Cancel workflow run if a human decision is rejected. |
+| `controls.on_pause.hold_pending` | `bool` | Optional | `false` | Hold pending worker tasks when paused. |
+| `controls.on_pause.cancel_running` | `bool` | Optional | `false` | Cancel currently running worker tasks on pause. |
+| `controls.on_stop.cancel_workers` | `bool` | Optional | `false` | Terminate background workers when stopped. |
+| `controls.on_stop.abort_delegation` | `bool` | Optional | `false` | Abort active delegation lineages when stopped. |
+| `controls.on_stop.session_abort` | `bool` | Optional | `false` | Abort host session when workflow run is stopped. |
+| `controls.content_review.tools` | `[]string` | Optional | `[]` | Tools available during content review. |
+| `controls.content_review.paths` | `[]string` | Optional | `[]` | File paths subject to content review. |
+| `controls.report.enabled` | `bool` | Optional | `false` | Enables downloadable report generation at workflow completion. |
+| `controls.report.findings_label` | `string` | Optional | `Findings` | Heading label for report findings section. |
+| `controls.report.brief.question` | `string` | Optional | Empty | Primary brief assessment question. |
+| `controls.report.brief.dimensions` | `[]block` | Optional | `[]` | Rating dimensions for evaluating findings. |
+| `controls.report.brief.levels` | `[]block` | Optional | `[]` | Severity levels and matching criteria. |
+| `controls.report.brief.basis` | `[]string` | Optional | `[]` | Basis topics informing the brief rating. |
+
+### Phase definitions
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `phases[].id` | `string` | Required | None | Stable identifier for the phase. |
+| `phases[].activity_label` | `string` | Required | None | User-facing activity label in sentence case. |
+| `phases[].complete_when` | `string` | Optional | `gates_satisfied` | Exit condition predicate or expression. |
+| `phases[].entry_when` | `string` | Optional | Empty | Predicate evaluated before phase entry. |
+| `phases[].next` | `string` | Optional | Empty | Identifier of next sequential phase. |
+| `phases[].terminal` | `bool` | Optional | `false` | When `true`, marks phase as terminal outcome for the run. |
+| `phases[].coordinator_surface`| `string` | Optional | Empty | Surface identifier for the coordinator in this phase. |
+| `phases[].surface_template` | `string` | Optional | Empty | Relative path to living phase surface template chrome. |
+| `phases[].mode_refs` | `[]string` | Optional | `[]` | Execution modes available in this phase. |
+| `phases[].gates` | `[]string` | Optional | `[]` | Machine evidence gates that must pass before leaving. |
+| `phases[].intake` | `[]string` | Optional | `[]` | Request/context keys collected upon entering phase. |
+| `phases[].blueprint_write` | `bool` | Optional | `false` | Authorizes coordinator to write or modify governing Blueprint. |
+| `phases[].depth_param` | `string` | Optional | Empty | Workflow parameter key controlling analysis depth. |
+
+### Phase invocation and delegation
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `phases[].invoke_workflow.workflow_id` | `string` | Optional | Empty | Target workflow ID for child subroutine. |
+| `phases[].invoke_workflow.version` | `string` | Optional | Empty | Exact version of child workflow to invoke. |
+| `phases[].invoke_workflow.blueprint` | `string` | Optional | `inherit` | Blueprint propagation mode (`inherit`, `own`, or `none`). |
+| `phases[].invoke_trigger` | `string` | Optional | Empty | Trigger command for invoked child workflow. |
+| `phases[].child_next` | `string` | Optional | Empty | Next phase applied to child execution when root phase loops. |
+| `phases[].child_complete_when` | `string` | Optional | Empty | Specific completion condition for invoked child. |
+| `phases[].child_gates` | `[]string` | Optional | `[]` | Gates required for child workflow completion. |
+| `phases[].bind_topology_stage` | `string` | Optional | Empty | Topology stage bound to this phase. |
+| `phases[].bind_parallel_group` | `[]string` | Optional | `[]` | Parallel task groups bound to this phase. |
+| `phases[].parallel_task.max_workers` | `int` | Optional | `0` (host max) | Max concurrent workers in this phase. |
+| `phases[].parallel_task.max_read_workers` | `int` | Optional | `0` (host max) | Max concurrent read-only workers in this phase. |
+| `phases[].parallel_task.max_write_workers` | `int` | Optional | `0` (host max) | Max concurrent mutating workers in this phase. |
+| `phases[].fanout.require_threat_model` | `bool` | Optional | `false` | Requires threat model input before leg dispatch. |
+| `phases[].fanout.max_attempts` | `int` | Optional | `1` | Max execution attempts per planned fan-out leg. |
+| `phases[].touch.paths` | `[]string` | Optional | `[]` | Workspace paths monitored or touched in this phase. |
+
+### Phase lifecycle hooks and transitions
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `phases[].on_enter.set_posture` | `string` | Optional | Empty | Session posture set on entering phase. |
+| `phases[].on_enter.set_execution_mode` | `string` | Optional | Empty | Session mode set on entering phase. |
+| `phases[].on_enter.prompt_coordinator` | `bool` | Optional | `false` | Wakes coordinator turn immediately upon entering phase. |
+| `phases[].on_enter.request_user_feedback` | `block` | Optional | None | Structured interactive user question on enter. |
+| `phases[].on_enter.obligations` | `[]block` | Optional | `[]` | Obligations instantiated upon entering phase. |
+| `phases[].on_reenter.inject_kick` | `string` | Optional | Empty | Prompt kick injected when re-entering phase. |
+| `phases[].on_reenter.reenter_leg` | `string` | Optional | Empty | Topology leg re-entered on re-entry. |
+| `phases[].controls.closeout` | `string` | Optional | Empty | Closeout policy applied upon completing phase. |
+| `phases[].advance.when_gate_met` | `string` | Optional | Empty | Custom gate condition triggering advance. |
+| `phases[].loop.exit` | `string` | Optional | Empty | Destination phase when loop condition exits. |
+| `phases[].human_approval.blueprint` | `string` | Optional | Empty | Blueprint digest required for human approval. |
+| `phases[].human_approval.readiness` | `string` | Optional | Empty | Readiness gate required before approval UI opens. |
+| `phases[].explain.summary` | `string` | Optional | Empty | Brief status summary presented while host holds phase. |
+| `phases[].explain.body` | `string` | Optional | Empty | Explanatory body note presented while host holds phase. |
+| `phases[].transitions[].id` | `string` | Required | None | Unique choice transition identifier. |
+| `phases[].transitions[].to` | `string` | Required | None | Target phase for this transition edge. |
+| `phases[].transitions[].actors` | `[]string` | Required | None | Permitted actors (`human`, `coordinator`). |
+| `phases[].transitions[].label` | `string` | Required | None | User-facing transition button label in sentence case. |
+| `phases[].transitions[].when` | `string` | Optional | Empty | Gate predicate guarding transition availability. |
+
+### Review loop configuration
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `phases[].review_loop.evidence_key` | `string` | Required | None | Review evidence collection key. |
+| `phases[].review_loop.required_agents` | `[]string` | Optional | `[]` | Reviewer agent roles required to review. |
+| `phases[].review_loop.if_spawnable` | `[]string` | Optional | `[]` | Conditional agent roles spawned when available. |
+| `phases[].review_loop.coverage_reviewers` | `[]string` | Optional | `[]` | Subset of reviewers assessing coverage facts. |
+| `phases[].review_loop.followup_attempts` | `int` | Optional | `0` | Max follow-up investigation rounds for open claims. |
+| `phases[].review_loop.reconciles_phase` | `string` | Optional | Empty | Earlier phase whose claims/assessments are reconciled. |
+| `phases[].review_loop.require_inventory_accounted` | `bool` | Optional | `false` | Requires all scan groups to be accounted before verdict. |
+| `phases[].review_loop.include_scan_inventory` | `bool` | Optional | `false` | Injects full scan inventory into review context. |
+| `phases[].review_loop.iteration_cap` | `int` | Optional | `3` | Maximum review iterations before forced exit. |
+| `phases[].review_loop.verdict_schema` | `map[string]string`| Optional | None | Schema of verdict submission fields and types. |
+| `phases[].review_loop.claim_statuses` | `map[string]string`| Optional | None | Mapping of verdict claim statuses to standard classes. |
+| `phases[].review_loop.brief_label` | `string` | Optional | Empty | Label for the review check in page 1 brief. |
+
+### Workflow injects and prompt bindings
+
+| Field | Type | Presence | Default / Missing behavior | Description |
+|---|---|---|---|---|
+| `injects[].on` | `string` | Required | None | Event triggering inject evaluation (e.g. `phase_enter`). |
+| `injects[].selector.surface` | `string` | Optional | Empty | Surface identifier filter. |
+| `injects[].selector.phase` | `string` | Optional | Empty | Phase identifier filter. |
+| `injects[].selector.workflow` | `string` | Optional | Empty | Workflow identifier filter. |
+| `injects[].selector.tool` | `string` | Optional | Empty | Tool identifier filter. |
+| `injects[].selector.tools` | `[]string` | Optional | `[]` | Set of tool identifier filters. |
+| `injects[].selector.profiles` | `[]string` | Optional | `[]` | Agent profile filters. |
+| `injects[].selector.surfaces` | `[]string` | Optional | `[]` | Set of surface filters. |
+| `injects[].selector.session_posture` | `[]string` | Optional | `[]` | Session posture filters. |
+| `injects[].effect` | `string` | Required | None | Injection effect (e.g. `guidance_render`). |
+| `injects[].when` | `string` | Optional | Empty | Gate predicate evaluated before injection. |
+| `injects[].render` | `string` | Optional | Empty | Name of prompt template unit to render. |
+| `injects[].tier` | `string` | Optional | Empty | Guidance tier precedence. |
+| `injects[].dedup` | `yaml` | Optional | None | Deduplication strategy for inject content. |
+
