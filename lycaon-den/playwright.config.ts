@@ -20,7 +20,7 @@ const tauriStack = {
   command: `bash ${path.join(scripts, "e2e-tauri-dev.sh")}`,
   url: baseURL,
   reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
-  timeout: 300_000,
+  timeout: 600_000,
   stdout: "pipe" as const,
   stderr: "pipe" as const,
   // The script runs Tauri in its own process group; SIGTERM lets its trap stop
