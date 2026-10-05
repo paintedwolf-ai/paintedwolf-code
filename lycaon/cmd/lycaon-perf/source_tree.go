@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,10 +34,13 @@ func (s *runState) measureSourceTree(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	firstRows := path + "/rows?follow=latest&limit=100&anchor=" + base64.RawURLEncoding.EncodeToString(anchor)
+	var presPath string
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
+		if presPath != "" {
+			_ = s.client.request(cleanup, http.MethodDelete, presPath, nil, nil)
+		}
 		_ = s.client.request(cleanup, http.MethodDelete, path, nil, nil)
 	}()
 	painted := false
@@ -49,6 +51,16 @@ func (s *runState) measureSourceTree(ctx context.Context) error {
 			return fmt.Errorf("source tree preparation failed: %+v", view.Failure)
 		}
 		if view.State == "ready" && !painted {
+			var pres api.SourcePresentation
+			presReq := api.SourcePresentationCreate{
+				OperationID:    uuid.NewString(),
+				IntentRevision: view.IntentRevision,
+			}
+			if err := s.client.request(ctx, http.MethodPost, path+"/presentations", presReq, &pres); err != nil {
+				return err
+			}
+			presPath = path + "/presentations/" + pres.ID
+			firstRows := presPath + "/rows?limit=100&anchor=" + base64.RawURLEncoding.EncodeToString(anchor)
 			var frame api.SourceTreeFrame
 			if err := s.client.request(ctx, http.MethodGet, firstRows, nil, &frame); err != nil {
 				return err
@@ -72,15 +84,15 @@ func (s *runState) measureSourceTree(ctx context.Context) error {
 		}
 	}
 	s.metrics.add("source.tree", elapsedMS(started))
-	return s.verifySourceTree(ctx, path, view)
+	return s.verifySourceTree(ctx, presPath, view)
 }
 
-func (s *runState) verifySourceTree(ctx context.Context, path string, view api.SourceTreeView) error {
+func (s *runState) verifySourceTree(ctx context.Context, presPath string, view api.SourceTreeView) error {
 	directories := make(map[string]bool)
 	for offset := int64(0); offset < view.Extent.Rows; {
 		var frame api.SourceTreeFrame
-		query := fmt.Sprintf("/rows?basis=%s&offset=%d&limit=200", url.QueryEscape(view.ProjectionRevision), offset)
-		if err := s.client.request(ctx, http.MethodGet, path+query, nil, &frame); err != nil {
+		query := fmt.Sprintf("/rows?offset=%d&limit=200", offset)
+		if err := s.client.request(ctx, http.MethodGet, presPath+query, nil, &frame); err != nil {
 			return err
 		}
 		if frame.ViewID != view.ID || frame.ProjectionRevision != view.ProjectionRevision || frame.Span.Start != offset || frame.Span.End <= offset || frame.Span.End > view.Extent.Rows || int64(len(frame.Rows)) != frame.Span.End-offset {

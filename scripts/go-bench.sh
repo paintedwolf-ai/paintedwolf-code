@@ -30,13 +30,21 @@ done
 
 if [[ ${#PACKAGES[@]} -eq 0 ]]; then
   while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
     package="./$(dirname "${file}")"
     seen=false
-    for existing in "${PACKAGES[@]:-}"; do
-      if [[ "${existing}" == "${package}" ]]; then seen=true; break; fi
-    done
+    if [[ ${#PACKAGES[@]} -gt 0 ]]; then
+      for existing in "${PACKAGES[@]}"; do
+        if [[ "${existing}" == "${package}" ]]; then seen=true; break; fi
+      done
+    fi
     if [[ "${seen}" == false ]]; then PACKAGES+=("${package}"); fi
-  done < <(cd "${ROOT}/lycaon" && rg -l '^func Benchmark' --glob '*_test.go' | sort)
+  done < <(cd "${ROOT}/lycaon" && (command -v rg >/dev/null 2>&1 && rg -l '^func Benchmark' --glob '*_test.go' || grep -rl '^func Benchmark' . --include='*_test.go' | sed 's|^\./||') | sort)
+fi
+
+if [[ ${#PACKAGES[@]} -eq 0 ]]; then
+  echo "go-bench: no packages with benchmarks found" >&2
+  exit 1
 fi
 
 mkdir -p "$(dirname "${OUTPUT}")"
