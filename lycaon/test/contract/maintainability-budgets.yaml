@@ -1156,7 +1156,7 @@ go_receiver_lines:
     lycaon/internal/scan/drivers/bundled/bundleddriver.opengrepRunFiles: 1
     lycaon/internal/scan/drivers/external/external.Scanner: 129
     lycaon/internal/scan/drivers/library/library.GitleaksScanner: 74
-    lycaon/internal/scan/drivers/library/library.ScalibrScanner: 72
+    lycaon/internal/scan/drivers/library/library.ScalibrScanner: 75
     lycaon/internal/scan/drivers/libraryworker/libraryworker.Scanner: 62
     lycaon/internal/scan/drivers/libraryworker/libraryworker.resident: 46
     lycaon/internal/scan/drivers/libraryworker/libraryworker.tailBuffer: 14
@@ -13456,7 +13456,7 @@ source_files:
     lycaon/internal/report/summary.go: 228
     lycaon/internal/report/table.go: 177
     lycaon/internal/report/theme.go: 126
-    lycaon/internal/report/typeface.go: 50
+    lycaon/internal/report/typeface.go: 51
     lycaon/internal/resourcelifecycle/registry.go: 182
     lycaon/internal/revision/counter.go: 37
     lycaon/internal/rules/canonical_when.go: 58
@@ -13565,7 +13565,7 @@ source_files:
     lycaon/internal/scan/drivers/external/scanner.go: 294
     lycaon/internal/scan/drivers/library/gitleaks_lycaon.go: 21
     lycaon/internal/scan/drivers/library/osv_advisory.go: 118
-    lycaon/internal/scan/drivers/library/scanners.go: 347
+    lycaon/internal/scan/drivers/library/scanners.go: 360
     lycaon/internal/scan/drivers/libraryworker/scanner.go: 210
     lycaon/internal/scan/execution/base_comparison.go: 124
     lycaon/internal/scan/execution/claims.go: 120
@@ -16137,7 +16137,7 @@ test_files:
     lycaon-den/e2e/checkpoint-edit-review-default-off.spec.ts: 16
     lycaon-den/e2e/checkpoint-file-change.spec.ts: 46
     lycaon-den/e2e/checkpoint-high-risk-band.spec.ts: 76
-    lycaon-den/e2e/checkpoint-recovery.spec.ts: 145
+    lycaon-den/e2e/checkpoint-recovery.spec.ts: 137
     lycaon-den/e2e/checkpoint-socket-capability.spec.ts: 76
     lycaon-den/e2e/checkpoint-tool-approval.spec.ts: 132
     lycaon-den/e2e/citation-open.spec.ts: 160
@@ -16191,7 +16191,7 @@ test_files:
     lycaon-den/e2e/fixtures/inline-diff-remount.tsx: 56
     lycaon-den/e2e/free-chat-implement.spec.ts: 24
     lycaon-den/e2e/git-action-errors.spec.ts: 73
-    lycaon-den/e2e/git-worktree-strip.spec.ts: 330
+    lycaon-den/e2e/git-worktree-strip.spec.ts: 325
     lycaon-den/e2e/gutter-line-card.spec.ts: 142
     lycaon-den/e2e/harness-smoke.spec.ts: 51
     lycaon-den/e2e/heavy-binary-hot-exit.spec.ts: 59

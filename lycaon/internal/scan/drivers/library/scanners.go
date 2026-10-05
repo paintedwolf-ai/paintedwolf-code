@@ -15,6 +15,7 @@ import (
 	scalibrfs "github.com/google/osv-scalibr/fs"
 	"github.com/google/osv-scalibr/inventory"
 	"github.com/google/osv-scalibr/plugin"
+	pluginconfig "github.com/google/osv-scalibr/plugin/config"
 	"github.com/google/osv-scalibr/plugin/list"
 	scalibrresult "github.com/google/osv-scalibr/result"
 	"github.com/lycaon/lycaon/internal/advisory"
@@ -75,17 +76,20 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 	if _, err := severity.Default(); err != nil {
 		return nil, err
 	}
-	pluginCfg := &cpb.PluginConfig{
-		PluginSpecific: []*cpb.PluginSpecificConfig{
-			{
-				Config: &cpb.PluginSpecificConfig_Osvlocal{
-					Osvlocal: &cpb.OSVLocalConfig{
-						LocalPath: cacheDir,
-						Download:  true,
-						RemoteHost: egressclass.RequireSingleFixedEndpoint(
-							egressclass.OSVAdvisoryDownload,
-							egressclass.LibraryDownload,
-						),
+	pluginCfg := &pluginconfig.PluginConfig{
+		ClientFactories: pluginconfig.NewDefaultClientFactories("lycaon"),
+		ProtoConfig: &cpb.PluginConfig{
+			PluginSpecific: []*cpb.PluginSpecificConfig{
+				{
+					Config: &cpb.PluginSpecificConfig_Osvlocal{
+						Osvlocal: &cpb.OSVLocalConfig{
+							LocalPath: cacheDir,
+							Download:  true,
+							RemoteHost: egressclass.RequireSingleFixedEndpoint(
+								egressclass.OSVAdvisoryDownload,
+								egressclass.LibraryDownload,
+							),
+						},
 					},
 				},
 			},
@@ -176,13 +180,22 @@ func mapPackageVulns(vulns []*inventory.PackageVuln, projectDir, driverID string
 			msg = pv.Vulnerability.Summary
 		}
 		var locations []api.SecurityFindingLocation
-		if pv.Package != nil && len(pv.Package.Locations) > 0 {
-			for _, path := range pv.Package.Locations {
+		if pv.Package != nil {
+			if path := pv.Package.Location.PathOrEmpty(); path != "" {
 				uri := path
 				if rel, err := filepath.Rel(projectDir, uri); err == nil {
 					uri = rel
 				}
 				locations = append(locations, api.SecurityFindingLocation{URI: uri})
+			}
+			for _, loc := range pv.Package.Location.Related {
+				if loc.File != nil && loc.File.Path != "" {
+					uri := loc.File.Path
+					if rel, err := filepath.Rel(projectDir, uri); err == nil {
+						uri = rel
+					}
+					locations = append(locations, api.SecurityFindingLocation{URI: uri})
+				}
 			}
 		}
 		out = append(out, scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{
