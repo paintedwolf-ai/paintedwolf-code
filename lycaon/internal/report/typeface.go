@@ -3,6 +3,7 @@ package report
 import (
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
 	"github.com/johnfercher/maroto/v2/pkg/core/entity"
+	"github.com/johnfercher/maroto/v2/pkg/fontrepository"
 	"github.com/lycaon/lycaon/internal/fonts"
 	"github.com/phpdave11/gofpdf"
 )
@@ -36,16 +37,16 @@ func faceBytes(file string) ([]byte, error) {
 }
 
 // customFonts is the face set handed to the document builder.
-func customFonts() ([]*entity.CustomFont, error) {
-	out := make([]*entity.CustomFont, 0, len(faces))
+func customFonts() ([]entity.CustomFont, error) {
+	repo := fontrepository.New()
 	for _, f := range faces {
 		b, err := faceBytes(f.file)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, &entity.CustomFont{Family: f.family, Style: f.style, Bytes: b})
+		repo.AddUTF8FontFromBytes(f.family, f.style, b)
 	}
-	return out, nil
+	return repo.Load()
 }
 
 // registerFaces registers font faces with a gofpdf document.

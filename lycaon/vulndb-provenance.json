@@ -1,9 +1,9 @@
 {
- "covered_modules": 82,
- "database_modified": "2026-09-28T16:43:40Z",
- "entries": 486,
- "module_count": 826,
- "module_digest": "f8da4f405eef7b24221a3f42049475a2a63258cb2dfdfd91d6287492ca07ea1e",
+ "covered_modules": 72,
+ "database_modified": "2026-10-01T20:24:15Z",
+ "entries": 409,
+ "module_count": 649,
+ "module_digest": "a93fd5f3f40591827576a375875251163e42d2cc4a7c1e5c4f12631650dfd6bf",
  "source": "https://vuln.go.dev",
- "tree_sha256": "344de08d42ae4598af666f8196deabce60d62ed9f8bb0f2b7f3212c25d0412c9"
+ "tree_sha256": "fbc4d8042495e2f90b07590d33c8a23df58bc51270da1996ee6b735f498904ba"
 }

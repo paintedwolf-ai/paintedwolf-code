@@ -38,7 +38,7 @@ func TestAdvisorySeverityPreservesUnknownAndPublishedScores(t *testing.T) {
 }
 
 func goPackage(name string) *extractor.Package {
-	return &extractor.Package{Name: name, Version: "1.0.0", PURLType: "golang", Locations: []string{"/proj/go.mod"}}
+	return &extractor.Package{Name: name, Version: "1.0.0", PURLType: "golang", Location: extractor.LocationFromPath("/proj/go.mod")}
 }
 
 func TestPackageAdvisoryPreservesAliasesAndMatchingFixes(t *testing.T) {

@@ -1,39 +1,4 @@
 # Reviewed suppressions for govulncheck (Go vulnerability database IDs).
 # govulncheck has no native ignore API; scripts/govulncheck-gate.py enforces this file.
 # goos marks an entry only that OS's build reaches; other hosts do not report it as stale.
-allow:
-  GO-2026-4887:
-    reason: >
-      Transitive github.com/docker/docker via osv-scalibr container image extraction.
-      Affects Docker daemon AuthZ plugins with oversized request bodies; the sidecar does not
-      run a Docker daemon or expose AuthZ plugin endpoints. Docker Engine is fixed in
-      29.3.1; the Go advisory lists no fixed release for the legacy docker/docker module.
-    reviewed: "2026-09-11"
-  GO-2026-4883:
-    reason: >
-      Same transitive docker/docker dependency path. Affects Docker daemon privilege
-      validation during Docker plugin installation. The embedded SCA path neither runs
-      a Docker daemon nor handles Docker plugin installation. Docker Engine is fixed in 29.3.1; the Go
-      advisory lists no fixed release for the legacy docker/docker module.
-    reviewed: "2026-09-11"
-  GO-2026-5622:
-    goos: linux
-    reason: >
-      Transitive github.com/containerd/containerd via the osv-scalibr containerd extractor,
-      which reads a containerd store's metadata on Linux. Affects the CRI plugin's checkpoint
-      restore following symlinks to host log files; the sidecar runs no CRI server and never
-      restores checkpoints. Fixed only in containerd/v2; the v1 module has no fixed release.
-    reviewed: "2026-10-03"
-  GO-2026-5338:
-    goos: linux
-    reason: >
-      Same containerd extractor path. Affects CRI checkpoint import tagging local images; the
-      sidecar runs no CRI server and imports no images. Fixed only in containerd/v2.
-    reviewed: "2026-10-03"
-  GO-2026-5064:
-    goos: linux
-    reason: >
-      Same containerd extractor path. Affects CDI annotations carried through CRI checkpoint
-      restore; the sidecar runs no CRI server and starts no containers. Fixed only in
-      containerd/v2.
-    reviewed: "2026-10-03"
+allow: {}
