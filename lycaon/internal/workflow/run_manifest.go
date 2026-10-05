@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -75,6 +76,32 @@ func (m *RunManager) manifestForRun(ctx context.Context, run *api.WorkflowRun) (
 		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
 	}
 	return m.manifestForSession(ctx, m.projectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+}
+
+// runnableManifestForRun validates that the workflow definition exists and is permitted to execute.
+// Under the compatibility contract (docs/compatibility.md), sealed archives are permitted to
+// execute, while retired unsealed versions and missing workflows fail with WorkflowVersionUnavailableError.
+func (m *RunManager) runnableManifestForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef.Manifest, error) {
+	if run == nil {
+		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
+	}
+	manifest, err := m.manifestForRun(ctx, run)
+	if err != nil {
+		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+			return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{
+				WorkflowID: run.WorkflowID,
+				Version:    run.WorkflowVersion,
+			}
+		}
+		return workflowdef.Manifest{}, err
+	}
+	if manifest.Retired && !manifest.Sealed {
+		return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{
+			WorkflowID: run.WorkflowID,
+			Version:    run.WorkflowVersion,
+		}
+	}
+	return manifest, nil
 }
 
 func (m *RunManager) projectDirForRun(ctx context.Context, run *api.WorkflowRun) string {

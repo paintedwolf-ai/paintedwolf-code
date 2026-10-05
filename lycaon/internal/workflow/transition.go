@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -51,21 +50,9 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	if IsTerminal(run.Status) || run.Status != api.WorkflowRunStatusRunning {
 		return nil, &NotRunnableError{RunID: runID, Status: run.Status, Reason: string(run.Status)}
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
-		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
-			return nil, &WorkflowVersionUnavailableError{
-				WorkflowID: run.WorkflowID,
-				Version:    run.WorkflowVersion,
-			}
-		}
 		return nil, err
-	}
-	if manifest.Retired && !manifest.Sealed {
-		return nil, &WorkflowVersionUnavailableError{
-			WorkflowID: run.WorkflowID,
-			Version:    run.WorkflowVersion,
-		}
 	}
 	cur, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok {

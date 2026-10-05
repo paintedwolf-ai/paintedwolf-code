@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -32,21 +31,9 @@ func (m *RunManager) Advance(ctx context.Context, runID string) (*api.WorkflowRu
 	if run.Status != api.WorkflowRunStatusRunning && run.Status != api.WorkflowRunStatusPaused {
 		return nil, &NotRunnableError{RunID: runID, Status: run.Status, Reason: string(run.Status)}
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
-		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
-			return nil, &WorkflowVersionUnavailableError{
-				WorkflowID: run.WorkflowID,
-				Version:    run.WorkflowVersion,
-			}
-		}
 		return nil, err
-	}
-	if manifest.Retired && !manifest.Sealed {
-		return nil, &WorkflowVersionUnavailableError{
-			WorkflowID: run.WorkflowID,
-			Version:    run.WorkflowVersion,
-		}
 	}
 	vars, err := m.Store.GetScaffoldVars(ctx, runID)
 	if err != nil {
