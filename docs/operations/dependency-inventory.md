@@ -22,33 +22,12 @@ Pinned values are read from the tree when this page is generated. Upstream value
 Critical- and high-urgency entries whose pinned version trails the upstream snapshot.
 
 * **Dugite Git and Git LFS** (critical): `2.53.0` → `2.56.0`; `3.7.1` → `3.8.0`
-* **`isomorphic-dompurify`** (critical): `3.22.0` → `4.4.0`
-* **`tauri`** (critical): `2.12.0` → `2.12.1`
-* **`tauri-build` · build** (critical): `2.7.0` → `2.7.1`
 * **Document core** (high): `0.27.4` → `0.28.0`
-* **`marked`** (high): `18.0.9` → `18.0.14`
 * **`yjs`** (high): `13.6.32` → `13.6.33`
-* **`codeberg.org/readeck/go-readability/v2`** (high): `v2.1.2` → `v2.1.3`
-* **`github.com/aws/aws-sdk-go-v2`** (high): `v1.42.1` → `v1.47.1`
-* **`github.com/aws/aws-sdk-go-v2/config`** (high): `v1.32.26` → `v1.33.6`
-* **`github.com/aws/aws-sdk-go-v2/credentials`** (high): `v1.19.25` → `v1.20.6`
-* **`github.com/aws/aws-sdk-go-v2/service/bedrock`** (high): `v1.65.1` → `v1.73.1`
-* **`github.com/aws/aws-sdk-go-v2/service/bedrockruntime`** (high): `v1.54.1` → `v1.63.1`
-* **`github.com/aws/smithy-go`** (high): `v1.27.7` → `v1.28.2`
-* **`github.com/go-chi/chi/v5`** (high): `v5.3.1` → `v5.3.2`
+* **`github.com/aws/smithy-go`** (high): `v1.28.1` → `v1.28.2`
 * **`github.com/go-git/go-git/v5`** (high): `v5.19.2` → `v5.19.3`
-* **`github.com/google/osv-scalibr`** (high): `v0.4.5` → `v0.5.3`
-* **`github.com/klauspost/compress`** (high): `v1.18.6` → `v1.20.1`
-* **`github.com/sashabaranov/go-openai`** (high): `v1.41.2` → `v1.43.0`
-* **`github.com/ulikunitz/xz`** (high): `v0.5.15` → `v0.5.17`
-* **`github.com/yuin/goldmark`** (high): `v1.7.13` → `v1.8.6`
-* **`golang.org/x/net`** (high): `v0.58.0` → `v0.59.0`
-* **`golang.org/x/oauth2`** (high): `v0.36.0` → `v0.37.0`
-* **`modernc.org/sqlite`** (high): `v1.57.0` → `v1.60.1`
 * **`ed25519-dalek`** (high): `2.2.0` → `3.0.0`
-* **`minisign-verify`** (high): `0.2.5` → `0.3.0`
 * **`rand`** (high): `0.8.6` → `0.10.3`
-* **`tokenizers`** (high): `0.22.2` → `0.23.2`
 * **`yrs`** (high): `0.27.4` → `0.28.0`
 
 ---
@@ -171,18 +150,18 @@ rebasing the patch.
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
 | `@codemirror/autocomplete` | `6.20.3` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/commands` | `6.10.4` | `6.11.1` | **Low** | **Moderate** |  |  |
+| `@codemirror/commands` | `6.11.1` | current | **Low** | **Moderate** |  |  |
 | `@codemirror/language` | `6.12.4` | current | **Low** | **Moderate** |  |  |
 | `@codemirror/lint` | `6.9.7` | current | **Low** | **Moderate** |  |  |
 | `@codemirror/merge` | `6.12.2` | current | **Low** | **Moderate** |  | Exact pin. |
-| `@codemirror/search` | `6.7.1` | `6.7.2` | **Low** | **Moderate** |  |  |
-| `@codemirror/state` | `6.7.1` | `6.7.6` | **Low** | **Moderate** |  | Bump the CodeMirror packages together with `@codemirror/view`. |
-| `@tanstack/solid-virtual` | `3.13.35` | `3.13.40` | **Moderate** | **Moderate** |  | The transcript virtualizer uses `anchorTo: "start"` with `followOnAppend: false`, and its own motion controller owns tail anchoring and `shiftContent` corrections. Re-verify scroll retention after a bump. |
+| `@codemirror/search` | `6.7.2` | current | **Low** | **Moderate** |  |  |
+| `@codemirror/state` | `6.7.6` | current | **Low** | **Moderate** |  | Bump the CodeMirror packages together with `@codemirror/view`. |
+| `@tanstack/solid-virtual` | `3.13.40` | current | **Moderate** | **Moderate** |  | The transcript virtualizer uses `anchorTo: "start"` with `followOnAppend: false`, and its own motion controller owns tail anchoring and `shiftContent` corrections. Re-verify scroll retention after a bump. |
 | `@tauri-apps/api` | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
 | `diff` | `8.0.4` | `9.0.0` | **Low** | **Moderate** |  | Audit hunk and patch APIs used by diff rendering and edit playback on a major bump. |
-| `isomorphic-dompurify` | `3.22.0` | `4.4.0` | **Critical** | **Moderate** |  | **Urgency:** `chat/markdown/markdown-render.ts` sanitizes all rendered Markdown HTML against XSS.<br>**Friction:** Before a major bump, audit the configured hooks and allow-lists. |
-| `marked` | `18.0.9` | `18.0.14` | **High** | **Low** |  | Parses model and file Markdown ahead of the sanitizer. Exact pin. |
-| `solid-js` | `1.9.13` | `1.9.15` | **Moderate** | **Low** |  |  |
+| `isomorphic-dompurify` | `4.4.0` | current | **Critical** | **Moderate** |  | **Urgency:** `chat/markdown/markdown-render.ts` sanitizes all rendered Markdown HTML against XSS.<br>**Friction:** Before a major bump, audit the configured hooks and allow-lists. |
+| `marked` | `18.0.14` | current | **High** | **Low** |  | Parses model and file Markdown ahead of the sanitizer. Exact pin. |
+| `solid-js` | `1.9.15` | current | **Moderate** | **Low** |  |  |
 | `yjs` | `13.6.32` | `13.6.33` | **High** | **High** | Held | Den's replica of the editor document. Must stay update-compatible with the host's `yrs`; bump both together and test end to end against the WASM core. |
 | `dompurify` · via `isomorphic-dompurify` | `3.4.16` | current | **Critical** | **Low** | — | The sanitizer itself. Patch releases arrive with a lockfile refresh inside `isomorphic-dompurify`'s range. |
 
@@ -190,19 +169,19 @@ rebasing the patch.
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `@playwright/test` · dev | `1.60.0` | `1.63.0` | **Moderate** | **Moderate** |  | Bumps the Chromium and WebKit builds that `scripts/e2e-den.sh` installs. |
-| `@redocly/cli` · dev | `2.32.2` | `2.58.0` | **Low** | **Low** |  | Offline OpenAPI bundler and linter; `scripts/redocly-version.sh` reads this pin. Verify with `./task openapi:bundle` and `./task openapi:lint`. |
-| `@tailwindcss/vite` · dev | `4.3.1` | `4.3.3` | **Low** | **Low** |  |  |
+| `@playwright/test` · dev | `1.63.0` | current | **Moderate** | **Moderate** |  | Bumps the Chromium and WebKit builds that `scripts/e2e-den.sh` installs. |
+| `@redocly/cli` · dev | `2.57.0` | `2.58.0` | **Low** | **Low** |  | Offline OpenAPI bundler and linter; `scripts/redocly-version.sh` reads this pin. Verify with `./task openapi:bundle` and `./task openapi:lint`. |
+| `@tailwindcss/vite` · dev | `4.3.3` | current | **Low** | **Low** |  |  |
 | `@tauri-apps/cli` · dev | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
-| `@vitest/coverage-v8` · dev | `4.1.8` | `5.0.3` | **Moderate** | **Moderate** |  |  |
-| `eslint` · dev | `10.4.1` | `10.12.0` | **Low** | **Moderate** |  |  |
-| `jsdom` · dev | `26.1.0` | `30.1.2` | **Low** | **Moderate** |  | Check DOM behavior in component tests when bumping a major. |
+| `@vitest/coverage-v8` · dev | `5.0.3` | current | **Moderate** | **Moderate** |  |  |
+| `eslint` · dev | `10.12.0` | current | **Low** | **Moderate** |  |  |
+| `jsdom` · dev | `30.1.1` | `30.1.2` | **Low** | **Moderate** |  | Check DOM behavior in component tests when bumping a major. |
 | `msw` · dev | `2.14.6` | `3.0.2` | **Low** | **Low** |  |  |
 | `openapi-typescript` · dev | `7.13.0` | current | **Moderate** | **Moderate** |  | Exact pin. `scripts/codegen-den-types.sh` refuses a mismatched install, and a bump regenerates `src/api/types.ts` through `./task codegen:den-types`. |
-| `tailwindcss` · dev | `4.3.1` | `4.3.3` | **Low** | **Low** |  |  |
+| `tailwindcss` · dev | `4.3.3` | current | **Low** | **Low** |  |  |
 | `typescript` · dev | `6.0.3` | `7.0.2` | **Moderate** | **High** | No majors | TypeScript 7 is the native compiler port. `typescript-eslint` and the Solid toolchain must support it first; plan it as dedicated work. |
-| `vite` · dev | `8.0.16` | `8.3.2` | **Moderate** | **Low** |  |  |
-| `vitest` · dev | `4.1.8` | `5.0.3` | **Moderate** | **Moderate** |  |  |
+| `vite` · dev | `8.3.2` | current | **Moderate** | **Low** |  |  |
+| `vitest` · dev | `5.0.2` | `5.0.3` | **Moderate** | **Moderate** |  |  |
 
 ### Transitive overrides
 
@@ -223,33 +202,34 @@ a fixed version on its own.
 |---|---|---|---|---|---|---|
 | `@codemirror/lang-css` | `6.3.1` | current |  |  |  |  |
 | `@codemirror/lang-go` | `6.0.1` | current |  |  |  |  |
-| `@codemirror/lang-html` | `6.4.11` | `6.4.12` |  |  |  |  |
+| `@codemirror/lang-html` | `6.4.12` | current |  |  |  |  |
 | `@codemirror/lang-javascript` | `6.2.5` | current |  |  |  |  |
 | `@codemirror/lang-json` | `6.0.2` | current |  |  |  |  |
-| `@codemirror/lang-markdown` | `6.5.1` | `6.5.2` |  |  |  |  |
+| `@codemirror/lang-markdown` | `6.5.2` | current |  |  |  |  |
 | `@codemirror/lang-python` | `6.2.1` | current |  |  |  |  |
 | `@codemirror/lang-rust` | `6.0.2` | current |  |  |  |  |
 | `@codemirror/lang-yaml` | `6.1.3` | current |  |  |  |  |
-| `@codemirror/legacy-modes` | `6.5.3` | `6.5.4` |  |  |  |  |
+| `@codemirror/legacy-modes` | `6.5.4` | current |  |  |  |  |
 | `@replit/codemirror-vim` | `6.4.0` | current |  |  |  |  |
 | `@solidjs/testing-library` · dev | `0.8.10` | current |  |  |  |  |
 | `@tauri-apps/plugin-dialog` | `2.8.0` | `2.8.1` |  |  |  |  |
 | `@tauri-apps/plugin-notification` | `2.5.0` | `2.5.1` |  |  |  |  |
 | `@tauri-apps/plugin-shell` | `2.4.0` | current |  |  |  |  |
 | `@thisbeyond/solid-dnd` | `0.7.5` | current |  |  |  |  |
-| `@types/node` · dev | `25.9.3` | `26.6.4` |  |  |  |  |
+| `@types/node` · dev | `26.6.3` | `26.6.4` |  |  |  |  |
 | `@types/semver` · dev | `7.8.0` | current |  |  |  |  |
-| `@typescript-eslint/eslint-plugin` · dev | `8.61.0` | `8.71.0` |  |  |  |  |
-| `@typescript-eslint/parser` · dev | `8.61.0` | `8.71.0` |  |  |  |  |
-| `axe-core` · dev | `4.12.1` | `4.13.0` |  |  |  |  |
-| `eslint-plugin-solid` · dev | `0.14.5` | `0.18.1` |  |  |  |  |
-| `eslint-plugin-tailwindcss` · dev | `4.0.2` | `4.4.0` |  |  |  |  |
-| `lightningcss` · dev | `1.32.0` | `1.33.0` |  |  |  |  |
-| `semver` | `7.8.1` | `7.8.5` |  |  |  |  |
-| `tailwind-merge` | `3.6.0` | `3.7.0` |  |  |  |  |
-| `typescript-eslint` · dev | `8.61.0` | `8.71.0` |  |  |  |  |
+| `@typescript-eslint/eslint-plugin` · dev | `8.71.0` | current |  |  |  |  |
+| `@typescript-eslint/parser` · dev | `8.71.0` | current |  |  |  |  |
+| `axe-core` · dev | `4.13.0` | current |  |  |  |  |
+| `eslint-plugin-solid` · dev | `0.18.1` | current |  |  |  |  |
+| `eslint-plugin-tailwindcss` · dev | `4.4.0` | current |  |  |  |  |
+| `lightningcss` · dev | `1.33.0` | current |  |  |  |  |
+| `@codemirror/state` · override | `^6.7.6` | `6.7.6` |  |  | — |  |
+| `semver` | `7.8.5` | current |  |  |  |  |
+| `tailwind-merge` | `3.7.0` | current |  |  |  |  |
+| `typescript-eslint` · dev | `8.71.0` | current |  |  |  |  |
 | `undici` · dev | `7.29.1` | `8.11.2` |  |  |  |  |
-| `vite-plugin-solid` · dev | `2.11.12` | `2.11.14` |  |  |  |  |
+| `vite-plugin-solid` · dev | `2.11.14` | current |  |  |  |  |
 | `yaml` · dev | `2.9.1` | current |  |  |  |  |
 
 ---
@@ -264,51 +244,51 @@ the vulnerability database.
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
 | `filippo.io/age` | `v1.3.2` | current | **Critical** | **Moderate** |  | Encrypts credential vaults in `internal/credentialstore`. Before any change, prove existing vaults still decrypt. |
-| `github.com/flosch/pongo2/v6` | `v6.0.0` | `v6.1.0` | **Moderate** | **Moderate** |  | The single template engine. `internal/pongoplain` enforces the bounded dialect, and engine changes must not widen it. |
-| `github.com/getkin/kin-openapi` | `v0.146.0` | `v0.149.0` | **Low** | **Low** |  | Test-only (`test/openapi`, `test/contract`, `test/security`). |
+| `github.com/flosch/pongo2/v6` | `v6.1.0` | current | **Moderate** | **Moderate** |  | The single template engine. `internal/pongoplain` enforces the bounded dialect, and engine changes must not widen it. |
+| `github.com/getkin/kin-openapi` | `v0.149.0` | current | **Low** | **Low** |  | Test-only (`test/openapi`, `test/contract`, `test/security`). |
 | `github.com/odvcencio/gotreesitter` | `v0.52.0` → `../third_party/gotreesitter` | `v0.55.1` |  |  |  | Replaced by the vendored copy; see the vendored catalogs section. |
 | `github.com/tiktoken-go/tokenizer` | `v0.8.1` | current | **Low** | **Low** |  | Embedded offline token estimator (`internal/tokenest`). |
-| `modernc.org/sqlite` | `v1.57.0` | `v1.60.1` | **High** | **Moderate** |  | **Urgency:** The single SQL driver: pure Go, FTS5, no CGO. It stores sessions, ledgers, and history.<br>**Friction:** Verify with `./task test:integration` (randomized SQLite lifecycle properties) and `./task test:stress`. |
+| `modernc.org/sqlite` | `v1.60.1` | current | **High** | **Moderate** |  | **Urgency:** The single SQL driver: pure Go, FTS5, no CGO. It stores sessions, ledgers, and history.<br>**Friction:** Verify with `./task test:integration` (randomized SQLite lifecycle properties) and `./task test:stress`. |
 
 ### Protocols, providers, and security engines
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `github.com/aws/aws-sdk-go-v2` | `v1.42.1` | `v1.47.1` | **High** | **Low** |  | Bedrock streaming and Converse API. Bump the AWS modules together. |
-| `github.com/aws/aws-sdk-go-v2/config` | `v1.32.26` | `v1.33.6` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/credentials` | `v1.19.25` | `v1.20.6` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/service/bedrock` | `v1.65.1` | `v1.73.1` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.54.1` | `v1.63.1` | **High** | **Low** |  |  |
-| `github.com/aws/smithy-go` | `v1.27.7` | `v1.28.2` | **High** | **Low** |  |  |
-| `github.com/go-chi/chi/v5` | `v5.3.1` | `v5.3.2` | **High** | **Low** |  | Sidecar HTTP routing. |
+| `github.com/aws/aws-sdk-go-v2` | `v1.47.1` | current | **High** | **Low** |  | Bedrock streaming and Converse API. Bump the AWS modules together. |
+| `github.com/aws/aws-sdk-go-v2/config` | `v1.33.6` | current | **High** | **Low** |  |  |
+| `github.com/aws/aws-sdk-go-v2/credentials` | `v1.20.6` | current | **High** | **Low** |  |  |
+| `github.com/aws/aws-sdk-go-v2/service/bedrock` | `v1.73.1` | current | **High** | **Low** |  |  |
+| `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.63.1` | current | **High** | **Low** |  |  |
+| `github.com/aws/smithy-go` | `v1.28.1` | `v1.28.2` | **High** | **Low** |  |  |
+| `github.com/go-chi/chi/v5` | `v5.3.2` | current | **High** | **Low** |  | Sidecar HTTP routing. |
 | `github.com/go-rod/rod` | `v0.116.2` | current | **High** | **Moderate** |  | CDP driver for the managed browser. Its protocol bindings age as the Chrome pin advances. |
-| `github.com/google/osv-scalibr` | `v0.4.5` | `v0.5.3` | **High** | **Moderate** |  | SCA extraction. Pulls the legacy `docker/docker` module, which carries reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`; re-check them after a bump. |
+| `github.com/google/osv-scalibr` | `v0.5.3` | current | **High** | **Moderate** |  | SCA extraction. Pulls the legacy `docker/docker` module, which carries reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`; re-check them after a bump. |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` | current | **Critical** | **Moderate** |  | Talks to untrusted MCP servers, and the spec moves quickly. Expect API deprecations; `test/security` and `test/wiring` cover it. |
-| `github.com/sashabaranov/go-openai` | `v1.41.2` | `v1.43.0` | **High** | **Low** |  | Provider wire API (`internal/llm`). |
+| `github.com/sashabaranov/go-openai` | `v1.43.0` | current | **High** | **Low** |  | Provider wire API (`internal/llm`). |
 | `github.com/zricethezav/gitleaks/v8` | `v8.30.1` | current | **High** | **Low** |  | Secret-detection patterns (`internal/scan`, `internal/secretmatch`). |
-| `golang.org/x/oauth2` | `v0.36.0` | `v0.37.0` | **High** | **Low** |  | Provider and MCP OAuth. |
+| `golang.org/x/oauth2` | `v0.37.0` | current | **High** | **Low** |  | Provider and MCP OAuth. |
 
 ### Parsers of untrusted content
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `codeberg.org/readeck/go-readability/v2` | `v2.1.2` | `v2.1.3` | **High** | **Low** |  | Extracts articles from fetched web pages. |
+| `codeberg.org/readeck/go-readability/v2` | `v2.1.3` | current | **High** | **Low** |  | Extracts articles from fetched web pages. |
 | `github.com/go-git/go-git/v5` | `v5.19.2` | `v5.19.3` | **High** | **Low** |  | Reads repository state in `internal/sourcescope`. |
 | `github.com/itchyny/gojq` | `v0.12.19` | current | **Moderate** | **Low** |  | Native query tool. |
-| `github.com/klauspost/compress` | `v1.18.6` | `v1.20.1` | **High** | **Low** |  | Decompression of attachments and blobs. |
-| `github.com/mikefarah/yq/v4` | `v4.45.1` | `v4.54.1` | **Moderate** | **Low** |  | Native query tool. |
+| `github.com/klauspost/compress` | `v1.20.1` | current | **High** | **Low** |  | Decompression of attachments and blobs. |
+| `github.com/mikefarah/yq/v4` | `v4.54.1` | current | **Moderate** | **Low** |  | Native query tool. |
 | `github.com/santhosh-tekuri/jsonschema/v6` | `v6.0.3` | current | **Moderate** | **Low** |  | Schema validation for MCP, OAR, and tools. |
 | `github.com/tsawler/tabula` | `v1.6.14` | current | **High** | **Low** |  | Document extraction for prompt attachments. |
-| `github.com/ulikunitz/xz` | `v0.5.15` | `v0.5.17` | **High** | **Low** |  | Decompression of attachments. |
-| `github.com/yuin/goldmark` | `v1.7.13` | `v1.8.6` | **High** | **Low** |  | Markdown parsing for reports, repo maps, and navigation. |
-| `golang.org/x/net` | `v0.58.0` | `v0.59.0` | **High** | **Low** |  | HTML, HTTP/2, and proxy code used by web research, egress, and scanning. |
+| `github.com/ulikunitz/xz` | `v0.5.17` | current | **High** | **Low** |  | Decompression of attachments. |
+| `github.com/yuin/goldmark` | `v1.8.6` | current | **High** | **Low** |  | Markdown parsing for reports, repo maps, and navigation. |
+| `golang.org/x/net` | `v0.59.0` | current | **High** | **Low** |  | HTML, HTTP/2, and proxy code used by web research, egress, and scanning. |
 
 ### Terminal UI
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `github.com/charmbracelet/bubbles` | `v0.21.0` | `v1.0.0` | **Low** | **Low** |  | The interactive log browser (`./task logs:tui`, `internal/logview`). v1.0.0 on this path is a ceremonial release; the breaking line is Charm v2. |
-| `github.com/charmbracelet/bubbletea` | `v1.3.5` | `v1.3.10` | **Low** | **Low** |  | The v1 line is in maintenance. |
+| `github.com/charmbracelet/bubbles` | `v1.0.0` | current | **Low** | **Low** |  | The interactive log browser (`./task logs:tui`, `internal/logview`). v1.0.0 on this path is a ceremonial release; the breaking line is Charm v2. |
+| `github.com/charmbracelet/bubbletea` | `v1.3.10` | current | **Low** | **Low** |  | The v1 line is in maintenance. |
 | `github.com/charmbracelet/lipgloss` | `v1.1.0` | current | **Low** | **Low** |  |  |
 | Charm v2 (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`) | — | bubbletea `v2.0.10`<br>bubbles `v2.2.1` | **Low** | **High** | — | New import paths and a breaking redesign. Migrate the whole log browser at once, and only when it is scheduled. |
 
@@ -316,16 +296,16 @@ the vulnerability database.
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `github.com/BurntSushi/toml` | `v1.5.0` | `v1.6.0` |  |  |  |  |
-| `github.com/Masterminds/semver/v3` | `v3.3.0` | `v3.5.0` |  |  |  |  |
+| `github.com/BurntSushi/toml` | `v1.6.0` | current |  |  |  |  |
+| `github.com/Masterminds/semver/v3` | `v3.5.0` | current |  |  |  |  |
 | `github.com/alecthomas/chroma/v2` | `v2.27.0` | current |  |  |  |  |
-| `github.com/andybalholm/brotli` | `v1.1.2-0.20250424173009-453214e765f3` | `v1.2.6` |  |  |  |  |
+| `github.com/andybalholm/brotli` | `v1.2.6` | current |  |  |  |  |
 | `github.com/atotto/clipboard` | `v0.1.4` | current |  |  |  |  |
-| `github.com/aymanbagabas/go-udiff` | `v0.2.0` | `v0.4.1` |  |  |  |  |
-| `github.com/charmbracelet/x/ansi` | `v0.11.7` | `v0.11.8` |  |  |  |  |
+| `github.com/aymanbagabas/go-udiff` | `v0.4.1` | current |  |  |  |  |
+| `github.com/charmbracelet/x/ansi` | `v0.11.8` | current |  |  |  |  |
 | `github.com/charmbracelet/x/vt` | `v0.0.0-20260713092006-0d683c34c74b` | `v0.0.0-20261004011457-ad85c59fdf4e` |  |  |  |  |
 | `github.com/creack/pty` | `v1.1.24` | current |  |  |  |  |
-| `github.com/fatih/semgroup` | `v1.2.0` | `v1.3.0` |  |  |  |  |
+| `github.com/fatih/semgroup` | `v1.3.0` | current |  |  |  |  |
 | `github.com/fsnotify/fsevents` | `v0.2.0` | current |  |  |  |  |
 | `github.com/fsnotify/fsnotify` | `v1.10.1` | current |  |  |  |  |
 | `github.com/go-chi/cors` | `v1.2.2` | current |  |  |  |  |
@@ -334,24 +314,24 @@ the vulnerability database.
 | `github.com/google/uuid` | `v1.6.0` | current |  |  |  |  |
 | `github.com/jimsmart/grobotstxt` | `v1.0.3` | current |  |  |  |  |
 | `github.com/johnfercher/go-tree` | `v1.1.0` | current |  |  |  |  |
-| `github.com/johnfercher/maroto/v2` | `v2.4.0` | `v2.4.3` |  |  |  |  |
+| `github.com/johnfercher/maroto/v2` | `v2.4.2` | `v2.4.3` |  |  |  |  |
 | `github.com/keybase/go-keychain` | `v0.0.1` | current |  |  |  |  |
-| `github.com/ossf/osv-schema/bindings/go` | `v0.0.0-20260129002236-09a17f85b44a` | `v0.0.0-20261001234421-2780d2ad3f89` |  |  |  |  |
+| `github.com/ossf/osv-schema/bindings/go` | `v0.0.0-20260424063704-83285ce2a866` | `v0.0.0-20261001234421-2780d2ad3f89` |  |  |  |  |
 | `github.com/owenrumney/go-sarif/v2` | `v2.3.3` | current |  |  |  |  |
-| `github.com/pandatix/go-cvss` | `v0.6.2` | `v0.6.4` |  |  |  |  |
-| `github.com/pelletier/go-toml/v2` | `v2.3.1` | `v2.4.3` |  |  |  |  |
+| `github.com/pandatix/go-cvss` | `v0.6.4` | current |  |  |  |  |
+| `github.com/pelletier/go-toml/v2` | `v2.4.3` | current |  |  |  |  |
 | `github.com/phpdave11/gofpdf` | `v1.4.3` | current |  |  |  |  |
 | `github.com/sony/gobreaker` | `v1.0.0` | current |  |  |  |  |
 | `github.com/ysmood/gson` | `v0.7.3` | current |  |  |  |  |
 | `go.uber.org/goleak` | `v1.3.0` | current |  |  |  |  |
-| `golang.org/x/image` | `v0.45.0` | `v0.46.0` |  |  |  |  |
-| `golang.org/x/mod` | `v0.39.0` | `v0.41.0` |  |  |  |  |
-| `golang.org/x/sync` | `v0.22.0` | `v0.23.0` |  |  |  |  |
-| `golang.org/x/sys` | `v0.47.0` | `v0.48.0` |  |  |  |  |
-| `golang.org/x/text` | `v0.41.0` | `v0.42.0` |  |  |  |  |
-| `golang.org/x/time` | `v0.15.0` | `v0.16.0` |  |  |  |  |
-| `golang.org/x/tools` | `v0.49.0` | `v0.51.0` |  |  |  |  |
-| `google.golang.org/protobuf` | `v1.36.11` | `v1.36.12` |  |  |  |  |
+| `golang.org/x/image` | `v0.46.0` | current |  |  |  |  |
+| `golang.org/x/mod` | `v0.41.0` | current |  |  |  |  |
+| `golang.org/x/sync` | `v0.23.0` | current |  |  |  |  |
+| `golang.org/x/sys` | `v0.48.0` | current |  |  |  |  |
+| `golang.org/x/text` | `v0.42.0` | current |  |  |  |  |
+| `golang.org/x/time` | `v0.16.0` | current |  |  |  |  |
+| `golang.org/x/tools` | `v0.50.0` | `v0.51.0` |  |  |  |  |
+| `google.golang.org/protobuf` | `v1.36.12` | current |  |  |  |  |
 | `gopkg.in/op/go-logging.v1` | `v1.0.0-20160211212156-b2cb9fa56473` | current |  |  |  |  |
 | `gopkg.in/yaml.v3` | `v3.0.1` | current |  |  |  |  |
 | `pgregory.net/rapid` | `v1.3.0` | current |  |  |  |  |
@@ -367,12 +347,12 @@ Windows build runs.
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
 | `arboard` | `3.6.1` | current | **Low** | **Low** |  | Clipboard. |
-| `base64` | `0.22.1` | `0.23.1` |  |  |  |  |
+| `base64` | `0.23.1` | current |  |  |  |  |
 | `block2` · macOS | `0.6.2` | current |  |  |  |  |
 | `ed25519-dalek` | `2.2.0` | `3.0.0` | **High** | **Moderate** |  | Signs secret-reveal requests to the sidecar (`sidecar.rs`). Bump a major together with `rand`. |
-| `futures-util` | `0.3.32` | `0.3.34` |  |  |  |  |
-| `libc` | `0.2.186` | `0.2.190` |  |  |  |  |
-| `minisign-verify` | `0.2.5` | `0.3.0` | **High** | **Low** |  | Used by `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. |
+| `futures-util` | `0.3.34` | current |  |  |  |  |
+| `libc` | `0.2.189` | `0.2.190` |  |  |  |  |
+| `minisign-verify` | `0.3.0` | current | **High** | **Low** |  | Used by `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. |
 | `objc2` · macOS | `0.6.4` | current | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
 | `objc2-app-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-core-foundation` · macOS | `0.3.2` | current |  |  |  |  |
@@ -384,22 +364,22 @@ Windows build runs.
 | `objc2-web-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `rand` | `0.8.6` | `0.10.3` | **High** | **Moderate** |  | Supplies `OsRng` to `ed25519-dalek`. |
 | `reqwest` | `0.13.5` | current | **High** | **Low** |  | Async HTTP. |
-| `rfd` | `0.16.0` | `0.17.2` | **Low** | **Low** |  | File picker. |
+| `rfd` | `0.17.2` | current | **Low** | **Low** |  | File picker. |
 | `rustls` | `0.23.45` | current | **High** | **Low** |  | TLS with the `ring` provider. |
 | `semver` | `1.0.28` | current |  |  |  |  |
-| `serde` | `1.0.228` | `1.0.229` |  |  |  |  |
-| `serde_json` | `1.0.150` | `1.0.151` |  |  |  |  |
+| `serde` | `1.0.229` | current |  |  |  |  |
+| `serde_json` | `1.0.151` | current |  |  |  |  |
 | `sha2` | `0.10.9` | `0.11.0` |  |  |  |  |
-| `tauri` | `2.12.0` | `2.12.1` | **Critical** | **Moderate** |  | Webview host, IPC, and asset isolation. Keep `@tauri-apps/cli` and `@tauri-apps/api` in step. |
-| `tauri-build` · build | `2.7.0` | `2.7.1` | **Critical** | **Moderate** |  | Moves with `tauri`. |
-| `tauri-plugin-dialog` | `2.8.0` | `2.8.1` | **Moderate** | **Low** |  |  |
-| `tauri-plugin-notification` · not macOS | `2.5.0` | `2.5.1` | **Moderate** | **Low** |  |  |
+| `tauri` | `2.12.1` | current | **Critical** | **Moderate** |  | Webview host, IPC, and asset isolation. Keep `@tauri-apps/cli` and `@tauri-apps/api` in step. |
+| `tauri-build` · build | `2.7.1` | current | **Critical** | **Moderate** |  | Moves with `tauri`. |
+| `tauri-plugin-dialog` | `2.8.1` | current | **Moderate** | **Low** |  |  |
+| `tauri-plugin-notification` · not macOS | `2.5.1` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-shell` | `2.4.0` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-updater` | `2.13.1` | current | **Critical** | **High** |  | In-place updates. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/verify-updater-signature.sh` against the `tauri.conf.json` public key and the release version bound in each signature; see [Release operations](release.md). `Cargo.toml` selects its features explicitly: the plugin's default `system-proxy` feature would route the check through OS proxy discovery, which the shell's other clients also avoid. |
-| `tokio` | `1.52.3` | `1.53.2` | **Moderate** | **Low** |  |  |
+| `tokio` | `1.53.1` | `1.53.2` | **Moderate** | **Low** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
-| `uuid` | `1.23.2` | `1.27.0` |  |  |  |  |
-| `which` | `7.0.3` | `8.0.6` | **Low** | **Low** |  | Executable lookup. |
+| `uuid` | `1.26.1` | `1.27.0` |  |  |  |  |
+| `which` | `8.0.6` | current | **Low** | **Low** |  | Executable lookup. |
 | `windows` · Windows | `0.61.3` | `0.62.2` | **Moderate** | **Moderate** |  | Credential UI and window APIs; unverified on Windows. |
 | `windows-sys` · Windows | `0.61.2` | current | **Moderate** | **Moderate** |  |  |
 
@@ -421,7 +401,7 @@ Model weights and trained heads are a separate, coordinated release described in
 | `serde` | `1.0.229` | current | **Moderate** | **Low** |  |  |
 | `serde_json` | `1.0.151` | current | **High** | **Low** |  |  |
 | `thiserror` | `2.0.21` | current | **Low** | **Low** |  |  |
-| `tokenizers` | `0.22.2` | `0.23.2` | **High** | **High** |  | Tokenization must agree with the pinned checkpoint and trained heads. Treat 0.x minor upgrades as breaking and compare token IDs and ranking results before adoption. |
+| `tokenizers` | `0.23.2` | current | **High** | **High** |  | Tokenization must agree with the pinned checkpoint and trained heads. Treat 0.x minor upgrades as breaking and compare token IDs and ranking results before adoption. |
 
 ---
 
@@ -429,7 +409,7 @@ Model weights and trained heads are a separate, coordinated release described in
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `base64` | `0.22.1` | `0.23.1` |  |  |  |  |
+| `base64` | `0.23.1` | current |  |  |  |  |
 | `serde` | `1.0.229` | current |  |  |  |  |
 | `serde_json` | `1.0.151` | current |  |  |  |  |
 | `yrs` | `0.27.4` | `0.28.0` | **High** | **High** | Held | Exact pin; see the document core engine row. Bump together with Den's `yjs`. |
@@ -440,7 +420,7 @@ Model weights and trained heads are a separate, coordinated release described in
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
-| `github.com/odvcencio/gotreesitter` | `v0.20.0` | `v0.55.1` | **Low** | **Low** |  | Upstream module, independent of the vendored copy the host uses. |
+| `github.com/odvcencio/gotreesitter` | `v0.55.1` | current | **Low** | **Low** |  | Upstream module, independent of the vendored copy the host uses. |
 
 ---
 
