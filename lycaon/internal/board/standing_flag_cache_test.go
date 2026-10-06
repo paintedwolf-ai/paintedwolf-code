@@ -15,7 +15,7 @@ func TestStandingFlagCacheKeysByEpochAndRules(t *testing.T) {
 	repochange.ResetWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
 	dir := t.TempDir()
-	repochange.EnsureRoot(t.Context(), dir)
+	repochange.MarkCoverageCompleteForTest(dir)
 	var loads atomic.Int32
 	cache := newStandingFlagCache(func(_ context.Context, _ string, rules []standingpatterns.Pattern) []standingpatterns.FlagCount {
 		loads.Add(1)

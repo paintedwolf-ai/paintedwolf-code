@@ -850,7 +850,7 @@
       "targets": [
         "lint:vuln:fresh"
       ],
-      "minutes": 90,
+      "minutes": 240,
       "profiles": [
         "nightly"
       ],

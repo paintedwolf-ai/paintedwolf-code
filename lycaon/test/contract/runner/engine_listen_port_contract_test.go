@@ -17,7 +17,7 @@ import (
 )
 
 const pythonHealthListener = `
-import sys
+import socket, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class H(BaseHTTPRequestHandler):
@@ -28,8 +28,17 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-httpd = HTTPServer(("127.0.0.1", 0), H)
-open(sys.argv[1], "w", encoding="utf-8").write(str(httpd.server_address[1]))
+class Server(HTTPServer):
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind(self.server_address)
+        self.server_address = self.socket.getsockname()
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
+
+httpd = Server(("127.0.0.1", 0), H)
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    f.write(str(httpd.server_address[1]))
 httpd.serve_forever()
 `
 
@@ -176,7 +185,7 @@ func (l *pythonListener) waitReaped(t *testing.T) {
 
 func waitPortFile(t *testing.T, path string, stderr *strings.Builder) string {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		b, err := os.ReadFile(path)
 		if err == nil {

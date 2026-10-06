@@ -25,7 +25,7 @@ go_receiver_lines:
     lycaon/cmd/lycaon-perf/main.eventMonitor: 15
     lycaon/cmd/lycaon-perf/main.measurements: 5
     lycaon/cmd/lycaon-perf/main.processResourceSampler: 41
-    lycaon/cmd/lycaon-perf/main.runState: 511
+    lycaon/cmd/lycaon-perf/main.runState: 524
     lycaon/cmd/lycaon-perf/main.sidecarClient: 178
     lycaon/cmd/opengrep-artifact/main.options: 71
     lycaon/cmd/opengrep-conformance/main.admissionPolicy: 47
@@ -11166,7 +11166,7 @@ source_files:
     lycaon/cmd/lycaon-perf/model.go: 73
     lycaon/cmd/lycaon-perf/resources.go: 218
     lycaon/cmd/lycaon-perf/runner.go: 687
-    lycaon/cmd/lycaon-perf/source_tree.go: 107
+    lycaon/cmd/lycaon-perf/source_tree.go: 119
     lycaon/cmd/lycaon/author_catalog.go: 10
     lycaon/cmd/lycaon/browser.go: 45
     lycaon/cmd/lycaon/completion.go: 93
@@ -15419,7 +15419,7 @@ source_files:
     scripts/gitengine-ensure.sh: 15
     scripts/gitengine-fetch.sh: 309
     scripts/go-bench-report.py: 96
-    scripts/go-bench.sh: 41
+    scripts/go-bench.sh: 48
     scripts/go-test-digest.sh: 309
     scripts/go-test-exec.py: 150
     scripts/go-test-failed.sh: 63
@@ -17605,7 +17605,7 @@ test_files:
     lycaon/cmd/lycaon-perf/client_test.go: 29
     lycaon/cmd/lycaon-perf/resources_test.go: 101
     lycaon/cmd/lycaon-perf/runner_test.go: 91
-    lycaon/cmd/lycaon-perf/source_tree_test.go: 58
+    lycaon/cmd/lycaon-perf/source_tree_test.go: 66
     lycaon/cmd/lycaon/author_verbs_test.go: 71
     lycaon/cmd/lycaon/credentials_test.go: 35
     lycaon/cmd/lycaon/diagnostics_store_test.go: 43
@@ -21917,7 +21917,7 @@ test_files:
     lycaon/test/contract/runner/argv_whitespace_seam_contract_test.go: 58
     lycaon/test/contract/runner/ast_callee_test.go: 13
     lycaon/test/contract/runner/benchmark_measurement_test.go: 61
-    lycaon/test/contract/runner/engine_listen_port_contract_test.go: 225
+    lycaon/test/contract/runner/engine_listen_port_contract_test.go: 234
     lycaon/test/contract/runner/go_test_scope.go: 97
     lycaon/test/contract/runner/harness_cleanup_contract_test.go: 123
     lycaon/test/contract/runner/harness_supervisor_contract_test.go: 19
