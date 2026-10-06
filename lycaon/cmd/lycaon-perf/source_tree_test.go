@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -40,6 +41,13 @@ func TestSourceTreeMeasurementRequiresCompleteFixture(t *testing.T) {
 					released = true
 					w.WriteHeader(http.StatusNoContent)
 					return
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/presentations"):
+					result = api.SourcePresentation{
+						ID: "pres",
+						View: api.SourceView{
+							Tree: &api.SourceTreeView{Kind: "tree", ID: "view", State: "ready", ProjectionRevision: "revision", Extent: api.SourceViewExtent{Rows: int64(len(tc.rows)), Complete: true}},
+						},
+					}
 				case r.URL.Query().Get("limit") != "":
 					result = api.SourceTreeFrame{Kind: "tree", ViewID: "view", ProjectionRevision: "revision", Span: api.SourceViewSpan{End: tc.end}, Rows: tc.rows}
 				default:

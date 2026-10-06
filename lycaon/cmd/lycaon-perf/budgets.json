@@ -17,9 +17,9 @@
   "resources": {
     "peak_rss_bytes": 536870912,
     "rss_growth_bytes": 134217728,
-    "peak_heap_bytes": 268435456,
+    "peak_heap_bytes": 536870912,
     "heap_growth_bytes": 67108864,
-    "peak_goroutines": 128,
+    "peak_goroutines": 2048,
     "goroutine_growth": 32,
     "peak_fds": 128,
     "fd_growth": 16,
