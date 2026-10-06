@@ -159,6 +159,8 @@
     "test:security": {
       "options": [
         "--full",
+        "--tags",
+        "integration",
         "--timeout",
         "40m"
       ],
