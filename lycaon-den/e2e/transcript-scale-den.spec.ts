@@ -510,6 +510,11 @@ webE2e.describe("transcript scale den", () => {
       await page.keyboard.press("PageUp");
       await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
       await settleTranscriptLayout(page);
+      await expect
+        .poll(async () => (await transcriptScrollSample(page)).firstVisibleKey, {
+          timeout: 10_000,
+        })
+        .not.toBeNull();
       const before = await transcriptScrollSample(page);
       expect(before.firstVisibleKey).not.toBeNull();
       expect(before.scrollTop).toBeLessThan(before.maxTop);
