@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,7 +52,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	}
 	var accepted wire.PromptAcceptedResponse
 	testutil.FailErr(t, "decode admitted prompt", json.Unmarshal(w.Body.Bytes(), &accepted))
-	if !testutil.WaitForNoFatal(10*time.Second, func() bool {
+	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
 		submission, err := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read admitted prompt", err)
 		if !submission.Status.Terminal() {

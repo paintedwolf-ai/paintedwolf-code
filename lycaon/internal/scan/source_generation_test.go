@@ -24,13 +24,13 @@ func TestDiffSourceGenerationsDerivesExactUpsertsAndDeletions(t *testing.T) {
 	writeScanSource(t, root, "changed.go", "old")
 	writeScanSource(t, root, "deleted.go", "gone")
 	writeScanSource(t, root, "same.go", "same")
-	previous, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyStat)
+	previous, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyContent)
 	testutil.FailErr(t, "publish previous", err)
 
 	writeScanSource(t, root, "changed.go", "changed")
 	writeScanSource(t, root, "added.go", "new")
 	testutil.FailErr(t, "delete", os.Remove(filepath.Join(root, "deleted.go")))
-	current, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyStat)
+	current, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyContent)
 	testutil.FailErr(t, "publish current", err)
 
 	generation, err := DiffSourceGenerations(t.Context(), snapshots, previous, current)
