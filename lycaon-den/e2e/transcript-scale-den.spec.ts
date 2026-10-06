@@ -169,7 +169,7 @@ async function transcriptScrollSample(page: Page): Promise<TranscriptScrollSampl
     if (!viewport) throw new Error("transcript viewport is unavailable");
     const viewportTop = viewport.getBoundingClientRect().top;
     const row = [
-      ...document.querySelectorAll<HTMLElement>(
+      ...viewport.querySelectorAll<HTMLElement>(
         ".transcript-viewport-row[data-index]",
       ),
     ].find((candidate) => candidate.getBoundingClientRect().bottom > viewportTop);
@@ -179,7 +179,7 @@ async function transcriptScrollSample(page: Page): Promise<TranscriptScrollSampl
       scrollTop: viewport.scrollTop,
       maxTop: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
       viewportHeight: viewport.clientHeight,
-      firstVisibleKey: row?.dataset.msgId ?? null,
+      firstVisibleKey: (row?.dataset.msgId || row?.dataset.timeRow) ?? null,
       firstVisibleTop: row
         ? row.getBoundingClientRect().top - viewportTop
         : null,
@@ -200,7 +200,7 @@ async function settleTranscriptLayout(page: Page): Promise<void> {
         );
         if (!viewport) return "";
         const rows = [
-          ...document.querySelectorAll<HTMLElement>(
+          ...viewport.querySelectorAll<HTMLElement>(
             ".transcript-viewport-row[data-index]",
           ),
         ];
@@ -210,7 +210,7 @@ async function settleTranscriptLayout(page: Page): Promise<void> {
           viewport.scrollTop,
           ...rows.flatMap((row) => {
             const rect = row.getBoundingClientRect();
-            return [row.dataset.msgId ?? "", rect.top, rect.height];
+            return [row.dataset.msgId ?? row.dataset.timeRow ?? "", rect.top, rect.height];
           }),
         ].join(":");
       };
@@ -255,7 +255,7 @@ async function startTranscriptScrollTrace(page: Page): Promise<void> {
     const sample = () => {
       const viewportTop = viewport.getBoundingClientRect().top;
       const row = [
-        ...document.querySelectorAll<HTMLElement>(
+        ...viewport.querySelectorAll<HTMLElement>(
           ".transcript-viewport-row[data-index]",
         ),
       ].find((candidate) => candidate.getBoundingClientRect().bottom > viewportTop);
@@ -265,7 +265,7 @@ async function startTranscriptScrollTrace(page: Page): Promise<void> {
         scrollTop: viewport.scrollTop,
         maxTop: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
         viewportHeight: viewport.clientHeight,
-        firstVisibleKey: row?.dataset.msgId ?? null,
+        firstVisibleKey: (row?.dataset.msgId || row?.dataset.timeRow) ?? null,
         firstVisibleTop: row
           ? row.getBoundingClientRect().top - viewportTop
           : null,
@@ -510,6 +510,11 @@ webE2e.describe("transcript scale den", () => {
       await page.keyboard.press("PageUp");
       await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
       await settleTranscriptLayout(page);
+      await expect
+        .poll(async () => (await transcriptScrollSample(page)).firstVisibleKey, {
+          timeout: 10_000,
+        })
+        .not.toBeNull();
       const before = await transcriptScrollSample(page);
       expect(before.firstVisibleKey).not.toBeNull();
       expect(before.scrollTop).toBeLessThan(before.maxTop);

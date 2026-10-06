@@ -16276,7 +16276,7 @@ test_files:
     lycaon-den/e2e/transcript-geometry-performance.spec.ts: 81
     lycaon-den/e2e/transcript-history-gap.spec.ts: 122
     lycaon-den/e2e/transcript-reading-position.spec.ts: 135
-    lycaon-den/e2e/transcript-scale-den.spec.ts: 906
+    lycaon-den/e2e/transcript-scale-den.spec.ts: 911
     lycaon-den/e2e/transcript-spacing-helpers.ts: 9
     lycaon-den/e2e/transcript-spacing.spec.ts: 256
     lycaon-den/e2e/transcript-streaming-cost.spec.ts: 134
@@ -20491,7 +20491,7 @@ test_files:
     lycaon/internal/sourcecatalog/presentation_store_test.go: 59
     lycaon/internal/sourcecatalog/range_encoding_test.go: 95
     lycaon/internal/sourcecatalog/range_pages_test.go: 76
-    lycaon/internal/sourcecatalog/settlement_test.go: 236
+    lycaon/internal/sourcecatalog/settlement_test.go: 259
     lycaon/internal/sourcecatalog/snapshot_walk_test.go: 108
     lycaon/internal/sourcecatalog/store_eviction_test.go: 94
     lycaon/internal/sourcecatalog/store_lifecycle_test.go: 157
@@ -22245,7 +22245,7 @@ test_files:
     lycaon/test/security/api_coordinator_batch_concurrency_e2e_test.go: 138
     lycaon/test/security/api_coordinator_compose_playbook_e2e_test.go: 111
     lycaon/test/security/api_coordinator_feedback_tool_test.go: 38
-    lycaon/test/security/api_coordinator_loop_test.go: 85
+    lycaon/test/security/api_coordinator_loop_test.go: 89
     lycaon/test/security/api_coordinator_tool_feedback_test.go: 164
     lycaon/test/security/api_cost_breakdown_test.go: 148
     lycaon/test/security/api_delegation_closeout_scan_test.go: 56
@@ -22289,7 +22289,7 @@ test_files:
     lycaon/test/security/api_scan_sarif_export_test.go: 48
     lycaon/test/security/api_scan_serve_path_e2e_test.go: 79
     lycaon/test/security/api_scan_target_failure_e2e_test.go: 44
-    lycaon/test/security/api_sequential_plan_runs_test.go: 115
+    lycaon/test/security/api_sequential_plan_runs_test.go: 114
     lycaon/test/security/api_session_project_e2e_test.go: 81
     lycaon/test/security/api_session_rewind_test.go: 246
     lycaon/test/security/api_session_test.go: 66
@@ -22315,7 +22315,7 @@ test_files:
     lycaon/test/security/api_workflow_advance_parity_test.go: 317
     lycaon/test/security/api_workflow_compose_policy_test.go: 110
     lycaon/test/security/api_workflow_compose_test.go: 205
-    lycaon/test/security/api_workflow_discovery_test.go: 112
+    lycaon/test/security/api_workflow_discovery_test.go: 111
     lycaon/test/security/api_workflow_feedback_test.go: 64
     lycaon/test/security/api_workflow_human_start_loop_wake_e2e_test.go: 34
     lycaon/test/security/api_workflow_journey_e2e_test.go: 274
