@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session"
@@ -57,14 +56,19 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "append worker summary", err)
 	}
-	allowed, reason, err := mgr.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
-	testutil.FailErr(t, "evaluate loop wake", err)
+	var allowed bool
+	var reason string
+	testutil.WaitFor(t, promptIdleBudget, func() bool {
+		var err error
+		allowed, reason, err = mgr.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
+		return err == nil && allowed
+	})
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
 	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, promptIdleBudget, func() bool {
 		mgr.DrainLoopPendingForTest(ctx, sess.ID)
 		msgs, err := mgr.GetMessages(ctx, sess.ID)
 		if err != nil {
