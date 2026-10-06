@@ -75,6 +75,8 @@ func TestObserveJoinsKnownInvalidationOnce(t *testing.T) {
 	rootPath := t.TempDir()
 	catalog := New()
 	var builds atomic.Int32
+	buildStarted := make(chan struct{})
+	releaseBuild := make(chan struct{})
 	catalog.build = func(ctx context.Context, roots []Root, _ walkPolicy) (Snapshot, error) {
 		if builds.Add(1) == 2 {
 			repochange.Notify(ctx, repochange.Event{
@@ -82,6 +84,12 @@ func TestObserveJoinsKnownInvalidationOnce(t *testing.T) {
 				Kind:       repochange.WorktreeChanged,
 				Source:     repochange.SourceMutation,
 			})
+			close(buildStarted)
+			select {
+			case <-releaseBuild:
+			case <-ctx.Done():
+				return Snapshot{}, ctx.Err()
+			}
 		}
 		return Snapshot{State: StateReady, Roots: append([]Root(nil), roots...)}, nil
 	}
@@ -90,10 +98,28 @@ func TestObserveJoinsKnownInvalidationOnce(t *testing.T) {
 	_, err := catalog.Snapshot(t.Context(), "project", roots)
 	testutil.FailErr(t, "build initial generation", err)
 	catalog.InvalidateRoot(rootPath)
-	snapshot, err := catalog.Observe(t.Context(), "project", roots)
-	testutil.FailErr(t, "observe invalidated generation", err)
-	if !snapshot.Moving || len(snapshot.Epochs) != 0 || builds.Load() != 2 {
-		t.Fatalf("snapshot = {moving:%t epochs:%d builds:%d}", snapshot.Moving, len(snapshot.Epochs), builds.Load())
+
+	type obsResult struct {
+		snap Snapshot
+		err  error
+	}
+	obsCh := make(chan obsResult, 1)
+	go func() {
+		snap, err := catalog.Observe(t.Context(), "project", roots)
+		obsCh <- obsResult{snap, err}
+	}()
+
+	select {
+	case <-buildStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("build 2 did not start")
+	}
+	close(releaseBuild)
+
+	res := <-obsCh
+	testutil.FailErr(t, "observe invalidated generation", res.err)
+	if !res.snap.Moving || len(res.snap.Epochs) != 0 || builds.Load() != 2 {
+		t.Fatalf("snapshot = {moving:%t epochs:%d builds:%d}", res.snap.Moving, len(res.snap.Epochs), builds.Load())
 	}
 }
 

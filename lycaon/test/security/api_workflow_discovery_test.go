@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -69,10 +68,10 @@ func TestPlanSlashReplacesActivePlanRun(t *testing.T) {
 	if len(history) < 1 {
 		t.Fatal("expected run history")
 	}
-	first := waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", 10*time.Second)
+	first := waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", promptIdleBudget)
 
 	acceptPromptHTTP(t, srv, sess.ID, "/plan")
-	waitWorkflowRunCountHTTP(t, srv, sess.ID, len(history)+1, 10*time.Second)
+	waitWorkflowRunCountHTTP(t, srv, sess.ID, len(history)+1, promptIdleBudget)
 
 	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
 	w = httptest.NewRecorder()
@@ -111,7 +110,7 @@ func TestNonSlashPromptAcceptedHTTP(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	exitAmbientRunHTTP(t, srv, sess.ID)
 
-	postPromptAndWaitTranscriptHTTP(t, srv, sess.ID, "/notatrigger please explain", "I understand", 10*time.Second)
+	postPromptAndWaitTranscriptHTTP(t, srv, sess.ID, "/notatrigger please explain", "I understand", promptIdleBudget)
 }
 
 func TestSlashPlanStartsWorkflow(t *testing.T) {
@@ -122,5 +121,5 @@ func TestSlashPlanStartsWorkflow(t *testing.T) {
 
 	// The active run is observable before the mock coordinator turn settles.
 	acceptPromptHTTP(t, srv, sess.ID, "/plan")
-	waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", 10*time.Second)
+	waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", promptIdleBudget)
 }
