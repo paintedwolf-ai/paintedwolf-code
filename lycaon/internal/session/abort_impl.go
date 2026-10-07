@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -194,6 +193,9 @@ func (m *Manager) stopTreeWorkers(ctx context.Context, tree []store.SessionTreeM
 // unwind and release its session before recording the stop without it.
 const DefaultTurnReleaseTimeout = 30 * time.Second
 
+// stoppedTurnPoll is how often a stop re-tries the prompt lock while waiting.
+const stoppedTurnPoll = 10 * time.Millisecond
+
 func (m *Manager) stopOneSessionRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string, errs []error) []error {
 	defer m.acquireStoppedTurn(ctx, sess.ID)()
 	preserveQueue := sess.ID == preserveQueueSessionID
@@ -228,39 +230,21 @@ func (m *Manager) stopOneSessionRuntime(ctx context.Context, sess store.SessionT
 // settles the session without waiting for it. The returned func releases the
 // lock when it was taken.
 func (m *Manager) acquireStoppedTurn(ctx context.Context, sessionID string) (release func()) {
-	lock := m.promptState.Prompt.Acquire(sessionID)
 	timeout := m.turnReleaseTimeout
 	if timeout <= 0 {
 		timeout = DefaultTurnReleaseTimeout
 	}
-	var mu sync.Mutex
-	abandoned := false
-	acquired := make(chan struct{})
-	go func() {
-		lock.Lock()
-		mu.Lock()
-		defer mu.Unlock()
-		if abandoned {
-			lock.Unlock()
-			return
+	deadline := time.Now().Add(timeout)
+	for {
+		lock := m.promptState.Prompt.Acquire(sessionID)
+		if lock.TryLock() {
+			return lock.Unlock
 		}
-		close(acquired)
-	}()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-acquired:
-		return lock.Unlock
-	case <-timer.C:
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(stoppedTurnPoll)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	select {
-	case <-acquired:
-		return lock.Unlock
-	default:
-	}
-	abandoned = true
 	slog.WarnContext(ctx, "cancelled turn did not release its session; stopping without it",
 		"component", "session", "session_id", sessionID, "waited", timeout)
 	return func() {}
