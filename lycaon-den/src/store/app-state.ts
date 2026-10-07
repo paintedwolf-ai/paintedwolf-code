@@ -1,3 +1,4 @@
+import { batch } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { projectMatchesDir } from "../api/project-path.ts";
 import { isEnterableSessionStatus } from "../api/session-status.generated.ts";
@@ -94,7 +95,6 @@ export function createAppStore(
     installSessionBootstrap(bootstrap, sessionOverride) {
       const session = sessionOverride ?? bootstrap.session;
       const sid = session.id.trim();
-      const previousQueue = queueDrafts.get(sid);
       const queue = rememberQueueDraft(sid, bootstrap.queue);
       setState(
         produce((draft) => {
@@ -133,13 +133,7 @@ export function createAppStore(
           draft.pendingCheckpoints = bootstrap.checkpoints.map(pendingFromEvent);
         }),
       );
-      // A session switch drops pending sends, so a bootstrap at the remembered
-      // revision still has to seat the reserved head.
-      const unseated = queue.sending &&
-        !state.pendingSends[sid]?.some((entry) => entry.kind === "queue_send");
-      if (!previousQueue || queue.revision > previousQueue.revision || unseated) {
-        reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
-      }
+      reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
       replayForegroundBufferedMessages({ state, actions }, session.id);
     },
     setWorkers(workers) {
@@ -567,15 +561,12 @@ export function createAppStore(
     setQueueDraft(sessionId, epoch, queueDraft) {
       const sid = sessionId.trim();
       if (state.currentSession?.id.trim() !== sid || state.sessionViewEpoch !== epoch) return false;
-      const current = queueDrafts.get(sid);
-      if (current && current.revision >= queueDraft.revision) return false;
-      queueDrafts.set(sid, queueDraft);
-      setState(
-        produce((s) => {
-          s.queueDraft = queueDraft;
-        }),
-      );
-      return true;
+      const queue = rememberQueueDraft(sid, queueDraft);
+      batch(() => {
+        setState("queueDraft", queue);
+        reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
+      });
+      return queue === queueDraft;
     },
     bumpVerifyDetectRevision() {
       setState("verifyDetectRevision", state.verifyDetectRevision + 1);

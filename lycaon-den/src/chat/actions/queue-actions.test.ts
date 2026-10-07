@@ -28,22 +28,28 @@ const draft = (revision: number, text = "queued"): QueueDraft => ({
   queue_items: [{ submitted_by: "00000000-0000-4000-8000-000000000002", id: "item-1", text, created_at: "t" }],
 });
 
+const bootstrap = (queue: QueueDraft): SessionBootstrap => ({
+  event_cursor: "",
+  session: session("a"),
+  transcript: { messages: [], watermark: 0, turn_clocks: {}, turn_loads: {} },
+  progress: { revision: 1, steps: [] },
+  turn_clock: { session_id: "a", active_ms: 0, work_ms: 0, running: false },
+  findings: { revision: 1, findings: [] },
+  queue, coordinator: {}, workers: [], checkpoints: [], background_outputs: [], previews: [],
+});
+
 describe("queue actions", () => {
-  it("installs bootstrap queue revisions monotonically and reconciles only accepted snapshots", () => {
+  it("a stale bootstrap installs and reconciles against the newest remembered draft", () => {
     const store = createAppStore();
-    const bootstrap = (queue: QueueDraft): SessionBootstrap => ({
-      event_cursor: "",
-      session: session("a"),
-      transcript: { messages: [], watermark: 0, turn_clocks: {}, turn_loads: {} },
-      progress: { revision: 1, steps: [] },
-      turn_clock: { session_id: "a", active_ms: 0, work_ms: 0, running: false },
-      findings: { revision: 1, findings: [] },
-      queue, coordinator: {}, workers: [], checkpoints: [], background_outputs: [], previews: [],
-    });
     store.actions.installSessionBootstrap(bootstrap({ ...draft(2), sending: true }));
-    expect(store.state.pendingSends.a).toHaveLength(1);
-    store.actions.removePendingSends("a", ["item-1"]);
-    store.actions.setQueueDraft("a", store.state.sessionViewEpoch, { ...draft(3), queue_items: [] });
+    expect(store.state.pendingSends.a).toEqual([
+      expect.objectContaining({ kind: "queue_send", operationId: "item-1" }),
+    ]);
+
+    // Cancel send lands as a newer draft: the item is queued again, unreserved.
+    expect(store.actions.setQueueDraft("a", store.state.sessionViewEpoch, draft(3))).toBe(true);
+    expect(store.state.pendingSends.a).toBeUndefined();
+
     store.actions.installSessionBootstrap(bootstrap({ ...draft(2), sending: true }));
     expect(store.state.queueDraft?.revision).toBe(3);
     expect(store.state.pendingSends.a).toBeUndefined();
@@ -51,15 +57,6 @@ describe("queue actions", () => {
 
   it("a bootstrap at the remembered revision re-seats the reserved head after a session switch", async () => {
     const store = createAppStore();
-    const bootstrap = (queue: QueueDraft): SessionBootstrap => ({
-      event_cursor: "",
-      session: session("a"),
-      transcript: { messages: [], watermark: 0, turn_clocks: {}, turn_loads: {} },
-      progress: { revision: 1, steps: [] },
-      turn_clock: { session_id: "a", active_ms: 0, work_ms: 0, running: false },
-      findings: { revision: 1, findings: [] },
-      queue, coordinator: {}, workers: [], checkpoints: [], background_outputs: [], previews: [],
-    });
     store.actions.installSessionBootstrap(bootstrap(draft(1)));
     const sending = { ...draft(2), sending: true };
     const client = stubClient({ updateSessionQueue: vi.fn().mockResolvedValue(sending) });
@@ -77,7 +74,6 @@ describe("queue actions", () => {
       expect.objectContaining({ kind: "queue_send", operationId: "item-1", state: "accepted" }),
     ]);
 
-    // A seated head is not reseated by a repeat bootstrap.
     store.actions.installSessionBootstrap(bootstrap(sending));
     expect(store.state.pendingSends.a).toHaveLength(1);
   });
