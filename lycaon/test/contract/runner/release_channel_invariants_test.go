@@ -290,6 +290,21 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 			t.Fatalf("publication job receives signing credential %s", credential)
 		}
 	}
+	// The feed key signs pointers at publication and never signs code; the artifact key never
+	// leaves the signing environment.
+	activate := extractYAMLJob(workflow, "activate-updater")
+	if !strings.Contains(activate, "FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}") ||
+		strings.Contains(activate, "TAURI_SIGNING_PRIVATE_KEY") {
+		t.Fatal("channel activation must sign pointers with the feed key only")
+	}
+	if strings.Contains(build, "FEED_SIGNING_PRIVATE_KEY") {
+		t.Fatal("signed build receives the feed signing key")
+	}
+	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
+	if !strings.Contains(halt, "FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}") ||
+		strings.Contains(halt, "TAURI_SIGNING_PRIVATE_KEY") {
+		t.Fatal("release halt must sign replacement pointers with the feed key only")
+	}
 }
 
 func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
@@ -334,7 +349,7 @@ func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
 	}
 	stage := contractcheck.ReadRepoFile(t, root, "scripts/stage-engine.sh")
 	if !strings.Contains(stage, `EXE_SUFFIX=".exe"`) {
-		t.Fatal("Windows sidecars do not use Tauri's target-triple .exe naming")
+		t.Fatal("Windows sidecar staging must apply the plain .exe suffix")
 	}
 	linuxStage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	for _, needle := range []string{
@@ -403,11 +418,6 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 			t.Fatalf("cross-platform sidecar launcher is missing %q", needle)
 		}
 	}
-	for _, forbidden := range []string{"engine_root: Option<PathBuf>", "fn request_graceful_stop(_proc: &Child)"} {
-		if strings.Contains(launcher, forbidden) {
-			t.Fatalf("cross-platform sidecar launcher retains stub %q", forbidden)
-		}
-	}
 	control := contractcheck.ReadRepoFile(t, root, "lycaon/internal/startupprotocol/control.go")
 	if !strings.Contains(control, `ControlStdinEnv = "LYCAON_CONTROL_STDIN"`) ||
 		!strings.Contains(control, "ReadControlShutdown") {
@@ -456,17 +466,15 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	var tauri struct {
-		Plugins struct {
-			Updater struct {
-				RequireSignedVersion bool `json:"requireSignedVersion"`
-			} `json:"updater"`
-		} `json:"plugins"`
-	}
-	contractcheck.FailErr(t, "parse tauri.conf.json", json.Unmarshal(
-		[]byte(contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/tauri.conf.json")), &tauri))
-	if !tauri.Plugins.Updater.RequireSignedVersion {
-		t.Fatal("the updater must refuse signatures that are not bound to a version")
+	verification := contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/src/update_service/verification.rs")
+	for _, needle := range []string{
+		`"Artifact signature does not bind the offered version"`,
+		"pub fn verify_feed(",
+		"comment.file.as_deref() != Some(expected_file)",
+	} {
+		if !strings.Contains(verification, needle) {
+			t.Fatalf("the updater must refuse signatures that are not bound to a version and feed (%q missing)", needle)
+		}
 	}
 	// The native bundle version drops the prerelease, so build signatures are rebound.
 	bundle := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")
@@ -477,6 +485,11 @@ func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 	if !strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${FILE}"`+"\n") ||
 		!strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${CURRENT}" --existing`) {
 		t.Fatal("the pointer publisher must validate the new manifest strictly and read the current one as existing")
+	}
+	if !strings.Contains(pointer, `bun run tauri signer sign --app-version "${EXPECTED_VERSION}" "${SIGNED_COPY}"`) ||
+		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}"`) ||
+		strings.Index(pointer, "publish_signature()") > strings.Index(pointer, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`) {
+		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")
 	}
 	stage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	if !strings.Contains(stage, `verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"`) {

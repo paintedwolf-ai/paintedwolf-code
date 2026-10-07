@@ -130,7 +130,7 @@ def apply(prepared: dict) -> None:
             payload = {"channel": row["channel"], "bad_version": row["bad"], "last_good_version": row["last_good"],
                        "manifest_sha256": row["manifest_sha256"]}
             api(os.environ["WWW_DISPATCH_TOKEN"], "repos/paintedwolf-ai/paintedwolf-www/dispatches", "POST",
-                {"event_type": "lycaon-release-halt", "client_payload": payload})
+                {"event_type": "painted-wolf-release-halt", "client_payload": payload})
             wait_for_withdrawal(row)
         except (OSError, ValueError) as error:
             errors.append(str(error))

@@ -35,8 +35,7 @@ var manifestRequiredKeys = []string{
 	"semantics_sha256",
 }
 
-// releaseCandidateCorpus is the fixture this candidate ships; pre-v1 builds
-// leave no released baseline behind.
+// releaseCandidateCorpus is the fixture this candidate ships.
 func releaseCandidateCorpus(t *testing.T, root string) string {
 	t.Helper()
 	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, root, "VERSION"))

@@ -595,6 +595,8 @@ tasks:
       - 'capabilities/**/*.json'
       - ../../VERSION
       - ../../packaging/update-keys.json
+      - ../../packaging/update-limits.json
+      - 'src/update_service/fixtures/*.json'
       - ../../lycaon/internal/backup/archive-limits.json
       - ../shared/local-file-formats.json
       - Cargo.toml

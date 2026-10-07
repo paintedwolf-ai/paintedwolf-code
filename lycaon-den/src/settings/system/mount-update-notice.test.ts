@@ -1,88 +1,53 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { createNoticeStore } from "../../notices/notice-store.ts";
-import { APP_SCOPE } from "../../notices/notice-scope.ts";
-import { noticeScopeKey } from "../../notices/notice-scope.ts";
-import type { NativeUpdateState, UpdateService } from "./update-service.ts";
+import { APP_SCOPE, noticeScopeKey } from "../../notices/notice-scope.ts";
+import { createUpdateState } from "./update-state.ts";
 import { mountUpdateNotice } from "./mount-update-notice.ts";
+import { updateFixture, stagedFixture, updateServiceFixture } from "./update-test-fixture.ts";
+import type { NativeUpdateState } from "./update-service.ts";
 
-const state = (
-  over: Partial<NativeUpdateState> = {},
-): NativeUpdateState => ({
-  phase: "idle",
-  revision: 0,
-  current_version: "1.0.0",
-  channel: "stable",
-  install_source: "direct_download",
-  checks_enabled: true,
-  downloaded_bytes: 0,
-  total_bytes: null,
-  rollout_eligibility: "not_applicable",
-  ...over,
-});
+async function fixture() {
+  let deliver!: (state: NativeUpdateState) => void;
+  const notices = createNoticeStore();
+  const updates = createUpdateState(updateServiceFixture({ subscribe: async (observe) => { deliver = observe; return () => {}; } }));
+  const stop = mountUpdateNotice({ notices, updates });
+  await vi.waitFor(() => expect(updates.state()).not.toBeNull());
+  let revision = 2;
+  return { stop, notices, rows: () => notices.index().get(noticeScopeKey(APP_SCOPE)) ?? [], send: async (state: NativeUpdateState) => {
+    deliver({ ...state, revision: revision++ });
+    await Promise.resolve();
+  } };
+}
 
-describe("mountUpdateNotice", () => {
-  it("publishes each discovered version once at app scope", async () => {
-    let deliver: ((next: NativeUpdateState) => void) | undefined;
-    const service: UpdateService = {
-      getState: vi.fn(async () => state()),
-      setChecksEnabled: vi.fn(async () => state()),
-      setChannel: vi.fn(async () => state()),
-      check: vi.fn(async () => state()),
-      install: vi.fn(async () => state()),
-      subscribe: vi.fn(async (handler) => {
-        deliver = handler;
-        return () => {};
-      }),
-    };
-    const notices = createNoticeStore();
-    const stop = mountUpdateNotice({ notices, service });
-    await vi.waitFor(() => expect(deliver).toBeTypeOf("function"));
-
-    const available = state({ phase: "available", available_version: "1.1.0" });
-    deliver?.(available);
-    deliver?.(available);
-
-    const rows = notices.index().get(noticeScopeKey(APP_SCOPE)) ?? [];
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.code).toBe("update_available");
-    stop();
+describe("update notices", () => {
+  it("announces readiness once, respects dismissal, and withdraws obsolete offers", async () => {
+    const f = await fixture();
+    try {
+      expect(f.rows()).toHaveLength(0);
+      await f.send(stagedFixture());
+      expect(f.rows().map(row => row.code)).toEqual(["update_ready"]);
+      f.notices.dismiss(f.rows()[0]!.id);
+      await f.send(stagedFixture());
+      expect(f.rows()).toHaveLength(0);
+      await f.send(updateFixture({ candidate: null, discovery: "up_to_date" }));
+      await f.send(stagedFixture());
+      expect(f.rows()).toHaveLength(1);
+      await f.send(updateFixture({ candidate: null }));
+      expect(f.rows()).toHaveLength(0);
+    } finally { f.stop(); }
   });
-
-  it("continues when the event stream is unavailable", async () => {
-    const service: UpdateService = {
-      getState: vi.fn(async () => state()),
-      setChecksEnabled: vi.fn(async () => state()),
-      setChannel: vi.fn(async () => state()),
-      check: vi.fn(async () => state()),
-      install: vi.fn(async () => state()),
-      subscribe: vi.fn(async () => {
-        throw new Error("update_event_stream_unavailable");
-      }),
-    };
-    const stop = mountUpdateNotice({ notices: createNoticeStore(), service });
-
-    await vi.waitFor(() => expect(service.getState).toHaveBeenCalledOnce());
-    stop();
+  it("keeps held-back and offline checks quiet and uses the existing notice rail for failures", async () => {
+    const f = await fixture();
+    try {
+      const held = updateFixture();
+      held.candidate!.rollout_eligibility = "held_back";
+      await f.send({ ...held, automatic_updates_enabled: false, last_error: { code: "check_failed" } });
+      expect(f.rows()).toHaveLength(0);
+      await f.send(updateFixture({ installation: "failed", last_error: { code: "install_failed" } }));
+      expect(f.rows().map(row => row.code)).toEqual(["update_failed"]);
+      await f.send(updateFixture({ automatic_updates_enabled: false }));
+      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
+    } finally { f.stop(); }
   });
-  it("ignores delayed offers after newer state or disposal", async () => {
-    let deliver: ((next: NativeUpdateState) => void) | undefined;
-    const service: UpdateService = {
-      getState: async () => state(),
-      setChecksEnabled: async () => state(),
-      setChannel: async () => state(),
-      check: async () => state(),
-      install: async () => state(),
-      subscribe: async (handler) => { deliver = handler; return () => {}; },
-    };
-    const notices = createNoticeStore();
-    const stop = mountUpdateNotice({ notices, service });
-    await vi.waitFor(() => expect(deliver).toBeTypeOf("function"));
-    deliver?.(state({ revision: 3, phase: "restart_required" }));
-    deliver?.(state({ revision: 2, phase: "available", available_version: "1.1.0" }));
-    expect(notices.index().get(noticeScopeKey(APP_SCOPE)) ?? []).toHaveLength(0);
-    stop();
-    deliver?.(state({ revision: 4, phase: "available", available_version: "1.2.0" }));
-    expect(notices.index().get(noticeScopeKey(APP_SCOPE)) ?? []).toHaveLength(0);
-  });
-
 });

@@ -89,7 +89,7 @@ class WebsiteWithdrawalTests(unittest.TestCase):
             withdrawal.apply(prepared)
         self.assertEqual(api.call_args_list[0].args[2], "DELETE")
         event = api.call_args_list[1].args[3]
-        self.assertEqual(event, {"event_type": "lycaon-release-halt", "client_payload": {
+        self.assertEqual(event, {"event_type": "painted-wolf-release-halt", "client_payload": {
             "channel": "stable", "bad_version": "1.0.0", "last_good_version": None, "manifest_sha256": None}})
         self.assertEqual(wait.call_args.args[0], prepared["channels"][0])
 
