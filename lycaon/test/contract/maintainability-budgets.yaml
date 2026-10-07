@@ -1328,7 +1328,7 @@ go_receiver_lines:
     lycaon/internal/session/session.ListenCheckpointBroker: 135
     lycaon/internal/session/session.LocalNetworkCheckpointBroker: 146
     lycaon/internal/session/session.LoopbackCheckpointBroker: 109
-    lycaon/internal/session/session.Manager: 12473
+    lycaon/internal/session/session.Manager: 12455
     lycaon/internal/session/session.MemoryDecisionStore: 48
     lycaon/internal/session/session.PeerRejectionFeed: 62
     lycaon/internal/session/session.PlanToolStash: 35
@@ -13864,7 +13864,7 @@ source_files:
     lycaon/internal/secretspan/candidate.go: 84
     lycaon/internal/secretspan/secretspan.go: 95
     lycaon/internal/sensitivepath/sensitivepath.go: 290
-    lycaon/internal/session/abort_impl.go: 230
+    lycaon/internal/session/abort_impl.go: 212
     lycaon/internal/session/agent_turn.go: 26
     lycaon/internal/session/agentsmd_cache.go: 175
     lycaon/internal/session/approvalstate/direct_ip_capability_runtime.go: 251
