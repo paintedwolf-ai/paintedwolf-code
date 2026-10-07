@@ -1,7 +1,8 @@
-//! The native host owns update discovery, preparation, and lifecycle activation.
+//! The native host runs update discovery, preparation, and lifecycle activation.
 pub(crate) mod check;
 pub(crate) mod download;
 mod error;
+pub(crate) mod feed;
 mod installer;
 mod model;
 mod persistence;
@@ -41,6 +42,8 @@ pub struct UpdateService {
     activation: std::sync::Arc<tokio::sync::Mutex<()>>,
     startup_ready: tokio::sync::watch::Sender<bool>,
     engine_admission: std::sync::Arc<tokio::sync::RwLock<()>>,
+    /// Held for the life of the process so no exchange can happen beneath it.
+    _lease: Option<transaction::Lease>,
 }
 fn default_channel(version: &str) -> Result<UpdateChannel, UpdateError> {
     let version = semver::Version::parse(version)
@@ -52,12 +55,14 @@ fn default_channel(version: &str) -> Result<UpdateChannel, UpdateError> {
     })
 }
 impl UpdateService {
-    pub fn new(version: String) -> Self {
+    pub fn new(version: String, launch: transaction::Launch) -> Self {
         let (source, receipt_channel, error) = persistence::detect_install_source();
         let channel = receipt_channel
             .unwrap_or_else(|| default_channel(&version).expect("compiled product version"));
         let mut state = NativeUpdateState::new(version, channel, source);
         state.last_error = error;
+        // A process outside an installed bundle has nothing to coordinate.
+        state.coordinated = launch.lease.is_some() || installer::bundle().is_err();
         let mut preferences = persistence::Preferences {
             format_version: 2,
             automatic_updates_enabled: false,
@@ -87,11 +92,10 @@ impl UpdateService {
         if let Err(e) = staging::restore(&mut state) {
             state.last_error = Some(e);
         }
-        let blocked_release = match transaction::restore_failure(&mut state) {
+        let blocked_release = match transaction::restore(&mut state) {
             Ok(id) => id,
             Err(error) => {
                 state.last_error = Some(error);
-                state.automatic_updates_enabled = false;
                 None
             }
         };
@@ -99,10 +103,12 @@ impl UpdateService {
             Ok(rejected) => blocked_release.or(rejected),
             Err(error) => {
                 state.last_error = Some(error);
-                state.automatic_updates_enabled = false;
                 blocked_release
             }
         };
+        if let Some(error) = launch.error {
+            state.last_error = Some(error);
+        }
         state.refresh_capabilities(installer::supported());
         Self {
             inner: tokio::sync::Mutex::new(Inner {
@@ -119,6 +125,7 @@ impl UpdateService {
             engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
             preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+            _lease: launch.lease,
         }
     }
     pub async fn automatic_install_ready(&self) -> bool {
@@ -126,6 +133,7 @@ impl UpdateService {
         inner.state.refresh_capabilities(installer::supported());
         inner.state.capabilities.can_install_automatically
     }
+    /// Drains engine starts in flight and refuses new ones until startup finishes again.
     pub async fn close_startup(&self) {
         let _admission = self.engine_admission.write().await;
         self.startup_ready.send_replace(false);
@@ -155,6 +163,7 @@ impl UpdateService {
     fn wake_scheduler(&self) {
         self.wake.send_modify(|revision| *revision += 1);
     }
+    /// Invalidates checks in flight; preparation has its own generation.
     fn cancel(&self, state: &mut NativeUpdateState) {
         if state.discovery == Discovery::Checking {
             state.discovery = Discovery::Idle;

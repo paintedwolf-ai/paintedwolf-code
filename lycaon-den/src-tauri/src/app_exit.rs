@@ -279,7 +279,6 @@ pub async fn install_update(
     let Some(activation) = transaction::prepare_exit(app, expected, true).await? else {
         return Ok(false);
     };
-    activation.revalidate(app).await?;
     prepared
         .commit_boundary()
         .map_err(|e| UpdateError::new(UpdateErrorCode::Cancelled, e))?;
@@ -318,8 +317,8 @@ async fn stop_and_activate(
     }
     activation.commit()
 }
-#[tauri::command]
-pub fn cancel_app_exit(app: AppHandle, request_id: u64) -> Result<(), String> {
+/// Returns the windows to the workspace when the person chooses to keep working.
+fn cancel_app_exit(app: AppHandle, request_id: u64) -> Result<(), String> {
     let coordinator = app.state::<ExitCoordinator>();
     let mut state = coordinator
         .0

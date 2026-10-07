@@ -3,31 +3,30 @@ use std::{env, fs, path::Path};
 #[cfg(test)]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use painted_wolf_code_lib::update_service::verification;
-use serde_json::Value;
 
 fn run(
     artifact: &Path,
     signature_path: &Path,
-    config_path: &Path,
+    public_key_path: &Path,
     version: &str,
 ) -> Result<(), String> {
-    let config: Value = serde_json::from_slice(
-        &fs::read(config_path).map_err(|err| format!("read config: {err}"))?,
-    )
-    .map_err(|err| format!("parse config: {err}"))?;
-    let encoded_public_key = config
-        .pointer("/plugins/updater/pubkey")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "config has no updater public key".to_string())?;
+    let encoded_public_key = fs::read_to_string(public_key_path).map_err(|e| e.to_string())?;
+    if encoded_public_key.trim().is_empty() {
+        return Err("public key file is empty".into());
+    }
     let encoded_signature = fs::read_to_string(signature_path).map_err(|e| e.to_string())?;
-    verification::verify(artifact, &encoded_signature, encoded_public_key, version)
+    verification::verify(
+        artifact,
+        &encoded_signature,
+        encoded_public_key.trim(),
+        version,
+    )
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 5 {
-        eprintln!("usage: verify_updater_signature ARTIFACT SIGNATURE TAURI_CONFIG VERSION");
+        eprintln!("usage: verify_updater_signature ARTIFACT SIGNATURE PUBLIC_KEY_FILE VERSION");
         std::process::exit(2);
     }
     if let Err(err) = run(
@@ -48,6 +47,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     #[test]
     fn bridges_bind_source_generation_bytes_and_release_version() {
         let fixtures: Vec<Value> = serde_json::from_str(include_str!(
@@ -58,36 +58,22 @@ mod tests {
         fs::create_dir(&directory).unwrap();
         let artifact = directory.join("bridge.bin");
         let signature = directory.join("bridge.sig");
-        let config = directory.join("config.json");
+        let key = directory.join("key.pub");
         for row in fixtures {
             let bytes = STANDARD.decode(row["body"].as_str().unwrap()).unwrap();
             fs::write(&artifact, &bytes).unwrap();
             fs::write(&signature, row["signature"].as_str().unwrap()).unwrap();
-            fs::write(
-                &config,
-                serde_json::to_vec(
-                    &serde_json::json!({"plugins":{"updater":{"pubkey":row["key"]}}}),
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            run(&artifact, &signature, &config, "2.0.0").expect("source key accepts bridge");
-            assert!(run(&artifact, &signature, &config, "2.0.1").is_err());
+            fs::write(&key, row["key"].as_str().unwrap()).unwrap();
+            run(&artifact, &signature, &key, "2.0.0").expect("source key accepts bridge");
+            assert!(run(&artifact, &signature, &key, "2.0.1").is_err());
             fs::write(&artifact, "substituted bridge").unwrap();
-            assert!(run(&artifact, &signature, &config, "2.0.0").is_err());
+            assert!(run(&artifact, &signature, &key, "2.0.0").is_err());
             fs::write(&artifact, &bytes).unwrap();
             fs::write(&signature, row["unbound_signature"].as_str().unwrap()).unwrap();
-            assert!(run(&artifact, &signature, &config, "2.0.0").is_err());
+            assert!(run(&artifact, &signature, &key, "2.0.0").is_err());
             fs::write(&signature, row["signature"].as_str().unwrap()).unwrap();
-            fs::write(
-                &config,
-                serde_json::to_vec(
-                    &serde_json::json!({"plugins":{"updater":{"pubkey":row["successor_key"]}}}),
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            assert!(run(&artifact, &signature, &config, "2.0.0").is_err());
+            fs::write(&key, row["successor_key"].as_str().unwrap()).unwrap();
+            assert!(run(&artifact, &signature, &key, "2.0.0").is_err());
         }
         fs::remove_dir_all(directory).unwrap();
     }

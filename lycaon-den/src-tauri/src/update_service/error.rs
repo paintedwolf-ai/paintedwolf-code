@@ -58,26 +58,13 @@ impl UpdateError {
         self
     }
 
-    pub fn check(error: tauri_plugin_updater::Error) -> Self {
-        use tauri_plugin_updater::Error;
-        let code = match &error {
-            Error::Reqwest(_) | Error::Network(_) | Error::ReleaseNotFound => {
-                UpdateErrorCode::CheckFailed
-            }
-            _ => UpdateErrorCode::InvalidRelease,
-        };
-        Self::new(code, error)
-    }
-
-    pub fn download(error: tauri_plugin_updater::Error) -> Self {
-        use tauri_plugin_updater::Error;
-        let code = match &error {
-            Error::Minisign(_)
-            | Error::Base64(_)
-            | Error::SignatureUtf8(_)
-            | Error::SignedVersionMismatch { .. }
-            | Error::MissingSignedVersion => UpdateErrorCode::VerificationFailed,
-            _ => UpdateErrorCode::DownloadFailed,
+    /// Transport failures are retried; everything else about a feed response is a release defect.
+    pub fn transport(error: reqwest::Error) -> Self {
+        // A client error says the origin has no such release; everything else is transient.
+        let code = if error.status().is_some_and(|status| status.is_client_error()) {
+            UpdateErrorCode::InvalidRelease
+        } else {
+            UpdateErrorCode::CheckFailed
         };
         Self::new(code, error)
     }
@@ -98,40 +85,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn download_failures_use_typed_causes() {
-        let signature = UpdateError::download(tauri_plugin_updater::Error::SignatureUtf8(
-            "opaque signature diagnostic".into(),
-        ));
-        assert_eq!(signature.code, UpdateErrorCode::VerificationFailed);
-        let rebound = UpdateError::download(tauri_plugin_updater::Error::SignedVersionMismatch {
-            signed: "1.0.0".into(),
-            announced: "1.0.0-rc.3".into(),
-        });
-        assert_eq!(rebound.code, UpdateErrorCode::VerificationFailed);
-        let unbound = UpdateError::download(tauri_plugin_updater::Error::MissingSignedVersion);
-        assert_eq!(unbound.code, UpdateErrorCode::VerificationFailed);
-        let transport = UpdateError::download(tauri_plugin_updater::Error::Network(
-            "signature verification failed".into(),
-        ));
-        assert_eq!(transport.code, UpdateErrorCode::DownloadFailed);
-    }
-
-    #[test]
-    fn check_errors_separate_transport_from_invalid_release_metadata() {
-        assert_eq!(
-            UpdateError::check(tauri_plugin_updater::Error::ReleaseNotFound).code,
-            UpdateErrorCode::CheckFailed
-        );
-        assert_eq!(
-            UpdateError::check(tauri_plugin_updater::Error::TargetNotFound("test".into())).code,
-            UpdateErrorCode::InvalidRelease
-        );
-    }
-
-    #[test]
     fn errors_serialize_as_structured_command_and_event_values() {
         let value = serde_json::to_value(UpdateError::from(UpdateErrorCode::Interrupted))
             .expect("serialize update failure");
         assert_eq!(value, serde_json::json!({"code": "interrupted"}));
+    }
+
+    #[test]
+    fn context_is_appended_to_existing_detail() {
+        let error = UpdateError::new(UpdateErrorCode::DiskSpace, "first").with_context("second");
+        assert_eq!(error.detail.as_deref(), Some("first; second"));
+        assert_eq!(error.to_string(), "DiskSpace: first; second");
     }
 }

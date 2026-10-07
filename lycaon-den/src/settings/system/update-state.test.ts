@@ -32,7 +32,10 @@ describe("native update projection", () => {
   });
   it("recovers authoritative native state after a lost command reply", async () => {
     const updates = createUpdateState(updateServiceFixture({ getState: async () => updateFixture({ installation: "staged" }) }));
-    await updates.run(async () => { throw new Error("lost reply"); });
+    await updates.run(async () => {
+      // A command whose reply never arrives.
+      throw new Error("lost reply");
+    });
     expect(updates.state()?.installation).toBe("staged"); expect(updates.busy()).toBe(false);
   });
 });

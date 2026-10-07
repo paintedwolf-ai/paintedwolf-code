@@ -23,7 +23,7 @@ pub fn start(app: AppHandle) {
             Ok(false) => {}
         }
         app.state::<UpdateService>().finish_startup(&app).await;
-        super::check::start_update_scheduler(app);
+        super::scheduler::start_update_scheduler(app);
     });
 }
 

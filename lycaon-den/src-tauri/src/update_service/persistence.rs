@@ -1,6 +1,8 @@
+//! Device records: preferences, feed freshness, and the per-installation namespace.
 use super::{Failure, InstallSource, UpdateChannel, UpdateError};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -81,6 +83,65 @@ pub(super) fn write_json_atomic<T: Serialize>(
     result
 }
 
+/// Reads a JSON record; a missing file is `None` and an unreadable or unknown shape is refused unchanged.
+pub(super) fn read_json<T: DeserializeOwned>(
+    path: &Path,
+    failure: Failure,
+    valid: impl FnOnce(&T) -> bool,
+) -> Result<Option<T>, UpdateError> {
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(UpdateError::new(failure, err)),
+    };
+    let value: T = serde_json::from_slice(&raw).map_err(|err| UpdateError::new(failure, err))?;
+    if !valid(&value) {
+        return Err(UpdateError::new(
+            failure,
+            format!("Record has an unsupported shape: {}", path.display()),
+        ));
+    }
+    Ok(Some(value))
+}
+
+/// Reads an ephemeral record, moving an unreadable one aside so the service rebuilds it.
+pub(super) fn read_or_quarantine<T: DeserializeOwned>(
+    path: &Path,
+    failure: Failure,
+    valid: impl FnOnce(&T) -> bool,
+) -> Result<Option<T>, UpdateError> {
+    match read_json(path, failure, valid) {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            let stem = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("record");
+            let quarantine =
+                path.with_file_name(format!("{stem}-quarantined-{}.json", uuid::Uuid::new_v4()));
+            crate::atomic_file::replace(path, &quarantine, true).map_err(|moved| {
+                error.with_context(format!(
+                    "Record: {}. Could not preserve the incompatible record: {moved}",
+                    path.display()
+                ))
+            })?;
+            Ok(None)
+        }
+    }
+}
+
+pub(super) fn remove_if_present(path: &Path, failure: Failure) -> Result<(), UpdateError> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(UpdateError::new(failure, err)),
+    }
+}
+
+pub(super) fn hex_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Preferences {
@@ -96,6 +157,7 @@ struct LegacyPreferences {
     channel: UpdateChannel,
     rollout_bucket: u8,
 }
+/// Device-wide update records shared by every installation.
 pub fn preferences_dir() -> Result<PathBuf, UpdateError> {
     crate::den_state_dir()
         .map(|p| p.join("updates"))
@@ -110,13 +172,14 @@ pub fn installation_id(target: &Path) -> String {
     )
 }
 pub fn helper_installation(id: &str) -> Result<(), UpdateError> {
-    if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if !hex_digest(id) {
         return Err(Failure::InvalidTransition.into());
     }
     HELPER_INSTALLATION
         .set(id.into())
         .map_err(|_| Failure::InvalidTransition.into())
 }
+/// Records that belong to one installed application path.
 pub fn update_dir() -> Result<PathBuf, UpdateError> {
     let id = match HELPER_INSTALLATION.get() {
         Some(id) => id.clone(),
@@ -189,6 +252,51 @@ fn validate_preferences(p: &Preferences) -> Result<(), UpdateError> {
     Ok(())
 }
 
+/// The newest signed pointer timestamp accepted per feed; an older pointer is a replay.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FeedState {
+    format_version: u8,
+    feeds: BTreeMap<String, u64>,
+}
+const FEED_STATE_FILE: &str = "feed-state.json";
+fn read_feed_state(dir: &Path) -> Result<FeedState, UpdateError> {
+    Ok(read_or_quarantine(
+        &dir.join(FEED_STATE_FILE),
+        Failure::JournalUnavailable,
+        |state: &FeedState| state.format_version == 1,
+    )?
+    .unwrap_or(FeedState {
+        format_version: 1,
+        feeds: BTreeMap::new(),
+    }))
+}
+/// Accepts a pointer timestamp for a feed unless a newer one was already accepted.
+pub(super) fn accept_feed_timestamp(
+    dir: &Path,
+    feed: &str,
+    timestamp: u64,
+) -> Result<(), UpdateError> {
+    let mut state = read_feed_state(dir)?;
+    match state.feeds.get(feed) {
+        Some(&newest) if newest > timestamp => Err(UpdateError::new(
+            Failure::InvalidRelease,
+            "The update feed is older than one this device already accepted",
+        )),
+        Some(&newest) if newest == timestamp => Ok(()),
+        _ => {
+            state.feeds.insert(feed.into(), timestamp);
+            write_json_atomic(
+                dir,
+                FEED_STATE_FILE,
+                "feed-state.tmp",
+                &state,
+                Failure::JournalUnavailable,
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,6 +341,41 @@ mod tests {
         fs::write(root.join("preferences.json"), bytes).unwrap();
         assert!(load_preferences(&root, UpdateChannel::Stable, 0).is_err());
         assert_eq!(fs::read(root.join("preferences.json")).unwrap(), bytes);
+    }
+    #[test]
+    fn feed_timestamps_only_advance_and_a_replayed_pointer_is_refused() {
+        let root = TempDir::new("update-feed-state");
+        accept_feed_timestamp(&root, "latest-stable-key-1.json", 100).unwrap();
+        accept_feed_timestamp(&root, "latest-stable-key-1.json", 100).unwrap();
+        accept_feed_timestamp(&root, "latest-stable-key-1.json", 150).unwrap();
+        let replay = accept_feed_timestamp(&root, "latest-stable-key-1.json", 120).unwrap_err();
+        assert_eq!(replay.code, Failure::InvalidRelease);
+        accept_feed_timestamp(&root, "latest-preview-key-1.json", 5).unwrap();
+        assert_eq!(
+            read_feed_state(&root).unwrap().feeds["latest-stable-key-1.json"],
+            150
+        );
+    }
+    #[test]
+    fn unreadable_ephemeral_records_are_quarantined_and_rebuilt() {
+        let root = TempDir::new("update-record-quarantine");
+        let path = root.join(FEED_STATE_FILE);
+        for bytes in [
+            b"not json".as_slice(),
+            br#"{"format_version":99,"feeds":{}}"#,
+        ] {
+            fs::write(&path, bytes).unwrap();
+            assert!(read_json(&path, Failure::JournalUnavailable, |state: &FeedState| {
+                state.format_version == 1
+            })
+            .is_err());
+            assert!(read_feed_state(&root).unwrap().feeds.is_empty());
+            assert!(!path.exists());
+            assert!(fs::read_dir(&*root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
+        }
     }
 }
 

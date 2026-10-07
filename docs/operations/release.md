@@ -20,7 +20,7 @@ go to Preview; versions such as `1.0.0` go to Stable.
 | Environment | Secrets | Variables |
 |---|---|---|
 | `release-signing` | `APPLE_CERTIFICATE` (base64 p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ENGINE_PROVISIONING_PROFILE_BASE64`, `APPLE_API_KEY_P8` (base64), `APPLE_API_ISSUER`, `APPLE_API_KEY_ID`, `TAURI_SIGNING_PRIVATE_KEY`, optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; Windows candidates also need `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` | Windows candidates: `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, `AZURE_ARTIFACT_SIGNING_PROFILE` |
-| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
+| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_PRIVATE_KEY`, optional `FEED_SIGNING_PRIVATE_KEY_PASSWORD` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
 | `release-rehearsal` | `RELEASE_TEST_R2_API_TOKEN` | `RELEASE_TEST_R2_ACCOUNT_ID`, `RELEASE_TEST_R2_BUCKET`, `RELEASE_TEST_DOWNLOAD_BASE_URL` |
 
 The `release-rehearsal` environment serves the weekly [release system live
@@ -29,8 +29,9 @@ the R2 controls through an isolated `release-system-tests/` prefix; it may
 reuse the public bucket and domain or point at a scratch bucket.
 
 - [ ] Use an Apple Developer ID certificate and notarization key. Match the
-  updater private key to the public key in
-  [update-keys.json](../../packaging/update-keys.json); keep a recovery copy.
+  artifact and feed private keys to `public_key` and `feed_public_key` in
+  [update-keys.json](../../packaging/update-keys.json); keep recovery copies.
+  Custody rules: [Signing custody](../dev-tasks.md#updates).
 - [ ] Give each token **Contents: read and write** access to its repository:
   `HOMEBREW_TAP_TOKEN` for the tap and `WWW_DISPATCH_TOKEN` for
   `paintedwolf-ai/paintedwolf-www`.
@@ -73,8 +74,8 @@ release, update both the host manifest and the action's revision pin together.
    ```
 
    Commit the version changes and generated fixture with the candidate.
-   Pre-v1 schema changes redefine revision 1 and refresh its locks; no migration
-   is needed ([compatibility](../compatibility.md)).
+   A schema change ships its registered migration step and recorded released
+   baseline with the candidate ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
 4. Merge the candidate through the merge queue, which runs the full CI tier on
    the commit that lands, and wait for
@@ -97,7 +98,7 @@ release, update both the host manifest and the action's revision pin together.
 
 ## Automatic-update qualification
 
-The first release containing the automatic installer still requires the old client's manual update (or Homebrew). Later direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
+Clients at 1.0.1 or earlier check for updates but do not install them, so the first release with the automatic installer reaches them through a manual download or Homebrew. From that release on, direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
 
 Local tests establish state, migration, archive, and transaction invariants. A signed beta and clean VMs must establish the packaged lifecycle before promotion:
 
@@ -120,6 +121,11 @@ Local tests establish state, migration, archive, and transaction invariants. A s
 17. Toggle automatic updates during a manual download; it must finish. Toggle off during an automatic download; it must cancel. Switch channel during either; obsolete bytes must never become ready. Inject a helper-spawn failure and verify windows become usable before normal engine/credential recovery starts.
 18. Offer the wrong signed architecture or a signed preview through stable; both must be refused before exchange. Check ordinary macOS installations without developer command-line tools.
 19. Test a skipped signing-key bridge and a second restart into the successor release. Inspect version-bound signatures and package signing on both sides.
+20. Serve the previous channel pointer and its signature again after a newer one was accepted; the client must refuse it. Serve a pointer with a signature made under the other channel's name, an unsigned pointer, and a pointer whose manifest version differs from its signed version; each must be refused without an offer. Withdraw a release through the halt workflow and confirm the replacement pointer carries a fresh feed signature.
+21. Publish a manifest without `pub_date`; automatic checks must treat it as brand new (10% rollout). Corrupt `rejected.json` and `feed-state.json`; both must be quarantined without changing the automatic-update preference, and Settings must keep working.
+22. Quit with a staged update while offline less than a day after the last successful check; it must install. Repeat with an offer last confirmed more than a day earlier; quit and launch must defer silently, and an explicit restart must report the failed check.
+23. Keep a second instance open across the helper's ten-minute wait, then quit it; the committed update must install at that quit. Fill the disk before the helper's final journal write; the exchange must still relaunch the new version and Settings must report the unrecorded receipt.
+24. Run on a proxy-only network and against an artifact URL that redirects; both must fail with a transport error and leave the installed version untouched.
 
 Keep results with the release evidence. A local unit pass is not a claim of Gatekeeper, application-translocation, logout, power-loss, or cross-account filesystem behavior; these belong in the beta/VM qualification.
 

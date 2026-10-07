@@ -1,6 +1,6 @@
 import { nativeUpdateState } from "../settings/system/update-state.ts";
 import { RecoveryUpdates } from "./update/RecoveryUpdates.tsx";
-import { Show, createSignal } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "solid-js";
 import {
   engineStartupPhaseLabel,
@@ -22,6 +22,22 @@ export function EngineStartupStage(): JSX.Element {
   const [stopping, setStopping] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [status, setStatus] = createSignal<string>();
+  // The native update decision defers itself after 30 seconds; the view says so and offers diagnostics.
+  const [updateElapsed, setUpdateElapsed] = createSignal(0);
+  let updateTimer: ReturnType<typeof setInterval> | undefined;
+  createEffect(() => {
+    const pending = nativeUpdateState.state()?.startup_pending;
+    clearInterval(updateTimer);
+    updateTimer = undefined;
+    if (!pending) {
+      setUpdateElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    updateTimer = setInterval(() => setUpdateElapsed(Date.now() - started), 1_000);
+  });
+  onCleanup(() => clearInterval(updateTimer));
+  const updateTakingLong = () => updateElapsed() >= 30_000;
 
   const progress = () => {
     const state = engineStartupState();
@@ -82,7 +98,24 @@ export function EngineStartupStage(): JSX.Element {
         <div class="den-engine-startup" data-testid="update-startup" {...tauriDragRegionProps({ deep: true })}>
           <div class="den-engine-startup__pulse" aria-hidden="true" />
           <p class="den-engine-startup__title">Preparing Painted Wolf Code</p>
-          <p class="den-engine-startup__message" role="status">Checking the prepared update before starting the engine.</p>
+          <p class="den-engine-startup__message" role="status" aria-live="polite" aria-atomic="true">
+            {updateTakingLong()
+              ? "The update check is taking longer than usual. Startup continues without it shortly."
+              : "Checking the prepared update before starting the engine."}
+          </p>
+          <p class="den-engine-startup__elapsed" aria-live="off">{durationLabel(updateElapsed())}</p>
+          <Show when={updateTakingLong()}>
+            <div class="den-engine-startup__actions">
+              <DenButton
+                variant="secondary"
+                data-testid="update-startup-save"
+                disabled={saving()}
+                onClick={() => void saveBundle()}
+              >
+                {saving() ? "Saving…" : "Save report bundle…"}
+              </DenButton>
+            </div>
+          </Show>
         </div>
       </Show>
       <Show when={!nativeUpdateState.state()?.startup_pending && progress()}>

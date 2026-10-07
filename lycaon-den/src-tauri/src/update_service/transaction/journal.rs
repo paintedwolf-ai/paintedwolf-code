@@ -1,3 +1,5 @@
+//! The activation journal is recovery-critical: it is refused unchanged, never quarantined.
+use super::super::persistence;
 use super::{Candidate, Failure, UpdateError};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
@@ -25,66 +27,71 @@ pub(super) struct Transaction {
     pub(super) recovery_relaunch_attempted: bool,
     pub(super) error: Option<String>,
 }
+const RETAINED_RECEIPTS: usize = 20;
 pub(super) fn active_path() -> Result<PathBuf, UpdateError> {
-    Ok(super::super::persistence::update_dir()?.join("transaction.json"))
+    Ok(persistence::update_dir()?.join("transaction.json"))
 }
 pub(super) fn read() -> Result<Option<Transaction>, UpdateError> {
     read_at(&active_path()?)
 }
 fn read_at(path: &std::path::Path) -> Result<Option<Transaction>, UpdateError> {
-    let raw = match fs::read(path) {
-        Ok(raw) => raw,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(UpdateError::new(Failure::JournalUnavailable, e)),
-    };
-    let t: Transaction = serde_json::from_slice(&raw)
-        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if [&t.previous_hash, &t.next_hash, &t.next_bundle_hash]
-        .iter()
-        .any(|hash| hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        || t.format_version != 1
-        || uuid::Uuid::parse_str(&t.id).is_err()
-        || !t.candidate.valid_identity()
-        || !t.target.is_absolute()
-        || t.target.extension().and_then(|s| s.to_str()) != Some("app")
-    {
-        return Err(Failure::JournalUnavailable.into());
-    }
-    Ok(Some(t))
+    persistence::read_json(path, Failure::JournalUnavailable, |t: &Transaction| {
+        t.format_version == 1
+            && uuid::Uuid::parse_str(&t.id).is_ok()
+            && t.candidate.valid_identity()
+            && t.target.is_absolute()
+            && t.target.extension().and_then(|s| s.to_str()) == Some("app")
+            && [&t.previous_hash, &t.next_hash, &t.next_bundle_hash]
+                .iter()
+                .all(|hash| persistence::hex_digest(hash))
+    })
 }
 pub(super) fn write(t: &Transaction) -> Result<(), UpdateError> {
-    super::super::persistence::write_json_atomic(
-        &super::super::persistence::update_dir()?,
+    persistence::write_json_atomic(
+        &persistence::update_dir()?,
         "transaction.json",
         "transaction.tmp",
         t,
         Failure::JournalUnavailable,
     )
 }
+/// Archives a receipt and removes the active journal.
+pub(super) fn retire(t: &Transaction) -> Result<(), UpdateError> {
+    archive_receipt(t)?;
+    persistence::remove_if_present(&active_path()?, Failure::JournalUnavailable)
+}
 pub(super) fn archive_receipt(transaction: &Transaction) -> Result<(), UpdateError> {
-    let directory = super::super::persistence::update_dir()?.join("receipts");
-    super::super::persistence::write_json_atomic(
+    let directory = persistence::update_dir()?.join("receipts");
+    persistence::write_json_atomic(
         &directory,
         &format!("{}.json", transaction.id),
         &format!("{}.tmp", transaction.id),
         transaction,
         Failure::JournalUnavailable,
     )?;
-    let mut entries: Vec<_> = fs::read_dir(&directory)
+    prune_receipts(&directory)
+}
+fn prune_receipts(directory: &std::path::Path) -> Result<(), UpdateError> {
+    let mut receipts: Vec<_> = fs::read_dir(directory)
         .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?
         .filter_map(Result::ok)
-        .filter(|e| {
-            e.path()
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
+        .filter(|entry| {
+            let path = entry.path();
+            path.extension().and_then(|s| s.to_str()) == Some("json")
+                && path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
+        })
+        .map(|entry| {
+            let modified = entry.metadata().and_then(|m| m.modified()).ok();
+            (modified, entry.file_name(), entry.path())
         })
         .collect();
-    entries.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
-    let excess = entries.len().saturating_sub(20);
-    for entry in entries.into_iter().take(excess) {
-        fs::remove_file(entry.path())
-            .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
+    receipts.sort();
+    let excess = receipts.len().saturating_sub(RETAINED_RECEIPTS);
+    for (_, _, path) in receipts.into_iter().take(excess) {
+        fs::remove_file(path).map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
     }
     Ok(())
 }
@@ -100,5 +107,28 @@ mod tests {
         fs::write(&path, bytes).unwrap();
         assert!(read_at(&path).is_err());
         assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+    #[test]
+    fn receipt_pruning_keeps_the_newest_receipts_and_ignores_temporary_files() {
+        let root = crate::test_support::TempDir::new("update-receipts");
+        let old = uuid::Uuid::new_v4();
+        fs::write(root.join(format!("{old}.json")), b"{}").unwrap();
+        let stale_temp = root.join(format!("{}.tmp-{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4()));
+        fs::write(&stale_temp, b"").unwrap();
+        let late = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        for _ in 0..RETAINED_RECEIPTS {
+            let path = root.join(format!("{}.json", uuid::Uuid::new_v4()));
+            fs::write(&path, b"{}").unwrap();
+            fs::File::open(&path).unwrap().set_modified(late).unwrap();
+        }
+        prune_receipts(&root).unwrap();
+        assert!(!root.join(format!("{old}.json")).exists());
+        assert!(stale_temp.exists());
+        let kept = fs::read_dir(&*root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("json"))
+            .count();
+        assert_eq!(kept, RETAINED_RECEIPTS);
     }
 }

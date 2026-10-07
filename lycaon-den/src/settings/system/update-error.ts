@@ -25,7 +25,7 @@ export const UPDATE_ERROR_MESSAGES = {
   service_unavailable: "The updater could not complete this action. Try again, or restart the app if the problem continues.",
 } as const;
 
-export type UpdateErrorCode = keyof typeof UPDATE_ERROR_MESSAGES;
+type UpdateErrorCode = keyof typeof UPDATE_ERROR_MESSAGES;
 export type UpdateError = { code: UpdateErrorCode; detail?: string };
 
 function isUpdateErrorCode(value: string): value is UpdateErrorCode {

@@ -21,6 +21,8 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => stagedFixture() })} />);
     fireEvent.click(await screen.findByRole("button", { name: "Restart to update" }));
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce()); expect(restart).not.toHaveBeenCalled();
+    // The declined confirmation releases the controls before a second attempt.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Restart to update" })).toHaveProperty("disabled", false));
     confirm.mockResolvedValue(true); fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
     await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
   });
@@ -49,6 +51,26 @@ describe("update settings", () => {
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
+  });
+  it("offers restart for a committed handoff and explains when it installs", async () => {
+    const restart = vi.fn(async () => {}); setConfirmDestructivePresenter(async () => true);
+    const state = stagedFixture(); state.installation = "committed"; state.capabilities = { ...state.capabilities, can_check: false };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-installation-status")).textContent).toContain("last Painted Wolf Code window closes");
+    expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
+    await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
+  });
+  it("holds every control while the restart confirmation is open", async () => {
+    let decide!: (value: boolean) => void; const restart = vi.fn(async () => {});
+    setConfirmDestructivePresenter(() => new Promise<boolean>((resolve) => { decide = resolve; }));
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => stagedFixture() })} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Restart to update" }));
+    await waitFor(() => expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true));
+    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    decide(false);
+    await waitFor(() => expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", false));
+    expect(restart).not.toHaveBeenCalled();
   });
   it("shows typed recovery guidance and keeps diagnostic detail separate", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "disk_space", detail: "test detail" } }) })} />);

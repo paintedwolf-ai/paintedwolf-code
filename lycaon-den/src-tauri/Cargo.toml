@@ -22,9 +22,6 @@ semver = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-# Package-managed installs notify; app-managed installs update in place.
-# The updater reaches its fixed endpoint directly, so system proxy discovery stays off.
-tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "zip"] }
 tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
 reqwest = { version = "0.13", default-features = false, features = ["stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }

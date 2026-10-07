@@ -16,6 +16,11 @@ function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
   return undefined;
 }
 
+// A notice is about one release: the staged or committed one when there is one, else the offer.
+function noticeIdentity(state: NativeUpdateState | null, code: UpdateNotice): string {
+  return `${state?.staged_release_id ?? state?.candidate?.release_id}:${code}`;
+}
+
 export function mountUpdateNotice(options: {
   notices: NoticeStore;
   updates?: ReturnType<typeof createUpdateState>;
@@ -26,7 +31,7 @@ export function mountUpdateNotice(options: {
     let published: string | undefined;
     createEffect(on(updates.state, (state) => {
       const code = noticeFor(state);
-      const identity = code ? `${state?.candidate?.release_id}:${code}` : undefined;
+      const identity = code ? noticeIdentity(state, code) : undefined;
       if (identity === published) return;
       published = identity;
       for (const previous of codes) options.notices.withdraw(previous, APP_SCOPE);

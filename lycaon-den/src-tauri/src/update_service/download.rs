@@ -1,6 +1,7 @@
+//! Preparation: stream the signed artifact, verify it, and build the replacement bundle.
 use super::{
     emit, staging, Candidate, Failure, Installation, NativeUpdateState, UpdateError, UpdateService,
-    DOWNLOAD_REQUEST_TIMEOUT,
+    DOWNLOAD_ORIGIN, DOWNLOAD_REQUEST_TIMEOUT,
 };
 use futures_util::StreamExt;
 use std::{sync::atomic::Ordering, time::Duration};
@@ -30,7 +31,9 @@ pub async fn automatic(app: &AppHandle) -> Result<(), UpdateError> {
         if !inner.state.automatic_updates_enabled || !inner.state.capabilities.can_download {
             return Ok(());
         }
-        let release = inner.state.candidate.as_ref().unwrap().release_id.clone();
+        let Some(release) = inner.state.candidate.as_ref().map(|c| c.release_id.clone()) else {
+            return Ok(());
+        };
         if inner.blocked_release.as_ref() == Some(&release) {
             return Ok(());
         }
@@ -115,10 +118,10 @@ async fn prepare(
     if service.preparation_generation.load(Ordering::Acquire) != generation {
         return Ok(inner.state.clone());
     }
-    let mut failure = None;
-    match result
-        .and_then(|(identity, permit)| staging::publish(&candidate, identity).map(|()| permit))
-    {
+    let confirmed_at = inner.state.offer_confirmed_at.unwrap_or_else(super::now);
+    match result.and_then(|(identity, permit)| {
+        staging::publish(&candidate, identity, confirmed_at).map(|()| permit)
+    }) {
         Ok(permit) => {
             inner.state.staged_release_id = Some(candidate.release_id.clone());
             inner.state.installation = Installation::Staged;
@@ -161,12 +164,11 @@ async fn prepare(
                 inner.blocked_release = Some(candidate.release_id);
             }
             inner.state.installation = Installation::Failed;
-            failure = Some(error.clone());
-            inner.state.last_error = Some(error);
+            inner.state.last_error = Some(error.clone());
+            emit(app, &mut inner.state);
+            Err(error)
         }
     }
-    emit(app, &mut inner.state);
-    failure.map_or_else(|| Ok(inner.state.clone()), Err)
 }
 async fn transfer(
     app: &AppHandle,
@@ -206,7 +208,7 @@ async fn transfer(
     let cleanup = Partial(partial.clone());
     let url = tauri::Url::parse(&candidate.artifact_url)
         .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
-    if url.scheme() != "https" || url.host_str() != Some("downloads.paintedwolf.dev") {
+    if url.origin().ascii_serialization() != DOWNLOAD_ORIGIN {
         return Err(Failure::InvalidRelease.into());
     }
     let client = reqwest::Client::builder()
@@ -265,10 +267,10 @@ async fn transfer(
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(file);
     phase(app, generation, Installation::Verifying).await?;
-    phase(app, generation, Installation::Preparing).await?;
     crate::atomic_file::replace(&partial, &dir.join("artifact"), true)
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(cleanup);
+    phase(app, generation, Installation::Preparing).await?;
     let release = candidate.clone();
     tauri::async_runtime::spawn_blocking(move || {
         super::installer::prepare(&release).map(|identity| (identity, permit))

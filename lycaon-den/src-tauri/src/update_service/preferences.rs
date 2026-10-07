@@ -1,3 +1,4 @@
+//! The device preference: automatic updating and the release channel.
 use super::{
     emit, persistence, Discovery, Failure, Installation, NativeUpdateState, UpdateChannel,
     UpdateError, UpdateService,
@@ -22,7 +23,7 @@ async fn set(
     if inner.state.installation == Installation::RecoveryRequired {
         return Err(Failure::RecoveryRequired.into());
     }
-    if matches!(inner.state.installation, Installation::AwaitingExit) {
+    if inner.state.installation == Installation::AwaitingExit {
         return Err(Failure::InvalidTransition.into());
     }
     if !inner.preferences_writable {
@@ -37,6 +38,8 @@ async fn set(
     }
     persistence::write_preferences(&persistence::preferences_dir()?, &preferences)?;
     let changed_channel = inner.state.channel != preferences.channel;
+    // A committed handoff belongs to the installation, not to the channel preference.
+    let committed = inner.state.installation == Installation::Committed;
     if changed_channel {
         service.cancel(&mut inner.state);
         service
@@ -48,6 +51,7 @@ async fn set(
     if !preferences.automatic_updates_enabled
         && !inner.manual_preparation
         && inner.state.installation.busy()
+        && !committed
     {
         service
             .preparation_generation
@@ -56,18 +60,17 @@ async fn set(
         inner.state.installation = Installation::None;
     }
     inner.state.automatic_updates_enabled = preferences.automatic_updates_enabled;
-    let mut cleanup_error = None;
-    if inner.state.channel != preferences.channel {
-        inner.state.candidate = None;
-        inner.state.staged_release_id = None;
-        inner.state.installation = Installation::None;
-        cleanup_error = super::staging::forget_ready().err();
-    }
-    inner.state.channel = preferences.channel;
     if changed_channel {
         inner.state.discovery = Discovery::Idle;
+        if !committed {
+            inner.state.candidate = None;
+            inner.state.staged_release_id = None;
+            inner.state.installation = Installation::None;
+            inner.state.offer_confirmed_at = None;
+            inner.state.last_error = super::staging::forget_ready().err();
+        }
     }
-    inner.state.last_error = cleanup_error;
+    inner.state.channel = preferences.channel;
     inner.preferences = preferences;
     emit(app, &mut inner.state);
     Ok(inner.state.clone())

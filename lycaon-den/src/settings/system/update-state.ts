@@ -6,7 +6,10 @@ import { updateError, type UpdateError } from "./update-error.ts";
 export function createUpdateState(service: UpdateService) {
   const [state, setState] = createSignal<NativeUpdateState | null>(null);
   const [error, setError] = createSignal<UpdateError | null>(null);
-  const [busy, setBusy] = createSignal(false);
+  const [running, setRunning] = createSignal(false);
+  const [confirming, setConfirming] = createSignal(false);
+  // A pending command or an open restart confirmation both hold the controls.
+  const busy = () => running() || confirming();
   const retired = new Set<string>();
   let users = 0;
   let epoch = 0;
@@ -58,8 +61,8 @@ export function createUpdateState(service: UpdateService) {
   };
 
   const run = async (operation: () => Promise<NativeUpdateState | void>) => {
-    if (busy()) return;
-    setBusy(true);
+    if (running()) return;
+    setRunning(true);
     setError(null);
     try {
       const next = await operation();
@@ -72,7 +75,7 @@ export function createUpdateState(service: UpdateService) {
         // Native events retain the last known state.
       }
     } finally {
-      setBusy(false);
+      setRunning(false);
     }
   };
 
@@ -80,13 +83,19 @@ export function createUpdateState(service: UpdateService) {
     const current = state();
     const id = current?.staged_release_id;
     if (!id || !current.capabilities.can_restart_to_update || busy()) return;
-    const confirmed = await confirmDestructive({
-      title: "Restart to update?",
-      message: "Restart to update Painted Wolf Code? Drafts will be preserved. Running work and terminals will be interrupted.",
-      okLabel: "Restart to update",
-      cancelLabel: "Keep working",
-      destructive: false,
-    });
+    setConfirming(true);
+    let confirmed = false;
+    try {
+      confirmed = await confirmDestructive({
+        title: "Restart to update?",
+        message: "Restart to update Painted Wolf Code? Drafts will be preserved. Running work and terminals will be interrupted.",
+        okLabel: "Restart to update",
+        cancelLabel: "Keep working",
+        destructive: false,
+      });
+    } finally {
+      setConfirming(false);
+    }
     if (confirmed && state()?.staged_release_id === id) await run(() => service.restart(id));
   };
 

@@ -1,3 +1,4 @@
+//! Verified download staging and the per-installation ready and rejection records.
 use super::{
     persistence, Candidate, Discovery, Failure, Installation, NativeUpdateState, UpdateError,
 };
@@ -9,9 +10,13 @@ pub struct Staged {
     pub format_version: u8,
     pub candidate: Candidate,
     pub verified_at: u64,
+    /// When the release origin last confirmed this offer.
+    pub offer_confirmed_at: u64,
     pub executable_hash: String,
     pub bundle_hash: String,
 }
+const READY_FILE: &str = "ready.json";
+const REJECTED_FILE: &str = "rejected.json";
 pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
     if !candidate.valid_identity() {
         return Err(Failure::InvalidRelease.into());
@@ -23,73 +28,53 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
 pub fn publish(
     candidate: &Candidate,
     identity: super::installer::PreparedIdentity,
+    offer_confirmed_at: u64,
 ) -> Result<(), UpdateError> {
-    read_ready()?;
-    let staged = Staged {
+    write_ready(&Staged {
         format_version: 1,
         candidate: candidate.clone(),
         verified_at: super::now(),
+        offer_confirmed_at,
         executable_hash: identity.executable_hash,
         bundle_hash: identity.bundle_hash,
-    };
+    })
+}
+fn write_ready(staged: &Staged) -> Result<(), UpdateError> {
     persistence::write_json_atomic(
         &persistence::update_dir()?,
-        "ready.json",
+        READY_FILE,
         "ready.tmp",
-        &staged,
+        staged,
         Failure::JournalUnavailable,
     )
 }
-pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
-    let path = persistence::update_dir()?.join("ready.json");
-    recover_ready_at(&path)
-}
-fn recover_ready_at(path: &std::path::Path) -> Result<Option<Staged>, UpdateError> {
-    match read_ready_at(path) {
-        Ok(ready) => Ok(ready),
-        Err(error) => {
-            let quarantine =
-                path.with_file_name(format!("ready-quarantined-{}.json", uuid::Uuid::new_v4()));
-            crate::atomic_file::replace(path, &quarantine, true).map_err(|failure| {
-                error.with_context(format!(
-                    "Record: {}. Could not preserve incompatible staging information: {failure}",
-                    path.display()
-                ))
-            })?;
-            Ok(None)
+/// Records a fresh confirmation of the staged offer so an offline quit can still install it.
+pub fn confirm_offer(release_id: &str, at: u64) -> Result<(), UpdateError> {
+    if let Some(mut staged) = read_ready()? {
+        if staged.candidate.release_id == release_id && staged.offer_confirmed_at < at {
+            staged.offer_confirmed_at = at;
+            write_ready(&staged)?;
         }
     }
+    Ok(())
 }
-
-fn read_ready_at(path: &std::path::Path) -> Result<Option<Staged>, UpdateError> {
-    let bytes = match fs::read(path) {
-        Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(UpdateError::new(Failure::JournalUnavailable, e)),
-    };
-    let staged: Staged = serde_json::from_slice(&bytes)
-        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if staged.bundle_hash.len() != 64
-        || !staged.bundle_hash.bytes().all(|b| b.is_ascii_hexdigit())
-        || staged.format_version != 1
-        || !staged.candidate.valid_identity()
-        || staged.executable_hash.len() != 64
-        || !staged
-            .executable_hash
-            .bytes()
-            .all(|b| b.is_ascii_hexdigit())
-    {
-        return Err(Failure::JournalUnavailable.into());
-    }
-    Ok(Some(staged))
+pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
+    persistence::read_or_quarantine(
+        &persistence::update_dir()?.join(READY_FILE),
+        Failure::JournalUnavailable,
+        |staged: &Staged| {
+            staged.format_version == 1
+                && staged.candidate.valid_identity()
+                && persistence::hex_digest(&staged.executable_hash)
+                && persistence::hex_digest(&staged.bundle_hash)
+        },
+    )
 }
 pub fn forget_ready() -> Result<(), UpdateError> {
-    read_ready()?;
-    match fs::remove_file(persistence::update_dir()?.join("ready.json")) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(UpdateError::new(Failure::JournalUnavailable, e)),
-    }
+    persistence::remove_if_present(
+        &persistence::update_dir()?.join(READY_FILE),
+        Failure::JournalUnavailable,
+    )
 }
 pub fn restore(state: &mut NativeUpdateState) -> Result<(), UpdateError> {
     let Some(staged) = read_ready()? else {
@@ -106,6 +91,7 @@ pub fn restore(state: &mut NativeUpdateState) -> Result<(), UpdateError> {
     // Activation validates the prepared executable against this authenticated receipt.
     state.staged_release_id = Some(staged.candidate.release_id.clone());
     state.candidate = Some(staged.candidate);
+    state.offer_confirmed_at = Some(staged.offer_confirmed_at);
     state.discovery = Discovery::Available;
     state.installation = Installation::Staged;
     Ok(())
@@ -120,8 +106,7 @@ pub fn cleanup(keep: &[String]) -> Result<(), UpdateError> {
     for entry in entries {
         let entry = entry.map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.len() == 64
-            && name.bytes().all(|b| b.is_ascii_hexdigit())
+        if persistence::hex_digest(&name)
             && !keep.contains(&name)
             && entry.file_type().is_ok_and(|t| t.is_dir())
         {
@@ -138,27 +123,21 @@ struct Rejected {
     format_version: u8,
     release_id: String,
 }
+/// A release whose signed contents failed verification; automatic preparation skips it.
 pub fn rejected() -> Result<Option<String>, UpdateError> {
-    let bytes = match fs::read(persistence::update_dir()?.join("rejected.json")) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(UpdateError::new(Failure::JournalUnavailable, e)),
-    };
-    let rejected: Rejected = serde_json::from_slice(&bytes)
-        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
-    if rejected.format_version != 1
-        || rejected.release_id.len() != 64
-        || !rejected.release_id.bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        return Err(Failure::JournalUnavailable.into());
-    }
-    Ok(Some(rejected.release_id))
+    Ok(persistence::read_or_quarantine(
+        &persistence::update_dir()?.join(REJECTED_FILE),
+        Failure::JournalUnavailable,
+        |rejected: &Rejected| {
+            rejected.format_version == 1 && persistence::hex_digest(&rejected.release_id)
+        },
+    )?
+    .map(|rejected| rejected.release_id))
 }
 pub fn reject(release_id: String) -> Result<(), UpdateError> {
-    rejected()?;
     persistence::write_json_atomic(
         &persistence::update_dir()?,
-        "rejected.json",
+        REJECTED_FILE,
         "rejected.tmp",
         &Rejected {
             format_version: 1,
@@ -169,8 +148,10 @@ pub fn reject(release_id: String) -> Result<(), UpdateError> {
 }
 pub fn clear_rejected(release_id: &str) -> Result<(), UpdateError> {
     if rejected()?.as_deref() == Some(release_id) {
-        fs::remove_file(persistence::update_dir()?.join("rejected.json"))
-            .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?;
+        persistence::remove_if_present(
+            &persistence::update_dir()?.join(REJECTED_FILE),
+            Failure::JournalUnavailable,
+        )?;
     }
     Ok(())
 }
@@ -190,31 +171,4 @@ pub fn clean_partials(candidate: &Candidate) -> Result<(), UpdateError> {
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn incompatible_ready_records_are_quarantined_without_blocking_updates() {
-        let root = crate::test_support::TempDir::new("update-ready-recovery");
-        let path = root.join("ready.json");
-        for bytes in [
-            b"not json".as_slice(),
-            br#"{"format_version":99,"future":"retained"}"#,
-        ] {
-            fs::write(&path, bytes).unwrap();
-            assert_eq!(
-                read_ready_at(&path).unwrap_err().code,
-                Failure::JournalUnavailable
-            );
-            assert_eq!(fs::read(&path).unwrap(), bytes);
-            assert!(recover_ready_at(&path).unwrap().is_none());
-            assert!(!path.exists());
-            assert!(fs::read_dir(&*root)
-                .unwrap()
-                .filter_map(Result::ok)
-                .any(|entry| fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
-        }
-    }
 }

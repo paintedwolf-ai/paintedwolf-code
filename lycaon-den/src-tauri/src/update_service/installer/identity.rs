@@ -1,3 +1,4 @@
+//! Content identity of an installed or prepared bundle.
 use super::{Failure, UpdateError};
 use sha2::{Digest, Sha256};
 use std::{
@@ -25,7 +26,8 @@ pub(crate) fn hash(path: &Path) -> Result<String, UpdateError> {
     Ok(format!("{:x}", digest.finalize()))
 }
 
-#[cfg(target_os = "macos")]
+/// A digest over every path, mode, link target, and file body beneath `root`.
+#[cfg(unix)]
 pub(crate) fn bundle_hash(root: &Path) -> Result<String, UpdateError> {
     use std::os::unix::{ffi::OsStrExt, fs::PermissionsExt};
     fn bytes(digest: &mut Sha256, bytes: &[u8]) {
@@ -36,7 +38,10 @@ pub(crate) fn bundle_hash(root: &Path) -> Result<String, UpdateError> {
         let metadata = fs::symlink_metadata(path)?;
         bytes(
             digest,
-            path.strip_prefix(root).unwrap().as_os_str().as_bytes(),
+            path.strip_prefix(root)
+                .map_err(|_| std::io::Error::other("entry outside the bundle"))?
+                .as_os_str()
+                .as_bytes(),
         );
         digest.update((metadata.permissions().mode() & 0o7777).to_le_bytes());
         if metadata.is_symlink() {
@@ -77,8 +82,12 @@ pub(crate) fn bundle_hash(root: &Path) -> Result<String, UpdateError> {
         .map_err(|error| UpdateError::new(Failure::VerificationFailed, error))?;
     Ok(format!("{:x}", digest.finalize()))
 }
+#[cfg(not(unix))]
+pub(crate) fn bundle_hash(_root: &Path) -> Result<String, UpdateError> {
+    Err(Failure::UnsupportedInstallation.into())
+}
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::{symlink, PermissionsExt};

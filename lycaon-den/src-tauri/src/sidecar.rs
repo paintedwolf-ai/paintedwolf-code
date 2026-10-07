@@ -339,7 +339,7 @@ fn attach_or_explain(config_dir: &Path) -> Result<SidecarInfo, SidecarStartError
     match attach_existing_daemon_in(config_dir)? {
         Some(info) => Ok(info),
         None => Err(SidecarStartError::EngineNotStarted(
-            "attach-only development mode is on, but no engine is running — start one with ./task den:sidecar in another terminal".into(),
+            "Attach-only development mode is on, but no engine is running — start one with ./task den:sidecar in another terminal".into(),
         )),
     }
 }
@@ -372,17 +372,16 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     });
 }
 
-pub(crate) fn stop_sidecar(state: &SidecarState) -> process::StopOutcome {
+pub(crate) fn stop_sidecar(state: &SidecarState) {
     state.cancel_start.store(true, Ordering::Release);
     let _lifecycle = state.lifecycle.lock().unwrap();
-    stop_sidecar_locked(state)
+    stop_sidecar_locked(state);
 }
 
-fn stop_sidecar_locked(state: &SidecarState) -> process::StopOutcome {
-    let outcome = kill_child(&mut *state.process.lock().unwrap());
+fn stop_sidecar_locked(state: &SidecarState) {
+    kill_child(&mut *state.process.lock().unwrap());
     state.retire();
     state.publish(EngineState::Idle);
-    outcome
 }
 
 fn restart_sidecar_with_progress<F>(
@@ -442,12 +441,11 @@ pub fn cancel_sidecar_start(state: &SidecarState) -> bool {
     true
 }
 
+/// Stops the engine this process started before an exchange; an attached daemon is left running.
 pub(crate) fn stop_for_update(state: &SidecarState) -> bool {
     if attach_only_requested() {
         return false;
     }
-    matches!(
-        stop_sidecar(state),
-        process::StopOutcome::AlreadyStopped | process::StopOutcome::Exited
-    )
+    stop_sidecar(state);
+    true
 }

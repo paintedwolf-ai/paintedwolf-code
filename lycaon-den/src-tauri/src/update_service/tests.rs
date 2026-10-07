@@ -1,7 +1,4 @@
-use super::check::{
-    draw_rollout_bucket, manifest_age_secs, manifest_offers_update, rollout_admits,
-    rollout_percent, ROLLOUT_BUCKETS,
-};
+use super::check::{draw_rollout_bucket, rollout_admits, rollout_percent, ROLLOUT_BUCKETS};
 use super::*;
 
 fn state() -> NativeUpdateState {
@@ -18,7 +15,7 @@ pub(super) fn candidate(version: &str) -> Candidate {
         channel: UpdateChannel::Stable,
         platform: "darwin-aarch64".into(),
         signing_generation: 1,
-        artifact_url: "https://downloads.paintedwolf.dev/release.tar.gz".into(),
+        artifact_url: format!("{DOWNLOAD_ORIGIN}/release.tar.gz"),
         artifact_signature: "signature".into(),
         notes: None,
         rollout_eligibility: RolloutEligibility::Eligible,
@@ -26,12 +23,17 @@ pub(super) fn candidate(version: &str) -> Candidate {
     c.release_id = c.identity();
     c
 }
+const NOW: u64 = 1_800_000_000;
 fn offered(s: &mut NativeUpdateState, version: &str, automatic: bool, bucket: u8) {
     check::apply_offer(
         s,
-        Ok(Some((candidate(version), Some(0)))),
+        Ok(Some(feed::Offer {
+            candidate: candidate(version),
+            published_age_secs: Some(0),
+        })),
         automatic,
         bucket,
+        NOW,
     );
 }
 #[test]
@@ -40,13 +42,28 @@ fn staged_release_survives_network_failure_but_not_withdrawal() {
     offered(&mut s, "1.1.0", false, 99);
     s.staged_release_id = s.candidate.as_ref().map(|c| c.release_id.clone());
     s.installation = Installation::Staged;
-    check::apply_offer(&mut s, Err(Failure::CheckFailed.into()), true, 99);
+    check::apply_offer(&mut s, Err(Failure::CheckFailed.into()), true, 99, NOW);
     s.refresh_capabilities(true);
     assert!(s.capabilities.can_restart_to_update);
-    check::apply_offer(&mut s, Ok(None), true, 99);
+    assert_eq!(s.offer_confirmed_at, Some(NOW));
+    check::apply_offer(&mut s, Ok(None), true, 99, NOW);
     s.refresh_capabilities(true);
     assert!(!s.capabilities.can_restart_to_update);
     assert_eq!(s.installation, Installation::None);
+    assert!(s.offer_confirmed_at.is_none());
+}
+#[test]
+fn an_empty_feed_does_not_retract_an_installed_or_committed_release() {
+    for installation in [Installation::AwaitingStartup, Installation::Committed] {
+        let mut s = state();
+        offered(&mut s, "1.1.0", false, 0);
+        s.staged_release_id = s.candidate.as_ref().map(|c| c.release_id.clone());
+        s.installation = installation;
+        check::apply_offer(&mut s, Ok(None), true, 0, NOW);
+        assert_eq!(s.installation, installation);
+        assert!(s.candidate.is_some());
+        assert_eq!(s.discovery, Discovery::UpToDate);
+    }
 }
 #[test]
 fn manual_offer_survives_automatic_rollout_and_newer_held_release() {
@@ -83,6 +100,34 @@ fn disabling_automatic_updates_keeps_explicit_restart_only() {
     assert!(!s.capabilities.can_download);
 }
 #[test]
+fn a_committed_handoff_offers_restart_and_blocks_new_work() {
+    let mut s = state();
+    offered(&mut s, "1.1.0", false, 0);
+    s.staged_release_id = s.candidate.as_ref().map(|c| c.release_id.clone());
+    s.installation = Installation::Committed;
+    s.automatic_updates_enabled = false;
+    s.refresh_capabilities(true);
+    assert!(s.capabilities.can_restart_to_update);
+    assert!(!s.capabilities.can_check);
+    assert!(!s.capabilities.can_download);
+    assert!(!s.capabilities.can_install_automatically);
+}
+#[test]
+fn an_uncoordinated_process_cannot_install_and_says_why() {
+    let mut s = state();
+    offered(&mut s, "1.1.0", false, 0);
+    s.coordinated = false;
+    s.refresh_capabilities(true);
+    assert!(s.capabilities.can_check);
+    assert!(!s.capabilities.can_download);
+    assert_eq!(s.capabilities.blocked_reason.as_deref(), Some("state_unavailable"));
+    s.refresh_capabilities(false);
+    assert_eq!(
+        s.capabilities.blocked_reason.as_deref(),
+        Some("unsupported_installation")
+    );
+}
+#[test]
 fn release_identity_binds_every_installation_field_but_not_notes() {
     let c = candidate("1.1.0");
     let mut changed = c.clone();
@@ -112,6 +157,19 @@ fn maturity_selects_initial_channel_without_overriding_preferences() {
     );
 }
 #[test]
+fn feed_endpoints_derive_from_the_embedded_key_generation() {
+    let (generation, _) = feed::embedded_key();
+    assert_eq!(
+        UpdateChannel::Stable.endpoint(),
+        format!("{DOWNLOAD_ORIGIN}/updates/stable/key-{generation}/latest.json")
+    );
+    assert_eq!(
+        UpdateChannel::Preview.feed_name(),
+        format!("latest-preview-key-{generation}.json")
+    );
+    assert!(!feed::feed_key().is_empty());
+}
+#[test]
 fn automatic_retry_is_bounded() {
     assert_eq!(scheduler::retry_delay(1), 1800);
     assert_eq!(scheduler::retry_delay(2), 3600);
@@ -137,26 +195,9 @@ fn source_receipts_fail_closed() {
     std::fs::write(dir.join("install-source.json"), "{}").unwrap();
     assert!(persistence::read_install_source(&dir).is_err());
 }
-#[test]
-fn manifest_withdrawal_stops_discovery_and_rejects_malformed_state() {
-    let offered = serde_json::json!({"update_keys": {"signing_generation": 1}});
-    assert!(manifest_offers_update(&offered, 1).unwrap());
-    assert!(manifest_offers_update(&offered, 2).is_err());
-    let mut halted = offered.clone();
-    halted["withdrawn"] = serde_json::json!(true);
-    assert!(!manifest_offers_update(&halted, 1).unwrap());
-    for invalid in [
-        serde_json::json!(false),
-        serde_json::json!("true"),
-        serde_json::Value::Null,
-    ] {
-        halted["withdrawn"] = invalid;
-        assert!(manifest_offers_update(&halted, 1).is_err());
-    }
-}
 
 #[test]
-fn rollout_ramp_widens_with_manifest_age() {
+fn rollout_ramp_widens_with_manifest_age_and_treats_undated_releases_as_new() {
     const DAY: u64 = 24 * 60 * 60;
     assert_eq!(rollout_percent(0), 10);
     assert_eq!(rollout_percent(DAY - 1), 10);
@@ -169,7 +210,8 @@ fn rollout_ramp_widens_with_manifest_age() {
     assert!(rollout_admits(49, Some(DAY)));
     assert!(!rollout_admits(50, Some(DAY)));
     assert!(rollout_admits(99, Some(2 * DAY)));
-    assert!(rollout_admits(99, None));
+    assert!(rollout_admits(9, None));
+    assert!(!rollout_admits(10, None));
 }
 
 #[test]
@@ -177,17 +219,6 @@ fn rollout_bucket_draw_stays_in_range() {
     for _ in 0..1000 {
         assert!(draw_rollout_bucket() < ROLLOUT_BUCKETS);
     }
-}
-
-#[test]
-fn manifest_age_clamps_future_dates_to_zero() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock after epoch")
-        .as_secs() as i64;
-    assert_eq!(manifest_age_secs(Some(now + 3600)), Some(0));
-    assert!(manifest_age_secs(Some(now - 3600)).expect("past date") >= 3600);
-    assert_eq!(manifest_age_secs(None), None);
 }
 
 #[test]
@@ -238,6 +269,7 @@ fn service_for_test() -> UpdateService {
         engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
         preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+        _lease: None,
     }
 }
 #[tokio::test]

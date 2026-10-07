@@ -3,6 +3,9 @@ use super::UpdateError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+/// Every update request leaves from this origin, which serves both feeds and artifacts.
+pub const DOWNLOAD_ORIGIN: &str = "https://downloads.paintedwolf.dev";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InstallSource {
@@ -10,21 +13,32 @@ pub enum InstallSource {
     DirectDownload,
     Unknown,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateChannel {
     Stable,
     Preview,
 }
 impl UpdateChannel {
-    pub fn endpoint(self) -> String {
-        let channel = match self {
+    pub fn name(self) -> &'static str {
+        match self {
             Self::Stable => "stable",
             Self::Preview => "preview",
-        };
+        }
+    }
+    pub fn endpoint(self) -> String {
+        let channel = self.name();
         format!(
-            "https://downloads.paintedwolf.dev/updates/{channel}/key-{}/latest.json",
-            super::check::embedded_key().0
+            "{DOWNLOAD_ORIGIN}/updates/{channel}/key-{}/latest.json",
+            super::feed::embedded_key().0
+        )
+    }
+    /// The signed name of this channel's pointer; it binds channel and key generation.
+    pub fn feed_name(self) -> String {
+        format!(
+            "latest-{}-key-{}.json",
+            self.name(),
+            super::feed::embedded_key().0
         )
     }
 }
@@ -47,6 +61,8 @@ pub enum Installation {
     Preparing,
     Staged,
     AwaitingExit,
+    /// A committed handoff exists for this installation and installs at the next exclusive lease.
+    Committed,
     AwaitingStartup,
     RecoveryRequired,
     Failed,
@@ -59,6 +75,7 @@ impl Installation {
                 | Self::Verifying
                 | Self::Preparing
                 | Self::AwaitingExit
+                | Self::Committed
                 | Self::RecoveryRequired
         )
     }
@@ -115,6 +132,9 @@ pub struct NativeUpdateState {
     pub channel: UpdateChannel,
     pub automatic_updates_enabled: bool,
     pub startup_pending: bool,
+    /// This process holds the installation lease that excludes activation beneath it.
+    #[serde(skip)]
+    pub coordinated: bool,
     pub install_source: InstallSource,
     pub capabilities: Capabilities,
     pub discovery: Discovery,
@@ -125,6 +145,8 @@ pub struct NativeUpdateState {
     pub total_bytes: Option<u64>,
     pub last_check_at: Option<u64>,
     pub next_check_at: Option<u64>,
+    /// When the release origin last confirmed the current candidate.
+    pub offer_confirmed_at: Option<u64>,
     pub last_error: Option<UpdateError>,
 }
 impl NativeUpdateState {
@@ -140,6 +162,7 @@ impl NativeUpdateState {
             channel,
             automatic_updates_enabled: true,
             startup_pending: true,
+            coordinated: true,
             install_source,
             capabilities: Capabilities::default(),
             discovery: Discovery::Idle,
@@ -150,9 +173,11 @@ impl NativeUpdateState {
             total_bytes: None,
             last_check_at: None,
             next_check_at: None,
+            offer_confirmed_at: None,
             last_error: None,
         }
     }
+    /// `supported` says whether the installation is a writable bundle on a supported platform.
     pub fn refresh_capabilities(&mut self, supported: bool) {
         if self.installation == Installation::RecoveryRequired {
             self.capabilities = Capabilities {
@@ -161,12 +186,15 @@ impl NativeUpdateState {
             };
             return;
         }
+        let platform = supported;
+        let supported = platform && self.coordinated;
         let direct = self.install_source == InstallSource::DirectDownload;
         let ready = self.installation == Installation::Staged
             && self
                 .candidate
                 .as_ref()
                 .is_some_and(|c| Some(&c.release_id) == self.staged_release_id.as_ref());
+        let committed = self.installation == Installation::Committed;
         self.capabilities = Capabilities {
             can_check: !self.installation.busy() && self.discovery != Discovery::Checking,
             can_download: self.discovery != Discovery::Checking
@@ -178,7 +206,7 @@ impl NativeUpdateState {
                     .is_some_and(|c| c.rollout_eligibility == RolloutEligibility::Eligible)
                 && !self.installation.busy()
                 && !ready,
-            can_restart_to_update: supported && direct && ready,
+            can_restart_to_update: supported && direct && (ready || committed),
             can_install_automatically: supported
                 && direct
                 && ready
@@ -191,8 +219,10 @@ impl NativeUpdateState {
                     }
                     .into(),
                 )
-            } else if !supported {
+            } else if !platform {
                 Some("unsupported_installation".into())
+            } else if !self.coordinated {
+                Some("state_unavailable".into())
             } else {
                 None
             },

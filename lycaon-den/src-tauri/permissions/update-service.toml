@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-update-service"
 description = "Read and advance the host-managed update lifecycle."
-commands.allow = ["get_update_state", "set_automatic_updates_enabled", "set_update_channel", "check_update", "download_update", "retry_update", "restart_to_update", "cancel_app_exit"]
+commands.allow = ["get_update_state", "set_automatic_updates_enabled", "set_update_channel", "check_update", "download_update", "retry_update", "restart_to_update"]

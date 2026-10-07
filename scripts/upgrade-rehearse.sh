@@ -352,7 +352,7 @@ fi
 TAG="$(resolve_prior_release)"
 if [[ -z "${TAG}" ]]; then
   echo "upgrade:rehearse — skipped: no published release from 1.0.0 on to upgrade from." >&2
-  echo "  Pre-v1 releases are not upgrade sources; candidate corpus verification still applies." >&2
+  echo "  Candidate corpus verification still applies." >&2
   exit 0
 fi
 
