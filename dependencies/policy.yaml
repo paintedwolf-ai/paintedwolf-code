@@ -19,8 +19,9 @@ dependabot:
   interval: weekly
   cooldown_days: 3
   extra:
+    # Workflows live at the root; composite actions each have their own directory.
     - ecosystem: github-actions
-      directory: /
+      directories: [/, /.github/actions/*]
       group: github-actions
 
 # Render order.

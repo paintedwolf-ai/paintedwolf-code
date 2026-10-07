@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -50,5 +51,35 @@ func TestInventoryOmissionDoesNotEstablishTrackedFileDeletion(t *testing.T) {
 				t.Fatalf("direct deletion recorded=%d head=%+v", out.recorded, deleted)
 			}
 		})
+	}
+}
+
+// A manifest captured before a recorded write cannot establish that the file
+// reverted; only the live file can.
+func TestStaleInventoryManifestDoesNotRevertNewerHead(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "a.txt", "original\n")
+	snapshot, err := store.snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
+	testutil.FailErr(t, "capture manifest before the write", err)
+	trackRootFile(t, store, ctx, root, "a.txt", "edited\n")
+	testutil.FailErr(t, "seed tracking boundary", store.seedTrackingBoundary(ctx, "p1"))
+	head, err := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "a.txt"})
+	testutil.FailErr(t, "read recorded head", err)
+
+	out, err := store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+	testutil.FailErr(t, "reconcile stale manifest", err)
+	current, err := store.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), FileID: head.FileID})
+	testutil.FailErr(t, "read head after stale reconcile", err)
+	if out.recorded != 0 || current.VersionID != head.VersionID {
+		t.Fatalf("stale manifest recorded=%d head=%+v, want the recorded write kept", out.recorded, current)
+	}
+
+	writeRootFile(t, root, "a.txt", "outside\n")
+	out, err = store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+	testutil.FailErr(t, "reconcile outside edit", err)
+	current, err = store.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), FileID: head.FileID})
+	testutil.FailErr(t, "read head after outside edit", err)
+	if out.recorded != 1 || current.ContentSha256 != sourceblob.ContentSHA([]byte("outside\n")) {
+		t.Fatalf("outside edit recorded=%d head=%+v, want the live bytes", out.recorded, current)
 	}
 }

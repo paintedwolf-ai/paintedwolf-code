@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       last_good_version:
-        description: Optional older release to restore; leave empty to stop discovery without a replacement
+        description: Older release to restore; required while a generation-1 feed is affected, otherwise leave empty to stop discovery without a replacement
         required: false
         type: string
       plan:
