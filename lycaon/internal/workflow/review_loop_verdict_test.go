@@ -198,6 +198,31 @@ func TestReviewLoopVerdictClaimStatusIsDeclared(t *testing.T) {
 	}
 }
 
+// A phase declaring one status word supplies it when a claim leaves status out.
+func TestReviewLoopVerdictSingleStatusWordIsTheDefault(t *testing.T) {
+	def := reviewLoopDef(t, reviewLoopFixtures[1]) // survey claims: claimed only
+	v := map[string]string{"verdict": "CLAIMED", "claims": `[{"id":"c1","title":"Claim","statement":"s","cited_evidence":[{"handle":"read#1","path":"a.go","line":1}]}]`}
+	for key, kind := range def.VerdictSchema {
+		if _, ok := v[key]; ok {
+			continue
+		}
+		v[key] = "[]"
+		if kind == workflowdef.VerdictCoverageType {
+			v[key] = `{"revision":"fixture","assessments":[]}`
+		}
+	}
+	claims, err := workflow.ParseVerdictClaims(def, v)
+	if err != nil {
+		t.Fatalf("parse claims: %v", err)
+	}
+	if got := claims["claims"][0].Status; got != def.StatusWords()[0] {
+		t.Fatalf("defaulted status = %q, want %q", got, def.StatusWords()[0])
+	}
+	if err := workflow.ValidateReviewLoopVerdict(def, v, workflow.VerdictRules{}); err != nil {
+		t.Fatalf("defaulted claim rejected: %v", err)
+	}
+}
+
 // The phase that introduces a claim titles it; a later phase restating it may
 // leave the title out.
 func TestReviewLoopVerdictNewClaimNeedsTitle(t *testing.T) {

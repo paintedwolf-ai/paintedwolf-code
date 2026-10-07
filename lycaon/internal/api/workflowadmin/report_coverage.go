@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -187,6 +188,10 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	if err != nil {
 		return err
 	}
+	taskByID := make(map[string]wire.WorkerTask, len(tasks))
+	for _, task := range tasks {
+		taskByID[task.ID] = task
+	}
 	unfinished := report.ReportGap{Kind: report.GapLegsUnfinished}
 	partial := report.ReportGap{Kind: report.GapLegsPartial}
 	legAttempts := map[string]bool{}
@@ -199,10 +204,17 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 			for _, id := range leg.Attempts {
 				legAttempts[id] = true
 			}
+			detail := fmt.Sprintf("%s · %d of %d allowed attempts: %s", leg.Subject, len(leg.Attempts), plan.MaxAttempts, strings.Join(leg.Attempts, ", "))
+			if len(leg.Attempts) > 0 {
+				lastTask := taskByID[leg.Attempts[len(leg.Attempts)-1]]
+				if lastTask.Result != nil && strings.TrimSpace(lastTask.Result.HintCode) != "" {
+					detail += " · host check: " + guidance.HintCodeUILabel(lastTask.Result.HintCode)
+				}
+			}
 			a.coverage = append(a.coverage, report.ReportCoverageItem{
 				Subject: phase.ID + "/" + leg.ID + " · " + leg.AgentType,
 				Status:  leg.Status,
-				Detail:  fmt.Sprintf("%s · %d of %d allowed attempts: %s", leg.Subject, len(leg.Attempts), plan.MaxAttempts, strings.Join(leg.Attempts, ", ")),
+				Detail:  detail,
 			})
 			check := report.ReportCheck{Kind: report.CheckArea, Subject: leg.Subject}
 			unfinished.Of++
@@ -231,17 +243,17 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		if legAttempts[task.ID] {
 			continue
 		}
-		status := string(task.Status)
-		if task.Result != nil && task.Result.CompletionReport != nil {
-			status += "/" + task.Result.CompletionReport.LegStatus
+		status := wire.WorkerTaskLegStatus(task)
+		detail := "Attempt " + task.ID
+		if task.Result != nil && strings.TrimSpace(task.Result.HintCode) != "" {
+			detail += " · host check: " + guidance.HintCodeUILabel(task.Result.HintCode)
 		}
-		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: task.AgentType + " · " + task.WorkflowPhase, Status: status, Detail: "Attempt " + task.ID})
+		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: task.AgentType + " · " + task.WorkflowPhase, Status: status, Detail: detail})
 		if task.WorkflowWorkID != "" {
 			continue
 		}
 		helpers.Of++
-		complete := task.Status == wire.WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil &&
-			task.Result.CompletionReport.LegStatus == "complete"
+		complete := wire.WorkerTaskLegStatus(task) == "complete"
 		if !complete {
 			helpers.Count++
 			helpers.Names = append(helpers.Names, task.AgentType)

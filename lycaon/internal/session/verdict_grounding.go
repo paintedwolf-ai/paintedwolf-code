@@ -255,8 +255,8 @@ func selectReviewerEvidence(all []guidance.ReviewerEvidence, agents []string) []
 // reviewerEvidence resolves completed reviewers from the same dispatch scope as closeout.
 func (m *Manager) reviewerEvidence(ctx context.Context, sessionID string, history []api.Message, owedAgents []string) ([]guidance.ReviewerEvidence, error) {
 	var since time.Time
-	if i := api.UserIntentBoundary(history); i > 0 {
-		since = history[i-1].CreatedAt
+	if intent, ok := api.LastUserIntentMessage(history); ok {
+		since = intent.CreatedAt
 	}
 	tasks, err := m.reviewEvidenceTasks(ctx, sessionID, since)
 	if err != nil {

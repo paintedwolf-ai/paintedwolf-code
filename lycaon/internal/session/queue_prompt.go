@@ -51,6 +51,13 @@ type PromptInput struct {
 	Recovery     *api.PromptRecovery `json:"recovery,omitempty"`
 }
 
+func (in PromptInput) hostSignalID() string {
+	if in.HostSignal == nil {
+		return ""
+	}
+	return strings.TrimSpace(in.HostSignal.ID)
+}
+
 func promptUserInstruction(in PromptInput) string {
 	if len(in.ContentParts) == 0 {
 		return strings.TrimSpace(in.Text)

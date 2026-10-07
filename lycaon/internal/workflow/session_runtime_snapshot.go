@@ -122,6 +122,7 @@ func (m *RunManager) workflowRuntimeSnapshot(
 	}
 	if def, ok := manifest.PhaseForRun(active, active.CurrentPhase); ok {
 		snap.ReportDocumentEnabled = manifest.ReportEnabled() && workflowdef.PhaseHasGate(def, "topology_report_delivered")
+		snap.CloseoutRetries = def.CloseoutRetries
 		if brief := manifest.ReportBrief(); snap.ReportDocumentEnabled && brief != nil {
 			snap.ReportRating = &inject.ReportRatingView{Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
 		}

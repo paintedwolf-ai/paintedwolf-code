@@ -1,6 +1,8 @@
 package pagecursor
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -61,19 +63,31 @@ func TestCodecRejectsTamperedAndMalformedTokens(t *testing.T) {
 	testutil.FailErr(t, "encode cursor", err)
 	payload, signature, _ := strings.Cut(token, ".")
 	flip := func(s string) string {
-		if s[0] == 'A' {
-			return "B" + s[1:]
+		if s[0] == 'A' || s[0] == '0' {
+			return "1" + s[1:]
 		}
-		return "A" + s[1:]
+		return "0" + s[1:]
+	}
+	flipInside := func(s string) string {
+		if len(s) > 4 {
+			idx := len(s) - 2
+			replacement := "B"
+			if s[idx] == 'B' {
+				replacement = "A"
+			}
+			return s[:idx] + replacement + s[idx+1:]
+		}
+		return flip(s)
 	}
 	for name, candidate := range map[string]string{
-		"empty":             "",
-		"payload edited":    flip(payload) + "." + signature,
-		"signature edited":  payload + "." + flip(signature),
-		"signature missing": payload,
-		"extra segment":     token + ".x",
-		"not base64":        "!!!." + signature,
-		"oversized":         strings.Repeat("A", maxEncodedBytes+1),
+		"empty":               "",
+		"frame byte edited":   flip(payload) + "." + signature,
+		"payload body edited": flipInside(payload) + "." + signature,
+		"signature edited":    payload + "." + flip(signature),
+		"signature missing":   payload,
+		"extra segment":       token + ".x",
+		"not base64":          "!!!." + signature,
+		"oversized":           strings.Repeat("A", maxEncodedBytes+1),
 	} {
 		if _, err := testPages.Decode(candidate, scope); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: error = %v, want ErrInvalid", name, err)
@@ -140,3 +154,29 @@ func TestCursorFromPreviousEngineProcessIsExpired(t *testing.T) {
 		t.Fatalf("previous-process cursor for another scope error = %v, want ErrInvalid", err)
 	}
 }
+
+func TestSealedTokenNeverStartsWithJSONObjectBase64(t *testing.T) {
+	token, err := testPages.Encode(Scope("project-a"), listPosition{ID: "x"})
+	testutil.FailErr(t, "encode cursor", err)
+	if strings.HasPrefix(token, "eyJ") {
+		t.Fatalf("token %q starts with base64 JSON object prefix eyJ", token)
+	}
+	if !strings.HasPrefix(token, "AX") {
+		t.Fatalf("token %q does not start with framed prefix AX", token)
+	}
+}
+
+func TestOpenRejectsUnframedToken(t *testing.T) {
+	scope := Scope("project-a")
+	raw, err := json.Marshal(envelope{
+		Kind: "test_list", Scope: scopeDigest(scope), Process: processInstance,
+		Value: json.RawMessage(`{"created_at":"","id":"x"}`),
+	})
+	testutil.FailErr(t, "marshal raw envelope", err)
+	payload := base64.RawURLEncoding.EncodeToString(raw)
+	token := payload + "." + base64.RawURLEncoding.EncodeToString(sign(payload))
+	if _, err := testPages.Decode(token, scope); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unframed token error = %v, want ErrInvalid", err)
+	}
+}
+

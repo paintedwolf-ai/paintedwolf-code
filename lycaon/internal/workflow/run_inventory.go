@@ -186,7 +186,7 @@ func (m *RunManager) ActiveRunOwnsScanEvidence(ctx context.Context, sessionID st
 }
 
 // checkReviewInventory checks the proposed verdict before its phase can settle.
-func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*guidance.ReportDocumentIssue, error) {
+func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*InventoryIssue, error) {
 	if !def.RequireInventoryAccounted {
 		return nil, nil
 	}
@@ -195,7 +195,7 @@ func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.Workflow
 		return nil, err
 	}
 	if !inventory.Settled {
-		return &guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}, nil
+		return &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}}, nil
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
@@ -211,11 +211,15 @@ func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.Workflow
 		Phase: run.CurrentPhase, Def: def,
 		Record: evidence.Record{Artifacts: verdictArtifacts(verdict, nil, nil)},
 	})
-	issue := checkInventoryAccounted(guidance.CoordinatorCompletionReport{}, ReportDocumentFacts{
+	issue, unaccounted := inventoryAccounting(guidance.CoordinatorCompletionReport{}, ReportDocumentFacts{
 		Claims: ReconcileClaims(phases), SetAsides: RunSetAsides(phases), Inventory: inventory,
 	})
 	if issue.Code == "" {
 		return nil, nil
 	}
-	return &issue, nil
+	out := &InventoryIssue{ReportDocumentIssue: issue, Unaccounted: unaccounted}
+	if len(unaccounted) > 0 {
+		out.Regressed = m.noteInventoryShortfall(run.ID, run.CurrentPhase, unaccounted)
+	}
+	return out, nil
 }

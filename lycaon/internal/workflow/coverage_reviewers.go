@@ -22,6 +22,17 @@ func (m *RunManager) CoverageAssignment(ctx context.Context, run *api.WorkflowRu
 }
 
 func (m *RunManager) coverageAssignment(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef) (*reviewcoverage.Assignment, error) {
+	facts, err := m.CoverageFacts(ctx, run, manifest)
+	if err != nil {
+		return nil, err
+	}
+	return m.assignCoverage(ctx, run, manifest, def, facts)
+}
+
+// assignCoverage seals the subject an independent reviewer assesses: the
+// candidate review over the facts minus gaps other gates own. Reviewer
+// assessments must carry its revision.
+func (m *RunManager) assignCoverage(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef, facts reviewcoverage.Facts) (*reviewcoverage.Assignment, error) {
 	source, ok := manifest.PhaseByID(def.ReconcilesPhase)
 	if !ok || source.ReviewLoop == nil {
 		return nil, fmt.Errorf("coverage review source phase %q unavailable", def.ReconcilesPhase)
@@ -37,29 +48,12 @@ func (m *RunManager) coverageAssignment(ctx context.Context, run *api.WorkflowRu
 	if candidate == nil {
 		return nil, fmt.Errorf("coverage candidate unavailable for phase %q", source.ID)
 	}
-	facts, err := m.CoverageFacts(ctx, run, manifest)
-	if err != nil {
-		return nil, err
-	}
 	assignment := reviewcoverage.Assign(facts, *candidate, run.CurrentPhase)
 	return &assignment, nil
 }
 
-func (m *RunManager) checkCoverageReviewers(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef) error {
-	if len(def.CoverageReviewers) == 0 {
-		return nil
-	}
-	assignment, err := m.coverageAssignment(ctx, run, manifest, def)
-	if err != nil {
-		return err
-	}
-	tasks, err := m.WorkerTasks(ctx, run.ID)
-	if err != nil {
-		return err
-	}
-	return validateCoverageReviewerResults(run, def, assignment.Facts, tasks)
-}
-
+// validateCoverageReviewerResults requires each declared coverage reviewer's
+// latest leg in this phase to carry a current structured assessment.
 func validateCoverageReviewerResults(run *api.WorkflowRun, def workflowdef.ReviewLoopDef, facts reviewcoverage.Facts, tasks []api.WorkerTask) error {
 	for _, agent := range def.CoverageReviewers {
 		var latest *api.WorkerTask

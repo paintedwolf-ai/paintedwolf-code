@@ -2,9 +2,6 @@ package inject
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -25,8 +22,7 @@ type PhaseExitView struct {
 	OpenGates           []string
 	DormantGates        []string
 	CompleteWhen        string
-	VerdictSchema       map[string]string
-	ClaimStatuses       []string
+	VerdictShape        string
 	ReviewLoopKey       string
 	ReviewLoopCap       int
 	FollowupAttempts    int
@@ -51,6 +47,7 @@ type PhaseExitChoiceArm struct {
 // WorkflowRuntimeSnapshot is workflow-generic runtime metadata for inject.
 type WorkflowRuntimeSnapshot struct {
 	ReportDocumentEnabled bool
+	CloseoutRetries       int
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.
 	CoverageReview    string
@@ -252,8 +249,6 @@ func BuildActiveWorkflowInjectData(frame CoordinatorTurnFrame) ActiveWorkflowInj
 	}
 	if snap.PhaseExit != nil {
 		pe := *snap.PhaseExit
-		pe.VerdictSchema = maps.Clone(snap.PhaseExit.VerdictSchema)
-		pe.ClaimStatuses = append([]string(nil), snap.PhaseExit.ClaimStatuses...)
 		pe.OpenGates = append([]string(nil), snap.PhaseExit.OpenGates...)
 		pe.DormantGates = append([]string(nil), snap.PhaseExit.DormantGates...)
 		pe.ReviewAgents = append([]string(nil), snap.PhaseExit.ReviewAgents...)
@@ -418,8 +413,7 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"open_gates":           append([]string(nil), data.PhaseExit.OpenGates...),
 			"dormant_gates":        append([]string(nil), data.PhaseExit.DormantGates...),
 			"complete_when":        data.PhaseExit.CompleteWhen,
-			"verdict_schema":       verdictSchemaJSON(data.PhaseExit.VerdictSchema),
-			"claim_statuses":       append([]string(nil), data.PhaseExit.ClaimStatuses...),
+			"verdict_shape":        data.PhaseExit.VerdictShape,
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
 			"followup_attempts":    data.PhaseExit.FollowupAttempts,
@@ -508,17 +502,6 @@ func previewDecisionPhaseIDs(phases []api.ComposeDecisionPhase) []string {
 }
 
 // String maps always marshal; encoding/json sorts keys for stable render/cache identity.
-func verdictSchemaJSON(schema map[string]string) string {
-	if len(schema) == 0 {
-		return ""
-	}
-	raw, err := json.Marshal(schema)
-	if err != nil {
-		panic(fmt.Errorf("encode string-only verdict schema: %w", err))
-	}
-	return string(raw)
-}
-
 func reportRatingRow(r *ReportRatingView) map[string]any {
 	if r == nil {
 		return nil

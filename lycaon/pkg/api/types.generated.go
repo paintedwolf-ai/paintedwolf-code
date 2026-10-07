@@ -8488,7 +8488,10 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
-	CoverageReview      *CoverageReview            `json:"coverage_review,omitempty"`
+	CoverageReview *CoverageReview `json:"coverage_review,omitempty"`
+	// Leg status the worker declared; leg_status is the host-graded status.
+	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
+	// Host-graded leg status.
 	LegStatus           string                     `json:"leg_status"`
 	FilesModified       []string                   `json:"files_modified,omitempty"`
 	ObjectivesMet       []string                   `json:"objectives_met,omitempty"`

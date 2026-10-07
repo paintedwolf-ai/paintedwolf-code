@@ -94,6 +94,7 @@ type reportControlsYAML struct {
 	Enabled       bool       `yaml:"enabled"`
 	FindingsLabel string     `yaml:"findings_label"`
 	Brief         *briefYAML `yaml:"brief,omitempty"`
+	Retries       *int       `yaml:"retries,omitempty"`
 }
 
 type attachYAML struct {
@@ -227,6 +228,7 @@ type userFeedbackYAML struct {
 type phaseControlsYAML struct {
 	ContentReview *contentReviewYAML `yaml:"content_review"`
 	Closeout      string             `yaml:"closeout"`
+	Retries       *int               `yaml:"retries,omitempty"`
 }
 
 type contentReviewYAML struct {

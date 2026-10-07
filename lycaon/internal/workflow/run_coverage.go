@@ -4,54 +4,76 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// CoverageFacts loads the same observations used by verdict admission and reports.
+// CoverageFacts loads the same observations used by verdict admission and
+// reports. Before the run's bound scans settle it returns ErrCoverageScansPending.
 func (m *RunManager) CoverageFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, error) {
+	facts, _, err := m.coverageFacts(ctx, run, manifest)
+	return facts, err
+}
+
+// coverageFacts also returns the worker tasks the facts were built from, so a
+// caller judging reviewer results reads the same ledger snapshot.
+func (m *RunManager) coverageFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, []api.WorkerTask, error) {
+	if m.Inventory == nil {
+		return reviewcoverage.Facts{}, nil, fmt.Errorf("coverage scan ledger unavailable")
+	}
+	if m.WorkerTasks == nil {
+		return reviewcoverage.Facts{}, nil, fmt.Errorf("coverage worker ledger unavailable")
+	}
 	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
-		return reviewcoverage.Facts{}, err
+		return reviewcoverage.Facts{}, nil, err
 	}
 	inventory, err := LoadRunInventory(ctx, m.Inventory, run.ID)
 	if err != nil {
-		return reviewcoverage.Facts{}, err
-	}
-	if m.Inventory == nil {
-		return reviewcoverage.Facts{}, fmt.Errorf("coverage scan ledger unavailable")
+		return reviewcoverage.Facts{}, nil, err
 	}
 	if !inventory.Settled {
-		return reviewcoverage.Facts{}, fmt.Errorf("coverage scans have not settled")
-	}
-	if m.WorkerTasks == nil {
-		return reviewcoverage.Facts{}, fmt.Errorf("coverage worker ledger unavailable")
+		return reviewcoverage.Facts{}, nil, ErrCoverageScansPending
 	}
 	tasks, err := m.WorkerTasks(ctx, run.ID)
 	if err != nil {
-		return reviewcoverage.Facts{}, err
+		return reviewcoverage.Facts{}, nil, err
 	}
-	return BuildCoverageFacts(manifest, vars, tasks, inventory.Scans), nil
+	return BuildCoverageFacts(manifest, vars, tasks, inventory.Scans), tasks, nil
 }
 
 // BuildCoverageFacts keeps full identities while bounding prompt path samples.
 func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, tasks []api.WorkerTask, scans []api.CodeScan) reviewcoverage.Facts {
 	tasks = coverageReviewTasks(manifest, tasks)
+	taskByID := make(map[string]api.WorkerTask, len(tasks))
+	for _, task := range tasks {
+		taskByID[task.ID] = task
+	}
 	var facts reviewcoverage.Facts
 	var plans []string
 	for _, phase := range manifest.PhaseDefs {
 		if plan, ok := FanoutPlanForPhase(vars, phase); ok {
 			plans = append(plans, reviewcoverage.Identity(plan))
 			for i, leg := range FanoutCoverage(plan, tasks, phase.ID) {
-				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{Blocking: leg.Status != "complete" && leg.Status != "partial", ID: phase.ID + "/" + leg.ID, Kind: "planned_area", Subject: leg.Subject + " (" + leg.Status + ")", Question: plan.Legs[i].Prompt, Scope: plan.Legs[i].Scope, Tasks: leg.Attempts})
+				subj := leg.Subject + " (" + leg.Status + ")"
+				if len(leg.Attempts) > 0 {
+					lastTask := taskByID[leg.Attempts[len(leg.Attempts)-1]]
+					if lastTask.Result != nil && strings.TrimSpace(lastTask.Result.HintCode) != "" {
+						subj += " · host check: " + guidance.HintCodeUILabel(lastTask.Result.HintCode)
+					}
+				}
+				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{Blocking: leg.Status != "complete" && leg.Status != "partial", ID: phase.ID + "/" + leg.ID, Kind: "planned_area", Subject: subj, Question: plan.Legs[i].Prompt, Scope: plan.Legs[i].Scope, Tasks: leg.Attempts, Evidence: legEvidence(leg.Attempts, taskByID)})
 			}
 		} else if workflowdef.PhaseHasGate(phase, "worker_cycle_ready") {
 			facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/plan", Kind: "planned_area", Subject: "The planned review is unavailable", Blocking: true})
@@ -97,6 +119,34 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 		Evidence []string
 	}{facts, ids})
 	return facts
+}
+
+// coverageEvidenceLimit bounds the handles a fact offers as citations.
+const coverageEvidenceLimit = 12
+
+// legEvidence lists the session-qualified handles a leg's findings cited.
+func legEvidence(attempts []string, tasks map[string]api.WorkerTask) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range attempts {
+		task := tasks[id]
+		session := strings.TrimSpace(task.ChildSessionID)
+		if session == "" || task.Result == nil || task.Result.CompletionReport == nil {
+			continue
+		}
+		for _, f := range task.Result.CompletionReport.Findings {
+			handle := strings.TrimSpace(f.Evidence)
+			if handle == "" || seen[handle] {
+				continue
+			}
+			seen[handle] = true
+			out = append(out, session+":"+handle)
+			if len(out) == coverageEvidenceLimit {
+				return out
+			}
+		}
+	}
+	return out
 }
 
 func scanCoverageFacts(scans []api.CodeScan) []reviewcoverage.Fact {
@@ -157,7 +207,7 @@ func workerCoverageFacts(tasks []api.WorkerTask) []reviewcoverage.Fact {
 		if task.WorkflowWorkID != "" {
 			continue
 		}
-		if task.Status == api.WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil && task.Result.CompletionReport.LegStatus == "complete" {
+		if api.WorkerTaskLegStatus(task) == "complete" {
 			continue
 		}
 		fact := coverageGap("supporting_work", task.AgentType, nil, nil, task)
@@ -181,6 +231,10 @@ func coverageGap(kind, scanner string, paths, scans []string, evidence any) revi
 	return fact
 }
 
+// CoverageReviewShape is the one description of the coverage verdict member,
+// quoted by the schema summary and by every refusal of a malformed member.
+const CoverageReviewShape = "{revision, assessments: [{id, disposition: satisfied (obligation) | covered | immaterial (gap) | material_open | essential_open, reason, obligations: [affected obligation ids], cited_evidence}]} from current coverage facts; every obligation and gap requires an assessment"
+
 // ParseVerdictCoverage reads the single coverage_review field declared by a phase.
 func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]string) (*api.CoverageReview, error) {
 	var out *api.CoverageReview
@@ -194,13 +248,13 @@ func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]stri
 		dec := json.NewDecoder(strings.NewReader(verdict[field]))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&out); err != nil {
-			return nil, fmt.Errorf("coverage review: %w", err)
+			return nil, fmt.Errorf("coverage review: %w; the member is %s", err, CoverageReviewShape)
 		}
 		if out == nil {
-			return nil, fmt.Errorf("coverage review must be an object")
+			return nil, fmt.Errorf("coverage review must be an object: %s", CoverageReviewShape)
 		}
 		if err := dec.Decode(&struct{}{}); err != io.EOF {
-			return nil, fmt.Errorf("coverage review must contain one object")
+			return nil, fmt.Errorf("coverage review must contain one object: %s", CoverageReviewShape)
 		}
 	}
 	return out, nil
@@ -226,23 +280,46 @@ func RunCoverageReview(verdicts []PhaseVerdict) *api.CoverageReview {
 	return out
 }
 
-func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) error {
+// checkReviewCoverage admits a terminal verdict's coverage assessment. What the
+// model can repair comes back as a rejection; a host fault comes back as an error.
+func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*tools.ToolReject, error) {
 	review, err := ParseVerdictCoverage(def, verdict)
-	if err != nil || review == nil {
-		return err
+	if err != nil {
+		return coverageReject(def, err), nil
+	}
+	if review == nil {
+		return nil, nil
 	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	facts, err := m.CoverageFacts(ctx, run, manifest)
+	facts, tasks, err := m.coverageFacts(ctx, run, manifest)
+	if errors.Is(err, ErrCoverageScansPending) {
+		return &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}}, nil
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := reviewcoverage.Validate(facts, *review); err != nil {
-		return err
+		return coverageReject(def, err), nil
 	}
-	return m.checkCoverageReviewers(ctx, run, manifest, def)
+	if len(def.CoverageReviewers) == 0 {
+		return nil, nil
+	}
+	// Independent reviewers assess the sealed assignment, not the raw facts.
+	assignment, err := m.assignCoverage(ctx, run, manifest, def, facts)
+	if err != nil {
+		return coverageReject(def, err), nil
+	}
+	if err := validateCoverageReviewerResults(run, def, assignment.Facts, tasks); err != nil {
+		return coverageReject(def, err), nil
+	}
+	return nil, nil
+}
+
+func coverageReject(def workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
+	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: verdictInvalidDetails(def, cause)}
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not

@@ -294,12 +294,14 @@ func completenessReason(input ReportInput, level string) string {
 
 // gapOrder puts the gaps that leave work incomplete first.
 var gapOrder = []string{
-	GapInventoryUnaccounted, GapClaimsOpen, GapLegsUnfinished, GapScansFailed,
+	GapInventoryUnaccounted, GapCoverageUnreviewed, GapClaimsOpen, GapLegsUnfinished, GapScansFailed,
 	GapLegsPartial, GapWorkersPartial, GapScansMoved,
 }
 
 func gapPhrase(g ReportGap) string {
 	switch g.Kind {
+	case GapCoverageUnreviewed:
+		return "the coverage review couldn't be checked because scans were still running"
 	case GapInventoryUnaccounted:
 		if g.Of > 0 && g.Count < g.Of {
 			return fmt.Sprintf("the review didn't use %d of %d automated scan result groups", g.Count, g.Of)

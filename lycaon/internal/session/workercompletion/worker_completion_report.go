@@ -31,6 +31,7 @@ const (
 type WorkerCompletionReport struct {
 	CoverageReview      *api.CoverageReview      `json:"coverage_review,omitempty"`
 	Verification        *verification.Assessment `json:"verification,omitempty"`
+	DeclaredLegStatus   string                   `json:"declared_leg_status,omitempty"`
 	LegStatus           string                   `json:"leg_status"`
 	FilesModified       []string                 `json:"files_modified,omitempty"`
 	ObjectivesMet       []string                 `json:"objectives_met,omitempty"`
@@ -143,6 +144,7 @@ func decodeWorkerCompletionReport(candidate string) (WorkerCompletionReport, boo
 
 func (r WorkerCompletionReport) Empty() bool {
 	return strings.TrimSpace(r.LegStatus) == "" &&
+		strings.TrimSpace(r.DeclaredLegStatus) == "" &&
 		len(r.FilesModified) == 0 &&
 		len(r.ObjectivesMet) == 0 &&
 		len(r.RemainingRisk) == 0 &&
@@ -161,6 +163,7 @@ func (r *WorkerCompletionReport) Normalize() {
 
 func (r *WorkerCompletionReport) normalizeListsAndLeg() {
 	r.LegStatus = NormalizeReportLegStatus(r.LegStatus)
+	r.DeclaredLegStatus = NormalizeReportLegStatus(r.DeclaredLegStatus)
 	r.FilesModified = normalizeReportStringList(r.FilesModified, 0)
 	r.ObjectivesMet = normalizeReportStringList(r.ObjectivesMet, 0)
 	r.RemainingRisk = normalizeReportStringList(r.RemainingRisk, 0)

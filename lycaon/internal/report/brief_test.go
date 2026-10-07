@@ -135,6 +135,7 @@ func TestCompleteness_ByKindOfGap(t *testing.T) {
 		{[]ReportGap{{Kind: GapLegsPartial, Count: 1}, {Kind: GapWorkersPartial, Count: 2}}, CompletenessMostly},
 		{[]ReportGap{{Kind: GapScansMoved, Count: 1}, {Kind: GapClaimsOpen, Count: 1}}, CompletenessIncomplete},
 		{[]ReportGap{{Kind: GapInventoryUnaccounted, Count: 3}}, CompletenessIncomplete},
+		{[]ReportGap{{Kind: GapCoverageUnreviewed, Count: 1}}, CompletenessIncomplete},
 		{[]ReportGap{{Kind: GapClaimsOpen, Count: 0}}, CompletenessComplete},
 	}
 	for i, tc := range cases {

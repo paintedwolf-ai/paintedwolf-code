@@ -1124,7 +1124,7 @@
       "branch_instruction": "Branch on Code; partition the search scope and retry",
       "category": "recoverable",
       "emit": "guard:grep",
-      "summary": "Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget; coverage is incomplete."
+      "summary": "Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete."
     },
     "GREP_MATCH_BUDGET": {
       "branch_instruction": "Repair the pattern itself before retrying",
@@ -2648,10 +2648,10 @@
       "summary": "The verdict payload does not match the active review phase contract."
     },
     "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED": {
-      "branch_instruction": "Keep earlier claim links and inherited set-asides. Do not clear a group merely because it was listed.",
+      "branch_instruction": "Do not re-page scan_query to rediscover the listed ids, and do not clear a group merely because it was listed.",
       "category": "recoverable",
       "emit": "guard:workflow",
-      "summary": "{{ paintedwolf.rejection_reason }}{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %}; {{ paintedwolf.offenders_omitted }} more{% endif %}{% endif %}."
+      "summary": "{{ paintedwolf.rejection_reason }}{% if paintedwolf.unaccounted_group_ids %}: {{ paintedwolf.unaccounted_group_ids }}{% if paintedwolf.unaccounted_omitted %} and {{ paintedwolf.unaccounted_omitted }} more{% endif %}{% endif %}."
     },
     "SUBMIT_VERDICT_ITERATION_CAP": {
       "branch_instruction": "If the evidence cannot support a terminal ruling, report the unresolved issue and seek a user decision through the available channel. Do not invent approval or reset the review to evade the cap.",
@@ -2660,6 +2660,7 @@
       "summary": "The review is at attempt {{ paintedwolf.review_attempt }} of {{ paintedwolf.review_iteration_cap }}; another non-terminal verdict cannot open a round."
     },
     "SUBMIT_VERDICT_QUESTION_INVALID": {
+      "branch_instruction": "Keep completed investigations and their evidence. Do not rename a question, drop its scope, or mark it covered to make the transition pass.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The follow-up question cannot make this transition{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% endif %}."
@@ -2677,6 +2678,7 @@
       "summary": "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
     },
     "SUBMIT_VERDICT_SCANS_PENDING": {
+      "branch_instruction": "Do not submit a partial inventory or start another scan to replace one that is still running.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The run's scanner inventory is still being collected."
@@ -3319,7 +3321,7 @@
       "summary": "The worker ended without an accepted structured completion report."
     },
     "WORKER_EVIDENCE_HANDLE_UNKNOWN": {
-      "branch_instruction": "Use complete_leg with partial status and remaining_risk for unresolved evidence. Keep existing work; do not repeat a worker assignment solely to replace a bad citation.",
+      "branch_instruction": "Fix or drop only the listed citations and keep the rest of the report; leg_status reflects whether the remaining evidence delivers the assignment. Do not repeat a worker assignment solely to replace a bad citation.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
       "summary": "Worker cited {{ paintedwolf.offender_count }} finding reference(s) that did not resolve in this leg evidence."

@@ -175,7 +175,7 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 	deps.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
 		return HostNudge{Content: "Use one bounded wind-down round."}
 	}
-	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutReason, string) HostNudge {
+	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
 		return HostNudge{Content: "Give the final prose closeout."}
 	}
 	var admitted int

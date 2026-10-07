@@ -11,7 +11,7 @@ scanners:
     runtime:
       soft_limit_sec: 900
       hard_limit_sec: 0
-      cpu_units: 2
+      cpu_units: 1
       parallelism: 1
     label: OSV-Scalibr
     description: Reads your lockfiles and checks each dependency against the OSV advisory database for known vulnerabilities. Built on Google's OSV-Scalibr, linked in as a library.
@@ -25,7 +25,7 @@ scanners:
     runtime:
       soft_limit_sec: 900
       hard_limit_sec: 0
-      cpu_units: 2
+      cpu_units: 1
       parallelism: 2
     label: Gitleaks — bundled rules
     description: Looks for credentials and tokens committed to the repo. Built on the Gitleaks engine, linked in as a library, running vendored Kingfisher rules.

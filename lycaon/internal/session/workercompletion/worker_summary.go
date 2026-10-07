@@ -50,6 +50,7 @@ type WorkerSummaryEvalInput struct {
 type WorkerSummaryEvalResult struct {
 	Status     string
 	Summary    string
+	Report     WorkerCompletionReport
 	HintCode   string
 	HintData   map[string]any
 	HintCopy   map[string]string
@@ -68,8 +69,10 @@ type workerSummaryObs struct {
 	SurfaceClaimUngrounded bool
 	PageMeasureUngrounded  bool
 	UnobservedCitedHandles []string
-	UnobservedCitedURLs    []string
-	NoArtifact             bool
+	// CitedHandleRanges describes what the unresolved citations' handles did observe.
+	CitedHandleRanges   string
+	UnobservedCitedURLs []string
+	NoArtifact          bool
 	RejectDataCodes        []string // PutRejectData keys for render vars only
 }
 
@@ -90,7 +93,7 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 		obs.ActualChars, obs.MaxChars = utf8.RuneCountInString(brief), in.MaxChars
 		obs.RejectDataCodes = append(obs.RejectDataCodes, "WORKER_SUMMARY_TOO_LONG")
 	}
-	if obs.MissingReport || obs.NoProse {
+	if obs.MissingReport {
 		return decideWorkerSummary(ctx, in, &audit, brief, obs, report)
 	}
 
@@ -131,8 +134,15 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 				obs.UnobservedCitedURLs = append([]string(nil), offenders...)
 			default:
 				obs.UnobservedCitedHandles = append([]string(nil), offenders...)
+				obs.CitedHandleRanges = guidance.CitedHandleRanges(citationEval.Resolutions, audit.ev)
 			}
 		}
+	}
+	if len(citationEval.UnobservedURLs) > 0 && len(obs.UnobservedCitedURLs) == 0 {
+		obs.UnobservedCitedURLs = append([]string(nil), citationEval.UnobservedURLs...)
+	}
+	if corrected := applyLineCorrections(&report, citationEval.Resolutions); corrected > 0 {
+		audit.recordLineCorrections(corrected)
 	}
 	audit.recordFindingCitationVerdicts(citationEval)
 	audit.recordTypedCitationChannels(report)
@@ -175,8 +185,11 @@ func decideWorkerSummary(
 	if obs.MaxChars > 0 {
 		data["actual_chars"], data["max_chars"] = obs.ActualChars, obs.MaxChars
 	}
+	if obs.CitedHandleRanges != "" {
+		data["cited_handle_ranges"] = obs.CitedHandleRanges
+	}
 	if in.Pipeline == nil || !in.Pipeline.AnchorEnforced(oar.AnchorWorkerReportCheck) {
-		return WorkerSummaryEvalResult{Status: "complete", Summary: summary, Grounding: audit.finish(observedValid, "", report)}, nil
+		return WorkerSummaryEvalResult{Status: "complete", Summary: summary, Report: report, Grounding: audit.finish(observedValid, "", report)}, nil
 	}
 	gc := oar.NewGuardContext()
 	gc.SessionID = in.ChildSessionID
@@ -203,7 +216,7 @@ func decideWorkerSummary(
 	if code != "" {
 		status = "partial"
 	}
-	result := WorkerSummaryEvalResult{Status: status, Summary: summary, HintCode: code, HintData: data, HintCopy: copy, HintEffect: effect}
+	result := WorkerSummaryEvalResult{Status: status, Summary: summary, Report: report, HintCode: code, HintData: data, HintCopy: copy, HintEffect: effect}
 	if audit != nil {
 		result.Grounding = audit.finish(observedValid && code == "", code, report)
 	}
@@ -326,6 +339,32 @@ func (r WorkerSummaryEvalResult) PolicyFeedback() *api.WorkerPolicyFeedback {
 		return nil
 	}
 	return &api.WorkerPolicyFeedback{Code: r.HintCode, Effect: string(r.HintEffect), Copy: maps.Clone(r.HintCopy), Details: jsonvalue.CloneMap(r.HintData)}
+}
+
+// applyLineCorrections writes host-corrected lines back onto the citations
+// they resolved; resolutions are index-aligned with workerReportCitations.
+func applyLineCorrections(report *WorkerCompletionReport, resolutions []evidence.Resolution) int {
+	next, corrected := 0, 0
+	correct := func(line *int) {
+		if next < len(resolutions) {
+			if res := resolutions[next]; res.LineCorrectedFrom != 0 {
+				*line = res.Line
+				corrected++
+			}
+		}
+		next++
+	}
+	for i := range report.Findings {
+		correct(&report.Findings[i].Line)
+	}
+	if report.CoverageReview != nil {
+		for a := range report.CoverageReview.Assessments {
+			for c := range report.CoverageReview.Assessments[a].CitedEvidence {
+				correct(&report.CoverageReview.Assessments[a].CitedEvidence[c].Line)
+			}
+		}
+	}
+	return corrected
 }
 
 func workerReportCitations(report WorkerCompletionReport) []guidance.WorkerFindingInput {

@@ -7,16 +7,17 @@ requires:
   facts:
     - paintedwolf.rejection_code
     - paintedwolf.rejection_reason
-    - paintedwolf.offenders_sample
-    - paintedwolf.offenders_omitted
+    - paintedwolf.unaccounted_group_ids
+    - paintedwolf.unaccounted_omitted
+    - paintedwolf.regressed_group_ids
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED"
 effect: block
 copy:
-  what: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %}; {{ paintedwolf.offenders_omitted }} more{% endif %}{% endif %}.'
-  cause: The review must account for the run's scanner inventory before advancing to the report.
+  what: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.unaccounted_group_ids %}: {{ paintedwolf.unaccounted_group_ids }}{% if paintedwolf.unaccounted_omitted %} and {{ paintedwolf.unaccounted_omitted }} more{% endif %}{% endif %}.'
+  cause: The review must account for every scanner group before the report phase.
   why: The report phase cannot investigate groups the review left unassessed.
-  fix: 'Use scan_query with view groups on the run-bound scan ids to inspect the remaining groups. Link assessed groups through claims scan_group_ids, or supply set_asides with a reason that holds for every selected group. Path selectors must cover every location in a group; mixed-location or locationless groups need explicit scan_group_ids. Resubmit the complete verdict with the accounting corrected.'
-  instead: Keep earlier claim links and inherited set-asides. Do not clear a group merely because it was listed.
+  fix: '{% if paintedwolf.regressed_group_ids %}This submission dropped the accounting the previous one held for {{ paintedwolf.regressed_group_ids }}; restore it. {% endif %}Account for exactly the listed ids: link assessed groups through claims scan_group_ids, or add set_asides naming them in scan_group_ids with a reason that holds for each. details.unaccounted_groups carries each group''s scanner, rule, and locations; use scan_query only to read a group''s findings. Keep every link and set-aside already submitted and resubmit the complete verdict.'
+  instead: Do not re-page scan_query to rediscover the listed ids, and do not clear a group merely because it was listed.
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
 x-paintedwolf-message: The review leaves scanner groups unaccounted.
@@ -25,6 +26,14 @@ x-paintedwolf-scenarios:
   - id: missing_groups
     vars:
       rejection_reason: 18 of 241 scanner groups have no assessment and no set-aside
-      offenders_sample: 'group:sample · secrets · high · fixture-token · src/example.go'
-      offenders_omitted: 17
-    expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'group:sample', 'scan_query', '17 more']
+      unaccounted_group_ids: ['group:sample', 'group:other']
+      unaccounted_omitted: 0
+      regressed_group_ids: []
+    expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'group:sample, group:other', 'scan_group_ids']
+  - id: regressed_groups
+    vars:
+      rejection_reason: 2 of 241 scanner groups have no assessment and no set-aside
+      unaccounted_group_ids: ['group:lost']
+      unaccounted_omitted: 70
+      regressed_group_ids: ['group:lost']
+    expect_contains: ['dropped the accounting the previous one held for group:lost', 'and 70 more']

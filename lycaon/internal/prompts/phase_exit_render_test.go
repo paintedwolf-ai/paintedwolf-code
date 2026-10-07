@@ -47,7 +47,7 @@ func TestPhaseExitRendersEveryKind(t *testing.T) {
 			exit: map[string]any{
 				"kind": "review_loop", "review_agents": []string{"skeptic", "web-researcher"},
 				"review_loop_key": "survey_challenged", "review_loop_cap": 1,
-				"verdict_schema": `{"verdict":"CHALLENGED","claims":"claims"}`, "coordinator_advances": true,
+				"verdict_shape": "{verdict: one of CHALLENGED (first value is terminal); claims: array of {id, title (required when the claim is new), statement, status: one of survives, cited_evidence, answers?, scan_group_ids?}}", "coordinator_advances": true,
 			},
 			want: []string{"`skeptic`", "`web-researcher`", "one assistant message",
 				"submit_verdict", "CHALLENGED", "evidence_passed:survey_challenged"},
@@ -55,10 +55,10 @@ func TestPhaseExitRendersEveryKind(t *testing.T) {
 		{
 			name: "review_loop with structured coverage and set-asides",
 			exit: map[string]any{
-				"kind":           "review_loop",
-				"verdict_schema": `{"verdict":"CHALLENGED","challenges":"claims","coverage":"coverage_review","set_asides":"set_asides"}`,
+				"kind":          "review_loop",
+				"verdict_shape": "{verdict: CHALLENGED (first is terminal); coverage: object {revision, assessments}; set_asides: array of {reason, scan_group_ids} or {reason, scanner, paths}}",
 			},
-			want: []string{"`coverage_review` is an object with `revision` and `assessments`", "`set_asides` is an array"},
+			want: []string{"coverage: object {revision, assessments}", "set_asides: array of", "arrays may be empty"},
 		},
 		{
 			name: "review_loop with no reviewers still names the verdict channel",

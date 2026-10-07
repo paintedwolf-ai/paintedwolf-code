@@ -45,7 +45,6 @@ schema:
           items:
             type: string
             minLength: 1
-            maxLength: 500
         constraints:
           description: Decisions, exclusions, or boundaries the worker must preserve.
           type: array
@@ -53,7 +52,6 @@ schema:
           items:
             type: string
             minLength: 1
-            maxLength: 500
         done_when:
           description: Concrete acceptance criteria that let the worker stop.
           type: array
@@ -62,7 +60,6 @@ schema:
           items:
             type: string
             minLength: 1
-            maxLength: 500
         context_refs:
           description: Compact path, symbol, attachment-name, or prior-result references; never pasted bodies.
           type: array

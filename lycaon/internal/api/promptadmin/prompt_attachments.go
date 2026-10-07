@@ -115,7 +115,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, session.ErrPromptRecoveryStale) {
-			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, err.Error())
+			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, err.Error())
 			return
 		}
 		var conflict *store.PromptSubmissionConflictError
@@ -179,7 +179,7 @@ func (s *Handler) preparePromptAdmission(
 ) (promptAdmission, bool) {
 	if req.Recovery != nil {
 		if len(req.Attachments) != 0 || len(req.References) != 0 || len(req.Secrets) != 0 {
-			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "recovery cannot include new attachments, references, or secrets")
+			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, "Recovery cannot add attachments, references, or secrets; send them as a new message")
 			return promptAdmission{}, false
 		}
 		return promptAdmission{input: session.PromptInput{Text: text, Recovery: req.Recovery}}, true

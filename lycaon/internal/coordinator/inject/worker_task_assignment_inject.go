@@ -123,8 +123,9 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		}
 	}
 	if in.CoverageAssignment != nil {
-		raw, _ := json.Marshal(in.CoverageAssignment)
-		data.CoverageAssignment = string(raw)
+		if raw, err := json.Marshal(in.CoverageAssignment); err == nil {
+			data.CoverageAssignment = string(raw)
+		}
 	}
 	data.Elisions = elisions
 	return data

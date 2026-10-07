@@ -308,6 +308,7 @@ func (b *serveBuilder) wireFindingAndProgressTools() error {
 		return fmt.Errorf("surface_note tool: %w", err)
 	}
 	b.progressStore = progress.NewSQLStore(b.db)
+	b.workflowMgr.Progress = b.progressStore
 	b.mgr.SetProgressStore(b.progressStore)
 	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)

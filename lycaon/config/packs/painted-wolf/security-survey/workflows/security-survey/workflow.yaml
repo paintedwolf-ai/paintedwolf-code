@@ -175,6 +175,7 @@ controls:
   phase_advance: host
   report:
     enabled: true
+    retries: 5
     brief:
       question: How serious is it?
       dimensions:
@@ -185,6 +186,7 @@ controls:
           values:
             - {id: reachable, label: "Yes"}
             - {id: app_window, label: From the app window}
+            - {id: no_sink, label: No reachable sink}
             - {id: not_reachable, label: "No"}
         - id: outcome
           label: Worst outcome
@@ -231,6 +233,7 @@ controls:
           tone: low
           when:
             - {reachable: [reachable, app_window], outcome: [degraded, limited_misuse, code_runs, data_exposed]}
+            - {reachable: [no_sink, not_reachable], outcome: [degraded, limited_misuse, code_runs, data_exposed]}
         - label: None
           answer: No known risk
           means: Nothing found that needs action.

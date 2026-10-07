@@ -17,7 +17,7 @@ func (b *serveBuilder) decodeCompleteLeg(ctx context.Context, args map[string]an
 	if tctx.WorkerJobID == "" {
 		return record, nil
 	}
-	task, ok := b.workerQueue.Get(tctx.WorkerJobID)
+	task, ok := b.workerQueue.Lookup(ctx, tctx.WorkerJobID)
 	if !ok {
 		return record, fmt.Errorf("worker job %q unavailable", tctx.WorkerJobID)
 	}

@@ -39,16 +39,10 @@ func FanoutCoverage(plan FanoutPlan, tasks []api.WorkerTask, phase string) []Fan
 				continue
 			}
 			entry.Attempts = append(entry.Attempts, task.ID)
-			entry.Status = string(task.Status)
+			entry.Status = api.WorkerTaskLegStatus(task)
 			entry.Settled = false
 			if task.Status.IsTerminal() {
-				if task.Status == api.WorkerStatusComplete {
-					entry.Status = "unreported"
-				}
-				if task.Status == api.WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil {
-					entry.Status = task.Result.CompletionReport.LegStatus
-				}
-				if task.Status == api.WorkerStatusComplete && entry.Status == "complete" {
+				if entry.Status == "complete" {
 					entry.Settled = true
 				}
 				if !entry.Settled && len(entry.Attempts) >= max(1, plan.MaxAttempts) {

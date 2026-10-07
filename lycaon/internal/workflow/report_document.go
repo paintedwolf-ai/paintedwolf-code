@@ -267,9 +267,15 @@ func checkClaimsCarried(report guidance.CoordinatorCompletionReport, claims []Ru
 }
 
 func checkInventoryAccounted(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) guidance.ReportDocumentIssue {
+	issue, _ := inventoryAccounting(report, facts)
+	return issue
+}
+
+// inventoryAccounting returns the accounting defect and the groups left unaccounted.
+func inventoryAccounting(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) (guidance.ReportDocumentIssue, []scanfindings.InventoryGroup) {
 	inv := facts.Inventory
 	if len(inv.Groups) == 0 {
-		return guidance.ReportDocumentIssue{}
+		return guidance.ReportDocumentIssue{}, nil
 	}
 	reviewed := len(facts.SetAsides)
 	sets := append(append([]scanfindings.SetAside(nil), facts.SetAsides...), ReportSetAsides(report)...)
@@ -280,16 +286,16 @@ func checkInventoryAccounted(report guidance.CoordinatorCompletionReport, facts 
 			Reason:    "these scan_group_ids name no group in this run's scans",
 			Offenders: sampleStrings(account.Unknown, 8),
 			Count:     len(account.Unknown),
-		}
+		}, nil
 	}
 	for i, n := range account.SetAsideCounts[reviewed:] {
 		if n == 0 {
-			return invalid("set_asides[%d] (%q) accounts for no group in this run's scans", i, report.SetAsides[i].Reason)
+			return invalid("set_asides[%d] (%q) accounts for no group in this run's scans", i, report.SetAsides[i].Reason), nil
 		}
 	}
 	left := account.Unaccounted()
 	if len(left) == 0 {
-		return guidance.ReportDocumentIssue{}
+		return guidance.ReportDocumentIssue{}, nil
 	}
 	offenders := make([]string, 0, min(len(left), 8))
 	for _, g := range left[:min(len(left), 8)] {
@@ -300,7 +306,7 @@ func checkInventoryAccounted(report guidance.CoordinatorCompletionReport, facts 
 		Reason:    fmt.Sprintf("%d of %d scanner groups have no assessment and no set-aside", len(left), len(inv.Groups)),
 		Offenders: offenders,
 		Count:     len(left),
-	}
+	}, left
 }
 
 // Every location matters when repairing a path selector for a whole group.

@@ -42,7 +42,7 @@ func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
 	if !ok || challenge.ReviewLoop == nil {
 		t.Fatal("security-survey challenge review_loop missing")
 	}
-	if challenge.ReviewLoop.VerdictSchema["verdict"] != "CHALLENGED" {
+	if challenge.ReviewLoop.VerdictSchema["verdict"] != "CHALLENGED|NEEDS_INVESTIGATION" {
 		t.Fatalf("challenge verdict_schema = %+v", challenge.ReviewLoop.VerdictSchema)
 	}
 	if len(challenge.ReviewLoop.RequiredAgents) != 1 || challenge.ReviewLoop.RequiredAgents[0] != "skeptic" {

@@ -486,7 +486,21 @@ func WorkerOutputState(task *WorkerTask) string {
 	return "waiting"
 }
 
+// WorkerTaskLegStatus is the host-graded leg outcome, or the lifecycle state while unfinished.
+func WorkerTaskLegStatus(task WorkerTask) string {
+	if !task.Status.IsTerminal() {
+		return string(task.Status)
+	}
+	if task.Status != WorkerStatusComplete {
+		return string(task.Status)
+	}
+	if task.Result == nil || task.Result.CompletionReport == nil {
+		return "unreported"
+	}
+	return task.Result.CompletionReport.LegStatus
+}
+
 // WorkerReviewSucceeded requires a completed review and its accepted full closeout.
 func WorkerReviewSucceeded(task WorkerTask) bool {
-	return task.Status == WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil && task.Result.CompletionReport.LegStatus == "complete" && !WorkerTaskOverlayOpen(&task)
+	return WorkerTaskLegStatus(task) == "complete" && !WorkerTaskOverlayOpen(&task)
 }

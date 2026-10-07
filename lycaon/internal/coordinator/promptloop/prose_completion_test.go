@@ -42,8 +42,13 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 					UserPrompt: "Read a.txt", ProfileID: "coordinator", ProseFinish: forced,
 				})
 				if content == "" || content == " \n" {
-					if !errors.Is(err, failure.ErrProviderEmptyCompletion) || result != nil {
-						t.Fatalf("empty prose result=%+v error=%v", result, err)
+					// The provider answered; the model's final-turn call is its own miss.
+					var miss *promptloop.ProseTurnToolCallError
+					if !errors.As(err, &miss) || result != nil || len(miss.Tools) != 1 || miss.Tools[0] != "read" {
+						t.Fatalf("tool-only prose result=%+v error=%v", result, err)
+					}
+					if errors.Is(err, failure.ErrProviderEmptyCompletion) {
+						t.Fatalf("model's miss attributed to the provider: %v", err)
 					}
 				} else {
 					testutil.FailErr(t, "run prose completion", err)

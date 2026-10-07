@@ -25446,6 +25446,7 @@ components:
         - checkpoint_not_found
         - approval_grant_not_found
         - session_not_idle
+        - prompt_recovery_stale
         - rewind_anchor_not_found
         - rewind_anchor_ineligible
         - rewind_blocked
@@ -25669,6 +25670,7 @@ components:
         - grounding_escalated
         - session_spend_ceiling_reached
         - prompt_failed
+        - turn_closeout_tool_call
         - host_fault
         - worker_closeout_exhausted
         - worker_execute_failed
@@ -27935,6 +27937,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
         disposition:
           type: string
           enum:
@@ -28020,8 +28023,12 @@ components:
         coverage_review:
           x-go-pointer: true
           $ref: '#/components/schemas/CoverageReview'
+        declared_leg_status:
+          type: string
+          description: Leg status the worker declared; leg_status is the host-graded status.
         leg_status:
           type: string
+          description: Host-graded leg status.
         files_modified:
           type: array
           items:
@@ -40053,6 +40060,7 @@ components:
         - session_preparation_failed
         - session_spend_ceiling_reached
         - thinking_override_unavailable
+        - turn_closeout_tool_call
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable

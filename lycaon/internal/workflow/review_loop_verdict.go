@@ -93,7 +93,12 @@ func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string
 				ReviewLoopVerdictInvalidCode, field)
 		}
 		seen := map[string]struct{}{}
+		words := def.StatusWords()
 		for i, c := range claims {
+			if strings.TrimSpace(c.Status) == "" && len(words) == 1 {
+				// One declared status word is the only valid value.
+				claims[i].Status = words[0]
+			}
 			if strings.TrimSpace(c.ID) == "" || strings.TrimSpace(c.Statement) == "" {
 				return nil, fmt.Errorf("%s: verdict field %q claim %d requires id and statement",
 					ReviewLoopVerdictInvalidCode, field, i)
@@ -106,10 +111,6 @@ func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string
 			for j, ce := range c.CitedEvidence {
 				if strings.TrimSpace(ce.Handle) == "" && strings.TrimSpace(ce.Path) == "" {
 					return nil, fmt.Errorf("%s: verdict field %q claim %q cited_evidence[%d] requires handle or path",
-						ReviewLoopVerdictInvalidCode, field, c.ID, j)
-				}
-				if strings.TrimSpace(ce.Handle) != "" && strings.TrimSpace(ce.Path) != "" {
-					return nil, fmt.Errorf("%s: verdict field %q claim %q cited_evidence[%d] must use exactly one of handle or path",
 						ReviewLoopVerdictInvalidCode, field, c.ID, j)
 				}
 				if ce.Line < 0 || (ce.Line > 0 && strings.TrimSpace(ce.Path) == "") {

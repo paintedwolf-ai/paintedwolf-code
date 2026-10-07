@@ -134,8 +134,8 @@ func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 	if exit.ReviewLoopKey != "survey_challenged" {
 		t.Fatalf("review loop key = %q", exit.ReviewLoopKey)
 	}
-	if exit.VerdictSchema["verdict"] != "CHALLENGED|NEEDS_INVESTIGATION" {
-		t.Fatalf("verdict = %q want CHALLENGED|NEEDS_INVESTIGATION", exit.VerdictSchema["verdict"])
+	if !strings.HasPrefix(exit.VerdictShape, "{verdict: CHALLENGED|NEEDS_INVESTIGATION (first is terminal)") {
+		t.Fatalf("verdict shape = %q want CHALLENGED|NEEDS_INVESTIGATION first", exit.VerdictShape)
 	}
 }
 

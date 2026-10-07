@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -149,8 +149,9 @@ func parseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) 
 		return nil, nil, nil, fmt.Errorf("verdict must be a non-empty object of schema fields")
 	}
 	verdict := make(map[string]string, len(raw))
-	for key, value := range raw {
-		encoded, err := encodeVerdictField(def.VerdictSchema[key], key, value)
+	for _, key := range slices.Sorted(maps.Keys(raw)) {
+		kind, declared := def.VerdictSchema[key]
+		encoded, err := encodeVerdictField(kind, declared, key, raw[key])
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -167,7 +168,20 @@ func parseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) 
 	return verdict, cited, urls, nil
 }
 
-func encodeVerdictField(kind, field string, value any) (string, error) {
+// encodeVerdictField checks a declared member against its declared type. An
+// undeclared member keeps its value so validation can name it as undeclared
+// instead of faulting it for a type the schema never asked for.
+func encodeVerdictField(kind string, declared bool, field string, value any) (string, error) {
+	if !declared {
+		if text, ok := value.(string); ok {
+			return text, nil
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return "", fmt.Errorf("encode verdict field %q: %w", field, err)
+		}
+		return string(raw), nil
+	}
 	switch kind {
 	case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType:
 		if _, ok := value.([]any); !ok {
@@ -222,7 +236,7 @@ func parseVerdictCitedURLs(raw any) ([]string, error) {
 }
 
 // parseVerdictCitedEvidence decodes a citation list. Each entry cites an
-// observed evidence handle or a repo path (with optional line/excerpt).
+// observed evidence handle, a repo path with optional line/excerpt, or both.
 func parseVerdictCitedEvidence(raw any) ([]api.CitationGroundingCitedEvidence, error) {
 	if raw == nil {
 		return nil, nil
@@ -256,11 +270,8 @@ func parseVerdictCitedEvidence(raw any) ([]api.CitationGroundingCitedEvidence, e
 		if ce.Handle == "" && ce.Path == "" {
 			return nil, fmt.Errorf("cited_evidence[%d] requires handle or path", i)
 		}
-		if ce.Handle != "" && ce.Path != "" {
-			return nil, fmt.Errorf("cited_evidence[%d] must use exactly one of handle or path", i)
-		}
-		if ce.Handle != "" && (ce.Line != 0 || ce.Excerpt != "") {
-			return nil, fmt.Errorf("cited_evidence[%d] line/excerpt require path, not handle", i)
+		if ce.Path == "" && (ce.Line != 0 || ce.Excerpt != "") {
+			return nil, fmt.Errorf("cited_evidence[%d] line/excerpt require path", i)
 		}
 		key := fmt.Sprintf("%s\x00%s\x00%d\x00%s", ce.Handle, ce.Path, ce.Line, ce.Excerpt)
 		if _, dup := seen[key]; dup {
@@ -290,25 +301,25 @@ func rejectUnknownKeys(values map[string]any, object string, allowed ...string) 
 	return fmt.Errorf("%s has undeclared field(s): %s", object, strings.Join(unknown, ", "))
 }
 
-// describeVerdictSchema renders the manifest verdict shape.
-func describeVerdictSchema(rl workflowdef.ReviewLoopDef) string {
+// VerdictSchemaShape renders the phase's verdict shape for prompts and refusals.
+func VerdictSchemaShape(rl workflowdef.ReviewLoopDef) string {
 	enum := VerdictEnum(rl)
-	parts := []string{fmt.Sprintf("verdict: one of %s (first value is terminal)", strings.Join(enum, "|"))}
+	parts := []string{fmt.Sprintf("verdict: %s (first is terminal)", strings.Join(enum, "|"))}
 	for _, field := range requiredVerdictFields(rl) {
 		switch strings.TrimSpace(rl.VerdictSchema[field]) {
 		case workflowdef.VerdictClaimsType:
 			parts = append(parts, fmt.Sprintf(
-				"%s: JSON array of {id, title (required when the claim is new), statement, status: one of %s, cited_evidence, answers?, scan_group_ids?}",
+				"%s: array of {id, title (new ids), statement, status: %s, cited_evidence, answers?, scan_group_ids?}",
 				field, strings.Join(rl.StatusWords(), "|")))
 			if rl.FollowupAttempts > 0 {
 				parts = append(parts, "open claims require question: {missing_fact, obligations} when registering investigation")
 			}
 			continue
 		case workflowdef.VerdictCoverageType:
-			parts = append(parts, field+": {revision, assessments: [{id, disposition: satisfied (obligation) | covered | immaterial (gap) | material_open | essential_open, reason, obligations: [affected obligation ids], cited_evidence}]} from current coverage facts; every obligation and gap requires an assessment")
+			parts = append(parts, field+": "+CoverageReviewShape)
 			continue
 		case workflowdef.VerdictSetAsidesType:
-			parts = append(parts, field+": JSON array of {reason, scan_group_ids} or {reason, scanner, paths}; [] when no group is set aside")
+			parts = append(parts, field+": array of {reason, scan_group_ids} or {reason, scanner, paths}")
 			continue
 		}
 		parts = append(parts, field+": non-empty string")
@@ -381,14 +392,14 @@ func scanGroupRejectDetails(check ScanGroupCheck) map[string]any {
 func verdictInvalidDetails(rl workflowdef.ReviewLoopDef, err error) map[string]any {
 	return map[string]any{
 		"reason":         err.Error(),
-		"verdict_schema": describeVerdictSchema(rl),
+		"verdict_schema": VerdictSchemaShape(rl),
 		"example":        VerdictExample(rl),
 		"expected_call":  describeVerdictCall(rl),
 	}
 }
 
 func describeVerdictCall(rl workflowdef.ReviewLoopDef) string {
-	return "submit_verdict(verdict=" + describeVerdictSchema(rl) +
+	return "submit_verdict(verdict=" + VerdictSchemaShape(rl) +
 		`, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])`
 }
 
@@ -420,7 +431,7 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 }
 
 // VerdictExample renders the active manifest's nested submission shape.
-func VerdictExample(def workflowdef.ReviewLoopDef) string {
+func VerdictExample(def workflowdef.ReviewLoopDef) map[string]any {
 	verdict := map[string]any{}
 	for field, kind := range def.VerdictSchema {
 		switch kind {
@@ -435,8 +446,7 @@ func VerdictExample(def workflowdef.ReviewLoopDef) string {
 	if values := VerdictEnum(def); len(values) > 0 {
 		verdict["verdict"] = values[0]
 	}
-	raw, _ := json.Marshal(map[string]any{"verdict": verdict, "cited_evidence": []map[string]string{{"handle": "<observed handle>"}}})
-	return string(raw)
+	return map[string]any{"verdict": verdict, "cited_evidence": []map[string]string{{"handle": "<observed handle>"}}}
 }
 
 // verdictRepair retains each refusal's code and facts in the same response.
@@ -448,10 +458,7 @@ type verdictRepair struct {
 func verdictRepairs(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) []verdictRepair {
 	var repairs []verdictRepair
 	if issue := out.InventoryIssue; issue != nil {
-		details := guidance.OffenderHintData(issue.Offenders)
-		details["reason"] = issue.Reason
-		details["offender_count"] = issue.Count
-		details["offenders_omitted"] = max(0, issue.Count-len(issue.Offenders))
+		details := issue.Details()
 		code := SubmitVerdictInventoryUnaccountedCode
 		if issue.Code == SubmitVerdictScansPendingCode {
 			code = SubmitVerdictScansPendingCode
@@ -467,8 +474,8 @@ func verdictRepairs(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) 
 	if out.QuestionIssue != nil {
 		repairs = append(repairs, verdictRepair{out.QuestionIssue.Code, out.QuestionIssue.Data})
 	}
-	if out.CoverageIssue != "" {
-		repairs = append(repairs, verdictRepair{ReviewLoopVerdictInvalidCode, verdictInvalidDetails(rl, fmt.Errorf("%s", out.CoverageIssue))})
+	if issue := out.CoverageIssue; issue != nil && !slices.ContainsFunc(repairs, func(r verdictRepair) bool { return r.Code == issue.Code }) {
+		repairs = append(repairs, verdictRepair{issue.Code, issue.Data})
 	}
 	return repairs
 }

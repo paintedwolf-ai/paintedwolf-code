@@ -33,11 +33,12 @@ func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
 				var id string
 				var legs []string
 				var err error
-				if pattern == "fan_out" {
+				switch pattern {
+				case "fan_out":
 					id, legs, err = o.setupFanOutDelegation(ctx, req, wf, "session", "/repo", "task", "agent", FanOutSpec{Subtasks: []string{"first", "second"}}, state)
-				} else if pattern == "pack" {
+				case "pack":
 					id, legs, err = o.setupPackDelegation(ctx, req, wf, "session", "/repo", "task", "agent", 2, nil, state)
-				} else {
+				default:
 					stages := []PipelineStage{{Name: "first", AgentProfile: "agent"}, {Name: "second", AgentProfile: "agent"}}
 					id, err = o.setupPipelineDelegation(ctx, req, "session", "/repo", stages, state)
 					legs = []string{state.stageLegs["first"], state.stageLegs["second"]}
@@ -59,9 +60,10 @@ func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
 				t.Fatalf("restored state = %+v", state)
 			}
 			for i, legID := range resumedLegs {
-				if pattern == "fan_out" {
+				switch pattern {
+				case "fan_out":
 					err = o.dispatchFanOutLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
-				} else if pattern == "pack" {
+				case "pack":
 					err = o.dispatchPackLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
 				}
 				testutil.FailErr(t, "reuse already dispatched leg", err)

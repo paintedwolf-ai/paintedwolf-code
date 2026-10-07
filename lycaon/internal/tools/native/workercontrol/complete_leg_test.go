@@ -125,7 +125,7 @@ func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
 		return workertools.CompleteLegRecord{}, rejection
 	})
 	body, err := handler(t.Context(), map[string]any{"leg_status": "complete"}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"})
-	if body != "" || err != rejection {
+	if body != "" || !errors.Is(err, rejection) {
 		t.Fatalf("host rejection became ack: %q, %v", body, err)
 	}
 }

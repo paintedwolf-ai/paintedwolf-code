@@ -227,6 +227,9 @@ const (
 	GapScansFailed          = "scans_failed"
 	GapScansMoved           = "scans_moved"
 	GapScansStanding        = "scans_standing"
+	// GapCoverageUnreviewed: the run ended before its bound scans settled, so
+	// the declared coverage review had no settled facts to be checked against.
+	GapCoverageUnreviewed = "coverage_unreviewed"
 )
 
 // ReportGap is one kind of unfinished work, counted against its whole.
@@ -266,7 +269,7 @@ func (in ReportInput) Completeness() string {
 			if !in.openClaimsAssessed() {
 				return CompletenessIncomplete
 			}
-		case GapInventoryUnaccounted, GapLegsUnfinished, GapScansFailed:
+		case GapInventoryUnaccounted, GapLegsUnfinished, GapScansFailed, GapCoverageUnreviewed:
 			return CompletenessIncomplete
 		case GapLegsPartial, GapWorkersPartial, GapScansMoved:
 			level = CompletenessMostly

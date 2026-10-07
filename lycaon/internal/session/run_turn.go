@@ -224,8 +224,9 @@ func (m *Manager) executePromptRun(
 		History:     assembly.History,
 		ProfileID:   assembly.ProfileID,
 		UserPrompt:  userPrompt,
-		HostTurn:    hostTurn,
-		ProseFinish: in.ProseFinish,
+		HostTurn:     hostTurn,
+		HostSignalID: in.hostSignalID(),
+		ProseFinish:  in.ProseFinish,
 		ToolCtx:     assembly.ToolCtx,
 		Machine:     assembly.Machine,
 	})

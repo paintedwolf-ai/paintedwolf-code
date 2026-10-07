@@ -38,3 +38,21 @@ func TestMaxCitationGroundingRetries(t *testing.T) {
 			doc.MaxCitationGroundingRetries, limits.DefaultCitationGroundingRetries)
 	}
 }
+
+func TestMaxWorkerGroundingRetries(t *testing.T) {
+	t.Parallel()
+	if got := compaction.DefaultCompactionConfig().MaxWorkerGroundingRetries; got != limits.DefaultWorkerGroundingRetries {
+		t.Fatalf("MaxWorkerGroundingRetries = %d, want %d", got, limits.DefaultWorkerGroundingRetries)
+	}
+	raw, err := config.Read(config.Compaction)
+	contractcheck.FailErr(t, "read bundled compaction.yaml", err)
+	var doc struct {
+		MaxWorkerGroundingRetries int `yaml:"max_worker_grounding_retries"`
+	}
+	contractcheck.FailErr(t, "parse bundled compaction.yaml", yaml.Unmarshal(raw, &doc))
+	if doc.MaxWorkerGroundingRetries != limits.DefaultWorkerGroundingRetries {
+		t.Fatalf("compaction.yaml max_worker_grounding_retries = %d, want %d",
+			doc.MaxWorkerGroundingRetries, limits.DefaultWorkerGroundingRetries)
+	}
+}
+

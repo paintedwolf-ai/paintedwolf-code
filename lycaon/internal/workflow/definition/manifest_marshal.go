@@ -99,6 +99,10 @@ func manifestControlsYAML(controls ManifestControls) workflowControls {
 			FindingsLabel: controls.Report.FindingsLabel,
 			Brief:         controls.Report.Brief.toYAML(),
 		}
+		if controls.Report.Retries > 0 {
+			r := controls.Report.Retries
+			out.Report.Retries = &r
+		}
 	}
 	return out
 }
@@ -160,8 +164,12 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 	if !p.OnReenter.IsZero() {
 		out.OnReenter = &onReenterYAML{InjectKick: p.OnReenter.InjectKick, ReenterLeg: p.OnReenter.ReenterLeg}
 	}
-	if p.ContentReview != nil || p.Closeout != "" {
+	if p.ContentReview != nil || p.Closeout != "" || p.CloseoutRetries > 0 {
 		out.Controls = &phaseControlsYAML{ContentReview: contentReviewToYAML(p.ContentReview), Closeout: string(p.Closeout)}
+		if p.CloseoutRetries > 0 {
+			r := p.CloseoutRetries
+			out.Controls.Retries = &r
+		}
 	}
 	if p.ParallelTask != nil {
 		out.ParallelTask = &parallelTaskYAML{

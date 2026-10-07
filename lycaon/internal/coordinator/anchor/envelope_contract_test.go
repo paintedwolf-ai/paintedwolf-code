@@ -213,6 +213,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		// Report-document repair supplies the refusal's reason, the current document fence,
 		// and whether the draft delivers its run's report.
 		"rejection_reason": true, "offenders_omitted": true, "retained_document": true, "run_report": true, "document_issues": true,
+		"offending_keys": true, "allowed_top_level_keys": true, "pinned_body_chars": true,
 		// QueueWorkerKick supplies these worker fields.
 		"agent_type": true, "leg_id": true, "phase_id": true, "cancel_reason": true,
 		"actual_chars": true, "max_chars": true,

@@ -39,9 +39,12 @@ func (m *RunManager) validateReviewSubmission(ctx context.Context, active *api.W
 		}
 	}
 	if shapeValid && ReviewLoopVerdictTerminal(rl, verdict) {
-		if coverageErr := m.checkReviewCoverage(ctx, active, rl, verdict); coverageErr != nil {
+		out.CoverageIssue, err = m.checkReviewCoverage(ctx, active, rl, verdict)
+		if err != nil {
+			return reviewValidation{}, err
+		}
+		if out.CoverageIssue != nil {
 			out.Valid = false
-			out.CoverageIssue = coverageErr.Error()
 		}
 		out.InventoryIssue, err = m.checkReviewInventory(ctx, active, rl, verdict)
 		if err != nil {

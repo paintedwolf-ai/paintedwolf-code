@@ -263,6 +263,19 @@ func (a *citationGroundingAudit) recordProseAdvisories(eval guidance.WorkerCitat
 	})
 }
 
+func (a *citationGroundingAudit) recordLineCorrections(count int) {
+	if count <= 0 {
+		return
+	}
+	a.addCheck(api.CitationGroundingCheck{
+		ID:      "line_corrections",
+		Label:   "Line corrections",
+		Status:  api.CitationGroundingCheckStatusAdvisory,
+		Kind:    api.CitationGroundingCheckKindCitation,
+		Summary: fmt.Sprintf("%d citation line(s) corrected to the observed line", count),
+	})
+}
+
 func (a *citationGroundingAudit) recordScoutSurveyCheck() (ok bool) {
 	if guidance.LedgerHasSurveyHandle(a.ev) {
 		a.passLifecycle("scout_survey", "Survey tool activity", "At least one successful survey handle in leg evidence")

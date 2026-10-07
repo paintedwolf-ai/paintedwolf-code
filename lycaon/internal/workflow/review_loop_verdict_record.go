@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -250,9 +249,10 @@ type ReviewLoopVerdictOutcome struct {
 	EvidenceKey string
 	// MissingAgents lists required reviewers without succeeded envelopes.
 	MissingAgents  []string
-	InventoryIssue *guidance.ReportDocumentIssue
-	CoverageIssue  string
-	QuestionIssue  *tools.ToolReject
+	InventoryIssue *InventoryIssue
+	// CoverageIssue is the structured refusal of a coverage assessment.
+	CoverageIssue *tools.ToolReject
+	QuestionIssue *tools.ToolReject
 	// IterationCapExceeded reports a non-terminal verdict rejected because the
 	// phase already reached iteration_cap on a prior attempt.
 	IterationCapExceeded bool

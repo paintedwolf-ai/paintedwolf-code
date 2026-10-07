@@ -3,6 +3,7 @@ package survey
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
@@ -19,11 +20,17 @@ func compileSurveyGlob(argument, pattern string) (sandbox.EntryGlob, error) {
 	return filter, nil
 }
 
-func grepExecutionError(err error) error {
+// grepExecutionError names where a timed-out search spent its budget.
+func grepExecutionError(s *grepSearch, err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return safecmd.Reject("GREP_DEADLINE_EXCEEDED", map[string]any{
-			"timeout_ms": safecmd.GrepTimeout.Milliseconds(),
-		})
+		details := map[string]any{"timeout_ms": safecmd.GrepTimeout.Milliseconds(), "files_searched": 0}
+		if s != nil {
+			details["files_searched"] = s.textScanned + s.prefilterSkipped
+			if dir, n := s.largestSubtree(); dir != "" {
+				details["largest_subtree"] = fmt.Sprintf("%s (%d files)", dir, n)
+			}
+		}
+		return safecmd.Reject("GREP_DEADLINE_EXCEEDED", details)
 	}
 	return err
 }

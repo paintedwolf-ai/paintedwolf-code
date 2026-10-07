@@ -107,6 +107,8 @@ func gapItem(g ReportGap) string {
 	switch g.Kind {
 	case GapInventoryUnaccounted:
 		return fmt.Sprintf("%d of %d scanner result groups have no assessment and no set-aside. Unassessed is not cleared.", g.Count, g.Of)
+	case GapCoverageUnreviewed:
+		return "Coverage was not reviewed: the run ended while its scans were still running, so no assessment could be checked against settled results."
 	case GapClaimsOpen:
 		return fmt.Sprintf("%s still open: %s.", plural(g.Count, "claim", "claims"), names)
 	case GapLegsUnfinished:

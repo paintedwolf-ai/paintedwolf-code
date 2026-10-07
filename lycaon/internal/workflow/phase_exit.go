@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"maps"
+	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -54,10 +54,9 @@ type PhaseExitView struct {
 	// failures: the phase work is what activates them.
 	DormantGates []string
 	// CompleteWhen is a non-gate completion expression, when the phase declares one.
-	CompleteWhen  string
-	VerdictSchema map[string]string
-	// ClaimStatuses are the status words the phase's claims may take.
-	ClaimStatuses    []string
+	CompleteWhen string
+	// VerdictShape is the rendered verdict_schema a terminal verdict must follow.
+	VerdictShape     string
 	ReviewLoopKey    string
 	ReviewLoopCap    int
 	FollowupAttempts int
@@ -99,13 +98,12 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 			out.ReviewLoopCap = 0
 		}
 		out.FollowupAttempts = phase.ReviewLoop.FollowupAttempts
-		out.VerdictExample = VerdictExample(*phase.ReviewLoop)
+		out.VerdictExample = verdictExampleJSON(*phase.ReviewLoop)
 		if len(reviewAgents) == 0 {
 			reviewAgents = dedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
 		out.ReviewAgents = append([]string(nil), reviewAgents...)
-		out.VerdictSchema = maps.Clone(phase.ReviewLoop.VerdictSchema)
-		out.ClaimStatuses = phase.ReviewLoop.StatusWords()
+		out.VerdictShape = VerdictSchemaShape(*phase.ReviewLoop)
 	case phase.HumanApproval != nil:
 		out.Kind = PhaseExitKindHumanApproval
 		out.HumanApproval = true
@@ -186,8 +184,7 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		OpenGates:           append([]string(nil), exit.OpenGates...),
 		DormantGates:        append([]string(nil), exit.DormantGates...),
 		CompleteWhen:        exit.CompleteWhen,
-		VerdictSchema:       maps.Clone(exit.VerdictSchema),
-		ClaimStatuses:       append([]string(nil), exit.ClaimStatuses...),
+		VerdictShape:        exit.VerdictShape,
 		ReviewLoopKey:       exit.ReviewLoopKey,
 		ReviewLoopCap:       exit.ReviewLoopCap,
 		FollowupAttempts:    exit.FollowupAttempts,
@@ -208,4 +205,12 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		}
 	}
 	return pe
+}
+
+func verdictExampleJSON(def workflowdef.ReviewLoopDef) string {
+	raw, err := json.Marshal(VerdictExample(def))
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }

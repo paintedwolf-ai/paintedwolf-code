@@ -24,11 +24,11 @@ func TestVerdictRepairReportsIndependentShapeErrors(t *testing.T) {
 func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{}
 	out := ReviewLoopVerdictOutcome{
-		InventoryIssue: &guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode},
+		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		MissingAgents:  []string{"skeptic"},
 		GroundingCode:  "SUBMIT_VERDICT_UNGROUNDED",
 		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
-		CoverageIssue:  "stale coverage revision",
+		CoverageIssue:  &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs(def, out)
 	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, submitVerdictQuestionInvalidCode, ReviewLoopVerdictInvalidCode}
@@ -43,10 +43,24 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 	if repairs[3].Details["question_id"] != "question/c1" {
 		t.Fatal("question subject lost in aggregate repair")
 	}
+	if repairs[4].Details["reason"] != "stale coverage revision" {
+		t.Fatal("coverage refusal lost its structured reason")
+	}
+}
+
+func TestVerdictRepairsStateEachCodeOnce(t *testing.T) {
+	out := ReviewLoopVerdictOutcome{
+		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
+		CoverageIssue:  &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
+	}
+	repairs := verdictRepairs(workflowdef.ReviewLoopDef{}, out)
+	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictScansPendingCode {
+		t.Fatalf("pending scans repeated across channels: %+v", repairs)
+	}
 }
 
 func TestVerdictInventoryRepairUsesToolCode(t *testing.T) {
-	repairs := verdictRepairs(workflowdef.ReviewLoopDef{}, ReviewLoopVerdictOutcome{InventoryIssue: &guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}})
+	repairs := verdictRepairs(workflowdef.ReviewLoopDef{}, ReviewLoopVerdictOutcome{InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}}})
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictInventoryUnaccountedCode {
 		t.Fatalf("report code escaped into verdict rejection: %+v", repairs)
 	}

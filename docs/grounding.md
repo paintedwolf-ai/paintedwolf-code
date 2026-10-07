@@ -85,6 +85,7 @@ A citation must name enough structure for the host to resolve the observation:
 |----------|------------|
 | Evidence handle | Resolves the exact observation if it belongs to the allowed evidence union |
 | Path + line/excerpt | Resolves against observed file-region evidence |
+| Handle + path | Resolves when both name the same observation; a handle that contradicts the path is refused |
 | URL | Resolves only when the URL was observed through an admitted tool path |
 | Artifact id | Resolves to a present, permitted visual or report artifact |
 
@@ -97,6 +98,8 @@ Resolution produces one of five verdicts (`internal/evidence/resolve.go`):
 - **bound**: the exact resolver bounced the citation, but the host found exactly one ledger record satisfying every structured field the claim supplied, and adopted its canonical handle;
 - **ambiguous**: more than one ledger record satisfies the claim;
 - **unverifiable**: the host cannot connect the claim to admitted evidence.
+
+Every file-reading tool renders a line as the host's numbered-line grammar (`internal/hostmarker`), and the verifiers read that same grammar back from retained bodies, so an excerpt copied from a read compares against the line's text rather than its rendered number. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
 
 Matched, traced, and bound are grounded; ambiguous and unverifiable block the strict completion paths. Binding exists because a citation can be correct and still fail an exact match (a differently normalized path, a stale ordinal), and refusing it would spend repair budget on a claim the evidence already supports. Where several records fit, the host has no basis for choosing one, and picking would manufacture a provenance the worker never established; that is why `ambiguous` is a separate verdict rather than a tie broken quietly.
 

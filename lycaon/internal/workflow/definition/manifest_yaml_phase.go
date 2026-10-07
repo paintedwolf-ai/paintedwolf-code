@@ -110,6 +110,12 @@ func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
 			}
 			def.Closeout = CloseoutGated
 		}
+		if p.Controls.Retries != nil {
+			if *p.Controls.Retries <= 0 {
+				return PhaseDef{}, fmt.Errorf("phase %q: controls.retries must be positive", id)
+			}
+			def.CloseoutRetries = *p.Controls.Retries
+		}
 	}
 	if len(p.Intake) > 0 {
 		def.Intake = make([]string, 0, len(p.Intake))
