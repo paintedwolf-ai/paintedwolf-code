@@ -10005,7 +10005,7 @@ source_files:
     lycaon-den/src/components/CriticalStopStage.tsx: 463
     lycaon-den/src/components/EngineStartupStage.tsx: 169
     lycaon-den/src/components/FileEditDiff.tsx: 69
-    lycaon-den/src/components/GitCheckout.tsx: 770
+    lycaon-den/src/components/GitCheckout.tsx: 773
     lycaon-den/src/components/GitStrip.tsx: 775
     lycaon-den/src/components/HostFolderDialog.tsx: 79
     lycaon-den/src/components/ListRowActions.tsx: 44
@@ -10034,7 +10034,7 @@ source_files:
     lycaon-den/src/components/browse/SelectionThumb.tsx: 168
     lycaon-den/src/components/chatview/ChatDestinationPicker.tsx: 256
     lycaon-den/src/components/chatview/ChatView.tsx: 1331
-    lycaon-den/src/components/chatview/Composer.tsx: 1256
+    lycaon-den/src/components/chatview/Composer.tsx: 1258
     lycaon-den/src/components/chatview/ComposerActivityIndicator.tsx: 152
     lycaon-den/src/components/chatview/ComposerChromeSlot.tsx: 209
     lycaon-den/src/components/chatview/ComposerChromeStack.tsx: 58
@@ -10045,7 +10045,7 @@ source_files:
     lycaon-den/src/components/chatview/CostSummaryPanel.tsx: 130
     lycaon-den/src/components/chatview/QueuePopover.tsx: 436
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.tsx: 96
-    lycaon-den/src/components/chatview/chat-git-binding.ts: 318
+    lycaon-den/src/components/chatview/chat-git-binding.ts: 321
     lycaon-den/src/components/chatview/chat-tabs.ts: 41
     lycaon-den/src/components/chatview/chat-workflow-state.ts: 211
     lycaon-den/src/components/chatview/composer-edit-menu.ts: 161
@@ -10402,7 +10402,7 @@ source_files:
     lycaon-den/src/components/source/inline-edit/inline-edit-scope.ts: 92
     lycaon-den/src/components/source/inline-edit/rename-card-model.ts: 43
     lycaon-den/src/components/source/inline-edit/run-editor-action.ts: 390
-    lycaon-den/src/components/source/reader/SourceReader.tsx: 381
+    lycaon-den/src/components/source/reader/SourceReader.tsx: 382
     lycaon-den/src/components/source/reader/source-line-anchors.ts: 47
     lycaon-den/src/components/source/reader/source-reader-change.ts: 26
     lycaon-den/src/components/source/reader/source-reader-document.ts: 118
@@ -15525,7 +15525,7 @@ source_files:
     scripts/redocly-version.sh: 2
     scripts/release-assemble-updater-manifest.py: 98
     scripts/release-collect-public-artifacts.py: 63
-    scripts/release-halt-plan.py: 115
+    scripts/release-halt-plan.py: 122
     scripts/release-halt.sh: 177
     scripts/release-metadata.py: 50
     scripts/release-preflight.sh: 134
@@ -15648,7 +15648,7 @@ test_directories:
     lycaon-den/src/components: 31
     lycaon-den/src/components/blueprint: 3
     lycaon-den/src/components/browse: 4
-    lycaon-den/src/components/chatview: 21
+    lycaon-den/src/components/chatview: 22
     lycaon-den/src/components/checkpoint: 15
     lycaon-den/src/components/citation: 6
     lycaon-den/src/components/first-time-tips: 1
@@ -16345,7 +16345,7 @@ test_files:
     lycaon-den/e2e/settings-layout-switch.spec.ts: 56
     lycaon-den/e2e/settings.spec.ts: 104
     lycaon-den/e2e/shortcut-help-overlay.spec.ts: 36
-    lycaon-den/e2e/sidebar-pins.spec.ts: 102
+    lycaon-den/e2e/sidebar-pins.spec.ts: 104
     lycaon-den/e2e/sidecar-cors.spec.ts: 115
     lycaon-den/e2e/skills-settings.spec.ts: 87
     lycaon-den/e2e/source-reader-scroll.spec.ts: 256
@@ -16641,7 +16641,7 @@ test_files:
     lycaon-den/src/components/CriticalStopStage.test.tsx: 594
     lycaon-den/src/components/EngineStartupStage.test.tsx: 159
     lycaon-den/src/components/FileEditDiff.test.tsx: 269
-    lycaon-den/src/components/GitStrip.test.tsx: 1200
+    lycaon-den/src/components/GitStrip.test.tsx: 1229
     lycaon-den/src/components/HostFolderDialog.test.tsx: 56
     lycaon-den/src/components/NoticeRail.test.tsx: 170
     lycaon-den/src/components/NotificationStack.test.tsx: 101
@@ -16662,7 +16662,7 @@ test_files:
     lycaon-den/src/components/browse/BrowseStagePanel.test.tsx: 116
     lycaon-den/src/components/chatview/ChatDestinationPicker.test.tsx: 125
     lycaon-den/src/components/chatview/Composer.attachments.test.tsx: 440
-    lycaon-den/src/components/chatview/Composer.focus.test.tsx: 186
+    lycaon-den/src/components/chatview/Composer.focus.test.tsx: 237
     lycaon-den/src/components/chatview/Composer.keyboard.test.tsx: 118
     lycaon-den/src/components/chatview/Composer.policy.test.tsx: 86
     lycaon-den/src/components/chatview/Composer.secrets.test.tsx: 143
@@ -16677,6 +16677,7 @@ test_files:
     lycaon-den/src/components/chatview/CostSummaryPanel.test.tsx: 170
     lycaon-den/src/components/chatview/QueuePopover.test.tsx: 320
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.test.tsx: 157
+    lycaon-den/src/components/chatview/chat-git-binding.test.ts: 140
     lycaon-den/src/components/chatview/chat-tabs.test.ts: 115
     lycaon-den/src/components/chatview/chat-workflow-state.test.ts: 182
     lycaon-den/src/components/chatview/composer-secret-mark.test.ts: 95
@@ -16942,7 +16943,7 @@ test_files:
     lycaon-den/src/components/source/inline-edit/run-editor-action.test.ts: 26
     lycaon-den/src/components/source/inline-edit/selection-action-errors.test.ts: 42
     lycaon-den/src/components/source/inline-edit/selection-action-prose.test.ts: 53
-    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 248
+    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 272
     lycaon-den/src/components/source/reader/source-line-anchors.test.ts: 25
     lycaon-den/src/components/source/reader/source-reader-change.test.ts: 51
     lycaon-den/src/components/source/reader/source-reader-document.test.ts: 34
@@ -22603,7 +22604,7 @@ test_files:
     scripts/harness/test_supervise.py: 234
     scripts/test_decide_heads_execution.py: 83
     scripts/test_stage_macos_host.py: 124
-    scripts/test_update_keys.py: 156
+    scripts/test_update_keys.py: 180
     scripts/verification_tests/__init__.py: 3
     scripts/verification_tests/support.py: 179
     scripts/verification_tests/test_advisory_execution.py: 219
@@ -22957,7 +22958,7 @@ ts_local_dependencies:
     lycaon-den/src/components/chatview/CostSummaryPanel.tsx: 7
     lycaon-den/src/components/chatview/QueuePopover.tsx: 6
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.tsx: 5
-    lycaon-den/src/components/chatview/chat-git-binding.ts: 8
+    lycaon-den/src/components/chatview/chat-git-binding.ts: 9
     lycaon-den/src/components/chatview/chat-tabs.ts: 5
     lycaon-den/src/components/chatview/chat-workflow-state.ts: 7
     lycaon-den/src/components/chatview/composer-edit-menu.ts: 10
