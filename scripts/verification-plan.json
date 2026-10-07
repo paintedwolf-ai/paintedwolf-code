@@ -712,7 +712,7 @@
       "targets": [
         "lint:vuln"
       ],
-      "minutes": 240,
+      "minutes": 60,
       "profiles": [
         "check",
         "release"
@@ -852,7 +852,7 @@
       "targets": [
         "lint:vuln:fresh"
       ],
-      "minutes": 240,
+      "minutes": 90,
       "profiles": [
         "nightly"
       ],

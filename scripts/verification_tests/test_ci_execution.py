@@ -60,8 +60,8 @@ class HostedVerificationTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
-                    if profile != "check" or row["lane"] == "webkit":
-                        self.assertEqual(row["runner"], "macos-15")
+                    # macOS hosts only the lanes that test macOS-specific behavior.
+                    self.assertEqual(row["runner"], "macos-15" if row["lane"] == "webkit" else "ubuntu-latest")
 
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})

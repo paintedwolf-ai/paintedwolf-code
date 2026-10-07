@@ -54,7 +54,7 @@ def matrix(profile, suite="all"):
             continue
         result.append({"lane": name, "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
                        "native": lane["native"],
-                       "runner": lane.get("runner", "ubuntu-latest" if profile == "check" else "macos-15")})
+                       "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
     return {"include": result}
