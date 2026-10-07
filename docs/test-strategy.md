@@ -454,10 +454,14 @@ ceiling.
 
 Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB on public
 repositories); a lane declares `macos-15` only when it tests macOS-specific
-behavior. WebKit runs on macOS so its platform check cannot silently skip the
-suite. Desktop E2E shares one reusable workflow across the merge queue and the
-nightly run, with separate staging and test deadlines. Aggregates reject
-failed, cancelled, missing, or unexpectedly skipped results.
+behavior. A lane may declare `shards`: the race lane runs as three jobs, each
+verifying every third package of the planner's sorted selection
+(`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
+three hundred others. A lane may also cap `workers` below the CPU count when
+its peak memory outgrows the runner. WebKit runs on macOS so its platform check
+cannot silently skip the suite. Desktop E2E shares one reusable workflow across
+the merge queue and the nightly run, with separate staging and test deadlines.
+Aggregates reject failed, cancelled, missing, or unexpectedly skipped results.
 
 Each catalog job reports what did not pass as a workflow annotation on the pull
 request and in the Actions summary: the stage, the Go package or task, the

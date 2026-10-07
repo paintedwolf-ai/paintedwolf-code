@@ -88,12 +88,21 @@ func (s *Store) reconcileSnapshot(
 		if err != nil {
 			return out, err
 		}
-		// Confirm absence directly when the manifest omits a tracked path.
-		if !found {
-			entry, found, err = s.snapshots.Identify(ctx, rootPath, head.Path)
+		if found {
+			same, err := s.headHoldsEntry(ctx, head, entry)
 			if err != nil {
 				return out, err
 			}
+			if same {
+				continue
+			}
+		}
+		// The manifest can predate a write recorded during its capture, so
+		// omission or disagreement is confirmed against the live file, read
+		// after the head it is compared with.
+		entry, found, err = s.snapshots.Identify(ctx, rootPath, head.Path)
+		if err != nil {
+			return out, err
 		}
 		var observed *observedFile
 		if found {

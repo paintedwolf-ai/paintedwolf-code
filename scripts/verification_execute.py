@@ -102,6 +102,19 @@ def constraint_tags(path):
     return set()
 
 
+def shard_packages(packages, shard):
+    """A hosted lane split into shards (k/N) verifies every Nth package of the sorted selection."""
+    if not shard:
+        return packages
+    index, separator, count = shard.partition("/")
+    if not (separator and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
+        raise ValueError(f"PW_GO_SHARD must be k/N with 1 <= k <= N, not {shard!r}")
+    selected = packages[int(index) - 1::int(count)]
+    if not selected:
+        raise ValueError(f"Shard {shard} selects none of {len(packages)} packages")
+    return selected
+
+
 def excluded_tier_tests(records, tiers, enabled):
     """Per package, the test files a tier tag keeps out of a stage that does not enable it."""
     out = {}
@@ -307,6 +320,7 @@ class Executor:
                 raise ValueError(f"Invalid package selection; {log}: {error}") from error
             if not packages:
                 raise ValueError(f"Package selection matched no packages; {log}")
+            packages = shard_packages(packages, os.environ.get("PW_GO_SHARD", ""))
             self.selections[key] = packages
             excluded = excluded_tier_tests(records, tier_tags(self.catalog),
                                            flag_tags(stage["options"], stage["flags"]))

@@ -36,7 +36,7 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner", "workers"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner", "workers", "shards"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
@@ -50,6 +50,8 @@ def lanes():
             raise ValueError(f"unsupported CI runner: {name}")
         if "workers" in lane and (type(lane["workers"]) is not int or not 1 <= lane["workers"] <= 8):
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
+        if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
+            raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
     for profile, gate in GATES.items():
         expected = Counter(stage["name"] for stage in expand([gate]))
         actual = Counter(stage["name"] for lane in values.values() if profile in lane["profiles"]
@@ -67,9 +69,12 @@ def matrix(profile, suite="all"):
     for name, lane in lanes().items():
         if profile not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
-        result.append({"lane": name, "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                       "native": lane["native"],
-                       "runner": lane.get("runner", "ubuntu-latest")})
+        count = lane.get("shards", 1)
+        for index in range(1, count + 1):
+            result.append({"lane": name, "shard": f"{index}/{count}" if count > 1 else "",
+                           "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
+                           "native": lane["native"],
+                           "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
     return {"include": result}
@@ -139,19 +144,25 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-def run_lane(name):
+def run_lane(name, shard=""):
     lane = lanes()[name]
+    count = lane.get("shards", 1)
+    if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
+        raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
     targets = lane["targets"]
     directory = artifact_root(ROOT) / "ci"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "run.json"
-    record = {"lane": name, "targets": targets, "started_at": time.time(), "status": "running"}
+    record = {"lane": name, "shard": shard, "targets": targets, "started_at": time.time(), "status": "running"}
     path.write_text(json.dumps(record, indent=2) + "\n")
     # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
     environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
     # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
     if "workers" in lane:
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
+    # Each shard of a split lane runs its slice of every Go stage's packages.
+    if shard:
+        environment["PW_GO_SHARD"] = shard
     # A hosted runner that runs out of memory or disk vanishes without evidence; the live log keeps these lines.
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
@@ -251,6 +262,7 @@ def main():
     plan.add_argument("--suite", default="all", choices=sorted(SUITES))
     run = commands.add_parser("run")
     run.add_argument("lane")
+    run.add_argument("--shard", default="")
     gate = commands.add_parser("gate")
     gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
                       help="comma-separated jobs this tier skips on purpose")
@@ -262,7 +274,7 @@ def main():
     if args.command == "matrix":
         print(json.dumps(matrix(args.profile, args.suite), separators=(",", ":")))
     elif args.command == "run":
-        return run_lane(args.lane)
+        return run_lane(args.lane, args.shard)
     elif args.command == "gate":
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped)
     elif args.command == "verified":

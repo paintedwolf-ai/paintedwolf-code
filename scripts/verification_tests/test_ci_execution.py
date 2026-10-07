@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import ci_verification as ci
 import verification_plan as planning
+from verification_execute import shard_packages
 
 
 class HostedVerificationTests(unittest.TestCase):
@@ -117,6 +118,31 @@ class HostedVerificationTests(unittest.TestCase):
         self.assertRegex(line, r"available \d+ MiB, swap free \d+ MiB; disk free / \d+ GiB")
         self.assertRegex(line, r"largest \S+\[\d+\] \d+ MiB")
 
+    def test_sharded_lane_expands_into_jobs_that_each_select_their_slice(self):
+        count = ci.lanes()["race"]["shards"]
+        rows = [row for row in ci.matrix("nightly", "race")["include"] if row["lane"] == "race"]
+        self.assertEqual([row["shard"] for row in rows], [f"{k}/{count}" for k in range(1, count + 1)])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("race", f"2/{count}")
+            self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], f"2/{count}")
+            for lane, shard in [("race", ""), ("race", f"{count + 1}/{count}"), ("behavior", "1/2")]:
+                with self.subTest(lane=lane, shard=shard), self.assertRaises(ValueError):
+                    ci.run_lane(lane, shard)
+
+    def test_shards_partition_the_package_selection(self):
+        packages = [f"p{n:02d}" for n in range(10)]
+        slices = [shard_packages(packages, f"{k}/3") for k in range(1, 4)]
+        self.assertEqual(sorted(p for part in slices for p in part), packages)
+        self.assertEqual(slices[0], ["p00", "p03", "p06", "p09"])
+        self.assertEqual(shard_packages(packages, ""), packages)
+        for shard in ["0/3", "4/3", "x/3", "3", "2/1"]:
+            with self.subTest(shard=shard), self.assertRaises(ValueError):
+                shard_packages(packages, shard)
+        with self.assertRaises(ValueError):
+            shard_packages(["only"], "2/2")
+
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = ci.lanes()["behavior"]["minutes"]
         with tempfile.TemporaryDirectory() as directory:
@@ -204,7 +230,7 @@ class HostedVerificationTests(unittest.TestCase):
             with patch.object(ci, "artifact_root", return_value=root), \
                     patch.object(ci.subprocess, "call", side_effect=KeyboardInterrupt), \
                     self.assertRaises(KeyboardInterrupt):
-                ci.run_lane("race")
+                ci.run_lane("stress")
             record = json.loads((root / "ci/run.json").read_text())
             self.assertEqual(record["status"], "running")
             self.assertNotIn("exit_code", record)

@@ -363,6 +363,9 @@ type hostCrawler struct {
 	drained   map[string]struct{}
 	// Coalesced completion signals wake the waiting frontier.
 	updates chan struct{}
+	// crawls tracks launched goroutines; closed refuses launches once wait begins.
+	crawls sync.WaitGroup
+	closed bool
 
 	// The discovery slot spans the first crawl through frontier completion.
 	slotOnce sync.Once
@@ -395,15 +398,21 @@ func (h *hostCrawler) launch(base string, phrases []string) {
 	}
 	key := strings.ToLower(base)
 	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
 	if _, ok := h.launched[key]; ok {
 		h.mu.Unlock()
 		return
 	}
 	h.launched[key] = struct{}{}
 	h.order = append(h.order, key)
+	h.crawls.Add(1)
 	h.mu.Unlock()
 
 	go func() {
+		defer h.crawls.Done()
 		h.ensureSlot()
 		local, ok := siteIndexCache.get(base)
 		if !ok {
@@ -422,6 +431,15 @@ func (h *hostCrawler) launch(base string, phrases []string) {
 		default:
 		}
 	}()
+}
+
+// wait refuses further launches and blocks until every launched crawl returns,
+// so no crawl outlives the search or warm pass that owns it.
+func (h *hostCrawler) wait() {
+	h.mu.Lock()
+	h.closed = true
+	h.mu.Unlock()
+	h.crawls.Wait()
 }
 
 // drain returns completed host candidates and empty-crawl roots.

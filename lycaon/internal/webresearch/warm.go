@@ -516,6 +516,7 @@ func (w *Warmer) warmSiteBases(ctx context.Context, d *directDiscoverer, query s
 		return warmProbeResult{}
 	}
 	crawler := newHostCrawlerPreSlotted(ctx)
+	defer crawler.wait()
 	phrases := append([]string{strings.ToLower(query)}, queryTokens(query)...)
 	for _, base := range bases {
 		crawler.launch(base, phrases)
@@ -552,6 +553,7 @@ func (w *Warmer) warmSeed(ctx context.Context, d *directDiscoverer, query, proje
 		return nil, warmProbeResult{}, ""
 	}
 	crawler := newHostCrawlerPreSlotted(ctx)
+	defer crawler.wait()
 	plan, err := d.pickSeedsCached(ctx, query, CurrentPeriod(), probeBudget, crawler.launch, func(ctx context.Context) (bool, error) {
 		return w.index.ReserveSeedWarm(ctx, time.Now(), time.Hour, caps.SeedWarmsPerHour)
 	})
