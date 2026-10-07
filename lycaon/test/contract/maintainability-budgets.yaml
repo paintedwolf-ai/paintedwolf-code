@@ -11835,7 +11835,7 @@ source_files:
     lycaon/internal/confine/agent_policy.go: 82
     lycaon/internal/confine/command_not_found.go: 30
     lycaon/internal/confine/command_read_habit.go: 185
-    lycaon/internal/confine/confine.go: 844
+    lycaon/internal/confine/confine.go: 845
     lycaon/internal/confine/confine_action.go: 259
     lycaon/internal/confine/confine_broker.go: 150
     lycaon/internal/confine/confine_egress.go: 748
@@ -11857,7 +11857,7 @@ source_files:
     lycaon/internal/confine/listen_grants.go: 15
     lycaon/internal/confine/log.go: 96
     lycaon/internal/confine/observation.go: 38
-    lycaon/internal/confine/package_cache_roots.go: 7
+    lycaon/internal/confine/package_cache_roots.go: 18
     lycaon/internal/confine/path_case.go: 104
     lycaon/internal/confine/path_case_darwin.go: 20
     lycaon/internal/confine/path_case_other.go: 61
@@ -15830,7 +15830,7 @@ test_directories:
     lycaon/internal/conditions: 20
     lycaon/internal/configdir: 2
     lycaon/internal/configlayout: 2
-    lycaon/internal/confine: 49
+    lycaon/internal/confine: 50
     lycaon/internal/contactsheet: 1
     lycaon/internal/contentblob: 7
     lycaon/internal/contribframe: 1
@@ -18229,6 +18229,7 @@ test_files:
     lycaon/internal/confine/skill_read_roots_test.go: 50
     lycaon/internal/confine/socket_direct_seatbelt_test.go: 389
     lycaon/internal/confine/ssh_known_hosts_test.go: 33
+    lycaon/internal/confine/toolchain_state_roots_test.go: 28
     lycaon/internal/confine/worker_branch_read_isolation_test.go: 28
     lycaon/internal/confine/write_root_alias_test.go: 41
     lycaon/internal/confine/write_root_grants_test.go: 421
