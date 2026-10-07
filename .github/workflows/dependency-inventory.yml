@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: dependency-inventory
@@ -20,7 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The deploy key is the only actor that may push to main without a pull request.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.DEPENDENCY_INVENTORY_DEPLOY_KEY }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -32,7 +35,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./task codegen:dependency-inventory:upstream
 
-      # main-protection lets GitHub Actions push this generated commit.
       - name: Commit generated files
         run: |
           set -euo pipefail
