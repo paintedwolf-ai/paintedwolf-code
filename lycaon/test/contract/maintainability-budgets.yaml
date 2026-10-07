@@ -9035,7 +9035,7 @@ source_directories:
     lycaon-den/src/attention: 3
     lycaon-den/src/blueprint: 4
     lycaon-den/src/chat: 1
-    lycaon-den/src/chat/actions: 7
+    lycaon-den/src/chat/actions: 8
     lycaon-den/src/chat/checkpoint: 11
     lycaon-den/src/chat/composer: 23
     lycaon-den/src/chat/draft: 2
@@ -9771,6 +9771,7 @@ source_files:
     lycaon-den/src/chat/actions/chat-actions.ts: 44
     lycaon-den/src/chat/actions/findings-actions.ts: 27
     lycaon-den/src/chat/actions/git-actions.ts: 376
+    lycaon-den/src/chat/actions/git-status-reads.ts: 178
     lycaon-den/src/chat/actions/git-workspace-status.ts: 56
     lycaon-den/src/chat/actions/queue-actions.ts: 111
     lycaon-den/src/chat/checkpoint/approval-display.ts: 163
@@ -16420,7 +16421,7 @@ test_files:
     lycaon-den/src/chat/actions/board-actions.test.ts: 649
     lycaon-den/src/chat/actions/findings-actions.test.ts: 60
     lycaon-den/src/chat/actions/git-actions.invalidation.test.ts: 59
-    lycaon-den/src/chat/actions/git-actions.status.test.ts: 99
+    lycaon-den/src/chat/actions/git-actions.status.test.ts: 124
     lycaon-den/src/chat/actions/git-actions.worktree.test.ts: 83
     lycaon-den/src/chat/actions/git-workspace-status.test.ts: 69
     lycaon-den/src/chat/actions/queue-actions.test.ts: 203
@@ -16677,7 +16678,7 @@ test_files:
     lycaon-den/src/components/chatview/CostSummaryPanel.test.tsx: 170
     lycaon-den/src/components/chatview/QueuePopover.test.tsx: 320
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.test.tsx: 157
-    lycaon-den/src/components/chatview/chat-git-binding.test.ts: 140
+    lycaon-den/src/components/chatview/chat-git-binding.test.ts: 250
     lycaon-den/src/components/chatview/chat-tabs.test.ts: 115
     lycaon-den/src/components/chatview/chat-workflow-state.test.ts: 182
     lycaon-den/src/components/chatview/composer-secret-mark.test.ts: 95
@@ -22684,6 +22685,7 @@ ts_local_dependencies:
     lycaon-den/src/chat/actions/chat-actions.ts: 4
     lycaon-den/src/chat/actions/findings-actions.ts: 3
     lycaon-den/src/chat/actions/git-actions.ts: 7
+    lycaon-den/src/chat/actions/git-status-reads.ts: 6
     lycaon-den/src/chat/actions/git-workspace-status.ts: 3
     lycaon-den/src/chat/actions/queue-actions.ts: 5
     lycaon-den/src/chat/checkpoint/approval-display.ts: 2
@@ -22958,7 +22960,7 @@ ts_local_dependencies:
     lycaon-den/src/components/chatview/CostSummaryPanel.tsx: 7
     lycaon-den/src/components/chatview/QueuePopover.tsx: 6
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.tsx: 5
-    lycaon-den/src/components/chatview/chat-git-binding.ts: 9
+    lycaon-den/src/components/chatview/chat-git-binding.ts: 10
     lycaon-den/src/components/chatview/chat-tabs.ts: 5
     lycaon-den/src/components/chatview/chat-workflow-state.ts: 7
     lycaon-den/src/components/chatview/composer-edit-menu.ts: 10

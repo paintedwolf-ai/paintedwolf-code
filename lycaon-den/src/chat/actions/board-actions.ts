@@ -4,7 +4,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import { valueOf, loading, loadFailed } from "../../store/load-state.ts";
 import { loadPendingCheckpointsForSessionView } from "../checkpoint/checkpoint-session-scope.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
-import { refreshGitStatus } from "./git-actions.ts";
+import { refreshGitStatus } from "./git-status-reads.ts";
 import { resolveScope } from "../../components/git-repo-scope.ts";
 import { createCoalescedAsyncScheduler } from "../../store/coalesced-async.ts";
 import {
