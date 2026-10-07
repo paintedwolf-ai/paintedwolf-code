@@ -46,6 +46,64 @@ describe("Composer", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("leaves another text field focused when session state changes but composing stays open", async () => {
+    const [status, setStatus] = createSignal<"idle" | "busy">("idle");
+    const field = document.createElement("textarea");
+    document.body.appendChild(field);
+    const { getByTestId, unmount } = render(() => (
+      <Composer
+        sidecarStatus="connected"
+        sessionId="sess-1"
+        sessionStatus={status()}
+        focusWhen="sess-1"
+        onSend={vi.fn()}
+      />
+    ));
+    await Promise.resolve();
+    expect(document.activeElement).toBe(getByTestId("chat-composer"));
+    field.focus();
+
+    setStatus("busy");
+    await Promise.resolve();
+    setStatus("idle");
+    await Promise.resolve();
+    expect(document.activeElement).toBe(field);
+
+    unmount();
+    field.remove();
+  });
+
+  it("refocuses the message field when composing unblocks, unless another text field has focus", async () => {
+    const [status, setStatus] = createSignal<"preparing" | "idle">("preparing");
+    const { getByTestId, unmount } = render(() => (
+      <Composer
+        sidecarStatus="connected"
+        sessionId="sess-1"
+        sessionStatus={status()}
+        focusWhen="sess-1"
+        onSend={vi.fn()}
+      />
+    ));
+    const input = getByTestId("chat-composer") as HTMLTextAreaElement;
+    input.blur();
+
+    setStatus("idle");
+    await Promise.resolve();
+    expect(document.activeElement).toBe(input);
+
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    setStatus("preparing");
+    await Promise.resolve();
+    field.focus();
+    setStatus("idle");
+    await Promise.resolve();
+    expect(document.activeElement).toBe(field);
+
+    unmount();
+    field.remove();
+  });
+
   it("does not re-focus on refocusPulse when the message field already has focus", async () => {
     const [pulse, setPulse] = createSignal(0);
     const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, "focus");

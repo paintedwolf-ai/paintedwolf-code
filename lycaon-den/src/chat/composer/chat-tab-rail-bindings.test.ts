@@ -26,7 +26,7 @@ function makeBindings(): ChatTabRailBindings {
       projectId: "p1",
       rootRefs: [],
       busy: () => false,
-      onRefreshRepos: () => {},
+      onRefreshRepos: async () => {},
       onScopePin: () => {},
       onSelectRepo: () => {},
       onInit: () => {},
