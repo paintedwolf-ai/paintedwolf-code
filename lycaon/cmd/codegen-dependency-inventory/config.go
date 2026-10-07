@@ -39,9 +39,9 @@ type dependabotConfig struct {
 
 // dependabotEntry is one ecosystem block that no manifest section produces.
 type dependabotEntry struct {
-	Ecosystem string `yaml:"ecosystem"`
-	Directory string `yaml:"directory"`
-	Group     string `yaml:"group"`
+	Ecosystem   string   `yaml:"ecosystem"`
+	Directories []string `yaml:"directories"`
+	Group       string   `yaml:"group"`
 }
 
 type sectionConfig struct {

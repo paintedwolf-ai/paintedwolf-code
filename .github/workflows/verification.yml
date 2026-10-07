@@ -37,7 +37,7 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   verify:
-    name: ${{ matrix.lane }}
+    name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
     needs: plan
     strategy:
       fail-fast: false
@@ -67,13 +67,14 @@ jobs:
         timeout-minutes: ${{ matrix.minutes }}
         env:
           LANE: ${{ matrix.lane }}
-        run: python3 scripts/ci_verification.py run "$LANE"
+          SHARD: ${{ matrix.shard }}
+        run: python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
 
       - uses: ./.github/actions/verification-evidence
         if: always()
         timeout-minutes: 5
         with:
-          name: verification-${{ inputs.profile }}-${{ matrix.lane }}-${{ github.run_attempt }}
+          name: verification-${{ inputs.profile }}-${{ matrix.lane }}${{ matrix.shard != '' && format('-{0}', strategy.job-index) || '' }}-${{ github.run_attempt }}
           status: ${{ job.status }}
 
   verified:
