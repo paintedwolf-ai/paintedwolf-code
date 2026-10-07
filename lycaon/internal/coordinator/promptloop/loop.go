@@ -10,6 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/events"
@@ -194,6 +196,8 @@ type PromptRunInput struct {
 	ProfileID  string
 	UserPrompt string
 	HostTurn   bool
+	// HostSignalID names the host kick a host turn delivers.
+	HostSignalID string
 	// ProseFinish is a forced closeout for the whole run.
 	ProseFinish bool
 	ToolCtx     tools.ToolContext
@@ -406,7 +410,7 @@ func (l *PromptLoop) workerLoopCeiling(ctx context.Context, sess *api.Session, s
 	} else {
 		workerLim = applyWorkerMaxToolLoops(baseLim, sess)
 	}
-	next := surface.EffectivePromptLoopIterations(workerLim, surfaceID)
+	next := max(surface.EffectivePromptLoopIterations(workerLim, surfaceID), st.repairCeiling)
 	st.progress().SetMaxToolLoops(next)
 	st.workerBudget.observe(task, completed > 0 && next > maxIter)
 	return next, st.workerBudget.holdDue(completed, next)
@@ -485,6 +489,9 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 	setup.completed = setup.state.progress().ToolLoopsUsed()
 	setup.state.progress().SetMaxToolLoops(setup.maxIter)
 	setup.state.proseFinish = in.ProseFinish
+	if setup.sess.IsWorkerChild() && in.HostSignalID == string(anchor.WorkerCitationGrounding) {
+		setup.state.repairCeiling = setup.completed + spawn.WorkerRepairRounds
+	}
 	return setup, nil
 }
 

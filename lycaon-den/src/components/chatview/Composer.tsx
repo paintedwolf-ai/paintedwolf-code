@@ -108,6 +108,7 @@ import {
 let nextSlashListboxId = 0;
 
 export type ComposerSendPayload = {
+  recovery?: import("../../api/types.ts").PromptRecovery;
   text: string;
   attachments?: PromptAttachmentPart[];
   references?: PromptReferencePart[];

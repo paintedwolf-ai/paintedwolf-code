@@ -5,7 +5,9 @@ import "github.com/lycaon/lycaon/pkg/api"
 // ReportWire copies the internal validated report into its durable/wire shape.
 func ReportWire(in WorkerCompletionReport) *api.WorkerCompletionReport {
 	out := &api.WorkerCompletionReport{
-		LegStatus: in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
+		CoverageReview:    in.CoverageReview,
+		DeclaredLegStatus: in.DeclaredLegStatus,
+		LegStatus:         in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),
 		RemainingRisk:     append([]string(nil), in.RemainingRisk...),
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,
@@ -33,7 +35,9 @@ func ReportFromWire(in *api.WorkerCompletionReport) WorkerCompletionReport {
 		return WorkerCompletionReport{}
 	}
 	out := WorkerCompletionReport{
-		LegStatus: in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
+		CoverageReview:    in.CoverageReview,
+		DeclaredLegStatus: in.DeclaredLegStatus,
+		LegStatus:         in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),
 		RemainingRisk:     append([]string(nil), in.RemainingRisk...),
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,

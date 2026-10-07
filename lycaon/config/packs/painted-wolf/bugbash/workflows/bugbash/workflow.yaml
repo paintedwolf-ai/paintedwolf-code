@@ -83,6 +83,7 @@ phases:
     complete_when: closeout_gates_passed
     controls:
       closeout: gated
+      retries: 4
     next: done
   - id: done
     activity_label: Done

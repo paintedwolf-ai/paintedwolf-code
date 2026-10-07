@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
@@ -15,6 +16,8 @@ import (
 // SubmitVerdictScanGroupUnknownCode rejects a verdict whose claims cite
 // scanner groups outside the run's inventory.
 const SubmitVerdictScanGroupUnknownCode = "SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN"
+
+const SubmitVerdictScansPendingCode = "SUBMIT_VERDICT_SCANS_PENDING"
 
 // ScanInventory reads the scans a run's review is accountable for.
 type ScanInventory interface {
@@ -53,22 +56,18 @@ func LoadRunInventory(ctx context.Context, inv ScanInventory, runID string) (Run
 	return out, nil
 }
 
-// ScanGroupCheck is how a set of cited group ids stands against a run's
-// inventory.
+// ScanGroupCheck identifies citations outside the run's scanner groups.
 type ScanGroupCheck struct {
 	// Unknown ids name no group in the settled inventory.
 	Unknown []string
-	// ScanIDs are cited ids that name a scan, with that scan's groups the run
-	// inventory holds: the ids the citation should have used.
+	// ScanIDs maps misused scan ids to their groups in this run.
 	ScanIDs map[string][]string
 }
 
 // OK reports whether every cited id names a group the run holds.
 func (c ScanGroupCheck) OK() bool { return len(c.Unknown) == 0 && len(c.ScanIDs) == 0 }
 
-// CheckScanGroups classifies cited group ids against the run's inventory. An
-// id that names a scan is always wrong; an id that names nothing is wrong once
-// the bound scans are terminal.
+// Unknown group ids become invalid once the run's scans settle.
 func CheckScanGroups(ctx context.Context, inv ScanInventory, runID string, cited []string) (ScanGroupCheck, error) {
 	var out ScanGroupCheck
 	if inv == nil || len(cited) == 0 {
@@ -184,4 +183,43 @@ func (m *RunManager) ActiveRunOwnsScanEvidence(ctx context.Context, sessionID st
 		}
 	}
 	return false
+}
+
+// checkReviewInventory checks the proposed verdict before its phase can settle.
+func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*InventoryIssue, error) {
+	if !def.RequireInventoryAccounted {
+		return nil, nil
+	}
+	inventory, err := LoadRunInventory(ctx, m.Inventory, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !inventory.Settled {
+		return &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}}, nil
+	}
+	manifest, err := m.manifestForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	var phases []PhaseVerdict
+	for _, prior := range ReviewVerdicts(ctx, m, run, manifest) {
+		if prior.Phase != run.CurrentPhase {
+			phases = append(phases, prior)
+		}
+	}
+	phases = append(phases, PhaseVerdict{
+		Phase: run.CurrentPhase, Def: def,
+		Record: evidence.Record{Artifacts: verdictArtifacts(verdict, nil, nil)},
+	})
+	issue, unaccounted := inventoryAccounting(guidance.CoordinatorCompletionReport{}, ReportDocumentFacts{
+		Claims: ReconcileClaims(phases), SetAsides: RunSetAsides(phases), Inventory: inventory,
+	})
+	if issue.Code == "" {
+		return nil, nil
+	}
+	out := &InventoryIssue{ReportDocumentIssue: issue, Unaccounted: unaccounted}
+	if len(unaccounted) > 0 {
+		out.Regressed = m.noteInventoryShortfall(run.ID, run.CurrentPhase, unaccounted)
+	}
+	return out, nil
 }

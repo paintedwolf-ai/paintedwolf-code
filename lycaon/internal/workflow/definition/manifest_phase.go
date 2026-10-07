@@ -122,12 +122,15 @@ type BlueprintDef struct {
 
 // ReviewLoopDef defines a bounded parallel review cycle.
 type ReviewLoopDef struct {
-	ReconcilesPhase      string
-	IncludeScanInventory bool
-	EvidenceKey          string
-	IterationCap         int
-	VerdictSchema        map[string]string
-	RequiredAgents       []string
+	CoverageReviewers         []string
+	FollowupAttempts          int
+	ReconcilesPhase           string
+	RequireInventoryAccounted bool
+	IncludeScanInventory      bool
+	EvidenceKey               string
+	IterationCap              int
+	VerdictSchema             map[string]string
+	RequiredAgents            []string
 	// IfSpawnable are reviewers required only when the turn roster can spawn them
 	// at phase enter. The host snapshots that roster; a later Settings flip does
 	// not change the sojourn.
@@ -159,6 +162,7 @@ type PhaseDef struct {
 	BindParallelGroup  []string
 	ContentReview      *PhaseContentReview
 	Closeout           CloseoutPolicy
+	CloseoutRetries    int
 	ParallelTask       *ParallelTask
 	Fanout             FanoutOptions
 	TouchPaths         []string
@@ -260,6 +264,8 @@ type ReportControls struct {
 	// Brief is the rating the report's first page states. Nil when the
 	// workflow rates nothing, and the brief states completeness alone.
 	Brief *Brief
+	// Retries sets the closeout retry limit for report phases when unconfigured per-phase.
+	Retries int
 }
 
 // ManifestControls holds workflow-level control knobs from YAML.
@@ -337,6 +343,9 @@ func MergePhaseDef(parent, child PhaseDef) PhaseDef {
 	if child.Closeout != "" {
 		out.Closeout = child.Closeout
 	}
+	if child.CloseoutRetries > 0 {
+		out.CloseoutRetries = child.CloseoutRetries
+	}
 	if child.ParallelTask != nil {
 		out.ParallelTask = &ParallelTask{
 			MaxWorkers:      child.ParallelTask.MaxWorkers,
@@ -381,13 +390,7 @@ func MergePhaseDef(parent, child PhaseDef) PhaseDef {
 		}
 	}
 	if child.ReviewLoop != nil {
-		out.ReviewLoop = &ReviewLoopDef{
-			EvidenceKey:    child.ReviewLoop.EvidenceKey,
-			IterationCap:   child.ReviewLoop.IterationCap,
-			VerdictSchema:  copyStringMap(child.ReviewLoop.VerdictSchema),
-			RequiredAgents: append([]string(nil), child.ReviewLoop.RequiredAgents...),
-			IfSpawnable:    append([]string(nil), child.ReviewLoop.IfSpawnable...),
-		}
+		out.ReviewLoop = cloneReviewLoop(child.ReviewLoop)
 	}
 	if child.DepthParam != "" {
 		out.DepthParam = child.DepthParam
@@ -408,8 +411,14 @@ func MergePhaseDef(parent, child PhaseDef) PhaseDef {
 // PhaseForRun returns the phase contract effective for a root or invoked run.
 func (m Manifest) PhaseForRun(run *api.WorkflowRun, id string) (PhaseDef, bool) {
 	def, ok := m.PhaseByID(id)
-	if !ok || !RunHasParent(run) || strings.TrimSpace(def.ChildCompleteWhen) == "" {
-		return def, ok
+	if !ok {
+		return def, false
+	}
+	if def.CloseoutRetries == 0 && m.Controls.Report != nil && m.Controls.Report.Retries > 0 && PhaseHasGate(def, "topology_report_delivered") {
+		def.CloseoutRetries = m.Controls.Report.Retries
+	}
+	if !RunHasParent(run) || strings.TrimSpace(def.ChildCompleteWhen) == "" {
+		return def, true
 	}
 	def.CompleteWhen = strings.TrimSpace(def.ChildCompleteWhen)
 	def.Gates = append([]string(nil), def.ChildGates...)

@@ -1,0 +1,233 @@
+id: security-survey
+version: 1.0.0
+retired: true
+name: Security
+description: Survey a project against its threat model.
+trigger: /security-survey
+request:
+  question: What should the security review focus on?
+  default: Review the project broadly against its threat model, trust boundaries, and exposed attack surface.
+icon: shield
+featured: true
+requires_repo: true
+initial_posture: vet
+agents:
+  - { id: coordinator, tools: all }
+  - { id: security-reviewer, tools: profile }
+  - { id: skeptic, tools: profile }
+  - { id: web-researcher, tools: profile }
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+  - config/packs/painted-wolf/platform/host/posture-rules/vet.yaml
+injects:
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: plan
+      workflow: security-survey
+    effect: inform
+    render: coordinator-security-plan
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: execute
+      workflow: security-survey
+    effect: inform
+    render: coordinator-security-execute
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: claims
+      workflow: security-survey
+    effect: inform
+    render: coordinator-security-claims
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: challenge
+      workflow: security-survey
+    effect: inform
+    render: coordinator-security-challenge
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: report
+      workflow: security-survey
+    effect: inform
+    render: coordinator-security-synthesis
+    tier: workflow
+phases:
+  - id: ingest
+    activity_label: Collecting security scan results
+    coordinator_surface: observe_investigate
+    surface_template: agents/coordinator-surface-vet.md
+    explain:
+      summary: A full security scan runs first
+      body: >-
+        The review starts with a full security scan, so every later step works
+        from real scanner results instead of guesses. You don't need to do
+        anything. When the scan finishes, the survey is planned around what
+        it found.
+    on_enter:
+      obligations:
+        - kind: scan
+          categories: [security]
+          full: true
+          gate: complete
+    complete_when: gates_satisfied
+    gates: ["obligation_settled:scan"]
+    next: plan
+  - id: plan
+    activity_label: Planning the security survey
+    coordinator_surface: observe_plan
+    surface_template: agents/coordinator-surface-vet.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [fanout_planned]
+    fanout:
+      require_threat_model: true
+      max_attempts: 2
+    advance:
+      when_gate_met: coordinator
+    controls:
+      closeout: gated
+    next: execute
+  - id: execute
+    activity_label: Surveying the project
+    coordinator_surface: survey_execute
+    surface_template: agents/coordinator-surface-vet.md
+    parallel_task:
+      max_workers: 5
+      max_read_workers: 5
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [worker_cycle_ready]
+    controls:
+      closeout: gated
+    next: claims
+  - id: claims
+    activity_label: Naming the candidate claims
+    coordinator_surface: review_adjudicate
+    surface_template: agents/coordinator-surface-vet.md
+    review_loop:
+      evidence_key: survey_claims
+      iteration_cap: 1
+      verdict_schema:
+        verdict: CLAIMED
+        threat_model: string
+        claims: claims
+      claim_statuses:
+        claimed: open
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [evidence_passed:survey_claims]
+    next: challenge
+  - id: challenge
+    activity_label: Challenging the claims
+    coordinator_surface: review_adjudicate
+    surface_template: agents/coordinator-surface-vet.md
+    review_loop:
+      evidence_key: survey_challenged
+      include_scan_inventory: true
+      reconciles_phase: claims
+      iteration_cap: 1
+      required_agents: [skeptic]
+      if_spawnable: [web-researcher]
+      verdict_schema:
+        verdict: CHALLENGED
+        challenges: claims
+        set_asides: set_asides
+      claim_statuses:
+        survives: held
+        refuted: failed
+        unresolved: open
+      brief_label: Second opinion
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [evidence_passed:survey_challenged]
+    next: report
+  - id: report
+    activity_label: Synthesizing the findings
+    coordinator_surface: observe_synthesis
+    surface_template: agents/coordinator-surface-vet.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [topology_report_delivered]
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host
+  report:
+    enabled: true
+    brief:
+      question: How serious is it?
+      dimensions:
+        - id: reachable
+          label: Reachable
+          question: Does untrusted input reach the flawed code?
+          allow_unknown: true
+          values:
+            - {id: reachable, label: "Yes"}
+            - {id: app_window, label: From the app window}
+            - {id: not_reachable, label: "No"}
+        - id: outcome
+          label: Worst outcome
+          question: What happens if someone uses it?
+          values:
+            - {id: none, label: None}
+            - {id: limited_misuse, label: Limited misuse}
+            - {id: degraded, label: Service degraded}
+            - {id: data_exposed, label: Data exposed}
+            - {id: code_runs, label: Code runs}
+        - id: attacker
+          label: Attacker needs
+          question: Who would have to do it?
+          values:
+            - {id: anyone_remote, label: Anyone remote, phrase: anyone who can reach it over the network could use it}
+            - {id: project_files, label: Project files, phrase: someone who can get a crafted file into the project could use it}
+            - {id: local_user, label: Local user, phrase: only someone already signed in to this computer could use it}
+            - {id: already_inside, label: Already inside, phrase: only someone already in control of the app could use it}
+            - {id: not_applicable, label: Not applicable}
+      basis: [attacker]
+      levels:
+        - label: Critical
+          answer: Critical risk
+          means: Act now.
+          tone: critical
+          when:
+            - {reachable: [reachable], outcome: [code_runs, data_exposed], attacker: [anyone_remote]}
+        - label: High
+          answer: High risk
+          means: Fix before the next release.
+          tone: high
+          when:
+            - {reachable: [reachable], outcome: [code_runs, data_exposed], attacker: [project_files, local_user]}
+        - label: Moderate
+          answer: Moderate risk
+          means: A real flaw exists. Fix it on a normal schedule; it is not an emergency.
+          tone: medium
+          when:
+            - {reachable: [reachable, app_window], outcome: [code_runs, data_exposed], attacker: [already_inside]}
+            - {reachable: [reachable], outcome: [degraded], attacker: [anyone_remote]}
+        - label: Low
+          answer: Low risk
+          means: Minor issues only. Nothing urgent.
+          tone: low
+          when:
+            - {reachable: [reachable, app_window], outcome: [degraded, limited_misuse, code_runs, data_exposed]}
+        - label: None
+          answer: No known risk
+          means: Nothing found that needs action.
+          tone: good

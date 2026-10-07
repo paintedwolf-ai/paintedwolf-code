@@ -19,7 +19,8 @@ func (l *LoopEngine) matchesActiveWait(ctx context.Context, sessionID string, pe
 	}
 	_, matched := waitConditionForWake(l.activeWaitTriggers(sessionID), waitMatchInput{
 		Wake: pending.wake, CompletingJobID: pending.completingJobID, ProcessHandle: pending.legID,
-		ProcessHandles: l.ActiveProcessHandles(sessionID), CycleIdle: l.workerCycleIdle(ctx, sessionID, pending.completingJobID),
+		ProcessHandles: l.ActiveProcessHandles(sessionID), WorkerHandles: l.activeWorkerHandles(sessionID),
+		CycleIdle: l.workerCycleIdle(ctx, sessionID, pending.completingJobID),
 		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, pending.env), NeedsDecision: pending.env.HasWorkerDecision(),
 	})
 	return matched

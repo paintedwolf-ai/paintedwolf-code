@@ -32,11 +32,12 @@ func CitationsRequiredFamily(code string) bool {
 }
 
 // GroundingRetryBypassesStuckDetection reports codes where the model can fix the
-// offender by fetching or searching the URL, so repeating the same URL must not
-// exhaust the retry budget early.
+// offender by fetching or searching the URL, or adjusting its report document fence,
+// so repeating the same unread member or URL must not exhaust the retry budget early.
 func GroundingRetryBypassesStuckDetection(code string) bool {
 	switch strings.TrimSpace(code) {
-	case InvestURLNotObservedCode, SynthURLNotObservedCode, WorkerURLNotObservedCode:
+	case InvestURLNotObservedCode, SynthURLNotObservedCode, WorkerURLNotObservedCode,
+		ReportFenceUnreadableCode, ReportDocumentInvalidCode, ReportClaimUnreportedCode, ReportInventoryUnaccountedCode:
 		return true
 	default:
 		return false

@@ -3,6 +3,7 @@ package workercloseout
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -15,10 +16,10 @@ import (
 )
 
 func citationGroundingMaxRetries(opts WorkerSummaryFinalizeOpts) int {
-	if opts.MaxCitationGroundingRetries > 0 {
-		return opts.MaxCitationGroundingRetries
+	if opts.MaxGroundingRetries > 0 {
+		return opts.MaxGroundingRetries
 	}
-	return limits.DefaultCitationGroundingRetries
+	return limits.DefaultWorkerGroundingRetries
 }
 
 func boundCitationGroundingReport(
@@ -55,6 +56,7 @@ func boundCitationGroundingReport(
 	if err != nil {
 		return report, "", workercompletion.WorkerSummaryEvalResult{}, err
 	}
+	report = eval.Report
 	if eval.Status == "complete" {
 		return report, "", eval, nil
 	}
@@ -71,10 +73,6 @@ func boundCitationGroundingReport(
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if opts.decisionPending(ctx, childSessionID) {
 			return report, "decision_pending", eval, nil
-		}
-		// Different rejection codes share the grounding budget.
-		if opts.RecordGroundingFriction != nil && opts.RecordGroundingFriction(ctx, childSessionID).Exhausted() {
-			return hostAssembleWorkerExit(ctx, report, opts, childSessionID, eval)
 		}
 		reject, err := eval.FormatFeedback(ctx, opts.WorkflowHints)
 		if err != nil {
@@ -108,6 +106,9 @@ func boundCitationGroundingReport(
 		// Parse only rows produced by this retry.
 		parsed, reportID, ok := workercompletion.LastCompleteLegReport(msgs[min(retryStart, len(msgs)):])
 		if !ok {
+			if len(msgs) <= retryStart {
+				slog.WarnContext(ctx, "worker grounding retry produced no model turn", "session", childSessionID, "attempt", attempt)
+			}
 			return hostAssembleWorkerExit(ctx, report, opts, childSessionID, eval)
 		}
 
@@ -121,6 +122,7 @@ func boundCitationGroundingReport(
 		if err != nil {
 			return report, "", workercompletion.WorkerSummaryEvalResult{}, err
 		}
+		report = eval.Report
 		if eval.Status == "complete" {
 			return report, joinProvenance("grounding_retry", fmt.Sprintf("attempt_%d", attempt)), eval, nil
 		}

@@ -36,7 +36,7 @@ schema:
             maxItems: 8
             uniqueItems: true
             items: {type: string, minLength: 1}
-            description: process_done only; omit handles for all live command jobs.
+            description: process_done command handles or next_worker_done task ids; omit to wake on any.
           url: {type: string, description: http_ready only; required absolute HTTP(S) health URL.}
           method: {type: string, enum: [GET, HEAD], default: GET, description: http_ready only; probe method.}
           status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: http_ready only; lowest satisfying status.}

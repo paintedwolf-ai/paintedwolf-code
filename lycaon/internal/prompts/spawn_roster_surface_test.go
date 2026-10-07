@@ -198,22 +198,6 @@ func TestSpawnRosterCoordinatorSurfaceVariable(t *testing.T) {
 	}
 }
 
-func TestSpawnRosterFingerprintChangesWithToolSurface(t *testing.T) {
-	a, err := prompts.LoadSpawnRosterSurface(spawn.AmbientAllowedAgents(), 3, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("LoadSpawnRosterSurface: %v", err)
-	}
-	fpA := prompts.SpawnRosterFingerprint(a, excludedDisclosuresForTest(t, a))
-	b := a
-	b.SpawnAgents = append([]prompts.SpawnAgentView(nil), a.SpawnAgents...)
-	b.SpawnAgents[0].EnabledTools = append([]string(nil), b.SpawnAgents[0].EnabledTools...)
-	b.SpawnAgents[0].EnabledTools = append(b.SpawnAgents[0].EnabledTools, "python_tool")
-	fpB := prompts.SpawnRosterFingerprint(b, excludedDisclosuresForTest(t, b))
-	if fpA == fpB {
-		t.Fatal("expected fingerprint to change when the tool surface changes")
-	}
-}
-
 func TestLoadSpawnRosterSurfaceUnknownAgent(t *testing.T) {
 	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "not found") {

@@ -15,6 +15,7 @@ const baseWorkerSummaryMaxChars = 16384
 var (
 	DefaultWorkerSummaryMaxChars    int
 	DefaultCitationGroundingRetries int
+	DefaultWorkerGroundingRetries   int
 	DefaultGroundingRejectsPerTurn  int
 	DefaultGroundingRejectsPerCycle int
 	DefaultCloseoutStallToolTurns   int
@@ -26,6 +27,7 @@ var (
 type bundledCompactionLimitsYAML struct {
 	MaxWorkerSummaryChars           int `yaml:"max_worker_summary_chars"`
 	MaxCitationGroundingRetries     int `yaml:"max_citation_grounding_retries"`
+	MaxWorkerGroundingRetries       int `yaml:"max_worker_grounding_retries"`
 	MaxGroundingRejectsPerTurn      int `yaml:"max_grounding_rejects_per_turn"`
 	MaxGroundingRejectsPerCycle     int `yaml:"max_grounding_rejects_per_cycle"`
 	MaxToolTurnsAfterCitationReject int `yaml:"max_tool_turns_after_citation_reject"`
@@ -46,6 +48,7 @@ func ensureBundledCompactionLimits() {
 			return
 		}
 		if doc.MaxCitationGroundingRetries <= 0 ||
+			doc.MaxWorkerGroundingRetries <= 0 ||
 			doc.MaxGroundingRejectsPerTurn <= 0 ||
 			doc.MaxGroundingRejectsPerCycle <= 0 ||
 			doc.MaxToolTurnsAfterCitationReject <= 0 ||
@@ -59,6 +62,7 @@ func ensureBundledCompactionLimits() {
 			DefaultWorkerSummaryMaxChars = baseWorkerSummaryMaxChars
 		}
 		DefaultCitationGroundingRetries = doc.MaxCitationGroundingRetries
+		DefaultWorkerGroundingRetries = doc.MaxWorkerGroundingRetries
 		DefaultGroundingRejectsPerTurn = doc.MaxGroundingRejectsPerTurn
 		DefaultGroundingRejectsPerCycle = doc.MaxGroundingRejectsPerCycle
 		DefaultCloseoutStallToolTurns = doc.MaxToolTurnsAfterCitationReject

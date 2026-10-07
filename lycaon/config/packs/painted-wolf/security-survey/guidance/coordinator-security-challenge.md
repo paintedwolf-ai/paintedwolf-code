@@ -1,21 +1,22 @@
-Challenge stamped claims and independently assess run-bound dependency advisories. Preserve the original user ask.
+Challenge stamped claims and run-bound dependency advisories. Preserve the user ask. Preserve user limits in `brief.constraints`. If required review conflicts, `ask_user` before dispatch; available reviewers grant no exception.
 
-Workers start cold: brief them on the threat model and numbered claims. Preserve user limits in `brief.constraints`. If required review conflicts, `ask_user` before dispatch; available reviewers grant no exception.
+1. Brief `skeptic` (`scope.mode: read`) on the threat model and claims. Require the strongest evidence-backed case against each: revisit defaults, alternate callers, enforcement, errors, and bypasses. A control helper's name proves nothing. `done_when`: per-claim survives/refuted with observed `path:line`. Assign code-only applicability questions here.
+{% if spawnable_reviewers %}2. In the same assistant turn, brief `web-researcher` on claims and independent dependency review. The host attaches run-bound groups; page through `scan_query`, not just its sample. Check coordinates, published fixes, primary sources, and applicability. Return assessed group ids, conclusions, uncertainty, and verbatim fetched URLs. Coordinator omissions remain in scope. It cannot read project code.
+{% else %}2. Web research is off; do not dispatch it. Retain currency as a report coverage gap.
+{% endif %}3. Wait for reviewer results, then reconcile the claims and current coverage facts. Local dependency imports and reachability require repository evidence; web research establishes advisory facts and prerequisites.
+{% if review_followup_attempts %}
+For each unresolved claim, submit `NEEDS_INVESTIGATION` with `question: {missing_fact, obligations: [affected host obligation ids]}` on that claim. Use the returned question id verbatim as `workflow_work_id`; preserve its registered scope. Dispatch a focused read task for the missing fact, carrying existing evidence and user constraints; then dispatch `skeptic`, appending `/review` to that work id, to reassess the result. Reuse completed reviews whose inputs still apply.
 
-1. Dispatch `skeptic` with `scope.mode: read` to argue the strongest evidence-backed case **against each claim** under the stamped threat model. Require it to revisit constructors/defaults, alternate callers, physical enforcement points, error paths, and bypass routes; the existence or name of an intended-control helper does not refute a claim. Per-claim `survives` / `refuted`. `done_when` is that verdict list plus `path:line` sources. It also answers questions only the code settles, such as whether a flagged package is imported.
-{% if spawnable_reviewers %}
-2. In the **same assistant turn**, dispatch `web-researcher` to check claim currency and independently assess dependency advisories. The host attaches run-bound groups to the assignment. Page through the inventory with `scan_query`; the initial sample may be incomplete. Check affected coordinates, published fixes, current primary sources and applicability. Return each assessed group id, its conclusion, unresolved questions, and verbatim fetched URLs. An advisory omitted by the coordinator is still in scope. It cannot read the project.
-{% else %}
-2. Web research is off this turn — do not `task(web-researcher)`. Currency stays a coverage caveat for the report.
+Each question allows {{ review_followup_attempts }} completed investigation attempts; provider failures and rejected calls do not consume them. Assess every registered question in coverage. An open question cannot be `covered`; `immaterial` needs evidence bounding its consequences. Material or essential uncertainty also leaves its affected obligations open. Submit `CHALLENGED` only after resolution, evidenced immateriality, exhausted investigation, or a host-recorded blocker.
 {% endif %}
-3. Call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])`. Then record the outcome per claim:
 
-   `submit_verdict(verdict={"verdict": "CHALLENGED", "challenges": [{"id": "c1", "status": "survives", "statement": "…", "cited_evidence": [{"path": "…", "line": 12}]}], "set_asides": []}, cited_evidence=[…]{% if spawnable_reviewers %}, cited_urls=[…]{% endif %})`
+`challenges` needs one entry per stamped id; independent advisory assessments need new ids and titles. Use status {{ claim_statuses|join:" | " }}, evidence, and uncertainty. Preserve assessed `scan_group_ids` (`group:…`, never scan ids); listing a group is not assessment. Missing outcomes stay unresolved.
 
-   `challenges` is a JSON array with one entry per stamped claim id, plus independent advisory assessments with new ids and a `title`. Use `status`: {{ claim_statuses|join:" | " }}; explain the evidence and remaining uncertainty. Include `scan_group_ids` (`group:…`, never a scan id) for assessed inventory groups and preserve those links from earlier claims. Do not claim to have assessed groups merely because they were listed. Missing outcomes remain unresolved in the report. Put groups that cannot change the rating, such as test fixtures, in `set_asides` as `{scanner, paths, reason}` or `{scan_group_ids, reason}`; the report inherits them. Scanners with zero findings need no set-asides.{% if rating_questions %} For each flaw claim, restate `answers` as the evidence leaves them (`unknown` only where open):
-{{ rating_questions }}{% endif %} `cited_evidence` is the reviewer's observed `path:line`. The host checks reviewer envelopes and citation provenance, not conclusion truth. Include reviewer evidence{% if spawnable_reviewers %} and verbatim fetched URLs in `cited_urls`{% endif %}; correct rejected references without inventing replacements.
-
-Leave severity and vulnerability / hardening classification to the report.
+Inherited claim links and set-asides already count. Account for remaining groups before terminal submission. Select whole groups with `{scanner, paths, reason}` or explicit `{scan_group_ids, reason}`; the reason must cover every selected group.
+{% if rating_questions %}Restate each flaw's `answers` from the evidence, using `unknown` only where open:
+{{ rating_questions }}
+{% endif %}
+Cite reviewer-observed paths/lines{% if spawnable_reviewers %} and verbatim fetched URLs{% endif %}; repair rejected references without inventing replacements. Provenance checks do not decide truth. The report assigns severity. The host advances on the terminal verdict.
 
 {% if review_verdict and review_verdict.survey_claims %}
 **Stamped claims**
@@ -29,5 +30,3 @@ Threat model: {{ review_verdict.survey_claims.threat_model }}
 {% elif topology_output %}
 {{ topology_output }}
 {% endif %}
-
-The host advances on a terminal `submit_verdict` — do not call the phase-advance tool.

@@ -1,7 +1,7 @@
 <!-- lycaon-workflow-runtime:v1 -->
 ## Workflow
 
-Workflows never override user limits: `ask_user` before conflicting action. `topology` is the declared shape; each **gate leaf** is a required phase condition.
+User limits apply: `ask_user` before conflicting action. `topology` defines the shape; each **gate leaf** must pass.
 
 {% if workflow_id %}- **workflow**: `{{ workflow_id }}`{% if workflow_version %}@{{ workflow_version }}{% endif %}
 {% endif %}{% if run_id %}- **run_id**: `{{ run_id }}`
@@ -55,8 +55,8 @@ When no phase work is required below, work the user's request directly.
 This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_agents %}
 1. Dispatch every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) as `task` legs in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each successful envelope.
-{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_schema %} with this required `verdict_schema`: `{{ phase_exit.verdict_schema }}` (first verdict value is terminal; fields typed `claims` are arrays, possibly empty{% if phase_exit.claim_statuses %} (`status`: {{ phase_exit.claim_statuses|join:"|" }}; new ids need `title`){% endif %}; others are non-empty strings){% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
-{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}
+{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_shape %} with `verdict` shaped `{{ phase_exit.verdict_shape }}`; arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.verdict_example %} Nested argument shape: `{{ phase_exit.verdict_example }}`.{% endif %}{% if phase_exit.review_loop_key %}
+{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; dispatch their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
 End the turn. The user approves the bound document themselves — chat prose is not approval, and `workflow_advance` will not stand in for it. Treat any message they send meanwhile as revision feedback on that document.
 {% elif phase_exit.kind == "invoke" %}
@@ -101,7 +101,7 @@ Depth parameter: `{{ phase_exit.depth_param }}`.
 
 This workflow phase delivers a report document. Write for readers outside the chat: third person, present tense, named subject.
 
-Answer in Markdown, then end with one `json` fence of the report's fields, not a tool call. This is the fence's whole shape; the host reads no other member, and `ask` and `set_asides` appear once, at the top level:
+Answer in Markdown, then end with one `json` fence of the report's fields, not a tool call. This is the fence's whole shape; the host reads no other member, and `ask` and `set_asides` appear once, at the top level. Omit optional fields that have no value rather than setting them to null or empty strings:
 
 ```json
 {
@@ -127,9 +127,17 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 }
 ```
 
-- `findings` are your conclusions, most severe first; scanner rows are carried separately. Each has a one-line `title` stating the conclusion and a `disposition`, plus the claim's `id` when it carries one; its reasoning belongs in the Markdown answer, and a finding has no `statement`. `disposition` is `act` (needs work), `accept` (a risk kept on purpose), or `held` (examined and sound). {% if report_rating %}Leave out `severity`: the host states the level each rated finding's answers decide.{% else %}`severity` is critical, high, medium, low, or info; sound areas need none.{% endif %} A claim a review left open or overturned needs a finding with its `id`.
+- `findings` are your conclusions, most severe first; scanner rows are carried separately. Each has a one-line `title` stating the conclusion and a `disposition`, plus the claim's `id` when it carries one; its reasoning belongs in the Markdown answer, and a finding has no `statement`. `disposition` is `act` (needs work), `accept` (a risk kept on purpose), `held` (examined and sound), or `unresolved` (an unanswered question, without rating answers). {% if report_rating %}Leave out `severity`: the host states the level each rated finding's answers decide.{% else %}`severity` is critical, high, medium, low, or info; sound areas need none.{% endif %} A claim a review left open or overturned needs a finding with its `id`.
 {% if report_rating %}- `answers` rate each `act` or `accept` finding that no answered claim shares an id with:
 {{ report_rating.questions }}
 {% endif %}- `ask` is required when a finding is `act`, written for a reader who has never seen the work; `effort` is small, medium, or large.
 - When the run has bound scans, every scanner group is accounted for: a finding's `scan_group_ids` link the groups it assesses, and `set_asides`, each with a `reason`, account for the rest by `scanner` and `paths` or by `scan_group_ids`. Clean scans with zero findings need no set-asides.
+{% endif %}
+
+{% if coverage_review %}
+## Coverage review
+
+{{ coverage_review }}
+
+Assess each obligation and gap in the declared `coverage_review` verdict member using the current revision. `satisfied` means the planned question is answered; gaps use `covered` for alternative evidence or `immaterial` with an evidence-backed reason. `material_open` leaves bounded work unanswered; `essential_open` leaves the review incomplete. Name affected obligation IDs and cite evidence for every assessment; a fact's `evidence` lists handles its legs cited and may be cited directly. Scanner limits and small counts alone establish neither completion nor failure. Path lists are samples; inspect the named scans for the full affected scope. Include unexamined in-scope areas in their obligation assessments. During a reconciling review, give the reviewer the candidate coverage assessments and challenge exclusions as well as findings. Carry the accepted assessment into the report; disclose limitations without treating accounted scanner findings as uncovered work.
 {% endif %}

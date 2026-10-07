@@ -28,6 +28,9 @@ var (
 	ErrInvalidTransition = errors.New("invalid workflow transition")
 	// ErrNoActiveRun is returned when no active workflow run exists for the session.
 	ErrNoActiveRun = errors.New("no active workflow run")
+	// ErrCoverageScansPending reports coverage facts asked for before the run's
+	// bound scans settled; verdict admission and reports each answer it their way.
+	ErrCoverageScansPending = errors.New("coverage scans have not settled")
 	// ErrPlanNotDraft is returned when resuming a plan that is not in draft status.
 	ErrPlanNotDraft = errors.New("plan is not draft")
 	// ErrPlanNotFound is returned when a requested plan id does not exist.

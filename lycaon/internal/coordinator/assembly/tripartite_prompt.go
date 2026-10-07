@@ -110,6 +110,27 @@ func (e *AssemblyEngine) renderTripartiteCoordinatorPrompt(
 
 	surfaceVars := map[string]any{}
 	copyPromptVarsSorted(surfaceVars, vars)
+	rootCount := 0
+	if v, ok := surfaceVars["root_count"].(int); ok {
+		rootCount = v
+	}
+	webSearchEnabled := true
+	if fn := e.deps().WebSearchEnabled; fn != nil {
+		webSearchEnabled = fn()
+	}
+	roster := frame.Roster
+	if roster == nil {
+		// Fixture/dump paths render without an engine-stamped frame.
+		declared := runCtx.AllowedAgents
+		if len(declared) == 0 {
+			declared = spawn.AmbientAllowedAgents()
+		}
+		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
+		roster = &resolved
+	}
+	if err := capability.MergeForTurn(surfaceVars, profile, rootCount, roster.Effective, webSearchEnabled); err != nil {
+		return "", profile, surface.TransitionVars{}, fmt.Errorf("capability vars: %w", err)
+	}
 	var toolProfiles []sandbox.ToolProfile
 	turnSurface := prompts.SurfaceTurn{Loaded: e.loadedTools(sess)}
 	if view := e.sessionCatalogView(ctx, sess); view != nil {
@@ -118,6 +139,9 @@ func (e *AssemblyEngine) renderTripartiteCoordinatorPrompt(
 	}
 	if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {
 		return "", profile, surface.TransitionVars{}, fmt.Errorf("surface path vars: %w", err)
+	}
+	if !webSearchEnabled {
+		prompts.MergeWebResearchUnavailable(surfaceVars)
 	}
 	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
@@ -143,29 +167,8 @@ func (e *AssemblyEngine) renderTripartiteCoordinatorPrompt(
 	); err != nil {
 		return "", profile, surface.TransitionVars{}, fmt.Errorf("surface prompt vars: %w", err)
 	}
-	rootCount := 0
-	if v, ok := surfaceVars["root_count"].(int); ok {
-		rootCount = v
-	}
 	if err := e.mergeUnitBlocks(ctx, pe, sess, profile.SurfaceID, rootCount, surfaceVars); err != nil {
-		return "", profile, surface.TransitionVars{}, fmt.Errorf("unit blocks: %w", err)
-	}
-	webSearchEnabled := true
-	if fn := e.deps().WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	roster := frame.Roster
-	if roster == nil {
-		// Fixture/dump paths render without an engine-stamped frame.
-		declared := runCtx.AllowedAgents
-		if len(declared) == 0 {
-			declared = spawn.AmbientAllowedAgents()
-		}
-		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
-		roster = &resolved
-	}
-	if err := capability.MergeForTurn(surfaceVars, profile, rootCount, roster.Effective, webSearchEnabled); err != nil {
-		return "", profile, transition, fmt.Errorf("capability vars: %w", err)
+		return "", profile, transition, fmt.Errorf("unit blocks: %w", err)
 	}
 	policyVars := spawn.PolicyTemplateVars(e.workerToolBudget(ctx, sess))
 	keys := make([]string, 0, len(policyVars))

@@ -225,17 +225,15 @@ func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 	}
 	needsRevision := map[string]string{"verdict": "NEEDS_REVISION", "winner": "undecided"}
 
-	// Round 1 (attempt 1 < cap 2) → re-loop (continue), holds.
+	// An available round keeps review open.
 	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
 		testutil.FailErr(t, "verdict 1", err)
 	}
-	// Round 2 (attempt 2 == cap 2) → coordinator must decide (decision-required), still holds.
+	// The final round requires a decision.
 	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil); err != nil {
 		testutil.FailErr(t, "verdict 2", err)
 	}
-	// Round 3: cap already reached — a further non-terminal verdict is rejected
-	// outright (not silently accepted and bumped past the cap), and the
-	// decision-required nudge fires again rather than going quiet.
+	// Further submissions retain the exhausted count and decision requirement.
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", needsRevision, nil, nil)
 	testutil.FailErr(t, "verdict 3", err)
 	if out.Valid || !out.IterationCapExceeded || out.Attempt != 2 {
@@ -325,6 +323,9 @@ func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "judge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1",
 		map[string]string{"verdict": "SELECTED", "winner": "B"}, nil, nil)
 	testutil.FailErr(t, "verdict with skeptic", err)
@@ -381,6 +382,9 @@ func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict with skeptic only", err)
 	if !out.Valid || !out.Terminal || len(out.MissingAgents) != 0 {
@@ -409,6 +413,9 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict without researcher", err)
 	if out.Valid || out.Terminal || len(out.MissingAgents) != 1 || out.MissingAgents[0] != "web-researcher" {
@@ -423,6 +430,9 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 			Status:    api.WorkerSummaryStatusComplete,
 		},
 	}))
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}, {WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "web-researcher", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+	}
 	out, err = mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 	testutil.FailErr(t, "verdict with researcher", err)
 	if !out.Valid || !out.Terminal {
@@ -451,6 +461,9 @@ func TestRecordReviewLoopVerdictRequiresCapturedOptionalRoster(t *testing.T) {
 		mgr.ReviewSpawnFilter = func(context.Context, string, string, []string) []string {
 			t.Fatal("verdict recomputed phase-entry roster")
 			return nil
+		}
+		mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+			return []api.WorkerTask{{WorkflowRunID: run.ID, WorkflowPhase: "challenge", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
 		}
 		out, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", map[string]string{"verdict": "CHALLENGED"}, nil, nil)
 		if err == nil || out.Terminal {

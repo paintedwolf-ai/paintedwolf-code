@@ -356,11 +356,11 @@ func loadFileBindings(ctx context.Context, q *db.Queries, sessionID string, inco
 			continue
 		}
 		rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, Survey: row.Survey != 0}
-		if !evidence.SupersedesPathHandle(incoming, rec) {
-			continue
-		}
 		if err := unmarshalEvidenceLineRanges(row.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode path binding %s: %w", rec.Handle, err)
+		}
+		if !evidence.SupersedesPathHandle(incoming, rec) {
+			continue
 		}
 		records = append(records, rec)
 	}

@@ -2,8 +2,9 @@ package evidence
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 )
 
 const (
@@ -216,8 +217,8 @@ func summarizeSkeletonExcerpt(s summarizePackSymbolWire, substance []summarizePa
 		if s.Line < w.StartLine || (w.EndLine > 0 && s.Line > w.EndLine) {
 			continue
 		}
-		if line := numberedWindowLine(w.Body, s.Line); line != "" {
-			if cleaned := StripNumberedLinePrefix(line); summarizeExcerptUsable(cleaned) {
+		if text, ok := hostmarker.NumberedLineAt(w.Body, s.Line); ok {
+			if cleaned := strings.TrimSpace(text); summarizeExcerptUsable(cleaned) {
 				return cleaned
 			}
 		}
@@ -257,72 +258,17 @@ func substanceBodyLines(body string) []substanceLine {
 	}
 	var out []substanceLine
 	for _, row := range strings.Split(body, "\n") {
-		row = strings.TrimSpace(row)
-		if row == "" {
+		n, text, ok := hostmarker.ParseNumberedLine(row)
+		if !ok || n <= 0 {
 			continue
 		}
-		i := strings.IndexByte(row, ':')
-		if i <= 0 || i > 6 {
-			continue
-		}
-		lineStr := row[:i]
-		digits := true
-		for _, c := range lineStr {
-			if c < '0' || c > '9' {
-				digits = false
-				break
-			}
-		}
-		if !digits {
-			continue
-		}
-		n, err := strconv.Atoi(lineStr)
-		if err != nil || n <= 0 {
-			continue
-		}
-		content := strings.TrimSpace(row[i+1:])
+		content := strings.TrimSpace(text)
 		if content == "" {
 			continue
 		}
 		out = append(out, substanceLine{line: n, content: content})
 	}
 	return out
-}
-
-func numberedWindowLine(body string, line int) string {
-	if body == "" || line <= 0 {
-		return ""
-	}
-	prefix := strconv.Itoa(line) + ":"
-	for _, row := range strings.Split(body, "\n") {
-		t := strings.TrimSpace(row)
-		if strings.HasPrefix(t, prefix) {
-			return t
-		}
-	}
-	return ""
-}
-
-// StripNumberedLinePrefix drops a leading "NN:" line number from an excerpt, so
-// a citation body matches the source it was taken from.
-func StripNumberedLinePrefix(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	if i := strings.IndexByte(s, ':'); i > 0 && i <= 6 {
-		digits := true
-		for _, c := range s[:i] {
-			if c < '0' || c > '9' {
-				digits = false
-				break
-			}
-		}
-		if digits {
-			s = strings.TrimSpace(s[i+1:])
-		}
-	}
-	return s
 }
 
 func summarizeExcerptUsable(s string) bool {

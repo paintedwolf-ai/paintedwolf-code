@@ -83,7 +83,7 @@ const ContextTrimNotice = `[host:context-trimmed]
 
 Earlier rows of this session — tool results and the calls that produced them — no longer fit the model window and have left your context. Anything pinned above is intact; the evidence behind it is not.
 
-Do not re-run searches to rebuild what was trimmed. The same call returns the same bytes, and the window that dropped them will drop them again. Work from what is in front of you: if a fact you need is genuinely gone, state it as unresolved in your report rather than searching for it a second time.`
+Do not re-run searches to rebuild what was trimmed. The same call returns the same bytes, and the window that dropped them will drop them again. Missing context does not mean deleted evidence. If recall is available, recover the needed observation; if it cannot be recovered, state the gap.`
 
 // CarriesWorkerCharter reports whether content carries a leg's scope or assignment.
 func CarriesWorkerCharter(content string) bool {

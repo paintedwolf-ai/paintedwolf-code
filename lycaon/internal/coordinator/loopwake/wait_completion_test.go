@@ -320,3 +320,26 @@ func TestCompletionWaitReturnsAlreadyFinishedWithoutParking(t *testing.T) {
 		t.Fatal("finished process created a parked wait or model wake")
 	}
 }
+
+// A next_worker_done wait that names task ids ignores other workers finishing.
+func TestNextWorkerDoneWaitSelectsNamedTasks(t *testing.T) {
+	subscription, err := resolveConditions([]any{map[string]any{"kind": "next_worker_done", "handles": []any{"job-2"}}})
+	testutil.FailErr(t, "resolve worker-selective wait", err)
+	if len(subscription.WorkerHandles) != 1 || len(subscription.ProcessHandles) != 0 {
+		t.Fatalf("subscription = %+v", subscription)
+	}
+	triggers, _ := triggersFromConditions(subscription.Conditions)
+	in := waitMatchInput{Wake: anchor.WorkerTaskFinished, CompletingJobID: "job-1", WorkerHandles: subscription.WorkerHandles}
+	if waitEventMatches(triggers, in) {
+		t.Fatal("an unnamed worker woke the wait")
+	}
+	in.CompletingJobID = "job-2"
+	condition, matched := waitConditionForWake(triggers, in)
+	if !matched || condition.Kind != "next_worker_done" || len(condition.Handles) != 1 || condition.Handles[0] != "job-2" {
+		t.Fatalf("named worker did not settle the wait: matched=%v condition=%+v", matched, condition)
+	}
+	restored := conditionsFromTriggers(triggers, nil, subscription.WorkerHandles)
+	if got := workerHandlesFromConditions(restored); len(got) != 1 || got[0] != "job-2" {
+		t.Fatalf("worker selection lost across the durable lease: %v", got)
+	}
+}

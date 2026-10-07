@@ -31,9 +31,9 @@ type TaskToolDeps struct {
 	// PendingDecision returns a child's open decision.
 	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
 	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
-	// PlannedLeg returns what the active phase's fanout plan fixed for a leg id.
-	PlannedLeg  func(context.Context, tools.ToolContext, string) (PlannedLeg, bool, error)
-	TaskReceipt func(context.Context, string, string) (*api.WorkerTask, error)
+	// WorkflowWork resolves dispatch constraints for an active workflow work id.
+	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
+	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")

@@ -1,4 +1,4 @@
-import type { WorkflowRun, WorkflowSummary } from "../api/types.ts";
+import type { WorkflowRun } from "../api/types.ts";
 
 export function runsByIdMap(runs: readonly WorkflowRun[]): Map<string, WorkflowRun> {
   return new Map(runs.map((r) => [r.id, r]));
@@ -76,18 +76,6 @@ export function resolveCatalogRun(
 export function catalogWorkflowRun(
   leaf: WorkflowRun | undefined,
   runs: readonly WorkflowRun[],
-  catalog: readonly WorkflowSummary[] = [],
 ): WorkflowRun | undefined {
-  const run = resolveCatalogRun(leaf, runsByIdMap(runs));
-  if (!run) return undefined;
-  if (
-    catalog.length > 0 &&
-    !catalog.some(
-      (row) =>
-        row.id === run.workflow_id && row.version === run.workflow_version,
-    )
-  ) {
-    return undefined;
-  }
-  return run;
+  return resolveCatalogRun(leaf, runsByIdMap(runs));
 }

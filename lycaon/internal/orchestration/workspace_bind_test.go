@@ -58,3 +58,27 @@ func TestBindLegWorkspacesIsolatedUpdatesLeg(t *testing.T) {
 		t.Fatalf("leg workspace = %+v", got)
 	}
 }
+
+func TestBindLegWorkspacesPreservesRecoveryBindings(t *testing.T) {
+	binder := &stubWorkspaceBinder{}
+	store := delegation.NewMemoryStore()
+	ctx := context.Background()
+	legs := []api.Leg{
+		{ID: "running", Status: api.LegStatusRunning, WorkspaceID: "existing", WorkspaceRoot: "/existing"},
+		{ID: "complete", Status: api.LegStatusComplete},
+		{ID: "bound", Status: api.LegStatusPending, WorkspaceID: "prepared", WorkspaceRoot: "/prepared"},
+	}
+	created, err := store.Create(ctx, api.Delegation{ProjectID: "project", WorkspacePath: t.TempDir(), Task: "task", Status: "active"}, "session", legs)
+	testutil.FailErr(t, "create delegation", err)
+	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Store: store, Workspaces: binder})
+	bindings, err := orch.BindLegWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceIsolated}, created.WorkspacePath, created.ID, []string{"running", "complete", "bound"})
+	testutil.FailErr(t, "restore workspace bindings", err)
+	if len(bindings) != 0 || len(binder.created) != 0 {
+		t.Fatal("recovery recreated or took ownership of existing workspaces")
+	}
+	got, err := store.GetLeg(ctx, created.ID, "running")
+	testutil.FailErr(t, "read running leg", err)
+	if got.WorkspaceID != "existing" || got.WorkspaceRoot != "/existing" {
+		t.Fatalf("workspace changed: %+v", got)
+	}
+}
