@@ -25,7 +25,7 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner", "workers"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
@@ -37,6 +37,8 @@ def lanes():
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"}:
             raise ValueError(f"unsupported CI runner: {name}")
+        if "workers" in lane and (type(lane["workers"]) is not int or not 1 <= lane["workers"] <= 8):
+            raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
     expected = Counter(stage["name"] for stage in expand(["check"]))
     actual = Counter(stage["name"] for lane in values.values() if "check" in lane["profiles"]
                      for stage in expand(lane["targets"]))
@@ -87,6 +89,9 @@ def run_lane(name):
     path.write_text(json.dumps(record, indent=2) + "\n")
     # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
     environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
+    # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
+    if "workers" in lane:
+        environment["PW_TEST_WORKERS"] = str(lane["workers"])
     code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT, env=environment)
     record.update(finished_at=time.time(), exit_code=code,
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")

@@ -86,6 +86,15 @@ class HostedVerificationTests(unittest.TestCase):
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
 
+    def test_lane_worker_cap_reaches_admission(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("behavior")
+            self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(ci.lanes()["behavior"]["workers"]))
+            ci.run_lane("frontend")
+            self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
+
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = ci.lanes()["behavior"]["minutes"]
         with tempfile.TemporaryDirectory() as directory:

@@ -742,7 +742,8 @@
         "nightly"
       ],
       "suite": "behavior",
-      "native": false
+      "native": false,
+      "workers": 3
     },
     "frontend": {
       "targets": [

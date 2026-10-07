@@ -150,16 +150,25 @@ func TestInventorySharesColdReadAndAllowsWaiterCancellation(t *testing.T) {
 		<-release
 		return nil, nil
 	}
+	// Non-recursive watch coverage (inotify) asks every read to revalidate a stale root.
+	// Each coverage probe runs under the inventory lock, so it marks a caller's join point.
+	joined := make(chan struct{}, 16) // Room for every probe; only the cold-read joins are awaited.
+	i.coverage = func(string) repochange.WatchCoverage {
+		joined <- struct{}{}
+		return repochange.WatchCoverage{Watching: true, Complete: true}
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	first := make(chan error, 1)
 	go func() { _, err := i.Scan(ctx, []string{root}); first <- err }()
+	<-joined
 	<-started
 	cancel()
 	if err := <-first; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel = %v", err)
 	}
+	const waiters = 8
 	var group sync.WaitGroup
-	for range 8 {
+	for range waiters {
 		group.Go(func() {
 			_, err := i.Scan(t.Context(), []string{root})
 			if err != nil {
@@ -167,8 +176,14 @@ func TestInventorySharesColdReadAndAllowsWaiterCancellation(t *testing.T) {
 			}
 		})
 	}
+	for range waiters {
+		<-joined
+	}
 	close(release)
 	group.Wait()
+	// A read after the shared walk lands is answered from the index it recorded.
+	_, err := i.Scan(t.Context(), []string{root})
+	testutil.FailErr(t, "scan after cold read", err)
 	if walks.Load() != 1 {
 		t.Fatalf("cold discovery repeated %d times", walks.Load())
 	}

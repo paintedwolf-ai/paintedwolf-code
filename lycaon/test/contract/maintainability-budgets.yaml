@@ -1029,7 +1029,7 @@ go_receiver_lines:
     lycaon/internal/project/project.sourceWorkProgress: 18
     lycaon/internal/project/project.symbolNameMatcher: 61
     lycaon/internal/project/project.symbolSearchRun: 140
-    lycaon/internal/projectcontrib/projectcontrib.Inventory: 240
+    lycaon/internal/projectcontrib/projectcontrib.Inventory: 241
     lycaon/internal/projectcontrib/projectcontrib.Manifest: 8
     lycaon/internal/projectignore/projectignore.SecretEntry: 31
     lycaon/internal/projectignore/projectignore.SecretReviews: 37
@@ -6572,13 +6572,13 @@ go_struct_fields:
     lycaon/internal/project/project.symbolSearchRoot: 2
     lycaon/internal/project/project.symbolSearchRun: 12
     lycaon/internal/projectcontrib/projectcontrib.File: 4
-    lycaon/internal/projectcontrib/projectcontrib.Inventory: 7
+    lycaon/internal/projectcontrib/projectcontrib.Inventory: 8
     lycaon/internal/projectcontrib/projectcontrib.Item: 5
     lycaon/internal/projectcontrib/projectcontrib.Manifest: 1
     lycaon/internal/projectcontrib/projectcontrib.Spec: 3
     lycaon/internal/projectcontrib/projectcontrib.Surface: 6
     lycaon/internal/projectcontrib/projectcontrib.extensionsOverlayFile: 2
-    lycaon/internal/projectcontrib/projectcontrib.inventoryFlight: 3
+    lycaon/internal/projectcontrib/projectcontrib.inventoryFlight: 4
     lycaon/internal/projectcontrib/projectcontrib.inventoryRoot: 7
     lycaon/internal/projectcontrib/projectcontrib.mcpOverlayFile: 1
     lycaon/internal/projectcontrib/projectcontrib.mcpReviewItem: 2
@@ -13309,7 +13309,7 @@ source_files:
     lycaon/internal/project/workspace.go: 69
     lycaon/internal/project/worktree_binding.go: 39
     lycaon/internal/projectcontrib/guidance.go: 81
-    lycaon/internal/projectcontrib/inventory.go: 302
+    lycaon/internal/projectcontrib/inventory.go: 305
     lycaon/internal/projectcontrib/manifest.go: 75
     lycaon/internal/projectcontrib/registry.go: 45
     lycaon/internal/projectcontrib/scanners.go: 319
@@ -15282,7 +15282,7 @@ source_files:
     scripts/bundle-smoke.sh: 245
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 116
+    scripts/ci_verification.py: 120
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -19558,7 +19558,7 @@ test_files:
     lycaon/internal/project/worktree_binding_test.go: 80
     lycaon/internal/projectcontrib/agent_policy_coverage_test.go: 77
     lycaon/internal/projectcontrib/extensions_test.go: 84
-    lycaon/internal/projectcontrib/inventory_test.go: 233
+    lycaon/internal/projectcontrib/inventory_test.go: 245
     lycaon/internal/projectcontrib/manifest_test.go: 277
     lycaon/internal/projectignore/secrets_test.go: 320
     lycaon/internal/projectliveness/tracker_test.go: 187
@@ -22304,7 +22304,7 @@ test_files:
     lycaon/test/security/api_sse_overflow_resync_e2e_test.go: 186
     lycaon/test/security/api_t1_tools_sandbox_test.go: 34
     lycaon/test/security/api_terminal_send_redaction_e2e_test.go: 83
-    lycaon/test/security/api_testutil.go: 464
+    lycaon/test/security/api_testutil.go: 465
     lycaon/test/security/api_tool_result_wire_test.go: 62
     lycaon/test/security/api_user_decision_topology_test.go: 83
     lycaon/test/security/api_user_notice_host_error_e2e_test.go: 74
@@ -22490,7 +22490,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 98
+    scripts/verification_tests/test_ci_execution.py: 106
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
