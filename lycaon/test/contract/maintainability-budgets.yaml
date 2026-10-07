@@ -18136,7 +18136,7 @@ test_files:
     lycaon/internal/confine/sandbox_refusal_live_test.go: 109
     lycaon/internal/confine/seatbelt_attest_test.go: 10
     lycaon/internal/confine/skill_read_roots_test.go: 50
-    lycaon/internal/confine/socket_direct_seatbelt_test.go: 378
+    lycaon/internal/confine/socket_direct_seatbelt_test.go: 389
     lycaon/internal/confine/ssh_known_hosts_test.go: 33
     lycaon/internal/confine/worker_branch_read_isolation_test.go: 28
     lycaon/internal/confine/write_root_alias_test.go: 41
@@ -22481,7 +22481,7 @@ test_files:
     scripts/test_decide_heads_execution.py: 83
     scripts/test_stage_macos_host.py: 124
     scripts/test_update_keys.py: 137
-    scripts/verification_tests/__init__.py: 1
+    scripts/verification_tests/__init__.py: 3
     scripts/verification_tests/support.py: 178
     scripts/verification_tests/test_advisory_execution.py: 219
     scripts/verification_tests/test_advisory_severity_catalog_execution.py: 117
