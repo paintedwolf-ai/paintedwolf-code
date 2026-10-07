@@ -1,0 +1,59 @@
+//go:build unix
+
+package bgprocess_test
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+// A dev server started from a shell with job control lives in its own process
+// group and keeps the job's output pipe open; disposing the session must end
+// it and return within the stop budget.
+func TestDisposeSessionEndsJobsOutsideTheLeadersGroup(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "job.pid")
+	reg := newTestRegistry(t, bgprocess.Config{MaxBackground: 4}, bgprocess.Hooks{})
+	_, err := startBackground(context.Background(), reg, "sess-1", "proj-1", hostcmd.Request{
+		Launch: exec.HostLaunch("bgprocess test"), ProjectDir: dir,
+		Stages: []exec.Stage{{Name: "sh", Args: []string{"-c",
+			fmt.Sprintf("set -m; sleep 30 & echo $! > %s; wait", strconv.Quote(pidFile))}}},
+	}, hostcmd.NewRunner())
+	testutil.FailErr(t, "start background", err)
+	job := waitForJobPID(t, pidFile)
+
+	started := time.Now()
+	testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
+	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+5*time.Second {
+		t.Fatalf("dispose took %v", elapsed)
+	}
+	testutil.WaitFor(t, 5*time.Second, func() bool { return !osprocess.Alive(job) })
+}
+
+func waitForJobPID(t *testing.T, path string) int {
+	t.Helper()
+	var pid int
+	testutil.WaitFor(t, 20*time.Second, func() bool {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil && pid > 0
+	})
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	return pid
+}

@@ -16,7 +16,7 @@ type AsyncPipeline struct {
 }
 
 // StartPipelineAsync launches stages and returns immediately. stdout/stderr receive
-// incremental process output; Kill tears down the whole pipeline tree.
+// incremental process output; Kill terminates the whole pipeline tree.
 func StartPipelineAsync(
 	parentCtx context.Context,
 	stages []Stage,
@@ -94,12 +94,13 @@ func (a *AsyncPipeline) wait(runCtx context.Context, opts ExecOpts, stdinReader 
 	}
 }
 
-// Kill terminates the running group and stops the plan from starting another.
+// Kill terminates the running tree, SIGKILL after TerminateGrace, and stops
+// the plan from starting another group.
 func (a *AsyncPipeline) Kill() {
 	if a == nil {
 		return
 	}
-	a.run.kill()
+	a.run.terminate()
 	if a.cancel != nil {
 		a.cancel()
 	}

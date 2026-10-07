@@ -26,7 +26,7 @@ func (r *Registry) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 	r.killProcess(proc)
 	select {
 	case <-proc.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(stopSettleTimeout):
 	}
 	r.mu.Lock()
 	hasExit := proc.hasExit
