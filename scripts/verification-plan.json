@@ -724,12 +724,13 @@
         "test:short",
         "test:contract"
       ],
-      "minutes": 60,
+      "minutes": 45,
       "profiles": [
         "fast"
       ],
       "suite": "all",
-      "native": false
+      "native": false,
+      "shards": 2
     },
     "fast-frontend": {
       "targets": [
