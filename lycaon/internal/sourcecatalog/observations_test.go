@@ -7,15 +7,52 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestDirectoryListingDuringSaveOmitsOnlyTheDoorsStaging(t *testing.T) {
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "notes.txt", "original")
+	// The user's file follows the staging grammar; the tree must still list it.
+	lookalike := ".notes.txt.0123456789abcdef01234567.tmp"
+	writeIndexFile(t, root.Path, lookalike, "user")
+	var staged string
+	var listed, scanned []string
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: root.Path, Rel: "notes.txt"}, Source: strings.NewReader("saved"), Mode: 0o644,
+		ObserveStagingPath: func(path string) { staged = path },
+		ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+			if _, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive}); err != nil {
+				return err
+			}
+			entries, _, err := navigationEntries(t, catalog, root, ".", "", 100)
+			for _, entry := range entries {
+				listed = append(listed, entry.Name)
+			}
+			scanned = collectStructuralScan(t, root, structuralScanOptions{}).paths
+			return err
+		},
+	})
+	testutil.FailErr(t, "save during listing", err)
+	name := filepath.Base(staged)
+	for label, names := range map[string][]string{"navigation": listed, "structural scan": scanned} {
+		if slices.Contains(names, name) {
+			t.Fatalf("%s published the in-flight staging entry %q: %v", label, name, names)
+		}
+		if !slices.Contains(names, lookalike) || !slices.Contains(names, "notes.txt") {
+			t.Fatalf("%s omitted user files: %v", label, names)
+		}
+	}
+}
 
 func TestDirectoryObservationsArePagedAndKeepConsumerVisibility(t *testing.T) {
 	catalog, root := indexFixture(t)

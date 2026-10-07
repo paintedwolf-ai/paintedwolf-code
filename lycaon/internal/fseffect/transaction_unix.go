@@ -393,10 +393,11 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return Result{}, err
 	}
 	defer parent.close()
-	tmpName, tmp, err := createTempAt(parent, 0o600)
+	tmpName, tmp, held, err := createTempAt(parent, 0o600)
 	if err != nil {
 		return Result{}, err
 	}
+	defer held.retire()
 	if req.ObserveStagingPath != nil {
 		req.ObserveStagingPath(filepath.Join(parent.root.path, parent.rel, tmpName))
 	}
@@ -511,24 +512,34 @@ func verifyReviewedParent(location Location, held *openedParent) error {
 	return nil
 }
 
-func createTempAt(parent *openedParent, mode os.FileMode) (string, *os.File, error) {
+// createTempAt holds the staging name before creating it so no listing sees
+// the entry unregistered; the caller retires the hold after the entry is gone.
+func createTempAt(parent *openedParent, mode os.FileMode) (string, *os.File, stagingHold, error) {
+	directory, err := fspath.EntryIdentityAt(int(parent.file.Fd()), ".")
+	if err != nil {
+		return "", nil, stagingHold{}, fmt.Errorf("identify replacement parent: %w", err)
+	}
 	for range 64 {
 		var nonce [12]byte
 		if _, err := rand.Read(nonce[:]); err != nil {
-			return "", nil, fmt.Errorf("randomize replacement: %w", err)
+			return "", nil, stagingHold{}, fmt.Errorf("randomize replacement: %w", err)
 		}
 		name := "." + parent.name + "." + hex.EncodeToString(nonce[:]) + ".tmp"
+		held := holdStaging(directory, name)
 		fd, err := unix.Openat(int(parent.file.Fd()), name,
 			unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW, uint32(mode.Perm()))
+		if err != nil {
+			held.abandon()
+		}
 		if errors.Is(err, unix.EEXIST) {
 			continue
 		}
 		if err != nil {
-			return "", nil, fmt.Errorf("create replacement: %w", err)
+			return "", nil, stagingHold{}, fmt.Errorf("create replacement: %w", err)
 		}
-		return name, os.NewFile(uintptr(fd), filepath.Join(parent.root.path, parent.rel, name)), nil
+		return name, os.NewFile(uintptr(fd), filepath.Join(parent.root.path, parent.rel, name)), held, nil
 	}
-	return "", nil, fmt.Errorf("create replacement: exhausted unique names")
+	return "", nil, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
 }
 
 func verifyTarget(target Target, want Result) error {
@@ -581,9 +592,16 @@ func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
 		return err
 	}
 	parentFD := int(parent.file.Fd())
+	directory, err := fspath.EntryIdentityAt(parentFD, ".")
+	if err != nil {
+		return fmt.Errorf("identify removal parent: %w", err)
+	}
+	held := holdStaging(directory, quarantine)
 	if err := unix.Renameat(parentFD, parent.name, parentFD, quarantine); err != nil {
+		held.abandon()
 		return fmt.Errorf("stage removal: %w", err)
 	}
+	defer held.retire()
 	if req.ObserveQuarantinePath != nil {
 		req.ObserveQuarantinePath(filepath.Join(parent.root.path, parent.rel, quarantine))
 	}

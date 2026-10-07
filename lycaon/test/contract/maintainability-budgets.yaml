@@ -554,6 +554,7 @@ go_receiver_lines:
     lycaon/internal/fseffect/fseffect.openedParent: 4
     lycaon/internal/fseffect/fseffect.openedRoot: 1
     lycaon/internal/fseffect/fseffect.readWalk: 20
+    lycaon/internal/fseffect/fseffect.stagingHold: 20
     lycaon/internal/fseffect/fseffect.targetAt: 25
     lycaon/internal/fseffect/fseffect.windowsHandleTarget: 16
     lycaon/internal/fseffect/fseffect.windowsParent: 1
@@ -1077,7 +1078,7 @@ go_receiver_lines:
     lycaon/internal/recall/recall.ErrScopeDenied: 3
     lycaon/internal/recall/recall.Service: 251
     lycaon/internal/repochange/repochange.Debouncer: 144
-    lycaon/internal/repochange/repochange.PrivateDirectoryFilter: 24
+    lycaon/internal/repochange/repochange.PrivateDirectoryFilter: 27
     lycaon/internal/repochange/repochange.WatcherRegistry: 129
     lycaon/internal/repochange/repochange.fseventsPlatformWatcher: 197
     lycaon/internal/repochange/repochange.fsnotifyPlatformWatcher: 3
@@ -2456,6 +2457,7 @@ go_receiver_methods:
     lycaon/internal/fseffect/fseffect.openedParent: 1
     lycaon/internal/fseffect/fseffect.openedRoot: 1
     lycaon/internal/fseffect/fseffect.readWalk: 5
+    lycaon/internal/fseffect/fseffect.stagingHold: 2
     lycaon/internal/fseffect/fseffect.targetAt: 2
     lycaon/internal/fseffect/fseffect.windowsHandleTarget: 2
     lycaon/internal/fseffect/fseffect.windowsParent: 1
@@ -5307,6 +5309,8 @@ go_struct_fields:
     lycaon/internal/fseffect/fseffect.openedParent: 4
     lycaon/internal/fseffect/fseffect.openedRoot: 2
     lycaon/internal/fseffect/fseffect.readWalk: 1
+    lycaon/internal/fseffect/fseffect.stagingEntry: 2
+    lycaon/internal/fseffect/fseffect.stagingHold: 2
     lycaon/internal/fseffect/fseffect.targetAt: 1
     lycaon/internal/fseffect/fseffect.targetLock: 2
     lycaon/internal/fseffect/fseffect.windowsHandleTarget: 2
@@ -9345,7 +9349,7 @@ source_directories:
     lycaon/internal/fileoutline: 6
     lycaon/internal/findings: 8
     lycaon/internal/fonts: 1
-    lycaon/internal/fseffect: 13
+    lycaon/internal/fseffect: 14
     lycaon/internal/fsname: 1
     lycaon/internal/fspath: 7
     lycaon/internal/fssync: 1
@@ -12507,12 +12511,13 @@ source_files:
     lycaon/internal/fseffect/remove_tree_windows.go: 74
     lycaon/internal/fseffect/rename_darwin.go: 5
     lycaon/internal/fseffect/rename_linux.go: 5
+    lycaon/internal/fseffect/staging.go: 86
     lycaon/internal/fseffect/sync_directory_unix.go: 20
     lycaon/internal/fseffect/sync_directory_windows.go: 25
     lycaon/internal/fseffect/transaction.go: 182
     lycaon/internal/fseffect/transaction_other.go: 27
-    lycaon/internal/fseffect/transaction_unix.go: 727
-    lycaon/internal/fseffect/transaction_windows.go: 602
+    lycaon/internal/fseffect/transaction_unix.go: 743
+    lycaon/internal/fseffect/transaction_windows.go: 611
     lycaon/internal/fsname/fsname.go: 11
     lycaon/internal/fspath/canonical_path.go: 52
     lycaon/internal/fspath/canonical_path_darwin.go: 41
@@ -13475,7 +13480,7 @@ source_files:
     lycaon/internal/repochange/platform_watcher.go: 11
     lycaon/internal/repochange/platform_watcher_darwin.go: 307
     lycaon/internal/repochange/platform_watcher_fsnotify.go: 16
-    lycaon/internal/repochange/private_tree.go: 80
+    lycaon/internal/repochange/private_tree.go: 87
     lycaon/internal/repochange/refwatch.go: 176
     lycaon/internal/repochange/source.go: 8
     lycaon/internal/repochange/watcher.go: 550
@@ -15889,7 +15894,7 @@ test_directories:
     lycaon/internal/fileoutline: 7
     lycaon/internal/findings: 4
     lycaon/internal/fonts: 1
-    lycaon/internal/fseffect: 8
+    lycaon/internal/fseffect: 9
     lycaon/internal/fsname: 1
     lycaon/internal/fspath: 2
     lycaon/internal/gate: 7
@@ -18847,6 +18852,7 @@ test_files:
     lycaon/internal/fseffect/replace_faults_test.go: 81
     lycaon/internal/fseffect/review_test.go: 30
     lycaon/internal/fseffect/review_unix_test.go: 37
+    lycaon/internal/fseffect/staging_test.go: 79
     lycaon/internal/fseffect/transaction_test.go: 430
     lycaon/internal/fsname/fsname_test.go: 40
     lycaon/internal/fspath/canonical_path_darwin_test.go: 38
@@ -19738,7 +19744,7 @@ test_files:
     lycaon/internal/repochange/dir_watched_test.go: 122
     lycaon/internal/repochange/notify_test.go: 43
     lycaon/internal/repochange/platform_watcher_darwin_test.go: 93
-    lycaon/internal/repochange/private_tree_test.go: 71
+    lycaon/internal/repochange/private_tree_test.go: 105
     lycaon/internal/repochange/recursive_coverage_test.go: 101
     lycaon/internal/repochange/refwatch_internal_test.go: 38
     lycaon/internal/repochange/refwatch_test.go: 123
@@ -20594,7 +20600,7 @@ test_files:
     lycaon/internal/sourcecatalog/navigation_resources_test.go: 48
     lycaon/internal/sourcecatalog/observation_invalidation_test.go: 119
     lycaon/internal/sourcecatalog/observation_nodes_test.go: 111
-    lycaon/internal/sourcecatalog/observations_test.go: 361
+    lycaon/internal/sourcecatalog/observations_test.go: 396
     lycaon/internal/sourcecatalog/page_cache_test.go: 30
     lycaon/internal/sourcecatalog/presentation_store_test.go: 59
     lycaon/internal/sourcecatalog/range_encoding_test.go: 95

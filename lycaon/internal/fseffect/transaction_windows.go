@@ -323,10 +323,11 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return Result{}, err
 	}
 	defer parent.close()
-	tmpName, tmp, err := createWindowsTemp(parent)
+	tmpName, tmp, held, err := createWindowsTemp(parent)
 	if err != nil {
 		return Result{}, err
 	}
+	defer held.retire()
 	if req.ObserveStagingPath != nil {
 		req.ObserveStagingPath(filepath.Join(parent.path, tmpName))
 	}
@@ -406,25 +407,35 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 	return result, injectAt(inject, stageVerified)
 }
 
-func createWindowsTemp(parent *windowsParent) (string, *os.File, error) {
+// createWindowsTemp holds the staging name before creating it so no listing
+// sees the entry unregistered; the caller retires the hold after it is gone.
+func createWindowsTemp(parent *windowsParent) (string, *os.File, stagingHold, error) {
+	directory, err := fspath.EntryIdentityHandle(parent.handle)
+	if err != nil {
+		return "", nil, stagingHold{}, fmt.Errorf("identify replacement parent: %w", err)
+	}
 	for range 64 {
 		var nonce [12]byte
 		if _, err := rand.Read(nonce[:]); err != nil {
-			return "", nil, err
+			return "", nil, stagingHold{}, err
 		}
 		name := "." + parent.name + "." + hex.EncodeToString(nonce[:]) + ".tmp"
+		held := holdStaging(directory, name)
 		handle, err := ntOpenRelative(parent.handle, name,
 			windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE|windows.DELETE,
 			windows.FILE_CREATE, windows.FILE_NON_DIRECTORY_FILE|windows.FILE_WRITE_THROUGH)
+		if err != nil {
+			held.abandon()
+		}
 		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			continue
 		}
 		if err != nil {
-			return "", nil, err
+			return "", nil, stagingHold{}, err
 		}
-		return name, os.NewFile(uintptr(handle), filepath.Join(parent.path, name)), nil
+		return name, os.NewFile(uintptr(handle), filepath.Join(parent.path, name)), held, nil
 	}
-	return "", nil, fmt.Errorf("create replacement: exhausted unique names")
+	return "", nil, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
 }
 
 type fileRenameInformation struct {
