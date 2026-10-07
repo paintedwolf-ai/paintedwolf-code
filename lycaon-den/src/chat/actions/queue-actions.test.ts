@@ -49,6 +49,39 @@ describe("queue actions", () => {
     expect(store.state.pendingSends.a).toBeUndefined();
   });
 
+  it("a bootstrap at the remembered revision re-seats the reserved head after a session switch", async () => {
+    const store = createAppStore();
+    const bootstrap = (queue: QueueDraft): SessionBootstrap => ({
+      event_cursor: "",
+      session: session("a"),
+      transcript: { messages: [], watermark: 0, turn_clocks: {}, turn_loads: {} },
+      progress: { revision: 1, steps: [] },
+      turn_clock: { session_id: "a", active_ms: 0, work_ms: 0, running: false },
+      findings: { revision: 1, findings: [] },
+      queue, coordinator: {}, workers: [], checkpoints: [], background_outputs: [], previews: [],
+    });
+    store.actions.installSessionBootstrap(bootstrap(draft(1)));
+    const sending = { ...draft(2), sending: true };
+    const client = stubClient({ updateSessionQueue: vi.fn().mockResolvedValue(sending) });
+    await sendQueue(store, client, "a");
+    expect(store.state.pendingSends.a).toEqual([
+      expect.objectContaining({ kind: "queue_send", operationId: "item-1" }),
+    ]);
+
+    // Switching away drops every pending send; the host still reports revision 2.
+    store.actions.beginSessionResumeSwitch("a");
+    expect(store.state.pendingSends).toEqual({});
+    store.actions.installSessionBootstrap(bootstrap(sending));
+    expect(store.state.queueDraft?.revision).toBe(2);
+    expect(store.state.pendingSends.a).toEqual([
+      expect.objectContaining({ kind: "queue_send", operationId: "item-1", state: "accepted" }),
+    ]);
+
+    // A seated head is not reseated by a repeat bootstrap.
+    store.actions.installSessionBootstrap(bootstrap(sending));
+    expect(store.state.pendingSends.a).toHaveLength(1);
+  });
+
   it("queue admission hands an optimistic transcript bubble to the queue surface", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession(session("session-1"));

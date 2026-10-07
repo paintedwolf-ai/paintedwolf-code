@@ -93,7 +93,9 @@ export function createAppStore(
     },
     installSessionBootstrap(bootstrap, sessionOverride) {
       const session = sessionOverride ?? bootstrap.session;
-      const previousQueue = queueDrafts.get(session.id.trim());
+      const sid = session.id.trim();
+      const previousQueue = queueDrafts.get(sid);
+      const queue = rememberQueueDraft(sid, bootstrap.queue);
       setState(
         produce((draft) => {
           draft.sessionViewEpoch++;
@@ -103,9 +105,8 @@ export function createAppStore(
           draft.progress = bootstrap.progress;
           draft.turnClock = bootstrap.turn_clock;
           draft.findings = loaded(bootstrap.findings ?? null);
-          draft.queueDraft = rememberQueueDraft(session.id.trim(), bootstrap.queue);
+          draft.queueDraft = queue;
           draft.coordinatorRunContext = bootstrap.coordinator;
-          const sid = session.id.trim();
           mutateSessionActivity(draft, sid, (entry) => {
             entry.activities = bootstrap.activities?.length
               ? Object.fromEntries(bootstrap.activities.map((activity) => [activity.activity_id, activity]))
@@ -132,8 +133,12 @@ export function createAppStore(
           draft.pendingCheckpoints = bootstrap.checkpoints.map(pendingFromEvent);
         }),
       );
-      if (!previousQueue || bootstrap.queue.revision > previousQueue.revision) {
-        reconcilePendingOnQueueDraft({ state, actions }, session.id.trim(), bootstrap.queue);
+      // A session switch drops pending sends, so a bootstrap at the remembered
+      // revision still has to seat the reserved head.
+      const unseated = queue.sending &&
+        !state.pendingSends[sid]?.some((entry) => entry.kind === "queue_send");
+      if (!previousQueue || queue.revision > previousQueue.revision || unseated) {
+        reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
       }
       replayForegroundBufferedMessages({ state, actions }, session.id);
     },
