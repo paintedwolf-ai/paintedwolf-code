@@ -85,8 +85,11 @@ modelIndependentWebE2e("large Markdown preview keeps the app responsive and boun
   const codeWidth = await code.evaluate((element) => element.getBoundingClientRect().width);
   expect(codeWidth).toBeGreaterThan(largeWidth - 40);
   await page.screenshot({ path: path.resolve("../.task/markdown-preview-qa.png") });
-  await preview.locator(".den-scrollport__viewport").first().evaluate((element) => { element.scrollTop = element.scrollHeight; });
-  await expect(preview.locator(".den-markdown-preview-block .markdown-body").last()).toContainText("End of preview fixture.");
+  // Sections keep arriving and extend the document, so follow its end until the last one mounts.
+  await expect.poll(async () => {
+    await preview.locator(".den-scrollport__viewport").first().evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    return await preview.locator(".den-markdown-preview-block .markdown-body").last().textContent();
+  }, { timeout: 15_000 }).toContain("End of preview fixture.");
   expect(await preview.locator(".den-markdown-preview-block").count()).toBeLessThan(20);
   await page.getByTestId("files-editor-md-code").click();
   await expect(preview).toHaveCount(0);

@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,10 +46,19 @@ func requireSeatbelt(t *testing.T) string {
 	if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
 		t.Skip("darwin + seatbelt sandbox required")
 	}
+	warmPythonShim.Do(func() {
+		// /usr/bin/python3 is an xcrun shim that caches under the Darwin user temp
+		// directory, outside the isolated TMPDIR that confined children may write.
+		if out, err := exec.Command("/usr/bin/python3", "-c", "pass").CombinedOutput(); err != nil {
+			t.Logf("warm python3 shim: %v: %s", err, out)
+		}
+	})
 	self, err := os.Executable()
 	testutil.FailErr(t, "os.Executable failed", err)
 	return self
 }
+
+var warmPythonShim sync.Once
 
 func outsideTemporaryWriteRoots(t *testing.T) string {
 	t.Helper()

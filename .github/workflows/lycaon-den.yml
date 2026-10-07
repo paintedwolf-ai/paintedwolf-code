@@ -41,8 +41,13 @@ jobs:
           status: ${{ job.status }}
 
   playwright-web:
+    name: playwright-web (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -64,18 +69,19 @@ jobs:
         uses: ./.github/actions/setup-opengrep
 
       - name: Playwright web E2E (Tier B)
-        timeout-minutes: 90
+        timeout-minutes: 40
         env:
           # Keep traces and reports on disk so the failure-upload step below
           # can capture them; the cleanup trap otherwise deletes them.
           LYCAON_E2E_KEEP_ARTIFACTS: "1"
+          LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/3
         run: ./task e2e:den
 
       - uses: ./.github/actions/verification-evidence
         if: always()
         timeout-minutes: 5
         with:
-          name: playwright-web-${{ github.run_attempt }}
+          name: playwright-web-${{ matrix.shard }}-${{ github.run_attempt }}
           status: ${{ job.status }}
 
       - name: E2E cleanup

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { denSourceRoot, loadTypeScriptCorpus } from "../test/source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
 const productionSources = loadTypeScriptCorpus(denSourceRoot, { excludeTests: true }).files;
 
-describe("modal shortcut handling", () => {
+describe("modal shortcut handling", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("keeps overlay focus control on the shared helper", () => {
     const overlayTraps = productionSources
       .filter((file) => file.text.includes("createOverlayScopeFocusTrap("))

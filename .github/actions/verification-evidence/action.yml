@@ -21,8 +21,10 @@ runs:
         VERIFICATION_STATUS: ${{ inputs.status }}
       run: python3 scripts/ci_verification.py report "$VERIFICATION_STATUS"
 
+    # Evidence is diagnostic; an artifact service outage must not overturn the verdict.
     - name: Upload verification evidence
       if: always()
+      continue-on-error: true
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: ${{ inputs.name }}

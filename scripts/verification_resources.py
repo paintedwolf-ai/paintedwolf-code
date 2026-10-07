@@ -13,13 +13,18 @@ if os.name != "nt":
     import fcntl
 
 
+def dedicated_host():
+    """A dedicated host, such as a hosted CI runner, has no neighboring work to leave room for."""
+    return os.environ.get("PW_TEST_HOST", "shared") == "dedicated"
+
+
 def capacity():
     return worker_budget({})
 
 
 def worker_budget(environment):
     cpus = os.cpu_count() or 1
-    limit = min(8, max(1, cpus * 3 // 4))
+    limit = min(8, max(1, cpus if dedicated_host() else cpus * 3 // 4))
     requested = int(environment.get("PW_TEST_WORKERS", limit))
     if not 1 <= requested <= limit:
         raise ValueError(f"PW_TEST_WORKERS must be between 1 and {limit} (the shared worker capacity)")
@@ -87,7 +92,7 @@ def demand(spec, requested):
     limit = capacity()
     workers = spec["workers"]
     if workers == "shared":
-        workers = max(1, limit // 2)
+        workers = limit if dedicated_host() else max(1, limit // 2)
     elif workers == "all":
         workers = limit
     return min(requested, workers, limit)

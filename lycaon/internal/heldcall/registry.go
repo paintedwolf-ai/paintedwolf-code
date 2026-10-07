@@ -116,8 +116,11 @@ type call struct {
 	stopped      bool
 	cancel       context.CancelFunc
 	done         chan struct{}
-	settled      *Settled
-	settledAt    time.Time
+	// lifecycle orders the running event before the exit event: promote holds
+	// it from marking the call held until the running event is published.
+	lifecycle sync.Mutex
+	settled   *Settled
+	settledAt time.Time
 }
 
 type sessionState struct {
@@ -236,7 +239,9 @@ func (r *Registry) execute(ctx context.Context, sessionID string, c *call, fn Fu
 	if !held {
 		return
 	}
+	c.lifecycle.Lock()
 	r.publishExit(ctx, sessionID, c, result.Outcome)
+	c.lifecycle.Unlock()
 	if r.onSettle != nil {
 		r.onSettle(sessionID, c.handle)
 	}
@@ -258,6 +263,8 @@ func (r *Registry) publishExit(ctx context.Context, sessionID string, c *call, o
 // promote makes a running call visible as a handle, reporting false when it
 // settled first.
 func (r *Registry) promote(ctx context.Context, sessionID string, c *call) bool {
+	c.lifecycle.Lock()
+	defer c.lifecycle.Unlock()
 	r.mu.Lock()
 	if c.settled != nil {
 		r.mu.Unlock()

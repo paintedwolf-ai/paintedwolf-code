@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/authzcontext"
@@ -156,6 +157,9 @@ type Manager struct {
 	loopbackRuntime         *approvalstate.SandboxPortGrantRuntime
 	toolApprovalCoalesce    *approvalstate.ToolApprovalCoalesce
 	gateRepeatLedger        *approvalstate.GateRepeatLedger
+	// turnReleaseTimeout bounds how long a stop waits for a cancelled turn to
+	// release its session before recording the stop without it.
+	turnReleaseTimeout time.Duration
 	// progressClosureExpect tracks unfinished progress after worker completion.
 	progressClosureExpect       scopedstore.LRU[guard.ProgressClosureBaseline]
 	closeout                    closeoutLifecycle
@@ -229,16 +233,17 @@ func NewManager(store Store, client modelcall.LLMClient, registry tools.ToolRegi
 func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.Service, registry tools.ToolRegistry, cfg settings.SessionLimits, tracker cost.CostTracker) *Manager {
 	cfg = settings.NormalizeSessionLimits(cfg)
 	m := &Manager{
-		store:            store,
-		catalog:          sessioncatalog.New(store),
-		llm:              client,
-		llmSvc:           svc,
-		cost:             tracker,
-		tools:            registry,
-		cfg:              cfg,
-		compactionRunner: NewCompactionRunner(),
-		planToolStash:    NewPlanToolStash(),
-		queue:            queue.New(),
+		store:              store,
+		catalog:            sessioncatalog.New(store),
+		llm:                client,
+		llmSvc:             svc,
+		cost:               tracker,
+		tools:              registry,
+		cfg:                cfg,
+		compactionRunner:   NewCompactionRunner(),
+		planToolStash:      NewPlanToolStash(),
+		queue:              queue.New(),
+		turnReleaseTimeout: DefaultTurnReleaseTimeout,
 	}
 	m.ensureResourceRegistry()
 	return m

@@ -511,6 +511,16 @@ func (s *runState) stopSidecar() (resultErr error) {
 	}
 }
 
+// meanWaitMS is the average time one blocked connection request waited. The
+// pool's wait totals are cumulative, so their ratio does not grow with run length.
+func meanWaitMS(gauges map[string]int64, pool string) float64 {
+	count := gauges[pool+"_wait_count"]
+	if count == 0 {
+		return 0
+	}
+	return float64(gauges[pool+"_wait_ns"]) / float64(count) / 1e6
+}
+
 func (s *runState) collectInternalPerformance(resources *resourceSummary) error {
 	if s.workloadBaseline.IsZero() || !s.workloadEnd.After(s.workloadBaseline) {
 		return fmt.Errorf("performance capture requires a completed workload interval")
@@ -542,7 +552,8 @@ func (s *runState) collectInternalPerformance(resources *resourceSummary) error 
 			return fmt.Errorf("performance capture has incomplete runtime measurement")
 		}
 		for _, name := range []string{
-			"db_reader_wait_ns", "db_writer_wait_ns", "db_reader_open", "db_reader_in_use", "db_writer_open", "db_writer_in_use",
+			"db_reader_wait_ns", "db_writer_wait_ns", "db_reader_wait_count", "db_writer_wait_count",
+			"db_reader_open", "db_reader_in_use", "db_writer_open", "db_writer_in_use",
 		} {
 			if value, ok := record.Runtime.Gauges[name]; !ok || value < 0 {
 				return fmt.Errorf("performance capture has missing or invalid %s measurement", name)
@@ -560,8 +571,8 @@ func (s *runState) collectInternalPerformance(resources *resourceSummary) error 
 		}
 		resources.PeakHeapBytes = max(resources.PeakHeapBytes, copy.HeapAllocBytes)
 		resources.PeakGoroutines = max(resources.PeakGoroutines, copy.Goroutines)
-		resources.DBReaderWaitMS = max(resources.DBReaderWaitMS, float64(copy.Gauges["db_reader_wait_ns"])/1e6)
-		resources.DBWriterWaitMS = max(resources.DBWriterWaitMS, float64(copy.Gauges["db_writer_wait_ns"])/1e6)
+		resources.DBReaderMeanWaitMS = max(resources.DBReaderMeanWaitMS, meanWaitMS(copy.Gauges, "db_reader"))
+		resources.DBWriterMeanWaitMS = max(resources.DBWriterMeanWaitMS, meanWaitMS(copy.Gauges, "db_writer"))
 		resources.PeakDBReaderOpen = max(resources.PeakDBReaderOpen, int(copy.Gauges["db_reader_open"]))
 		resources.PeakDBReaderInUse = max(resources.PeakDBReaderInUse, int(copy.Gauges["db_reader_in_use"]))
 		resources.PeakDBWriterOpen = max(resources.PeakDBWriterOpen, int(copy.Gauges["db_writer_open"]))
@@ -623,7 +634,7 @@ func evaluateBudgets(value report) []string {
 		"peak_heap_bytes": float64(value.Resources.PeakHeapBytes), "heap_growth_bytes": float64(value.Resources.HeapGrowthBytes),
 		"peak_goroutines": float64(value.Resources.PeakGoroutines), "goroutine_growth": float64(value.Resources.GoroutineGrowth),
 		"peak_fds": float64(value.Resources.PeakFDs), "fd_growth": float64(value.Resources.FDGrowth),
-		"db_reader_wait_ms": value.Resources.DBReaderWaitMS, "db_writer_wait_ms": value.Resources.DBWriterWaitMS,
+		"db_reader_mean_wait_ms": value.Resources.DBReaderMeanWaitMS, "db_writer_mean_wait_ms": value.Resources.DBWriterMeanWaitMS,
 		"peak_db_reader_open":   float64(value.Resources.PeakDBReaderOpen),
 		"peak_db_reader_in_use": float64(value.Resources.PeakDBReaderInUse),
 		"peak_db_writer_open":   float64(value.Resources.PeakDBWriterOpen),
