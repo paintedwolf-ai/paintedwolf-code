@@ -50,7 +50,12 @@ reuse the public bucket and domain or point at a scratch bucket.
   squash through a merge queue, the required checks `check` (GitHub Actions) and
   `DCO`, no force-pushes or deletions, and the dependency-inventory deploy key
   as the only bypass actor. `check` is the aggregate of every CI tier, so no
-  individual job is listed.
+  individual job is listed. The queue builds one group at a time (up to five
+  pull requests, all required to pass): one full-tier run occupies about 20
+  hosted jobs, six of them on macOS, which is the free plan's whole runner pool,
+  so a second concurrent group would stall every pull request's fast tier.
+  Confirm the queue is live afterwards: the repository's `mergeQueue(branch:
+  "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
 ## Release
