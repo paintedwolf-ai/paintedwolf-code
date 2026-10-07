@@ -15405,7 +15405,7 @@ source_files:
     scripts/document-core-env.sh: 2
     scripts/e2e-cleanup.sh: 15
     scripts/e2e-den-desktop.sh: 50
-    scripts/e2e-den.sh: 184
+    scripts/e2e-den.sh: 193
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 20
     scripts/e2e-sidecar-serve.sh: 71
@@ -15508,7 +15508,7 @@ source_files:
     scripts/verification_history.py: 46
     scripts/verification_jobs.py: 135
     scripts/verification_plan.py: 370
-    scripts/verification_resources.py: 213
+    scripts/verification_resources.py: 216
     scripts/verification_results.py: 29
     scripts/verification_reuse.py: 409
     scripts/verification_state.py: 23
@@ -16149,13 +16149,13 @@ test_files:
     lycaon-den/e2e/coordination-fixtures.ts: 113
     lycaon-den/e2e/coordination-ui.spec.ts: 102
     lycaon-den/e2e/cost-tracking.spec.ts: 115
-    lycaon-den/e2e/crossbar.spec.ts: 144
+    lycaon-den/e2e/crossbar.spec.ts: 145
     lycaon-den/e2e/deleted-chat-links.spec.ts: 64
     lycaon-den/e2e/demo-workflows-smoke.spec.ts: 54
     lycaon-den/e2e/detections-settings.spec.ts: 203
     lycaon-den/e2e/deterministic-chat-items.spec.ts: 154
     lycaon-den/e2e/draft-versions-ui.spec.ts: 144
-    lycaon-den/e2e/eager-bubble.spec.ts: 89
+    lycaon-den/e2e/eager-bubble.spec.ts: 94
     lycaon-den/e2e/editor-agent-collaboration.spec.ts: 92
     lycaon-den/e2e/editor-collaboration.spec.ts: 204
     lycaon-den/e2e/editor-diff-scroll.spec.ts: 120
@@ -16204,12 +16204,12 @@ test_files:
     lycaon-den/e2e/live-preview-pane.spec.ts: 189
     lycaon-den/e2e/manual-harness-tools.ts: 42
     lycaon-den/e2e/markdown-preview-fixture.ts: 6
-    lycaon-den/e2e/markdown-preview-scroll.spec.ts: 93
+    lycaon-den/e2e/markdown-preview-scroll.spec.ts: 97
     lycaon-den/e2e/markdown-preview.spec.ts: 104
     lycaon-den/e2e/mcp-settings-access.spec.ts: 37
     lycaon-den/e2e/mcp-sign-in-cancellation.spec.ts: 85
     lycaon-den/e2e/mcp-sign-in-lifecycle.spec.ts: 127
-    lycaon-den/e2e/nav-single-selection.spec.ts: 66
+    lycaon-den/e2e/nav-single-selection.spec.ts: 69
     lycaon-den/e2e/no-provider-first-run.spec.ts: 35
     lycaon-den/e2e/nofolder-banner.spec.ts: 42
     lycaon-den/e2e/notification-stack.spec.ts: 90
@@ -17856,7 +17856,7 @@ test_files:
     lycaon/internal/api/taskgroup/group_test.go: 80
     lycaon/internal/api/taskgroup/testing_main_test.go: 6
     lycaon/internal/api/testing_main_test.go: 14
-    lycaon/internal/api/testutil_test.go: 585
+    lycaon/internal/api/testutil_test.go: 560
     lycaon/internal/api/thinking_policy_test.go: 44
     lycaon/internal/api/transport_boundaries_test.go: 136
     lycaon/internal/api/trust_testutil_test.go: 31
@@ -18101,7 +18101,7 @@ test_files:
     lycaon/internal/confine/confine_egress_ingestion_test.go: 226
     lycaon/internal/confine/confine_egress_internal_test.go: 511
     lycaon/internal/confine/confine_egress_socks_test.go: 95
-    lycaon/internal/confine/confine_test.go: 982
+    lycaon/internal/confine/confine_test.go: 989
     lycaon/internal/confine/confined_broker_live_test.go: 62
     lycaon/internal/confine/credential_stores_fixture_test.go: 15
     lycaon/internal/confine/credential_subject_test.go: 118
@@ -19509,7 +19509,7 @@ test_files:
     lycaon/internal/project/lifecycle_test.go: 399
     lycaon/internal/project/mutation_gate_test.go: 68
     lycaon/internal/project/name_test.go: 88
-    lycaon/internal/project/navigation_test.go: 92
+    lycaon/internal/project/navigation_test.go: 94
     lycaon/internal/project/overlay_test.go: 94
     lycaon/internal/project/path_resolve_test.go: 59
     lycaon/internal/project/policy_test.go: 69
@@ -22256,7 +22256,7 @@ test_files:
     lycaon/test/security/api_idempotency_sweep_test.go: 444
     lycaon/test/security/api_implement_default_e2e_test.go: 146
     lycaon/test/security/api_mcp_settings_test.go: 68
-    lycaon/test/security/api_orchestration_pipeline_test.go: 126
+    lycaon/test/security/api_orchestration_pipeline_test.go: 121
     lycaon/test/security/api_outbound_secret_floor_e2e_test.go: 301
     lycaon/test/security/api_plan_approve_readiness_test.go: 182
     lycaon/test/security/api_plan_journey_e2e_test.go: 37
@@ -22304,7 +22304,7 @@ test_files:
     lycaon/test/security/api_sse_overflow_resync_e2e_test.go: 186
     lycaon/test/security/api_t1_tools_sandbox_test.go: 34
     lycaon/test/security/api_terminal_send_redaction_e2e_test.go: 83
-    lycaon/test/security/api_testutil.go: 460
+    lycaon/test/security/api_testutil.go: 464
     lycaon/test/security/api_tool_result_wire_test.go: 62
     lycaon/test/security/api_user_decision_topology_test.go: 83
     lycaon/test/security/api_user_notice_host_error_e2e_test.go: 74
@@ -22490,7 +22490,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 99
+    scripts/verification_tests/test_ci_execution.py: 98
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
@@ -22501,7 +22501,7 @@ test_files:
     scripts/verification_tests/test_planning_execution.py: 444
     scripts/verification_tests/test_release_distribution_execution.py: 279
     scripts/verification_tests/test_reuse_execution.py: 247
-    scripts/verification_tests/test_test_execution.py: 486
+    scripts/verification_tests/test_test_execution.py: 496
     scripts/verification_tests/test_tier_exclusion_execution.py: 40
     scripts/verification_tests/test_upgrade_corpus_execution.py: 115
 ts_local_dependencies:

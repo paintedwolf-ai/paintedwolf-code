@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -329,6 +330,10 @@ func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want s
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// A stalled turn is diagnosable only from the stacks that hold it.
+	var stacks bytes.Buffer
+	_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
+	t.Logf("goroutines at transcript wait timeout:\n%s", stacks.String())
 	t.Fatalf("session %s transcript did not contain %q within %s; messages: %+v", sessionID, want, timeout, listMessagesHTTP(t, srv, sessionID))
 }
 
