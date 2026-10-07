@@ -49,9 +49,14 @@ func (g *windowsGuard) configure(cmd *exec.Cmd) {
 	cmd.SysProcAttr.CreationFlags = flags
 	// Cancellation terminates the entire process job.
 	cmd.Cancel = func() error {
-		g.kill(cmd)
+		g.terminate(cmd)
 		return nil
 	}
+}
+
+// terminate has no graceful signal on Windows; the job ends at once.
+func (g *windowsGuard) terminate(cmd *exec.Cmd) {
+	g.kill(cmd)
 }
 
 func (g *windowsGuard) onStarted(cmd *exec.Cmd) error {

@@ -344,7 +344,9 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts.
+assigned at admission; host load only adjusts timeouts. Hosted CI sets
+`PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
+(still at most eight) and a shared operation reserves all of it.
 
 Resource names are global locks: Go digests share `go`, Go lint holds `lint`,
 frontend checks hold `frontend`, Cargo tests hold `rust`, and the isolated
@@ -487,7 +489,9 @@ kill can still prevent upload. Inspect the first cold-cache hosted runs and
 adjust the affected partition from their timings, rather than raising every
 job to the six-hour hosted-runner ceiling.
 
-WebKit runs on macOS even in the Linux-oriented PR profile so its platform
+Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB on public
+repositories); a lane declares `macos-15` only when it tests macOS-specific
+behavior. WebKit runs on macOS so its platform
 check cannot silently skip the suite. Desktop E2E shares one reusable workflow
 across PR, nightly, and release runs, with separate staging and test deadlines.
 The companion `lycaon-den.yml` retains seam canaries and Playwright web E2E;

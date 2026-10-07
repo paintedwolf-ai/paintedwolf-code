@@ -78,7 +78,16 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     echo "error: LYCAON_E2E_SHARDS must be a positive integer" >&2
     exit 1
   fi
-  if ((shard_count > 1)); then
+  # A CI job runs one slice (k/M) of the suite; its local shards subdivide that slice.
+  job_shard="${LYCAON_E2E_JOB_SHARD:-1/1}"
+  job_index="${job_shard%%/*}"
+  job_count="${job_shard#*/}"
+  if ! [[ "${job_index}" =~ ^[1-9][0-9]*$ && "${job_count}" =~ ^[1-9][0-9]*$ ]] || ((job_index > job_count)); then
+    echo "error: LYCAON_E2E_JOB_SHARD must be k/M with 1 <= k <= M" >&2
+    exit 1
+  fi
+  total_shards=$((job_count * shard_count))
+  if ((shard_count > 1 || job_count > 1)); then
     cd "${ROOT}/lycaon-den"
     if ! bunx playwright install chromium webkit --with-deps; then
       echo "playwright install --with-deps failed; retrying without system deps" >&2
@@ -104,10 +113,11 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     }
     trap exit_shards INT TERM
     for ((shard = 1; shard <= shard_count; shard++)); do
+      global_shard=$(( (job_index - 1) * shard_count + shard ))
       LYCAON_E2E_SHARD_CHILD=1 \
       LYCAON_E2E_PLAYWRIGHT_READY=1 \
       LYCAON_E2E_OUTPUT_DIR="${ROOT}/lycaon-den/test-results/shard-${shard}" \
-        bash "$0" "$@" --shard="${shard}/${shard_count}" &
+        bash "$0" "$@" --shard="${global_shard}/${total_shards}" &
       pids+=("$!")
     done
     status=0

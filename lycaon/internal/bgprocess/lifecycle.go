@@ -2,13 +2,21 @@ package bgprocess
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// stopSettleTimeout bounds how long a stopped job may take to report its exit
+// after the kill fallback fired. A tree whose output pipe is still held from
+// outside the signalled session cannot be reaped from here.
+const stopSettleTimeout = exec.TerminateGrace + 8*time.Second
 
 // Promote makes a job visible and publishes buffered output and any observed exit.
 func (r *Registry) Promote(ctx context.Context, sessionID, handle string) error {
@@ -157,13 +165,32 @@ func (r *Registry) DisposeSession(ctx context.Context, sessionID string) error {
 		r.killProcess(proc)
 	}
 	for _, proc := range procs {
-		select {
-		case <-proc.done:
-		case <-ctx.Done():
-			return ctx.Err()
+		if err := r.awaitSettled(ctx, proc); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// awaitSettled waits for a stopped job to report its exit. After
+// stopSettleTimeout the handle is abandoned so the caller's stop can finish;
+// the job stays signalled and the reaper still covers it at engine exit.
+func (r *Registry) awaitSettled(ctx context.Context, proc *Process) error {
+	timer := time.NewTimer(stopSettleTimeout)
+	defer timer.Stop()
+	select {
+	case <-proc.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		r.mu.Lock()
+		stages := append([]hostcmd.StageResult(nil), proc.Stages...)
+		r.mu.Unlock()
+		slog.WarnContext(ctx, "stopped process did not settle; abandoning its handle",
+			"session_id", proc.SessionID, "handle", proc.Handle, "command", hostcmd.CommandLine(stages))
+		return nil
+	}
 }
 
 // Close rejects new work and waits for registered processes to exit.
@@ -191,10 +218,8 @@ func (r *Registry) Close(ctx context.Context) error {
 		r.killProcess(proc)
 	}
 	for _, proc := range procs {
-		select {
-		case <-proc.done:
-		case <-ctx.Done():
-			return ctx.Err()
+		if err := r.awaitSettled(ctx, proc); err != nil {
+			return err
 		}
 	}
 	return nil

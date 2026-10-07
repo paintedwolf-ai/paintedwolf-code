@@ -221,7 +221,7 @@ grandfathered:
         lycaon-den/src/settings/providers/models-editor-model.ts: 647
         lycaon-den/src/shell/den-client-state-invariants.ts: 621
         lycaon-den/src/store/app-state.ts: 754
-        lycaon/cmd/lycaon-perf/runner.go: 687
+        lycaon/cmd/lycaon-perf/runner.go: 695
         lycaon/cmd/lycaon/extensions.go: 786
         lycaon/internal/api/harness_control.go: 767
         lycaon/internal/api/search_handlers.go: 698
@@ -327,7 +327,7 @@ grandfathered:
         lycaon-den/src/platform/connection/app-connection.test.ts: 1076
         lycaon-den/src/settings/providers/models-editor-model.test.ts: 1021
         lycaon-den/src/shortcuts/dispatcher.test.ts: 919
-        lycaon/internal/confine/confine_test.go: 982
+        lycaon/internal/confine/confine_test.go: 989
         lycaon/internal/coordinator/integration_test.go: 841
         lycaon/internal/gate/evaluate_test.go: 833
         lycaon/internal/hitl/manager_test.go: 1045

@@ -56,8 +56,9 @@ webE2e.describe("nav single selection", () => {
       page, request,
     }) => {
       await bootstrapChatSession(page);
+      const previousSession = await settledChatSessionId(page);
       if (started) {
-        await apiSeedSessionTranscript(request, await settledChatSessionId(page), transcriptMessages([
+        await apiSeedSessionTranscript(request, previousSession, transcriptMessages([
           { id: crypto.randomUUID(), role: "user", content: "Existing conversation", created_at: new Date().toISOString(), ord: 1, seq: 1 },
         ]));
         await expect(liveChatStage(page).getByTestId("transcript-article-user")).toContainText("Existing conversation");
@@ -75,6 +76,10 @@ webE2e.describe("nav single selection", () => {
 
       // An empty session is reused; a started conversation creates another row.
       await page.getByTestId("new-chat-btn").click();
+      // The outgoing chat stays painted while the new one prepares; both are
+      // non-idle until the handoff, so wait for a single settled stage first.
+      const settled = expect.poll(() => settledChatSessionId(page));
+      await (started ? settled.not.toBe(previousSession) : settled.toBe(previousSession));
       await expect(liveChatStage(page).getByTestId("chat-composer")).toBeVisible();
       await expect(liveChatStage(page).getByTestId("chat-composer")).toBeFocused();
       await expect(config).not.toHaveClass(new RegExp(GEAR_ACTIVE));

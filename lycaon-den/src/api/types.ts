@@ -19721,6 +19721,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOperationStatus"];
+                };
+            };
             /** @description Entry moved to Trash */
             204: {
                 headers: {

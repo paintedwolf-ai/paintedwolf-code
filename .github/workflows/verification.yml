@@ -47,6 +47,8 @@ jobs:
     env:
       LYCAON_LLM_MOCK: '1'
       LYCAON_GIT_REFERENCE: /usr/bin/git
+      # Hosted runners run one lane each, so admission may use every CPU.
+      PW_TEST_HOST: dedicated
       BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
       SOAK: 10m
     steps:

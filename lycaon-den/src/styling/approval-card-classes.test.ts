@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { join } from "node:path";
 import { denSourceRoot, loadSourceCorpus, loadTypeScriptCorpus } from "../test/source-corpus.ts";
 import { readSourceText } from "../test/stylesheet-source.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
 const sources = loadTypeScriptCorpus(denSourceRoot, { excludeTests: true });
 const styles = loadSourceCorpus(denSourceRoot, { extensions: [".css"] });
@@ -33,7 +34,7 @@ function utilityBlock(css: string, name: string): string {
 }
 
 /** Member previews wrap because the card clips horizontal overflow. */
-describe("approval card members never hide behind the clipped axis", () => {
+describe("approval card members never hide behind the clipped axis", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("target previews wrap while the scroll region clips overflow-x", () => {
     const css = readSourceText(join(denSourceRoot, "tool-utilities.css"));
     // A vertical scrollport clips overflow-x.

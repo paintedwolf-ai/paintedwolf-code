@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { denSourceRoot, loadTypeScriptCorpus, requireNonEmpty } from "../test/source-corpus.ts";
 import { CLIENT_NOTICES } from "./client-notices.generated.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
 const sources = loadTypeScriptCorpus(denSourceRoot, { excludeTests: true });
 
@@ -17,7 +18,7 @@ const recoveryCopyFragments = [
   "Finish restoring",
 ] as const;
 
-describe("upgrade survival recovery copy", () => {
+describe("upgrade survival recovery copy", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("resolves every store-incompatible notice through CLIENT_NOTICES", () => {
     for (const key of [
       "store_incompatible_integrity",

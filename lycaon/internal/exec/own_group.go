@@ -6,7 +6,7 @@ import (
 )
 
 // RunInOwnGroup runs a command from PrepareCommand in a new session without a
-// controlling terminal (a job object on Windows). The whole group dies on
+// controlling terminal (a job object on Windows). The whole session dies on
 // cancellation, when the command exits, or with the engine.
 func RunInOwnGroup(cmd *exec.Cmd) error {
 	guard, err := newRunGuard(ProcessPriorityNormal)

@@ -90,8 +90,11 @@ func navigationBenchmarkRepository(b *testing.B) string {
 	for directory := range 1000 {
 		folder := filepath.Join(root, "packages", fmt.Sprintf("pkg-%04d", directory))
 		testutil.FailErr(b, "create navigation fixture folder", os.MkdirAll(folder, 0700))
-		for file := range 100 {
-			testutil.FailErr(b, "create navigation fixture file", os.Link(payload, filepath.Join(folder, fmt.Sprintf("file-%03d.txt", file))))
+		// One inode per folder stays under ext4's 65,000-link ceiling.
+		first := filepath.Join(folder, "file-000.txt")
+		testutil.FailErr(b, "write navigation fixture folder payload", os.WriteFile(first, []byte("fixture\n"), 0600))
+		for file := 1; file < 100; file++ {
+			testutil.FailErr(b, "create navigation fixture file", os.Link(first, filepath.Join(folder, fmt.Sprintf("file-%03d.txt", file))))
 		}
 	}
 	return root

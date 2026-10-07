@@ -87,9 +87,10 @@ func (p *ptySession) Wait() error {
 	return p.waitErr
 }
 
+// Kill terminates the terminal's whole session, SIGKILL after TerminateGrace.
 func (p *ptySession) Kill() {
 	if p.guard != nil {
-		p.guard.kill(p.cmd)
+		p.guard.terminate(p.cmd)
 		return
 	}
 	if p.cmd != nil && p.cmd.Process != nil {
