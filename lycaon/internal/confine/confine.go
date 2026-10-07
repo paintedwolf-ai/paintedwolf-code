@@ -1002,6 +1002,7 @@ func standardCacheDataRoots() []string {
 	for _, rel := range packageCacheHomeRelRoots {
 		candidates = append(candidates, join(home, rel))
 	}
+	candidates = append(candidates, toolchainStateRoots()...)
 	candidates = append(candidates, environmentWriteRoots()...)
 	for _, c := range candidates {
 		if strings.TrimSpace(c) != "" {
