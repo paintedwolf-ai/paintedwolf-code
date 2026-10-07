@@ -15491,7 +15491,7 @@ source_files:
     scripts/e2e-den.sh: 193
     scripts/e2e-sidecar-bg.sh: 66
     scripts/e2e-sidecar-build.sh: 20
-    scripts/e2e-sidecar-serve.sh: 71
+    scripts/e2e-sidecar-serve.sh: 72
     scripts/e2e-sidecar-stop.sh: 15
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
