@@ -105,7 +105,7 @@ The host publishes `idle` with one terminal disposition only at that boundary: `
 
 The idle boundary ends one visible turn, not the session's work. When admitted human direction will run next, `Session.prompt_pending` is already true on that idle event and stays true until the next turn's `busy`. See [Host contract](host-contract.md#2-prompt-loop-sequence).
 
-Stop is a root-session barrier when there is no queued human direction: it blocks new admission, converges active turns and descendants, settles receipts, closes resources, and only then reports the session idle as `user_stopped`. When the session has a next-turn queue, Stop still interrupts and reconciles the active tree but preserves the queue and immediately dispatches its head as the next user turn. The queued direction is the user's reason to stop, not collateral work to discard.
+Stop is a root-session barrier when there is no queued human direction: it blocks new admission, converges active turns and descendants, settles receipts, closes resources, and only then reports the session idle as `user_stopped`. When the session has a next-turn queue, Stop still interrupts and reconciles the active tree but preserves the queue and immediately dispatches its head as the next user turn. The queued direction is the user's reason to stop, not collateral work to discard. Convergence is bounded: a turn whose context is cancelled while it is still inside a tool has thirty seconds to unwind, after which Stop records the interruption and settles the session without it.
 
 ---
 

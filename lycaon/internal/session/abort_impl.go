@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -188,10 +190,12 @@ func (m *Manager) stopTreeWorkers(ctx context.Context, tree []store.SessionTreeM
 	return errs
 }
 
+// DefaultTurnReleaseTimeout is how long a stop waits for the cancelled turn to
+// unwind and release its session before recording the stop without it.
+const DefaultTurnReleaseTimeout = 30 * time.Second
+
 func (m *Manager) stopOneSessionRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string, errs []error) []error {
-	lock := m.promptState.Prompt.Acquire(sess.ID)
-	lock.Lock()
-	defer lock.Unlock()
+	defer m.acquireStoppedTurn(ctx, sess.ID)()
 	preserveQueue := sess.ID == preserveQueueSessionID
 	if m.store != nil {
 		if preserveQueue {
@@ -216,4 +220,48 @@ func (m *Manager) stopOneSessionRuntime(ctx context.Context, sess store.SessionT
 		}
 	}
 	return errs
+}
+
+// acquireStoppedTurn takes the session's prompt lock from the turn the stop
+// already cancelled. A turn still inside a tool after turnReleaseTimeout is
+// abandoned: its context is done, so the stop records the interruption and
+// settles the session without waiting for it. The returned func releases the
+// lock when it was taken.
+func (m *Manager) acquireStoppedTurn(ctx context.Context, sessionID string) (release func()) {
+	lock := m.promptState.Prompt.Acquire(sessionID)
+	timeout := m.turnReleaseTimeout
+	if timeout <= 0 {
+		timeout = DefaultTurnReleaseTimeout
+	}
+	var mu sync.Mutex
+	abandoned := false
+	acquired := make(chan struct{})
+	go func() {
+		lock.Lock()
+		mu.Lock()
+		defer mu.Unlock()
+		if abandoned {
+			lock.Unlock()
+			return
+		}
+		close(acquired)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-acquired:
+		return lock.Unlock
+	case <-timer.C:
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	select {
+	case <-acquired:
+		return lock.Unlock
+	default:
+	}
+	abandoned = true
+	slog.WarnContext(ctx, "cancelled turn did not release its session; stopping without it",
+		"component", "session", "session_id", sessionID, "waited", timeout)
+	return func() {}
 }

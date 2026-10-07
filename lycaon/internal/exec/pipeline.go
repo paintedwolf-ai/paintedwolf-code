@@ -409,7 +409,7 @@ func waitWiredStages(runCtx context.Context, wired []wiredStage) (timedOut bool,
 	case <-runCtx.Done():
 		timedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
 		// Synchronous teardown keeps the following wait ordered.
-		killWired(wired)
+		terminateWired(wired)
 		<-waitDone
 	}
 	return timedOut, waitErrs
@@ -501,6 +501,15 @@ func killWired(stages []wiredStage) {
 	for i := range stages {
 		if stages[i].guard != nil {
 			stages[i].guard.kill(stages[i].cmd)
+		}
+	}
+}
+
+// terminateWired asks every stage's tree to exit, with the guard's kill fallback.
+func terminateWired(stages []wiredStage) {
+	for i := range stages {
+		if stages[i].guard != nil {
+			stages[i].guard.terminate(stages[i].cmd)
 		}
 	}
 }

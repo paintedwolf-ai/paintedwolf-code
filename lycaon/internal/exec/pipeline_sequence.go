@@ -240,13 +240,13 @@ func (s *sequenceRun) stopped() bool {
 	return s.killed
 }
 
-// kill tears down the running group and prevents subsequent groups from starting.
-func (s *sequenceRun) kill() {
+// terminate tears down the running group and prevents subsequent groups from starting.
+func (s *sequenceRun) terminate() {
 	s.mu.Lock()
 	s.killed = true
 	wired := s.live
 	s.mu.Unlock()
-	killWired(wired)
+	terminateWired(wired)
 }
 
 // ErrStageNotLaunched marks a sequenced stage whose process never started.

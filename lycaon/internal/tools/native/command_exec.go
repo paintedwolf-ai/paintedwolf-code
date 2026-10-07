@@ -24,7 +24,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
-const commandCancelCleanupTimeout = 2 * time.Second
+// commandCancelCleanupTimeout outlasts the kill fallback so a cancelled command
+// settles inline instead of being promoted as still running.
+const commandCancelCleanupTimeout = exec.TerminateGrace + 3*time.Second
 
 // commandRunOutcome carries an inline completion or a promoted process handle.
 type commandRunOutcome struct {

@@ -342,7 +342,7 @@ Unquoted `*`, `?`, and `[...]` expand once, before secret references resolve and
 
 One pattern may match at most 1,000 paths and one plan may examine at most 50,000 directory entries. Exceeding either returns `COMMAND_GLOB_BUDGET_EXCEEDED` naming the pattern; nothing is truncated. Redirection targets and environment values never expand.
 
-Working directory and environment are per-call inputs; there is no mutable session shell state whose hidden `cd` or export changes later commands. Structured I/O and background handles replace shell idioms that would obscure resource lifetime: a stage that becomes long-running returns a handle, and output and stop use explicit control tools.
+Working directory and environment are per-call inputs; there is no mutable session shell state whose hidden `cd` or export changes later commands. Structured I/O and background handles replace shell idioms that would obscure resource lifetime: a stage that becomes long-running returns a handle, and output and stop use explicit control tools. Stopping a handle, cancelling the call that awaits it, or stopping the session ends the whole process session the command started, including jobs a shell moved into their own process groups: SIGTERM first, then SIGKILL for anything still running two seconds later.
 
 A settled foreground result carries the last 8 KiB of screened output as `tail`. When the process wrote more, the result says so (`truncated`, `original_tail_bytes`) and names `wire_spill_path`, a host-data file holding every retained byte, readable by line with `read` `offset`/`limit`. A redirect into the tree is never needed to see the rest.
 
