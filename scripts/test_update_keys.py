@@ -169,6 +169,31 @@ class UpdateKeyRehearsal(unittest.TestCase):
                 planner.main()
                 self.assertEqual(len(run.call_args_list), 4)
 
+    def test_generation_one_feeds_halt_only_to_a_replacement(self):
+        spec = importlib.util.spec_from_file_location("halt_plan", Path(__file__).with_name("release-halt-plan.py"))
+        planner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(planner)
+        keys = registry()
+        feeds = {feed_key(channel, number): release(keys, version, number, embedded)
+                 for channel in ("stable", "preview")
+                 for number, version, embedded in [(1, "2.0.0", 2), (2, "3.0.0", 3)]}
+        with patch.object(planner, "read_storage", side_effect=feeds.get):
+            with self.assertRaises(ValueError):
+                planner.plan_withdrawal(keys, 1, "2.0.0", None)
+            plan = planner.plan_withdrawal(keys, 1, "2.0.0", "1.9.0")
+            self.assertEqual([row["last_good"] for row in plan["feeds"] if row["generation"] == 1], ["1.9.0", "1.9.0"])
+            withdrawn_only = planner.plan_withdrawal(keys, 2, "3.0.0", None)
+            self.assertEqual([row["last_good"] for row in withdrawn_only["feeds"] if "bad" in row], [None, None])
+        rows = [{"generation": 1, "channel": channel, "bad": "2.0.0", "last_good": None} for channel in ("stable", "preview")]
+        rows += [{"generation": 2, "channel": channel, "keep_version": "3.0.0"} for channel in ("stable", "preview")]
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "plan.json"
+            path.write_text(json.dumps({"source_generation": 1, "feeds": rows}))
+            with patch.object(planner, "load_registry", return_value=keys), patch.object(sys, "argv", ["halt", "--plan", str(path)]), patch.object(planner, "read_storage", side_effect=feeds.get), patch.object(planner.subprocess, "run") as run:
+                with self.assertRaises(ValueError):
+                    planner.main()
+                run.assert_not_called()
+
     def test_real_registry_carries_distinct_artifact_and_feed_keys_for_the_embedded_generation(self):
         keys = load_registry()
         row = keys["generations"][keys["embedded_generation"] - 1]
