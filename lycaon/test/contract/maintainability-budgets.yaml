@@ -146,7 +146,7 @@ go_receiver_lines:
     lycaon/internal/bgprocess/bgprocess.BackgroundCapacityError: 2
     lycaon/internal/bgprocess/bgprocess.Completion: 6
     lycaon/internal/bgprocess/bgprocess.Process: 12
-    lycaon/internal/bgprocess/bgprocess.Registry: 1651
+    lycaon/internal/bgprocess/bgprocess.Registry: 1664
     lycaon/internal/bgprocess/bgprocess.RingBuffer: 136
     lycaon/internal/bgprocess/bgprocess.StartConflict: 7
     lycaon/internal/bgprocess/bgprocess.ptyScreen: 106
@@ -491,8 +491,8 @@ go_receiver_lines:
     lycaon/internal/exec/exec.sequenceRun: 213
     lycaon/internal/exec/exec.stageFiles: 38
     lycaon/internal/exec/exec.tailLimitedWriter: 24
-    lycaon/internal/exec/exec.unixGuard: 51
-    lycaon/internal/exec/exec.windowsGuard: 43
+    lycaon/internal/exec/exec.unixGuard: 92
+    lycaon/internal/exec/exec.windowsGuard: 46
     lycaon/internal/extensionstate/extensionstate.ApplyMetaOp: 12
     lycaon/internal/extensionstate/extensionstate.ApplyProfileOp: 12
     lycaon/internal/extensionstate/extensionstate.InstallMetaOp: 14
@@ -1325,7 +1325,7 @@ go_receiver_lines:
     lycaon/internal/session/session.ListenCheckpointBroker: 135
     lycaon/internal/session/session.LocalNetworkCheckpointBroker: 146
     lycaon/internal/session/session.LoopbackCheckpointBroker: 109
-    lycaon/internal/session/session.Manager: 12316
+    lycaon/internal/session/session.Manager: 12334
     lycaon/internal/session/session.MemoryDecisionStore: 48
     lycaon/internal/session/session.PeerRejectionFeed: 62
     lycaon/internal/session/session.PlanToolStash: 35
@@ -2040,7 +2040,7 @@ go_receiver_methods:
     lycaon/internal/bgprocess/bgprocess.BackgroundCapacityError: 2
     lycaon/internal/bgprocess/bgprocess.Completion: 1
     lycaon/internal/bgprocess/bgprocess.Process: 1
-    lycaon/internal/bgprocess/bgprocess.Registry: 62
+    lycaon/internal/bgprocess/bgprocess.Registry: 63
     lycaon/internal/bgprocess/bgprocess.RingBuffer: 9
     lycaon/internal/bgprocess/bgprocess.StartConflict: 2
     lycaon/internal/bgprocess/bgprocess.ptyScreen: 5
@@ -2385,8 +2385,8 @@ go_receiver_methods:
     lycaon/internal/exec/exec.sequenceRun: 12
     lycaon/internal/exec/exec.stageFiles: 4
     lycaon/internal/exec/exec.tailLimitedWriter: 2
-    lycaon/internal/exec/exec.unixGuard: 5
-    lycaon/internal/exec/exec.windowsGuard: 4
+    lycaon/internal/exec/exec.unixGuard: 7
+    lycaon/internal/exec/exec.windowsGuard: 5
     lycaon/internal/extensionstate/extensionstate.ApplyMetaOp: 1
     lycaon/internal/extensionstate/extensionstate.ApplyProfileOp: 1
     lycaon/internal/extensionstate/extensionstate.InstallMetaOp: 1
@@ -3219,7 +3219,7 @@ go_receiver_methods:
     lycaon/internal/session/session.ListenCheckpointBroker: 5
     lycaon/internal/session/session.LocalNetworkCheckpointBroker: 4
     lycaon/internal/session/session.LoopbackCheckpointBroker: 5
-    lycaon/internal/session/session.Manager: 692
+    lycaon/internal/session/session.Manager: 693
     lycaon/internal/session/session.MemoryDecisionStore: 4
     lycaon/internal/session/session.PeerRejectionFeed: 2
     lycaon/internal/session/session.PlanToolStash: 2
@@ -5146,7 +5146,7 @@ go_struct_fields:
     lycaon/internal/exec/exec.stageFiles: 4
     lycaon/internal/exec/exec.stageWrite: 2
     lycaon/internal/exec/exec.tailLimitedWriter: 3
-    lycaon/internal/exec/exec.unixGuard: 3
+    lycaon/internal/exec/exec.unixGuard: 6
     lycaon/internal/exec/exec.windowsGuard: 2
     lycaon/internal/exec/exec.wiredStage: 5
     lycaon/internal/extensionstate/extensionstate.ApplyMetaOp: 2
@@ -7343,7 +7343,7 @@ go_struct_fields:
     lycaon/internal/session/session.ListenCheckpointBroker: 9
     lycaon/internal/session/session.LocalNetworkCheckpointBroker: 9
     lycaon/internal/session/session.LoopbackCheckpointBroker: 8
-    lycaon/internal/session/session.Manager: 134
+    lycaon/internal/session/session.Manager: 135
     lycaon/internal/session/session.MemoryDecisionStore: 2
     lycaon/internal/session/session.OverlayBaseRejection: 2
     lycaon/internal/session/session.ParallelTaskCaps: 3
@@ -9391,7 +9391,7 @@ source_directories:
     lycaon/internal/oarcore: 13
     lycaon/internal/observability: 26
     lycaon/internal/orchestration: 26
-    lycaon/internal/osprocess: 6
+    lycaon/internal/osprocess: 9
     lycaon/internal/oswalk: 1
     lycaon/internal/outboundhttp: 3
     lycaon/internal/overlayplan: 1
@@ -11593,7 +11593,7 @@ source_files:
     lycaon/internal/bgprocess/direct_ip.go: 59
     lycaon/internal/bgprocess/execution_capability.go: 38
     lycaon/internal/bgprocess/job.go: 97
-    lycaon/internal/bgprocess/lifecycle.go: 251
+    lycaon/internal/bgprocess/lifecycle.go: 268
     lycaon/internal/bgprocess/output_projection.go: 231
     lycaon/internal/bgprocess/pipeline.go: 183
     lycaon/internal/bgprocess/process.go: 67
@@ -12318,15 +12318,15 @@ source_files:
     lycaon/internal/evidence/verifiers_visual.go: 29
     lycaon/internal/exec/env_merge.go: 27
     lycaon/internal/exec/exec.go: 186
-    lycaon/internal/exec/guard.go: 8
-    lycaon/internal/exec/guard_unix.go: 67
-    lycaon/internal/exec/guard_windows.go: 76
+    lycaon/internal/exec/guard.go: 13
+    lycaon/internal/exec/guard_unix.go: 114
+    lycaon/internal/exec/guard_windows.go: 79
     lycaon/internal/exec/io.go: 175
     lycaon/internal/exec/launch.go: 92
     lycaon/internal/exec/nice_linux.go: 6
     lycaon/internal/exec/nice_other.go: 5
     lycaon/internal/exec/own_group.go: 24
-    lycaon/internal/exec/pipeline.go: 458
+    lycaon/internal/exec/pipeline.go: 465
     lycaon/internal/exec/pipeline_background.go: 103
     lycaon/internal/exec/pipeline_sequence.go: 266
     lycaon/internal/exec/pty.go: 160
@@ -13126,6 +13126,9 @@ source_files:
     lycaon/internal/osprocess/alive_unix.go: 12
     lycaon/internal/osprocess/alive_windows.go: 14
     lycaon/internal/osprocess/doc.go: 1
+    lycaon/internal/osprocess/session_darwin.go: 22
+    lycaon/internal/osprocess/session_linux.go: 45
+    lycaon/internal/osprocess/session_other.go: 2
     lycaon/internal/osprocess/start_darwin.go: 13
     lycaon/internal/osprocess/start_linux.go: 28
     lycaon/internal/osprocess/start_other.go: 2
@@ -13792,7 +13795,7 @@ source_files:
     lycaon/internal/secretspan/candidate.go: 84
     lycaon/internal/secretspan/secretspan.go: 95
     lycaon/internal/sensitivepath/sensitivepath.go: 290
-    lycaon/internal/session/abort_impl.go: 191
+    lycaon/internal/session/abort_impl.go: 212
     lycaon/internal/session/agent_turn.go: 26
     lycaon/internal/session/agentsmd_cache.go: 175
     lycaon/internal/session/approvalstate/direct_ip_capability_runtime.go: 251
@@ -13861,7 +13864,7 @@ source_files:
     lycaon/internal/session/manager_background.go: 85
     lycaon/internal/session/manager_crud.go: 113
     lycaon/internal/session/manager_held.go: 76
-    lycaon/internal/session/manager_impl.go: 248
+    lycaon/internal/session/manager_impl.go: 251
     lycaon/internal/session/manager_progress.go: 32
     lycaon/internal/session/manager_wiring.go: 147
     lycaon/internal/session/merge_reconcile_paths.go: 77
@@ -15718,7 +15721,7 @@ test_directories:
     lycaon/internal/await: 1
     lycaon/internal/backgroundwork: 3
     lycaon/internal/backup: 17
-    lycaon/internal/bgprocess: 15
+    lycaon/internal/bgprocess: 16
     lycaon/internal/blobcache: 1
     lycaon/internal/bloblifecycle: 2
     lycaon/internal/blobstore: 2
@@ -15795,7 +15798,7 @@ test_directories:
     lycaon/internal/eventoutbox: 1
     lycaon/internal/events: 18
     lycaon/internal/evidence: 30
-    lycaon/internal/exec: 21
+    lycaon/internal/exec: 22
     lycaon/internal/extensionstate: 12
     lycaon/internal/extpacks: 36
     lycaon/internal/filebriefing: 6
@@ -15959,7 +15962,7 @@ test_directories:
     lycaon/internal/secretmint: 7
     lycaon/internal/secretspan: 2
     lycaon/internal/sensitivepath: 3
-    lycaon/internal/session: 248
+    lycaon/internal/session: 249
     lycaon/internal/session/approvalstate: 10
     lycaon/internal/session/checkpoint: 5
     lycaon/internal/session/lifecycle: 2
@@ -17940,6 +17943,7 @@ test_files:
     lycaon/internal/backup/upgrade_recovery_test.go: 131
     lycaon/internal/backup/worker_manifest_integrity_test.go: 43
     lycaon/internal/bgprocess/capacity_test.go: 46
+    lycaon/internal/bgprocess/dispose_tree_test.go: 49
     lycaon/internal/bgprocess/execution_capability_test.go: 24
     lycaon/internal/bgprocess/on_exit_test.go: 48
     lycaon/internal/bgprocess/pty_exit_test.go: 38
@@ -18677,6 +18681,7 @@ test_files:
     lycaon/internal/exec/sanitize_env_test.go: 129
     lycaon/internal/exec/separate_stderr_test.go: 58
     lycaon/internal/exec/stage_redirect_test.go: 150
+    lycaon/internal/exec/terminate_unix_test.go: 102
     lycaon/internal/extensionstate/candidate_error_test.go: 34
     lycaon/internal/extensionstate/credential_slots_test.go: 90
     lycaon/internal/extensionstate/device_catalog_test.go: 96
@@ -20037,6 +20042,7 @@ test_files:
     lycaon/internal/sensitivepath/alias_spelling_test.go: 101
     lycaon/internal/sensitivepath/sensitivepath_case_test.go: 47
     lycaon/internal/sensitivepath/sensitivepath_test.go: 231
+    lycaon/internal/session/abort_command_unix_test.go: 132
     lycaon/internal/session/abort_invariants_test.go: 275
     lycaon/internal/session/abort_panic_recovery_test.go: 44
     lycaon/internal/session/abort_test.go: 201
