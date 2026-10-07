@@ -31,14 +31,22 @@ type hostedJob struct {
 	}
 }
 
-func hostedJobs(t *testing.T, name string) map[string]hostedJob {
+type hostedWorkflow struct {
+	On   map[string]yaml.Node
+	Jobs map[string]hostedJob
+}
+
+func hostedWorkflowFile(t *testing.T, name string) hostedWorkflow {
 	t.Helper()
-	var workflow struct {
-		Jobs map[string]hostedJob
-	}
+	var workflow hostedWorkflow
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/"+name+".yml")
 	contractcheck.FailErr(t, "decode hosted workflow", yaml.Unmarshal([]byte(data), &workflow))
-	return workflow.Jobs
+	return workflow
+}
+
+func hostedJobs(t *testing.T, name string) map[string]hostedJob {
+	t.Helper()
+	return hostedWorkflowFile(t, name).Jobs
 }
 
 func hostedNeeds(t *testing.T, job hostedJob) []string {
@@ -61,7 +69,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 		t.Fatalf("%s must always judge every dependency: got %v (%s), want %v", gate, got, job.If, dependencies)
 	}
 	for _, step := range job.Steps {
-		if step.Run == "python3 scripts/ci_verification.py gate" && step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" {
+		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") && step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" {
 			return
 		}
 	}
@@ -70,7 +78,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	t.Parallel()
-	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "verification": "verified", "lycaon-den": "e2e"} {
+	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "verification": "verified"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
@@ -82,8 +90,48 @@ func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	}
 }
 
-// Push CI verifies every commit; a release gates publication on its own
-// preflight and upgrade rehearsal while the signed build runs alongside them.
+// Pull requests get the fast tier; main advances only through the merge queue,
+// whose single required check judges the full tier on the commit that lands.
+func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "ci")
+	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
+		if _, ok := workflow.On[event]; !ok {
+			t.Errorf("CI must run on %s", event)
+		}
+	}
+	if _, ok := workflow.On["push"]; ok {
+		t.Error("the merge queue verifies what lands on main; a push run would repeat it")
+	}
+	var pullRequest struct {
+		Paths       []string
+		PathsIgnore []string `yaml:"paths-ignore"`
+	}
+	trigger := workflow.On["pull_request"]
+	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
+	if len(pullRequest.Paths)+len(pullRequest.PathsIgnore) > 0 {
+		t.Error("the required check must report on every pull request")
+	}
+	jobs := workflow.Jobs
+	if jobs["verification"].With["profile"] != "${{ github.event_name == 'pull_request' && 'fast' || 'check' }}" {
+		t.Error("pull requests must run the fast profile and every other event the check profile")
+	}
+	if platform := jobs["platform"]; platform.Uses != "./.github/workflows/platform-verification.yml" ||
+		platform.If != "github.event_name != 'pull_request'" {
+		t.Error("platform verification must run in every full-tier event and only there")
+	}
+	requireHostedGate(t, jobs, "check", []string{"verification", "platform"})
+	for _, step := range jobs["check"].Steps {
+		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
+			(step.Env["SKIPPED"] != "${{ github.event_name == 'pull_request' && 'platform' || '' }}" ||
+				!strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
+			t.Error("the gate may excuse only the platform job, and only on pull requests")
+		}
+	}
+}
+
+// A release ships only a commit the full tier passed, and gates publication on
+// its own preflight and upgrade rehearsal while the signed build runs alongside them.
 func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
@@ -94,6 +142,14 @@ func TestReleaseGatesPrecedePublication(t *testing.T) {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)
 		}
+	}
+	verified := false
+	for _, step := range jobs["classify"].Steps {
+		verified = verified || step.Run == `python3 scripts/ci_verification.py verified "${GITHUB_SHA}"` &&
+			step.If == "${{ github.ref_type == 'tag' }}"
+	}
+	if !verified {
+		t.Error("a tagged release must prove its commit passed the full tier")
 	}
 	if !slices.Contains(hostedNeeds(t, jobs["publish-immutable"]), "ship-gates") {
 		t.Error("publish-immutable must require ship-gates; signing may overlap the gates, publication may not")
@@ -122,7 +178,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	if !bounded || !evidence {
 		t.Fatal("verification needs an invocation deadline and always-run evidence collection")
 	}
-	for _, workflow := range []string{"ci", "nightly", "verification", "desktop-verification"} {
+	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "desktop-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
 			if job.Continue || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
@@ -138,7 +194,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 
 func TestDesktopVerificationHasOneImplementation(t *testing.T) {
 	t.Parallel()
-	for workflow, job := range map[string]string{"lycaon-den": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop"} {
+	for workflow, job := range map[string]string{"platform-verification": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop"} {
 		if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/desktop-verification.yml" {
 			t.Errorf("%s must use the shared desktop verification workflow", workflow)
 		}
@@ -147,11 +203,13 @@ func TestDesktopVerificationHasOneImplementation(t *testing.T) {
 
 func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	t.Parallel()
-	for workflow, profile := range map[string]string{"ci": "check", "nightly": "nightly"} {
-		job := hostedJobs(t, workflow)["verification"]
-		if job.Uses != "./.github/workflows/verification.yml" || job.With["profile"] != profile {
-			t.Errorf("%s must invoke its catalog verification profile %s", workflow, profile)
+	for _, workflow := range []string{"ci", "nightly"} {
+		if hostedJobs(t, workflow)["verification"].Uses != "./.github/workflows/verification.yml" {
+			t.Errorf("%s must invoke catalog verification", workflow)
 		}
+	}
+	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {
+		t.Error("nightly must invoke the nightly catalog profile")
 	}
 	for workflow, job := range map[string]string{"verification": "verify", "desktop-verification": "desktop", "release": "preflight"} {
 		setup := false

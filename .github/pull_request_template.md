@@ -20,8 +20,9 @@
 ## Checklist
 
 - [ ] Every commit includes a DCO `Signed-off-by:` trailer (`git commit -s`)
-- [ ] `./task check-fast` is green on the paths I touched
 
 ## Test plan
 
-<!-- How did you verify? Prefer ./task targets (check-fast, den:test, test:digest, …). -->
+<!-- What did you check while working, and how? Prefer scoped ./task targets
+     (test:digest, den:test:digest, …). CI runs check-fast here and the full
+     gate in the merge queue. -->

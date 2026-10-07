@@ -82,7 +82,7 @@ observable behavior; they do not freeze prompt wording.
 - Fixture corpora are committed. A test keyed to a path outside the repository runs on one machine and skips on every other.
 - A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
-- `test:short` is only the unit/component feedback loop. Repository contracts, external integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
+- `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
 - Files classified as internal integration carry the `integration` build tag and stay out of `test:short`; `test:integration`, `test:full`, and `test:race` opt in explicitly and run without `-short`. Source-content limit journeys, document compaction/reload scenarios, full checkpoint-cap capture, and archive entry-limit extraction assemble real stores and filesystems, so they belong to this tier with their exact limit and editing-history fixtures intact. Randomized SQLite lifecycle properties in `test/property` use the same tag; pure in-memory properties remain in the normal suite.
 - Keep scale sweeps separate from boundary proofs. Routine source-tree tests exercise first and late pages and indexed edits at 1,000 and 4,096 rows; stress runs repeat the same assertions at 100,000, one million, and ten million rows. Do not shrink a fixture below a real page, spill, or byte-limit boundary merely to save time.
 - A test must invoke the production transition it claims to prove. Test-local copies of draft settlement or retention deletion are not lifecycle coverage.
@@ -380,10 +380,10 @@ Run every task from the repository root through `./task`.
 | `./task perf:bench` | Repeated Go microbenchmarks and an optional baseline comparison |
 | `./task perf:sidecar` | Representative isolated sidecar workload with enforced latency/resource/correctness budgets |
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
-| `./task check-fast` | Handoff gate: build, lint:fast, unit/component Go suite, Den typecheck, lint, and den:test:fast |
-| `./task check` | Ship gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, lint, and vulnerability checks |
+| `./task check-fast` | Pull request gate and local handoff: build, lint:fast, unit/component Go suite, repository contracts, Den typecheck, lint, and den:test:fast |
+| `./task check` | Merge queue gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, lint, and vulnerability checks |
 
-Choose one closeout gate: `./task check-fast` for handoff or `./task check` for full verification. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
+Each gate runs once per change. A pushed change gets `check-fast` on its pull request and `check` in the merge queue, so it runs neither locally first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
 
 Digest output lists up to five slow packages and Go tests, and up to five slow
 Vitest assertions, when they take at least one second. Go reports the slowest
@@ -409,46 +409,63 @@ allocation before claiming an end-to-end speedup.
 
 ### Hosted verification
 
+Every change is verified once at each tier, and main only advances to a commit
+the full tier passed. [`ci.yml`](../.github/workflows/ci.yml) reports one
+required check, `check`:
+
+| Event | Tier | Work |
+|---|---|---|
+| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go, and frontend jobs on `ubuntu-latest`. |
+| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): upgrade corpus, applied Seatbelt, browser confinement, and Git parity on `macos-15`, Playwright web E2E in three shards, and desktop E2E. |
+| Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
+
+The merge queue squashes each pull request onto main and tests the resulting
+commit; main then advances to exactly that commit, so CI does not run again on
+push. A required check that ran only on pull requests would admit commits that
+were never tested together. Neither tier uses path filters: generated
+documentation, shipped prompts, and the changelog are Markdown the build and
+tests read.
+
 [`scripts/verification-plan.json`](../scripts/verification-plan.json) owns the
 hosted job partitions alongside the local recipes. The reusable
 [`verification.yml`](../.github/workflows/verification.yml) expands a profile
 into independent jobs with `fail-fast: false`. Each job invokes the existing
 `./task` entry point, preserving queue admission, source capture, and receipts.
-The planner rejects a `check` partition that omits or duplicates any stage of
-the local full gate. The release profile runs the subset that decides whether
-the product works: build, contracts, behavior, frontend, native, and
-vulnerabilities. Lint, runner tooling, and WebKit run on every change; race,
-stress, fuzz, transcript scale, and both coverage gates run nightly.
+The planner rejects a `fast` partition that differs from `check-fast` and a
+`check` partition that differs from `check`, so the hosted tiers and the local
+gates cannot drift apart.
 
 | Profile | Work and required result |
 |---|---|
-| PR and main | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these plus upgrade corpus, Seatbelt, browser confinement, and Git parity. |
+| Fast | Build and fast lint, Go (unit/component suite and repository contracts), and frontend (Den typecheck, lint, seam canaries). `CI/check` requires all three and excuses only the platform workflow, which a pull request skips. |
+| Check | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these and every platform job. |
 | Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
-| Release | Push CI verifies every commit, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
+| Release | The tagged commit must carry a passing full-tier `CI/check`, which every commit the queue lands has, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
 
-The catalog grants each verification invocation 60–180 minutes and each job an
-additional 30 minutes for setup and evidence collection. These are initial
-budgets, not measured service levels. Step timeouts leave an opportunity to
-upload receipts and logs before the job deadline; runner loss or a job-level
-kill can still prevent upload. Inspect the first cold-cache hosted runs and
-adjust the affected partition from their timings, rather than raising every
-job to the six-hour hosted-runner ceiling.
+The release profile is the subset of `check` that decides whether the product
+works: build, contracts, behavior, frontend, native, and vulnerabilities.
+
+The catalog grants each verification invocation 45–180 minutes and each job an
+additional 30 minutes for setup and evidence collection. Step timeouts leave an
+opportunity to upload receipts and logs before the job deadline; runner loss or
+a job-level kill can still prevent upload. Adjust the affected partition from
+hosted timings rather than raising every job to the six-hour hosted-runner
+ceiling.
 
 Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB on public
 repositories); a lane declares `macos-15` only when it tests macOS-specific
-behavior. WebKit runs on macOS so its platform
-check cannot silently skip the suite. Desktop E2E shares one reusable workflow
-across PR, nightly, and release runs, with separate staging and test deadlines.
-The companion `lycaon-den.yml` retains seam canaries and Playwright web E2E;
-its terminal `e2e` job requires those and desktop E2E. Require **`check` and
-`e2e`** in branch protection after the first push. Neither workflow uses path
-filters. Aggregates reject failed, cancelled, skipped, or missing results.
+behavior. WebKit runs on macOS so its platform check cannot silently skip the
+suite. Desktop E2E shares one reusable workflow across the merge queue and the
+nightly run, with separate staging and test deadlines. Aggregates reject
+failed, cancelled, missing, or unexpectedly skipped results.
 
-Each catalog job publishes its invocation timing in the Actions summary and
-retains available receipts, stage logs, digest captures, performance reports,
-and browser diagnostics for 14 days, on success as well as failure. Artifact
-names distinguish profiles, jobs, and run attempts. Caches accelerate builds;
-they never substitute for the required job result.
+Each catalog job reports what did not pass as a workflow annotation on the pull
+request and in the Actions summary: the stage, the Go package or task, the
+failing tests, and the start of the digest's failure output. It retains
+receipts, stage logs, digest captures, performance reports, and browser
+diagnostics for 14 days, on success as well as failure. Artifact names
+distinguish profiles, jobs, and run attempts. Caches accelerate builds; they
+never substitute for the required job result.
 
 ## Fixtures
 

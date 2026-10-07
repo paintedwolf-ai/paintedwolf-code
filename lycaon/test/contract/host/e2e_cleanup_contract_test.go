@@ -105,7 +105,7 @@ func TestE2EWorkflowsAlwaysRunCleanup(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	workflows := []string{
-		filepath.Join(root, ".github", "workflows", "lycaon-den.yml"),
+		filepath.Join(root, ".github", "workflows", "platform-verification.yml"),
 		filepath.Join(root, ".github", "workflows", "desktop-verification.yml"),
 	}
 	nightly := readFile(t, filepath.Join(root, ".github", "workflows", "lycaon-den-nightly.yml"))

@@ -127,27 +127,27 @@ func TestReleaseBlastRadiusSeedBootTasks(t *testing.T) {
 func TestReleaseBlastRadiusCiUpgradeCorpusJob(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
-	ci := contractcheck.ReadRepoFile(t, root, ".github/workflows/ci.yml")
-	if !strings.Contains(ci, "upgrade-corpus:") {
-		t.Fatal("ci.yml missing upgrade-corpus job")
+	platform := contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")
+	if !strings.Contains(platform, "upgrade-corpus:") {
+		t.Fatal("platform-verification.yml missing upgrade-corpus job")
 	}
-	if !strings.Contains(ci, "upgrade:corpus:boot") {
-		t.Fatal("ci.yml upgrade-corpus job must run upgrade:corpus:boot")
+	if !strings.Contains(platform, "upgrade:corpus:boot") {
+		t.Fatal("platform-verification.yml upgrade-corpus job must run upgrade:corpus:boot")
 	}
 }
 
 func TestReleaseBlastRadiusCiSeatbeltJob(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
-	ci := contractcheck.ReadRepoFile(t, root, ".github/workflows/ci.yml")
-	if !strings.Contains(ci, "seatbelt:") {
-		t.Fatal("ci.yml missing seatbelt job")
+	platform := contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")
+	if !strings.Contains(platform, "seatbelt:") {
+		t.Fatal("platform-verification.yml missing seatbelt job")
 	}
-	if !strings.Contains(ci, "test:seatbelt") {
-		t.Fatal("ci.yml seatbelt job must run test:seatbelt")
+	if !strings.Contains(platform, "test:seatbelt") {
+		t.Fatal("platform-verification.yml seatbelt job must run test:seatbelt")
 	}
-	if !strings.Contains(ci, "runs-on: macos-15") {
-		t.Fatal("ci.yml must keep macos-15 runners for darwin-gated jobs")
+	if !strings.Contains(platform, "runs-on: macos-15") {
+		t.Fatal("platform-verification.yml must keep macos-15 runners for darwin-gated jobs")
 	}
 }
 

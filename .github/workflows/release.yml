@@ -20,6 +20,10 @@ env:
 jobs:
   classify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      actions: read
     outputs:
       publish: ${{ steps.release.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
@@ -41,6 +45,14 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           bash scripts/release-source-validate.sh \
             "${RELEASE_TAG}" "${GITHUB_SHA}" refs/remotes/origin/main
+
+      # Main only advances through the merge queue, which runs the full tier on the
+      # exact commit it lands; a release ships nothing that tier has not passed.
+      - name: Require full-tier verification of the release commit
+        if: ${{ github.ref_type == 'tag' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_verification.py verified "${GITHUB_SHA}"
 
       - name: Classify release
         id: release
@@ -126,7 +138,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # Push CI verifies every commit; the signed build starts with preflight, and
+  # The merge queue verified this commit; the signed build starts with preflight, and
   # nothing leaves the run until ship-gates passes.
   build-release:
     needs: [classify]

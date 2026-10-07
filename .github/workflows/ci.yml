@@ -1,185 +1,42 @@
 name: CI
 
+# Pull requests run the fast tier, the stages of `./task check-fast`. The merge
+# queue runs the full tier on the exact commit that lands on main: every stage of
+# `./task check` plus platform verification. `check` is the one required check
+# for both, so main only advances to a commit the full tier passed.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
+  # The full tier on any branch, before queueing or to reproduce a queue failure.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
-  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
   verification:
     uses: ./.github/workflows/verification.yml
     with:
-      profile: check
+      profile: ${{ github.event_name == 'pull_request' && 'fast' || 'check' }}
 
-  # Boot last N corpus fixtures with HEAD; named so a corpus failure is distinct.
-  upgrade-corpus:
-    runs-on: macos-15
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up maintained OpenGrep
-        uses: ./.github/actions/setup-opengrep
-
-      - name: Install frontend dependencies
-        working-directory: lycaon-den
-        run: bun install --frozen-lockfile
-
-      - uses: ./.github/actions/setup-bialy
-
-      - uses: ./.github/actions/cache-decide
-
-      - name: Build sidecar
-        timeout-minutes: 60
-        run: ./task build:lycaon-dev
-
-      - name: Boot upgrade corpus fixtures
-        timeout-minutes: 90
-        run: ./task upgrade:corpus:boot
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: upgrade-corpus-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Applied Seatbelt profiles (darwin; --full).
-  seatbelt:
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - name: Applied Seatbelt confinement
-        timeout-minutes: 60
-        run: ./task test:seatbelt
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: seatbelt-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Managed browser under Seatbelt.
-  browser-confinement:
-    runs-on: macos-15
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - name: Set up maintained OpenGrep
-        uses: ./.github/actions/setup-opengrep
-
-      - uses: ./.github/actions/setup-bialy
-
-      - uses: ./.github/actions/cache-decide
-
-      - name: Build sidecar and provision pinned browser
-        id: browser
-        run: |
-          set -euo pipefail
-          ./task build:lycaon-dev
-          BUILD_DIR="$(python3 scripts/artifact_paths.py build "$GITHUB_WORKSPACE")"
-          BROWSER_OUT="$("$BUILD_DIR/lycaon-dev" browser ensure --cache-dir "$RUNNER_TEMP/browser-cache")"
-          BROWSER_PATH="${BROWSER_OUT##* path=}"
-          test -x "$BROWSER_PATH"
-          echo "path=$BROWSER_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Confined browser launch and screenshot regression
-        timeout-minutes: 60
-        env:
-          LYCAON_BROWSER_BIN: ${{ steps.browser.outputs.path }}
-          # The step above provisioned one, so a skip here would be a green job
-          # covering nothing.
-          LYCAON_BROWSER_REQUIRED: '1'
-        run: >
-          ./task test:digest -- ./internal/browser
-          -run '^(TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
-          -count=1
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: browser-confinement-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Owned git engine is darwin-arm64 only.
-  git-parity:
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - name: Fetch pinned git engine
-        run: ./task gitengine:fetch
-
-      - name: Git engine parity matrix
-        timeout-minutes: 60
-        env:
-          LYCAON_GIT_REFERENCE: /usr/bin/git
-          LYCAON_GIT_PARITY_REQUIRED: "1"
-        run: >
-          ./task test:integration -- ./test/integration/...
-          -run 'GitParity|LFS|Filter|Attributes|UndefinedFilter|RepoAttributes|LargeFile'
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: git-parity-${{ github.run_attempt }}
-          status: ${{ job.status }}
+  platform:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/platform-verification.yml
 
   check:
     if: always()
-    needs: [verification, upgrade-corpus, seatbelt, browser-confinement, git-parity]
+    needs: [verification, platform]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Require all CI verification
+      - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_verification.py gate
+          SKIPPED: ${{ github.event_name == 'pull_request' && 'platform' || '' }}
+        run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED"

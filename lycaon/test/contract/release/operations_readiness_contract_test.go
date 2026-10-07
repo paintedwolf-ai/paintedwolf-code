@@ -40,49 +40,6 @@ func TestGitHubActionsAreCommitPinnedAndMaintained(t *testing.T) {
 	}
 }
 
-func TestDenE2EAggregateIsAlwaysPresentAndComplete(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/lycaon-den.yml")
-	permissions := strings.Index(workflow, "permissions:")
-	if permissions < 0 {
-		t.Fatal("lycaon-den workflow missing permissions")
-	}
-	trigger := workflow[:permissions]
-	if strings.Contains(trigger, "paths:") || strings.Contains(trigger, "paths-ignore:") {
-		t.Fatal("lycaon-den workflow must always report its required aggregate check")
-	}
-	for _, needle := range []string{
-		"playwright-web:",
-		"playwright-desktop:",
-		"e2e:",
-		"if: always()",
-		"needs: [vitest, playwright-web, playwright-desktop]",
-	} {
-		if !strings.Contains(workflow, needle) {
-			t.Fatalf("lycaon-den workflow missing required E2E topology %q", needle)
-		}
-	}
-}
-
-func TestFrontendCIFullSuiteHasOneOwner(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	ci := contractcheck.ReadRepoFile(t, root, ".github/workflows/ci.yml")
-	den := contractcheck.ReadRepoFile(t, root, ".github/workflows/lycaon-den.yml")
-	if !strings.Contains(ci, "uses: ./.github/workflows/verification.yml") || !strings.Contains(ci, "profile: check") {
-		t.Fatal("CI must request the catalog check profile, including frontend verification")
-	}
-	if !strings.Contains(den, "run: ./task den:test:fast") {
-		t.Fatal("the companion frontend job must run the managed seam canaries")
-	}
-	for _, duplicate := range []string{"run: bun run test", "run: bun run typecheck", "run: ./task den:test\n"} {
-		if strings.Contains(den, duplicate) {
-			t.Fatalf("the frontend companion duplicates CI/check: %s", duplicate)
-		}
-	}
-}
-
 func TestReleaseSafetyPrimitivesStayWired(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
