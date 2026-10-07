@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Catalog profile (check, nightly, or release)
+        description: Catalog profile (fast, check, nightly, or release)
         required: true
         type: string
       suite:
@@ -49,7 +49,6 @@ jobs:
       LYCAON_GIT_REFERENCE: /usr/bin/git
       # Hosted runners run one lane each, so admission may use every CPU.
       PW_TEST_HOST: dedicated
-      BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
       SOAK: 10m
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

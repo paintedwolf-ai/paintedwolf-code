@@ -45,10 +45,11 @@ reuse the public bucket and domain or point at a scratch bucket.
   by Ubuntu CI. See [engine selection](#engine-selection).
 - [ ] Enable **Private vulnerability reporting** in repository settings and
   install the [DCO GitHub App](https://github.com/apps/dco) to enforce sign-offs.
-- [ ] Configure branch protection on `main`: require pull requests, require the
-  CI checks (`check`, `upgrade-corpus`, `seatbelt`, `browser-confinement`,
-  `git-parity`, `vitest`, `playwright-web`, `playwright-desktop`), and prevent
-  force-pushes or deletions.
+- [ ] Protect `main` with the `main-protection` ruleset: pull requests merged by
+  squash through a merge queue, the required checks `check` (GitHub Actions) and
+  `DCO`, no force-pushes or deletions, and the dependency-inventory deploy key
+  as the only bypass actor. `check` is the aggregate of every CI tier, so no
+  individual job is listed.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
 ## Release
@@ -75,11 +76,15 @@ release, update both the host manifest and the action's revision pin together.
    Pre-v1 schema changes redefine revision 1 and refresh its locks; no migration
    is needed ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
-4. Merge the candidate to `main` and wait for CI and
+4. Merge the candidate through the merge queue, which runs the full CI tier on
+   the commit that lands, and wait for
    [Release build cache](../../.github/workflows/release-build-cache.yml) to
    pass; the release build restores the Go and Tauri compiles that run saved.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
-   [Release](../../.github/workflows/release.yml).
+   [Release](../../.github/workflows/release.yml), which refuses a commit
+   without a passing full-tier `CI/check`. A dependency-inventory refresh
+   pushed after the candidate bypasses the queue: dispatch
+   [CI](../../.github/workflows/ci.yml) on `main` and tag once it passes.
 5. The workflow tests, builds, signs, notarizes, publishes the downloads,
    updates the tap and website, and activates the updater feeds. Manual dispatch
    never publishes.

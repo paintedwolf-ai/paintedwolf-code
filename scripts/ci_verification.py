@@ -1,4 +1,4 @@
-"""Hosted verification partitions, task invocation, and required-job verdicts."""
+"""Hosted verification partitions, task invocation, failure reports, and required-job verdicts."""
 
 import argparse
 from collections import Counter
@@ -17,7 +17,13 @@ from verification_plan import catalog, expand
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PROFILES = {"check", "nightly", "release"}
+PROFILES = {"fast", "check", "nightly", "release"}
+# Each profile on the left runs exactly the stages of the local gate on the right.
+GATES = {"fast": "check-fast", "check": "check"}
+# Runs of `CI/check` that executed the full tier; pull requests run the fast tier on a merge preview.
+FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
+# Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
+EXCERPT_LINES = 60
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
 
 
@@ -42,11 +48,13 @@ def lanes():
             raise ValueError(f"unsupported CI runner: {name}")
         if "workers" in lane and (type(lane["workers"]) is not int or not 1 <= lane["workers"] <= 8):
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
-    expected = Counter(stage["name"] for stage in expand(["check"]))
-    actual = Counter(stage["name"] for lane in values.values() if "check" in lane["profiles"]
-                     for stage in expand(lane["targets"]))
-    if actual != expected:
-        raise ValueError(f"CI check partition differs from check: missing={expected - actual}, extra={actual - expected}")
+    for profile, gate in GATES.items():
+        expected = Counter(stage["name"] for stage in expand([gate]))
+        actual = Counter(stage["name"] for lane in values.values() if profile in lane["profiles"]
+                         for stage in expand(lane["targets"]))
+        if actual != expected:
+            raise ValueError(f"CI {profile} partition differs from {gate}: "
+                             f"missing={expected - actual}, extra={actual - expected}")
     return values
 
 
@@ -65,13 +73,36 @@ def matrix(profile, suite="all"):
     return {"include": result}
 
 
-def require_success(results):
+def require_success(results, skipped=()):
+    """Every job passed, except those the caller's tier skips on purpose, which must not have run."""
     if not isinstance(results, dict) or not results:
         raise ValueError("required-job results are missing")
+    unknown = set(skipped) - set(results)
+    if unknown:
+        raise ValueError("jobs expected to be skipped are not required: " + ", ".join(sorted(unknown)))
     failed = [f"{name}: {value.get('result', 'missing')}" for name, value in results.items()
-              if value.get("result") != "success"]
+              if value.get("result") != ("skipped" if name in skipped else "success")]
     if failed:
         raise ValueError("required verification did not pass: " + ", ".join(failed))
+
+
+def github(path, **query):
+    command = ["gh", "api", "--method", "GET", path, *(f"-f{key}={value}" for key, value in query.items())]
+    return json.loads(subprocess.run(command, check=True, capture_output=True, text=True).stdout)
+
+
+def require_full_tier(repository, sha):
+    """The commit itself passed `CI/check` in the full tier, as every commit the merge queue lands has."""
+    runs = github(f"repos/{repository}/commits/{sha}/check-runs", check_name="check", filter="all")["check_runs"]
+    events = set()
+    for run in runs:
+        if run["app"]["slug"] != "github-actions" or run["conclusion"] != "success":
+            continue
+        suite = run["check_suite"]["id"]
+        events |= {item["event"] for item in github(f"repos/{repository}/actions/runs", check_suite_id=suite)["workflow_runs"]}
+    if not events & FULL_TIER_EVENTS:
+        raise ValueError(f"{sha} has no passing full-tier CI/check; land it through the merge queue "
+                         "or dispatch CI on it before releasing")
 
 
 def invocation(targets):
@@ -133,8 +164,62 @@ def run_lane(name):
     return code
 
 
+def failures(root):
+    """Stages and packages this job's receipts did not pass, with the tests a digest named."""
+    found = []
+    for receipt in sorted((root / "verification").glob("*/[0-9]*.json")):
+        if receipt.name.endswith(".progress.json"):
+            continue
+        record = json.loads(receipt.read_text())
+        if record.get("status") == "passed":
+            continue
+        stages = [{"stage": evidence["stage"], "subject": subject, "status": result.get("status"),
+                   "tests": result.get("tests", []), "output": result.get("output"), "log": result.get("log")}
+                  for evidence in record.get("evidence", [])
+                  for subject, result in evidence.get("results", {}).items() if result.get("status") != "passed"]
+        # A run stopped before any stage reported, such as a cancellation, has only the receipt's reason.
+        found += stages or [{"stage": ", ".join(record.get("names", [])), "subject": "", "status": record.get("status"),
+                             "tests": [], "output": None, "log": None, "reason": record.get("reason")}]
+    return found
+
+
+def excerpt(failure):
+    """The digest's failure output, or the end of the stage log when no digest isolated one."""
+    for key, tail in (("output", False), ("log", True)):
+        path = failure.get(key)
+        if path and Path(path).is_file():
+            lines = Path(path).read_text(errors="replace").splitlines()
+            return lines[-EXCERPT_LINES:] if tail else lines[:EXCERPT_LINES]
+    return []
+
+
+def named_subject(failure):
+    """The failing package, or nothing for a stage that reports as a single task."""
+    return failure["subject"] if failure["subject"] not in {"", "task"} else ""
+
+
+def annotation(failure):
+    """A workflow error the pull request's checks show without opening the log."""
+    message = ": ".join(part for part in (named_subject(failure), ", ".join(failure["tests"])) if part)
+    message = message or failure.get("reason") or "see the job summary"
+    return f"::error title={failure['stage']} {failure['status']}::{message}".replace("\n", "%0A")
+
+
+def summary_lines(failure):
+    subject = f" · `{named_subject(failure)}`" if named_subject(failure) else ""
+    tests = ", ".join(f"`{test}`" for test in failure["tests"])
+    reason = f" ({failure['reason']})" if failure.get("reason") else ""
+    heading = f"- **{failure['status']}** `{failure['stage']}`{subject}" + (f": {tests}" if tests else "") + reason
+    body = excerpt(failure)
+    if not body:
+        return [heading]
+    return [heading, "  <details><summary>Output</summary>", "", "  ```text",
+            *(f"  {line}" for line in body), "  ```", "  </details>"]
+
+
 def report(status):
-    path = artifact_root(ROOT) / "ci" / "run.json"
+    root = artifact_root(ROOT)
+    path = root / "ci" / "run.json"
     record = json.loads(path.read_text()) if path.exists() else {}
     lines = [f"### Verification: {status}", ""]
     if record:
@@ -144,6 +229,13 @@ def report(status):
             lines += ["The task invocation did not return a verdict; inspect the retained evidence.", ""]
     else:
         lines += ["No catalog task invocation was recorded; inspect the setup or custom job steps.", ""]
+    found = failures(root)
+    if found:
+        lines += ["#### Not passed", ""]
+        for failure in found:
+            lines += summary_lines(failure)
+            print("\n".join([annotation(failure), *excerpt(failure), ""]), flush=True)
+        lines.append("")
     lines += ["Receipts, stage logs, and available reports are retained with this job's artifacts.", ""]
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write("\n".join(lines))
@@ -157,16 +249,22 @@ def main():
     plan.add_argument("--suite", default="all", choices=sorted(SUITES))
     run = commands.add_parser("run")
     run.add_argument("lane")
-    commands.add_parser("gate")
+    gate = commands.add_parser("gate")
+    gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
+                      help="comma-separated jobs this tier skips on purpose")
     summary = commands.add_parser("report")
     summary.add_argument("status")
+    verified = commands.add_parser("verified")
+    verified.add_argument("sha")
     args = parser.parse_args()
     if args.command == "matrix":
         print(json.dumps(matrix(args.profile, args.suite), separators=(",", ":")))
     elif args.command == "run":
         return run_lane(args.lane)
     elif args.command == "gate":
-        require_success(json.loads(os.environ["NEEDS_JSON"]))
+        require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped)
+    elif args.command == "verified":
+        require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
     else:
         report(args.status)
     return 0
