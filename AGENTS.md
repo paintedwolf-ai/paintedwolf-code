@@ -81,11 +81,26 @@ owner's engine, report which one and why.
 
 ## Testing
 
-**Choose verification by the effect of your change.** For executable changes
-(code, build/test tooling, runtime configuration, schemas, or shipped prompts),
-use scoped digests while iterating, then choose one closeout gate:
-`./task check-fast` for handoff or `./task check` for full verification.
+**Choose verification by the effect of your change, and run each gate once.**
+For executable changes (code, build/test tooling, runtime configuration,
+schemas, or shipped prompts), iterate with scoped digests on what you touched.
+How you close out depends on where the change goes next:
+
+- **Pushed for a pull request** (only when the user asked for one): push once
+  your scoped checks pass. CI is the gate. Pull requests run the stages of
+  `./task check-fast`; the merge queue runs `./task check` plus platform
+  verification on the exact commit that lands on main. Do not run either gate
+  locally first, and never rerun locally what CI passed for the same commit.
+  Report the pull request without waiting on or polling its checks. A failure's
+  annotation and job summary name the stage, package, and tests: reproduce that
+  scope through `./task`, fix it, and push again.
+- **Handed off without a push:** `./task check-fast`.
+- **Full local verification:** `./task check`, only when the user asks for it
+  or to reproduce a merge-queue failure that a scoped target cannot.
+
 Do not combine both gates or repeat their subsets during the same closeout.
+Merge only on request, by adding the pull request to the merge queue; never
+bypass the queue or its required `check`.
 
 For **prose-only documentation or policy edits**, review the diff, check local
 links/anchors and whitespace, and verify that instructions remain consistent.
@@ -327,7 +342,7 @@ Run from the repository root. Setup and pinned toolchain requirements:
 |---|---|
 | `./task test:digest -- ./internal/foo/...` | Scoped Go verification |
 | `./task den:typecheck` / `./task den:test` | Frontend verification |
-| `./task check-fast` / `./task check` | Handoff / full closeout gates for executable changes |
+| `./task check-fast` / `./task check` | Handoff without a push / full local verification ([testing](#testing)) |
 | `./task test:status` | Queue state, blocking reasons, and advisories |
 | `./task test:cancel -- <ticket> --reason "<why>"` | Withdraw one queued or running [request](#stuck-verification) |
 | `./task den:harness` | Isolated UI verification; read the [harness guide](docs/dev-tasks.md#den-harness-llm-drivable-stack) first |

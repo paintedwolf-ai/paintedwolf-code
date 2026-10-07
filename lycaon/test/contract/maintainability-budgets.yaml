@@ -9459,7 +9459,7 @@ source_directories:
     lycaon/internal/projectstack: 5
     lycaon/internal/promptattach: 9
     lycaon/internal/promptattach/attacherr: 1
-    lycaon/internal/promptattach/docext: 13
+    lycaon/internal/promptattach/docext: 12
     lycaon/internal/promptattach/docformat: 1
     lycaon/internal/promptattach/format: 3
     lycaon/internal/promptresult: 1
@@ -13392,7 +13392,6 @@ source_files:
     lycaon/internal/promptattach/docext/worker.go: 175
     lycaon/internal/promptattach/docext/worker_limit_linux.go: 9
     lycaon/internal/promptattach/docext/worker_limit_other.go: 9
-    lycaon/internal/promptattach/docext/worker_limit_unix.go: 9
     lycaon/internal/promptattach/docext/worker_limit_windows.go: 34
     lycaon/internal/promptattach/docformat/format.go: 112
     lycaon/internal/promptattach/format/container.go: 70
@@ -15350,7 +15349,7 @@ source_files:
     scripts/bundle-smoke.sh: 245
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 149
+    scripts/ci_verification.py: 230
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -22004,10 +22003,10 @@ test_files:
     lycaon/test/contract/providers/provider_live_helpers.go: 42
     lycaon/test/contract/providers/registry_testmain_test.go: 10
     lycaon/test/contract/registry_testmain_test.go: 10
-    lycaon/test/contract/release/hosted_verification_contract_test.go: 154
+    lycaon/test/contract/release/hosted_verification_contract_test.go: 207
     lycaon/test/contract/release/licensing_public_contract_test.go: 78
     lycaon/test/contract/release/opengrep_candidate_release_test.go: 47
-    lycaon/test/contract/release/operations_readiness_contract_test.go: 114
+    lycaon/test/contract/release/operations_readiness_contract_test.go: 73
     lycaon/test/contract/release/registry_testmain_test.go: 10
     lycaon/test/contract/release/release_corpus_identity_test.go: 66
     lycaon/test/contract/release/release_preflight_corpus_test.go: 73
@@ -22596,7 +22595,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 111
+    scripts/verification_tests/test_ci_execution.py: 192
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
