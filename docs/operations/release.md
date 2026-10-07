@@ -103,7 +103,7 @@ release, update both the host manifest and the action's revision pin together.
 
 ## Automatic-update qualification
 
-Clients at 1.0.1 or earlier check for updates but do not install them, so the first release with the automatic installer reaches them through a manual download or Homebrew. From that release on, direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
+Clients at 1.0.1 or earlier install updates through the Tauri updater plugin: they read the same `key-1` channel pointers, verify artifacts with the generation-1 artifact key, and require the signed `version` comment. They ignore the pointer's `withdrawn` marker and its rollout timing, so every 1.0.x client installs a new release at its next check, and only a restored last-good pointer stops one from installing a withdrawn release. From the first release with the native installer on, direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
 
 Local tests establish state, migration, archive, and transaction invariants. A signed beta and clean VMs must establish the packaged lifecycle before promotion:
 
@@ -137,7 +137,10 @@ Keep results with the release evidence. A local unit pass is not a claim of Gate
 ## If a release needs to be stopped
 
 1. Run [Release halt](../../.github/workflows/release-halt.yml) with `bad_version`.
-   Set `last_good_version` to restore an older release, or leave it empty to stop
+   Set `last_good_version` to restore an older release. While a generation-1
+   feed is affected it is required: 1.0.x clients ignore `withdrawn` and would
+   install the withdrawn release from a pointer that still names it, so the plan
+   refuses to halt generation 1 without a replacement. Otherwise leave it empty to stop
    offering downloads when there is no safe replacement.
 2. Review the default dry-run plan, then run it with `dry_run=false`. It updates
    all affected feeds and withdraws or replaces the tap and website downloads.

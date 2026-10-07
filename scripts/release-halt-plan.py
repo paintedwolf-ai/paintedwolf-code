@@ -11,6 +11,15 @@ from update_keys import feed_key, generation, load_registry, validate_binding
 from release_semver import compare, parse
 from release_distribution import read_storage
 
+# Clients embedding these generations ignore a pointer's `withdrawn` marker, so their
+# feeds can only stop a release by pointing at a replacement.
+WITHDRAWN_UNAWARE_GENERATIONS = {1}
+
+
+def require_replacement(number: int, last_good: str | None) -> None:
+    if last_good is None and number in WITHDRAWN_UNAWARE_GENERATIONS:
+        raise ValueError(f"generation {number} clients ignore withdrawn markers; name a last-good release")
+
 
 def distribution_plan(rows: list[dict], bad: str | None = None, last_good: str | None = None) -> dict:
     if bad is not None:
@@ -40,6 +49,7 @@ def plan_withdrawal(registry: dict, source: int, bad: str, last_good: str | None
             version = manifest["version"]
             row = {"generation": number, "channel": channel}
             if version in {bad, last_good}:
+                require_replacement(number, last_good)
                 row.update(bad=bad, last_good=last_good)
             else:
                 row["keep_version"] = version
@@ -74,6 +84,8 @@ def main() -> None:
             raise ValueError("duplicate halt feed")
         if set(row) not in ({"generation", "channel", "bad", "last_good"}, {"generation", "channel", "keep_version"}):
             raise ValueError("each feed must halt bad to last_good, or explicitly keep its current version")
+        if "bad" in row:
+            require_replacement(row["generation"], row["last_good"])
         rows[key] = row
     affected = range(source, len(registry["generations"]) + 1)
     current = {}
