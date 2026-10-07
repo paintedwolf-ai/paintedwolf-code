@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/egressclass"
-	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -59,9 +58,7 @@ func TestNoUnboundedHTTPClients(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		testutil.FailErr(t, "walk internal for unbounded clients", err)
-	}
+	contractcheck.FailErr(t, "walk internal for unbounded clients", err)
 
 	if len(offenders) > 0 {
 		sort.Strings(offenders)
@@ -107,7 +104,7 @@ func TestEgressClassesMatchInventory(t *testing.T) {
 		}
 		switch c.Transport {
 		case egressclass.HTTPBounded, egressclass.HTTPStreaming, egressclass.HTTPDownload,
-			egressclass.GitCLI, egressclass.LibraryDownload, egressclass.TauriUpdater:
+			egressclass.GitCLI, egressclass.LibraryDownload:
 		default:
 			t.Fatalf("%s has unknown transport %q", c.ID, c.Transport)
 		}
@@ -244,10 +241,10 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		t.Fatal("OSV advisory class has no fixed endpoint")
 	}
 
-	update := egressclass.RequireTransport(egressclass.UpdateManifestCheck, egressclass.TauriUpdater)
+	update := egressclass.RequireTransport(egressclass.UpdateManifestCheck, egressclass.HTTPBounded)
 	service := contractcheck.RustModuleSource(t, contractcheck.RepoRoot(t), "lycaon-den/src-tauri/src/update_service.rs")
 	endpoint, err := url.Parse(update.EndpointTemplate)
-	testutil.FailErr(t, "parse update endpoint template", err)
+	contractcheck.FailErr(t, "parse update endpoint template", err)
 	origin := endpoint.Scheme + "://" + endpoint.Host
 	if endpoint.Scheme != "https" || endpoint.Host == "" ||
 		!strings.Contains(service, fmt.Sprintf("const DOWNLOAD_ORIGIN: &str = %q;", origin)) {
@@ -258,8 +255,17 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		!strings.Contains(service, "embedded_key().0") {
 		t.Fatalf("update service does not bind inventory template %q", update.EndpointTemplate)
 	}
-	if !strings.Contains(service, ".updater_builder()") || !strings.Contains(service, ".check().await") {
-		t.Fatal("update manifest class has no Tauri updater call site")
+	// The feed is read directly, without proxies or redirects, and verified before any field is used.
+	for _, needle := range []string{
+		"reqwest::Client::builder()",
+		".no_proxy()",
+		".redirect(reqwest::redirect::Policy::none())",
+		"verification::verify_feed(",
+		"persistence::accept_feed_timestamp(",
+	} {
+		if !strings.Contains(service, needle) {
+			t.Fatalf("update manifest class is missing %q", needle)
+		}
 	}
 }
 

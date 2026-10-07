@@ -20,7 +20,7 @@ go to Preview; versions such as `1.0.0` go to Stable.
 | Environment | Secrets | Variables |
 |---|---|---|
 | `release-signing` | `APPLE_CERTIFICATE` (base64 p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ENGINE_PROVISIONING_PROFILE_BASE64`, `APPLE_API_KEY_P8` (base64), `APPLE_API_ISSUER`, `APPLE_API_KEY_ID`, `TAURI_SIGNING_PRIVATE_KEY`, optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; Windows candidates also need `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` | Windows candidates: `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, `AZURE_ARTIFACT_SIGNING_PROFILE` |
-| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
+| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_PRIVATE_KEY`, optional `FEED_SIGNING_PRIVATE_KEY_PASSWORD` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
 | `release-rehearsal` | `RELEASE_TEST_R2_API_TOKEN` | `RELEASE_TEST_R2_ACCOUNT_ID`, `RELEASE_TEST_R2_BUCKET`, `RELEASE_TEST_DOWNLOAD_BASE_URL` |
 
 The `release-rehearsal` environment serves the weekly [release system live
@@ -29,8 +29,9 @@ the R2 controls through an isolated `release-system-tests/` prefix; it may
 reuse the public bucket and domain or point at a scratch bucket.
 
 - [ ] Use an Apple Developer ID certificate and notarization key. Match the
-  updater private key to the public key in
-  [update-keys.json](../../packaging/update-keys.json); keep a recovery copy.
+  artifact and feed private keys to `public_key` and `feed_public_key` in
+  [update-keys.json](../../packaging/update-keys.json); keep recovery copies.
+  Custody rules: [Signing custody](../dev-tasks.md#updates).
 - [ ] Give each token **Contents: read and write** access to its repository:
   `HOMEBREW_TAP_TOKEN` for the tap and `WWW_DISPATCH_TOKEN` for
   `paintedwolf-ai/paintedwolf-www`.
@@ -73,8 +74,8 @@ release, update both the host manifest and the action's revision pin together.
    ```
 
    Commit the version changes and generated fixture with the candidate.
-   Pre-v1 schema changes redefine revision 1 and refresh its locks; no migration
-   is needed ([compatibility](../compatibility.md)).
+   A schema change ships its registered migration step and recorded released
+   baseline with the candidate ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
 4. Merge the candidate through the merge queue, which runs the full CI tier on
    the commit that lands, and wait for
@@ -94,6 +95,39 @@ release, update both the host manifest and the action's revision pin together.
 7. Check the website download, Homebrew cask, updater feed, and GitHub release
    show the intended version, and keep the workflow run link with the release
    notes. Published versions are immutable; corrections use a new version.
+
+## Automatic-update qualification
+
+Clients at 1.0.1 or earlier check for updates but do not install them, so the first release with the automatic installer reaches them through a manual download or Homebrew. From that release on, direct-download clients discover, stage, and install without visiting Settings. Candidate Linux and Windows entries remain unpublished until their activation adapters receive equivalent qualification.
+
+Local tests establish state, migration, archive, and transaction invariants. A signed beta and clean VMs must establish the packaged lifecycle before promotion:
+
+1. Install a released app A at a writable application location. Exercise chats, drafts, an editor, and multiple windows without opening update settings.
+2. Offer signed beta B through the release channel; verify background staging and the update-ready notification and existing Settings restart action. Ordinary quit must stop the engine before exchange, install B, and remain closed. The next launch must run B and preserve released history and preferences.
+3. Repeat with explicit restart, opt-out during download and after staging, channel change, a Homebrew receipt, a non-writable application directory, low disk space, and offline quit. Automatic work must never raise an administrator prompt or initiate restart.
+4. Withdraw B after download. Its final offer check must prevent activation. Replace it with C and verify that C does not inherit B's staged identity.
+5. Interrupt the helper before exchange, after exchange, and before the completion journal write; launch concurrently with activation. Both complete bundles must remain identifiable, and no process may start an engine from mixed installation files.
+6. Exercise a supported released-store migration and its recovery snapshot. A failed new-version startup must retain recovery evidence, never downgrade the database or repeatedly relaunch.
+7. Leave B's activation unconfirmed, then reinstall a different signed version at the same location, including A. The stale receipt must be archived, startup must work, and a later fix-forward update must remain available.
+8. Run as a standard user with an unwritable application directory, from a mounted DMG, and under App Translocation. Observe multiple scheduler attempts: unsupported locations must not download repeatedly. After correcting the location, an explicit retry must reuse a valid cached archive and replace a corrupt one.
+9. Start a second process from the same installed app while the first remains open. It must not hang awaiting an exclusive lifetime lease. Race a launch with helper activation and lease downgrade; no engine may start while an exchange is possible.
+10. Download a quarantined, notarized beta through a browser. Verify that the copied helper runs directly from private staging with quarantine and signing attributes intact, including Gatekeeper assessment and executable-relative libraries. Exercise ordinary quit and explicit restart. Reuse of prepared files must survive a full signed-resource validation; tampering with resources or the main executable must prevent reuse.
+11. Launch with a staged update while offline, and inject a helper-spawn failure. The first window must remain responsive, normal engine startup must resume, and Settings must retain the actual failure.
+12. Measure cold and warm quit/restart timings on the complete signed beta bundle, including slower VM disks. Record preservation, parent verification, helper verification, exchange, and time to an interactive window. Verify that the preservation dialog disappears from eligibility after all windows acknowledge; cancel an already-open dialog during verification and confirm that update controls work again. Keep fresh helper integrity validation even when preparation just completed.
+13. Preserve an unreadable or incompatible beta transaction journal. Confirm that startup identifies its exact path and that the documented archive-and-reinstall recovery works without removing user data.
+14. Reopen A while the helper waits for another open instance. New launches must remain responsive. Race old and new processes through activation and startup confirmation; an old process must never open the new store. With another instance still open after 30 seconds, verify the committed update resumes on a later eligible launch.
+15. Press Cmd+Q during explicit restart's offer check with automatic updates off. The restart must retain its exit request. Make one window never acknowledge: launch must defer after 30 seconds, and explicit quit/restart must keep offering cancellation after “Keep waiting.”
+16. Run two installations at different paths, including a moved copy with a pending transaction at the old path. Staging, retry, cleanup, and activation must stay independent. Corrupt ready metadata must be quarantined without user file editing.
+17. Toggle automatic updates during a manual download; it must finish. Toggle off during an automatic download; it must cancel. Switch channel during either; obsolete bytes must never become ready. Inject a helper-spawn failure and verify windows become usable before normal engine/credential recovery starts.
+18. Offer the wrong signed architecture or a signed preview through stable; both must be refused before exchange. Check ordinary macOS installations without developer command-line tools.
+19. Test a skipped signing-key bridge and a second restart into the successor release. Inspect version-bound signatures and package signing on both sides.
+20. Serve the previous channel pointer and its signature again after a newer one was accepted; the client must refuse it. Serve a pointer with a signature made under the other channel's name, an unsigned pointer, and a pointer whose manifest version differs from its signed version; each must be refused without an offer. Withdraw a release through the halt workflow and confirm the replacement pointer carries a fresh feed signature.
+21. Publish a manifest without `pub_date`; automatic checks must treat it as brand new (10% rollout). Corrupt `rejected.json` and `feed-state.json`; both must be quarantined without changing the automatic-update preference, and Settings must keep working.
+22. Quit with a staged update while offline less than a day after the last successful check; it must install. Repeat with an offer last confirmed more than a day earlier; quit and launch must defer silently, and an explicit restart must report the failed check.
+23. Keep a second instance open across the helper's ten-minute wait, then quit it; the committed update must install at that quit. Fill the disk before the helper's final journal write; the exchange must still relaunch the new version and Settings must report the unrecorded receipt.
+24. Run on a proxy-only network and against an artifact URL that redirects; both must fail with a transport error and leave the installed version untouched.
+
+Keep results with the release evidence. A local unit pass is not a claim of Gatekeeper, application-translocation, logout, power-loss, or cross-account filesystem behavior; these belong in the beta/VM qualification.
 
 ## If a release needs to be stopped
 

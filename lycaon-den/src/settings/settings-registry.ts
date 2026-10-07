@@ -136,7 +136,7 @@ const SETTING_SPECS = [
   // General · Keyboard, Power, Updates, About
   { section: "general", tab: "keyboard", id: "keyboard-shortcuts", label: "Filter shortcuts", keywords: ["keyboard shortcuts", "keybindings", "hotkeys", "rebind", "leader key"] },
   { section: "general", tab: "power", id: "keep-awake", label: "Keep Mac awake while sessions are working", keywords: ["sleep", "power", "idle", "caffeinate"] },
-  { section: "general", tab: "updates", id: "update-checks", label: "Automatic update checks", keywords: ["updates", "auto update", "check for updates"] },
+  { section: "general", tab: "updates", id: "update-checks", label: "Automatic updates", keywords: ["updates", "auto update", "check for updates"] },
   { section: "general", tab: "updates", id: "release-channel", label: "Release channel", keywords: ["updates", "preview", "beta", "stable", "release candidate"] },
   { section: "general", tab: "updates", id: "check-for-updates", label: "Check now", keywords: ["check for updates", "update now", "upgrade"] },
   { section: "general", tab: "about", id: "tell-a-friend", label: "Tell a friend", keywords: ["share", "star", "github", "website"] },
