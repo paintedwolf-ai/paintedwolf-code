@@ -8,6 +8,7 @@ import {
   loadTypeScriptCorpus,
   type TypeScriptSourceFile,
 } from "../../test/source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../../test/vitest-timeouts.ts";
 
 const tauriSourceRoot = join(denRoot, "src-tauri", "src");
 
@@ -111,7 +112,7 @@ function invokedCommands(): { commands: Set<string>; unresolved: string[] } {
   return { commands, unresolved };
 }
 
-describe("Tauri IPC parity", () => {
+describe("Tauri IPC parity", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("Den invokes exactly the commands generate_handler! registers", () => {
     const { commands, unresolved } = invokedCommands();
     expect(unresolved).toEqual([]);
