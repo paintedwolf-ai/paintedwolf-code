@@ -225,14 +225,18 @@ func renderDependabot(p *policy, sections []section) []byte {
 		if m == nil || m.DependabotGroup == "" {
 			continue
 		}
-		e := dependabotEntry{Ecosystem: m.Kind, Directory: manifestDirectory(m.Path), Group: m.DependabotGroup}
+		e := dependabotEntry{Ecosystem: m.Kind, Directories: []string{manifestDirectory(m.Path)}, Group: m.DependabotGroup}
 		writeDependabotEntry(&b, d, e, s.rows)
 	}
 	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
 }
 
 func writeDependabotEntry(b *strings.Builder, d dependabotConfig, e dependabotEntry, rows []row) {
-	fmt.Fprintf(b, "  - package-ecosystem: %s\n    directory: %s\n    schedule:\n      interval: %s\n", e.Ecosystem, e.Directory, d.Interval)
+	fmt.Fprintf(b, "  - package-ecosystem: %s\n    directories:\n", e.Ecosystem)
+	for _, directory := range e.Directories {
+		fmt.Fprintf(b, "      - %q\n", directory)
+	}
+	fmt.Fprintf(b, "    schedule:\n      interval: %s\n", d.Interval)
 	if d.CooldownDays > 0 {
 		fmt.Fprintf(b, "    cooldown:\n      default-days: %d\n", d.CooldownDays)
 	}

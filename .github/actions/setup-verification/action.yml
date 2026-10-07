@@ -17,7 +17,7 @@ runs:
       shell: bash
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: lycaon/go.mod
         cache-dependency-path: |
@@ -28,7 +28,7 @@ runs:
       with:
         bun-version-file: .bun-version
 
-    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version-file: .node-version
 

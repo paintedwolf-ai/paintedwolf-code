@@ -19,8 +19,8 @@ func TestDependabotSeparatesMajorsAndPreservesHolds(t *testing.T) {
 	}}
 	var document struct {
 		Updates []struct {
-			Directory string `yaml:"directory"`
-			Groups    map[string]struct {
+			Directories []string `yaml:"directories"`
+			Groups      map[string]struct {
 				AppliesTo   string   `yaml:"applies-to"`
 				Patterns    []string `yaml:"patterns"`
 				UpdateTypes []string `yaml:"update-types"`
@@ -31,7 +31,7 @@ func TestDependabotSeparatesMajorsAndPreservesHolds(t *testing.T) {
 		} `yaml:"updates"`
 	}
 	testutil.FailErr(t, "decode generated Dependabot config", yaml.Unmarshal(renderDependabot(p, sections), &document))
-	if len(document.Updates) != 1 || document.Updates[0].Directory != "/engine" {
+	if len(document.Updates) != 1 || !reflect.DeepEqual(document.Updates[0].Directories, []string{"/engine"}) {
 		t.Fatalf("unexpected ecosystem entries: %+v", document.Updates)
 	}
 	u := document.Updates[0]
