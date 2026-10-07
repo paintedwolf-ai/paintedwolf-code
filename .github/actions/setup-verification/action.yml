@@ -79,6 +79,20 @@ runs:
       working-directory: lycaon-den
       run: bun install --frozen-lockfile
 
+    - name: Resolve tool directory
+      id: tools
+      shell: bash
+      run: echo "bin=$(python3 scripts/artifact_paths.py bin)" >> "$GITHUB_OUTPUT"
+
+    # The notices script pins both tools; cargo-about otherwise compiles from source on every runner.
+    - name: Restore license tools
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: |
+          ${{ steps.tools.outputs.bin }}/go-licenses
+          ${{ steps.tools.outputs.bin }}/cargo-about
+        key: license-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh') }}
+
     - name: Generate third-party notices
       shell: bash
       run: ./task licenses:notices
