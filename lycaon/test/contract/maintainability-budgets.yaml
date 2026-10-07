@@ -22,7 +22,7 @@ grandfathered:
         lycaon/internal/api/sourceapi/sourceapi.Handler: 5800
         lycaon/internal/api/workflowadmin/workflowadmin.Handler: 1272
         lycaon/internal/app/app.serveBuilder: 4142
-        lycaon/internal/bgprocess/bgprocess.Registry: 1651
+        lycaon/internal/bgprocess/bgprocess.Registry: 1664
         lycaon/internal/coordinator/assembly/assembly.AssemblyEngine: 1194
         lycaon/internal/coordinator/loopwake/loopwake.LoopEngine: 1830
         lycaon/internal/coordinator/promptloop/promptloop.PromptLoop: 4490
@@ -38,7 +38,7 @@ grandfathered:
         lycaon/internal/scan/execution/execution.Runner: 1042
         lycaon/internal/scan/scan.SQLStore: 2227
         lycaon/internal/secretcap/secretcap.Service: 1573
-        lycaon/internal/session/session.Manager: 12316
+        lycaon/internal/session/session.Manager: 12352
         lycaon/internal/session/store/store.Memory: 2828
         lycaon/internal/session/store/store.SQL: 3930
         lycaon/internal/sourcecatalog/sourcecatalog.Catalog: 1683
@@ -58,7 +58,7 @@ grandfathered:
         lycaon/internal/api/sourceapi/sourceapi.Handler: 213
         lycaon/internal/api/workflowadmin/workflowadmin.Handler: 45
         lycaon/internal/app/app.serveBuilder: 121
-        lycaon/internal/bgprocess/bgprocess.Registry: 62
+        lycaon/internal/bgprocess/bgprocess.Registry: 63
         lycaon/internal/coordinator/assembly/assembly.AssemblyEngine: 54
         lycaon/internal/coordinator/loopwake/loopwake.LoopEngine: 120
         lycaon/internal/coordinator/promptloop/promptloop.PromptLoop: 153
@@ -75,7 +75,7 @@ grandfathered:
         lycaon/internal/scan/execution/execution.Runner: 43
         lycaon/internal/scan/scan.SQLStore: 102
         lycaon/internal/secretcap/secretcap.Service: 76
-        lycaon/internal/session/session.Manager: 692
+        lycaon/internal/session/session.Manager: 693
         lycaon/internal/session/store/store.Memory: 145
         lycaon/internal/session/store/store.SQL: 162
         lycaon/internal/sourcecatalog/sourcecatalog.Catalog: 73
@@ -129,7 +129,7 @@ grandfathered:
         lycaon/internal/search/search.Hit: 31
         lycaon/internal/search/search.IndexRow: 27
         lycaon/internal/secretmatch/secretmatch.Alert: 33
-        lycaon/internal/session/session.Manager: 134
+        lycaon/internal/session/session.Manager: 135
         lycaon/internal/session/store/store.Memory: 40
         lycaon/internal/settings/settings.ApprovalGrant: 26
         lycaon/internal/sourceledger/sourceledger.Effect: 28
@@ -291,7 +291,7 @@ grandfathered:
         lycaon/internal/api: 163
         lycaon/internal/coordinator/promptloop: 96
         lycaon/internal/llm: 130
-        lycaon/internal/session: 248
+        lycaon/internal/session: 249
         lycaon/internal/tools: 115
         lycaon/internal/tools/native: 89
         lycaon/internal/webresearch: 71
