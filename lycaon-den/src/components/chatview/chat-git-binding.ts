@@ -112,10 +112,10 @@ export function createChatGitBinding(options: ChatGitOptions) {
       )
     )?.roots ?? [],
   busy: gitBusy,
-  // Status reads run beside mutations; only writes hold `busy`.
+  // Reads never hold `busy`; a write in flight publishes its own fresh status.
   onRefreshRepos: async () => {
     const projectId = gitProjectId();
-    if (!getLycaonClient() || !projectId) return;
+    if (!getLycaonClient() || !projectId || gitBusy()) return;
     try {
       await refreshGitStatus(appStore(), clientOrThrow(), projectId, gitSessionId());
     } catch (err) {

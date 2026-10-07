@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRoot } from "solid-js";
+import { valueOf } from "../../store/load-state.ts";
 import { createChatGitBinding } from "./chat-git-binding.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { stubClient } from "../../test/client-fixture.ts";
-import type { GitRepoEntry, Project } from "../../api/types.ts";
+import type { GitMutationResult, GitRepoEntry, GitStatusSummary, Project } from "../../api/types.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 
 const REPO_ID = "repo-1";
@@ -99,6 +100,54 @@ describe("chat Git binding", () => {
       bindingFor(client, appStore, reportError).onPull();
       await vi.waitFor(() => expect(reportError).toHaveBeenCalledTimes(1));
       expect(client.pullGit).toHaveBeenCalledWith(project.id, REPO_ID, "session-1");
+      dispose();
+    });
+  });
+
+  it("keeps a push's fresh status when a background read is requested mid-write", async () => {
+    let pushed = false;
+    let finishPush: (result: GitMutationResult) => void = () => {};
+    const summary = (ahead: number): GitStatusSummary => ({
+      available: true,
+      repo_id: REPO_ID,
+      root_ids: ["root-1"],
+      upstream: "origin/main",
+      ahead,
+      behind: 0,
+      dirty: true,
+      staged_count: 0,
+      unstaged_count: 1,
+      changed_count: 1,
+      revision: 1,
+      refreshing: false,
+    });
+    const client = stubClient({
+      pushGit: vi.fn(() => new Promise<GitMutationResult>((resolve) => {
+        finishPush = (result) => {
+          pushed = true;
+          resolve(result);
+        };
+      })),
+      getGitStatus: vi.fn(async () => summary(pushed ? 0 : 1)),
+      listGitChanges: vi.fn(async () => ({ repo_id: REPO_ID, revision: 1, refreshing: false, files: [] })),
+      listGitRepos: vi.fn(async () => ({ repos: [{ ...repo, ahead: pushed ? 0 : 1 }], active_repo_id: REPO_ID })),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    const reportError = vi.fn();
+
+    await createRoot(async (dispose) => {
+      const binding = bindingFor(client, appStore, reportError);
+      binding.onPush();
+      expect(binding.busy()).toBe(true);
+
+      await binding.onRefreshRepos();
+      finishPush({ repo_id: REPO_ID, revision: 2, refreshing: false });
+      await vi.waitFor(() => expect(binding.busy()).toBe(false));
+
+      expect(valueOf(appStore.state.gitStatus)?.ahead).toBe(0);
+      expect(reportError).not.toHaveBeenCalled();
       dispose();
     });
   });
