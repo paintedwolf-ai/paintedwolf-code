@@ -86,7 +86,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
-    "undici": "^7.29.0",
+    "undici": "^8.11.2",
     "vite": "^8.3.2",
     "vite-plugin-solid": "^2.11.14",
     "vitest": "^5.0.2",
