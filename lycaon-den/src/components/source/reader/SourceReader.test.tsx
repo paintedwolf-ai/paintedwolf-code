@@ -271,3 +271,29 @@ it("reserves an inline reader's own rows, so the reserve shrinks when they do", 
     restoreViewport();
   }
 });
+
+it("keeps loading the viewport after a projection rebase cancels its range read", async () => {
+  const restoreViewport = mockReaderViewport();
+  try {
+    const lines = Array.from({ length: 2000 }, (_, i) => `line ${i}\n`);
+    const value = fixture(null, lines.join(""));
+    const rows = value.rows.getMockImplementation()!;
+    let holdTop = false, heldTop = false;
+    value.rows.mockImplementation((...args) => {
+      if (!holdTop || args[2].offset !== 0) return rows(...args);
+      heldTop = true;
+      return new Promise<never>(() => {});
+    });
+    // The reader opens near the end, so the unloaded top range is requested from the viewport.
+    render(() => <SourceReader access={value.access} path="example.ts" restoreViewState={() => ({ viewport: { rank: 1500, fraction: 0 } })} />);
+    holdTop = true;
+    await waitFor(() => expect(heldTop).toBe(true));
+    holdTop = false;
+    const screened: SourceReaderRow[] = lines.map((text, index) => ({ index, end: index + 1, kind: "insert", text, before_line: 0, after_line: index + 1, changed: [] }));
+    for (const view of value.host.publishRows(value.reference, screened)) {
+      receiveSourceViewEvent({ kind: "comparison", view_id: view.id, intent_revision: view.intent_revision,
+        projection_revision: view.projection_revision, invalidated: false, terminal: true });
+    }
+    await waitFor(() => expect(document.querySelector('[data-source-row="0"]')?.textContent).toBe("line 0"));
+  } finally { restoreViewport(); }
+});
