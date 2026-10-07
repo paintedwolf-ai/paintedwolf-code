@@ -10402,7 +10402,7 @@ source_files:
     lycaon-den/src/components/source/inline-edit/inline-edit-scope.ts: 92
     lycaon-den/src/components/source/inline-edit/rename-card-model.ts: 43
     lycaon-den/src/components/source/inline-edit/run-editor-action.ts: 390
-    lycaon-den/src/components/source/reader/SourceReader.tsx: 382
+    lycaon-den/src/components/source/reader/SourceReader.tsx: 386
     lycaon-den/src/components/source/reader/source-line-anchors.ts: 47
     lycaon-den/src/components/source/reader/source-reader-change.ts: 26
     lycaon-den/src/components/source/reader/source-reader-document.ts: 118
@@ -11119,10 +11119,10 @@ source_files:
     lycaon-den/src/ui/frame-publication.ts: 37
     lycaon-den/src/ui/height-toggle-motion.ts: 330
     lycaon-den/src/ui/min-visible-hold.ts: 101
-    lycaon-den/src/ui/paged-view/controller.ts: 174
+    lycaon-den/src/ui/paged-view/controller.ts: 175
     lycaon-den/src/ui/paged-view/geometry.ts: 26
     lycaon-den/src/ui/paged-view/interest.ts: 20
-    lycaon-den/src/ui/paged-view/source-view-session.ts: 554
+    lycaon-den/src/ui/paged-view/source-view-session.ts: 555
     lycaon-den/src/ui/paged-view/viewport-interest.ts: 80
     lycaon-den/src/ui/presentation-context.tsx: 15
     lycaon-den/src/ui/presentation.ts: 94
@@ -16348,7 +16348,7 @@ test_files:
     lycaon-den/e2e/sidebar-pins.spec.ts: 104
     lycaon-den/e2e/sidecar-cors.spec.ts: 115
     lycaon-den/e2e/skills-settings.spec.ts: 87
-    lycaon-den/e2e/source-reader-scroll.spec.ts: 256
+    lycaon-den/e2e/source-reader-scroll.spec.ts: 259
     lycaon-den/e2e/source-tree-frame-fixture.ts: 84
     lycaon-den/e2e/spend-ceiling-den.spec.ts: 348
     lycaon-den/e2e/split-narrow-survivor.spec.ts: 71
@@ -16943,7 +16943,7 @@ test_files:
     lycaon-den/src/components/source/inline-edit/run-editor-action.test.ts: 26
     lycaon-den/src/components/source/inline-edit/selection-action-errors.test.ts: 42
     lycaon-den/src/components/source/inline-edit/selection-action-prose.test.ts: 53
-    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 272
+    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 299
     lycaon-den/src/components/source/reader/source-line-anchors.test.ts: 25
     lycaon-den/src/components/source/reader/source-reader-change.test.ts: 51
     lycaon-den/src/components/source/reader/source-reader-document.test.ts: 34
@@ -17650,7 +17650,7 @@ test_files:
     lycaon-den/src/ui/min-visible-hold.test.ts: 120
     lycaon-den/src/ui/paged-view/controller.test.ts: 147
     lycaon-den/src/ui/paged-view/interest.test.ts: 25
-    lycaon-den/src/ui/paged-view/source-view-session.test.ts: 534
+    lycaon-den/src/ui/paged-view/source-view-session.test.ts: 561
     lycaon-den/src/ui/paged-view/viewport-interest.test.ts: 86
     lycaon-den/src/ui/presentation-waiting.test.tsx: 35
     lycaon-den/src/ui/presentation.test.ts: 91

@@ -17,6 +17,11 @@ async function saveRetainedFixture(request: APIRequestContext, source: string,
   expect(saved.ok(), await saved.text()).toBe(true);
 }
 
+/** Exact path: the host's atomic replace briefly lists a `.<name>.<nonce>.tmp` sibling that a text filter also matches. */
+function treeFile(page: Page, filePath: string) {
+  return page.locator(`[data-testid="files-tree-file"][data-path="${filePath}"]`);
+}
+
 modelIndependentWebE2e("historical CodeMirror reserves unloaded ranges and reaches the actual end", async ({ page, request }, testInfo) => {
   const text = (version: string) => Array.from({ length: 3000 }, (_, i) => `export const ${version}${i} = ${i};\n`).join("");
   const { project } = await openProjectFilesFixture(page, request, {
@@ -28,7 +33,7 @@ modelIndependentWebE2e("historical CodeMirror reserves unloaded ranges and reach
   const source = `${apiUrl}/v1/projects/${project.id}/source`;
   const params = { path: "history.ts", root_id: project.roots[0]!.id };
   await saveRetainedFixture(request, source, { headers, params }, text("after"));
-  await page.getByTestId("files-tree-file").filter({ hasText: "history.ts" }).click();
+  await treeFile(page, "history.ts").click();
   await expect(page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content")).toBeEditable();
   const offsets: number[] = [];
   page.on("request", request => {
@@ -110,7 +115,7 @@ modelIndependentWebE2e("switching summarized historical diffs never paints the f
   const source = `${apiUrl}/v1/projects/${project.id}/source`;
   const options = { headers: { Authorization: `Bearer ${token}` }, params: { root_id: project.roots[0]!.id, path: "switch.txt" } };
   for (const version of [1, 2]) await saveRetainedFixture(request, source, options, text(version));
-  await page.getByTestId("files-tree-file").filter({ hasText: "switch.txt" }).click();
+  await treeFile(page, "switch.txt").click();
   await page.getByTestId("file-version-trigger").click();
   const menu = page.getByRole("menu", { name: "Version history" });
   await expect.poll(() => menu.getByRole("menuitemradio").count()).toBeGreaterThan(2);
