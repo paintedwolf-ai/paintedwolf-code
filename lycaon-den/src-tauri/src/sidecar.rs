@@ -205,7 +205,11 @@ impl SidecarState {
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
         let message =
             format!("painted-wolf-presence-v1\n{proof_payload}\nauthenticator={authenticator}");
-        URL_SAFE_NO_PAD.encode(self.presence_signing_key.sign(message.as_bytes()).to_bytes())
+        URL_SAFE_NO_PAD.encode(
+            self.presence_signing_key
+                .sign(message.as_bytes())
+                .to_bytes(),
+        )
     }
 }
 
@@ -335,7 +339,7 @@ fn attach_or_explain(config_dir: &Path) -> Result<SidecarInfo, SidecarStartError
     match attach_existing_daemon_in(config_dir)? {
         Some(info) => Ok(info),
         None => Err(SidecarStartError::EngineNotStarted(
-            "attach-only development mode is on, but no engine is running — start one with ./task den:sidecar in another terminal".into(),
+            "Attach-only development mode is on, but no engine is running — start one with ./task den:sidecar in another terminal".into(),
         )),
     }
 }
@@ -347,7 +351,8 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     let state = app.state::<SidecarState>();
     let events = app.clone();
     state.observe(Box::new(move |engine| {
-        if let (Some(line), Some(path)) = (supervisor::log_line(engine), logging::engine_log_path()) {
+        if let (Some(line), Some(path)) = (supervisor::log_line(engine), logging::engine_log_path())
+        {
             let _ = logging::append_engine_log(&path, line.as_bytes());
         }
         let _ = events.emit(supervisor::ENGINE_STATE_EVENT, engine);
@@ -358,7 +363,12 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     let handle = app.clone();
     std::thread::spawn(move || {
         let state = handle.state::<SidecarState>();
-        supervisor::supervise(&state, watches, &supervisor::RESTART_POLICY, relaunch_sidecar);
+        supervisor::supervise(
+            &state,
+            watches,
+            &supervisor::RESTART_POLICY,
+            relaunch_sidecar,
+        );
     });
 }
 
@@ -428,5 +438,14 @@ pub fn cancel_sidecar_start(state: &SidecarState) -> bool {
         return false;
     }
     state.cancel_start.store(true, Ordering::Release);
+    true
+}
+
+/// Stops the engine this process started before an exchange; an attached daemon is left running.
+pub(crate) fn stop_for_update(state: &SidecarState) -> bool {
+    if attach_only_requested() {
+        return false;
+    }
+    stop_sidecar(state);
     true
 }

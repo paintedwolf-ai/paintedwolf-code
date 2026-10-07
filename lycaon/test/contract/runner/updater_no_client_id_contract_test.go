@@ -3,6 +3,7 @@ package contract
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,26 +11,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/egressclass"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
+// staticUpdaterEndpoint is the stable pointer the shipped client reads: the egress
+// inventory's template applied to the registry's embedded key generation.
 func staticUpdaterEndpoint(t *testing.T, root string) string {
 	t.Helper()
-	conf := contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/tauri.conf.json")
+	registry := contractcheck.ReadRepoFile(t, root, "packaging/update-keys.json")
 	var parsed struct {
-		Plugins struct {
-			Updater struct {
-				Endpoints []string `json:"endpoints"`
-			} `json:"updater"`
-		} `json:"plugins"`
+		EmbeddedGeneration int `json:"embedded_generation"`
 	}
-	if err := json.Unmarshal([]byte(conf), &parsed); err != nil {
-		t.Fatalf("parse tauri updater config: %v", err)
+	contractcheck.FailErr(t, "parse update key registry", json.Unmarshal([]byte(registry), &parsed))
+	if parsed.EmbeddedGeneration < 1 {
+		t.Fatalf("update key registry embeds generation %d", parsed.EmbeddedGeneration)
 	}
-	if len(parsed.Plugins.Updater.Endpoints) != 1 {
-		t.Fatalf("tauri updater endpoints = %v, want exactly one", parsed.Plugins.Updater.Endpoints)
-	}
-	return parsed.Plugins.Updater.Endpoints[0]
+	endpoint := strings.ReplaceAll(egressclass.UpdateManifestEndpointTemplate, "{channel}", "stable")
+	return strings.ReplaceAll(endpoint, "{key_generation}", fmt.Sprint(parsed.EmbeddedGeneration))
 }
 
 type updaterScanKind int
@@ -122,17 +121,13 @@ func TestUpdaterNoClientIDInTree(t *testing.T) {
 	}
 	for _, pattern := range scriptGlobs {
 		matches, err := filepath.Glob(filepath.Join(root, pattern))
-		if err != nil {
-			t.Fatalf("glob %s: %v", pattern, err)
-		}
+		contractcheck.FailErr(t, "glob "+pattern, err)
 		if len(matches) == 0 {
 			t.Fatalf("glob %s matched nothing", pattern)
 		}
 		for _, abs := range matches {
 			raw, err := os.ReadFile(abs)
-			if err != nil {
-				t.Fatalf("read %s: %v", abs, err)
-			}
+			contractcheck.FailErr(t, "read "+abs, err)
 			rel, err := filepath.Rel(root, abs)
 			if err != nil {
 				rel = abs
@@ -145,29 +140,31 @@ func TestUpdaterNoClientIDInTree(t *testing.T) {
 
 	endpoint := staticUpdaterEndpoint(t, root)
 	nativeService := contractcheck.RustModuleSource(t, root, "lycaon-den/src-tauri/src/update_service.rs")
-	if !strings.Contains(nativeService, ".updater_builder()") ||
-		!strings.Contains(nativeService, ".download(") ||
-		!strings.Contains(nativeService, ".install(") {
-		t.Fatal("native update service must own check, verified download, and install")
+	for _, needle := range []string{
+		"verification::verify_feed(", "fn transfer(", "fn prepare_exit(", "fn run_helper(",
+	} {
+		if !strings.Contains(nativeService, needle) {
+			t.Fatalf("native update service must own discovery, verified download, and activation (%q missing)", needle)
+		}
 	}
-	if !strings.Contains(nativeService, "if automatic && !self.state.checks_enabled") ||
+	if !strings.Contains(nativeService, "if (automatic && !inner.state.automatic_updates_enabled)") ||
 		!strings.Contains(nativeService, "write_preferences(") {
-		t.Fatal("native update service must persist and enforce the check preference")
+		t.Fatal("native update service must persist and enforce the automatic update preference")
 	}
 	if !strings.Contains(nativeService, "UPDATE_STATE_EVENT") ||
-		!strings.Contains(nativeService, "emit_update_state") {
+		!strings.Contains(nativeService, "fn emit(") {
 		t.Fatal("native update service must publish lifecycle state changes")
 	}
 	clientService := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/settings/system/update-service.ts")
 	for _, command := range []string{
-		"get_update_state", "set_update_checks_enabled", "set_update_channel", "check_update", "install_update",
+		"get_update_state", "set_automatic_updates_enabled", "set_update_channel", "check_update",
+		"download_update", "retry_update", "restart_to_update",
 	} {
-		if !strings.Contains(clientService, `invoke<NativeUpdateState>("`+command+`"`) {
+		if !strings.Contains(clientService, `invoke("`+command+`"`) {
 			t.Fatalf("update service does not invoke %s", command)
 		}
 	}
-	if strings.Contains(clientService, endpoint) || strings.Contains(clientService, "fetch(") ||
-		strings.Contains(clientService, "plugin-updater") {
+	if strings.Contains(clientService, endpoint) || strings.Contains(clientService, "fetch(") {
 		t.Fatal("client update service provides transport")
 	}
 	packageJSON := contractcheck.ReadRepoFile(t, root, "lycaon-den/package.json")

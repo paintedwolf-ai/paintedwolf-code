@@ -31,6 +31,8 @@ done
 
 [[ -n "${FILE}" ]] || usage
 [[ -n "${GENERATION}" ]] || GENERATION="$(jq -er '.update_keys.signing_generation' "${FILE}")"
+# Clients accept a pointer only with a signature from this generation's feed key.
+: "${FEED_SIGNING_PRIVATE_KEY:?missing FEED_SIGNING_PRIVATE_KEY}"
 [[ "${GENERATION}" =~ ^[1-9][0-9]*$ ]] || usage
 case "${CHANNEL}" in
   stable|preview) KEY="updates/${CHANNEL}/key-${GENERATION}/latest.json" ;;
@@ -112,12 +114,35 @@ if [[ -z "${FROM_VERSION}" ]]; then
     --output "${WORKDIR}/active.json" --storage-prefix "${STORAGE_PREFIX}"
   FILE="${WORKDIR}/active.json"
 fi
+# The signature binds the pointer's channel and generation through its file name, the
+# announced version, and a timestamp clients require to advance.
+FEED_NAME="latest-${CHANNEL}-key-${GENERATION}.json"
+SIGNED_COPY="${WORKDIR}/${FEED_NAME}"
+SIGNATURE="${SIGNED_COPY}.sig"
+cp "${FILE}" "${SIGNED_COPY}"
+(
+  cd "$(dirname "$0")/../lycaon-den"
+  TAURI_SIGNING_PRIVATE_KEY="${FEED_SIGNING_PRIVATE_KEY}" \
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${FEED_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+    bun run tauri signer sign --app-version "${EXPECTED_VERSION}" "${SIGNED_COPY}" >/dev/null
+)
+rehearsal_args=()
+[[ -z "${STORAGE_PREFIX}" ]] || rehearsal_args+=(--rehearsal)
+python3 "$(dirname "$0")/feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}" \
+  --version "${EXPECTED_VERSION}" --generation "${GENERATION}" "${rehearsal_args[@]}" >/dev/null
+
+publish_signature() {
+  "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}.sig" \
+    --file "${SIGNATURE}" --content-type text/plain \
+    --cache-control "no-cache, no-store, must-revalidate" --remote
+}
 get_status="$(python3 "$(dirname "$0")/release_distribution.py" storage-read \
   --key "${OBJECT_KEY}" --output "${CURRENT}")"
 case "${get_status}" in
   200)
     if python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "${FILE}" "${CURRENT}"; then
       echo "release-pointer: authenticated pointer already has the requested bytes" >&2
+      publish_signature
     else
       bash "$(dirname "$0")/release-validate-updater-manifest.sh" --file "${CURRENT}" --existing
       current_version="$(jq -r '.version' "${CURRENT}")"
@@ -139,6 +164,7 @@ case "${get_status}" in
           exit 1
         fi
       fi
+      publish_signature
       "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}" \
         --file "${FILE}" --content-type application/json \
         --cache-control "no-cache, no-store, must-revalidate" --remote
@@ -149,6 +175,7 @@ case "${get_status}" in
       echo "error: updater pointer disappeared; expected active ${FROM_VERSION}" >&2
       exit 1
     }
+    publish_signature
     "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}" \
       --file "${FILE}" --content-type application/json \
       --cache-control "no-cache, no-store, must-revalidate" --remote
@@ -164,8 +191,11 @@ for attempt in $(seq 1 60); do
     "${DOWNLOAD_BASE_URL%/}/${KEY}" -o "${PUBLIC}" --dump-header "${WORKDIR}/headers" \
     && python3 "$(dirname "$0")/release_pointer_headers.py" "${WORKDIR}/headers" \
     && cmp -s "${FILE}" "${PUBLIC}" \
-    && [[ "$(jq -r '.version // empty' "${PUBLIC}" 2>/dev/null)" == "${EXPECTED_VERSION}" ]]; then
-    echo "release-pointer: public ${KEY} verified at version ${EXPECTED_VERSION}" >&2
+    && [[ "$(jq -r '.version // empty' "${PUBLIC}" 2>/dev/null)" == "${EXPECTED_VERSION}" ]] \
+    && curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 \
+      -H 'Cache-Control: no-cache' "${DOWNLOAD_BASE_URL%/}/${KEY}.sig" -o "${PUBLIC}.sig" \
+    && cmp -s "${SIGNATURE}" "${PUBLIC}.sig"; then
+    echo "release-pointer: public ${KEY} and its signature verified at version ${EXPECTED_VERSION}" >&2
     exit 0
   fi
   sleep 5

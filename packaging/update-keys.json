@@ -6,6 +6,7 @@
     {
       "generation": 1,
       "public_key": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1MUIyOEQyMjEzMjExMgpSV1FTSVJNaWpiSlJBemRsVnpiZ0tzbjVUVi9uWE5jV3hhMXIyNmxya0tNYTVxcjhlbDdjaGhvRgo=",
+      "feed_public_key": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxQkU3NzQ5ODk1ODJFMkMKUldRc0xsaUpTWGUrd2YzRUw4dDQ4di9WVzJBWEYydUFEdFFvS3ZOMHpZQnd6UFc2eTlxK25vY1EK",
       "successor": null,
       "bridge_version": null
     }

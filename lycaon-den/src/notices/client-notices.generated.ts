@@ -49,6 +49,8 @@ export type ClientNoticeKind =
   | "transcript_row_gone"
   | "unexpected_client_error"
   | "update_available"
+  | "update_failed"
+  | "update_ready"
   | "view_render_failed";
 
 export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>> = {
@@ -224,8 +226,20 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   update_available: {
     title: "Update available",
+    message: "A new version of Painted Wolf Code is available.",
+    suggestedAction: "Open Settings → General → Updates to review and download it.",
+    scope: "app",
+  },
+  update_failed: {
+    title: "Update needs attention",
+    message: "Painted Wolf Code could not prepare or install the update.",
+    suggestedAction: "Open Settings → General → Updates to review the failure and retry.",
+    scope: "app",
+  },
+  update_ready: {
+    title: "Update ready",
     message: "A verified update is ready for Painted Wolf Code.",
-    suggestedAction: "Open Settings → General → Updates to review and install it.",
+    suggestedAction: "It will install when you quit if automatic updates are on. To apply it now, open Settings → General → Updates and choose Restart to update.",
     scope: "app",
   },
   view_render_failed: {

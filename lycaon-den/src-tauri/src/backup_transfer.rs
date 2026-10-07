@@ -156,9 +156,12 @@ async fn transfer(
             GrantMode::Write
         },
     )?;
-    let info = crate::sidecar::commands::ipc_sidecar_info(window.state::<SidecarState>())
-        .await?
-        .ok_or("The engine is unavailable")?;
+    let info = crate::sidecar::commands::ipc_sidecar_info(
+        window.app_handle().clone(),
+        window.state::<SidecarState>(),
+    )
+    .await?
+    .ok_or("The engine is unavailable")?;
     let client = transfer_client()?;
     let url = format!(
         "http://127.0.0.1:{}/v1/backup{}",

@@ -1,11 +1,10 @@
 scope: app
 title: Update available
 message: >-
-  A verified update is ready for Painted Wolf Code.
+  A new version of Painted Wolf Code is available.
 suggested_action: >-
-  Open Settings → General → Updates to review and install it.
+  Open Settings → General → Updates to review and download it.
 scenarios:
   - id: default
     expect_contains:
-      - verified update
       - Painted Wolf Code

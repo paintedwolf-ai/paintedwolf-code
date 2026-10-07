@@ -9,15 +9,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/updater-signature.XXXXXX")"
 trap 'rm -rf "${WORKDIR}"' EXIT
-python3 - "${ROOT}/scripts" "${WORKDIR}/signing.json" <<'PYKEY'
-import json, sys
+python3 - "${ROOT}/scripts" "${WORKDIR}/signing.pub" <<'PYKEY'
+import sys
 sys.path.insert(0, sys.argv[1])
 from update_keys import load_registry, generation
 keys = load_registry()
 with open(sys.argv[2], "w") as handle:
-    json.dump({"plugins": {"updater": {"pubkey": generation(keys, keys["signing_generation"])["public_key"]}}}, handle)
+    handle.write(generation(keys, keys["signing_generation"])["public_key"] + "\n")
 PYKEY
 cargo run --quiet --locked \
   --manifest-path "${ROOT}/lycaon-den/src-tauri/Cargo.toml" \
   --example verify_updater_signature -- \
-  "$1" "$2" "${WORKDIR}/signing.json" "$3"
+  "$1" "$2" "${WORKDIR}/signing.pub" "$3"

@@ -41,6 +41,11 @@ RELEASES_REL="updates/releases"
 VERSIONS=(0.0.900001 0.0.900002 0.0.900003)
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/release-r2-live-test.XXXXXX")"
+# Pointers under the isolated prefix are signed with a key that exists only for this run.
+(cd "${ROOT}/lycaon-den" && bun run tauri signer generate --ci -w "${WORKDIR}/feed.key" >/dev/null 2>&1)
+FEED_SIGNING_PRIVATE_KEY="$(cat "${WORKDIR}/feed.key")"
+export FEED_SIGNING_PRIVATE_KEY
+export FEED_SIGNING_PRIVATE_KEY_PASSWORD=""
 declare -a CREATED_KEYS=()
 CLEANED=0
 
@@ -270,6 +275,7 @@ echo "release-live-test: rendered Homebrew metadata verified" >&2
 
 require_absent "${POINTER_KEY}"
 register_key "${POINTER_KEY}"
+register_key "${POINTER_KEY}.sig"
 for version in "${VERSIONS[@]}"; do
   register_key "${STORAGE_PREFIX}/release-metadata/${version}/activation.json"
 done
@@ -286,10 +292,19 @@ public_headers "${POINTER_REL}" "${WORKDIR}/pointer-headers"
 require_header_tokens "${WORKDIR}/pointer-headers" Cache-Control \
   no-cache no-store must-revalidate
 require_header_tokens "${WORKDIR}/pointer-headers" Content-Type application/json
-echo "release-live-test: pointer activation, retry, public bytes, and caching verified" >&2
+public_headers "${POINTER_REL}.sig" "${WORKDIR}/pointer-signature-headers"
+require_header_tokens "${WORKDIR}/pointer-signature-headers" Cache-Control \
+  no-cache no-store must-revalidate
+curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+  "${DOWNLOAD_BASE_URL}/${POINTER_REL}.sig?live_test=${RUN_ID}" --output "${WORKDIR}/pointer.sig"
+python3 "${ROOT}/scripts/feed_signature.py" --signature "${WORKDIR}/pointer.sig" \
+  --file "latest-stable-key-${GENERATION}.json" --version "${VERSIONS[1]}" \
+  --generation "${GENERATION}" --rehearsal >/dev/null
+echo "release-live-test: pointer activation, retry, public bytes, signature, and caching verified" >&2
 
 require_absent "${PREVIEW_POINTER_KEY}"
 register_key "${PREVIEW_POINTER_KEY}"
+register_key "${PREVIEW_POINTER_KEY}.sig"
 bash "${ROOT}/scripts/release-r2-publish-pointer.sh" \
   --file "${WORKDIR}/manifest-${VERSIONS[0]}.json" \
   --channel preview --storage-prefix "${STORAGE_PREFIX}"

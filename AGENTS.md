@@ -274,10 +274,11 @@ per-operation and per-event authorization in `internal/people`.
 vocabulary, classify the artifact using
 [`docs/compatibility.md`](docs/compatibility.md).**
 
-- Pre-v1 database changes redefine revision 1 in
-  `lycaon/internal/db/schema.sql` and refresh its locks. No development migrations,
-  `user_version` bumps, or dual reads. Refuse unknown shapes without modifying
-  them. Released schemas require registered upgrades and verified recovery.
+- A schema change records the shipped baseline in
+  `lycaon/internal/db/released-baselines.json`, advances `SchemaVersion`, and adds
+  a registered step under `lycaon/internal/db/migrations`; `schema.sql` stays the
+  complete fresh target. No dual reads. Refuse unknown shapes without modifying
+  them. Every live upgrade captures a verified recovery snapshot first.
 - Co-shipped wire changes move together: `docs/openapi/**` →
   `./task openapi:bundle` → `./task codegen:den-types` → affected Go API behavior
   and Den consumers. Never hand-edit generated OpenAPI, Den types, or Go DTOs.

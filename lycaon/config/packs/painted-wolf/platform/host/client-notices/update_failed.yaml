@@ -1,0 +1,10 @@
+scope: app
+title: Update needs attention
+message: >-
+  Painted Wolf Code could not prepare or install the update.
+suggested_action: >-
+  Open Settings → General → Updates to review the failure and retry.
+scenarios:
+  - id: default
+    expect_contains:
+      - Painted Wolf Code

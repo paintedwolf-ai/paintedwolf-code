@@ -50,7 +50,7 @@ def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
         parsed = parse(version)
         if channel == "stable" and parsed.channel != "stable":
             raise ValueError("Stable feed contains a prerelease")
-        # Pre-v1 stores were never released baselines, so they are not upgrade sources.
+        # Only releases from FIRST_RELEASE on are upgrade sources.
         if compare(parsed, target) < 0 and compare(parsed, FIRST_RELEASE) >= 0:
             versions.add(version)
     # Withdrawn releases remain upgrade sources for existing installations.

@@ -21,15 +21,39 @@ def public_key(number):
 
 def registry():
     return {"schema_version": 1, "signing_generation": 3, "embedded_generation": 3, "generations": [
-        {"generation": 1, "public_key": public_key(1), "successor": 2, "bridge_version": "2.0.0"},
-        {"generation": 2, "public_key": public_key(2), "successor": 3, "bridge_version": "3.0.0"},
-        {"generation": 3, "public_key": public_key(3), "successor": None, "bridge_version": None},
+        {"generation": 1, "public_key": public_key(1), "feed_public_key": public_key(11), "successor": 2, "bridge_version": "2.0.0"},
+        {"generation": 2, "public_key": public_key(2), "feed_public_key": public_key(12), "successor": 3, "bridge_version": "3.0.0"},
+        {"generation": 3, "public_key": public_key(3), "feed_public_key": public_key(13), "successor": None, "bridge_version": None},
     ]}
 
 
 def release(keys, version, signing, embedded):
     selected = {**keys, "signing_generation": signing, "embedded_generation": embedded}
     return {"version": version, "update_keys": release_binding(selected, version)}
+
+
+class FeedSignatureCheck(unittest.TestCase):
+    FIXTURE = Path(__file__).resolve().parent.parent / "lycaon-den/src-tauri/src/update_service/fixtures/signed-feed.json"
+
+    def load(self):
+        spec = importlib.util.spec_from_file_location("feed_signature", Path(__file__).with_name("feed_signature.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module, json.loads(self.FIXTURE.read_text())
+
+    def test_signature_bindings_are_checked_before_publication(self):
+        feed_signature, fixture = self.load()
+        timestamp = feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=True)
+        self.assertGreater(timestamp, 1_700_000_000)
+        with self.assertRaises(ValueError):
+            feed_signature.check(fixture["signature"], file="latest-preview-key-1.json", version="1.2.3", number=1, rehearsal=True)
+        with self.assertRaises(ValueError):
+            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.4", number=1, rehearsal=True)
+        with self.assertRaises(ValueError):
+            feed_signature.check(fixture["unbound_signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=True)
+        # Outside a rehearsal the signer must be the registered feed key of the generation.
+        with self.assertRaises(ValueError):
+            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=False)
 
 
 class UpdateKeyRehearsal(unittest.TestCase):
@@ -92,6 +116,8 @@ class UpdateKeyRehearsal(unittest.TestCase):
     def test_registry_rejects_missing_routes_and_reused_keys(self):
         for mutation in (lambda value: value["generations"].pop(1),
                          lambda value: value["generations"][1].update(public_key=public_key(1)),
+                         lambda value: value["generations"][1].update(feed_public_key=public_key(2)),
+                         lambda value: value["generations"][1].pop("feed_public_key"),
                          lambda value: value["generations"][0].update(successor=3),
                          lambda value: value["generations"][0].update(bridge_version="2.0.0-rc.1"),
                          lambda value: value["generations"][1].update(bridge_version="1.9.0")):
@@ -143,12 +169,10 @@ class UpdateKeyRehearsal(unittest.TestCase):
                 planner.main()
                 self.assertEqual(len(run.call_args_list), 4)
 
-    def test_real_registry_matches_embedded_tauri_configuration(self):
+    def test_real_registry_carries_distinct_artifact_and_feed_keys_for_the_embedded_generation(self):
         keys = load_registry()
-        config = json.loads((Path(__file__).resolve().parent.parent / "lycaon-den/src-tauri/tauri.conf.json").read_text())
-        embedded = keys["embedded_generation"]
-        self.assertEqual(config["plugins"]["updater"]["pubkey"], keys["generations"][embedded - 1]["public_key"])
-        self.assertEqual(config["plugins"]["updater"]["endpoints"], ["https://downloads.paintedwolf.dev/" + feed_key("stable", embedded)])
+        row = keys["generations"][keys["embedded_generation"] - 1]
+        self.assertNotEqual(fingerprint(row["public_key"]), fingerprint(row["feed_public_key"]))
 
 
 if __name__ == "__main__":

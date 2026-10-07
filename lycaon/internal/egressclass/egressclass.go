@@ -51,7 +51,6 @@ const (
 	HTTPDownload    Transport = "http_download"
 	GitCLI          Transport = "git_cli"
 	LibraryDownload Transport = "library_download"
-	TauriUpdater    Transport = "tauri_updater"
 )
 
 // Class is one app-level outbound request purpose.
@@ -89,7 +88,7 @@ var classes = []Class{
 		SilentReason:   "background metadata refresh keeps the prior cache; explicit provider refresh has its own typed error",
 	},
 	{
-		ID: UpdateManifestCheck, EndpointSource: EndpointBundled, Transport: TauriUpdater,
+		ID: UpdateManifestCheck, EndpointSource: EndpointBundled, Transport: HTTPBounded,
 		EndpointTemplate: UpdateManifestEndpointTemplate,
 		SilentReason:     "background update checks are opt-out and manual checks report in the updates surface",
 	},

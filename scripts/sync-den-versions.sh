@@ -13,13 +13,9 @@ PKG="${ROOT}/lycaon-den/package.json"
 TAURI="${ROOT}/lycaon-den/src-tauri/tauri.conf.json"
 CARGO="${ROOT}/lycaon-den/src-tauri/Cargo.toml"
 
-python3 - "${PRODUCT_VERSION}" "${NATIVE_VERSION}" "${MACOS_BUNDLE_VERSION}" "${PKG}" "${TAURI}" "${ROOT}/scripts" <<'PY'
+python3 - "${PRODUCT_VERSION}" "${NATIVE_VERSION}" "${MACOS_BUNDLE_VERSION}" "${PKG}" "${TAURI}" <<'PY'
 import json, sys
-product, native, build, package_path, tauri_path, scripts = sys.argv[1:]
-sys.path.insert(0, scripts)
-from update_keys import load_registry, generation, feed_key
-keys = load_registry()
-embedded = keys["embedded_generation"]
+product, native, build, package_path, tauri_path = sys.argv[1:]
 with open(package_path, encoding="utf-8") as f:
     package = json.load(f)
 package["version"] = product
@@ -28,8 +24,6 @@ with open(package_path, "w", encoding="utf-8") as f:
     f.write("\n")
 with open(tauri_path, encoding="utf-8") as f:
     tauri = json.load(f)
-tauri["plugins"]["updater"]["pubkey"] = generation(keys, embedded)["public_key"]
-tauri["plugins"]["updater"]["endpoints"] = ["https://downloads.paintedwolf.dev/" + feed_key("stable", embedded)]
 tauri["version"] = native
 tauri["bundle"]["macOS"]["bundleVersion"] = build
 with open(tauri_path, "w", encoding="utf-8") as f:

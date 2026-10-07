@@ -1,3 +1,4 @@
+import { updateFixture, stagedFixture } from "../settings/system/update-test-fixture.ts";
 import { fireEvent, findByTestId, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightReport } from "../api/types.ts";
@@ -22,17 +23,13 @@ import type { HealthResponse } from "../platform/connection/backend.ts";
 
 const checkNativeUpdate = vi.fn();
 const installNativeUpdate = vi.fn();
-const nativeUpdateState = {
-  revision: 0, phase: "idle", current_version: "1.0.0", channel: "stable",
-  install_source: "direct_download", checks_enabled: false,
-  rollout_eligibility: "not_applicable", downloaded_bytes: 0, total_bytes: null,
-};
+const nativeUpdateState = () => updateFixture({ automatic_updates_enabled: false });
 vi.mock("../settings/system/update-service.ts", () => ({
   nativeUpdateService: {
-    getState: async () => nativeUpdateState,
+    getState: async () => nativeUpdateState(),
     subscribe: async () => () => {},
     check: () => checkNativeUpdate(),
-    install: (version: string) => installNativeUpdate(version),
+    download: (release: string) => installNativeUpdate(release),
   },
 }));
 
@@ -103,8 +100,8 @@ describe("createCriticalStop", () => {
   beforeEach(() => {
     checkNativeUpdate.mockReset();
     installNativeUpdate.mockReset();
-    checkNativeUpdate.mockResolvedValue({ ...nativeUpdateState, phase: "available", available_version: "1.1.0" });
-    installNativeUpdate.mockResolvedValue({ ...nativeUpdateState, phase: "restart_required", available_version: "1.1.0" });
+    checkNativeUpdate.mockResolvedValue(nativeUpdateState());
+    installNativeUpdate.mockResolvedValue(stagedFixture());
 
     connectAppBackend.mockReset();
     restartAppBackend.mockReset();
@@ -170,7 +167,7 @@ describe("createCriticalStop", () => {
     check.click();
     const install = await findByTestId(root, "updates-install");
     install.click();
-    await waitFor(() => expect(installNativeUpdate).toHaveBeenCalledWith("1.1.0"));
+    await waitFor(() => expect(installNativeUpdate).toHaveBeenCalledWith("release-1"));
     expect(resetStore).not.toHaveBeenCalled();
     expect(restoreRecoverySnapshot).not.toHaveBeenCalled();
   });
