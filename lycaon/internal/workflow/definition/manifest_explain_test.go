@@ -80,7 +80,7 @@ phases:
 func TestShippedSecuritySurveyExplainsItsScan(t *testing.T) {
 	catalog, _, err := LoadPackManifestsForCatalog(nil)
 	testutil.FailErr(t, "load catalog", err)
-	m, ok := catalog[ManifestKey("security-survey", "1.0.0")]
+	m, ok := catalog[ManifestKey("security-survey", "1.0.1")]
 	if !ok {
 		t.Fatal("missing security-survey")
 	}

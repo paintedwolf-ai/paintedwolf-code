@@ -90,7 +90,7 @@ func TestSummarizeAnchorResolvesInLedger_memory(t *testing.T) {
 	if rec.Path != "src/b.go" || rec.Body[0] != "package b" {
 		t.Fatalf("rec = %+v", rec)
 	}
-	if !evidence.ExcerptMatchesHandle(ev, "summarize#2", 20, "package b") {
+	if !evidence.ExcerptMatchesHandle(ev, "summarize#2", "src/b.go", 20, "package b") {
 		t.Fatal("expected excerpt match for summarize#2")
 	}
 	_ = patched
@@ -114,7 +114,7 @@ func TestSummarizeAnchorResolvesInLedger_sql(t *testing.T) {
 
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
-	if !evidence.ExcerptMatchesHandle(ev, "summarize#1", 10, "func entry() {}") {
+	if !evidence.ExcerptMatchesHandle(ev, "summarize#1", "src/a.go", 10, "func entry() {}") {
 		t.Fatal("expected summarize#1 excerpt match after SQL round-trip")
 	}
 }

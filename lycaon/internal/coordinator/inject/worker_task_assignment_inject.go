@@ -2,6 +2,7 @@ package inject
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,42 +31,43 @@ type RecordedVerdict struct {
 
 // WorkerTaskAssignmentInput is the host-defined charter for a worker leg.
 type WorkerTaskAssignmentInput struct {
-	ScanInventory string
-	SessionID     string
-	ProjectDir    string
-	Charter       api.WorkerTaskCharter
-	AgentType     string
-	WorkerJobID   string
-	Scope         api.TaskScope
-	MaxToolLoops  int
-	Attachments   []promptattach.ForwardedAttachment
+	CoverageAssignment *reviewcoverage.Assignment
+	ScanInventory      string
+	SessionID          string
+	ProjectDir         string
+	Charter            api.WorkerTaskCharter
+	AgentType          string
+	WorkerJobID        string
+	Scope              api.TaskScope
+	MaxToolLoops       int
+	Attachments        []promptattach.ForwardedAttachment
 	// RecordedVerdicts are the run's stamped verdicts in phase order.
 	RecordedVerdicts []RecordedVerdict
 }
 
 // WorkerTaskAssignmentData is the pongo data model for inject/worker-task-assignment.md.
 type WorkerTaskAssignmentData struct {
-	ScanInventory    string
-	AgentType        string
-	WorkerJobID      string
-	SharedContext    string
-	Goal             string
-	KnownFacts       []string
-	Constraints      []string
-	DoneWhen         []string
-	ContextRefs      []string
-	ScopeMode        string
-	ScopePaths       []string
-	MaxToolLoops     int
-	FileOrientations []ScopeFileOrientation
-	Attachments      []promptattach.ForwardedAttachment
-	RecordedVerdicts []RecordedVerdict
+	CoverageAssignment string
+	ScanInventory      string
+	AgentType          string
+	WorkerJobID        string
+	SharedContext      string
+	Goal               string
+	KnownFacts         []string
+	Constraints        []string
+	DoneWhen           []string
+	ContextRefs        []string
+	ScopeMode          string
+	ScopePaths         []string
+	MaxToolLoops       int
+	FileOrientations   []ScopeFileOrientation
+	Attachments        []promptattach.ForwardedAttachment
+	RecordedVerdicts   []RecordedVerdict
 	// Elisions names every list this assignment shortened.
 	Elisions []string
 }
 
 // BuildWorkerTaskAssignmentData maps runtime facts into inject DTO fields.
-// Every list is bounded here — see render_bounds.go.
 func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentInput) WorkerTaskAssignmentData {
 	norm := in.Scope.Normalized()
 	var elisions []string
@@ -117,6 +120,11 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 			if o.SymbolsElided > 0 {
 				elisions = append(elisions, elisionNote("outline symbols for `"+o.Path+"`", len(o.Symbols), o.SymbolsElided))
 			}
+		}
+	}
+	if in.CoverageAssignment != nil {
+		if raw, err := json.Marshal(in.CoverageAssignment); err == nil {
+			data.CoverageAssignment = string(raw)
 		}
 	}
 	data.Elisions = elisions
@@ -184,22 +192,23 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		})
 	}
 	return map[string]any{
-		"scan_inventory":    data.ScanInventory,
-		"agent_type":        data.AgentType,
-		"worker_job_id":     data.WorkerJobID,
-		"goal":              data.Goal,
-		"shared_context":    data.SharedContext,
-		"known_facts":       data.KnownFacts,
-		"constraints":       data.Constraints,
-		"done_when":         data.DoneWhen,
-		"context_refs":      data.ContextRefs,
-		"scope_mode":        data.ScopeMode,
-		"scope_paths":       data.ScopePaths,
-		"max_tool_loops":    data.MaxToolLoops,
-		"file_orientations": orientations,
-		"attachments":       attachments,
-		"recorded_verdicts": recorded,
-		"elisions":          data.Elisions,
+		"scan_inventory":      data.ScanInventory,
+		"coverage_assignment": data.CoverageAssignment,
+		"agent_type":          data.AgentType,
+		"worker_job_id":       data.WorkerJobID,
+		"goal":                data.Goal,
+		"shared_context":      data.SharedContext,
+		"known_facts":         data.KnownFacts,
+		"constraints":         data.Constraints,
+		"done_when":           data.DoneWhen,
+		"context_refs":        data.ContextRefs,
+		"scope_mode":          data.ScopeMode,
+		"scope_paths":         data.ScopePaths,
+		"max_tool_loops":      data.MaxToolLoops,
+		"file_orientations":   orientations,
+		"attachments":         attachments,
+		"recorded_verdicts":   recorded,
+		"elisions":            data.Elisions,
 	}
 }
 

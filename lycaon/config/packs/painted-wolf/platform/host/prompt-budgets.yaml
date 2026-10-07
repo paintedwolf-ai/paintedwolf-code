@@ -2,16 +2,16 @@
 # Model ceilings, attachment caps, and the perception window are manual.
 version: 1
 worker_personas:
-    code-reviewer: 14766
-    implementer: 34431
-    path-explorer: 14337
-    plan-reviewer: 10653
-    plan-reviewer-alt: 10386
-    plan-writer: 17150
-    repo-researcher: 14136
-    security-reviewer: 15746
-    skeptic: 13942
-    web-researcher: 8602
+    code-reviewer: 14800
+    implementer: 34465
+    path-explorer: 14371
+    plan-reviewer: 10687
+    plan-reviewer-alt: 10420
+    plan-writer: 17184
+    repo-researcher: 14170
+    security-reviewer: 15780
+    skeptic: 14059
+    web-researcher: 8615
 coordinator_tripartite:
     implement_dispatch_workflow_orchestrate: 20929
     implement_investigate_first_user: 33213
@@ -25,7 +25,7 @@ coordinator_tripartite:
     plan_research_surface: 13420
     workflow_compose: 7268
 coordinator_injects:
-    active_workflow: 1396
+    active_workflow: 2086
     board_orientation: 1001
     command_jobs: 5130
     implement_spawn: 1311
@@ -33,12 +33,12 @@ coordinator_injects:
     tool_procedures: 4596
     worker_command_jobs: 5130
     worker_leg: 334
-    worker_task_assignment: 1302
+    worker_task_assignment: 3589
     worker_task_preamble: 657
 agent_templates:
     coordinator: 5917
 kicks:
-    active-workflow: 443
+    active-workflow: 402
     agents-md: 1
     blueprint: 43
     board-orientation: 59
@@ -66,7 +66,7 @@ kicks:
     coordinator-recon-drill-plan: 684
     coordinator-recon-pack-plan: 1247
     coordinator-recon-reconcile: 653
-    coordinator-report-document: 514
+    coordinator-report-document: 613
     coordinator-review-loop-continue: 100
     coordinator-review-loop-decide: 264
     coordinator-root-detach-canceled: 106
@@ -75,11 +75,11 @@ kicks:
     coordinator-scan-finished: 492
     coordinator-scheduled: 801
     coordinator-secret-withheld: 503
-    coordinator-security-challenge: 2379
-    coordinator-security-claims: 1647
+    coordinator-security-challenge: 2549
+    coordinator-security-claims: 1378
     coordinator-security-execute: 1688
     coordinator-security-plan: 2872
-    coordinator-security-synthesis: 1743
+    coordinator-security-synthesis: 1767
     coordinator-spend-runway-low: 524
     coordinator-spend-soft-stop: 600
     coordinator-survey-streak: 407
@@ -98,7 +98,7 @@ kicks:
     worker-budget-declined: 358
     worker-budget-raised: 195
     worker-cancel-closeout: 367
-    worker-citation-grounding: 2094
+    worker-citation-grounding: 2126
     worker-closeout: 366
     worker-iterations-low: 838
     worker-leg: 258
@@ -108,14 +108,14 @@ kicks:
     worker-task-preamble: 41
     worker-task-started: 235
 tool_surfaces:
-    coordinator: 68935
-    editor_file: 29492
-    explore_readonly: 29513
-    implement: 62821
-    plan_review_readonly: 32744
-    plan_write_only: 30119
-    web_research: 17623
-    worker_readonly: 29994
+    coordinator: 69288
+    editor_file: 30304
+    explore_readonly: 31919
+    implement: 65227
+    plan_review_readonly: 35150
+    plan_write_only: 32363
+    web_research: 19960
+    worker_readonly: 30518
 absolute_maximums:
     model: accounts/fireworks/models/kimi-k2p7-code
     model_context_window_tokens: 262144

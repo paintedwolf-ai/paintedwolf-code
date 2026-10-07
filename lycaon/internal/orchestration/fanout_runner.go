@@ -119,6 +119,17 @@ func (o *OrchestratorImpl) setupFanOutDelegation(
 	state *runState,
 ) (string, []string, error) {
 	wfID, wfVer, wfRunID := workflowFieldsFromState(wf)
+	keys := make([]string, len(fanSpec.Subtasks))
+	for i := range keys {
+		keys[i] = fanOutSubtaskKey(i)
+	}
+	restored, err := o.restoreWorkflowDelegation(ctx, wfRunID, keys, state)
+	if err != nil {
+		return "", nil, err
+	}
+	if restored != nil {
+		return restored.ID, restored.LegIDs, nil
+	}
 	projectID, err := pipelineProjectID(req)
 	if err != nil {
 		return "", nil, err
@@ -214,6 +225,14 @@ func (o *OrchestratorImpl) dispatchFanOutLeg(
 	index int,
 	workflowRunID string,
 ) error {
+	leg, err := o.store.GetLeg(ctx, delegationID, legID)
+	if err != nil {
+		return err
+	}
+	if leg.Status != api.LegStatusPending {
+		return nil
+	}
+
 	taskID := runID + ":fan_out:" + fanOutSubtaskKey(index)
 	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
 		return err
@@ -229,6 +248,6 @@ func (o *OrchestratorImpl) dispatchFanOutLeg(
 			return err
 		}
 	}
-	_, err := o.delegation.DispatchLeg(ctx, delegationID, legID, "")
+	_, err = o.delegation.DispatchLeg(ctx, delegationID, legID, "")
 	return err
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -309,11 +308,12 @@ func (b *serveBuilder) wireFindingAndProgressTools() error {
 		return fmt.Errorf("surface_note tool: %w", err)
 	}
 	b.progressStore = progress.NewSQLStore(b.db)
+	b.workflowMgr.Progress = b.progressStore
 	b.mgr.SetProgressStore(b.progressStore)
 	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
 	}
-	if err := native.RegisterCompleteLegTool(b.toolRuntime.Registry, workercompletion.CompleteLegDecoder); err != nil {
+	if err := native.RegisterCompleteLegTool(b.toolRuntime.Registry, b.decodeCompleteLeg); err != nil {
 		return fmt.Errorf("complete_leg tool: %w", err)
 	}
 	// Recall reach follows session topology.

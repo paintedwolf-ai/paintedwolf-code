@@ -1,0 +1,32 @@
+surfaces:
+  - host_error
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - tool
+    - tools
+    - closeout_reason
+title: Model skipped its closing summary
+message: >-
+  {% if closeout_reason %}The turn ended early because {{ closeout_reason }}.{% else %}The turn had reached its final step.{% endif %}
+  Its last step allows no tools, but the model answered with {% if tool %}a `{{ tool }}` call{% else %}a tool call{% endif %}
+  instead of a summary. The call did not run and no summary was recorded; completed work is preserved.
+suggested_action: >-
+  Choose Keep going to start a fresh turn from here. If this repeats, a different model
+  in Settings → AI providers may follow the final-step instruction more reliably.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+  - open_ai_providers
+scenarios:
+  - id: with_tool
+    vars:
+      tool: submit_verdict
+      closeout_reason: "`submit_verdict` was refused 6 times in a row (SUBMIT_VERDICT_INVALID)"
+    expect_contains:
+      - submit_verdict
+      - did not run
+  - id: generic
+    vars: {}
+    expect_contains:
+      - no summary was recorded

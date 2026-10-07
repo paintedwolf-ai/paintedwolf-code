@@ -111,10 +111,10 @@ func TestGrepReadFailureDoesNotClaimAbsence(t *testing.T) {
 
 func TestGrepDeadlineIsNotAnEmptySearch(t *testing.T) {
 	var reject *tools.ToolReject
-	if err := grepExecutionError(context.DeadlineExceeded); !errors.As(err, &reject) || reject.Code != "GREP_DEADLINE_EXCEEDED" {
+	if err := grepExecutionError(nil, context.DeadlineExceeded); !errors.As(err, &reject) || reject.Code != "GREP_DEADLINE_EXCEEDED" {
 		t.Fatalf("deadline error = %v", err)
 	}
-	if err := grepExecutionError(context.Canceled); !errors.Is(err, context.Canceled) {
+	if err := grepExecutionError(nil, context.Canceled); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel error = %v", err)
 	}
 }

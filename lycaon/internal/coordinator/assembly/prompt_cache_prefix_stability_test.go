@@ -235,8 +235,8 @@ func TestPromptCacheVolatileChangeDoesNotAlterStableBytes(t *testing.T) {
 	}
 	stable2 := eng.Cache().LoadTurn(sess.ID).StablePrompt
 	runCtx2 := countCoordinatorRunContextBlocks(msgs2)
-	if runCtx2 >= runCtx1 && runCtx1 > 0 {
-		t.Fatalf("expected volatile run-context count to drop on iteration 2: %d -> %d", runCtx1, runCtx2)
+	if runCtx1 != 1 || runCtx2 != 1 {
+		t.Fatalf("each request needs the current workflow context: %d -> %d", runCtx1, runCtx2)
 	}
 	if stable2 != stable1 {
 		t.Fatalf("volatile-only turn change must not alter stable bytes")

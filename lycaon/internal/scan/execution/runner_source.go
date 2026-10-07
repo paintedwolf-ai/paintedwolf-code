@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,12 +15,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// scanSource binds live paths to a snapshot. Scanned holds root-relative files;
-// nil checks every admitted file for changes after execution.
+// scanSource owns the isolated bytes consumed by one scanner execution.
 type scanSource struct {
 	ProjectDir string
 	Paths      []string
-	Scanned    []string
 }
 
 func (r *Runner) resolveScanSource(ctx context.Context, job *api.CodeScan, contract scancatalog.ScannerContract, paths []string) (scanSource, bool) {
@@ -52,20 +49,22 @@ func (r *Runner) resolveScanSource(ctx context.Context, job *api.CodeScan, contr
 			r.failTerminal(ctx, job, fmt.Errorf("list source snapshot targets: %w", err))
 			return scanSource{}, false
 		}
-		return scanSource{ProjectDir: root, Paths: absoluteScanPaths(root, files), Scanned: files}, true
+		return r.materializedScanSource(ctx, job, root, files, true)
 	}
 	if !explicitTargets(contract) {
-		return scanSource{ProjectDir: root}, true
+		return r.materializedScanSource(ctx, job, root, nil, false)
 	}
 	files := make([]string, 0, snapshot.FileCount)
 	if err := r.Snapshots.ForEachEntry(ctx, snapshot.ID, func(entry sourcesnapshot.Entry) error {
-		files = append(files, entry.Path)
+		if entry.RootPath == root {
+			files = append(files, entry.Path)
+		}
 		return nil
 	}); err != nil {
 		r.failTerminal(ctx, job, fmt.Errorf("list source snapshot files: %w", err))
 		return scanSource{}, false
 	}
-	return scanSource{ProjectDir: root, Paths: absoluteScanPaths(root, files), Scanned: files}, true
+	return r.materializedScanSource(ctx, job, root, files, true)
 }
 
 func snapshotRoot(snapshot sourcesnapshot.Snapshot, canonicalPath string) string {
@@ -107,29 +106,17 @@ func absoluteScanPaths(root string, rels []string) []string {
 	return out
 }
 
-// fenceMovedSource marks coverage partial when scanned content changes during execution.
-func (r *Runner) fenceMovedSource(ctx context.Context, job *api.CodeScan, source scanSource, result *scanoutput.Result) {
-	if r.Snapshots == nil || result == nil {
-		return
-	}
-	if job.TargetKind == api.ScanTargetPaths && len(source.Scanned) == 0 {
-		return
-	}
-	moved, err := r.Snapshots.MovedSince(ctx, job.SourceSnapshotID, source.Scanned)
+func (r *Runner) materializedScanSource(ctx context.Context, job *api.CodeScan, root string, files []string, explicit bool) (scanSource, bool) {
+	dir, err := r.Snapshots.Materialize(ctx, job.SourceSnapshotID, root, files)
 	if err != nil {
-		slog.WarnContext(ctx, "check scanned files against their generation", "scan_id", job.ID, "error", err)
-		result.Warnings = append(result.Warnings, api.ScanWarning{Kind: api.ScanWarningSourceMoved, Message: "Could not verify scanned content against its source generation."})
-		return
+		r.failTerminal(ctx, job, err)
+		return scanSource{}, false
 	}
-	for _, rel := range moved {
-		result.Warnings = append(result.Warnings, api.ScanWarning{
-			Kind: api.ScanWarningSourceMoved, File: rel,
-			Message: "changed while the scan ran; its findings describe neither the generation nor the tree",
-		})
+	source := scanSource{ProjectDir: dir}
+	if explicit {
+		source.Paths = absoluteScanPaths(dir, files)
 	}
-	if len(moved) > 0 {
-		slog.InfoContext(ctx, "scanned files moved during the run", "scan_id", job.ID, "moved", len(moved))
-	}
+	return source, true
 }
 
 func (r *Runner) runScanner(ctx context.Context, job *api.CodeScan, req scanbase.ScanRequest) (*scanoutput.Result, error) {

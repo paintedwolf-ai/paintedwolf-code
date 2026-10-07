@@ -97,7 +97,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("phase = %q want judge (non-terminal verdict must hold)", run.CurrentPhase)
 	}
 
-	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic")
+	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "")
 
 	// A grounded terminal verdict advances the judge phase.
 	verdict := map[string]string{"verdict": "SELECTED", "winner": "Approach B", "rationale": "B survives the skeptic on integration boundaries."}

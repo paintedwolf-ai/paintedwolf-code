@@ -48,6 +48,7 @@ func resolveManifest(m Manifest, catalog map[string]Manifest, depth int, visited
 
 func mergeManifest(parent, child Manifest) Manifest {
 	out := cloneManifest(parent)
+	out.Retired = child.Retired
 	out.ID = child.ID
 	out.Version = child.Version
 	// The child controls attachments.
@@ -276,12 +277,7 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 			out[i].HumanApproval = &value
 		}
 		if in[i].ReviewLoop != nil {
-			value := *in[i].ReviewLoop
-			value.VerdictSchema = copyStringMap(value.VerdictSchema)
-			value.RequiredAgents = append([]string(nil), value.RequiredAgents...)
-			value.IfSpawnable = append([]string(nil), value.IfSpawnable...)
-			value.ClaimStatuses = cloneClaimStatuses(value.ClaimStatuses)
-			out[i].ReviewLoop = &value
+			out[i].ReviewLoop = cloneReviewLoop(in[i].ReviewLoop)
 		}
 	}
 	return out
@@ -379,4 +375,14 @@ func (c ManifestControls) IsZero() bool {
 	return c.PhaseAdvance == "" && c.DefaultExecutionMode == "" &&
 		c.OnDecisionReject == nil && c.OnPause == nil && c.OnStop == nil && c.ContentReview == nil &&
 		c.Report == nil
+}
+
+func cloneReviewLoop(in *ReviewLoopDef) *ReviewLoopDef {
+	value := *in
+	value.VerdictSchema = copyStringMap(in.VerdictSchema)
+	value.RequiredAgents = append([]string(nil), in.RequiredAgents...)
+	value.IfSpawnable = append([]string(nil), in.IfSpawnable...)
+	value.CoverageReviewers = append([]string(nil), in.CoverageReviewers...)
+	value.ClaimStatuses = cloneClaimStatuses(in.ClaimStatuses)
+	return &value
 }

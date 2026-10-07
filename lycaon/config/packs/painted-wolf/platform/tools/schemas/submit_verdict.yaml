@@ -20,7 +20,7 @@ schema:
       required: [verdict]
       additionalProperties: true
     cited_evidence:
-      description: "Citations: observed evidence handle, or repo path with line/excerpt."
+      description: "Citations: an observed evidence handle, a repo path with optional line and excerpt, or both naming one observation."
       type: array
       items:
         type: object
@@ -41,11 +41,9 @@ schema:
           excerpt:
             description: Verbatim excerpt at that location.
             type: string
-        oneOf:
+        anyOf:
           - required: [handle]
-            not: { required: [path] }
           - required: [path]
-            not: { required: [handle] }
       uniqueItems: true
     cited_urls:
       description: Verbatim URLs a reviewer envelope or this turn fetched.

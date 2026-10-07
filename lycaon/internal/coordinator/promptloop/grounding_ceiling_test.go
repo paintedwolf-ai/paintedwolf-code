@@ -3,7 +3,9 @@ package promptloop
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/jsonshape"
 )
 
 func citationBudget(attempt, limit, remaining int) closeoutRetryBudget {
@@ -64,11 +66,45 @@ func TestCloseoutRetryBudgetStatesTheBudgetThatApplies(t *testing.T) {
 
 func TestCloseoutRetryBudgetDocumentRepairCarriesTheFence(t *testing.T) {
 	budget := closeoutRetryBudget{attempt: 1, limit: 3, document: `{"findings":[]}`}
-	data := budget.hintData(map[string]any{"offender_count": 2})
+	data := budget.hintData(map[string]any{"offender_count": 2}, []jsonshape.Issue{{Name: "headline_note"}})
 	if data["retained_document"] != `{"findings":[]}` || data["offender_count"] != 2 {
 		t.Fatalf("hint data = %v", data)
 	}
+	if offending, ok := data["offending_keys"].([]string); !ok || len(offending) != 1 || offending[0] != "headline_note" {
+		t.Fatalf("offending_keys = %v", data["offending_keys"])
+	}
+	if allowed, ok := data["allowed_top_level_keys"].([]string); !ok || len(allowed) == 0 {
+		t.Fatalf("allowed_top_level_keys = %v", data["allowed_top_level_keys"])
+	}
 	if plain := (closeoutRetryBudget{}).hintData(map[string]any{"k": "v"}); len(plain) != 1 {
 		t.Fatalf("citation hint data gained fields: %v", plain)
+	}
+}
+
+func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
+	loop := &PromptLoop{}
+	stDefault := &promptLoopTurnState{
+		coordinatorFrame: inject.CoordinatorTurnFrame{
+			Runtime: inject.WorkflowRuntimeSnapshot{
+				ReportDocumentEnabled: true,
+			},
+		},
+	}
+	budget := loop.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
+	if budget.limit != 3 {
+		t.Fatalf("expected default limit 3, got %d", budget.limit)
+	}
+
+	stConfigured := &promptLoopTurnState{
+		coordinatorFrame: inject.CoordinatorTurnFrame{
+			Runtime: inject.WorkflowRuntimeSnapshot{
+				ReportDocumentEnabled: true,
+				CloseoutRetries:       5,
+			},
+		},
+	}
+	budget5 := loop.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
+	if budget5.limit != 5 {
+		t.Fatalf("expected configured limit 5, got %d", budget5.limit)
 	}
 }

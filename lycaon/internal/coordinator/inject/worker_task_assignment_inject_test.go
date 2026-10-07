@@ -2,11 +2,13 @@ package inject
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -100,5 +102,23 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 	}
 	if !strings.Contains(out, `jq(path="prompt-attachments/b3a260fb/127.0.0.1-recording.json")`) {
 		t.Fatalf("missing jq hint:\n%s", out)
+	}
+}
+
+func TestWorkerAssignmentCarriesCoverageIndependentlyOfClaims(t *testing.T) {
+	assignment := reviewcoverage.Assign(reviewcoverage.Facts{Gaps: []reviewcoverage.Fact{{ID: "gap/all", Kind: "partial", FileCount: 654, Paths: []string{"server/entry.go"}}}}, api.CoverageReview{Revision: "candidate"}, "check")
+	in := WorkerTaskAssignmentInput{SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &assignment}
+	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), in)
+	testutil.FailErr(t, "render coverage assignment", err)
+	raw, err := json.Marshal(assignment)
+	testutil.FailErr(t, "encode coverage assignment", err)
+	if !strings.Contains(out, string(raw)) {
+		t.Fatal("host scope lost from assignment")
+	}
+	in.CoverageAssignment = nil
+	out, err = RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), in)
+	testutil.FailErr(t, "render ordinary assignment", err)
+	if strings.Contains(out, assignment.Facts.Revision) {
+		t.Fatal("ordinary worker inherited coverage contract")
 	}
 }

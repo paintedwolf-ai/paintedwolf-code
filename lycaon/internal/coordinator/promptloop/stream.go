@@ -496,7 +496,12 @@ func (l *PromptLoop) completeStream(
 		l.Deps.RecordCompactionTokenObservation(sessionID, completion.Usage.PromptTokens, transcriptEstimate)
 	}
 	if proseFinish {
-		completion.ToolCalls = retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))
+		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))
+		// Calls the final turn will not run are the model's miss, not a silent provider.
+		if len(kept) == 0 && len(completion.ToolCalls) > 0 && strings.TrimSpace(completion.Content) == "" {
+			return nil, nil, &ProseTurnToolCallError{ProviderID: providerID, Model: model, Tools: proseTurnToolNames(completion.ToolCalls), CloseoutReason: st.closeoutCauseTextOrEmpty()}
+		}
+		completion.ToolCalls = kept
 	}
 	// Empty completions fail before the terminal event.
 	if !modelcall.CompletionHasPayload(completion) {

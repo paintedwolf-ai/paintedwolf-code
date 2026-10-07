@@ -1,22 +1,25 @@
 package evidence
 
 import (
-	"regexp"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 )
 
-// readLineNumberPrefixRE matches rendered line-number prefixes.
-var readLineNumberPrefixRE = regexp.MustCompile(`(?m)^\d+[\t|]`)
-
-// readBodyLinePrefixRE parses one prefixed read/grep body line into line number and text.
-var readBodyLinePrefixRE = regexp.MustCompile(`^(\d+)([\t|])(.*)$`)
-
-// normalizeForExcerptMatch ignores line prefixes and whitespace layout.
+// normalizeForExcerptMatch drops rendered line numbers and whitespace layout,
+// so an excerpt copied from a numbered read compares against the line text.
 func normalizeForExcerptMatch(s string) string {
-	s = readLineNumberPrefixRE.ReplaceAllString(s, "")
-	return strings.Join(strings.Fields(s), " ")
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if _, text, ok := hostmarker.ParseNumberedLine(line); ok {
+			lines[i] = text
+		}
+	}
+	return strings.Join(strings.Fields(strings.Join(lines, " ")), " ")
 }
 
+// ExcerptMeaningful reports whether an excerpt is long enough to identify a
+// span; an absent excerpt makes no claim and passes.
 func ExcerptMeaningful(excerpt string) bool {
 	excerpt = strings.TrimSpace(excerpt)
 	if excerpt == "" {

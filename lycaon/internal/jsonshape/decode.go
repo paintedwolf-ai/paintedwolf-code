@@ -151,6 +151,9 @@ func (d *decoder) object(raw json.RawMessage, v reflect.Value, at location) bool
 		f, ok := fields[name]
 		child := at.member(name)
 		if !ok {
+			if isVacuousJSON(members[name]) {
+				continue
+			}
 			d.report(child, at, name, Unknown, "")
 			continue
 		}
@@ -161,6 +164,22 @@ func (d *decoder) object(raw json.RawMessage, v reflect.Value, at location) bool
 		}
 	}
 	return true
+}
+
+// isVacuousJSON reports whether raw holds a vacuous value (null, empty string,
+// empty list, or empty object) that states no substantive facts.
+func isVacuousJSON(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "null" || trimmed == `""` || trimmed == "[]" || trimmed == "{}" {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		return strings.TrimSpace(trimmed[1:len(trimmed)-1]) == ""
+	}
+	if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") {
+		return strings.TrimSpace(trimmed[1:len(trimmed)-1]) == ""
+	}
+	return false
 }
 
 func (d *decoder) array(raw json.RawMessage, v reflect.Value, at location) bool {

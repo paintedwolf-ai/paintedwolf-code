@@ -52,6 +52,10 @@ const (
 	workerRunwayMax     = 10
 )
 
+// WorkerRepairRounds is how many tool rounds a citation grounding retry adds
+// past a worker's ceiling, so a repair never lands on a spent budget.
+const WorkerRepairRounds = 3
+
 // WorkerBudgetAnswerWait bounds how long a worker whose budget request is
 // still open waits before its final round for the coordinator's answer. It
 // covers one coordinator turn, including a wake deferred behind a busy one.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -131,7 +132,7 @@ func (t *ReadTool) runBatch(path, text string, args map[string]any, source *surv
 			Offset:  spec.Offset,
 			Limit:   spec.Limit,
 			EndLine: endLine,
-			Content: formatReadContent(page, spec.Offset),
+			Content: hostmarker.FormatNumberedLines(page, spec.Offset),
 		})
 	}
 	raw, err := surveyjson.Marshal(resp)

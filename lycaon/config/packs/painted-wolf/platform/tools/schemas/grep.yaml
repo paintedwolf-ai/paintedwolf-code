@@ -1,4 +1,4 @@
-description: "Search files with RE2 text patterns or tree-sitter structural patterns. Recurses under path with optional path_glob, searches gitignored files, and skips engine/VCS metadata. Wide results may return a view digest. Replaces command: rg / grep -r."
+description: "Search files with RE2 text patterns or tree-sitter structural patterns. Recurses under path with optional path_glob, searches ignored files unless include_ignored is false, and skips engine/VCS metadata. Wide results may return a view digest. Replaces command: rg / grep -r."
 schema:
   type: object
   properties:
@@ -32,5 +32,8 @@ schema:
     include_hidden:
       type: boolean
       description: Walk dotfiles and dot-directories (default true, as find). Does not change .git / ${overlay_dir} pruning.
+    include_ignored:
+      type: boolean
+      description: Search ignored entries (default true). False prunes them; a path named inside an ignored tree is still searched.
   required: [pattern]
   additionalProperties: false

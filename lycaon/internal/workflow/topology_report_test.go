@@ -149,6 +149,33 @@ func TestReportWithDefectsFailsTheRunAsNotAccepted(t *testing.T) {
 	}
 }
 
+func TestReportWithAdvisoryDefectCompletesRun(t *testing.T) {
+	mgr, _, _, _ := testManagerWithRegistry(t)
+	manifest := topologyReportTestManifest()
+	manifest.Controls.Report = &workflowdef.ReportControls{Enabled: true}
+	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
+	testutil.FailErr(t, "start report run", err)
+	advisory := func(m *api.Message) {
+		m.CompletionReport.Defects = []api.CompletionReportDefect{{
+			Code:     api.CompletionReportDefectCodeFenceUnreadable,
+			Reason:   "unrecognized non-substantive member",
+			Subjects: []string{"headline_note"},
+			Count:    1,
+		}}
+	}
+	id := seedTopologyCompletion(t, mgr, run, true, advisory)
+	testutil.FailErr(t, "deliver report with advisory defect", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
+	after, err := mgr.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "read settled run", err)
+	if after.Status != api.WorkflowRunStatusComplete {
+		t.Fatalf("run status = %q, want complete", after.Status)
+	}
+	if after.CurrentPhase != "done" {
+		t.Fatalf("phase = %q, want done", after.CurrentPhase)
+	}
+}
+
 func TestLateReportCannotCompleteReplacementRun(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()

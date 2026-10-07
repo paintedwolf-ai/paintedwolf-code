@@ -67,6 +67,9 @@ func (m *Manager) AppendWorkerCancellation(ctx context.Context, parentID string,
 	}
 	if agentReport := in.CompletionReport; strings.TrimSpace(agentReport.Brief) != "" || len(agentReport.ObjectivesMet) > 0 {
 		report = agentReport
+		if report.DeclaredLegStatus == "" {
+			report.DeclaredLegStatus = report.LegStatus
+		}
 		report.LegStatus = "partial"
 		report.FilesModified = append([]string(nil), proof.ChangedPaths...)
 		if strings.TrimSpace(in.Reason) != "" {

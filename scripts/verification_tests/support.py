@@ -77,6 +77,7 @@ name=[a for a in (args[:args.index('--')] if '--' in args else args) if not a.st
 root=pathlib.Path.cwd()
 subprocess.run([sys.executable,str(root/'scripts/test-execution.py'),'holding'],pass_fds=(200,),check=True)
 record={'name':name, 'source':(root/'source.txt').read_text(), 'cwd':str(root), 'workers':os.environ['PW_TEST_WORKERS'], 'pid':os.getpid()}
+record['git']={k:subprocess.run(['git','config','--get',k],capture_output=True,text=True).stdout.strip() for k in ('core.fsmonitor','gc.autoDetach','maintenance.autoDetach')}
 with open(os.environ['FIXTURE_CALLS'],'a') as f: f.write(json.dumps(record)+'\\n')
 if pathlib.Path(os.environ['FIXTURE_HOLD']).exists():
  while not pathlib.Path(os.environ['FIXTURE_RELEASE']).exists(): time.sleep(.01)

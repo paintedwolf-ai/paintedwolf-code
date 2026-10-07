@@ -30,7 +30,9 @@ type findWalkParams struct {
 	deeperPathsOmitted *bool
 	catalog            *sourcecatalog.Catalog
 	readFilter         sandbox.ReadFilter
-	onMatch            func(findResult)
+	// ignore prunes project-ignored entries; nil admits them.
+	ignore  sandbox.SurveyScope
+	onMatch func(findResult)
 }
 
 func (t *FindTool) walkFindTree(p findWalkParams) error {
@@ -43,6 +45,9 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 	}
 	return inventory.walk(p.ctx, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
 		if entry.IsDir && p.readFilter != nil && !p.readFilter(entry.Path, true) {
+			return sourcecatalog.WalkSkip
+		}
+		if !admitsCatalogEntry(p.ignore, catalogRelativePath(entry.Path, inventory.base), entry.IsDir) {
 			return sourcecatalog.WalkSkip
 		}
 		if beyondFindDepth(inventory.depth(entry), p.maxDepth) {
@@ -69,7 +74,7 @@ func (t *FindTool) walkFindTreeSurvey(p findWalkParams) error {
 		}
 		return p.readFilter == nil || p.readFilter(projectroot.ScopeRel(p.root, abs), true)
 	}
-	return workerBranchOrSurveyWalk(p.ctx, p.tctx, p.fullRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit},
+	return workerBranchOrSurveyWalk(p.ctx, p.tctx, p.fullRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, Scope: p.ignore},
 		func(e sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			if beyondFindDepth(e.Depth, p.maxDepth) {
 				*p.deeperPathsOmitted = true

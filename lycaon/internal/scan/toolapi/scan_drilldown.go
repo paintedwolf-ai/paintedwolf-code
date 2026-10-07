@@ -129,6 +129,15 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 	if len(scanIDs) == 0 {
 		return "", fmt.Errorf("scan_ids is required")
 	}
+	if drilldownStringArg(args, "view") == "coverage" {
+		out, err := queryCoverage(ctx, coord, scanIDs, args)
+		return out, scanbase.MapDrilldownReject(err, rejectFmt)
+	}
+	for _, field := range []string{"warning_kind", "construct"} {
+		if _, present := args[field]; present {
+			return "", fmt.Errorf("field %q requires view coverage", field)
+		}
+	}
 	scanID := scanIDs[0]
 	req := scanbase.QueryRequest{
 		ScanID:      scanID,
@@ -159,7 +168,7 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		out, err := queryFindingGroups(ctx, coord, scanIDs, req)
 		return out, scanbase.MapDrilldownReject(err, rejectFmt)
 	} else if view != "" && view != "findings" {
-		return "", fmt.Errorf("view must be findings or groups")
+		return "", fmt.Errorf("view must be findings, groups, or coverage")
 	}
 	var resp *api.ScanQueryResponse
 	var err error

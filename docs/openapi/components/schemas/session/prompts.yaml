@@ -227,6 +227,20 @@ components:
         hit_kind:
           type: string
           description: Indexed row's hit_kind.
+    PromptRecovery:
+      x-go-generate: true
+      type: object
+      required: [action, after_message_id]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [continue, retry]
+          description: Continue established progress or retry an interrupted request without progress.
+        after_message_id:
+          type: string
+          format: uuid
+          description: Last visible transcript message observed when choosing recovery. The host rejects stale actions.
     PromptRequest:
       x-go-generate: true
       type: object
@@ -242,6 +256,9 @@ components:
         text:
           type: string
           description: User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
+        recovery:
+          $ref: "#/components/schemas/PromptRecovery"
+          x-go-pointer: true
         attachments:
           type: array
           maxItems: 8

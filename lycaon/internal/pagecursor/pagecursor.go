@@ -38,6 +38,11 @@ var ErrInvalid = errors.New("invalid page cursor")
 // generation is no longer served.
 var ErrExpired = errors.New("page cursor generation expired")
 
+// frameVersion prefixes every sealed payload, so a token never begins with
+// eyJ, the base64 of a JSON object that secret detectors match.
+const frameVersion byte = 1
+
+// envelope is the framed, sealed cursor contents.
 type envelope struct {
 	Kind       string          `json:"k"`
 	Scope      string          `json:"s"`
@@ -135,8 +140,9 @@ func seal(kind, scope string, generation uint64, value any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encode page cursor envelope: %w", err)
 	}
-	payload := base64.RawURLEncoding.EncodeToString(raw)
-	token := payload + "." + base64.RawURLEncoding.EncodeToString(sign(payload))
+	payload := base64.RawURLEncoding.EncodeToString(append([]byte{frameVersion}, raw...))
+	sigRaw := append([]byte{frameVersion}, sign(payload)...)
+	token := payload + "." + hex.EncodeToString(sigRaw)
 	if len(token) > maxEncodedBytes {
 		return "", fmt.Errorf("encode page cursor: %w: %d bytes exceeds %d", ErrInvalid, len(token), maxEncodedBytes)
 	}
@@ -156,11 +162,11 @@ func open(token, kind, scope string, dst any) (envelope, error) {
 		return env, ErrInvalid
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(payload)
-	if err != nil || decodeStrict(raw, &env) != nil || env.Kind != kind || env.Scope != scopeDigest(scope) {
+	if err != nil || len(raw) == 0 || raw[0] != frameVersion || decodeStrict(raw[1:], &env) != nil || env.Kind != kind || env.Scope != scopeDigest(scope) {
 		return envelope{}, ErrInvalid
 	}
-	signature, err := base64.RawURLEncoding.DecodeString(signatureText)
-	if err != nil || !hmac.Equal(signature, sign(payload)) {
+	sigRaw, err := hex.DecodeString(signatureText)
+	if err != nil || len(sigRaw) == 0 || sigRaw[0] != frameVersion || !hmac.Equal(sigRaw[1:], sign(payload)) {
 		if env.Process != "" && env.Process != processInstance {
 			return envelope{}, ErrExpired
 		}
