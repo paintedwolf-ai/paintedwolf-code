@@ -3,6 +3,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
+import { valueOf } from "../../store/load-state.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { resolveScope, type GitScope } from "../git-repo-scope.ts";
 import type { ChatTabGitBinding } from "../../chat/composer/chat-tab-rail-bindings.ts";
@@ -61,7 +62,10 @@ export function createChatGitBinding(options: ChatGitOptions) {
 
   const gitScopedRepoId = (): string | undefined => {
     const scope = gitResolvedScope();
-    return scope.kind === "repo" ? scope.repoId : undefined;
+    if (scope.kind === "repo") return scope.repoId;
+    // Until the repository set loads, writes target the repository whose status is shown.
+    if (appStore().state.gitRepos !== undefined) return undefined;
+    return valueOf(appStore().state.gitStatus)?.repo_id?.trim() || undefined;
   };
 
   const gitScopedRootPath = (): string => {
@@ -108,15 +112,16 @@ export function createChatGitBinding(options: ChatGitOptions) {
       )
     )?.roots ?? [],
   busy: gitBusy,
-  onRefreshRepos: () =>
-    void runGitAction((pid) =>
-      refreshGitStatus(
-        appStore(),
-        clientOrThrow(),
-        pid,
-        gitSessionId(),
-      ),
-    ),
+  // Reads never hold `busy`; a write in flight publishes its own fresh status.
+  onRefreshRepos: async () => {
+    const projectId = gitProjectId();
+    if (!getLycaonClient() || !projectId || gitBusy()) return;
+    try {
+      await refreshGitStatus(appStore(), clientOrThrow(), projectId, gitSessionId());
+    } catch (err) {
+      chatNotices().reportError(err);
+    }
+  },
   onScopePin: (pin) => {
     appStore().actions.setGitScopePin(pin);
   },

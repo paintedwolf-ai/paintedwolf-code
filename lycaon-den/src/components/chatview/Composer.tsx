@@ -5,6 +5,7 @@ import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup
 import {
   attachDispatcher,
   declinable,
+  isEditableTarget,
   registerCommandHandler,
   setAskSendArmed,
   setComposerFocused,
@@ -906,9 +907,11 @@ export function Composer(props: Props) {
     ),
   );
 
+  // Unblocking returns the caret unless another text field holds it.
   createEffect(
     on(composeBlocked, (isDisabled, wasDisabled) => {
-      if (isDisabled || wasDisabled !== false || !props.focusWhen) return;
+      if (isDisabled || wasDisabled !== true || !props.focusWhen) return;
+      if (isEditableTarget(document.activeElement)) return;
       scheduleComposerFocus(inputRef);
     }),
   );

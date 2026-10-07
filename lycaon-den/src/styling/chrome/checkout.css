@@ -129,7 +129,8 @@
 .git-checkout__branch-option:hover:not(:disabled) {
   background: var(--den-tint-1);
 }
-.git-checkout button:disabled {
+.git-checkout button:disabled,
+.git-checkout button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.55;
 }

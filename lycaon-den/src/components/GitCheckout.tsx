@@ -90,6 +90,8 @@ export function GitCheckout(props: Props) {
   const stale = () => scopedWorktree() && worktree()?.state === "stale";
   const busy = () => props.busy || pending();
   const checkoutKnown = () => !hasWorktreeSupport() || worktree() !== undefined;
+  // Stays focusable while unavailable so dialogs can restore focus to it.
+  const triggerUnavailable = () => busy() || !checkoutKnown() || !!loadError();
   const branch = () =>
     scopedWorktree() ? worktree()?.branch : props.status?.branch;
   const canChangeBranch = () =>
@@ -329,8 +331,10 @@ export function GitCheckout(props: Props) {
           aria-expanded={props.menuOpen}
           aria-controls={`${id}-menu`}
           aria-haspopup="dialog"
-          disabled={busy() || !checkoutKnown() || !!loadError()}
-          onClick={() => props.onMenuOpenChange(!props.menuOpen)}
+          aria-disabled={triggerUnavailable() ? "true" : undefined}
+          onClick={() => {
+            if (!triggerUnavailable()) props.onMenuOpenChange(!props.menuOpen);
+          }}
         >
           <span class="git-strip__leaf" aria-hidden="true">
             ⎇

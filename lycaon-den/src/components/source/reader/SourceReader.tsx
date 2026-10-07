@@ -115,6 +115,8 @@ export function SourceReader(props: {
   };
   let savedEditorState: { access: SourceReaderAccess; selection?: ReaderSelection; viewport?: DenReaderViewState["viewport"] } | undefined;
   const reportError = (cause: unknown): void => { setError(cause); };
+  // A projection rebase cancels reads in the outgoing coordinates; the followed window rescans the viewport.
+  const superseded = (cause: unknown): boolean => cause instanceof DOMException && cause.name === "AbortError";
   const publish = (next: ReaderSlot[], reset = false) => {
     // Loads rebuild windows from fresh objects; an unchanged window keeps its published slots.
     if (!reset && sameWindow(slots, next)) return;
@@ -150,7 +152,7 @@ export function SourceReader(props: {
       const frame = await current.frameAt({ row: painted.anchor.row }, signal);
       if (token !== generation || current !== session || signal.aborted) return;
       await loadWindow(frame.span.start);
-    }).catch(cause => { if (token === generation && !signal.aborted) reportError(cause); })
+    }).catch(cause => { if (token === generation && !signal.aborted && !superseded(cause)) reportError(cause); })
       .finally(() => { followingProjection = false; followProjection(); });
   };
 
@@ -183,7 +185,7 @@ export function SourceReader(props: {
         await loadWindow(frame.span.start);
       }
     } catch (cause) {
-      if (token === generation && !controller.signal.aborted) { reportError(cause); props.onReady?.(true); }
+      if (token === generation && !controller.signal.aborted && !superseded(cause)) { reportError(cause); props.onReady?.(true); }
     }
   }
 

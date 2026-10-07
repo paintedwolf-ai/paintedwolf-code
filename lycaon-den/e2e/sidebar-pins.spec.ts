@@ -1,20 +1,22 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import {
   apiJson,
-  bootstrapActiveProject,
+  bootstrapChatSession,
   webE2e,
 } from "./helpers.ts";
 
 /**
  * The project rail's chat list: a Pinned group the person arranges, chats in
  * a chosen order, and rows that do not move because a chat was read. Opening
- * a project starts an empty chat first, so it is the oldest, untitled row.
+ * a project starts an empty chat; seeding waits until the host has created it,
+ * so it is the oldest, untitled row.
  */
 
 const UNTITLED = "Untitled chat";
 
 type CreatedSession = { id: string };
 type ListPage = { sessions: Array<{ id: string; title?: string }> };
+type SeenSession = { seen_at?: string };
 
 async function seedChat(request: APIRequestContext, projectId: string, title: string): Promise<string> {
   const session = await apiJson<CreatedSession>(request, "POST", "/v1/sessions", {
@@ -52,7 +54,7 @@ async function leaveList(page: Page) {
 }
 
 webE2e("pins chats, arranges the pinned group, and keeps the order", async ({ page, request }) => {
-  const project = await bootstrapActiveProject(page, request);
+  const project = await bootstrapChatSession(page, request);
   await seedChat(request, project.id, "Alpha plan");
   await seedChat(request, project.id, "Beta fix");
   await seedChat(request, project.id, "Gamma audit");
@@ -96,8 +98,8 @@ webE2e("pins chats, arranges the pinned group, and keeps the order", async ({ pa
 });
 
 webE2e("reading a chat leaves it where it is", async ({ page, request }) => {
-  const project = await bootstrapActiveProject(page, request);
-  await seedChat(request, project.id, "Oldest");
+  const project = await bootstrapChatSession(page, request);
+  const oldest = await seedChat(request, project.id, "Oldest");
   await seedChat(request, project.id, "Middle");
   await seedChat(request, project.id, "Newest");
   await expect.poll(() => groupTitles(page, "chats"), { timeout: 30_000 })
@@ -106,12 +108,13 @@ webE2e("reading a chat leaves it where it is", async ({ page, request }) => {
   await row(page, "Oldest").click();
   await leaveList(page);
   // Opening marks the chat read on the host; the order stays put.
-  await page.waitForTimeout(1_000);
+  await expect.poll(async () => (await apiJson<SeenSession>(request, "GET", `/v1/sessions/${oldest}`)).seen_at ?? "")
+    .not.toBe("");
   expect(await groupTitles(page, "chats")).toEqual(["Newest", "Middle", "Oldest", UNTITLED]);
 });
 
 webE2e("orders chats from the menu beside the heading, on every project", async ({ page, request }) => {
-  const project = await bootstrapActiveProject(page, request);
+  const project = await bootstrapChatSession(page, request);
   await seedChat(request, project.id, "beta");
   await seedChat(request, project.id, "Charlie");
   await seedChat(request, project.id, "alpha");

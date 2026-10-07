@@ -24,7 +24,8 @@ export type ChatTabGitBinding = {
   rootRefs: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
   /** True while a Git-tab mutation is in flight. */
   busy: Accessor<boolean>;
-  onRefreshRepos: () => void;
+  /** Reads repositories and status without holding `busy`. */
+  onRefreshRepos: () => Promise<void>;
   onScopePin: (pin: GitScope | null) => void;
   onSelectRepo: (repoId: string) => void;
   onInit: (rootId: string) => void;

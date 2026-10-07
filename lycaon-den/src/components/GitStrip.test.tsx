@@ -774,8 +774,10 @@ describe("GitStrip", () => {
 
   describe("checkout flow", () => {
     async function openBranchMenu() {
-      const button = screen.getByTestId("git-branch") as HTMLButtonElement;
-      await waitFor(() => expect(button.disabled).toBe(false));
+      const button = screen.getByTestId("git-branch");
+      await waitFor(() =>
+        expect(button.getAttribute("aria-disabled")).toBeNull(),
+      );
       fireEvent.click(button);
       await waitFor(() => screen.getByTestId("git-branches"));
     }
@@ -844,6 +846,34 @@ describe("GitStrip", () => {
       });
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(bind).not.toHaveBeenCalled();
+    });
+
+    it("returns focus to the branch trigger while a background refresh holds it", async () => {
+      const [busy, setBusy] = createSignal(false);
+      const onListBranches = vi.fn(noBranches);
+      render(() => (
+        <GitStrip
+          {...worktreeBase()}
+          status={loaded(dirty)}
+          busy={busy}
+          onListBranches={onListBranches}
+        />
+      ));
+      await openWorktreeForm();
+      setBusy(true);
+      fireEvent.keyDown(screen.getByLabelText("New branch name"), {
+        key: "Escape",
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      const trigger = screen.getByTestId("git-branch");
+      expect(trigger.getAttribute("aria-disabled")).toBe("true");
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+      fireEvent.click(trigger);
+      expect(screen.queryByTestId("git-branches")).toBeNull();
+      expect(onListBranches).toHaveBeenCalledOnce();
+      setBusy(false);
+      expect(trigger.getAttribute("aria-disabled")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
     });
 
     it("keeps a failed worktree form and retries the exact named branch", async () => {
