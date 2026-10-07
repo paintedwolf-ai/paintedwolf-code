@@ -15830,7 +15830,7 @@ test_directories:
     lycaon/internal/conditions: 20
     lycaon/internal/configdir: 2
     lycaon/internal/configlayout: 2
-    lycaon/internal/confine: 50
+    lycaon/internal/confine: 49
     lycaon/internal/contactsheet: 1
     lycaon/internal/contentblob: 7
     lycaon/internal/contribframe: 1
@@ -18229,10 +18229,9 @@ test_files:
     lycaon/internal/confine/skill_read_roots_test.go: 50
     lycaon/internal/confine/socket_direct_seatbelt_test.go: 389
     lycaon/internal/confine/ssh_known_hosts_test.go: 33
-    lycaon/internal/confine/toolchain_state_roots_test.go: 28
     lycaon/internal/confine/worker_branch_read_isolation_test.go: 28
     lycaon/internal/confine/write_root_alias_test.go: 41
-    lycaon/internal/confine/write_root_grants_test.go: 421
+    lycaon/internal/confine/write_root_grants_test.go: 434
     lycaon/internal/confine/write_root_validation_test.go: 82
     lycaon/internal/confine/write_roots_test.go: 37
     lycaon/internal/contactsheet/contactsheet_test.go: 50
