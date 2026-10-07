@@ -24,6 +24,8 @@ GATES = {"fast": "check-fast", "check": "check"}
 FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
+# Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
+GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
 
 
@@ -188,7 +190,7 @@ def excerpt(failure):
     for key, tail in (("output", False), ("log", True)):
         path = failure.get(key)
         if path and Path(path).is_file():
-            lines = Path(path).read_text(errors="replace").splitlines()
+            lines = [line for line in Path(path).read_text(errors="replace").splitlines() if not GO_PROGRESS.match(line)]
             return lines[-EXCERPT_LINES:] if tail else lines[:EXCERPT_LINES]
     return []
 

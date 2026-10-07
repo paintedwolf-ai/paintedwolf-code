@@ -158,7 +158,8 @@ class HostedVerificationTests(unittest.TestCase):
             batch = root / "verification" / "batch"
             (batch / "stage-001-failures").mkdir(parents=True)
             output = batch / "stage-001-failures" / "pkg.log"
-            output.write_text("=== RUN   TestBudget\n    budget_test.go:31: over cap\n")
+            output.write_text("=== RUN   TestOther\n=== PAUSE TestOther\n--- PASS: TestOther (0.01s)\n"
+                              "=== RUN   TestBudget\n    budget_test.go:31: over cap\n--- FAIL: TestBudget (0.02s)\n")
             log = batch / "stage-002.log"
             log.write_text("\n".join(f"line {index}" for index in range(ci.EXCERPT_LINES + 10)) + "\n")
             receipts = {
@@ -182,6 +183,8 @@ class HostedVerificationTests(unittest.TestCase):
             text = summary.read_text()
             self.assertIn("- **failed** `test:full` · `example/pkg`: `TestBudget`", text)
             self.assertIn("budget_test.go:31: over cap", text)
+            self.assertIn("--- FAIL: TestBudget", text)
+            self.assertNotIn("TestOther", text)
             self.assertNotIn("example/other", text)
             self.assertIn("- **failed** `lint:full`", text)
             self.assertIn(f"line {ci.EXCERPT_LINES + 9}", text)
