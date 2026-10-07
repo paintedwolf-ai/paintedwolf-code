@@ -371,7 +371,7 @@ These rules shape every `/v1` route. The mechanically checkable ones are contrac
 - POST that creates answers `201` with the created resource; only POST answers `201`, and a dry run or preview never does. A POST action answers `200` with its result, `202` with a status resource for durable async work, or `204`.
 - PUT replaces the whole document: its body requires every property it declares.
 - PATCH merges: an absent field is unchanged and `null` resets it to the inherited or default value. That is the only reset idiom. A PATCH body requires nothing except `expected_revision` (optimistic concurrency) and `operation_id` (idempotency).
-- DELETE answers `204` with no body.
+- DELETE answers `204` with no body, or `202` with the durable operation's status when the removal continues after the response.
 - Every authenticated operation declares `401`; every operation with a request body declares `415`, and `413` where the body is bounded; a rate-limited operation declares `429` and sends `Retry-After`.
 - Request schemas are closed: the body schema and every object schema inside it set `additionalProperties: false` (a composite may use `unevaluatedProperties: false`). A map-typed object declares its value schema in `additionalProperties` instead.
 

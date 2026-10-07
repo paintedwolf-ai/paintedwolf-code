@@ -41,22 +41,22 @@ type metricSummary struct {
 }
 
 type resourceSummary struct {
-	Samples           int     `json:"samples"`
-	PeakRSSBytes      int64   `json:"peak_rss_bytes,omitempty"`
-	RSSGrowthBytes    int64   `json:"rss_growth_bytes,omitempty"`
-	PeakFDs           int     `json:"peak_fds,omitempty"`
-	FDGrowth          int     `json:"fd_growth,omitempty"`
-	PeakHeapBytes     uint64  `json:"peak_heap_bytes,omitempty"`
-	HeapGrowthBytes   int64   `json:"heap_growth_bytes,omitempty"`
-	PeakGoroutines    int     `json:"peak_goroutines,omitempty"`
-	GoroutineGrowth   int     `json:"goroutine_growth,omitempty"`
-	DBReaderWaitMS    float64 `json:"db_reader_wait_ms,omitempty"`
-	DBWriterWaitMS    float64 `json:"db_writer_wait_ms,omitempty"`
-	PeakDBReaderOpen  int     `json:"peak_db_reader_open,omitempty"`
-	PeakDBReaderInUse int     `json:"peak_db_reader_in_use,omitempty"`
-	PeakDBWriterOpen  int     `json:"peak_db_writer_open,omitempty"`
-	PeakDBWriterInUse int     `json:"peak_db_writer_in_use,omitempty"`
-	WALBytes          int64   `json:"wal_bytes,omitempty"`
+	Samples            int     `json:"samples"`
+	PeakRSSBytes       int64   `json:"peak_rss_bytes,omitempty"`
+	RSSGrowthBytes     int64   `json:"rss_growth_bytes,omitempty"`
+	PeakFDs            int     `json:"peak_fds,omitempty"`
+	FDGrowth           int     `json:"fd_growth,omitempty"`
+	PeakHeapBytes      uint64  `json:"peak_heap_bytes,omitempty"`
+	HeapGrowthBytes    int64   `json:"heap_growth_bytes,omitempty"`
+	PeakGoroutines     int     `json:"peak_goroutines,omitempty"`
+	GoroutineGrowth    int     `json:"goroutine_growth,omitempty"`
+	DBReaderMeanWaitMS float64 `json:"db_reader_mean_wait_ms,omitempty"`
+	DBWriterMeanWaitMS float64 `json:"db_writer_mean_wait_ms,omitempty"`
+	PeakDBReaderOpen   int     `json:"peak_db_reader_open,omitempty"`
+	PeakDBReaderInUse  int     `json:"peak_db_reader_in_use,omitempty"`
+	PeakDBWriterOpen   int     `json:"peak_db_writer_open,omitempty"`
+	PeakDBWriterInUse  int     `json:"peak_db_writer_in_use,omitempty"`
+	WALBytes           int64   `json:"wal_bytes,omitempty"`
 }
 
 type correctnessSummary struct {

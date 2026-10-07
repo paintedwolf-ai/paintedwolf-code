@@ -55,7 +55,7 @@ func completeRuntimeSample() *observability.RuntimeSample {
 	return &observability.RuntimeSample{
 		HeapAllocBytes: 100, Goroutines: 4,
 		Gauges: map[string]int64{
-			"db_reader_wait_ns": 0, "db_writer_wait_ns": 0,
+			"db_reader_wait_ns": 0, "db_writer_wait_ns": 0, "db_reader_wait_count": 0, "db_writer_wait_count": 0,
 			"db_reader_open": 0, "db_reader_in_use": 0, "db_writer_open": 0, "db_writer_in_use": 0,
 		},
 	}
@@ -163,5 +163,19 @@ func TestPerformanceGrowthExcludesShutdownSamples(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestMeanWaitIgnoresRunLength(t *testing.T) {
+	short := map[string]int64{"db_writer_wait_ns": 30_000_000, "db_writer_wait_count": 3}
+	long := map[string]int64{"db_writer_wait_ns": 3_000_000_000, "db_writer_wait_count": 300}
+	if got, want := meanWaitMS(short, "db_writer"), 10.0; got != want {
+		t.Fatalf("short run mean wait = %v, want %v", got, want)
+	}
+	if meanWaitMS(long, "db_writer") != meanWaitMS(short, "db_writer") {
+		t.Fatal("a longer run at the same contention must report the same mean wait")
+	}
+	if got := meanWaitMS(map[string]int64{"db_writer_wait_ns": 0, "db_writer_wait_count": 0}, "db_writer"); got != 0 {
+		t.Fatalf("no waits = %v, want 0", got)
 	}
 }

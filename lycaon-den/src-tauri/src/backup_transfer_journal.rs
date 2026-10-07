@@ -274,6 +274,41 @@ mod tests {
         std::process::exit(0);
     }
 
+    /// Interrupts a transfer in a child process that then exits. Closing a
+    /// receipt here would not release its lock while a concurrent test's child
+    /// that forked but has not yet exec'd shares the descriptor; exit does.
+    fn interrupt_transfer(config: &Path, output: &Path, published: bool) {
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "backup_transfer_journal::tests::crash_fixture_child",
+                "--nocapture",
+            ])
+            .env("PW_BACKUP_CRASH_CONFIG", config)
+            .env("PW_BACKUP_CRASH_OUTPUT", output)
+            .env(
+                "PW_BACKUP_CRASH_PUBLISHED",
+                if published { "1" } else { "0" },
+            )
+            .status()
+            .expect("crash child");
+        assert!(status.success());
+    }
+
+    fn interrupted_temporary(output: &Path) -> PathBuf {
+        let mut temporaries = fs::read_dir(output)
+            .expect("interrupted output")
+            .map(|entry| entry.expect("output entry").path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".backup-"))
+            });
+        let temporary = temporaries.next().expect("interrupted temporary");
+        assert!(temporaries.next().is_none());
+        temporary
+    }
+
     #[test]
     fn process_exit_leaves_recoverable_receipt_and_cleanup_preserves_other_files() {
         for published in [false, true] {
@@ -281,21 +316,7 @@ mod tests {
             let output = TempDir::new("backup-crash-output");
             fs::write(output.join("existing.zip"), b"previous").expect("previous archive");
             fs::write(output.join(".backup-unrelated.tmp"), b"foreign").expect("foreign file");
-            let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
-                .args([
-                    "--exact",
-                    "backup_transfer_journal::tests::crash_fixture_child",
-                    "--nocapture",
-                ])
-                .env("PW_BACKUP_CRASH_CONFIG", &*config)
-                .env("PW_BACKUP_CRASH_OUTPUT", &*output)
-                .env(
-                    "PW_BACKUP_CRASH_PUBLISHED",
-                    if published { "1" } else { "0" },
-                )
-                .status()
-                .expect("crash child");
-            assert!(status.success());
+            interrupt_transfer(&config, &output, published);
             assert_eq!(
                 fs::read_dir(&output).expect("interrupted output").count(),
                 if published { 2 } else { 3 }
@@ -322,12 +343,10 @@ mod tests {
     fn cleanup_does_not_remove_a_replacement_at_the_temporary_path() {
         let config = TempDir::new("backup-replaced-config");
         let output = TempDir::new("backup-replaced-output");
-        let (mut temporary, file) = TemporaryArchive::create(&config, &output).expect("temporary");
-        let path = temporary.path().to_path_buf();
+        interrupt_transfer(&config, &output, false);
+        let path = interrupted_temporary(&output);
         fs::rename(&path, output.join("moved-original")).expect("retain original inode");
         fs::write(&path, b"replacement").expect("foreign replacement");
-        drop(file);
-        temporary.record.take();
         cleanup(&config).expect("preserve replacement");
         assert_eq!(fs::read(&path).expect("replacement"), b"replacement");
         assert_eq!(
@@ -343,16 +362,20 @@ mod tests {
     fn cleanup_does_not_follow_a_replaced_symlink() {
         let config = TempDir::new("backup-symlink-config");
         let output = TempDir::new("backup-symlink-output");
-        let (mut temporary, file) = TemporaryArchive::create(&config, &output).expect("temporary");
-        let path = temporary.path().to_path_buf();
+        interrupt_transfer(&config, &output, false);
+        let path = interrupted_temporary(&output);
         fs::remove_file(&path).expect("remove temporary");
         let foreign = output.join("foreign");
         fs::write(&foreign, b"foreign").expect("foreign content");
         std::os::unix::fs::symlink(&foreign, &path).expect("replacement link");
-        drop(file);
-        temporary.record.take();
         cleanup(&config).expect("preserve link");
         assert!(path.is_symlink());
         assert_eq!(fs::read(&foreign).expect("foreign remains"), b"foreign");
+        assert_eq!(
+            fs::read_dir(config.join(DIRECTORY))
+                .expect("journal")
+                .count(),
+            0
+        );
     }
 }

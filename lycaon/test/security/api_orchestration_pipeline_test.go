@@ -25,11 +25,12 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 		t.Fatalf("phase = %q want hunt", run.CurrentPhase)
 	}
 
-	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
+	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races", "triage"} {
 		waitTopologyStageComplete(t, h.workflowMgr, run.ID, stage)
 	}
-	waitWorkflowPhase(t, h.workflowMgr, run.ID, "triage")
-	waitTopologyStageComplete(t, h.workflowMgr, run.ID, "triage")
+	// Triage settles as soon as its stage completes, so expand is the first
+	// phase that holds still: it waits on the blueprint written below.
+	waitWorkflowPhase(t, h.workflowMgr, run.ID, "expand")
 	blueprintPath := filepath.Join(h.projectDir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
 	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
@@ -75,16 +76,13 @@ func TestPipelineWorkflowSSEOnPhaseChange(t *testing.T) {
 
 	run := startBugcommandRun(t, h)
 
-	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
-		waitTopologyStageComplete(t, h.workflowMgr, run.ID, stage)
-	}
-	waitWorkflowPhase(t, h.workflowMgr, run.ID, "triage")
-
+	// The run passes through triage without pausing there, so the subscription
+	// is the record of the transition; drain it while the pipeline runs.
 	testutil.WaitFor(t, 15*time.Second, func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {
-				return false
+				t.Fatal("workflow event subscription closed before hunt advanced to triage")
 			}
 			if envelope.Topic != wire.EventTopicWorkflow {
 				return false

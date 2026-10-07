@@ -17,6 +17,7 @@ SCRIPT = Path(__file__).resolve().parents[1].joinpath("test-execution.py")
 spec = importlib.util.spec_from_file_location("test_execution", SCRIPT)
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
+import verification_resources as resources  # importable once test-execution.py extends the path
 
 
 class TaskAdmissionTests(unittest.TestCase):
@@ -158,8 +159,18 @@ class TaskAdmissionTests(unittest.TestCase):
 
     def test_default_budget_reserves_host_capacity_and_caps_large_hosts(self):
         for cpus, workers in ((None, 1), (1, 1), (2, 1), (4, 3), (8, 6), (16, 8)):
-            with self.subTest(cpus=cpus), patch.object(os, "cpu_count", return_value=cpus):
+            with self.subTest(cpus=cpus), patch.object(os, "cpu_count", return_value=cpus), \
+                    patch.dict(os.environ, {"PW_TEST_HOST": "shared"}):
                 self.assertEqual(execution.worker_budget({}), workers)
+                self.assertEqual(resources.demand({"workers": "shared"}, 8), max(1, workers // 2))
+
+    def test_dedicated_host_uses_every_cpu_for_shared_operations(self):
+        for cpus, workers in ((1, 1), (3, 3), (4, 4), (16, 8)):
+            with self.subTest(cpus=cpus), patch.object(os, "cpu_count", return_value=cpus), \
+                    patch.dict(os.environ, {"PW_TEST_HOST": "dedicated"}):
+                self.assertEqual(execution.worker_budget({}), workers)
+                self.assertEqual(resources.demand({"workers": "shared"}, 8), workers)
+                self.assertEqual(resources.demand({"workers": 1}, 8), 1)
 
     def test_worker_limits_bound_oversized_requests_across_runners(self):
         names = ("GO_TEST_P", "GO_TEST_PARALLEL", "GOMAXPROCS", "PW_VITEST_MAX_WORKERS",
@@ -176,7 +187,7 @@ class TaskAdmissionTests(unittest.TestCase):
                     self.assertEqual(reduced[name], "1")
 
     def test_worker_budget_rejects_invalid_values(self):
-        with patch.object(os, "cpu_count", return_value=8):
+        with patch.object(os, "cpu_count", return_value=8), patch.dict(os.environ, {"PW_TEST_HOST": "shared"}):
             for value in ("0", "-1", "7", "8", "9", "many"):
                 with self.subTest(value=value), self.assertRaises(ValueError):
                     execution.worker_budget({"PW_TEST_WORKERS": value})

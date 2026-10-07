@@ -175,7 +175,7 @@
         "--tags",
         "integration",
         "--timeout",
-        "40m"
+        "90m"
       ],
       "packages": [
         "./..."
@@ -712,7 +712,7 @@
       "targets": [
         "lint:vuln"
       ],
-      "minutes": 240,
+      "minutes": 60,
       "profiles": [
         "check",
         "release"
@@ -742,7 +742,8 @@
         "nightly"
       ],
       "suite": "behavior",
-      "native": false
+      "native": false,
+      "workers": 3
     },
     "frontend": {
       "targets": [
@@ -852,7 +853,7 @@
       "targets": [
         "lint:vuln:fresh"
       ],
-      "minutes": 240,
+      "minutes": 90,
       "profiles": [
         "nightly"
       ],

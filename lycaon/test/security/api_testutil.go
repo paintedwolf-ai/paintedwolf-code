@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -130,7 +131,10 @@ func createSessionForProjectHandlerHTTP(t *testing.T, serve http.Handler, projec
 
 func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session) wire.Session {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	// Preparation resolves the effective catalog and attaches the ambient
+	// workflow; on a loaded runner that work can exceed ten seconds.
+	started := time.Now()
+	deadline := started.Add(testutil.Timeout(30 * time.Second))
 	for time.Now().Before(deadline) {
 		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w := httptest.NewRecorder()
@@ -150,7 +154,7 @@ func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("session preparation did not complete")
+	t.Fatalf("session preparation did not complete after %v: status %q", time.Since(started), sess.Status)
 	return sess
 }
 
@@ -329,6 +333,10 @@ func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want s
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// A stalled turn is diagnosable only from the stacks that hold it.
+	var stacks bytes.Buffer
+	_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
+	t.Logf("goroutines at transcript wait timeout:\n%s", stacks.String())
 	t.Fatalf("session %s transcript did not contain %q within %s; messages: %+v", sessionID, want, timeout, listMessagesHTTP(t, srv, sessionID))
 }
 

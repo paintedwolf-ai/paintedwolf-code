@@ -8,6 +8,7 @@ import {
   requireNonEmpty,
   type SourceFile,
 } from "./source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "./vitest-timeouts.ts";
 
 const fixtureRoots: string[] = [];
 
@@ -27,7 +28,7 @@ function fixture(): string {
   return root;
 }
 
-describe("source corpus", () => {
+describe("source corpus", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("loads deterministic filtered snapshots and lookup views", () => {
     const root = fixture();
     const corpus = loadSourceCorpus(root, {

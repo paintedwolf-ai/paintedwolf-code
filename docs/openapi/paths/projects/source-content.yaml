@@ -309,6 +309,12 @@ paths:
         schema:
           type: boolean
       responses:
+        '202':
+          description: Accepted durable file operation. Read status using operation_id; disconnecting does not cancel it.
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/project/source-operations.yaml#/components/schemas/SourceOperationStatus
         '204':
           description: Entry moved to Trash
         '400':

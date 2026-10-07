@@ -258,7 +258,7 @@ fn startup_lifecycle_waits_for_ready_without_a_deadline() {
     let script = r#"
 printf '{"protocol":1,"sequence":1,"pid":%s,"kind":"phase","phase":"providers","elapsed_ms":18000}\n' "$$"
 printf '{"protocol":1,"sequence":2,"pid":%s,"kind":"ready","phase":"ready","elapsed_ms":18100,"port":43123}\n' "$$"
-sleep 30
+exec sleep 30
 "#;
     let mut child = Command::new("sh")
         .args(["-c", script])
@@ -493,7 +493,9 @@ fn graceful_stop_writes_the_control_frame() {
 }
 
 /// Stands in for `launch_sidecar_locked`: a child whose output the shell holds
-/// open, registered for supervision and published as running.
+/// open, registered for supervision and published as running. A script must
+/// end in one process (`exec`): dash forks a trailing command, and a forked
+/// grandchild would hold the output open after the engine is killed.
 #[cfg(unix)]
 fn launch_fixture(state: &SidecarState, script: &str) -> Result<SidecarInfo, SidecarStartError> {
     let mut child = Command::new("sh")
@@ -564,8 +566,8 @@ fn kill_engine(state: &SidecarState) -> i32 {
 #[test]
 fn an_engine_killed_mid_session_is_reaped_reported_and_replaced() {
     let state = std::sync::Arc::new(SidecarState::new());
-    let published = supervised(&state, |state| launch_fixture(state, "sleep 30"));
-    launch_fixture(&state, "sleep 30").expect("first engine");
+    let published = supervised(&state, |state| launch_fixture(state, "exec sleep 30"));
+    launch_fixture(&state, "exec sleep 30").expect("first engine");
 
     let first = kill_engine(&state);
     // Reaping retires the old generation; the replacement takes the next one.
@@ -594,9 +596,9 @@ fn an_intentional_stop_is_not_answered_as_a_crash() {
     let counted = relaunches.clone();
     let published = supervised(&state, move |state| {
         counted.fetch_add(1, Ordering::AcqRel);
-        launch_fixture(state, "sleep 30")
+        launch_fixture(state, "exec sleep 30")
     });
-    launch_fixture(&state, "sleep 30").expect("engine");
+    launch_fixture(&state, "exec sleep 30").expect("engine");
 
     stop_sidecar(&state);
     std::thread::sleep(Duration::from_millis(100));
@@ -641,7 +643,7 @@ fn a_replacement_that_cannot_start_stops_with_its_reason() {
     supervised(&state, |_| {
         Err(SidecarStartError::StoreLocked("another engine is already serving this store".into()))
     });
-    launch_fixture(&state, "sleep 30").expect("engine");
+    launch_fixture(&state, "exec sleep 30").expect("engine");
 
     kill_engine(&state);
     wait_until("the failed replacement", || {

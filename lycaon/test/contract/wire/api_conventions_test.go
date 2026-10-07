@@ -843,7 +843,8 @@ func (s *conventionSpec) composesObject(members []any) bool {
 	return false
 }
 
-// TestAPIConventionStatusCodes: 201 answers only POST, and DELETE answers 204 only.
+// TestAPIConventionStatusCodes: 201 answers only POST, and DELETE answers 204,
+// or 202 for a durable operation that outlives the response.
 func TestAPIConventionStatusCodes(t *testing.T) {
 	t.Parallel()
 	spec := loadConventionSpec(t)
@@ -857,8 +858,8 @@ func TestAPIConventionStatusCodes(t *testing.T) {
 			continue
 		}
 		for _, code := range sortedNames(responses) {
-			if strings.HasPrefix(code, "2") && code != "204" {
-				violations = append(violations, fmt.Sprintf("%s: status-codes: DELETE answers %s; DELETE answers 204 with no body", op.ID, code))
+			if strings.HasPrefix(code, "2") && code != "204" && code != "202" {
+				violations = append(violations, fmt.Sprintf("%s: status-codes: DELETE answers %s; DELETE answers 204 with no body or 202 for a durable operation", op.ID, code))
 			}
 		}
 	}

@@ -33,23 +33,25 @@ type inventoryRoot struct {
 
 type inventoryFlight struct {
 	done  chan struct{}
+	full  bool
 	index []governance.ResolvedAgentsMD
 	err   error
 }
 
 // Inventory caches discovery paths and captures fresh file bytes on each scan.
 type Inventory struct {
-	mu     sync.Mutex
-	roots  map[string]*inventoryRoot
-	stop   func()
-	ctx    context.Context
-	cancel context.CancelFunc
-	slots  chan struct{}
-	walk   func(context.Context, string) ([]governance.ResolvedAgentsMD, error)
+	mu       sync.Mutex
+	roots    map[string]*inventoryRoot
+	stop     func()
+	ctx      context.Context
+	cancel   context.CancelFunc
+	slots    chan struct{}
+	walk     func(context.Context, string) ([]governance.ResolvedAgentsMD, error)
+	coverage func(string) repochange.WatchCoverage
 }
 
 func NewInventory() *Inventory {
-	i := &Inventory{roots: make(map[string]*inventoryRoot), slots: make(chan struct{}, 2), walk: governance.ListIndex}
+	i := &Inventory{roots: make(map[string]*inventoryRoot), slots: make(chan struct{}, 2), walk: governance.ListIndex, coverage: repochange.Coverage}
 	i.ctx, i.cancel = context.WithCancel(context.Background())
 	i.stop = repochange.RegisterObserver(i.changed)
 	return i
@@ -175,8 +177,10 @@ func (i *Inventory) read(ctx context.Context, root string, maxAge time.Duration)
 		i.roots[root] = entry
 	}
 	entry.touched = time.Now()
-	coverage := repochange.Coverage(root)
-	if (!coverage.Complete || !coverage.Recursive) && time.Since(entry.validated) >= repochange.CoverageRevalidationInterval {
+	coverage := i.coverage(root)
+	// A full walk already in flight revalidates the root when it lands.
+	revalidating := entry.flight != nil && entry.flight.full
+	if (!coverage.Complete || !coverage.Recursive) && !revalidating && time.Since(entry.validated) >= repochange.CoverageRevalidationInterval {
 		entry.full = true
 	}
 	if entry.ready && !entry.full && len(entry.dirty) == 0 && entry.flight == nil {
@@ -192,9 +196,12 @@ func (i *Inventory) read(ctx context.Context, root string, maxAge time.Duration)
 	}
 	flight := entry.flight
 	if flight == nil {
-		flight = &inventoryFlight{done: make(chan struct{})}
-		entry.flight = flight
 		full, dirty, previous := entry.full, entry.dirty, entry.index
+		if _, rootChanged := dirty["."]; rootChanged {
+			full = true
+		}
+		flight = &inventoryFlight{done: make(chan struct{}), full: full}
+		entry.flight = flight
 		entry.full, entry.dirty = false, make(map[string]struct{})
 		go i.refresh(context.WithoutCancel(ctx), root, entry, flight, full, dirty, previous)
 	}
@@ -232,9 +239,6 @@ func (i *Inventory) refresh(parent context.Context, root string, entry *inventor
 }
 
 func (i *Inventory) reconcile(ctx context.Context, root string, full bool, dirty map[string]struct{}, previous []governance.ResolvedAgentsMD) ([]governance.ResolvedAgentsMD, error) {
-	if _, rootChanged := dirty["."]; rootChanged {
-		full = true
-	}
 	if full {
 		return i.walk(ctx, root)
 	}

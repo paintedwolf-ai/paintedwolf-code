@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
 )
 
 func evaluationWorkerAlive(pid int) (bool, error) {
 	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-	if os.IsNotExist(err) {
+	// A process reaped while its stat file is open reads as ESRCH.
+	if os.IsNotExist(err) || errors.Is(err, syscall.ESRCH) {
 		return false, nil
 	}
 	if err != nil {

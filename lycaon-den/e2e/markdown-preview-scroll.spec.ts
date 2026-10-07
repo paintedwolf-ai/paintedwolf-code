@@ -5,7 +5,9 @@ import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
 import { largeMarkdownPreviewFixture, MARKDOWN_PREVIEW_TITLE } from "./markdown-preview-fixture.ts";
 
 async function sampleNativeWheel(page: Page, preview: Locator, deltaY: number) {
-  const sample = preview.evaluate((frame) => new Promise<{ offset: number; painted: boolean; thumb: number }>((resolve, reject) => {
+  // The sampler records its starting offset before the wheel is dispatched;
+  // the result promise stays wrapped so the handle resolves without awaiting it.
+  const sampler = await preview.evaluateHandle((frame) => ({ result: new Promise<{ offset: number; painted: boolean; thumb: number }>((resolve, reject) => {
     const viewport = frame.querySelector<HTMLElement>(":scope > .den-scrollport__viewport");
     if (!viewport) {
       reject(new Error("The preview frame has no viewport"));
@@ -32,10 +34,14 @@ async function sampleNativeWheel(page: Page, preview: Locator, deltaY: number) {
       });
     };
     requestAnimationFrame(measure);
-  }));
+  }) }));
   await preview.hover();
   await page.mouse.wheel(0, deltaY);
-  return sample;
+  try {
+    return await sampler.evaluate((pending) => pending.result);
+  } finally {
+    await sampler.dispose();
+  }
 }
 
 modelIndependentWebE2e("large Markdown preview retains text and scroll direction while sections arrive", async ({ page, request }) => {

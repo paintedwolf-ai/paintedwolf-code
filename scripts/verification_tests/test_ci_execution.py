@@ -60,8 +60,8 @@ class HostedVerificationTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
-                    if profile != "check" or row["lane"] == "webkit":
-                        self.assertEqual(row["runner"], "macos-15")
+                    # macOS hosts only the lanes that test macOS-specific behavior.
+                    self.assertEqual(row["runner"], "macos-15" if row["lane"] == "webkit" else "ubuntu-latest")
 
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})
@@ -85,6 +85,21 @@ class HostedVerificationTests(unittest.TestCase):
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
+
+    def test_lane_worker_cap_reaches_admission(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("behavior")
+            self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(ci.lanes()["behavior"]["workers"]))
+            ci.run_lane("frontend")
+            self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
+
+    @unittest.skipUnless(Path("/proc/meminfo").exists(), "reads Linux /proc")
+    def test_resource_line_reports_memory_disk_and_largest_processes(self):
+        line = ci.resource_line()
+        self.assertRegex(line, r"available \d+ MiB, swap free \d+ MiB; disk free / \d+ GiB")
+        self.assertRegex(line, r"largest \S+\[\d+\] \d+ MiB")
 
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = ci.lanes()["behavior"]["minutes"]

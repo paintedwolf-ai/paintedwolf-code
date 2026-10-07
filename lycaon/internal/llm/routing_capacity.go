@@ -43,30 +43,26 @@ func (c *RoutingClient) openWithCapacity(ctx context.Context, sel *ModelSelectio
 	return c.occupyLocalStream(ctx, sel, ch), sel, nil
 }
 
-// observeStreamOutcome records what a stream established once it ends. A
-// transport that answers inside the stream, as Converse does, reports a
-// refusal or an unavailable slot as the terminal chunk, and those facts count
-// the same as ones returned when the stream opened. A stream the consumer
-// abandons establishes nothing.
+// observeStreamOutcome records what a stream established. A transport that
+// answers inside the stream, as Converse does, reports a refusal or an
+// unavailable slot as an error chunk, and those facts count the same as ones
+// returned when the stream opened. The fact is recorded before the chunk is
+// forwarded, so a caller that reacts to the error and calls again meets the
+// gate. A stream the consumer abandons before any error establishes nothing.
 func (c *RoutingClient) observeStreamOutcome(ctx context.Context, sel *ModelSelection, ch <-chan modelcall.StreamChunk) <-chan modelcall.StreamChunk {
 	out := make(chan modelcall.StreamChunk, 64)
 	go func() {
 		defer close(out)
-		var terminal error
 		for chunk := range ch {
 			if chunk.Err != nil {
-				terminal = chunk.Err
+				c.capacity.NoteFailure(sel.ProviderID, sel.Model, chunk.Err)
+				c.refusals.Note(sel.ProviderID, sel.Model, chunk.Err)
 			}
 			if !modelcall.SendChunk(ctx, out, chunk) {
 				modelcall.DrainStream(ch)
 				return
 			}
 		}
-		if terminal == nil {
-			return
-		}
-		c.capacity.NoteFailure(sel.ProviderID, sel.Model, terminal)
-		c.refusals.Note(sel.ProviderID, sel.Model, terminal)
 	}()
 	return out
 }

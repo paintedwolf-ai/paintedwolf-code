@@ -55,13 +55,20 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   exit 0
 fi
 
+fuzz_target() {
+  go test -p="${FUZZ_WORKERS}" -parallel="${FUZZ_WORKERS}" -timeout="${PACKAGE_TIMEOUT}" \
+    -run='^$' -fuzz="^$2$" -fuzztime="${FUZZTIME}" "$1"
+}
+
 failed=0
 for entry in "${TARGETS[@]}"; do
   pkg="${entry%% *}"
   fn="${entry##* }"
   echo "→ ${pkg} :: ${fn} (${FUZZTIME})" >&2
-  if ! go test -p="${FUZZ_WORKERS}" -parallel="${FUZZ_WORKERS}" -timeout="${PACKAGE_TIMEOUT}" \
-    -run='^$' -fuzz="^${fn}$" -fuzztime="${FUZZTIME}" "${pkg}"; then
+  # With several workers the coordinator can fail with "context deadline exceeded" when -fuzztime
+  # ends mid-minimization. One rerun absorbs that; a real crasher is saved under testdata/fuzz and
+  # fails the rerun as a seed.
+  if ! fuzz_target "${pkg}" "${fn}" && ! { echo "fuzz: rerunning ${fn} once" >&2; fuzz_target "${pkg}" "${fn}"; }; then
     failed=$((failed + 1))
   fi
 done

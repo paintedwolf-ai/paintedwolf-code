@@ -422,8 +422,6 @@ func createTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 
 func acceptPrompt(t *testing.T, baseURL, sessionID, text string) {
 	t.Helper()
-	baseline := len(listMessagesAtURL(t, baseURL, sessionID))
-	acceptedAt := time.Now()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/v1/sessions/"+sessionID+"/prompts",
 		strings.NewReader(promptJSON(text)))
 	if err != nil {
@@ -446,51 +444,28 @@ func acceptPrompt(t *testing.T, baseURL, sessionID, text string) {
 	if accepted.Status != "queued" {
 		t.Fatalf("prompt accept status = %q", accepted.Status)
 	}
-	waitPromptTurnAtURL(t, baseURL, sessionID, baseline, acceptedAt, 10*time.Second)
+	waitForSessionIdle(t, baseURL, sessionID, 10*time.Second)
 }
 
 func promptJSON(text string) string {
 	return fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), text)
 }
 
+// waitForSessionIdle waits until no admitted prompt is pending and no turn runs;
+// prompt_pending covers the gap between admission and the turn going busy.
 func waitForSessionIdle(t *testing.T, baseURL, sessionID string, timeout time.Duration) wire.Session {
-	t.Helper()
-	return waitPromptTurnAtURL(t, baseURL, sessionID, len(listMessagesAtURL(t, baseURL, sessionID)), time.Now(), timeout)
-}
-
-func waitPromptTurnAtURL(t *testing.T, baseURL, sessionID string, baseline int, acceptedAt time.Time, timeout time.Duration) wire.Session {
 	t.Helper()
 	timeout = testutil.Timeout(timeout)
 	deadline := time.Now().Add(timeout)
-	sawBusy := false
 	for time.Now().Before(deadline) {
 		sess := getSessionAtURL(t, baseURL, sessionID)
-		if sess.Status == wire.SessionStatusBusy {
-			sawBusy = true
-		}
-		msgs := listMessagesAtURL(t, baseURL, sessionID)
-		if promptTurnSettled(sess, msgs, baseline, sawBusy, acceptedAt) {
+		if sess.Status == wire.SessionStatusIdle && !sess.PromptPending {
 			return sess
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("session %s prompt turn did not complete within %s", sessionID, timeout)
 	return wire.Session{}
-}
-
-func promptTurnSettled(sess wire.Session, msgs []wire.Message, baseline int, sawBusy bool, acceptedAt time.Time) bool {
-	if sess.Status != wire.SessionStatusIdle {
-		return false
-	}
-	if sawBusy {
-		return true
-	}
-	for i := baseline; i < len(msgs); i++ {
-		if msgs[i].Role != wire.MessageRoleUser {
-			return true
-		}
-	}
-	return time.Since(acceptedAt) >= 50*time.Millisecond
 }
 
 func getSessionAtURL(t *testing.T, baseURL, sessionID string) wire.Session {

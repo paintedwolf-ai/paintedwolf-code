@@ -60,11 +60,17 @@ webE2e.describe("eager bubble", () => {
     await composer.press("Enter");
     await expect(composer).toHaveValue("", { timeout: 30_000 });
 
-    // Each prompt remains visible through reconciliation.
+    // Each prompt remains visible through reconciliation. A send while the
+    // first turn is live enters the queue instead of the transcript.
     for (const text of ["First of two", "Second of two"]) {
       await expect(
         stage
-          .locator('[data-testid="pending-send-bubble"], [data-testid="transcript-article-user"]')
+          .locator([
+            '[data-testid="pending-send-bubble"]',
+            '[data-testid="transcript-article-user"]',
+            '[data-testid="queue-pending-item"]',
+            '[data-testid="queue-item"]',
+          ].join(", "))
           .filter({ hasText: text })
           .first(),
       ).toBeVisible({ timeout: 10_000 });

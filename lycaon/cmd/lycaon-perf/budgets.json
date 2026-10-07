@@ -27,8 +27,8 @@
     "peak_db_reader_in_use": 8,
     "peak_db_writer_open": 1,
     "peak_db_writer_in_use": 1,
-    "db_reader_wait_ms": 5000,
-    "db_writer_wait_ms": 5000,
+    "db_reader_mean_wait_ms": 250,
+    "db_writer_mean_wait_ms": 250,
     "perf_records_dropped": 0,
     "http_failures": 0
   }

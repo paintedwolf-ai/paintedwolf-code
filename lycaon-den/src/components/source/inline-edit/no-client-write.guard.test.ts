@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadTypeScriptCorpus } from "../../../test/source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../../../test/vitest-timeouts.ts";
 
 const ROOTS = [
   join(import.meta.dirname, "."),
@@ -19,7 +20,7 @@ const FORBIDDEN = [
   /dispatch\(\s*\{\s*changes:.*model/s,
 ];
 
-describe("no client write from inline-edit / verbs", () => {
+describe("no client write from inline-edit / verbs", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("does not call replaceProjectSource or apply model output to a buffer", () => {
     const files = ROOTS.flatMap((root) =>
       loadTypeScriptCorpus(root, { excludeTests: true }).files,
