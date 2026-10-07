@@ -95,6 +95,12 @@ class HostedVerificationTests(unittest.TestCase):
             ci.run_lane("frontend")
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
 
+    @unittest.skipUnless(Path("/proc/meminfo").exists(), "reads Linux /proc")
+    def test_resource_line_reports_memory_disk_and_largest_processes(self):
+        line = ci.resource_line()
+        self.assertRegex(line, r"available \d+ MiB, swap free \d+ MiB; disk free / \d+ GiB")
+        self.assertRegex(line, r"largest \S+\[\d+\] \d+ MiB")
+
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = ci.lanes()["behavior"]["minutes"]
         with tempfile.TemporaryDirectory() as directory:

@@ -6,7 +6,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
+import threading
 import time
 
 from artifact_paths import artifact_root
@@ -79,6 +82,30 @@ def invocation(targets):
             for member in (plan["groups"][target] if target in private else [target])]
 
 
+def resource_line():
+    """Memory, disk, and the largest processes, for diagnosing a runner that disappears mid-lane."""
+    meminfo = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+    mib = {key: int(meminfo[key].split()[0]) // 1024 for key in ("MemAvailable", "SwapFree")}
+    disks = {where: shutil.disk_usage(where).free // 2**30 for where in sorted({"/", tempfile.gettempdir()})}
+    processes = []
+    for status in Path("/proc").glob("[0-9]*/status"):
+        try:
+            fields = dict(line.split(":", 1) for line in status.read_text().splitlines() if ":" in line)
+        except OSError:
+            continue
+        if "VmRSS" in fields:
+            processes.append((int(fields["VmRSS"].split()[0]) // 1024, fields["Name"].strip(), status.parent.name))
+    top = ", ".join(f"{name}[{pid}] {rss} MiB" for rss, name, pid in sorted(processes, reverse=True)[:4])
+    free = ", ".join(f"{where} {gib} GiB" for where, gib in disks.items())
+    return (f"runner resources: available {mib['MemAvailable']} MiB, swap free {mib['SwapFree']} MiB; "
+            f"disk free {free}; largest {top}")
+
+
+def sample_resources(stop, interval=60):
+    while not stop.wait(interval):
+        print(resource_line(), flush=True)
+
+
 def run_lane(name):
     lane = lanes()[name]
     targets = lane["targets"]
@@ -92,7 +119,14 @@ def run_lane(name):
     # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
     if "workers" in lane:
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
-    code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT, env=environment)
+    # A hosted runner that runs out of memory or disk vanishes without evidence; the live log keeps these lines.
+    stop = threading.Event()
+    if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
+        threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
+    try:
+        code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT, env=environment)
+    finally:
+        stop.set()
     record.update(finished_at=time.time(), exit_code=code,
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")
     path.write_text(json.dumps(record, indent=2) + "\n")
