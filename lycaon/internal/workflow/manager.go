@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -105,6 +106,8 @@ type RunManager struct {
 
 	// Artifacts stores visual attachments for the session tree.
 	Artifacts visual.Store
+	// Progress seeds the coordinator's checklist from a stamped fan-out plan.
+	Progress progress.RunScopedStore
 	// RootSessionID resolves a session to its tree root.
 	RootSessionID func(ctx context.Context, sessionID string) string
 	SecretCapture SecretCapture
@@ -117,6 +120,8 @@ type RunManager struct {
 
 	// runVarsGuards serializes scaffold-variable updates per run.
 	runVarsGuards sync.Map // runID -> *sync.Mutex
+
+	inventoryShortfalls inventoryShortfalls
 }
 
 type sessionExitControl interface {

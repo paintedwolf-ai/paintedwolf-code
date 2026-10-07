@@ -492,46 +492,29 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 	stages []PipelineStage,
 	state *runState,
 ) (string, error) {
-	if req.Input != nil {
-		if v, ok := req.Input["delegation_id"].(string); ok && strings.TrimSpace(v) != "" {
-			delegationID := strings.TrimSpace(v)
-			legs, err := o.store.ListLegs(ctx, delegationID)
+	delegationID, _ := req.Input["delegation_id"].(string)
+	delegationID = strings.TrimSpace(delegationID)
+	if delegationID == "" {
+		if state.workflowRunID != "" {
+			var err error
+			delegationID, _, err = o.store.DelegationByWorkflowRunID(ctx, state.workflowRunID)
 			if err != nil {
 				return "", err
 			}
-			restorePipelineLegs(state, legs)
-			return delegationID, nil
+		} else {
+			delegationID, _ = o.store.DelegationBySessionID(sessionID)
 		}
 	}
-	if strings.TrimSpace(state.workflowRunID) != "" {
-		delegationID, ok, err := o.store.DelegationByWorkflowRunID(ctx, state.workflowRunID)
+	if delegationID != "" {
+		keys := make([]string, len(stages))
+		for i, stage := range stages {
+			keys[i] = stage.Name
+		}
+		restored, err := o.restoreDelegation(ctx, delegationID, keys, state)
 		if err != nil {
 			return "", err
 		}
-		if ok {
-			legs, listErr := o.store.ListLegs(ctx, delegationID)
-			if listErr != nil {
-				return "", listErr
-			}
-			restorePipelineLegs(state, legs)
-			if len(state.stageLegs) != len(stages) {
-				return "", fmt.Errorf("existing delegation has %d legs, pipeline needs %d", len(state.stageLegs), len(stages))
-			}
-			return delegationID, nil
-		}
-	}
-	if strings.TrimSpace(state.workflowRunID) == "" {
-		if delegationID, ok := o.store.DelegationBySessionID(sessionID); ok {
-			legs, err := o.store.ListLegs(ctx, delegationID)
-			if err != nil {
-				return "", err
-			}
-			restorePipelineLegs(state, legs)
-			if len(state.stageLegs) != len(stages) {
-				return "", fmt.Errorf("existing delegation has %d legs, pipeline needs %d", len(state.stageLegs), len(stages))
-			}
-			return delegationID, nil
-		}
+		return restored.ID, nil
 	}
 
 	task := strings.TrimSpace(req.Topology.Task)
@@ -566,7 +549,7 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 	return created.ID, nil
 }
 
-func restorePipelineLegs(state *runState, legs []api.Leg) {
+func restoreRecordedLegs(state *runState, legs []api.Leg) {
 	for _, leg := range legs {
 		state.stageLegs[leg.Title] = leg.ID
 		if leg.Status != api.LegStatusComplete {

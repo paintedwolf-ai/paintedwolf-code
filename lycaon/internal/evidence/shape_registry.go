@@ -117,7 +117,15 @@ func SupersedesPathHandle(newRec, oldRec Record) bool {
 	if binding.IsMutationKind(oldRec.Kind) {
 		return false
 	}
-	return UpdatesFileBindings(newRec)
+	if !UpdatesFileBindings(newRec) {
+		return false
+	}
+	oldPaths := IndexedPathsForRecord(oldRec)
+	if len(oldPaths) != 1 || oldPaths[0] != NormalizeLedgerPath(newRec.Path) {
+		return false
+	}
+	// A record without line ranges counts as covered.
+	return LineRangesCover(newRec.LineRanges, oldRec.LineRanges)
 }
 
 // UpdatesFileBindings distinguishes new file content from surveys and receipts.

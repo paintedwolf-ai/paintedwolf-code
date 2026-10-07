@@ -96,13 +96,7 @@ func failedTurnProgress(ctx context.Context, st session.Store, sessionID string)
 }
 
 func sessionMessagesHaveTurnProgress(msgs []wire.Message) bool {
-	lastAskIdx := -1
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == wire.MessageRoleUser && msgs[i].Origin == wire.MessageOriginUser {
-			lastAskIdx = i
-			break
-		}
-	}
+	lastAskIdx := wire.UserIntentBoundary(msgs) - 1
 	if lastAskIdx == -1 {
 		return false
 	}

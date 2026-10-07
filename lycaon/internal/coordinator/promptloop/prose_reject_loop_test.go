@@ -43,7 +43,7 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	deps.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT", "Required check is unresolved."), true
 	}
-	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, promptloop.TurnCloseoutReason, string) promptloop.HostNudge {
+	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "Report delivered work and the unresolved check."}
 	}
 	deps.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {

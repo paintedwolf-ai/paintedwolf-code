@@ -1,7 +1,6 @@
 package session
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -18,7 +17,10 @@ import (
 func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	const phaseGuidance = "claims phase fixture"
+	testutil.FailErr(t, "register phase fixture", engine.Register("kicks/coordinator-security-claims.md", phaseGuidance))
+	mgr.SetPromptEngine(engine)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	kicks := mgr.ensureCoordinatorRuntime().Kicks()
@@ -31,7 +33,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 
 	msgs, err := mgr.takePhaseGuidance(t.Context(), sess.ID)
 	testutil.FailErr(t, "take phase guidance", err)
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Content, "stamp the candidate claims") || msgs[0].Visibility != api.MessageVisibilityInternal {
+	if len(msgs) != 1 || msgs[0].Content != phaseGuidance || msgs[0].Visibility != api.MessageVisibilityInternal {
 		t.Fatalf("delivered = %+v, want the claims phase guidance", msgs)
 	}
 	stored, err := st.GetMessage(t.Context(), sess.ID, msgs[0].ID)

@@ -2,10 +2,10 @@ package surveyreceipt
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -53,11 +53,11 @@ func TestClampSessionToolOutputFindResults(t *testing.T) {
 }
 
 func TestClampSessionToolOutputReadContent(t *testing.T) {
-	numbered := make([]string, 100)
-	for i := range numbered {
-		numbered[i] = strconv.Itoa(i+1) + "\t" + strings.Repeat("a", 80)
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = strings.Repeat("a", 80)
 	}
-	content := strings.Join(numbered, "\n")
+	content := hostmarker.FormatNumberedLines(lines, 1)
 	payload, err := json.Marshal(map[string]any{
 		"path":        "go.sum",
 		"content":     content,
@@ -96,11 +96,11 @@ func TestClampSessionToolOutputReadContent(t *testing.T) {
 }
 
 func TestClampSessionToolOutputReadContentLineAware(t *testing.T) {
-	numbered := make([]string, 40)
-	for i := range numbered {
-		numbered[i] = strconv.Itoa(i+1) + "\t" + strings.Repeat("y", 80)
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = strings.Repeat("y", 80)
 	}
-	content := strings.Join(numbered, "\n")
+	content := hostmarker.FormatNumberedLines(lines, 1)
 	payload, err := json.Marshal(map[string]any{
 		"path":        "big.go",
 		"content":     content,
@@ -121,14 +121,13 @@ func TestClampSessionToolOutputReadContentLineAware(t *testing.T) {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	trimmed, _ := obj["content"].(string)
-	if strings.Contains(trimmed, "\n") {
-		lastLine := trimmed[strings.LastIndex(trimmed, "\n")+1:]
-		if tab := strings.IndexByte(lastLine, '\t'); tab <= 0 {
-			t.Fatalf("last line not complete numbered row: %q", lastLine)
-		}
+	lastLine := trimmed[strings.LastIndex(trimmed, "\n")+1:]
+	lastNumber, lastText, numbered := hostmarker.ParseNumberedLine(lastLine)
+	if !numbered || lastText != strings.Repeat("y", 80) {
+		t.Fatalf("last line not a complete numbered row: %q", lastLine)
 	}
-	if jsonvalue.Int(obj["end_line"]) <= 0 {
-		t.Fatalf("end_line = %v", obj["end_line"])
+	if jsonvalue.Int(obj["end_line"]) != lastNumber {
+		t.Fatalf("end_line = %v, want last kept line %d", obj["end_line"], lastNumber)
 	}
 	if jsonvalue.Int(obj["next_offset"]) <= jsonvalue.Int(obj["end_line"]) {
 		t.Fatalf("next_offset = %v end_line = %v", obj["next_offset"], obj["end_line"])

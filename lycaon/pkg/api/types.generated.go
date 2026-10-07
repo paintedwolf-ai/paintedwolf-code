@@ -1951,6 +1951,21 @@ type CostSummary struct {
 	HostMeasuredTokens int `json:"host_measured_tokens,omitempty"`
 }
 
+// CoverageAssessment
+type CoverageAssessment struct {
+	ID            string                           `json:"id"`
+	Disposition   string                           `json:"disposition"`
+	Reason        string                           `json:"reason"`
+	Obligations   []string                         `json:"obligations,omitempty"`
+	CitedEvidence []CitationGroundingCitedEvidence `json:"cited_evidence"`
+}
+
+// CoverageReview
+type CoverageReview struct {
+	Revision    string               `json:"revision"`
+	Assessments []CoverageAssessment `json:"assessments"`
+}
+
 // CreateApprovalGrantRequest Deliberate Settings creation of one durable grant with scope project or device. Category socket_path takes socket_path; category host takes host_pattern. Execution cards and model tools cannot call this.
 type CreateApprovalGrantRequest struct {
 	Category ApprovalGrantCategory `json:"category"`
@@ -4746,12 +4761,21 @@ type PromptAttachmentPart struct {
 	BlobID string `json:"blob_id"`
 }
 
+// PromptRecovery
+type PromptRecovery struct {
+	// Continue established progress or retry an interrupted request without progress.
+	Action string `json:"action"`
+	// Last visible transcript message observed when choosing recovery. The host rejects stale actions.
+	AfterMessageID string `json:"after_message_id"`
+}
+
 // PromptRequest
 type PromptRequest struct {
 	// Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
 	OperationID string `json:"operation_id"`
 	// User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
-	Text string `json:"text"`
+	Text     string          `json:"text"`
+	Recovery *PromptRecovery `json:"recovery,omitempty"`
 	// Handles for bodies already streamed to the attachment upload route — text, documents, and rasters alike. No bytes, no URLs, no paths.
 	Attachments []PromptAttachmentPart `json:"attachments,omitempty"`
 	// On-disk, artifact, and search-hit references; no bytes. Counted separately from uploaded attachments.
@@ -8464,6 +8488,10 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
+	CoverageReview *CoverageReview `json:"coverage_review,omitempty"`
+	// Leg status the worker declared; leg_status is the host-graded status.
+	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
+	// Host-graded leg status.
 	LegStatus           string                     `json:"leg_status"`
 	FilesModified       []string                   `json:"files_modified,omitempty"`
 	ObjectivesMet       []string                   `json:"objectives_met,omitempty"`
@@ -8820,6 +8848,8 @@ type WorkflowRunPage struct {
 
 // WorkflowRunUi
 type WorkflowRunUi struct {
+	// Selected workflow definition, including versions retired from the start catalog.
+	Definition *WorkflowSummary `json:"definition,omitempty"`
 	// Host-projected activity label from the active workflow manifest phase.
 	CurrentPhaseLabel     string                `json:"current_phase_label"`
 	HumanApprovalAwaiting bool                  `json:"human_approval_awaiting,omitempty"`

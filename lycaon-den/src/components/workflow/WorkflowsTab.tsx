@@ -71,7 +71,7 @@ export function WorkflowsTab(props: Props) {
   const active = () => props.activeRun ?? null;
   const canArm = () => {
     const run = active();
-    return canArmCatalogWorkflow(run, run ? [run] : [], props.catalog);
+    return canArmCatalogWorkflow(run, run ? [run] : []);
   };
   const showPicker = () => props.pickerOpen && canArm();
   const pickerRows = () => sortWorkflowCatalog(props.catalog);

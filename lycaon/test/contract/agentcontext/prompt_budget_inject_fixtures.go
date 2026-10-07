@@ -64,7 +64,7 @@ var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 		ID:       "worker_task_assignment",
 		Hosts:    workerTurns,
 		Template: "inject/worker-task-assignment.md",
-		Fixture:  "RenderWorkerTaskAssignment with write scope",
+		Fixture:  "RenderWorkerTaskAssignment with write scope and bounded coverage review",
 	},
 	{
 		ID:       "worker_task_preamble",

@@ -1,10 +1,12 @@
 package evidence_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,7 +22,7 @@ func readRecord(path, content string, start, end int) evidence.Record {
 }
 
 func TestFileRegion_FabricatedLineNumberDoesNotGround(t *testing.T) {
-	body := "10\tunrelated line ten\n11\tunrelated line eleven\n4000\t.root { x\n"
+	body := hostmarker.FormatNumberedLines([]string{"unrelated line ten", "unrelated line eleven"}, 10) + "\n" + hostmarker.FormatNumberedLines([]string{".root { x"}, 4000)
 	rec := readRecord("dup.go", body, 10, 4000)
 
 	ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Path: "dup.go", Line: 12})
@@ -34,7 +36,7 @@ func TestFileRegion_FabricatedLineNumberDoesNotGround(t *testing.T) {
 }
 
 func TestFileRegion_WrongLineExcerptFails(t *testing.T) {
-	body := "10\talpha\n11\tbeta\n4000\t.root { x\n"
+	body := hostmarker.FormatNumberedLines([]string{"alpha", "beta"}, 10) + "\n" + hostmarker.FormatNumberedLines([]string{".root { x"}, 4000)
 	rec := readRecord("x.go", body, 10, 4000)
 
 	ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Path: "x.go", Line: 12, Excerpt: ".root { x"})
@@ -48,7 +50,7 @@ func TestFileRegion_WrongLineExcerptFails(t *testing.T) {
 }
 
 func TestFileRegion_LineBindWindowDrift(t *testing.T) {
-	body := "12\tbefore\n13\t.root { x\n"
+	body := hostmarker.FormatNumberedLines([]string{"before", ".root { x"}, 12)
 	rec := readRecord("w.go", body, 12, 13)
 
 	ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Path: "w.go", Line: 12, Excerpt: ".root { x"})
@@ -62,7 +64,7 @@ func TestFileRegion_LineBindWindowDrift(t *testing.T) {
 }
 
 func TestFileRegion_MultiLineExcerptAnchoredAtLine(t *testing.T) {
-	body := "35\t    if (el.innerHTML !== html) {\n36\t      el.innerHTML = html;\n37\t    }\n"
+	body := hostmarker.FormatNumberedLines([]string{"    if (el.innerHTML !== html) {", "      el.innerHTML = html;", "    }"}, 35)
 	rec := readRecord("a.tsx", body, 35, 37)
 
 	reflowed := "if (el.innerHTML !== html) {\n el.innerHTML = html;\n }"
@@ -105,7 +107,7 @@ func TestFileRegion_GrepRecordExcerptAtLine(t *testing.T) {
 }
 
 func TestFileRegion_PathOnlyAndHandleOnlyUnchanged(t *testing.T) {
-	rec := readRecord("p.go", "1\tpackage p\n", 1, 1)
+	rec := readRecord("p.go", hostmarker.FormatNumberedLines([]string{"package p"}, 1), 1, 1)
 
 	ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Path: "p.go"})
 	if !ok {
@@ -118,7 +120,7 @@ func TestFileRegion_PathOnlyAndHandleOnlyUnchanged(t *testing.T) {
 }
 
 func TestFileRegion_ExcerptOnlyUnchanged(t *testing.T) {
-	rec := readRecord("f.go", "99\tneedle appears here\n", 99, 99)
+	rec := readRecord("f.go", hostmarker.FormatNumberedLines([]string{"needle appears here"}, 99), 99, 99)
 
 	ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Excerpt: "needle appears"})
 	if !ok {
@@ -127,7 +129,7 @@ func TestFileRegion_ExcerptOnlyUnchanged(t *testing.T) {
 }
 
 func TestFileRegion_TrivialityFloorUnchanged(t *testing.T) {
-	readJSON := `{"path":"f.go","content":"1|if x","offset":1,"end_line":1,"limit":1}`
+	readJSON := fmt.Sprintf(`{"path":"f.go","content":%q,"offset":1,"end_line":1,"limit":1}`, hostmarker.FormatNumberedLines([]string{"if x"}, 1))
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "f.go"}},
@@ -137,41 +139,80 @@ func TestFileRegion_TrivialityFloorUnchanged(t *testing.T) {
 			Content: readJSON,
 		}},
 	})
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 1, "if") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 1, "if") {
 		t.Fatal("sub-min-span excerpt must not verify")
 	}
 }
 
 func TestExcerptMatchesHandle_readBodyLineBound(t *testing.T) {
-	readJSON := `{"path":"f.go","content":"42|  return nil","offset":42,"end_line":42,"limit":1}`
+	readJSON := fmt.Sprintf(`{"path":"f.go","content":%q,"offset":42,"end_line":42,"limit":1}`, hostmarker.FormatNumberedLines([]string{"return nil"}, 42))
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "f.go", "offset": 42, "limit": 1}},
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: readJSON}},
 	})
-	if !evidence.ExcerptMatchesHandle(ev, "read#1", 42, "return nil") {
+	if !evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 42, "return nil") {
 		t.Fatal("expected excerpt match at cited line")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 42, "return 1") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 42, "return 1") {
 		t.Fatal("expected excerpt mismatch")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 1, "return nil") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 1, "return nil") {
 		t.Fatal("expected wrong cited line to fail")
 	}
 }
 
 func TestLineWithoutExcerptDegradesViaHandle(t *testing.T) {
+	readJSON := fmt.Sprintf(`{"path":"a.go","content":%q,"offset":1,"end_line":1}`, hostmarker.FormatNumberedLines([]string{"package a"}, 1))
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "a.go"}},
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 			Outcome: api.ToolResultOutcomeCompleted,
-			Content: `{"path":"a.go","content":"1\tpackage a\n","offset":1,"end_line":1}`,
+			Content: readJSON,
 		}},
 	})
-	if !evidence.ExcerptMatchesHandle(ev, "read#1", 12, "") {
+	if !evidence.ExcerptMatchesHandle(ev, "read#1", "a.go", 12, "") {
 		t.Fatal("line-without-excerpt should degrade to handle grounding")
 	}
 }
+
+func TestGrepContextLinesAreIndexed(t *testing.T) {
+	grepJSON := `{
+		"matches": [{
+			"path": "src/a.go",
+			"line": 33,
+			"content": "target match line",
+			"context_before": ["line 31 before", "line 32 before"],
+			"context_after": ["line 34 after", "line 35 after"]
+		}]
+	}`
+	ev := ledgertest.BuildFromMessages("", []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
+			{Name: "grep", ID: "c1", Args: map[string]any{"path": "src", "pattern": "target"}},
+		}},
+		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: grepJSON}},
+	})
+
+	if !evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 33, "target match line") {
+		t.Fatal("expected match line 33 to verify")
+	}
+	if !evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 31, "line 31 before") {
+		t.Fatal("expected context before line 31 to verify")
+	}
+	if !evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 32, "line 32 before") {
+		t.Fatal("expected context before line 32 to verify")
+	}
+	if !evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 34, "line 34 after") {
+		t.Fatal("expected context after line 34 to verify")
+	}
+	if !evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 35, "line 35 after") {
+		t.Fatal("expected context after line 35 to verify")
+	}
+	if evidence.ExcerptMatchesHandle(ev, "grep#1", "src/a.go", 25, "line 31 before") {
+		t.Fatal("expected out-of-range line 25 to fail")
+	}
+}
+

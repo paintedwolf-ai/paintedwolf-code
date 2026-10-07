@@ -46,9 +46,9 @@ func (e *Engine) Run(ctx context.Context, req Request) (Result, error) {
 	req.Task = DefaultTask(req.Task, req.Path, req.Paths, req.Content)
 	var cursor cursorState
 	if req.Cursor != "" {
-		var ok bool
-		cursor, ok = decodeCursor(req.Cursor)
-		if !ok || cursor.Scope != cursorScope(req) {
+		var err error
+		cursor, err = summarizeCursors.Decode(req.Cursor, cursorScope(req))
+		if err != nil {
 			return Result{}, ErrInvalidCursor
 		}
 		req.CursorPosition = cursor.Position

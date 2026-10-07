@@ -17,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -106,7 +108,7 @@ func measureCoordinatorInjectBlock(
 		contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
 		return block
 	case "worker_task_assignment":
-		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, inject.WorkerTaskAssignmentInput{
+		input := inject.WorkerTaskAssignmentInput{
 			SessionID:  "sess-inject-test",
 			ProjectDir: t.TempDir(),
 			Charter: api.WorkerTaskCharter{
@@ -116,8 +118,15 @@ func measureCoordinatorInjectBlock(
 			WorkerJobID:  "job-budget-fixture",
 			Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 			MaxToolLoops: 8,
-		})
+		}
+		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
 		contractcheck.FailErr(t, "RenderWorkerTaskAssignment", err)
+		input.CoverageAssignment = promptBudgetCoverageAssignment()
+		coverage, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
+		contractcheck.FailErr(t, "RenderWorkerTaskAssignment coverage", err)
+		if len(coverage) > len(block) {
+			return coverage
+		}
 		return block
 	case "worker_task_preamble":
 		block, err := worker.RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", lycaonRoot,
@@ -180,4 +189,16 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 		}
 	}
 	return largest
+}
+
+func promptBudgetCoverageAssignment() *reviewcoverage.Assignment {
+	var warnings []api.ScanWarning
+	for i := range 36 {
+		warnings = append(warnings, api.ScanWarning{File: fmt.Sprintf("component-%02d/src/entry.go", i), Construct: "indirect_call"})
+	}
+	scope := scancoverage.Summarize(warnings)
+	facts := reviewcoverage.Facts{Obligations: []reviewcoverage.Fact{{ID: "survey/entry", Kind: "planned_area", Subject: "External entry points"}}, Gaps: []reviewcoverage.Fact{{ID: "gap/partial", Kind: "file_partial_semantics", FileCount: scope.Files, Count: scope.Warnings, Paths: scope.PathsSample, Distribution: &scope.Profile, Scans: []string{"scan-fixture"}}}}
+	candidate := api.CoverageReview{Revision: "candidate", Assessments: []api.CoverageAssessment{{ID: "gap/partial", Disposition: "immaterial", Reason: "Candidate excludes the affected scope", Obligations: []string{"survey/entry"}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "scan#1"}}}}}
+	assignment := reviewcoverage.Assign(facts, candidate, "challenge")
+	return &assignment
 }

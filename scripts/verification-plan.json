@@ -12,6 +12,7 @@
       "den:test:fast",
       "den:coverage:changes",
       "test:short",
+      "test:contract",
       "coverage:changes"
     ],
     "oar:verify": [
@@ -706,15 +707,39 @@
     ]
   },
   "ci": {
-    "build": {
+    "fast-build": {
       "targets": [
         "build",
-        "build:cross"
+        "lint:fast"
       ],
-      "minutes": 120,
+      "minutes": 60,
       "profiles": [
-        "check",
-        "release"
+        "fast"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "fast-go": {
+      "targets": [
+        "test:short",
+        "test:contract"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "fast-frontend": {
+      "targets": [
+        "den:typecheck",
+        "den:lint",
+        "den:test:fast"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "fast"
       ],
       "suite": "all",
       "native": false
@@ -727,7 +752,21 @@
       ],
       "minutes": 45,
       "profiles": [
+        "fast",
         "check"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "build": {
+      "targets": [
+        "build",
+        "build:cross"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "check",
+        "release"
       ],
       "suite": "all",
       "native": false

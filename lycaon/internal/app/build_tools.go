@@ -62,18 +62,6 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	return nil
 }
 
-// plannedWorkflowLeg exposes the active phase's fanout plan to task dispatch.
-func (b *serveBuilder) plannedWorkflowLeg(ctx context.Context, tctx tools.ToolContext, workID string) (worker.PlannedLeg, bool, error) {
-	planned, ok, err := b.workflowMgr.PlannedLeg(ctx, tctx.SessionID, workID)
-	if err != nil || !ok {
-		return worker.PlannedLeg{}, ok, err
-	}
-	return worker.PlannedLeg{
-		RunID: planned.RunID, Phase: planned.Phase, AgentType: planned.Leg.AgentType,
-		Scope: planned.Leg.Scope, MaxToolLoops: planned.Leg.MaxToolLoops,
-	}, true, nil
-}
-
 func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := delegation.RegisterDelegationTools(b.toolRuntime.Registry, b.delegationMgr); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
@@ -184,7 +172,7 @@ func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
 		Workers:          b.workersCfg,
 		ToolBudget:       b.workerToolBudgetFor,
 		BindWorkflowTask: b.workflowMgr.BindWorkflowTask,
-		PlannedLeg:       b.plannedWorkflowLeg,
+		WorkflowWork:     b.workflowMgr.WorkflowWork,
 		TaskReceipt:      b.workerQueue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
 			if b.mgr == nil || b.mgr.Decisions() == nil {
@@ -223,6 +211,10 @@ func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
 			}
 			if run != nil {
 				manifest, err := b.workflowMgr.ManifestForRunID(ctx, run.ID)
+				if err != nil {
+					return "", err
+				}
+				in.CoverageAssignment, err = b.workflowMgr.CoverageAssignment(ctx, run, manifest, agentType)
 				if err != nil {
 					return "", err
 				}

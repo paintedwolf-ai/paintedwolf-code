@@ -313,21 +313,6 @@ func TestRenderImplementSpawnInject_MissingSentinel(t *testing.T) {
 	}
 }
 
-func TestImplementSpawnInjectFingerprintStable(t *testing.T) {
-	allowed := spawn.AmbientAllowedAgents()
-	a := ImplementSpawnInjectFingerprint([]string{"b", "a", allowed[0]}, spawn.MaxInFlightTaskWorkers, "", 1, false, true,
-		nil, nil)
-	b := ImplementSpawnInjectFingerprint([]string{"a", "b", allowed[0]}, spawn.MaxInFlightTaskWorkers, "", 1, false, true,
-		nil, nil)
-	if a != b {
-		t.Fatalf("fingerprints differ for same set: %q vs %q", a, b)
-	}
-	if a == ImplementSpawnInjectFingerprint([]string{"a"}, spawn.MaxInFlightTaskWorkers, "", 1, false, true,
-		nil, nil) {
-		t.Fatal("expected different fingerprint for different allowlist")
-	}
-}
-
 func TestReportDocumentInstructionsOnlyInEnabledPhase(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		block := renderTestActiveWorkflow(t, api.CoordinatorRunContext{WorkflowID: "fixture", RunID: "run-1"}, WorkflowRuntimeSnapshot{ReportDocumentEnabled: enabled}, nil, nil)

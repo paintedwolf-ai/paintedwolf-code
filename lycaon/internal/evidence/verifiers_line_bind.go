@@ -1,8 +1,9 @@
 package evidence
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 )
 
 func effectiveClaimPath(rec Record, claimPath string) string {
@@ -18,15 +19,11 @@ func lineContentIndex(rec Record, claimPath string) map[int]string {
 	idx := map[int]string{}
 	for _, body := range rec.Body {
 		for _, line := range strings.Split(body, "\n") {
-			m := readBodyLinePrefixRE.FindStringSubmatch(line)
-			if m == nil {
+			n, text, ok := hostmarker.ParseNumberedLine(line)
+			if !ok || n <= 0 {
 				continue
 			}
-			n, err := parseLineNumber(m[1])
-			if err != nil || n <= 0 {
-				continue
-			}
-			idx[n] = m[3]
+			idx[n] = text
 		}
 	}
 	if rec.grepLines != nil && claimPath != "" {
@@ -44,12 +41,7 @@ func lineContentIndex(rec Record, claimPath string) map[int]string {
 	return idx
 }
 
-func parseLineNumber(raw string) (int, error) {
-	var n int
-	_, err := fmt.Sscanf(raw, "%d", &n)
-	return n, err
-}
-
+// excerptLinesNormalized returns the excerpt's non-empty lines in match form.
 func excerptLinesNormalized(excerpt string) []string {
 	excerpt = strings.TrimSpace(excerpt)
 	if excerpt == "" {
@@ -108,6 +100,47 @@ func excerptLinesMatchAtAnchor(idx map[int]string, anchor int, exLines []string)
 	return true
 }
 
+func reanchorExcerpt(ev Ledger, path string, excerpt string) (int, string, bool) {
+	excerpt = strings.TrimSpace(excerpt)
+	if len(excerpt) < EvidenceMinMeaningfulSpan || path == "" || ev.ByPath == nil {
+		return 0, "", false
+	}
+	exLines := excerptLinesNormalized(excerpt)
+	if len(exLines) == 0 {
+		return 0, "", false
+	}
+	handles := ev.ByPath[path]
+	if len(handles) == 0 {
+		return 0, "", false
+	}
+	matched := map[int]string{}
+	for _, h := range handles {
+		rec, ok := ResolveHandle(ev, h)
+		if !ok || rec.SupersededBy != "" {
+			continue
+		}
+		idx := lineContentIndex(rec, path)
+		if idx == nil {
+			continue
+		}
+		for line := range idx {
+			if line > 0 && excerptLinesMatchAtAnchor(idx, line, exLines) {
+				if existing, exists := matched[line]; !exists || h < existing {
+					matched[line] = h
+				}
+			}
+		}
+	}
+	if len(matched) == 1 {
+		for line, h := range matched {
+			return line, h, true
+		}
+	}
+	return 0, "", false
+}
+
+// FormatReadBodyForVerification numbers a whole file from line one, as a read
+// of that file would have shown it.
 func FormatReadBodyForVerification(content string) string {
 	if content == "" {
 		return ""
@@ -116,12 +149,5 @@ func FormatReadBodyForVerification(content string) string {
 	if n := len(lines); n > 0 && lines[n-1] == "" && strings.HasSuffix(content, "\n") {
 		lines = lines[:n-1]
 	}
-	var b strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		fmt.Fprintf(&b, "%d\t%s", i+1, line)
-	}
-	return b.String()
+	return hostmarker.FormatNumberedLines(lines, 1)
 }
