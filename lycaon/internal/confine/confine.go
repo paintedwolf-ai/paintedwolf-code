@@ -505,7 +505,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
-	addControlPlaneReadFloor(&rules, c.ReadRoots)
+	addControlPlaneReadFloor(&rules, c.ReadRoots, c.SessionScratchRoot)
 	// Writes confined to the project plus temp and the standard device sinks.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,

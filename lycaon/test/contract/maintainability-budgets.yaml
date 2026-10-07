@@ -11841,7 +11841,7 @@ source_files:
     lycaon/internal/confine/confine_egress.go: 748
     lycaon/internal/confine/confine_egress_ingestion.go: 38
     lycaon/internal/confine/confine_orphan.go: 83
-    lycaon/internal/confine/control_plane_read_floor.go: 17
+    lycaon/internal/confine/control_plane_read_floor.go: 21
     lycaon/internal/confine/credential_stores.go: 93
     lycaon/internal/confine/credential_subject.go: 87
     lycaon/internal/confine/direct_ip_permits.go: 90
@@ -15830,7 +15830,7 @@ test_directories:
     lycaon/internal/conditions: 20
     lycaon/internal/configdir: 2
     lycaon/internal/configlayout: 2
-    lycaon/internal/confine: 49
+    lycaon/internal/confine: 50
     lycaon/internal/contactsheet: 1
     lycaon/internal/contentblob: 7
     lycaon/internal/contribframe: 1
