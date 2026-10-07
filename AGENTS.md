@@ -100,6 +100,15 @@ Backend test conventions, including labeled errors, live in
 [`lycaon/AGENTS.md`](lycaon/AGENTS.md#testing); frontend conventions live in
 [`lycaon-den/AGENTS.md`](lycaon-den/AGENTS.md#testing).
 
+**Size budgets and changed coverage run in both gates.** `./task budgets` holds
+prompts and code to category limits; `coverage:changes` and
+`den:coverage:changes` require tests for the statements a change adds. They
+fail only on growth past a chosen line. Answer a failure by reshaping or
+trimming. An exception needs a reason a reviewer can weigh, and grandfathered
+caps never grow. Run `./task budgets` while adding prompt copy or large code,
+not only at closeout. See
+[Size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
+
 ### Queue scope
 
 **Use the verification queue, including for lint.** Builds, typechecks,
@@ -327,6 +336,7 @@ Run from the repository root. Setup and pinned toolchain requirements:
 |---|---|
 | `./task test:digest -- ./internal/foo/...` | Scoped Go verification |
 | `./task den:typecheck` / `./task den:test` | Frontend verification |
+| `./task budgets` | Prompt and code size budgets, reported against your change |
 | `./task check-fast` / `./task check` | Handoff / full closeout gates for executable changes |
 | `./task test:status` | Queue state, blocking reasons, and advisories |
 | `./task test:cancel -- <ticket> --reason "<why>"` | Withdraw one queued or running [request](#stuck-verification) |

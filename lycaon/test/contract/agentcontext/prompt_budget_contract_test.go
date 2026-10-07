@@ -1,26 +1,26 @@
+//go:build budgets
+
 package contract
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
+	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
+// TestRenderedPromptsWithinBudget holds every shipped prompt to its category
+// limit and the static prompt stack to the model window.
 func TestRenderedPromptsWithinBudget(t *testing.T) {
 	// Persona render caches depend on the active catalog identity.
 	contractcheck.ActivateStockCatalog(t)
@@ -30,27 +30,49 @@ func TestRenderedPromptsWithinBudget(t *testing.T) {
 	reg, err := LoadPromptBudgetRegistry(lycaonRoot)
 	contractcheck.FailErr(t, "LoadPromptBudgetRegistry", err)
 	measured := measurePromptBudgets(t, root, reg)
+	file := promptBudgetPolicyFile(root)
+	raw, err := os.ReadFile(file)
+	contractcheck.FailErr(t, "read prompt budgets", err)
+	policy, err := decodePromptSizePolicy(raw)
+	contractcheck.FailErr(t, "decode prompt budgets", err)
 	if os.Getenv("UPDATE_PROMPT_BUDGETS") == "1" {
-		writePromptBudgets(t, lycaonRoot, measured)
-		return
+		policy = sizebudget.Tighten(policy, measured)
+		tightened, err := tightenPromptBudgetFile(raw, policy.Grandfathered)
+		contractcheck.FailErr(t, "tighten prompt budgets", err)
+		contractcheck.FailErr(t, "write prompt budgets", os.WriteFile(file, tightened, 0o644))
+	}
+	findings := sizebudget.Evaluate(policy, measured)
+	base, ok, note, err := sizebudget.BasePolicy(root, promptBudgetPolicyPath, decodePromptSizePolicy)
+	contractcheck.FailErr(t, "read base prompt budgets", err)
+	var notes []string
+	if ok {
+		findings = append(findings, sizebudget.GrandfatherGrowth(base, policy)...)
+	} else {
+		notes = append(notes, note)
 	}
 	budgets, err := prompts.LoadPromptBudgets()
 	contractcheck.FailErr(t, "LoadPromptBudgets", err)
-	allCaps := map[string]map[string]int{
-		"worker_personas":        budgets.WorkerPersonas,
-		"coordinator_tripartite": budgets.CoordinatorTripartite,
-		"coordinator_injects":    budgets.CoordinatorInjects,
-		"agent_templates":        budgets.AgentTemplates,
-		"kicks":                  budgets.Kicks,
-		"tool_surfaces":          budgets.ToolSurfaces,
+	stacks, err := staticPromptStacks(budgets.AbsoluteMaximums, measured)
+	contractcheck.FailErr(t, "static prompt stack", err)
+	for _, stack := range stacks {
+		notes = append(notes, stack.String())
 	}
 	catalog := buildPromptBudgetCatalog(reg)
-	if violations := collectPromptBudgetViolations(measured, allCaps); len(violations) > 0 {
-		t.Fatal(formatPromptBudgetFailureReport(violations, catalog))
+	report := sizebudget.NewReport(promptBudgetSuite, policy, measured, promptBudgetSources(catalog), findings, notes)
+	contractcheck.FailErr(t, "write prompt budget report", sizebudget.WriteReport(report))
+	if failures := sizebudget.Failures(findings); len(failures) > 0 {
+		t.Error(sizebudget.FailureReport(promptBudgetSuite, failures, promptBudgetDetail(catalog)))
+	}
+	for _, stack := range stacks {
+		if stack.Tokens > stack.Ceiling {
+			t.Errorf("%s exceeds the static ceiling %d tokens (window %d − reserved %d) for %s.\n"+
+				"Trim the largest contributors, or lower reserved_session_tokens and accept less room for transcript, tool tail, ledger, and output.",
+				stack, stack.Ceiling, budgets.AbsoluteMaximums.ModelContextWindowTokens, budgets.AbsoluteMaximums.ReservedSessionTokens, budgets.AbsoluteMaximums.Model)
+		}
 	}
 }
 
-func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) promptBudgetMeasurements {
+func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) sizebudget.Measurements {
 	t.Helper()
 	if reg == nil {
 		t.Fatal("PromptBudgetRegistry required")
@@ -58,7 +80,7 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 	engine := contractPersonaEngine(t)
 	vars := mergeCoordinatorTemplateVars(t)
 
-	out := promptBudgetMeasurements{
+	out := sizebudget.Measurements{
 		"worker_personas":        {},
 		"coordinator_tripartite": {},
 		"coordinator_injects":    {},
@@ -186,192 +208,53 @@ func promptBudgetWorkflowSnapshotFixture() inject.WorkflowRuntimeSnapshot {
 	}
 }
 
-func writePromptBudgets(t *testing.T, lycaonRoot string, measured promptBudgetMeasurements) {
-	t.Helper()
-	path := filepath.Join(lycaonRoot, "config", "packs", "painted-wolf", "platform", "host", "prompt-budgets.yaml")
-	// Manual limits carry through the refresh; only measured caps are rewritten.
-	var cfg prompts.PromptBudgets
-	if existing, err := prompts.LoadPromptBudgets(); err == nil {
-		cfg = *existing
-	}
-	cfg.Version = 1
-	cfg.WorkerPersonas = sortedIntMap(measured["worker_personas"])
-	cfg.CoordinatorTripartite = sortedIntMap(measured["coordinator_tripartite"])
-	cfg.CoordinatorInjects = sortedIntMap(measured["coordinator_injects"])
-	cfg.AgentTemplates = sortedIntMap(measured["agent_templates"])
-	cfg.Kicks = sortedIntMap(measured["kicks"])
-	cfg.ToolSurfaces = sortedIntMap(measured["tool_surfaces"])
-	assertStaticPromptStackWithinModelWindow(t, &cfg)
-	raw, err := yaml.Marshal(&cfg)
-	contractcheck.FailErr(t, "marshal prompt budgets", err)
-	header := `# Rendered prompt caps measure UTF-8 bytes with fixture variables.
-# Model ceilings, attachment caps, and the perception window are manual.
-`
-	if err := os.WriteFile(path, append([]byte(header), raw...), 0o644); err != nil {
-		contractcheck.FailErr(t, "write prompt budgets", err)
-	}
+// staticPromptStack is the worst-case static prompt one turn kind carries.
+type staticPromptStack struct {
+	Name          string
+	Bytes, Tokens int
+	Ceiling       int
 }
 
-// TestPromptBudgetRefreshKeepsManualLimits holds every section the refresh
-// does not measure across a rewrite.
-func TestPromptBudgetRefreshKeepsManualLimits(t *testing.T) {
-	existing, err := prompts.LoadPromptBudgets()
-	contractcheck.FailErr(t, "LoadPromptBudgets", err)
-	measured := promptBudgetMeasurements{
-		"worker_personas":        existing.WorkerPersonas,
-		"coordinator_tripartite": existing.CoordinatorTripartite,
-		"coordinator_injects":    existing.CoordinatorInjects,
-		"agent_templates":        existing.AgentTemplates,
-		"kicks":                  existing.Kicks,
-		"tool_surfaces":          existing.ToolSurfaces,
-	}
-	root := t.TempDir()
-	host := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "host")
-	contractcheck.FailErr(t, "mkdir host", os.MkdirAll(host, 0o755))
-	writePromptBudgets(t, root, measured)
-	raw, err := os.ReadFile(filepath.Join(host, "prompt-budgets.yaml"))
-	contractcheck.FailErr(t, "read refreshed budgets", err)
-	var refreshed prompts.PromptBudgets
-	contractcheck.FailErr(t, "decode refreshed budgets", yaml.Unmarshal(raw, &refreshed))
-	if !reflect.DeepEqual(&refreshed, existing) {
-		t.Fatalf("refresh changed unmeasured limits:\nbefore %+v\nafter  %+v", existing, &refreshed)
-	}
+func (s staticPromptStack) String() string {
+	headroom := 100 * float64(s.Ceiling-s.Tokens) / float64(s.Ceiling)
+	return fmt.Sprintf("%s: ≈%d of %d static tokens (%.1f%% headroom)", s.Name, s.Tokens, s.Ceiling, headroom)
 }
 
-// TestStaticPromptStackWithinModelWindow bounds the full static prompt stack.
-func TestStaticPromptStackWithinModelWindow(t *testing.T) {
-	t.Parallel()
-	budgets, err := prompts.LoadPromptBudgets()
-	contractcheck.FailErr(t, "LoadPromptBudgets", err)
-	if os.Getenv("UPDATE_PROMPT_BUDGETS") == "1" {
-		// The refresh writes after compilation; validate the new artifact rather
-		// than the previous caps embedded in this test binary.
-		path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "host", "prompt-budgets.yaml")
-		raw, err := os.ReadFile(path)
-		contractcheck.FailErr(t, "read refreshed prompt budgets", err)
-		budgets = &prompts.PromptBudgets{}
-		contractcheck.FailErr(t, "decode refreshed prompt budgets", yaml.Unmarshal(raw, budgets))
-	}
-	assertStaticPromptStackWithinModelWindow(t, budgets)
-}
-
-func assertStaticPromptStackWithinModelWindow(t *testing.T, budgets *prompts.PromptBudgets) {
-	t.Helper()
-	am := budgets.AbsoluteMaximums
+// staticPromptStacks sizes the largest coordinator and worker turns from the
+// measured prompts, so the model window bounds what actually ships.
+func staticPromptStacks(am *prompts.AbsoluteMaximums, measured sizebudget.Measurements) ([]staticPromptStack, error) {
 	if am == nil {
-		t.Fatal("prompt-budgets.yaml: absolute_maximums missing")
+		return nil, fmt.Errorf("prompt-budgets.yaml: absolute_maximums missing")
 	}
-	ceilingTokens := am.StaticStackCeilingTokens()
-	if ceilingTokens <= 0 {
-		t.Fatalf("static stack ceiling must be positive (window=%d reserved=%d)", am.ModelContextWindowTokens, am.ReservedSessionTokens)
+	ceiling := am.StaticStackCeilingTokens()
+	if ceiling <= 0 {
+		return nil, fmt.Errorf("static stack ceiling must be positive (window=%d reserved=%d)", am.ModelContextWindowTokens, am.ReservedSessionTokens)
 	}
-
-	// Every artifact contributes its byte cap to the worst-case stack.
-	coordBytes := promptBudgetMaxCap(budgets.CoordinatorTripartite) +
-		budgets.ToolSurfaces["coordinator"] +
-		promptBudgetSumCaps(budgets.CoordinatorInjects)
-	workerBytes := promptBudgetMaxCap(budgets.WorkerPersonas) + promptBudgetMaxWorkerSurface(budgets.ToolSurfaces)
-
-	stacks := []struct {
-		name  string
-		bytes int
-	}{
-		{"coordinator turn (max tripartite + coordinator tools + all injects)", coordBytes},
-		{"worker turn (max persona + max worker tool surface)", workerBytes},
-	}
-	for _, s := range stacks {
-		tokens := promptBudgetBytesToTokens(s.bytes)
-		if tokens > ceilingTokens {
-			t.Fatalf("%s: worst-case static stack ≈%d tokens (%d bytes) exceeds per-turn static ceiling %d tokens "+
-				"(window %d − reserved %d) for %s.\n"+
-				"Trim scaffolding (see prompt-budgets byte caps) or, if intentional, lower reserved_session_tokens — "+
-				"but that leaves less room for transcript, tool tail, ledger, and output+reasoning.",
-				s.name, tokens, s.bytes, ceilingTokens, am.ModelContextWindowTokens, am.ReservedSessionTokens, am.Model)
+	surfaces := measured["tool_surfaces"]
+	workerSurface := 0
+	for id, size := range surfaces {
+		if id != "coordinator" {
+			workerSurface = max(workerSurface, size)
 		}
 	}
+	injects := 0
+	for _, size := range measured["coordinator_injects"] {
+		injects += size
+	}
+	stacks := []staticPromptStack{
+		{Name: "coordinator turn (largest tripartite + coordinator tools + all injects)", Bytes: largest(measured["coordinator_tripartite"]) + surfaces["coordinator"] + injects},
+		{Name: "worker turn (largest persona + largest worker tool surface)", Bytes: largest(measured["worker_personas"]) + workerSurface},
+	}
+	for i := range stacks {
+		stacks[i].Tokens, stacks[i].Ceiling = (stacks[i].Bytes+3)/4, ceiling
+	}
+	return stacks, nil
 }
 
-// TestCompactionBudgetWithinModelWindow keeps live budgets within the true window.
-func TestCompactionBudgetWithinModelWindow(t *testing.T) {
-	t.Parallel()
-
-	budgets, err := prompts.LoadPromptBudgets()
-	contractcheck.FailErr(t, "LoadPromptBudgets", err)
-	am := budgets.AbsoluteMaximums
-	if am == nil || am.ModelContextWindowTokens <= 0 {
-		t.Fatal("prompt-budgets.yaml: absolute_maximums.model_context_window_tokens required as the true-window SSOT")
-	}
-	if strings.TrimSpace(am.Model) == "" {
-		t.Fatal("prompt-budgets.yaml: absolute_maximums.model required")
-	}
-
-	windows, err := modelinfo.LoadModelContextWindows()
-	contractcheck.FailErr(t, "LoadModelContextWindows", err)
-	cfg := compaction.DefaultCompactionConfig()
-
-	policy := llm.ModelPolicy{Coordinator: llm.ModelRef{Model: am.Model}}
-	trueWindow, source := llm.ResolveTrueWindow(policy, nil, windows, cfg)
-	if trueWindow != am.ModelContextWindowTokens {
-		t.Errorf("absolute_maximums.model_context_window_tokens (%d) != ResolveTrueWindow(%q)=%d (source=%s)",
-			am.ModelContextWindowTokens, am.Model, trueWindow, source)
-	}
-
-	live, _, err := llm.ApplyLiveBudget(cfg, policy, nil, windows)
-	contractcheck.FailErr(t, "ApplyLiveBudget", err)
-	if live.ModelContextWindow > trueWindow {
-		t.Errorf("live_budget (%d) exceeds true_window (%d)", live.ModelContextWindow, trueWindow)
-	}
-	if live.HardCeilingTokens > trueWindow {
-		t.Errorf("compaction hard ceiling (%d) exceeds true_window (%d)", live.HardCeilingTokens, trueWindow)
-	}
-}
-
-func promptBudgetBytesToTokens(b int) int { return (b + 3) / 4 }
-
-func promptBudgetMaxCap(m map[string]int) int {
-	max := 0
-	for _, v := range m {
-		if v > max {
-			max = v
-		}
-	}
-	return max
-}
-
-func promptBudgetSumCaps(m map[string]int) int {
-	sum := 0
-	for _, v := range m {
-		sum += v
-	}
-	return sum
-}
-
-// promptBudgetMaxWorkerSurface returns the largest worker tool surface.
-func promptBudgetMaxWorkerSurface(surfaces map[string]int) int {
-	max := 0
-	for id, v := range surfaces {
-		if id == "coordinator" {
-			continue
-		}
-		if v > max {
-			max = v
-		}
-	}
-	return max
-}
-
-func sortedIntMap(in map[string]int) map[string]int {
-	if len(in) == 0 {
-		return map[string]int{}
-	}
-	keys := make([]string, 0, len(in))
-	for k := range in {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make(map[string]int, len(in))
-	for _, k := range keys {
-		out[k] = in[k]
+func largest(sizes map[string]int) int {
+	out := 0
+	for _, size := range sizes {
+		out = max(out, size)
 	}
 	return out
 }

@@ -262,6 +262,16 @@ tasks:
         --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
         --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} --enforce {{.CLI_ARGS}}
 
+  budgets:
+    desc: 'Prompt and code size budgets, reported against the change; UPDATE_MAINTAINABILITY_BUDGETS=1 or UPDATE_PROMPT_BUDGETS=1 tightens grandfathered caps'
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/budgets.py
+
+  coverage:changes:
+    desc: Go statements the change adds or modifies must be tested (floors in scripts/coverage-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
+
   check:coverage:
     desc: Minimum statement coverage on internal/* (default 62%% floor)
     sources:
@@ -621,6 +631,14 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash -c 'source ../scripts/document-core-env.sh && bun run test:coverage'
+
+  den:coverage:changes:
+    desc: Frontend statements the change adds or modifies must be tested (floors in scripts/coverage-policy.json)
+    preconditions:
+      - sh: command -v bun
+        msg: bun required — install from https://bun.sh
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/coverage_changes.py den
 
   den:coverage-check:
     desc: Fail if lycaon-den coverage is below DEN_COVERAGE_MIN_* floors

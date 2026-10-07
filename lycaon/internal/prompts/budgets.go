@@ -6,16 +6,11 @@ import (
 	"github.com/lycaon/lycaon/config"
 )
 
-// PromptBudgets caps rendered prompt artifacts in UTF-8 bytes.
+// PromptBudgets bounds rendered prompts, attachments, and perception.
 type PromptBudgets struct {
-	Version               int            `yaml:"version"`
-	WorkerPersonas        map[string]int `yaml:"worker_personas"`
-	CoordinatorTripartite map[string]int `yaml:"coordinator_tripartite"`
-	CoordinatorInjects    map[string]int `yaml:"coordinator_injects"`
-	AgentTemplates        map[string]int `yaml:"agent_templates"`
-	Kicks                 map[string]int `yaml:"kicks"`
-	// ToolSurfaces caps initial wire-facing tool bytes by profile.
-	ToolSurfaces map[string]int `yaml:"tool_surfaces"`
+	Version int `yaml:"version"`
+	// Sizes holds rendered prompt artifacts to their category limits.
+	Sizes PromptSizes `yaml:"sizes"`
 	// AbsoluteMaximums bounds static prompts against the model window.
 	AbsoluteMaximums  *AbsoluteMaximums  `yaml:"absolute_maximums,omitempty"`
 	PromptAttachments *PromptAttachments `yaml:"prompt_attachments,omitempty"`
@@ -101,6 +96,40 @@ type AttachmentVideo struct {
 	MaxBodyBytes int `yaml:"max_body_bytes"`
 }
 
+// PromptSizes limits rendered prompt artifacts in UTF-8 bytes by category:
+// worker_personas, coordinator_tripartite, coordinator_injects,
+// agent_templates, kicks, and tool_surfaces.
+type PromptSizes struct {
+	Limits map[string]SizeLimit `yaml:"limits"`
+	// Grandfathered caps record artifacts that predate their limit; they only shrink.
+	Grandfathered map[string]map[string]int `yaml:"grandfathered"`
+	// Exceptions admit artifacts above their limit for a stated reason.
+	Exceptions map[string]map[string]SizeException `yaml:"exceptions"`
+}
+
+// SizeLimit is a category's warning line and hard limit.
+type SizeLimit struct {
+	Warn  int `yaml:"warn"`
+	Limit int `yaml:"limit"`
+}
+
+// SizeException admits one artifact above its category limit.
+type SizeException struct {
+	Cap    int    `yaml:"cap"`
+	Reason string `yaml:"reason"`
+}
+
+// Cap returns the most one artifact of a category may measure.
+func (s PromptSizes) Cap(category, id string) int {
+	if exception, ok := s.Exceptions[category][id]; ok {
+		return exception.Cap
+	}
+	if grandfathered, ok := s.Grandfathered[category][id]; ok {
+		return grandfathered
+	}
+	return s.Limits[category].Limit
+}
+
 // AbsoluteMaximums records model-window token ceilings.
 type AbsoluteMaximums struct {
 	Model string `yaml:"model,omitempty"`
@@ -124,12 +153,19 @@ func LoadPromptBudgets() (*PromptBudgets, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read prompt budgets: %w", err)
 	}
+	return decodePromptBudgets(raw)
+}
+
+func decodePromptBudgets(raw []byte) (*PromptBudgets, error) {
 	var cfg PromptBudgets
 	if err := config.DecodeYAML(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("parse prompt budgets: %w", err)
 	}
 	if cfg.Version <= 0 {
 		return nil, fmt.Errorf("prompt budgets: version must be positive")
+	}
+	if limit := cfg.Sizes.Limits["worker_personas"]; limit.Limit <= 0 {
+		return nil, fmt.Errorf("prompt budgets: sizes.limits.worker_personas.limit must be positive")
 	}
 	if am := cfg.AbsoluteMaximums; am != nil {
 		if am.ModelContextWindowTokens <= 0 {

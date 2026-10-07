@@ -11,61 +11,13 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// promptBudgetCategory describes one table in config/packs/painted-wolf/platform/host/prompt-budgets.yaml.
-type promptBudgetCategory struct {
-	Title       string
-	Description string
-	CapPath     string // yaml key under version:
-	RefreshCmd  string
-}
-
-const promptBudgetRefreshCmd = "UPDATE_PROMPT_BUDGETS=1 ./task test:digest -- ./test/contract/... -run TestRenderedPromptsWithinBudget"
-
-var promptBudgetCategories = map[string]promptBudgetCategory{
-	"worker_personas": {
-		Title:       "worker_personas",
-		Description: "Rendered worker persona stack (archetype + delta + playbooks + host WorkerPromptContext) per agent id in _persona-contract.yaml.",
-		CapPath:     "worker_personas.<agent_id>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-	"coordinator_tripartite": {
-		Title:       "coordinator_tripartite",
-		Description: "Full tripartite coordinator system prompt: coordinator-core + mode partial + posture surface template, rendered for ContextDietMatrix fixtures (worst-case compile size per turn kind).",
-		CapPath:     "coordinator_tripartite.<fixture_name>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-	"coordinator_injects": {
-		Title:       "coordinator_injects",
-		Description: "Ephemeral inject blocks appended per turn — measured via PromptBudgetInjectMatrix fixtures.",
-		CapPath:     "coordinator_injects.<inject_id>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-	"agent_templates": {
-		Title:       "agent_templates",
-		Description: "Non-worker agent system prompt templates from config/packs/painted-wolf/platform/agents/*.yaml (e.g. coordinator core template before tripartite assembly).",
-		CapPath:     "agent_templates.<profile_id>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-	"kicks": {
-		Title:       "kicks",
-		Description: "Host kick nudge templates under config/packs/painted-wolf/platform/guidance/*.md (discovered from disk; includes parsed partials).",
-		CapPath:     "kicks.<kick_id>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-	"tool_surfaces": {
-		Title:       "tool_surfaces",
-		Description: "Wire-facing LLM tool definition bytes per tool profile (deferred tools excluded; coordinator metas trimmed). Caps the upfront schema cost a profile puts on every request.",
-		CapPath:     "tool_surfaces.<profile_id>",
-		RefreshCmd:  promptBudgetRefreshCmd,
-	},
-}
-
-// promptBudgetEntry documents one capped artifact for failure digests.
+// promptBudgetEntry documents one measured prompt for failure digests and
+// names the sources a change touches when it grows the prompt.
 type promptBudgetEntry struct {
 	Measures  string
 	Fixture   string
 	TrimPaths []string
-	BumpNote  string
+	Advice    string
 }
 
 // buildPromptBudgetCatalog derives per-id documentation from the same registry as measurement.
@@ -108,7 +60,7 @@ func injectBudgetEntry(lycaonRoot string, spec PromptBudgetInjectSpec) promptBud
 		Measures:  fmt.Sprintf("Coordinator inject %q (%s).", spec.ID, spec.Template),
 		Fixture:   spec.Fixture,
 		TrimPaths: promptTemplateTrimPaths(lycaonRoot, spec.Template, spec.ExtraTrim...),
-		BumpNote:  spec.BumpNote,
+		Advice:    spec.Advice,
 	}
 }
 
@@ -138,7 +90,7 @@ func workerPersonaBudgetEntry(lycaonRoot, id, templateRef string, def prompts.Ag
 		Measures:  "Rendered persona for worker agent " + id + " (_persona-contract.yaml).",
 		Fixture:   "RenderPersona(" + id + ")",
 		TrimPaths: trim,
-		BumpNote:  "Persona/playbook growth — keep worker prompts focused; avoid duplicating coordinator policy in worker personas.",
+		Advice:    "Keep worker prompts focused; do not repeat coordinator policy in personas or playbooks.",
 	}
 }
 
@@ -191,7 +143,7 @@ func tripartiteEntryForRow(row ContextDietMatrixRow) promptBudgetEntry {
 
 	trim := []string{
 		catalogfixture.StockAgentPromptTrimRel("coordinator-core.md"),
-		catalogfixture.StockAgentPromptTrimRel("coordinator-mode-"+modeRefToPartial(row.ModeRefs)+".md"),
+		catalogfixture.StockAgentPromptTrimRel("coordinator-mode-" + modeRefToPartial(row.ModeRefs) + ".md"),
 		filepath.ToSlash(filepath.Join("lycaon", "config", "packs", "painted-wolf", "platform", "shared", "partials", "coordinator-worker-chain-baseline.md")),
 	}
 	if row.SurfaceID == "implement_overlay_promote" {
@@ -200,7 +152,7 @@ func tripartiteEntryForRow(row ContextDietMatrixRow) promptBudgetEntry {
 	if row.SurfaceID == "plan_stub" || row.SurfaceID == "plan_research" {
 		trim = []string{
 			catalogfixture.StockAgentPromptTrimRel("coordinator-core.md"),
-			catalogfixture.StockAgentPromptTrimRel("coordinator-mode-"+modeRefToPartial(row.ModeRefs)+".md"),
+			catalogfixture.StockAgentPromptTrimRel("coordinator-mode-" + modeRefToPartial(row.ModeRefs) + ".md"),
 		}
 	}
 
@@ -208,7 +160,7 @@ func tripartiteEntryForRow(row ContextDietMatrixRow) promptBudgetEntry {
 		Measures:  "Tripartite compile for fixture " + row.Name + " (ContextDietMatrix in coordinator_tripartite_fixtures.go).",
 		Fixture:   fixture,
 		TrimPaths: trim,
-		BumpNote:  "Shared partials (worker-chain-baseline, coordinator-core) affect many fixtures — prefer trim; bump only when policy text is intentionally larger.",
+		Advice:    "Shared partials (worker-chain-baseline, coordinator-core) reach many fixtures; shorten them before mode-specific copy.",
 	}
 }
 

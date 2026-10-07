@@ -272,13 +272,13 @@ class PlanningTests(unittest.TestCase):
         self.assertIsNone(planning.request(["den:test"], {"LYCAON_VITEST_PERF": "1"}))
         self.assertIsNotNone(planning.request([], {}))
 
-    def test_maintainability_budget_refresh_uses_exclusive_admission(self):
-        args = ["test:contract", "--", "./test/contract/maintainability", "-run", "^TestMaintainabilityWithinBudget$"]
+    def test_budget_tightening_uses_exclusive_admission(self):
+        args = ["budgets"]
         self.assertIsNotNone(planning.request(args, {}))
-        self.assertIsNone(planning.request(args, {"UPDATE_MAINTAINABILITY_BUDGETS": "1"}))
-        self.assertIsNotNone(planning.request(args, {"UPDATE_MAINTAINABILITY_BUDGETS": "0"}))
-        with self.assertRaisesRegex(ValueError, "unsupported flag"):
-            planning.request([*args, "-bogus"], {"UPDATE_MAINTAINABILITY_BUDGETS": "1"})
+        for variable in ("UPDATE_MAINTAINABILITY_BUDGETS", "UPDATE_PROMPT_BUDGETS"):
+            with self.subTest(variable=variable):
+                self.assertIsNone(planning.request(args, {variable: "1"}))
+                self.assertIsNotNone(planning.request(args, {variable: "0"}))
 
     def test_unknown_flags_cannot_hide_behind_exclusive_inputs(self):
         for args in (["test:digest", "--", "./internal/a", "-bogus"],

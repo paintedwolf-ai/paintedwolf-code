@@ -6,7 +6,7 @@ type PromptBudgetInjectSpec struct {
 	Template  string // under config/prompts/, e.g. inject/implement-spawn.md
 	Fixture   string
 	ExtraTrim []string
-	BumpNote  string
+	Advice    string
 }
 
 // PromptBudgetInjectMatrix is the SSOT for coordinator inject budget fixtures.
@@ -15,25 +15,25 @@ var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 		ID:       "tool_procedures",
 		Template: "guidance/tool-procedures.md",
 		Fixture:  "RenderToolProceduresBlock with command, verify, terminal, HTTP, and browser tools offered",
-		BumpNote: "Per-call operating guidance — measure separately from the initial prompt.",
+		Advice:   "Per-call operating guidance — measure separately from the initial prompt.",
 	},
 	{
 		ID:       "command_jobs",
 		Template: "inject/command-jobs.md",
 		Fixture:  "RenderCommandJobsBlock with awaited and background jobs",
-		BumpNote: "Command ledger growth — keep lifecycle state concise and host-authoritative.",
+		Advice:   "Command ledger growth — keep lifecycle state concise and host-authoritative.",
 	},
 	{
 		ID:       "worker_command_jobs",
 		Template: "inject/worker-command-jobs.md",
 		Fixture:  "RenderCommandJobsBlock worker surface with awaited and background jobs",
-		BumpNote: "Worker command ledger growth — keep lifecycle state concise and host-authoritative.",
+		Advice:   "Worker command ledger growth — keep lifecycle state concise and host-authoritative.",
 	},
 	{
 		ID:       "source_changes",
 		Template: "guidance/source-changes.md",
 		Fixture:  "RenderSourceChangesBlock at the working-set row cap with elsewhere counts",
-		BumpNote: "Change-brief growth — keep rows single-line and the itemized set capped.",
+		Advice:   "Change-brief growth — keep rows single-line and the itemized set capped.",
 	},
 	{
 		ID:       "implement_spawn",
@@ -42,7 +42,7 @@ var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 		ExtraTrim: []string{
 			"lycaon/internal/coordinator/inject/implement_spawn_inject.go",
 		},
-		BumpNote: "Roster or spawn policy growth — confirm allowlist/cap copy is necessary before bumping.",
+		Advice: "Roster or spawn policy growth — confirm allowlist/cap copy is necessary before bumping.",
 	},
 	{
 		ID:       "worker_task_assignment",

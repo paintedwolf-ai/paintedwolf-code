@@ -1,3 +1,5 @@
+//go:build budgets
+
 package contract
 
 import (
