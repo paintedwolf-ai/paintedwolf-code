@@ -5,8 +5,12 @@ package exec
 import (
 	"errors"
 	"os/exec"
+	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // DefaultBelowNormalNice is the nice value applied for ProcessPriorityBelowNormal.
@@ -18,6 +22,13 @@ type unixGuard struct {
 	pgid atomic.Int64
 	// untrack releases the group from the reaper that kills it if the engine dies.
 	untrack func()
+
+	mu sync.Mutex
+	// terminated marks a tree that was asked to exit; release then sweeps
+	// whatever outlived the leader.
+	terminated bool
+	// killTimer is the SIGKILL fallback armed by terminate.
+	killTimer *time.Timer
 }
 
 func newRunGuard(priority ProcessPriority) (runGuard, error) {
@@ -33,9 +44,9 @@ func (g *unixGuard) configure(cmd *exec.Cmd) {
 	// A session leader cannot also Setpgid.
 	cmd.SysProcAttr.Setsid = true
 	cmd.SysProcAttr.Setpgid = false
-	// Cancellation terminates the entire process group.
+	// Cancellation terminates the entire session the leader started.
 	cmd.Cancel = func() error {
-		g.kill(cmd)
+		g.terminate(cmd)
 		return nil
 	}
 }
@@ -71,18 +82,69 @@ func (g *unixGuard) recordProcessGroup(pid int) {
 	g.untrack = TrackProcessGroup(pgid)
 }
 
-func (g *unixGuard) kill(cmd *exec.Cmd) {
-	if pgid := g.pgid.Load(); pgid > 0 {
-		_ = syscall.Kill(-int(pgid), syscall.SIGKILL)
+// terminate sends SIGTERM to the tree and arms a SIGKILL for whatever is still
+// running after TerminateGrace. A second call is a no-op.
+func (g *unixGuard) terminate(cmd *exec.Cmd) {
+	g.mu.Lock()
+	if g.terminated {
+		g.mu.Unlock()
 		return
 	}
-	if cmd == nil || cmd.Process == nil {
+	g.terminated = true
+	g.mu.Unlock()
+	if !g.signal(cmd, syscall.SIGTERM) {
 		return
 	}
-	_ = cmd.Process.Kill()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.killTimer = time.AfterFunc(TerminateGrace, func() { g.kill(cmd) })
 }
 
+func (g *unixGuard) kill(cmd *exec.Cmd) {
+	g.mu.Lock()
+	g.terminated = true
+	if g.killTimer != nil {
+		g.killTimer.Stop()
+		g.killTimer = nil
+	}
+	g.mu.Unlock()
+	g.signal(cmd, syscall.SIGKILL)
+}
+
+// signal delivers sig to the leader's process group and then to every process
+// still in the session the leader started: a shell with job control moves each
+// job into its own group, and only the session ties those back to the command.
+// Without a recorded group it falls back to the leader alone.
+func (g *unixGuard) signal(cmd *exec.Cmd, sig syscall.Signal) bool {
+	pgid := int(g.pgid.Load())
+	if pgid <= 0 {
+		if cmd == nil || cmd.Process == nil {
+			return false
+		}
+		_ = cmd.Process.Signal(sig)
+		return true
+	}
+	_ = syscall.Kill(-pgid, sig)
+	for _, pid := range osprocess.SessionMembers(pgid) {
+		_ = syscall.Kill(pid, sig)
+	}
+	return true
+}
+
+// release runs after the leader is reaped. A terminated tree gets one final
+// sweep so nothing that outlived the leader survives the command.
 func (g *unixGuard) release() {
+	g.mu.Lock()
+	terminated := g.terminated
+	timer := g.killTimer
+	g.killTimer = nil
+	g.mu.Unlock()
+	if timer != nil {
+		timer.Stop()
+	}
+	if terminated {
+		g.signal(nil, syscall.SIGKILL)
+	}
 	if g.untrack != nil {
 		g.untrack()
 	}
