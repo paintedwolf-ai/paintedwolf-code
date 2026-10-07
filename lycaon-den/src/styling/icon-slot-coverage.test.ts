@@ -8,6 +8,7 @@ import {
   ICON_VIEWBOX,
 } from "../contributions/theme-vocabulary.generated.ts";
 import { loadTypeScriptCorpus } from "../test/source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
 const DEN_SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HOST_GLYPHS_FILE = join(DEN_SRC, "contributions", "host-glyphs.tsx");
@@ -136,7 +137,7 @@ function glyphDrawings(source: string): Map<string, string> {
   return out;
 }
 
-describe("icon slot coverage", () => {
+describe("icon slot coverage", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("leaves no glyph outside the slot system", () => {
     const EXEMPT = new Set([
       // Slot renderer.

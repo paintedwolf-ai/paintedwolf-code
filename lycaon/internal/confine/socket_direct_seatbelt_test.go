@@ -408,11 +408,23 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 		t.Fatalf("declared strings must reach the confinement: got %v want %v", c.DirectIPPermits, want)
 	}
 
-	// The narrowed profile retains name resolution.
-	ntp := []string{"/usr/bin/python3", "-c",
-		"import socket,struct;a=socket.gethostbyname('time.nist.gov');" +
-			"s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(6);s.connect((a,123));" +
-			"s.send(b'\\x1b'+47*b'\\0');d=s.recv(48);print(struct.unpack('!12I',d)[10]-2208988800)"}
+	// The narrowed profile retains name resolution. Public NTP servers drop
+	// requests under load, so any one of several may answer; a denial fails at once.
+	ntp := []string{"/usr/bin/python3", "-c", `import socket,struct,sys
+errors = []
+for host in ("time.apple.com", "time.google.com", "pool.ntp.org", "time.nist.gov"):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(4)
+        s.connect((socket.gethostbyname(host), 123))
+        s.send(b"\x1b" + 47 * b"\0")
+        print(struct.unpack("!12I", s.recv(48))[10] - 2208988800)
+        sys.exit(0)
+    except PermissionError:
+        raise
+    except OSError as error:
+        errors.append(f"{host}: {error}")
+sys.exit("no NTP server answered: " + "; ".join(errors))`}
 	code, out, stderr := confinedStdout(t, self, *c, ntp[0], ntp[1:]...)
 	if code != 0 {
 		t.Fatalf("narrowed direct IP must complete an NTP round trip by name: exit=%d out=%s stderr=%s", code, out, stderr)

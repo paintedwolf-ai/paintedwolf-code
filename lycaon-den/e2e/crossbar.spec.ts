@@ -14,6 +14,8 @@ async function waitShell(page: Page) {
 async function openCrossbar(page: Page) {
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByTestId("crossbar")).toBeVisible({ timeout: 10_000 });
+  // Mode chords are handled by the panel's keydown; focus lands after open.
+  await expect(page.getByTestId("crossbar-input")).toBeFocused();
 }
 
 /** Crossbar overlay and escalation into full search depth. */

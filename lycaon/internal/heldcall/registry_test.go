@@ -17,6 +17,8 @@ type recorder struct {
 	mu      sync.Mutex
 	events  []api.BackgroundProcessEvent
 	settled []string
+	// settledCh, when set, receives each handle after its exit event is published.
+	settledCh chan string
 }
 
 func (r *recorder) publish(_ context.Context, _, _ string, event api.BackgroundProcessEvent) {
@@ -29,6 +31,21 @@ func (r *recorder) onSettle(_, handle string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.settled = append(r.settled, handle)
+	if r.settledCh != nil {
+		r.settledCh <- handle
+	}
+}
+
+func awaitSettleCallback(t *testing.T, rec *recorder, handle string) {
+	t.Helper()
+	select {
+	case got := <-rec.settledCh:
+		if got != handle {
+			t.Fatalf("settled handle = %q, want %q", got, handle)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the held call did not settle")
+	}
 }
 
 func (r *recorder) snapshot() ([]api.BackgroundProcessEvent, []string) {
@@ -77,7 +94,7 @@ func TestCallInsideTheBudgetReturnsInlineAndLeavesNoHandle(t *testing.T) {
 }
 
 func TestCallPastTheBudgetIsHeldAndSettlesOnItsOwn(t *testing.T) {
-	rec := &recorder{}
+	rec := &recorder{settledCh: make(chan string, 1)}
 	registry := New(rec.publish, rec.onSettle)
 	release := make(chan struct{})
 	request := spec("find", "a", 20*time.Millisecond)
@@ -103,16 +120,9 @@ func TestCallPastTheBudgetIsHeldAndSettlesOnItsOwn(t *testing.T) {
 	}
 
 	close(release)
-	deadline := time.After(2 * time.Second)
-	for {
-		if known, running := registry.State("s", outcome.Handle); known && !running {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("the held call did not settle")
-		case <-time.After(5 * time.Millisecond):
-		}
+	awaitSettleCallback(t, rec, outcome.Handle)
+	if known, running := registry.State("s", outcome.Handle); !known || running {
+		t.Fatalf("settled state = known:%t running:%t", known, running)
 	}
 	status, err = registry.Status("s", outcome.Handle)
 	if err != nil {
@@ -131,6 +141,30 @@ func TestCallPastTheBudgetIsHeldAndSettlesOnItsOwn(t *testing.T) {
 	list := registry.List("s")
 	if len(list) != 1 || list[0].Running || list[0].ExitCode == nil {
 		t.Fatalf("list = %+v", list)
+	}
+}
+
+func TestCallSettlingDuringPromotionPublishesRunningBeforeExit(t *testing.T) {
+	rec := &recorder{settledCh: make(chan string, 1)}
+	release := make(chan struct{})
+	var registry *Registry
+	registry = New(func(ctx context.Context, projectID, sessionID string, event api.BackgroundProcessEvent) {
+		if event.Running {
+			close(release)
+			if status, err := registry.Await(ctx, sessionID, event.ProcessID, 5*time.Second); err != nil || status.Running {
+				t.Errorf("await during promotion = %+v, %v", status, err)
+			}
+		}
+		rec.publish(ctx, projectID, sessionID, event)
+	}, rec.onSettle)
+	outcome, err := registry.Run(t.Context(), spec("find", "a", 5*time.Millisecond), blocked(release))
+	if err != nil {
+		testutil.FailErr(t, "run", err)
+	}
+	awaitSettleCallback(t, rec, outcome.Handle)
+	events, _ := rec.snapshot()
+	if len(events) != 2 || !events[0].Running || events[1].Running {
+		t.Fatalf("events = %+v, want running then exit", events)
 	}
 }
 

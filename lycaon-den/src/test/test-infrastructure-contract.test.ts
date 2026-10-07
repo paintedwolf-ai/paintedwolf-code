@@ -5,6 +5,7 @@ import {
   loadSourceCorpus,
   loadTypeScriptCorpus,
 } from "./source-corpus.ts";
+import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "./vitest-timeouts.ts";
 
 const source = loadTypeScriptCorpus(denSourceRoot);
 const e2e = loadSourceCorpus(`${denRoot}/e2e`, { extensions: [".ts"] });
@@ -17,7 +18,7 @@ function violations(
   return files.filter((file) => pattern.test(file.text)).map((file) => file.rel);
 }
 
-describe("test infrastructure consolidation", () => {
+describe("test infrastructure consolidation", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
   it("routes partial API clients through the typed stub", () => {
     expect(
       violations(source.files, /as\s+unknown\s+as\s+[^;\n]*LycaonClient/),
