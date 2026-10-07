@@ -1492,7 +1492,7 @@ go_receiver_lines:
     lycaon/internal/sourceledger/sourceledger.RecoveryWriter: 55
     lycaon/internal/sourceledger/sourceledger.RestorableVersion: 6
     lycaon/internal/sourceledger/sourceledger.RewindBlockedError: 6
-    lycaon/internal/sourceledger/sourceledger.Store: 4614
+    lycaon/internal/sourceledger/sourceledger.Store: 4621
     lycaon/internal/sourceledger/sourceledger.attributionCursor: 23
     lycaon/internal/sourceledger/sourceledger.identityAuthors: 5
     lycaon/internal/sourceledger/sourceledger.lineTokens: 13
@@ -1764,18 +1764,18 @@ go_receiver_lines:
     lycaon/internal/webresearch/webresearch.Runtime: 56
     lycaon/internal/webresearch/webresearch.SecretDeniedError: 6
     lycaon/internal/webresearch/webresearch.SecretScreenFaultError: 12
-    lycaon/internal/webresearch/webresearch.WarmRunner: 202
-    lycaon/internal/webresearch/webresearch.Warmer: 392
+    lycaon/internal/webresearch/webresearch.WarmRunner: 203
+    lycaon/internal/webresearch/webresearch.Warmer: 394
     lycaon/internal/webresearch/webresearch.archiveFlexString: 21
     lycaon/internal/webresearch/webresearch.callbacksOnCloseBody: 9
     lycaon/internal/webresearch/webresearch.channelMerge: 57
-    lycaon/internal/webresearch/webresearch.directDiscoverer: 398
+    lycaon/internal/webresearch/webresearch.directDiscoverer: 401
     lycaon/internal/webresearch/webresearch.discoveryWait: 81
     lycaon/internal/webresearch/webresearch.errRuntime: 1
     lycaon/internal/webresearch/webresearch.frontier: 174
     lycaon/internal/webresearch/webresearch.gatedSearchProvider: 31
     lycaon/internal/webresearch/webresearch.healthWrappedProvider: 17
-    lycaon/internal/webresearch/webresearch.hostCrawler: 88
+    lycaon/internal/webresearch/webresearch.hostCrawler: 100
     lycaon/internal/webresearch/webresearch.ietfRFCProvider: 117
     lycaon/internal/webresearch/webresearch.memoryChannel: 10
     lycaon/internal/webresearch/webresearch.providerGate: 72
@@ -3677,7 +3677,7 @@ go_receiver_methods:
     lycaon/internal/webresearch/webresearch.frontier: 12
     lycaon/internal/webresearch/webresearch.gatedSearchProvider: 4
     lycaon/internal/webresearch/webresearch.healthWrappedProvider: 4
-    lycaon/internal/webresearch/webresearch.hostCrawler: 8
+    lycaon/internal/webresearch/webresearch.hostCrawler: 9
     lycaon/internal/webresearch/webresearch.ietfRFCProvider: 4
     lycaon/internal/webresearch/webresearch.memoryChannel: 2
     lycaon/internal/webresearch/webresearch.providerGate: 4
@@ -8593,7 +8593,7 @@ go_struct_fields:
     lycaon/internal/webresearch/webresearch.gateWaitCtxKey: 0
     lycaon/internal/webresearch/webresearch.gatedSearchProvider: 3
     lycaon/internal/webresearch/webresearch.healthWrappedProvider: 2
-    lycaon/internal/webresearch/webresearch.hostCrawler: 10
+    lycaon/internal/webresearch/webresearch.hostCrawler: 12
     lycaon/internal/webresearch/webresearch.hostFetchGate: 3
     lycaon/internal/webresearch/webresearch.hostGate: 8
     lycaon/internal/webresearch/webresearch.ietfRFCProvider: 0
@@ -10005,7 +10005,7 @@ source_files:
     lycaon-den/src/components/CriticalStopStage.tsx: 463
     lycaon-den/src/components/EngineStartupStage.tsx: 169
     lycaon-den/src/components/FileEditDiff.tsx: 69
-    lycaon-den/src/components/GitCheckout.tsx: 770
+    lycaon-den/src/components/GitCheckout.tsx: 773
     lycaon-den/src/components/GitStrip.tsx: 775
     lycaon-den/src/components/HostFolderDialog.tsx: 79
     lycaon-den/src/components/ListRowActions.tsx: 44
@@ -10034,7 +10034,7 @@ source_files:
     lycaon-den/src/components/browse/SelectionThumb.tsx: 168
     lycaon-den/src/components/chatview/ChatDestinationPicker.tsx: 256
     lycaon-den/src/components/chatview/ChatView.tsx: 1331
-    lycaon-den/src/components/chatview/Composer.tsx: 1256
+    lycaon-den/src/components/chatview/Composer.tsx: 1258
     lycaon-den/src/components/chatview/ComposerActivityIndicator.tsx: 152
     lycaon-den/src/components/chatview/ComposerChromeSlot.tsx: 209
     lycaon-den/src/components/chatview/ComposerChromeStack.tsx: 58
@@ -10045,7 +10045,7 @@ source_files:
     lycaon-den/src/components/chatview/CostSummaryPanel.tsx: 130
     lycaon-den/src/components/chatview/QueuePopover.tsx: 436
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.tsx: 96
-    lycaon-den/src/components/chatview/chat-git-binding.ts: 318
+    lycaon-den/src/components/chatview/chat-git-binding.ts: 321
     lycaon-den/src/components/chatview/chat-tabs.ts: 41
     lycaon-den/src/components/chatview/chat-workflow-state.ts: 211
     lycaon-den/src/components/chatview/composer-edit-menu.ts: 161
@@ -10402,7 +10402,7 @@ source_files:
     lycaon-den/src/components/source/inline-edit/inline-edit-scope.ts: 92
     lycaon-den/src/components/source/inline-edit/rename-card-model.ts: 43
     lycaon-den/src/components/source/inline-edit/run-editor-action.ts: 390
-    lycaon-den/src/components/source/reader/SourceReader.tsx: 381
+    lycaon-den/src/components/source/reader/SourceReader.tsx: 382
     lycaon-den/src/components/source/reader/source-line-anchors.ts: 47
     lycaon-den/src/components/source/reader/source-reader-change.ts: 26
     lycaon-den/src/components/source/reader/source-reader-document.ts: 118
@@ -14340,7 +14340,7 @@ source_files:
     lycaon/internal/sourceledger/publication_authorship.go: 58
     lycaon/internal/sourceledger/query_attribution.go: 80
     lycaon/internal/sourceledger/reconcile.go: 174
-    lycaon/internal/sourceledger/reconcile_snapshot.go: 271
+    lycaon/internal/sourceledger/reconcile_snapshot.go: 278
     lycaon/internal/sourceledger/recorded_text_authors.go: 63
     lycaon/internal/sourceledger/recorded_text_edits.go: 35
     lycaon/internal/sourceledger/recovery.go: 8
@@ -14939,7 +14939,7 @@ source_files:
     lycaon/internal/webresearch/direct_card.go: 15
     lycaon/internal/webresearch/direct_channels.go: 223
     lycaon/internal/webresearch/direct_discover.go: 93
-    lycaon/internal/webresearch/direct_frontier.go: 415
+    lycaon/internal/webresearch/direct_frontier.go: 429
     lycaon/internal/webresearch/direct_lead.go: 69
     lycaon/internal/webresearch/direct_memory.go: 91
     lycaon/internal/webresearch/direct_page_probe.go: 209
@@ -14947,7 +14947,7 @@ source_files:
     lycaon/internal/webresearch/direct_query.go: 44
     lycaon/internal/webresearch/direct_score.go: 334
     lycaon/internal/webresearch/direct_search.go: 66
-    lycaon/internal/webresearch/direct_search_cycle.go: 235
+    lycaon/internal/webresearch/direct_search_cycle.go: 238
     lycaon/internal/webresearch/direct_seed_budget.go: 80
     lycaon/internal/webresearch/direct_seed_decode.go: 162
     lycaon/internal/webresearch/direct_seed_picker.go: 165
@@ -15026,8 +15026,8 @@ source_files:
     lycaon/internal/webresearch/tools.go: 724
     lycaon/internal/webresearch/ttl_cache.go: 47
     lycaon/internal/webresearch/types.go: 206
-    lycaon/internal/webresearch/warm.go: 564
-    lycaon/internal/webresearch/warm_runner.go: 228
+    lycaon/internal/webresearch/warm.go: 566
+    lycaon/internal/webresearch/warm_runner.go: 229
     lycaon/internal/webresearch/wikidata.go: 86
     lycaon/internal/website/customization.go: 198
     lycaon/internal/website/providers.go: 220
@@ -15365,7 +15365,7 @@ source_files:
     scripts/bundle-smoke.sh: 245
     scripts/check-summary.sh: 125
     scripts/checkout-cache-dir.sh: 16
-    scripts/ci_verification.py: 230
+    scripts/ci_verification.py: 241
     scripts/codegen-den-types.sh: 84
     scripts/codegen-den-wire.sh: 97
     scripts/codegen-wire-enums.sh: 28
@@ -15587,7 +15587,7 @@ source_files:
     scripts/verification_batch.py: 369
     scripts/verification_cache.py: 181
     scripts/verification_cancel.py: 180
-    scripts/verification_execute.py: 586
+    scripts/verification_execute.py: 598
     scripts/verification_health.py: 145
     scripts/verification_history.py: 46
     scripts/verification_jobs.py: 135
@@ -15648,7 +15648,7 @@ test_directories:
     lycaon-den/src/components: 31
     lycaon-den/src/components/blueprint: 3
     lycaon-den/src/components/browse: 4
-    lycaon-den/src/components/chatview: 21
+    lycaon-den/src/components/chatview: 22
     lycaon-den/src/components/checkpoint: 15
     lycaon-den/src/components/citation: 6
     lycaon-den/src/components/first-time-tips: 1
@@ -16345,7 +16345,7 @@ test_files:
     lycaon-den/e2e/settings-layout-switch.spec.ts: 56
     lycaon-den/e2e/settings.spec.ts: 104
     lycaon-den/e2e/shortcut-help-overlay.spec.ts: 36
-    lycaon-den/e2e/sidebar-pins.spec.ts: 102
+    lycaon-den/e2e/sidebar-pins.spec.ts: 104
     lycaon-den/e2e/sidecar-cors.spec.ts: 115
     lycaon-den/e2e/skills-settings.spec.ts: 87
     lycaon-den/e2e/source-reader-scroll.spec.ts: 256
@@ -16641,7 +16641,7 @@ test_files:
     lycaon-den/src/components/CriticalStopStage.test.tsx: 594
     lycaon-den/src/components/EngineStartupStage.test.tsx: 159
     lycaon-den/src/components/FileEditDiff.test.tsx: 269
-    lycaon-den/src/components/GitStrip.test.tsx: 1200
+    lycaon-den/src/components/GitStrip.test.tsx: 1229
     lycaon-den/src/components/HostFolderDialog.test.tsx: 56
     lycaon-den/src/components/NoticeRail.test.tsx: 170
     lycaon-den/src/components/NotificationStack.test.tsx: 101
@@ -16662,7 +16662,7 @@ test_files:
     lycaon-den/src/components/browse/BrowseStagePanel.test.tsx: 116
     lycaon-den/src/components/chatview/ChatDestinationPicker.test.tsx: 125
     lycaon-den/src/components/chatview/Composer.attachments.test.tsx: 440
-    lycaon-den/src/components/chatview/Composer.focus.test.tsx: 186
+    lycaon-den/src/components/chatview/Composer.focus.test.tsx: 237
     lycaon-den/src/components/chatview/Composer.keyboard.test.tsx: 118
     lycaon-den/src/components/chatview/Composer.policy.test.tsx: 86
     lycaon-den/src/components/chatview/Composer.secrets.test.tsx: 143
@@ -16677,6 +16677,7 @@ test_files:
     lycaon-den/src/components/chatview/CostSummaryPanel.test.tsx: 170
     lycaon-den/src/components/chatview/QueuePopover.test.tsx: 320
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.test.tsx: 157
+    lycaon-den/src/components/chatview/chat-git-binding.test.ts: 140
     lycaon-den/src/components/chatview/chat-tabs.test.ts: 115
     lycaon-den/src/components/chatview/chat-workflow-state.test.ts: 182
     lycaon-den/src/components/chatview/composer-secret-mark.test.ts: 95
@@ -16942,7 +16943,7 @@ test_files:
     lycaon-den/src/components/source/inline-edit/run-editor-action.test.ts: 26
     lycaon-den/src/components/source/inline-edit/selection-action-errors.test.ts: 42
     lycaon-den/src/components/source/inline-edit/selection-action-prose.test.ts: 53
-    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 248
+    lycaon-den/src/components/source/reader/SourceReader.test.tsx: 272
     lycaon-den/src/components/source/reader/source-line-anchors.test.ts: 25
     lycaon-den/src/components/source/reader/source-reader-change.test.ts: 51
     lycaon-den/src/components/source/reader/source-reader-document.test.ts: 34
@@ -20650,7 +20651,7 @@ test_files:
     lycaon/internal/sourceledger/attribution_stress_test.go: 16
     lycaon/internal/sourceledger/attribution_test.go: 116
     lycaon/internal/sourceledger/branch_identity_test.go: 136
-    lycaon/internal/sourceledger/command_observation_test.go: 61
+    lycaon/internal/sourceledger/command_observation_test.go: 62
     lycaon/internal/sourceledger/commandwindow_test.go: 362
     lycaon/internal/sourceledger/comparison_authorship_test.go: 15
     lycaon/internal/sourceledger/deleted_paths_test.go: 53
@@ -20665,7 +20666,7 @@ test_files:
     lycaon/internal/sourceledger/operation_person_test.go: 29
     lycaon/internal/sourceledger/presentation_tracking_test.go: 282
     lycaon/internal/sourceledger/provenance_test.go: 209
-    lycaon/internal/sourceledger/reconcile_omitted_test.go: 50
+    lycaon/internal/sourceledger/reconcile_omitted_test.go: 76
     lycaon/internal/sourceledger/record_bench_test.go: 51
     lycaon/internal/sourceledger/recovery_manifest_test.go: 58
     lycaon/internal/sourceledger/recovery_stress_test.go: 88
@@ -22613,7 +22614,7 @@ test_files:
     scripts/verification_tests/test_bench_report_execution.py: 43
     scripts/verification_tests/test_cache_execution.py: 172
     scripts/verification_tests/test_cancel_execution.py: 241
-    scripts/verification_tests/test_ci_execution.py: 192
+    scripts/verification_tests/test_ci_execution.py: 216
     scripts/verification_tests/test_coverage_execution.py: 50
     scripts/verification_tests/test_digest_execution.py: 172
     scripts/verification_tests/test_environment_identity_execution.py: 71
@@ -22957,7 +22958,7 @@ ts_local_dependencies:
     lycaon-den/src/components/chatview/CostSummaryPanel.tsx: 7
     lycaon-den/src/components/chatview/QueuePopover.tsx: 6
     lycaon-den/src/components/chatview/SessionWorkflowLauncher.tsx: 5
-    lycaon-den/src/components/chatview/chat-git-binding.ts: 8
+    lycaon-den/src/components/chatview/chat-git-binding.ts: 9
     lycaon-den/src/components/chatview/chat-tabs.ts: 5
     lycaon-den/src/components/chatview/chat-workflow-state.ts: 7
     lycaon-den/src/components/chatview/composer-edit-menu.ts: 10
