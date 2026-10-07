@@ -107,7 +107,8 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 {
   "headline": "One-sentence conclusion.",
   "summary": "Scope, outcome, and first action.",
-  "findings": [
+{% if report_rating %}  "rating": {"level": "…", "why": "One line on what decided it."},
+{% endif %}  "findings": [
     {
       "id": "c1",
       "title": "The conclusion in one line.",
@@ -128,7 +129,8 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 ```
 
 - `findings` are your conclusions, most severe first; scanner rows are carried separately. Each has a one-line `title` stating the conclusion and a `disposition`, plus the claim's `id` when it carries one; its reasoning belongs in the Markdown answer, and a finding has no `statement`. `disposition` is `act` (needs work), `accept` (a risk kept on purpose), `held` (examined and sound), or `unresolved` (an unanswered question, without rating answers). {% if report_rating %}Leave out `severity`: the host states the level each rated finding's answers decide.{% else %}`severity` is critical, high, medium, low, or info; sound areas need none.{% endif %} A claim a review left open or overturned needs a finding with its `id`.
-{% if report_rating %}- `answers` rate each `act` or `accept` finding that no answered claim shares an id with:
+{% if report_rating %}- `rating` is your call on "{{ report_rating.question }}" from everything the review did, as one of {{ report_rating.levels }}. It may be worse than any single finding's level, never milder than the level a finding's answers decide.
+- `answers` rate each `act` or `accept` finding that no answered claim shares an id with:
 {{ report_rating.questions }}
 {% endif %}- `ask` is required when a finding is `act`, written for a reader who has never seen the work; `effort` is small, medium, or large.
 - When the run has bound scans, every scanner group is accounted for: a finding's `scan_group_ids` link the groups it assesses, and `set_asides`, each with a `reason`, account for the rest by `scanner` and `paths` or by `scan_group_ids`. Clean scans with zero findings need no set-asides.
