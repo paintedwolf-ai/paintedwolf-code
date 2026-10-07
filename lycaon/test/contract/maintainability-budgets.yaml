@@ -15415,7 +15415,7 @@ source_files:
     scripts/e2e-wait-health.sh: 14
     scripts/ensure-tauri-binaries.sh: 10
     scripts/eval-agent-live.sh: 182
-    scripts/fuzz-short.sh: 62
+    scripts/fuzz-short.sh: 65
     scripts/gitengine-ensure.sh: 15
     scripts/gitengine-fetch.sh: 309
     scripts/go-bench-report.py: 96
