@@ -18226,6 +18226,7 @@ test_files:
     lycaon/internal/confine/sandbox_refusal_internal_test.go: 211
     lycaon/internal/confine/sandbox_refusal_live_test.go: 109
     lycaon/internal/confine/seatbelt_attest_test.go: 10
+    lycaon/internal/confine/session_scratch_floor_test.go: 70
     lycaon/internal/confine/skill_read_roots_test.go: 50
     lycaon/internal/confine/socket_direct_seatbelt_test.go: 389
     lycaon/internal/confine/ssh_known_hosts_test.go: 33
