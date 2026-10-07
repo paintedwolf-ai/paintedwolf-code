@@ -415,7 +415,7 @@ required check, `check`:
 
 | Event | Tier | Work |
 |---|---|---|
-| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go, and frontend jobs on `ubuntu-latest`. |
+| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
 | Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): upgrade corpus, applied Seatbelt, browser confinement, and Git parity on `macos-15`, Playwright web E2E in three shards, and desktop E2E. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
 
@@ -457,7 +457,8 @@ repositories); a lane declares `macos-15` only when it tests macOS-specific
 behavior. A lane may declare `shards`: the race lane runs as three jobs, each
 verifying every third package of the planner's sorted selection
 (`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
-three hundred others. A lane may also cap `workers` below the CPU count when
+three hundred others. The pull request tier's Go lane runs as two, because its
+unit suite is the longest job a pull request waits for. A lane may also cap `workers` below the CPU count when
 its peak memory outgrows the runner. WebKit runs on macOS so its platform check
 cannot silently skip the suite. Desktop E2E shares one reusable workflow across
 the merge queue and the nightly run, with separate staging and test deadlines.
