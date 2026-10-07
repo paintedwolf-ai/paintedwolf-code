@@ -736,7 +736,7 @@ go_receiver_lines:
     lycaon/internal/llm/llm.Registry: 1041
     lycaon/internal/llm/llm.RegistrySummarizer: 601
     lycaon/internal/llm/llm.RoleExclusions: 14
-    lycaon/internal/llm/llm.RoutingClient: 161
+    lycaon/internal/llm/llm.RoutingClient: 156
     lycaon/internal/llm/llm.Service: 374
     lycaon/internal/llm/llm.StaticModelRouter: 112
     lycaon/internal/llm/llm.ThinkingOverrideError: 6
@@ -9617,7 +9617,7 @@ source_files:
     lycaon-den/src-tauri/src/app_state_views.rs: 58
     lycaon-den/src-tauri/src/atomic_file.rs: 47
     lycaon-den/src-tauri/src/backup_transfer.rs: 565
-    lycaon-den/src-tauri/src/backup_transfer_journal.rs: 334
+    lycaon-den/src-tauri/src/backup_transfer_journal.rs: 352
     lycaon-den/src-tauri/src/clipboard.rs: 35
     lycaon-den/src-tauri/src/config_dir.rs: 97
     lycaon-den/src-tauri/src/detect_editors.rs: 124
@@ -12894,7 +12894,7 @@ source_files:
     lycaon/internal/llm/response_retry_usage.go: 32
     lycaon/internal/llm/role_exclusions.go: 162
     lycaon/internal/llm/router.go: 140
-    lycaon/internal/llm/routing_capacity.go: 99
+    lycaon/internal/llm/routing_capacity.go: 94
     lycaon/internal/llm/routing_client.go: 156
     lycaon/internal/llm/service.go: 493
     lycaon/internal/llm/summarizer_cost.go: 315
