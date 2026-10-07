@@ -62,40 +62,19 @@ if [[ -z "$(printf '%s' "${CHANGELOG_NOTES}" | tr -d '[:space:]')" ]]; then
   fail=1
 fi
 
-TAURI_CONF="${ROOT}/lycaon-den/src-tauri/tauri.conf.json"
-PUBKEY="$(jq -r '.plugins.updater.pubkey // empty' "${TAURI_CONF}")"
-if ! python3 - "${PUBKEY}" <<'PY'
-import base64
+# Clients embed both keys of the embedded generation straight from the registry.
+if ! python3 - "${ROOT}/scripts" "${EMBEDDED_GENERATION}" <<'PYKEYS'
 import sys
-
-raw = sys.argv[1].strip()
-if not raw:
-    raise SystemExit("empty pubkey")
-try:
-    decoded = base64.b64decode(raw, validate=True).decode("utf-8")
-except Exception as exc:
-    raise SystemExit(f"pubkey is not base64: {exc}")
-lines = [line for line in decoded.splitlines() if line.strip()]
-if len(lines) != 2 or not lines[0].startswith("untrusted comment:"):
-    raise SystemExit("pubkey does not decode to a minisign public key file")
-try:
-    key = base64.b64decode(lines[1], validate=True)
-except Exception as exc:
-    raise SystemExit(f"pubkey key line is not base64: {exc}")
-if len(key) != 42 or key[:2] != b"Ed":
-    raise SystemExit("pubkey key material is not a minisign Ed25519 key")
-PY
+sys.path.insert(0, sys.argv[1])
+from update_keys import fingerprint, generation, load_registry
+row = generation(load_registry(), int(sys.argv[2]))
+if fingerprint(row["public_key"]) == fingerprint(row["feed_public_key"]):
+    raise SystemExit("the feed key must differ from the artifact key")
+PYKEYS
 then
-  echo "error: tauri.conf.json updater pubkey is not a valid minisign public key" >&2
+  echo "error: packaging/update-keys.json does not carry valid artifact and feed keys for generation ${EMBEDDED_GENERATION}" >&2
   fail=1
 fi
-ENDPOINT_COUNT="$(jq '.plugins.updater.endpoints | length' "${TAURI_CONF}")"
-ENDPOINT="$(jq -r '.plugins.updater.endpoints[0] // empty' "${TAURI_CONF}")"
-check_equal "updater endpoint count" "${ENDPOINT_COUNT}" "1"
-check_equal "updater endpoint" "${ENDPOINT}" "https://downloads.paintedwolf.dev/updates/stable/key-${EMBEDDED_GENERATION}/latest.json"
-EXPECTED_PUBKEY="$(jq -r --argjson generation "${EMBEDDED_GENERATION}" '.generations[] | select(.generation == $generation) | .public_key' "${ROOT}/packaging/update-keys.json")"
-check_equal "embedded updater public key" "${PUBKEY}" "${EXPECTED_PUBKEY}"
-check_equal "updater signed-version requirement" "$(jq -r '.plugins.updater.requireSignedVersion' "${TAURI_CONF}")" "true"
 
 if ! jq -e '
   .schema_version == 1

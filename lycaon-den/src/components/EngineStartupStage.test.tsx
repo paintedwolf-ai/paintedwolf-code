@@ -1,3 +1,4 @@
+import { updateFixture, stagedFixture } from "../settings/system/update-test-fixture.ts";
 import { readSourceText } from "../test/stylesheet-source.ts";
 
 import { join } from "node:path";
@@ -7,22 +8,20 @@ import {
   clearEngineStartupProgress,
   noteEngineStartupProgress,
 } from "../platform/connection/engine-startup.ts";
+import { nativeUpdateState as sharedUpdates } from "../settings/system/update-state.ts";
 import { EngineStartupStage } from "./EngineStartupStage.tsx";
 
 
 const checkNativeUpdate = vi.fn();
 const installNativeUpdate = vi.fn();
-const nativeUpdateState = {
-  revision: 0, phase: "idle", current_version: "1.0.0", channel: "stable",
-  install_source: "direct_download", checks_enabled: false,
-  rollout_eligibility: "not_applicable", downloaded_bytes: 0, total_bytes: null,
-};
+let updateStartupPending = false;
+const nativeUpdateState = () => updateFixture({ automatic_updates_enabled: false, startup_pending: updateStartupPending });
 vi.mock("../settings/system/update-service.ts", () => ({
   nativeUpdateService: {
-    getState: async () => nativeUpdateState,
+    getState: async () => nativeUpdateState(),
     subscribe: async () => () => {},
     check: () => checkNativeUpdate(),
-    install: (version: string) => installNativeUpdate(version),
+    download: (release: string) => installNativeUpdate(release),
   },
 }));
 
@@ -61,11 +60,25 @@ const base = {
 };
 
 describe("EngineStartupStage", () => {
+  it("shows the native update decision before any engine progress exists", async () => {
+    updateStartupPending = true;
+    const stop = sharedUpdates.mount();
+    try {
+      await waitFor(() => expect(sharedUpdates.state()?.startup_pending).toBe(true));
+      render(() => <EngineStartupStage />);
+      expect(screen.getByTestId("update-startup")).toBeTruthy();
+      expect(screen.queryByTestId("engine-startup")).toBeNull();
+    } finally {
+      await sharedUpdates.run(async () => updateFixture({ startup_pending: false }));
+      stop();
+    }
+  });
   beforeEach(() => {
+    updateStartupPending = false;
     checkNativeUpdate.mockReset();
     installNativeUpdate.mockReset();
-    checkNativeUpdate.mockResolvedValue({ ...nativeUpdateState, phase: "available", available_version: "1.1.0" });
-    installNativeUpdate.mockResolvedValue({ ...nativeUpdateState, phase: "restart_required", available_version: "1.1.0" });
+    checkNativeUpdate.mockResolvedValue(nativeUpdateState());
+    installNativeUpdate.mockResolvedValue(stagedFixture());
 
     cancelBackendStart.mockReset();
     cancelBackendStart.mockResolvedValue(true);
@@ -145,7 +158,7 @@ describe("EngineStartupStage", () => {
     fireEvent.click(screen.getByTestId("updates-check-now"));
     await waitFor(() => expect(screen.getByTestId("updates-install")).toBeTruthy());
     fireEvent.click(screen.getByTestId("updates-install"));
-    await waitFor(() => expect(installNativeUpdate).toHaveBeenCalledWith("1.1.0"));
+    await waitFor(() => expect(installNativeUpdate).toHaveBeenCalledWith("release-1"));
     expect(cancelBackendStart).not.toHaveBeenCalled();
   });
 

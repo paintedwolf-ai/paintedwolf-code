@@ -10,6 +10,7 @@ import { ConfirmDestructiveHost } from "./components/ConfirmDestructiveDialog.ts
 import { HostFolderDialog } from "./components/HostFolderDialog.tsx";
 import { TextEditContextMenuHost } from "./components/TextEditContextMenuHost.tsx";
 import {
+  connectAppBackend,
   disconnectAppBackend,
   getLycaonClient,
   onAttentionEvent,
@@ -42,6 +43,9 @@ import { mountNotificationService } from "./notifications/mount-notification-ser
 import { windowSubject } from "./platform/windows/window-subject.ts";
 import { ChatDestinationPicker } from "./components/chatview/ChatDestinationPicker.tsx";
 import { startComposerDocumentMirror } from "./chat/composer/composer-document-store.ts";
+import { isTauriRuntime } from "./platform/runtime.ts";
+import { nativeUpdateState } from "./settings/system/update-state.ts";
+import { listenHostEvent } from "./platform/windows/window-channel.ts";
 import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
@@ -111,14 +115,27 @@ function App() {
           waitingCount: () =>
             attentionStore.state.rows.filter((row) => row.class === "needs_you").length,
         });
-    const unmountUpdateNotice = subject
+    const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
       : mountUpdateNotice({ notices: noticeStore });
+    let stopped = false;
+    let stopUpdateRecovery = () => {};
+    if (!subject && isTauriRuntime()) {
+      void listenHostEvent("update-resume-engine", () => {
+        disconnectAppBackend();
+        void connectAppBackend(appStore).catch(() => undefined);
+      }).then((stop) => {
+        if (stopped) stop();
+        else stopUpdateRecovery = stop;
+      });
+    }
     onCleanup(() => {
+      stopped = true;
+      stopUpdateRecovery();
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();
-      unmountUpdateNotice();
+      unmountUpdates();
       rememberSessionChatFromStore(appStore);
       void flushTranscriptRowHeightsToDisk().catch(() => undefined);
       disconnectAppBackend();
@@ -131,7 +148,7 @@ function App() {
     <>
       {/* Managed startup and critical stops replace Shell while context actions remain available. */}
       <Show
-        when={engineStartupState().status === "idle"}
+        when={engineStartupState().status === "idle" && !nativeUpdateState.state()?.startup_pending}
         fallback={<EngineStartupStage />}
       >
         <Show when={!criticalStop.spec()} fallback={criticalStop.view()}>

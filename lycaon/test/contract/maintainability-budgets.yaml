@@ -1328,7 +1328,7 @@ go_receiver_lines:
     lycaon/internal/session/session.ListenCheckpointBroker: 135
     lycaon/internal/session/session.LocalNetworkCheckpointBroker: 146
     lycaon/internal/session/session.LoopbackCheckpointBroker: 109
-    lycaon/internal/session/session.Manager: 12473
+    lycaon/internal/session/session.Manager: 12455
     lycaon/internal/session/session.MemoryDecisionStore: 48
     lycaon/internal/session/session.PeerRejectionFeed: 62
     lycaon/internal/session/session.PlanToolStash: 35
@@ -9025,7 +9025,9 @@ source_directories:
     lycaon-den/src-tauri/src/document_outbox: 3
     lycaon-den/src-tauri/src/item_windows: 2
     lycaon-den/src-tauri/src/sidecar: 8
-    lycaon-den/src-tauri/src/update_service: 5
+    lycaon-den/src-tauri/src/update_service: 13
+    lycaon-den/src-tauri/src/update_service/installer: 3
+    lycaon-den/src-tauri/src/update_service/transaction: 1
     lycaon-den/src-tauri/src/wheel_smoothing: 3
     lycaon-den/src/api: 18
     lycaon-den/src/api/http-capabilities: 14
@@ -9160,7 +9162,7 @@ source_directories:
     lycaon-den/src/settings/research: 4
     lycaon-den/src/settings/security: 12
     lycaon-den/src/settings/storage: 5
-    lycaon-den/src/settings/system: 9
+    lycaon-den/src/settings/system: 11
     lycaon-den/src/shared: 2
     lycaon-den/src/shell: 20
     lycaon-den/src/shortcuts: 11
@@ -9630,7 +9632,7 @@ source_directories:
     lycaon/internal/zstdcodec: 1
     lycaon/pkg/api: 32
     lycaon/pkg/pathglob: 2
-    scripts: 153
+    scripts: 154
     scripts/bialy: 10
     scripts/bialy/rerank: 2
     scripts/commentlint: 8
@@ -9648,15 +9650,15 @@ source_files:
     lycaon-den/src-tauri/examples/scroll_thread_invariants.rs: 308
     lycaon-den/src-tauri/examples/support/scroll_thread_page.js: 218
     lycaon-den/src-tauri/examples/support/web_view_driver.rs: 208
-    lycaon-den/src-tauri/examples/verify_updater_signature.rs: 187
+    lycaon-den/src-tauri/examples/verify_updater_signature.rs: 76
     lycaon-den/src-tauri/examples/webkit_features_probe.rs: 20
     lycaon-den/src-tauri/examples/wheel_glide_probe.rs: 128
     lycaon-den/src-tauri/src/accessibility_text_size.rs: 256
-    lycaon-den/src-tauri/src/app_exit.rs: 268
+    lycaon-den/src-tauri/src/app_exit.rs: 436
     lycaon-den/src-tauri/src/app_menu.rs: 256
     lycaon-den/src-tauri/src/app_state_views.rs: 58
     lycaon-den/src-tauri/src/atomic_file.rs: 47
-    lycaon-den/src-tauri/src/backup_transfer.rs: 565
+    lycaon-den/src-tauri/src/backup_transfer.rs: 568
     lycaon-den/src-tauri/src/backup_transfer_journal.rs: 352
     lycaon-den/src-tauri/src/clipboard.rs: 35
     lycaon-den/src-tauri/src/config_dir.rs: 97
@@ -9670,8 +9672,8 @@ source_files:
     lycaon-den/src-tauri/src/item_windows.rs: 362
     lycaon-den/src-tauri/src/item_windows/drag.rs: 344
     lycaon-den/src-tauri/src/item_windows/presentation.rs: 118
-    lycaon-den/src-tauri/src/lib.rs: 854
-    lycaon-den/src-tauri/src/main.rs: 4
+    lycaon-den/src-tauri/src/lib.rs: 870
+    lycaon-den/src-tauri/src/main.rs: 15
     lycaon-den/src-tauri/src/native_notifications.rs: 252
     lycaon-den/src-tauri/src/open_external.rs: 379
     lycaon-den/src-tauri/src/open_local_path.rs: 157
@@ -9683,8 +9685,8 @@ source_files:
     lycaon-den/src-tauri/src/reveal_in_file_manager.rs: 240
     lycaon-den/src-tauri/src/shared_composer_documents.rs: 518
     lycaon-den/src-tauri/src/shell_command.rs: 491
-    lycaon-den/src-tauri/src/sidecar.rs: 374
-    lycaon-den/src-tauri/src/sidecar/commands.rs: 79
+    lycaon-den/src-tauri/src/sidecar.rs: 391
+    lycaon-den/src-tauri/src/sidecar/commands.rs: 104
     lycaon-den/src-tauri/src/sidecar/daemon.rs: 104
     lycaon-den/src-tauri/src/sidecar/diagnostics.rs: 68
     lycaon-den/src-tauri/src/sidecar/layout.rs: 85
@@ -9693,12 +9695,24 @@ source_files:
     lycaon-den/src-tauri/src/sidecar/startup.rs: 342
     lycaon-den/src-tauri/src/sidecar/supervisor.rs: 175
     lycaon-den/src-tauri/src/system_appearance.rs: 177
-    lycaon-den/src-tauri/src/update_service.rs: 396
-    lycaon-den/src-tauri/src/update_service/check.rs: 179
-    lycaon-den/src-tauri/src/update_service/error.rs: 116
-    lycaon-den/src-tauri/src/update_service/install.rs: 161
-    lycaon-den/src-tauri/src/update_service/persistence.rs: 161
-    lycaon-den/src-tauri/src/update_service/preferences.rs: 79
+    lycaon-den/src-tauri/src/update_service.rs: 176
+    lycaon-den/src-tauri/src/update_service/check.rs: 162
+    lycaon-den/src-tauri/src/update_service/download.rs: 292
+    lycaon-den/src-tauri/src/update_service/error.rs: 86
+    lycaon-den/src-tauri/src/update_service/feed.rs: 396
+    lycaon-den/src-tauri/src/update_service/installer.rs: 309
+    lycaon-den/src-tauri/src/update_service/installer/archive.rs: 352
+    lycaon-den/src-tauri/src/update_service/installer/identity.rs: 115
+    lycaon-den/src-tauri/src/update_service/installer/macos.rs: 268
+    lycaon-den/src-tauri/src/update_service/model.rs: 228
+    lycaon-den/src-tauri/src/update_service/persistence.rs: 426
+    lycaon-den/src-tauri/src/update_service/preferences.rs: 89
+    lycaon-den/src-tauri/src/update_service/scheduler.rs: 54
+    lycaon-den/src-tauri/src/update_service/staging.rs: 168
+    lycaon-den/src-tauri/src/update_service/startup.rs: 48
+    lycaon-den/src-tauri/src/update_service/transaction.rs: 967
+    lycaon-den/src-tauri/src/update_service/transaction/journal.rs: 131
+    lycaon-den/src-tauri/src/update_service/verification.rs: 191
     lycaon-den/src-tauri/src/vault_lock.rs: 146
     lycaon-den/src-tauri/src/webkit_features.rs: 147
     lycaon-den/src-tauri/src/webview_policy.rs: 64
@@ -9707,7 +9721,7 @@ source_files:
     lycaon-den/src-tauri/src/wheel_smoothing/mod.rs: 21
     lycaon-den/src-tauri/src/window_appearance.rs: 123
     lycaon-den/src-tauri/src/window_backdrop.rs: 454
-    lycaon-den/src/App.tsx: 152
+    lycaon-den/src/App.tsx: 169
     lycaon-den/src/api/client-impl.ts: 69
     lycaon-den/src/api/client.ts: 31
     lycaon-den/src/api/enum-registries.ts: 71
@@ -9989,7 +10003,7 @@ source_files:
     lycaon-den/src/components/ContextMenu.tsx: 493
     lycaon-den/src/components/CriticalStop.tsx: 84
     lycaon-den/src/components/CriticalStopStage.tsx: 463
-    lycaon-den/src/components/EngineStartupStage.tsx: 129
+    lycaon-den/src/components/EngineStartupStage.tsx: 169
     lycaon-den/src/components/FileEditDiff.tsx: 69
     lycaon-den/src/components/GitCheckout.tsx: 770
     lycaon-den/src/components/GitStrip.tsx: 775
@@ -10464,7 +10478,7 @@ source_files:
     lycaon-den/src/components/trust/TrustSurfaceRows.tsx: 66
     lycaon-den/src/components/trust/trust-review-navigation.ts: 22
     lycaon-den/src/components/update/RecoveryUpdates.tsx: 11
-    lycaon-den/src/components/update/UpdatePanel.tsx: 279
+    lycaon-den/src/components/update/UpdatePanel.tsx: 77
     lycaon-den/src/components/verdict/VerdictCard.tsx: 81
     lycaon-den/src/components/window-menu-items.ts: 26
     lycaon-den/src/components/worker/SessionWorkersDrawer.tsx: 179
@@ -11028,11 +11042,13 @@ source_files:
     lycaon-den/src/settings/system/debug-prefs.ts: 60
     lycaon-den/src/settings/system/diagnostics-export.ts: 54
     lycaon-den/src/settings/system/first-time-tips-prefs.ts: 65
-    lycaon-den/src/settings/system/mount-update-notice.ts: 59
+    lycaon-den/src/settings/system/mount-update-notice.ts: 42
     lycaon-den/src/settings/system/onboarding-prefs.ts: 29
     lycaon-den/src/settings/system/shortcut-prefs.ts: 241
-    lycaon-den/src/settings/system/update-error.ts: 33
-    lycaon-den/src/settings/system/update-service.ts: 53
+    lycaon-den/src/settings/system/update-error.ts: 40
+    lycaon-den/src/settings/system/update-service.ts: 45
+    lycaon-den/src/settings/system/update-state.ts: 95
+    lycaon-den/src/settings/system/update-test-fixture.ts: 13
     lycaon-den/src/settings/system/whats-new-prefs.ts: 44
     lycaon-den/src/shared/cn.ts: 4
     lycaon-den/src/shared/tw-merge.ts: 16
@@ -12259,7 +12275,7 @@ source_files:
     lycaon/internal/egress/loopback.go: 28
     lycaon/internal/egress/pinned.go: 48
     lycaon/internal/egress/public_ip.go: 105
-    lycaon/internal/egressclass/egressclass.go: 146
+    lycaon/internal/egressclass/egressclass.go: 145
     lycaon/internal/egressgate/gate.go: 114
     lycaon/internal/egressproxy/dial.go: 59
     lycaon/internal/egressproxy/endpoint.go: 177
@@ -13848,7 +13864,7 @@ source_files:
     lycaon/internal/secretspan/candidate.go: 84
     lycaon/internal/secretspan/secretspan.go: 95
     lycaon/internal/sensitivepath/sensitivepath.go: 290
-    lycaon/internal/session/abort_impl.go: 230
+    lycaon/internal/session/abort_impl.go: 212
     lycaon/internal/session/agent_turn.go: 26
     lycaon/internal/session/agentsmd_cache.go: 175
     lycaon/internal/session/approvalstate/direct_ip_capability_runtime.go: 251
@@ -15480,8 +15496,9 @@ source_files:
     scripts/e2e-tauri-dev.sh: 48
     scripts/e2e-vite.sh: 9
     scripts/e2e-wait-health.sh: 14
-    scripts/ensure-tauri-binaries.sh: 10
+    scripts/ensure-tauri-binaries.sh: 17
     scripts/eval-agent-live.sh: 182
+    scripts/feed_signature.py: 65
     scripts/fuzz-short.sh: 65
     scripts/gitengine-ensure.sh: 15
     scripts/gitengine-fetch.sh: 309
@@ -15511,14 +15528,14 @@ source_files:
     scripts/release-halt-plan.py: 115
     scripts/release-halt.sh: 177
     scripts/release-metadata.py: 50
-    scripts/release-preflight.sh: 156
+    scripts/release-preflight.sh: 134
     scripts/release-r2-immutable-put.sh: 101
-    scripts/release-r2-live-test.sh: 335
-    scripts/release-r2-publish-pointer.sh: 162
+    scripts/release-r2-live-test.sh: 349
+    scripts/release-r2-publish-pointer.sh: 188
     scripts/release-r2-rest.sh: 83
     scripts/release-recovery-prepare.sh: 43
     scripts/release-source-validate.sh: 46
-    scripts/release-stage-platform-artifacts.sh: 244
+    scripts/release-stage-platform-artifacts.sh: 303
     scripts/release-validate-bridge.sh: 30
     scripts/release-validate-updater-manifest.sh: 102
     scripts/release_control.py: 76
@@ -15540,7 +15557,7 @@ source_files:
     scripts/stage-decide-heads.sh: 8
     scripts/stage-engine.sh: 141
     scripts/stage-macos-host.py: 110
-    scripts/sync-den-versions.sh: 59
+    scripts/sync-den-versions.sh: 53
     scripts/task.sh: 21
     scripts/test-digest.py: 186
     scripts/test-execution.py: 514
@@ -15550,7 +15567,7 @@ source_files:
     scripts/test-run-lease.py: 54
     scripts/test-run-manifest.py: 195
     scripts/test-source-snapshot.sh: 250
-    scripts/update_keys.py: 101
+    scripts/update_keys.py: 113
     scripts/updater_signature.py: 45
     scripts/upgrade-archive-roundtrip.sh: 66
     scripts/upgrade-corpus-boot.sh: 339
@@ -15724,7 +15741,7 @@ test_directories:
     lycaon-den/src/settings/research: 3
     lycaon-den/src/settings/security: 7
     lycaon-den/src/settings/storage: 4
-    lycaon-den/src/settings/system: 8
+    lycaon-den/src/settings/system: 9
     lycaon-den/src/shared: 1
     lycaon-den/src/shell: 24
     lycaon-den/src/shortcuts: 14
@@ -16367,7 +16384,7 @@ test_files:
     lycaon-den/src-tauri/src/item_windows/tests.rs: 122
     lycaon-den/src-tauri/src/sidecar/tests.rs: 643
     lycaon-den/src-tauri/src/test_support.rs: 54
-    lycaon-den/src-tauri/src/update_service/tests.rs: 592
+    lycaon-den/src-tauri/src/update_service/tests.rs: 311
     lycaon-den/src-tauri/tests/host_wire_mirrors.rs: 689
     lycaon-den/src/App.boot.test.tsx: 45
     lycaon-den/src/api/client-impl-paths.test.ts: 194
@@ -16621,8 +16638,8 @@ test_files:
     lycaon-den/src/components/ConfirmDestructiveDialog.test.tsx: 91
     lycaon-den/src/components/ContextMenu.test.tsx: 376
     lycaon-den/src/components/CriticalStop.test.tsx: 48
-    lycaon-den/src/components/CriticalStopStage.test.tsx: 597
-    lycaon-den/src/components/EngineStartupStage.test.tsx: 146
+    lycaon-den/src/components/CriticalStopStage.test.tsx: 594
+    lycaon-den/src/components/EngineStartupStage.test.tsx: 159
     lycaon-den/src/components/FileEditDiff.test.tsx: 269
     lycaon-den/src/components/GitStrip.test.tsx: 1200
     lycaon-den/src/components/HostFolderDialog.test.tsx: 56
@@ -16837,7 +16854,7 @@ test_files:
     lycaon-den/src/components/settings/system/PreflightProbeList.test.tsx: 67
     lycaon-den/src/components/settings/system/ShellCommandPanel.test.tsx: 62
     lycaon-den/src/components/settings/system/SystemInfoPanel.test.tsx: 62
-    lycaon-den/src/components/settings/system/UpdatesSettingsPanel.test.tsx: 426
+    lycaon-den/src/components/settings/system/UpdatesSettingsPanel.test.tsx: 77
     lycaon-den/src/components/shell/ChromeDragSurface.test.tsx: 44
     lycaon-den/src/components/shell/ContextDrawer.test.tsx: 55
     lycaon-den/src/components/shell/LayoutDock.test.tsx: 305
@@ -17481,10 +17498,11 @@ test_files:
     lycaon-den/src/settings/system/debug-prefs.test.ts: 48
     lycaon-den/src/settings/system/diagnostics-export.test.ts: 119
     lycaon-den/src/settings/system/first-time-tips-prefs.test.ts: 48
-    lycaon-den/src/settings/system/mount-update-notice.test.ts: 81
+    lycaon-den/src/settings/system/mount-update-notice.test.ts: 50
     lycaon-den/src/settings/system/onboarding-prefs.test.ts: 40
     lycaon-den/src/settings/system/shortcut-prefs.test.ts: 248
     lycaon-den/src/settings/system/update-error.test.ts: 19
+    lycaon-den/src/settings/system/update-state.test.ts: 40
     lycaon-den/src/settings/system/whats-new-prefs.test.ts: 41
     lycaon-den/src/settings/web-research-catalog.test.ts: 36
     lycaon-den/src/shared/cn.test.ts: 22
@@ -21832,7 +21850,7 @@ test_files:
     lycaon/test/contract/host/doom_loop_thresholds_contract_test.go: 60
     lycaon/test/contract/host/dot_path_vars_one_authority_contract_test.go: 83
     lycaon/test/contract/host/e2e_cleanup_contract_test.go: 122
-    lycaon/test/contract/host/egress_contract_test.go: 251
+    lycaon/test/contract/host/egress_contract_test.go: 256
     lycaon/test/contract/host/engine_stdout_is_protocol_only_contract_test.go: 77
     lycaon/test/contract/host/env_truthy_one_spelling_contract_test.go: 80
     lycaon/test/contract/host/event_outbox_closure_contract_test.go: 162
@@ -22014,7 +22032,7 @@ test_files:
     lycaon/test/contract/release/runtime_code_generation_contract_test.go: 37
     lycaon/test/contract/release/scan_rules_vendor_pin_contract_test.go: 184
     lycaon/test/contract/release/shipped_go_notices_scope_contract_test.go: 80
-    lycaon/test/contract/release/version_release_contract_test.go: 310
+    lycaon/test/contract/release/version_release_contract_test.go: 312
     lycaon/test/contract/release/zxcvbn_passwords_vendor_pin_contract_test.go: 58
     lycaon/test/contract/runner/argv_whitespace_seam_contract_test.go: 58
     lycaon/test/contract/runner/ast_callee_test.go: 13
@@ -22029,7 +22047,7 @@ test_files:
     lycaon/test/contract/runner/platform_floor_contract_test.go: 119
     lycaon/test/contract/runner/registry_testmain_test.go: 10
     lycaon/test/contract/runner/release_blast_radius_contract_test.go: 424
-    lycaon/test/contract/runner/release_channel_invariants_test.go: 486
+    lycaon/test/contract/runner/release_channel_invariants_test.go: 497
     lycaon/test/contract/runner/repo_snapshot_lock_contract_test.go: 351
     lycaon/test/contract/runner/retired_artifact_paths_contract_test.go: 211
     lycaon/test/contract/runner/scanner_suite_scope_contract_test.go: 128
@@ -22041,7 +22059,7 @@ test_files:
     lycaon/test/contract/runner/test_short_scope_contract_test.go: 360
     lycaon/test/contract/runner/test_vacuity_contract_test.go: 360
     lycaon/test/contract/runner/third_party_notices_contract_test.go: 192
-    lycaon/test/contract/runner/updater_no_client_id_contract_test.go: 252
+    lycaon/test/contract/runner/updater_no_client_id_contract_test.go: 247
     lycaon/test/contract/scanning/registry_testmain_test.go: 10
     lycaon/test/contract/scanning/scan_catalog_stubs_contract_test.go: 54
     lycaon/test/contract/scanning/scan_config_contract_test.go: 93
@@ -22585,7 +22603,7 @@ test_files:
     scripts/harness/test_supervise.py: 234
     scripts/test_decide_heads_execution.py: 83
     scripts/test_stage_macos_host.py: 124
-    scripts/test_update_keys.py: 137
+    scripts/test_update_keys.py: 156
     scripts/verification_tests/__init__.py: 3
     scripts/verification_tests/support.py: 179
     scripts/verification_tests/test_advisory_execution.py: 219
@@ -22615,7 +22633,7 @@ ts_local_dependencies:
     lycaon-den/shared/app-state-types.ts: 0
     lycaon-den/shared/brand.ts: 0
     lycaon-den/shared/stage-selectors.ts: 0
-    lycaon-den/src/App.tsx: 31
+    lycaon-den/src/App.tsx: 34
     lycaon-den/src/api/client-impl.ts: 18
     lycaon-den/src/api/client.ts: 15
     lycaon-den/src/api/enum-registries.ts: 2
@@ -22897,7 +22915,7 @@ ts_local_dependencies:
     lycaon-den/src/components/ContextMenu.tsx: 4
     lycaon-den/src/components/CriticalStop.tsx: 2
     lycaon-den/src/components/CriticalStopStage.tsx: 23
-    lycaon-den/src/components/EngineStartupStage.tsx: 7
+    lycaon-den/src/components/EngineStartupStage.tsx: 8
     lycaon-den/src/components/FileEditDiff.tsx: 6
     lycaon-den/src/components/GitCheckout.tsx: 10
     lycaon-den/src/components/GitStrip.tsx: 18
@@ -23372,7 +23390,7 @@ ts_local_dependencies:
     lycaon-den/src/components/trust/TrustSurfaceRows.tsx: 5
     lycaon-den/src/components/trust/trust-review-navigation.ts: 4
     lycaon-den/src/components/update/RecoveryUpdates.tsx: 2
-    lycaon-den/src/components/update/UpdatePanel.tsx: 8
+    lycaon-den/src/components/update/UpdatePanel.tsx: 9
     lycaon-den/src/components/verdict/VerdictCard.tsx: 7
     lycaon-den/src/components/window-menu-items.ts: 2
     lycaon-den/src/components/worker/SessionWorkersDrawer.tsx: 11
@@ -23936,11 +23954,13 @@ ts_local_dependencies:
     lycaon-den/src/settings/system/debug-prefs.ts: 4
     lycaon-den/src/settings/system/diagnostics-export.ts: 3
     lycaon-den/src/settings/system/first-time-tips-prefs.ts: 4
-    lycaon-den/src/settings/system/mount-update-notice.ts: 4
+    lycaon-den/src/settings/system/mount-update-notice.ts: 5
     lycaon-den/src/settings/system/onboarding-prefs.ts: 2
     lycaon-den/src/settings/system/shortcut-prefs.ts: 10
     lycaon-den/src/settings/system/update-error.ts: 0
     lycaon-den/src/settings/system/update-service.ts: 2
+    lycaon-den/src/settings/system/update-state.ts: 3
+    lycaon-den/src/settings/system/update-test-fixture.ts: 1
     lycaon-den/src/settings/system/whats-new-prefs.ts: 3
     lycaon-den/src/shared/cn.ts: 1
     lycaon-den/src/shared/tw-merge.ts: 0

@@ -196,7 +196,7 @@ Project overlay files are `user-repo` surfaces. Additive keys are preferred, and
 
 The primary root carries the format marker, `overlay_format` in `.paintedwolf/overlay.yaml`; a missing file reads as format 1. The host validates it before reading any project-controlled artifact, including settings and suggestions not reached through a session, and fails closed on a format newer than it supports rather than partially applying policy it does not understand.
 
-`ignores.yaml` requires `overlay_format: 3` in the same root's `overlay.yaml`. Host writes publish the marker first, preserving its other keys and comments. Overlays without ignore artifacts remain accepted at their supported format. The retired `scan-suppressions.yaml` and `scan-ignores.yaml` files, missing markers on existing ignore documents, and unknown formats are refused without modification; pre-v1 has no compatibility reader or automatic conversion. `ignores.yaml` itself requires integer `version: 1` and only the `findings` and `secrets` sections.
+`ignores.yaml` requires `overlay_format: 3` in the same root's `overlay.yaml`. Host writes publish the marker first, preserving its other keys and comments. Overlays without ignore artifacts remain accepted at their supported format. The retired `scan-suppressions.yaml` and `scan-ignores.yaml` files, missing markers on existing ignore documents, and unknown formats are refused without modification; there is no compatibility reader or automatic conversion. `ignores.yaml` itself requires integer `version: 1` and only the `findings` and `secrets` sections.
 
 ## Invariants
 

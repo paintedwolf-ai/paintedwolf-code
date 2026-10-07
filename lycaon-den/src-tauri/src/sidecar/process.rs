@@ -9,9 +9,9 @@ use std::path::Path;
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-pub(super) const STARTUP_PROTOCOL_ENV: &str = "LYCAON_STARTUP_PROTOCOL";
-pub(super) const CONTROL_STDIN_ENV: &str = "LYCAON_CONTROL_STDIN";
-pub(super) const CONTROL_SHUTDOWN_FRAME: &[u8] = b"shutdown\n";
+const STARTUP_PROTOCOL_ENV: &str = "LYCAON_STARTUP_PROTOCOL";
+const CONTROL_STDIN_ENV: &str = "LYCAON_CONTROL_STDIN";
+const CONTROL_SHUTDOWN_FRAME: &[u8] = b"shutdown\n";
 pub(super) const VAULT_PASSWORD_MAX_BYTES: usize = 16 * 1024;
 /// Exceeds the engine's ordered shutdown budget.
 pub(super) const GRACEFUL_STOP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -38,7 +38,7 @@ pub(super) fn child_alive(child: Option<&mut Child>) -> bool {
 }
 
 /// Slow shutdowns remain visible after the window closes.
-pub(super) const GRACEFUL_STOP_NOTE_AFTER: Duration = Duration::from_secs(2);
+const GRACEFUL_STOP_NOTE_AFTER: Duration = Duration::from_secs(2);
 
 /// Stops the engine gracefully, then kills it after the timeout.
 pub(super) fn kill_child(child: &mut Option<Child>) {
@@ -55,7 +55,7 @@ pub(super) fn kill_child(child: &mut Option<Child>) {
     note_slow_graceful_stop(started.elapsed(), true);
 }
 
-pub(super) fn note_slow_graceful_stop(waited: Duration, killed: bool) {
+fn note_slow_graceful_stop(waited: Duration, killed: bool) {
     if waited < GRACEFUL_STOP_NOTE_AFTER {
         return;
     }
@@ -171,7 +171,7 @@ pub(super) fn apply_full_debug_logging_env(cmd: &mut Command) {
     cmd.env("LYCAON_DEBUG_ALL", "1");
 }
 
-pub(super) fn full_debug_logging_enabled() -> bool {
+fn full_debug_logging_enabled() -> bool {
     let Ok(dir) = crate::config_dir::host_config_dir() else {
         return false;
     };
