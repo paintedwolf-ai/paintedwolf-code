@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"encoding/json"
 	"maps"
 	"strings"
 	"testing"
@@ -53,11 +52,22 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 	snapshot := inject.WorkflowRuntimeSnapshot{PhaseExit: exit.InjectView()}
 	data := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{Runtime: snapshot})
 	vars := inject.ActiveWorkflowInjectToMap(data, nil, nil)
-	raw := vars["phase_exit"].(map[string]any)["verdict_schema"].(string)
-	var schema map[string]string
-	contractcheck.FailErr(t, "decode projected schema", json.Unmarshal([]byte(raw), &schema))
-	if !maps.Equal(schema, phase.ReviewLoop.VerdictSchema) {
-		t.Fatalf("projected schema = %v, declared %v", schema, phase.ReviewLoop.VerdictSchema)
+	raw := vars["phase_exit"].(map[string]any)["verdict_shape"].(string)
+	schema := phase.ReviewLoop.VerdictSchema
+	if raw != workflow.VerdictSchemaShape(*phase.ReviewLoop) {
+		t.Fatalf("projected shape = %q, want the admission shape", raw)
+	}
+	for key, kind := range schema {
+		if !strings.Contains(raw, key+": ") {
+			t.Fatalf("projected shape %q omits field %q", raw, key)
+		}
+		if kind == workflowdef.VerdictClaimsType {
+			for _, word := range phase.ReviewLoop.StatusWords() {
+				if !strings.Contains(raw, word) {
+					t.Fatalf("projected shape %q omits claim status %q", raw, word)
+				}
+			}
+		}
 	}
 	if !strings.Contains(renderPhaseExitBlock(t, exit), raw) {
 		t.Fatal("rendered phase exit lost the structured verdict contract")
@@ -69,6 +79,9 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 				continue
 			}
 			verdict[key] = "bounded evidence"
+			if kind == workflowdef.VerdictCoverageType {
+				verdict[key] = `{ "revision": "fixture", "assessments": [] }`
+			}
 			if kind == workflowdef.VerdictClaimsType || kind == workflowdef.VerdictSetAsidesType {
 				verdict[key] = "[]"
 			}
@@ -85,18 +98,17 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 			}
 		}
 	}
-	before := inject.ActiveWorkflowInjectFingerprint(data, nil)
-	snapshot.PhaseExit.VerdictSchema["later_snapshot_field"] = "string"
-	if before != inject.ActiveWorkflowInjectFingerprint(data, nil) {
-		t.Fatal("render DTO aliases runtime snapshot schema")
+	projectedShape := func() string {
+		return inject.ActiveWorkflowInjectToMap(data, nil, nil)["phase_exit"].(map[string]any)["verdict_shape"].(string)
 	}
+	before := projectedShape()
 	phase.ReviewLoop.VerdictSchema["new_required_field"] = "string"
-	if !maps.Equal(exit.VerdictSchema, schema) {
+	if exit.VerdictShape != before {
 		t.Fatal("projection aliases manifest schema")
 	}
 	data.PhaseExit = workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
-	if before == inject.ActiveWorkflowInjectFingerprint(data, nil) {
-		t.Fatal("schema change did not invalidate prompt fingerprint")
+	if before == projectedShape() {
+		t.Fatal("schema change did not reach the prompt projection")
 	}
 }
 

@@ -12,6 +12,7 @@ type workflowFile struct {
 	Request            *requestYAML                     `yaml:"request"`
 	Extends            string                           `yaml:"extends"`
 	Name               string                           `yaml:"name"`
+	Retired            bool                             `yaml:"retired,omitempty"`
 	Description        string                           `yaml:"description"`
 	Trigger            string                           `yaml:"trigger"`
 	InitialPosture     string                           `yaml:"initial_posture"`
@@ -65,15 +66,18 @@ type humanApprovalYAML struct {
 }
 
 type reviewLoopYAML struct {
-	ReconcilesPhase      string            `yaml:"reconciles_phase,omitempty"`
-	IncludeScanInventory bool              `yaml:"include_scan_inventory,omitempty"`
-	EvidenceKey          string            `yaml:"evidence_key"`
-	IterationCap         int               `yaml:"iteration_cap"`
-	VerdictSchema        map[string]string `yaml:"verdict_schema"`
-	RequiredAgents       []string          `yaml:"required_agents"`
-	IfSpawnable          []string          `yaml:"if_spawnable"`
-	ClaimStatuses        map[string]string `yaml:"claim_statuses,omitempty"`
-	BriefLabel           string            `yaml:"brief_label,omitempty"`
+	CoverageReviewers         []string          `yaml:"coverage_reviewers,omitempty"`
+	FollowupAttempts          int               `yaml:"followup_attempts,omitempty"`
+	ReconcilesPhase           string            `yaml:"reconciles_phase,omitempty"`
+	RequireInventoryAccounted bool              `yaml:"require_inventory_accounted,omitempty"`
+	IncludeScanInventory      bool              `yaml:"include_scan_inventory,omitempty"`
+	EvidenceKey               string            `yaml:"evidence_key"`
+	IterationCap              int               `yaml:"iteration_cap"`
+	VerdictSchema             map[string]string `yaml:"verdict_schema"`
+	RequiredAgents            []string          `yaml:"required_agents"`
+	IfSpawnable               []string          `yaml:"if_spawnable"`
+	ClaimStatuses             map[string]string `yaml:"claim_statuses,omitempty"`
+	BriefLabel                string            `yaml:"brief_label,omitempty"`
 }
 
 type workflowControls struct {
@@ -90,6 +94,7 @@ type reportControlsYAML struct {
 	Enabled       bool       `yaml:"enabled"`
 	FindingsLabel string     `yaml:"findings_label"`
 	Brief         *briefYAML `yaml:"brief,omitempty"`
+	Retries       *int       `yaml:"retries,omitempty"`
 }
 
 type attachYAML struct {
@@ -223,6 +228,7 @@ type userFeedbackYAML struct {
 type phaseControlsYAML struct {
 	ContentReview *contentReviewYAML `yaml:"content_review"`
 	Closeout      string             `yaml:"closeout"`
+	Retries       *int               `yaml:"retries,omitempty"`
 }
 
 type contentReviewYAML struct {

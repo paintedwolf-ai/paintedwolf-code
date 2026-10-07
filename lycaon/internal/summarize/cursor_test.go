@@ -8,30 +8,30 @@ import (
 func TestCursorBindsRevisionAndChild(t *testing.T) {
 	scope := cursorScope(Request{Path: "src", Pattern: "Needle"})
 	cursor := encodeCursor(42, scope, "src/next")
-	state, ok := decodeCursor(cursor)
-	if !ok || state.Revision != 42 || state.Scope != scope || state.Position != "src/next" {
-		t.Fatalf("decode = %+v %v", state, ok)
+	state, err := summarizeCursors.Decode(cursor, scope)
+	if err != nil || state.Revision != 42 || state.Scope != scope || state.Position != "src/next" {
+		t.Fatalf("decode = %+v %v", state, err)
 	}
-	if _, ok := decodeCursor("src/next"); ok {
+	if _, err := summarizeCursors.Decode("src/next", scope); err == nil {
 		t.Fatal("plain path accepted as cursor")
 	}
 	parts := strings.Split(cursor, ".")
 	replacement := byte('A')
-	if parts[1][0] == replacement {
+	if parts[0][0] == replacement {
 		replacement = 'B'
 	}
-	parts[1] = string(replacement) + parts[1][1:]
+	parts[0] = string(replacement) + parts[0][1:]
 	tampered := strings.Join(parts, ".")
-	if _, ok := decodeCursor(tampered); ok {
+	if _, err := summarizeCursors.Decode(tampered, scope); err == nil {
 		t.Fatal("tampered cursor accepted")
 	}
 }
 
 func TestPatternCursorCarriesExactTotals(t *testing.T) {
 	scope := cursorScope(Request{Path: ".", Pattern: "Needle"})
-	state, ok := decodeCursor(encodePatternCursor(8, scope, "src/next", 41, 12))
-	if !ok || state.MatchesObserved != 41 || state.MatchingFilesObserved != 12 {
-		t.Fatalf("decode = %+v %v", state, ok)
+	state, err := summarizeCursors.Decode(encodePatternCursor(8, scope, "src/next", 41, 12), scope)
+	if err != nil || state.MatchesObserved != 41 || state.MatchingFilesObserved != 12 {
+		t.Fatalf("decode = %+v %v", state, err)
 	}
 }
 

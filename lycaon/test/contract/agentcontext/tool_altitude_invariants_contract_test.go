@@ -246,8 +246,8 @@ func TestAltitudeToolArgSchemas(t *testing.T) {
 	locked := map[string][]string{
 		"read":     {"kind", "limit", "mode", "offset", "path", "ranges", "symbol"},
 		"list_dir": {"cursor", "include_hidden", "max_depth", "max_entries", "offset", "path"},
-		"grep":     {"case_insensitive", "context_lines", "include_hidden", "lang", "max_matches", "offset", "path", "path_glob", "pattern", "structural"},
-		"find":     {"max_depth", "max_results", "name_glob", "offset", "path", "type"},
+		"grep":     {"case_insensitive", "context_lines", "include_hidden", "include_ignored", "lang", "max_matches", "offset", "path", "path_glob", "pattern", "structural"},
+		"find":     {"include_ignored", "max_depth", "max_results", "name_glob", "offset", "path", "type"},
 	}
 	for tool, wantKeys := range locked {
 		def, ok := schemas.Tools[tool]

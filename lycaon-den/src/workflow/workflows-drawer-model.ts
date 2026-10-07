@@ -14,7 +14,7 @@ export function isBlueprintWorkflowRun(
   catalog: readonly WorkflowSummary[],
 ): boolean {
   if (!run) return false;
-  return catalogSummaryForRun(catalog, run)?.supports_blueprints === true;
+  return workflowSummaryForRun(catalog, run)?.supports_blueprints === true;
 }
 
 /** Picker row — manifest entry or a virtual preset row for drawer start. */
@@ -66,11 +66,11 @@ export function workflowStatusLabel(status: WorkflowRunStatus): string {
   return STATUS_LABELS[status];
 }
 
-export function catalogSummaryForRun(
+export function workflowSummaryForRun(
   catalog: readonly WorkflowSummary[],
   run: WorkflowRun,
 ): WorkflowSummary | undefined {
-  return catalog.find(
+  return run.ui?.definition ?? catalog.find(
     (row) =>
       row.id === run.workflow_id && row.version === run.workflow_version,
   );
@@ -97,7 +97,7 @@ export function workflowRunDisplayName(
   if (blueprintName?.trim() && isBlueprintWorkflowRun(run, catalog)) {
     return blueprintName.trim();
   }
-  const entry = catalogSummaryForRun(catalog, run);
+  const entry = workflowSummaryForRun(catalog, run);
   return entry?.name?.trim() || run.workflow_id;
 }
 
@@ -105,7 +105,7 @@ export function workflowRunStepProgress(
   run: WorkflowRun,
   catalog: readonly WorkflowSummary[],
 ): WorkflowStepProgress | undefined {
-  const phases = catalogSummaryForRun(catalog, run)?.phases;
+  const phases = workflowSummaryForRun(catalog, run)?.phases;
   if (!phases?.length) return undefined;
   const phase = run.current_phase?.trim();
   if (!phase) return undefined;
@@ -218,9 +218,8 @@ export function workflowPickerRowTrigger(w: CatalogPickerRow): string | undefine
 export function canArmCatalogWorkflow(
   leaf?: WorkflowRun | null,
   runs: readonly WorkflowRun[] = [],
-  catalog: readonly WorkflowSummary[] = [],
 ): boolean {
-  const blocking = catalogWorkflowRun(leaf ?? undefined, runs, catalog);
+  const blocking = catalogWorkflowRun(leaf ?? undefined, runs);
   if (!blocking) return true;
   return isTerminalWorkflowRunStatus(blocking.status);
 }

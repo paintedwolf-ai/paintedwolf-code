@@ -279,6 +279,7 @@ func (b *serveBuilder) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.Ru
 				}
 				if rl := phase.ReviewLoop; rl != nil && len(rl.ClaimStatuses) > 0 {
 					env.Vars["claim_statuses"] = rl.StatusWords()
+					env.Vars["review_followup_attempts"] = rl.FollowupAttempts
 				}
 			}
 		}

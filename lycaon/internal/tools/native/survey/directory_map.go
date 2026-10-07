@@ -3,8 +3,6 @@ package survey
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/repomap"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -56,6 +55,8 @@ type directoryMapCursor struct {
 	Revision uint64 `json:"r"`
 	Page     string `json:"p"`
 }
+
+var directoryMapCursors = pagecursor.For[directoryMapCursor]("directory_map")
 
 func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx tools.ToolContext, display, subpath, cursor string) (listDirResponse, error) {
 	started := time.Now()
@@ -123,13 +124,11 @@ func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx too
 func indexedDirectoryMap(ctx context.Context, reader *sourcecatalog.SummaryReader, scope, cursor string, resp *listDirResponse) error {
 	position := directoryMapCursor{Scope: scope, Revision: reader.Status.Revision}
 	if cursor != "" {
-		if len(cursor) > 8192 {
+		pos, err := directoryMapCursors.Decode(cursor, scope)
+		if err != nil || pos.Revision != reader.Status.Revision {
 			return mapCursorReject()
 		}
-		raw, err := base64.RawURLEncoding.DecodeString(cursor)
-		if err != nil || json.Unmarshal(raw, &position) != nil || position.Scope != scope || position.Revision != reader.Status.Revision {
-			return mapCursorReject()
-		}
+		position = pos
 	}
 	node, err := reader.Node(ctx, ".")
 	if err != nil {
@@ -189,11 +188,11 @@ func setMapContinuation(resp *listDirResponse, position directoryMapCursor) erro
 	if position.Page == "" {
 		return nil
 	}
-	raw, err := surveyjson.Marshal(position)
+	token, err := directoryMapCursors.Encode(position.Scope, position)
 	if err != nil {
 		return err
 	}
-	resp.NextActions = []summarize.NextAction{{Tool: "list_dir", Path: resp.Path, Cursor: base64.RawURLEncoding.EncodeToString(raw), Why: "More entries"}}
+	resp.NextActions = []summarize.NextAction{{Tool: "list_dir", Path: resp.Path, Cursor: token, Why: "More entries"}}
 	return nil
 }
 

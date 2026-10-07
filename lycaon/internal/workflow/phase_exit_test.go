@@ -121,7 +121,7 @@ func TestProjectPhaseExit_GatelessProofNamesCompleteWhen(t *testing.T) {
 func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("security-survey", "1.0.0")
+	m, err := reg.Get("security-survey", "1.0.1")
 	testutil.FailErr(t, "Get security-survey", err)
 	challenge, ok := m.PhaseByID("challenge")
 	if !ok {
@@ -134,15 +134,15 @@ func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 	if exit.ReviewLoopKey != "survey_challenged" {
 		t.Fatalf("review loop key = %q", exit.ReviewLoopKey)
 	}
-	if exit.VerdictSchema["verdict"] != "CHALLENGED" {
-		t.Fatalf("verdict = %q want CHALLENGED", exit.VerdictSchema["verdict"])
+	if !strings.HasPrefix(exit.VerdictShape, "{verdict: CHALLENGED|NEEDS_INVESTIGATION (first is terminal)") {
+		t.Fatalf("verdict shape = %q want CHALLENGED|NEEDS_INVESTIGATION first", exit.VerdictShape)
 	}
 }
 
 func TestProjectPhaseExitReviewLoopFallsBackToDeclaredRoster(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("security-survey", "1.0.0")
+	m, err := reg.Get("security-survey", "1.0.1")
 	testutil.FailErr(t, "Get security-survey", err)
 	challenge, ok := m.PhaseByID("challenge")
 	if !ok {

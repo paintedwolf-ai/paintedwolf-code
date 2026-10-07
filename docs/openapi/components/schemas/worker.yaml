@@ -63,8 +63,15 @@ components:
       additionalProperties: false
       required: [leg_status]
       properties:
+        coverage_review:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/CoverageReview
+        declared_leg_status:
+          type: string
+          description: "Leg status the worker declared; leg_status is the host-graded status."
         leg_status:
           type: string
+          description: "Host-graded leg status."
         files_modified:
           type: array
           items: { type: string }
@@ -90,6 +97,35 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerEvidenceObligation
+    CoverageReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [revision, assessments]
+      properties:
+        revision: { type: string }
+        assessments:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/CoverageAssessment
+    CoverageAssessment:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, disposition, reason, cited_evidence]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9_.-]+$' }
+        disposition:
+          type: string
+          enum: [satisfied, covered, immaterial, material_open, essential_open]
+        reason: { type: string }
+        obligations:
+          type: array
+          items: { type: string }
+        cited_evidence:
+          type: array
+          items:
+            $ref: session/worker-reports.yaml#/components/schemas/CitationGroundingCitedEvidence
     WorkerCompletionFinding:
       x-go-generate: true
       type: object

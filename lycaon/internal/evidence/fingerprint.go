@@ -366,6 +366,7 @@ func collectScanArtifactPaths(obj map[string]any, add func(string)) {
 	collectScanFindingPaths(obj["resolved_findings"], add)
 	collectScanFindingPaths(obj["persisted_findings"], add)
 	collectScanFindingPaths(obj["new_findings_sample"], add)
+	collectScanGroupPaths(obj["groups"], add)
 	if perScan, ok := obj["per_scan"].([]any); ok {
 		for _, row := range perScan {
 			if m, ok := row.(map[string]any); ok {
@@ -377,6 +378,31 @@ func collectScanArtifactPaths(obj map[string]any, add func(string)) {
 		for _, row := range scans {
 			if m, ok := row.(map[string]any); ok {
 				collectScanArtifactPaths(m, add)
+			}
+		}
+	}
+}
+
+func collectScanGroupPaths(raw any, add func(string)) {
+	if raw == nil {
+		return
+	}
+	bytes, err := json.Marshal(raw)
+	if err != nil {
+		return
+	}
+	var groups []struct {
+		Locations []struct {
+			URI string `json:"uri"`
+		} `json:"locations"`
+	}
+	if err := json.Unmarshal(bytes, &groups); err != nil {
+		return
+	}
+	for _, g := range groups {
+		for _, loc := range g.Locations {
+			if loc.URI != "" {
+				add(loc.URI)
 			}
 		}
 	}
@@ -745,7 +771,13 @@ func populateSummarizeRecord(projectDir string, rec *Record, content string) {
 	for _, h := range summarizeAnchorDetails(content) {
 		addRecordPath(projectDir, rec, h.path, FidelityStructured)
 		rel, ok := NormalizeCitationPath(projectDir, h.path)
-		if !ok || h.line <= 0 {
+		if !ok {
+			if strings.TrimSpace(projectDir) != "" {
+				continue
+			}
+			rel = NormalizeLedgerPath(h.path)
+		}
+		if rel == "" || h.line <= 0 {
 			continue
 		}
 		appendLineRange(rec, h.line, h.line)
@@ -795,16 +827,35 @@ func populateGrepRecord(projectDir string, rec *Record, args map[string]any, con
 	for _, m := range grepMatchDetails(content) {
 		addRecordPath(projectDir, rec, m.path, FidelityStructured)
 		rel, ok := NormalizeCitationPath(projectDir, m.path)
-		if !ok || m.line <= 0 {
+		if !ok {
+			if strings.TrimSpace(projectDir) != "" {
+				continue
+			}
+			rel = NormalizeLedgerPath(m.path)
+		}
+		if rel == "" || m.line <= 0 {
 			continue
 		}
-		appendLineRange(rec, m.line, m.line)
+		b := len(m.contextBefore)
+		for i, lineContent := range m.contextBefore {
+			rec.addGrepLine(rel, m.line-b+i, lineContent)
+		}
 		rec.addGrepLine(rel, m.line, m.content)
+		for i, lineContent := range m.contextAfter {
+			rec.addGrepLine(rel, m.line+1+i, lineContent)
+		}
+		appendLineRange(rec, m.line-b, m.line+len(m.contextAfter))
 	}
 	for _, h := range highlightDetails(content) {
 		addRecordPath(projectDir, rec, h.path, FidelityStructured)
 		rel, ok := NormalizeCitationPath(projectDir, h.path)
-		if !ok || h.line <= 0 {
+		if !ok {
+			if strings.TrimSpace(projectDir) != "" {
+				continue
+			}
+			rel = NormalizeLedgerPath(h.path)
+		}
+		if rel == "" || h.line <= 0 {
 			continue
 		}
 		appendLineRange(rec, h.line, h.line)
@@ -829,9 +880,11 @@ func stringArg(args map[string]any, key string) string {
 }
 
 type grepMatchDetail struct {
-	path    string
-	line    int
-	content string
+	path          string
+	line          int
+	content       string
+	contextBefore []string
+	contextAfter  []string
 }
 
 type readToolPayload struct {
@@ -891,10 +944,28 @@ func grepMatchDetails(content string) []grepMatchDetail {
 		if path == "" || line <= 0 {
 			continue
 		}
+		var contextBefore []string
+		if beforeRaw, ok := m["context_before"].([]any); ok {
+			for _, item := range beforeRaw {
+				if s, ok := item.(string); ok {
+					contextBefore = append(contextBefore, s)
+				}
+			}
+		}
+		var contextAfter []string
+		if afterRaw, ok := m["context_after"].([]any); ok {
+			for _, item := range afterRaw {
+				if s, ok := item.(string); ok {
+					contextAfter = append(contextAfter, s)
+				}
+			}
+		}
 		out = append(out, grepMatchDetail{
-			path:    path,
-			line:    line,
-			content: matchContent,
+			path:          path,
+			line:          line,
+			content:       matchContent,
+			contextBefore: contextBefore,
+			contextAfter:  contextAfter,
 		})
 	}
 	return out

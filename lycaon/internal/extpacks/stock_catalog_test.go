@@ -27,3 +27,17 @@ func TestResolveStockCatalogUsesBundledPacksOnly(t *testing.T) {
 		t.Fatalf("stock desired state = %+v, want empty", eff.Desired)
 	}
 }
+
+func TestSecurityPackPatchVersionResolvesWithPlatformDependency(t *testing.T) {
+	eff, err := extpacks.ResolveStockCatalog(t.Context(), nil)
+	testutil.FailErr(t, "resolve patch catalog", err)
+	for _, pack := range eff.Packs {
+		if pack.ID == "painted-wolf/security-survey" {
+			if pack.Version != "1.0.1" || !pack.Contributing {
+				t.Fatalf("security patch pack = %+v", pack)
+			}
+			return
+		}
+	}
+	t.Fatal("security patch pack is missing")
+}

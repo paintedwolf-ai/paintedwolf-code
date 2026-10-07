@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -436,7 +437,7 @@ func (t *SourceHistoryTool) runVersion(
 	limit := toolkit.BoundedIntArg(args, "limit", 200, 1, 2000).Effective
 
 	page, totalLines, endLine, hasMore := PaginateLines(text, offset, limit)
-	resp.Content = formatReadContent(page, offset)
+	resp.Content = hostmarker.FormatNumberedLines(page, offset)
 	resp.TotalLines = totalLines
 	resp.Offset = offset
 	resp.Limit = limit

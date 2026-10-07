@@ -178,7 +178,7 @@ func (l *PromptLoop) rejectCloseoutGrounding(
 	}
 	exhausted := !retryEligible || stuck || budget.exhausted()
 	renderDecision := *decision
-	renderDecision.Data = budget.hintData(hintData)
+	renderDecision.Data = budget.hintData(hintData, unread)
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,

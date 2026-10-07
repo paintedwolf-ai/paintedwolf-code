@@ -206,7 +206,7 @@ func (a *citationGroundingAudit) recordTypedCitationChannels(report WorkerComple
 	if len(report.CitedURLs) > 0 {
 		a.pass("url_citations", "URL citations", fmt.Sprintf("%d URL(s) matched web tool evidence", len(report.CitedURLs)), report.CitedURLs)
 	}
-	if guidance.TypedCitationChannelsEmpty(len(report.Findings), len(report.CitedURLs)) {
+	if guidance.TypedCitationChannelsEmpty(len(workerReportCitations(report)), len(report.CitedURLs)) {
 		a.passVacuous("typed_citations", "Typed citations", "No typed citations in report")
 	}
 }
@@ -260,6 +260,19 @@ func (a *citationGroundingAudit) recordProseAdvisories(eval guidance.WorkerCitat
 		Kind:    api.CitationGroundingCheckKindCitation,
 		Summary: fmt.Sprintf("%d citation(s) in narrative — surfaced for review; prefer typed fields", eval.ProseAdvisoryCount),
 		Matched: guidance.SampleGroundingStrings(eval.ProseAdvisoryTokens),
+	})
+}
+
+func (a *citationGroundingAudit) recordLineCorrections(count int) {
+	if count <= 0 {
+		return
+	}
+	a.addCheck(api.CitationGroundingCheck{
+		ID:      "line_corrections",
+		Label:   "Line corrections",
+		Status:  api.CitationGroundingCheckStatusAdvisory,
+		Kind:    api.CitationGroundingCheckKindCitation,
+		Summary: fmt.Sprintf("%d citation line(s) corrected to the observed line", count),
 	})
 }
 

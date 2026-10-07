@@ -9,6 +9,10 @@ func TestGroundingRetryBypassesStuckDetection(t *testing.T) {
 		InvestURLNotObservedCode,
 		SynthURLNotObservedCode,
 		WorkerURLNotObservedCode,
+		ReportFenceUnreadableCode,
+		ReportDocumentInvalidCode,
+		ReportClaimUnreportedCode,
+		ReportInventoryUnaccountedCode,
 	} {
 		if !GroundingRetryBypassesStuckDetection(code) {
 			t.Fatalf("code %q should bypass stuck detection", code)

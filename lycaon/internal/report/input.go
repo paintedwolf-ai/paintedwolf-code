@@ -3,13 +3,19 @@
 // The workflow authorizes generation before assembling the input.
 package report
 
-import "strings"
+import (
+	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 
-// ReportInput is the host-managed shape rendered into a PDF.
-//
-// The first page is the brief, the second the working summary; later sections
-// are the record behind them. Optional sections follow the durable records.
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
+)
+
+// ReportInput contains the host-assembled report and its supporting records.
 type ReportInput struct {
+	// CoverageReview is present only for workflows declaring reviewed coverage.
+	CoverageReview *api.CoverageReview   `json:"coverage_review,omitempty"`
+	CoverageFacts  *reviewcoverage.Facts `json:"coverage_facts,omitempty"`
+
 	// Title names the workflow document.
 	Title string `json:"title"`
 	// Headline is the closeout's one-sentence conclusion. It opens the working
@@ -64,8 +70,7 @@ type ReportInput struct {
 	// Verdicts are every review verdict the subject recorded, in phase order.
 	Verdicts []ReportVerdict `json:"verdicts,omitempty"`
 	Scan     *ReportScan     `json:"scan,omitempty"`
-	// ScanRules are the rules ScanRows reference, so a rule's description
-	// prints once rather than under every location.
+	// Shared scan rules print once across their locations.
 	ScanRules []ReportScanRule `json:"scan_rules,omitempty"`
 	// ScanRows are the scanner rows the report lists — a bounded selection of
 	// what the scan stored, with Scan carrying the counts behind it.
@@ -76,10 +81,7 @@ type ReportInput struct {
 	EvidenceTotal int `json:"evidence_total,omitempty"`
 	// Sources are the web pages the subject cited.
 	Sources []ReportSource `json:"sources,omitempty"`
-	// Artifacts are the durable visuals the subject produced. Captures
-	// (non-empty evidence_handle) land in the evidence appendix; renders
-	// (no handle) in a featured Visuals section. Bytes are host-resolved
-	// at assembly time; fixtures may omit bytes or supply base64.
+	// Evidence handles distinguish appendix captures from featured renders.
 	Artifacts []ReportArtifact `json:"artifacts,omitempty"`
 }
 
@@ -132,21 +134,22 @@ type ReportFinding struct {
 	Action string `json:"action,omitempty"`
 	// Where locates the finding, by place or by evidence handle.
 	Where []ReportClaimCitation `json:"where,omitempty"`
-	// Disposition is act, accept, or held.
+	// Disposition is act, accept, held, or unresolved.
 	Disposition string `json:"disposition,omitempty"`
 }
 
 // Finding dispositions.
 const (
-	DispositionAct    = "act"
-	DispositionAccept = "accept"
-	DispositionHeld   = "held"
+	DispositionAct        = "act"
+	DispositionAccept     = "accept"
+	DispositionHeld       = "held"
+	DispositionUnresolved = "unresolved"
 )
 
 // NeedsAttention reports whether a finding is work to do or a risk kept on
 // purpose. A finding that states no disposition is treated as work to do.
 func (f ReportFinding) NeedsAttention() bool {
-	return f.Disposition != DispositionHeld
+	return f.Disposition != DispositionHeld && f.Disposition != DispositionUnresolved
 }
 
 // ReportBrief is the declared rating, decided.
@@ -183,8 +186,7 @@ type ReportRated struct {
 	// Worst and Best index the brief's Levels.
 	Worst int `json:"worst"`
 	Best  int `json:"best"`
-	// Adjudicated marks answers a review phase stated for a claim with the
-	// finding's id, rather than the closeout alone.
+	// Adjudicated marks answers accepted in a review phase for this claim id.
 	Adjudicated bool `json:"adjudicated,omitempty"`
 	// Unreported marks a claim the review left open or overturned that no
 	// finding carries; it has no number in the findings.
@@ -225,6 +227,9 @@ const (
 	GapScansFailed          = "scans_failed"
 	GapScansMoved           = "scans_moved"
 	GapScansStanding        = "scans_standing"
+	// GapCoverageUnreviewed: the run ended before its bound scans settled, so
+	// the declared coverage review had no settled facts to be checked against.
+	GapCoverageUnreviewed = "coverage_unreviewed"
 )
 
 // ReportGap is one kind of unfinished work, counted against its whole.
@@ -236,8 +241,9 @@ type ReportGap struct {
 	Names []string `json:"names,omitempty"`
 	// Detail counts what inside the named things is affected: moved files,
 	// or engine limits and the files they touch.
-	Detail      int `json:"detail,omitempty"`
-	DetailFiles int `json:"detail_files,omitempty"`
+	Detail       int  `json:"detail,omitempty"`
+	DetailFiles  int  `json:"detail_files,omitempty"`
+	UnknownScope bool `json:"unknown_scope,omitempty"`
 }
 
 // Completeness levels.
@@ -247,12 +253,10 @@ const (
 	CompletenessIncomplete = "incomplete"
 )
 
-// Completeness decides how complete the work is. A report that failed its
-// acceptance checks is incomplete; otherwise its gaps decide. Scanner limits
-// that recur on every run describe the scanner, not the work, and leave it
-// complete.
+// Completeness retains hard failures, then applies the accepted coverage review.
+// Workflows without a declared review use the observed gap classification.
 func (in ReportInput) Completeness() string {
-	if len(in.Defects) > 0 {
+	if len(in.Defects) > 0 || in.UnreportedClaims > 0 || (in.Inventory != nil && in.Inventory.Unaccounted > 0) {
 		return CompletenessIncomplete
 	}
 	level := CompletenessComplete
@@ -261,11 +265,21 @@ func (in ReportInput) Completeness() string {
 			continue
 		}
 		switch g.Kind {
-		case GapInventoryUnaccounted, GapClaimsOpen, GapLegsUnfinished, GapScansFailed:
+		case GapClaimsOpen:
+			if !in.openClaimsAssessed() {
+				return CompletenessIncomplete
+			}
+		case GapInventoryUnaccounted, GapLegsUnfinished, GapScansFailed, GapCoverageUnreviewed:
 			return CompletenessIncomplete
 		case GapLegsPartial, GapWorkersPartial, GapScansMoved:
 			level = CompletenessMostly
 		}
+	}
+	if in.CoverageFacts != nil {
+		if in.CoverageReview == nil || reviewcoverage.Validate(*in.CoverageFacts, *in.CoverageReview) != nil {
+			return CompletenessIncomplete
+		}
+		return reviewcoverage.Completeness(*in.CoverageReview)
 	}
 	return level
 }
@@ -336,15 +350,12 @@ type ReportArtifact struct {
 	ID             string `json:"id"`
 	Caption        string `json:"caption"`
 	EvidenceHandle string `json:"evidence_handle,omitempty"`
-	// Mime and Bytes are filled by assembly from the durable overlay; omitted
-	// when the blob is missing/evicted (section shrinks — never a broken image).
+	// Missing artifact bytes omit the visual from the report.
 	Mime  string `json:"mime,omitempty"`
 	Bytes []byte `json:"bytes,omitempty"`
 }
 
-// ReportVerdict is one review verdict a phase recorded. A phase declares its
-// own `verdict_schema`, so members arrive as ordered name/value pairs rather
-// than as a fixed field list.
+// ReportVerdict retains the phase's declared field names and display order.
 type ReportVerdict struct {
 	ReconcilesPhase string `json:"reconciles_phase,omitempty"`
 	// Phase is the manifest phase id that stamped the verdict; Label its
@@ -355,10 +366,7 @@ type ReportVerdict struct {
 	Decision string `json:"decision"`
 	// RecordedAt is when the record was stamped, RFC 3339.
 	RecordedAt string `json:"recorded_at,omitempty"`
-	// Fields are the schema's other members, in the order assembly recorded
-	// them (decision first, then the rest alphabetically). A claims-typed
-	// member is not repeated here, and the reserved citation channels never
-	// appear.
+	// Fields exclude claims and citation channels and retain assembly order.
 	Fields []ReportVerdictField `json:"fields,omitempty"`
 	// Claims are the adjudicated statements from every claims-typed member,
 	// each tracing to its own evidence.
@@ -524,4 +532,31 @@ type ReportSource struct {
 	Title string `json:"title,omitempty"`
 	// CitedBy names what cited the page: "report" or a phase id.
 	CitedBy []string `json:"cited_by,omitempty"`
+}
+
+// openClaimsAssessed requires an accepted question assessment for every open claim.
+func (in ReportInput) openClaimsAssessed() bool {
+	if in.CoverageFacts == nil || in.CoverageReview == nil || reviewcoverage.Validate(*in.CoverageFacts, *in.CoverageReview) != nil {
+		return false
+	}
+	assessed := map[string]bool{}
+	for _, fact := range in.CoverageFacts.Gaps {
+		if fact.Kind == "review_question" {
+			for _, assessment := range in.CoverageReview.Assessments {
+				if assessment.ID == fact.ID && assessment.Disposition != reviewcoverage.Covered {
+					assessed[fact.Subject] = true
+				}
+			}
+		}
+	}
+	count := 0
+	for _, c := range in.Claims {
+		if c.Class == ClaimOpen {
+			count++
+			if !assessed[c.ID] {
+				return false
+			}
+		}
+	}
+	return count > 0
 }

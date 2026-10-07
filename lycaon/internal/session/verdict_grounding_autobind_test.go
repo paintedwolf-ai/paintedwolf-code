@@ -41,7 +41,7 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{{
-		ID: "job-1", ParentSessionID: parent.ID, ChildSessionID: child.ID, LegID: "leg-skeptic", CreatedAt: time.Now().UTC(),
+		AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, ID: "job-1", ParentSessionID: parent.ID, ChildSessionID: child.ID, LegID: "leg-skeptic", CreatedAt: time.Now().UTC(),
 	}}})
 	eval, err := mgr.EvaluateVerdictGrounding(ctx, parent.ID, nil, nil, []string{"skeptic"})
 	testutil.FailErr(t, "evaluate verdict grounding", err)

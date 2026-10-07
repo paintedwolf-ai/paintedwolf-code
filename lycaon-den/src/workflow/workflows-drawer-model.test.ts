@@ -11,7 +11,7 @@ import {
   workflowRunHeader,
   workflowRunStepProgress,
   catalogEntryForWorkflow,
-  catalogSummaryForRun,
+  workflowSummaryForRun,
   isBlueprintWorkflowRun,
   workflowRunDisplayName,
 } from "./workflows-drawer-model.ts";
@@ -115,7 +115,7 @@ describe("workflows-drawer-model", () => {
       { id: "plan", version: "1.0.0", name: "Plan v1" },
       { id: "plan", version: "2.0.0", name: "Plan v2" },
     ];
-    expect(catalogSummaryForRun(catalog, planRun())?.name).toBe("Plan v1");
+    expect(workflowSummaryForRun(catalog, planRun())?.name).toBe("Plan v1");
     expect(catalogEntryForWorkflow(catalog, "plan", "2.0.0")?.name).toBe(
       "Plan v2",
     );
@@ -236,4 +236,18 @@ describe("blueprint affordances follow the catalog", () => {
     expect(workflowRunDisplayName(run("plan"), catalog, "Ship the thing")).toBe("Ship the thing");
     expect(workflowRunDisplayName(run("bugbash"), catalog, "Ship the thing")).toBe("Bugbash");
   });
+});
+
+it("uses the selected run definition after its version leaves the start catalog", () => {
+  const definition: WorkflowSummary = {
+    id: "security-survey", version: "1.0.0", name: "Security review",
+    phases: ["plan", "survey", "done"], supports_blueprints: false,
+  };
+  const run = planRun({ workflow_id: definition.id, workflow_version: definition.version,
+    current_phase: "survey", ui: { current_phase_label: "Reviewing", definition } });
+  const catalog = [{ ...definition, version: "1.0.1", name: "New review", phases: ["plan", "done"], supports_blueprints: true }];
+  expect(workflowRunDisplayName(run, catalog, "Unrelated blueprint")).toBe("Security review");
+  expect(workflowRunStepProgress(run, catalog)).toEqual({ index: 2, total: 3 });
+  expect(isBlueprintWorkflowRun(run, catalog)).toBe(false);
+  expect(canArmCatalogWorkflow(run, [run])).toBe(false);
 });

@@ -289,7 +289,6 @@ export function ChatView(props: Props) {
     catalogWorkflowRun(
       activeRun(),
       props.appStore.state.workflowRuns,
-      props.appStore.state.workflowCatalog,
     );
 
   const tabs = createChatTabsState({
@@ -547,9 +546,25 @@ export function ChatView(props: Props) {
     workflow.setArmed(next);
   });
 
+  const sendPromptWithStreamFollow = async (
+    payload: import("./Composer.tsx").ComposerSendPayload,
+  ): Promise<boolean | void> => {
+    return props.onSend({
+      ...payload,
+      onPendingSend: (destination) => {
+        payload.onPendingSend?.(destination);
+        if (destination === "transcript") {
+          clearUnreadBoundary(props.sessionId);
+          viewport.jumpToTail(false);
+        }
+      },
+    });
+  };
+
   const sendWithStreamFollow = async (
     payload: import("./Composer.tsx").ComposerSendPayload,
   ): Promise<boolean | void> => {
+    if (payload.recovery) return sendPromptWithStreamFollow(payload);
     const pending = pendingAsk();
     if (pending) {
       // The draft survives while the question dock mounts.
@@ -604,20 +619,7 @@ export function ChatView(props: Props) {
     }
     workflow.clearArmed();
     clearPendingArmWorkflow();
-    const sendResult = await props.onSend({
-      ...payload,
-      text: resolution.text,
-      onPendingSend: (destination) => {
-        payload.onPendingSend?.(destination);
-        if (destination === "transcript") {
-          clearUnreadBoundary(props.sessionId);
-          viewport.jumpToTail(false);
-        }
-      },
-    });
-    if (sendResult === false) return false;
-    // Admission confirmation preserves any intervening reader input.
-    return sendResult;
+    return sendPromptWithStreamFollow({ ...payload, text: resolution.text });
   };
 
   const lastAskId = createMemo(() =>
@@ -649,18 +651,26 @@ export function ChatView(props: Props) {
     onCopy: (text) => void copyTextToClipboard(text),
   };
 
+  const recoveryAction = (action: "continue" | "retry", text: string) => {
+    const afterMessageId = props.appStore.state.messages.at(-1)?.id;
+    if (!afterMessageId) return undefined;
+    return () => sendWithStreamFollow({
+      text, recovery: { action, after_message_id: afterMessageId },
+    });
+  };
+
   const retryLastAsk = () => {
     const messages = props.appStore.state.messages;
     const id = lastAskId();
     const ask = id ? messages.find((m) => m.id === id) : undefined;
     const text = ask?.content?.trim();
     if (!text || chatLive()) return undefined;
-    return () => sendWithStreamFollow({ text });
+    return recoveryAction("retry", text);
   };
 
   const keepGoingLastAsk = () => {
     if (chatLive()) return undefined;
-    return () => sendWithStreamFollow({ text: "Keep going" });
+    return recoveryAction("continue", "Keep going");
   };
 
   const rewindAndRetryLastAsk = () => {

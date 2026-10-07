@@ -189,10 +189,12 @@ func waitTriggerSet(triggers []WaitTrigger) map[WaitTrigger]struct{} {
 }
 
 type waitMatchInput struct {
-	Wake              anchor.ID
-	CompletingJobID   string
-	ProcessHandle     string
-	ProcessHandles    []string
+	Wake            anchor.ID
+	CompletingJobID string
+	ProcessHandle   string
+	ProcessHandles  []string
+	// WorkerHandles narrows next_worker_done to the named task ids.
+	WorkerHandles     []string
 	CycleIdle         bool
 	OverlayPromoteDue bool
 	// NeedsDecision unblocks the coordinator before sibling work settles.
@@ -210,7 +212,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 		return ok
 	case anchor.ProcessFinished, anchor.ProcessRefused:
 		_, ok := set[WaitTriggerProcessDone]
-		return ok && processHandleMatches(in.ProcessHandles, in.ProcessHandle)
+		return ok && handleMatches(in.ProcessHandles, in.ProcessHandle)
 	case anchor.WorkerBudgetRequested:
 		_, ok := workerWaitCondition(set)
 		return ok
@@ -224,7 +226,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 		if in.NeedsDecision {
 			return true
 		}
-		if strings.TrimSpace(in.CompletingJobID) != "" {
+		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.CompletingJobID) {
 			if _, ok := set[WaitTriggerNextWorkerDone]; ok {
 				return true
 			}
@@ -260,12 +262,12 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		return awaitstore.Condition{Kind: string(WaitTriggerScanDone)}, ok
 	case anchor.ProcessFinished:
 		_, ok := set[WaitTriggerProcessDone]
-		ok = ok && processHandleMatches(in.ProcessHandles, in.ProcessHandle)
+		ok = ok && handleMatches(in.ProcessHandles, in.ProcessHandle)
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.ProcessHandle}}, ok
 	case anchor.ProcessRefused:
 		// A refusal wakes the waiter while the job continues running.
 		_, ok := set[WaitTriggerProcessDone]
-		ok = ok && processHandleMatches(in.ProcessHandles, in.ProcessHandle)
+		ok = ok && handleMatches(in.ProcessHandles, in.ProcessHandle)
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.ProcessHandle}, Outcome: "refused"}, ok
 	case anchor.WorkerBudgetRequested:
 		trigger, ok := workerWaitCondition(set)
@@ -276,9 +278,9 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 				return awaitstore.Condition{Kind: string(WaitTriggerOverlayPromote)}, true
 			}
 		}
-		if strings.TrimSpace(in.CompletingJobID) != "" {
+		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.CompletingJobID) {
 			if _, ok := set[WaitTriggerNextWorkerDone]; ok {
-				return awaitstore.Condition{Kind: string(WaitTriggerNextWorkerDone)}, true
+				return awaitstore.Condition{Kind: string(WaitTriggerNextWorkerDone), Handles: []string{strings.TrimSpace(in.CompletingJobID)}}, true
 			}
 		}
 		if in.CycleIdle {
@@ -308,7 +310,8 @@ func normalizeProcessHandles(handles []string) []string {
 	return out
 }
 
-func processHandleMatches(wanted []string, completed string) bool {
+// handleMatches reports whether completed is selected; no handles select all.
+func handleMatches(wanted []string, completed string) bool {
 	if len(wanted) == 0 {
 		return true
 	}
@@ -403,7 +406,7 @@ func (l *LoopEngine) SessionSleepingOnProcess(sessionID, handle string) bool {
 	if !waitSubscribesProcessDone(triggers) {
 		return false
 	}
-	return processHandleMatches(l.ActiveProcessHandles(sessionID), handle)
+	return handleMatches(l.ActiveProcessHandles(sessionID), handle)
 }
 
 // scanCycleOpen reports whether the session's project has a security scan pending or running.
@@ -464,6 +467,14 @@ func (l *LoopEngine) ActiveProcessHandles(sessionID string) []string {
 	return append([]string(nil), st.processHandles...)
 }
 
+// activeWorkerHandles copies the task selection under the sleep lock.
+func (l *LoopEngine) activeWorkerHandles(sessionID string) []string {
+	st := l.sleepState(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]string(nil), st.workerHandles...)
+}
+
 func (l *LoopEngine) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
 	if env.HasPendingOverlayPromote() {
 		return true
@@ -495,6 +506,7 @@ func (l *LoopEngine) waitWakeAccepted(
 		CompletingJobID:   completingJobID,
 		ProcessHandle:     legID,
 		ProcessHandles:    l.ActiveProcessHandles(sessionID),
+		WorkerHandles:     l.activeWorkerHandles(sessionID),
 		CycleIdle:         l.workerCycleIdle(ctx, sessionID, completingJobID),
 		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, env),
 		NeedsDecision:     env.HasWorkerDecision(),

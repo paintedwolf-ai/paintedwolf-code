@@ -109,6 +109,11 @@ values:
     status: 409
     comment: >-
       rewind refused while a turn or worker is still running
+  - id: prompt_recovery_stale
+    status: 409
+    comment: >-
+      a Keep going or Retry recovery no longer matches the chat (turn running, newer
+      messages, or nothing interrupted); details.reason says which
   - id: rewind_anchor_not_found
     status: 404
     comment: >-
@@ -1014,6 +1019,11 @@ values:
     status: 500
     comment: >-
       generic async prompt turn failure (SSE host_error)
+  - id: turn_closeout_tool_call
+    status: 500
+    comment: >-
+      the model answered its final, tool-less turn with a tool call, which the host
+      did not run, so no summary was recorded (SSE host_error)
   - id: host_fault
     status: 500
     comment: >-

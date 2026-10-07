@@ -1,7 +1,61 @@
-description: Finish this worker leg. Call once when the assignment is done or blocked. The host builds the parent report from these fields plus disk proof.
+description: Finish this worker leg when the assignment is done or blocked. The host builds the parent report from these fields plus disk proof.
 schema:
   type: object
   properties:
+    coverage_review:
+      type: object
+      description: Required when the host assignment declares coverage review. Use its revision and assess every supplied id, including exclusions, against full-scope facts.
+      properties:
+        revision:
+          type: string
+          description: Revision token from the coverage review assignment.
+        assessments:
+          type: array
+          description: Assessments for each obligation or claim id in the declared review.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Identifier of the claim or obligation being assessed.
+              disposition:
+                type: string
+                enum: [satisfied, covered, immaterial, material_open, essential_open]
+                description: Evaluation outcome for this assessment item.
+              reason:
+                type: string
+                maxLength: 1200
+                description: Plain-text justification grounded in observed facts.
+              obligations:
+                type: array
+                description: Obligation identifiers addressed by this assessment.
+                items:
+                  type: string
+                  description: Identifier of the obligation.
+              cited_evidence:
+                type: array
+                maxItems: 12
+                description: Evidence references backing this assessment.
+                items:
+                  type: object
+                  properties:
+                    handle:
+                      type: string
+                      description: Tool result handle that observed the evidence.
+                    path:
+                      type: string
+                      description: Repo-relative file path where evidence was observed.
+                    line:
+                      type: integer
+                      description: 1-based line number in the cited file.
+                    excerpt:
+                      type: string
+                      description: Verbatim text from the cited line or tool result.
+                  additionalProperties: false
+            required: [id, disposition, reason, cited_evidence]
+            additionalProperties: false
+      required: [revision, assessments]
+      additionalProperties: false
     verification:
       type: object
       description: Validation chosen for this assignment. The host derives outcomes from receipts; this never waives a workflow gate.
@@ -23,7 +77,8 @@ schema:
       description: complete=assigned work delivered; partial=work remains; blocked=work cannot proceed. Validation limits alone do not make delivered work incomplete.
     brief:
       type: string
-      description: Short narrative for the user. No file dumps. Host-capped.
+      minLength: 1
+      description: Parent-visible narrative. No file dumps. Host-capped.
     findings:
       type: array
       maxItems: 12
@@ -33,13 +88,16 @@ schema:
         properties:
           path:
             type: string
-            description: Repo-relative path you read or grepped.
+            description: Repo-relative path you read, grepped, or saw in scanner locations.
           line:
             type: integer
             description: 1-based line when citing file content.
+          evidence:
+            type: string
+            description: Handle of the tool result that holds excerpt, such as scan#2.
           excerpt:
             type: string
-            description: Verbatim content at path/line.
+            description: Verbatim text at path/line, or from the evidence result.
           note:
             type: string
             description: Optional narrative (not a substitute for excerpt).
@@ -84,5 +142,5 @@ schema:
     suggested_next_task:
       type: string
       description: Useful follow-up assignment.
-  required: [leg_status]
+  required: [leg_status, brief]
   additionalProperties: false

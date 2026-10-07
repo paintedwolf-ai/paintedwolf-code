@@ -11,13 +11,15 @@ requires:
   facts:
     - paintedwolf.rejection_code
     - paintedwolf.timeout_ms
+    - paintedwolf.files_searched
+    - paintedwolf.largest_subtree
 when: paintedwolf.rejection_code == "GREP_DEADLINE_EXCEEDED"
 effect: block
 copy:
-  what: 'Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget; coverage is incomplete.'
-  cause: The selected content could not be searched within the execution budget.
+  what: 'Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete.'
+  cause: '{% if paintedwolf.largest_subtree %}Most of the budget went to {{ paintedwolf.largest_subtree }}.{% else %}The selected content could not be searched within the execution budget.{% endif %}'
   why: Search execution is bounded to keep the host responsive; this is not evidence of absence.
-  fix: "Partition the same scope by path or path_glob and search each partition. Do not infer that the pattern is absent or exclude ignored files without task justification."
+  fix: "Partition the same scope by path or path_glob and search each partition{% if paintedwolf.largest_subtree %}, starting with the subtree that consumed the budget{% endif %}. Pass include_ignored=false only when the task does not need ignored files."
   instead: Branch on Code; partition the search scope and retry
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grep
@@ -28,6 +30,10 @@ x-paintedwolf-scenarios:
       profile: coordinator
       tool: grep
       timeout_ms: 60000
+      files_searched: 18240
+      largest_subtree: 'node_modules (16011 files)'
     expect_contains:
       - 'Rejected:'
       - 'Code: GREP_DEADLINE_EXCEEDED'
+      - 'after 18240 files'
+      - 'Most of the budget went to node_modules (16011 files)'

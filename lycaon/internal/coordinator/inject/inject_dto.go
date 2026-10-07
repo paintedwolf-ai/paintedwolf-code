@@ -2,11 +2,6 @@ package inject
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"maps"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -27,10 +22,11 @@ type PhaseExitView struct {
 	OpenGates           []string
 	DormantGates        []string
 	CompleteWhen        string
-	VerdictSchema       map[string]string
-	ClaimStatuses       []string
+	VerdictShape        string
 	ReviewLoopKey       string
 	ReviewLoopCap       int
+	FollowupAttempts    int
+	VerdictExample      string
 	// ReviewAgents is the verdict-owed reviewer roster for a review_loop phase.
 	ReviewAgents      []string
 	HumanApproval     bool
@@ -51,8 +47,10 @@ type PhaseExitChoiceArm struct {
 // WorkflowRuntimeSnapshot is workflow-generic runtime metadata for inject.
 type WorkflowRuntimeSnapshot struct {
 	ReportDocumentEnabled bool
+	CloseoutRetries       int
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.
+	CoverageReview    string
 	ReportRating      *ReportRatingView
 	Topology          string
 	Phases            []WorkflowPhaseRow
@@ -121,6 +119,7 @@ type ReportRatingView struct {
 // ActiveWorkflowInjectData is the pongo data model for inject/active-workflow.md.
 type ActiveWorkflowInjectData struct {
 	ReportDocumentEnabled bool
+	CoverageReview        string
 	ReportRating          *ReportRatingView
 	WorkflowID            string
 	WorkflowVersion       string
@@ -194,6 +193,7 @@ func BuildActiveWorkflowInjectData(frame CoordinatorTurnFrame) ActiveWorkflowInj
 		WorkflowVersion:       strings.TrimSpace(runCtx.WorkflowVersion),
 		RunID:                 strings.TrimSpace(runCtx.RunID),
 		ReportDocumentEnabled: snap.ReportDocumentEnabled,
+		CoverageReview:        snap.CoverageReview,
 		ReportRating:          snap.ReportRating,
 		RunStatus:             strings.TrimSpace(runCtx.RunStatus),
 		CurrentPhase:          strings.TrimSpace(runCtx.CurrentPhase),
@@ -249,8 +249,6 @@ func BuildActiveWorkflowInjectData(frame CoordinatorTurnFrame) ActiveWorkflowInj
 	}
 	if snap.PhaseExit != nil {
 		pe := *snap.PhaseExit
-		pe.VerdictSchema = maps.Clone(snap.PhaseExit.VerdictSchema)
-		pe.ClaimStatuses = append([]string(nil), snap.PhaseExit.ClaimStatuses...)
 		pe.OpenGates = append([]string(nil), snap.PhaseExit.OpenGates...)
 		pe.DormantGates = append([]string(nil), snap.PhaseExit.DormantGates...)
 		pe.ReviewAgents = append([]string(nil), snap.PhaseExit.ReviewAgents...)
@@ -372,6 +370,7 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 		"run_id":                  data.RunID,
 		"run_status":              data.RunStatus,
 		"report_document_enabled": data.ReportDocumentEnabled,
+		"coverage_review":         data.CoverageReview,
 		"report_rating":           reportRatingRow(data.ReportRating),
 		"current_phase":           data.CurrentPhase,
 		"complete_when":           data.CompleteWhen,
@@ -414,10 +413,11 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"open_gates":           append([]string(nil), data.PhaseExit.OpenGates...),
 			"dormant_gates":        append([]string(nil), data.PhaseExit.DormantGates...),
 			"complete_when":        data.PhaseExit.CompleteWhen,
-			"verdict_schema":       verdictSchemaJSON(data.PhaseExit.VerdictSchema),
-			"claim_statuses":       append([]string(nil), data.PhaseExit.ClaimStatuses...),
+			"verdict_shape":        data.PhaseExit.VerdictShape,
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
+			"followup_attempts":    data.PhaseExit.FollowupAttempts,
+			"verdict_example":      data.PhaseExit.VerdictExample,
 			"review_agents":        append([]string(nil), data.PhaseExit.ReviewAgents...),
 			"human_approval":       data.PhaseExit.HumanApproval,
 			"invoke_workflow_id":   data.PhaseExit.InvokeWorkflowID,
@@ -501,150 +501,10 @@ func previewDecisionPhaseIDs(phases []api.ComposeDecisionPhase) []string {
 	return out
 }
 
-// ActiveWorkflowInjectFingerprint hashes inject DTO fields for prompt assembly dedup.
-func ActiveWorkflowInjectFingerprint(data ActiveWorkflowInjectData, hintCodes []string) string {
-	codes := append([]string(nil), hintCodes...)
-	sort.Strings(codes)
-	failed := append([]string(nil), data.FailedLeaves...)
-	sort.Strings(failed)
-	unsatisfied := append([]string(nil), data.UnsatisfiedGateLeaves...)
-	sort.Strings(unsatisfied)
-	allowed := append([]string(nil), data.AllowedAgents...)
-	sort.Strings(allowed)
-	excludedParts := make([]string, len(data.ExcludedAgents))
-	for i, ex := range data.ExcludedAgents {
-		excludedParts[i] = ex.Name + ":" + ex.Code
-	}
-	sort.Strings(excludedParts)
-	allowed = append(allowed, excludedParts...)
-
-	phaseParts := make([]string, len(data.Phases))
-	for i, p := range data.Phases {
-		cur := "0"
-		if p.IsCurrent {
-			cur = "1"
-		}
-		phaseParts[i] = p.ID + ":" + cur + ":" + boolString(p.Terminal)
-	}
-	sort.Strings(phaseParts)
-
-	gateParts := make([]string, len(data.CurrentGates))
-	for i, g := range data.CurrentGates {
-		gateParts[i] = g.ID + ":" + boolString(g.Satisfied)
-	}
-	sort.Strings(gateParts)
-
-	obligationParts := make([]string, len(data.GateObligations))
-	for i, o := range data.GateObligations {
-		obligationParts[i] = strings.Join([]string{
-			o.ID,
-			o.Purpose,
-			strings.Join(o.Satisfy, ","),
-			strings.Join(o.Missing, ","),
-			strings.Join(o.Required, ","),
-		}, ":")
-	}
-	sort.Strings(obligationParts)
-
-	var pendingPhase, pendingPrompt string
-	if data.PendingFeedback != nil {
-		pendingPhase = data.PendingFeedback.PhaseID
-		pendingPrompt = data.PendingFeedback.Prompt
-	}
-	var requestStatus, requestText, requestSource string
-	requestSequence := 0
-	if data.Request != nil {
-		requestStatus = data.Request.Status
-		requestText = data.Request.Text
-		requestSource = data.Request.Source
-		requestSequence = data.Request.Sequence
-	}
-
-	parts := []string{
-		data.WorkflowID,
-		data.WorkflowVersion,
-		data.RunID,
-		data.RunStatus,
-		data.CurrentPhase,
-		data.CompleteWhen,
-		data.Topology,
-		data.TopologyPhaseID,
-		data.CoordinatorBrief,
-		data.FanoutPlan,
-		strings.Join(failed, ","),
-		strings.Join(unsatisfied, ","),
-		strings.Join(allowed, ","),
-		strings.Join(phaseParts, ","),
-		strings.Join(gateParts, ","),
-		strings.Join(obligationParts, ","),
-		data.NextPhase,
-		strings.Join(data.FeedbackPhases, ","),
-		strings.Join(data.DecisionPhases, ","),
-		boolString(data.RequiresIsolation),
-		boolString(data.ReportDocumentEnabled),
-		reportRatingKey(data.ReportRating),
-		pendingPhase,
-		pendingPrompt,
-		requestStatus,
-		requestText,
-		requestSource,
-		strconv.Itoa(requestSequence),
-		strings.Join(codes, ","),
-	}
-	if data.BlueprintApproval != nil {
-		parts = append(parts,
-			data.BlueprintApproval.Status,
-			data.BlueprintApproval.Origin,
-			data.BlueprintApproval.ParentRunID,
-		)
-	}
-	if data.PhaseExit != nil {
-		choiceIDs := make([]string, 0, len(data.PhaseExit.ChoiceTransitions))
-		for _, arm := range data.PhaseExit.ChoiceTransitions {
-			choiceIDs = append(choiceIDs, arm.ID+":"+arm.Label+":"+strings.Join(arm.Actors, "+"))
-		}
-		parts = append(parts,
-			data.PhaseExit.Kind,
-			data.PhaseExit.DepthParam,
-			data.PhaseExit.ReviewLoopKey,
-			strconv.Itoa(data.PhaseExit.ReviewLoopCap),
-			strings.Join(data.PhaseExit.ReviewAgents, "+"),
-			data.PhaseExit.InvokeWorkflowID,
-			boolString(data.PhaseExit.HumanApproval),
-			boolString(data.PhaseExit.CoordinatorAdvances),
-			strings.Join(data.PhaseExit.OpenGates, ","),
-			strings.Join(data.PhaseExit.DormantGates, ","),
-			data.PhaseExit.CompleteWhen,
-			verdictSchemaJSON(data.PhaseExit.VerdictSchema),
-			strings.Join(data.PhaseExit.ClaimStatuses, ","),
-			strings.Join(choiceIDs, ","),
-		)
-	}
-	return hashString(strings.Join(parts, "\x1e"))
-}
-
 // String maps always marshal; encoding/json sorts keys for stable render/cache identity.
-func verdictSchemaJSON(schema map[string]string) string {
-	if len(schema) == 0 {
-		return ""
-	}
-	raw, err := json.Marshal(schema)
-	if err != nil {
-		panic(fmt.Errorf("encode string-only verdict schema: %w", err))
-	}
-	return string(raw)
-}
-
 func reportRatingRow(r *ReportRatingView) map[string]any {
 	if r == nil {
 		return nil
 	}
 	return map[string]any{"dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
-}
-
-func reportRatingKey(r *ReportRatingView) string {
-	if r == nil {
-		return ""
-	}
-	return r.Questions
 }

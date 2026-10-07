@@ -39,8 +39,8 @@ func TestLoopProseFinishTurnOmitsTools(t *testing.T) {
 	deps.LLM = client
 	deps.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
 	deps.Tools = reg
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, reason promptloop.TurnCloseoutReason, _ string) promptloop.HostNudge {
-		closeoutReason = reason
+	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+		closeoutReason = cause.Reason
 		return promptloop.HostNudge{Content: "final turn closeout"}
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
