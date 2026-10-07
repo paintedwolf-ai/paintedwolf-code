@@ -1,11 +1,13 @@
 package guidance_test
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
+	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,7 +22,7 @@ func TestEvaluateWorkerCitations_barePathFindingBlocks(t *testing.T) {
 }
 
 func TestEvaluateWorkerCitations_groundedFinding(t *testing.T) {
-	readJSON := `{"path":"f.go","content":"42|  return nil","offset":42,"end_line":42,"limit":1}`
+	readJSON := fmt.Sprintf(`{"path":"f.go","content":%q,"offset":42,"end_line":42,"limit":1}`, hostmarker.FormatNumberedLines([]string{"return nil"}, 42))
 	msgs := []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "f.go", "offset": 42, "limit": 1}},
@@ -305,3 +307,23 @@ func TestEvaluateWorkerCitations_pageMeasureFabricatedWithGeometryPresent(t *tes
 		t.Fatalf("eval = %+v want %s for a figure present in no evidence record", eval, guidance.PageMeasureUngroundedCode)
 	}
 }
+
+func TestEvaluateWorkerCitationsReportsURLOffendersAlongsidePathOffenders(t *testing.T) {
+	ev := ledgertest.BuildFromMessages("", nil)
+	eval := guidance.EvaluateWorkerCitations(
+		evidence.CitationRoots{},
+		[]guidance.WorkerFindingInput{
+			{Path: "unobserved.go", Line: 10, Excerpt: "foo bar baz qux"},
+		},
+		[]string{"https://example.com/unobserved"},
+		guidance.WorkerNarrativeInput{},
+		ev,
+	)
+	if eval.Code != guidance.WorkerEvidenceHandleUnknownCode {
+		t.Fatalf("eval.Code = %q want %s", eval.Code, guidance.WorkerEvidenceHandleUnknownCode)
+	}
+	if len(eval.UnobservedURLs) != 1 || eval.UnobservedURLs[0] != "https://example.com/unobserved" {
+		t.Fatalf("eval.UnobservedURLs = %v want [https://example.com/unobserved]", eval.UnobservedURLs)
+	}
+}
+

@@ -2,12 +2,12 @@ package summarize
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/textrank"
 )
 
@@ -53,11 +53,7 @@ func numberWindowBody(body string, startLine int) string {
 		startLine = 1
 	}
 	lines := strings.Split(body, "\n")
-	var b strings.Builder
-	for i, line := range lines {
-		fmt.Fprintf(&b, "%d: %s\n", startLine+i, line)
-	}
-	return b.String()
+	return hostmarker.FormatNumberedLines(lines, startLine)
 }
 
 // mergeOverlappingWindows collapses adjacent/overlapping windows in the same
@@ -98,26 +94,16 @@ func mergeOverlappingWindows(windows []PackWindow) []PackWindow {
 	return out
 }
 
+// mergeWindowBodies keeps a's rows and appends b's rows past a's last line, so
+// adjacent and overlapping windows join on row boundaries.
 func mergeWindowBodies(a, b PackWindow) string {
-	if b.StartLine > a.EndLine {
-		return a.Body + b.Body
-	}
-	// Overlap: keep a's body and append lines of b past a.EndLine.
-	lines := strings.Split(strings.TrimSuffix(b.Body, "\n"), "\n")
-	var extra strings.Builder
-	for _, line := range lines {
-		var n int
-		rest := line
-		if i := strings.IndexByte(line, ':'); i > 0 {
-			_, _ = fmt.Sscanf(line[:i], "%d", &n)
-			rest = line
-		}
-		if n > a.EndLine {
-			extra.WriteString(rest)
-			extra.WriteByte('\n')
+	rows := strings.Split(a.Body, "\n")
+	for _, row := range strings.Split(b.Body, "\n") {
+		if n, _, ok := hostmarker.ParseNumberedLine(row); ok && n > a.EndLine {
+			rows = append(rows, row)
 		}
 	}
-	return a.Body + extra.String()
+	return strings.Join(rows, "\n")
 }
 
 // FocusSource keeps a relevant definition inside the gathered source span.

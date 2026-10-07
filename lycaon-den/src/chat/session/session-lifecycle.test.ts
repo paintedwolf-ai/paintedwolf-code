@@ -355,6 +355,19 @@ describe("sendChatPrompt", () => {
     });
   }
 
+  it("sends recovery identity without expanding its visible text", async () => {
+    const appStore = createAppStore();
+    appStore.actions.setCurrentSession(idle);
+    const client = promptClient();
+    const recovery = { action: "continue" as const, after_message_id: "last-progress" };
+    await sendChatPrompt(appStore, stalledRecents(), async () => client,
+      "sess-1", "proj-1", "/tmp/p", emptyProjects, "Keep going",
+      undefined, undefined, undefined, { recovery });
+    expect(client.sendPrompt).toHaveBeenCalledWith("sess-1", expect.objectContaining({
+      text: "Keep going", recovery,
+    }));
+  });
+
   it("seats the prompt and releases the draft before pre-send work resolves", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession(idle);

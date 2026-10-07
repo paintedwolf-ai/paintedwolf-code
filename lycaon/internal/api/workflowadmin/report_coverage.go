@@ -3,12 +3,10 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -37,36 +35,11 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	if len(scans) == 0 {
 		return
 	}
-	scanners := map[string]bool{}
-	failed := map[string]bool{}
-	for _, s := range scans {
-		scanners[s.ScannerID] = true
-		a.coverage = append(a.coverage, report.ReportCoverageItem{
-			Subject: s.ScannerID, Status: string(s.Status), Detail: scanCoverageDetail(s),
-		})
-		if s.Status != wire.CodeScanStatusComplete {
-			failed[s.ScannerID] = true
-		}
+	observed := summarizeScanCoverage(scans)
+	a.coverage = append(a.coverage, observed.coverage...)
+	for _, gap := range observed.gaps {
+		a.gap(gap)
 	}
-	a.gap(report.ReportGap{Kind: report.GapScansFailed, Count: len(failed), Of: len(scanners), Names: slices.Sorted(maps.Keys(failed))})
-
-	moved := report.ReportGap{Kind: report.GapScansMoved, Of: len(scanners)}
-	standing := report.ReportGap{Kind: report.GapScansStanding, Of: len(scanners)}
-	for _, g := range scan.RunCoverageGaps(scans) {
-		if g.Open() {
-			moved.Count++
-			moved.Names = append(moved.Names, g.Scanner)
-			moved.Detail += len(g.Moved)
-		}
-		if g.Standing > 0 {
-			standing.Count++
-			standing.Names = append(standing.Names, g.Scanner)
-			standing.Detail += g.Standing
-			standing.DetailFiles += g.StandingFiles
-		}
-	}
-	a.gap(moved)
-	a.gap(standing)
 
 	sets := append(append([]scanfindings.SetAside(nil), reviewed...), setAsides(completion)...)
 	account := scanfindings.AccountInventory(scanfindings.InventoryGroups(scanfindings.InventoryFindings(scans)),
@@ -77,9 +50,15 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 		SetAside:    account.SetAsideCount(),
 		Unaccounted: len(account.Unaccounted()),
 	}
+	counts := make([]int, len(sets))
+	for id, index := range account.SetAsideBy {
+		if !account.Linked[id] {
+			counts[index]++
+		}
+	}
 	for i, sa := range sets {
-		if i < len(account.SetAsideCounts) {
-			inv.SetAsides = append(inv.SetAsides, report.ReportSetAside{Reason: sa.Reason, Groups: account.SetAsideCounts[i]})
+		if counts[i] > 0 {
+			inv.SetAsides = append(inv.SetAsides, report.ReportSetAside{Reason: sa.Reason, Groups: counts[i]})
 		}
 	}
 	a.inventory = inv
@@ -91,7 +70,7 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	})
 
 	check := report.ReportCheck{
-		Kind: report.CheckScans, Ran: len(scanners), ScansFailed: len(failed),
+		Kind: report.CheckScans, Ran: observed.scanners, ScansFailed: observed.failed,
 		Used: inv.Linked + inv.SetAside, Total: inv.Total,
 	}
 	switch {
@@ -105,15 +84,13 @@ func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.Complet
 	a.checks = append(a.checks, check)
 }
 
-// scanCoverageDetail states what one bound scan covered. A path scan the run
-// bound closes the gap files that moved during a full scan left, so it is
-// named as that rescan rather than as partial coverage of the project.
+// Path-targeted scans report their declared scope.
 func scanCoverageDetail(s wire.CodeScan) string {
 	if s.TargetKind == wire.ScanTargetPaths {
 		n := len(s.TargetPaths)
-		return fmt.Sprintf("Rescan %s of %d moved %s; %d stored findings", s.ID, n, plural(n, "file", "files"), len(s.Findings))
+		return fmt.Sprintf("Targeted scan %s of %d %s; %d stored findings", s.ID, n, plural(n, "file", "files"), len(s.Findings))
 	}
-	return fmt.Sprintf("Scan %s; coverage %s; %d stored findings", s.ID, s.CoverageStatus, len(s.Findings))
+	return fmt.Sprintf("Scan %s; source snapshot %s; coverage %s; %d stored findings", s.ID, s.SourceSnapshotID, s.CoverageStatus, len(s.Findings))
 }
 
 func plural(n int, one, many string) string {
@@ -211,6 +188,10 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	if err != nil {
 		return err
 	}
+	taskByID := make(map[string]wire.WorkerTask, len(tasks))
+	for _, task := range tasks {
+		taskByID[task.ID] = task
+	}
 	unfinished := report.ReportGap{Kind: report.GapLegsUnfinished}
 	partial := report.ReportGap{Kind: report.GapLegsPartial}
 	legAttempts := map[string]bool{}
@@ -223,10 +204,17 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 			for _, id := range leg.Attempts {
 				legAttempts[id] = true
 			}
+			detail := fmt.Sprintf("%s · %d of %d allowed attempts: %s", leg.Subject, len(leg.Attempts), plan.MaxAttempts, strings.Join(leg.Attempts, ", "))
+			if len(leg.Attempts) > 0 {
+				lastTask := taskByID[leg.Attempts[len(leg.Attempts)-1]]
+				if lastTask.Result != nil && strings.TrimSpace(lastTask.Result.HintCode) != "" {
+					detail += " · host check: " + guidance.HintCodeUILabel(lastTask.Result.HintCode)
+				}
+			}
 			a.coverage = append(a.coverage, report.ReportCoverageItem{
 				Subject: phase.ID + "/" + leg.ID + " · " + leg.AgentType,
 				Status:  leg.Status,
-				Detail:  fmt.Sprintf("%s · %d of %d allowed attempts: %s", leg.Subject, len(leg.Attempts), plan.MaxAttempts, strings.Join(leg.Attempts, ", ")),
+				Detail:  detail,
 			})
 			check := report.ReportCheck{Kind: report.CheckArea, Subject: leg.Subject}
 			unfinished.Of++
@@ -255,17 +243,17 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		if legAttempts[task.ID] {
 			continue
 		}
-		status := string(task.Status)
-		if task.Result != nil && task.Result.CompletionReport != nil {
-			status += "/" + task.Result.CompletionReport.LegStatus
+		status := wire.WorkerTaskLegStatus(task)
+		detail := "Attempt " + task.ID
+		if task.Result != nil && strings.TrimSpace(task.Result.HintCode) != "" {
+			detail += " · host check: " + guidance.HintCodeUILabel(task.Result.HintCode)
 		}
-		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: task.AgentType + " · " + task.WorkflowPhase, Status: status, Detail: "Attempt " + task.ID})
+		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: task.AgentType + " · " + task.WorkflowPhase, Status: status, Detail: detail})
 		if task.WorkflowWorkID != "" {
 			continue
 		}
 		helpers.Of++
-		complete := task.Status == wire.WorkerStatusComplete && task.Result != nil && task.Result.CompletionReport != nil &&
-			task.Result.CompletionReport.LegStatus == "complete"
+		complete := wire.WorkerTaskLegStatus(task) == "complete"
 		if !complete {
 			helpers.Count++
 			helpers.Names = append(helpers.Names, task.AgentType)

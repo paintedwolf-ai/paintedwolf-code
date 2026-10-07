@@ -1,0 +1,31 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_QUESTION_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.offenders_sample]
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_QUESTION_INVALID"
+effect: block
+copy:
+  what: 'The follow-up question cannot make this transition{% if paintedwolf.offenders_sample %}: {{ paintedwolf.offenders_sample }}{% endif %}.'
+  cause: '{{ paintedwolf.rejection_reason }}.'
+  why: Question identity, completed investigations, and current review evidence determine which transitions are available.
+  fix: >-
+    Register open claims with question: {missing_fact, obligations}, using current obligation ids; retain each registered scope and include every claim's outcome. Wait for active work. Dispatch any required investigation with the question id as workflow_work_id, then the declared reviewer with /review appended. A terminal verdict needs current review evidence and a coverage assessment for every question. After the investigation allowance is exhausted, keep unanswered claims unresolved and assess their impact as immaterial, material_open, or essential_open; do not request another follow-up or mark an open question covered.
+  instead: Keep completed investigations and their evidence. Do not rename a question, drop its scope, or mark it covered to make the transition pass.
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: The follow-up question needs a valid transition.
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-scenarios:
+  - id: review_required
+    vars:
+      rejection_reason: current_review_required
+      offenders_sample: question/c1
+    expect_contains: ['Code: SUBMIT_VERDICT_QUESTION_INVALID', workflow_work_id, /review]
+  - id: exhausted
+    vars:
+      rejection_reason: investigations_exhausted
+      offenders_sample: ''
+    expect_contains: [terminal verdict, unresolved]

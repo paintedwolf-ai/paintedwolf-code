@@ -39,11 +39,12 @@ type Triple struct {
 
 // Resolution is host-minted provenance for one triple resolution.
 type Resolution struct {
-	Handle  string
-	Path    string
-	Line    int
-	Excerpt string
-	Verdict Verdict
+	Handle            string
+	Path              string
+	Line              int
+	LineCorrectedFrom int
+	Excerpt           string
+	Verdict           Verdict
 }
 
 // Resolve binds a citation triple against the path-indexed ledger.
@@ -75,9 +76,14 @@ func Resolve(
 		return out
 	}
 
-	if matchedHandle := matchedHandleForPath(ev, path, line, excerpt); matchedHandle != "" {
+	if matchedHandle := matchedHandleForPath(ev, path, line, excerpt, handleHint); matchedHandle != "" {
 		out.Handle = matchedHandle
 		out.Verdict = VerdictMatched
+		return out
+	}
+
+	if anchor, handle, ok := reanchorExcerpt(ev, path, excerpt); ok {
+		out.LineCorrectedFrom, out.Line, out.Handle, out.Verdict = line, anchor, handle, VerdictMatched
 		return out
 	}
 
@@ -103,9 +109,12 @@ func NormalizeResolvePath(projectDir, raw string) string {
 	return ""
 }
 
-func matchedHandleForPath(ev Ledger, path string, line int, excerpt string) string {
+func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) string {
+	if handleHint != "" && ExcerptMatchesHandle(ev, handleHint, path, line, excerpt) {
+		return handleHint
+	}
 	for _, handle := range ev.ByPath[path] {
-		if ExcerptMatchesHandle(ev, handle, line, excerpt) {
+		if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
 			return handle
 		}
 	}
@@ -122,7 +131,7 @@ func excerptMatchesOtherPath(ev Ledger, citedPath string, line int, excerpt stri
 			continue
 		}
 		for _, handle := range handles {
-			if ExcerptMatchesHandle(ev, handle, line, excerpt) {
+			if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
 				return true
 			}
 		}

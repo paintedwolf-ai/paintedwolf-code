@@ -96,8 +96,8 @@ func TestScanFailsWhenTheBoundSnapshotIsNotResident(t *testing.T) {
 	}
 }
 
-// The engine reads live files selected by the snapshot.
-func TestScanNamesFilesThatMovedWhileItRan(t *testing.T) {
+// The engine reads captured bytes even when the working tree changes.
+func TestScanUsesIsolatedSnapshotWhileLiveFilesMove(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	sqlStore := scanbase.NewSQLStore(database)
 	snapshots := testSnapshots(t, sqlStore)
@@ -119,11 +119,15 @@ func TestScanNamesFilesThatMovedWhileItRan(t *testing.T) {
 		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{onRun: func(req scanbase.ScanRequest) {
 			scanned = req.Paths
-			if req.ProjectDir != canonical {
-				t.Errorf("engine root = %q, want the live tree %q", req.ProjectDir, canonical)
+			if req.ProjectDir == canonical {
+				t.Errorf("engine received the live tree %q", canonical)
 			}
 			if err := os.WriteFile(main, []byte("package main // rewritten under the scan\n"), 0o644); err != nil {
 				t.Errorf("rewrite under the scan: %v", err)
+			}
+			raw, readErr := os.ReadFile(filepath.Join(req.ProjectDir, "main.go"))
+			if readErr != nil || string(raw) != "package main\n" {
+				t.Errorf("scan bytes = %q, error = %v", raw, readErr)
 			}
 		}},
 	}
@@ -139,17 +143,11 @@ func TestScanNamesFilesThatMovedWhileItRan(t *testing.T) {
 	if final.Status != api.CodeScanStatusComplete {
 		t.Fatalf("status = %q error = %q, want complete", final.Status, final.Error)
 	}
-	if final.CoverageStatus != api.ScanCoveragePartial {
-		t.Fatalf("coverage = %q, want partial: a scanned file moved", final.CoverageStatus)
+	if final.CoverageStatus != api.ScanCoverageComplete || len(final.Warnings) != 0 {
+		t.Fatalf("isolated scan lost coverage: %s %+v", final.CoverageStatus, final.Warnings)
 	}
-	moved := 0
-	for _, warning := range final.Warnings {
-		if warning.Kind == api.ScanWarningSourceMoved && warning.File == "main.go" {
-			moved++
-		}
-	}
-	if moved != 1 {
-		t.Fatalf("warnings = %+v, want one source_moved for main.go", final.Warnings)
+	if _, err := os.Stat(scanned[0]); !os.IsNotExist(err) {
+		t.Fatalf("scan staging was not removed: %v", err)
 	}
 }
 

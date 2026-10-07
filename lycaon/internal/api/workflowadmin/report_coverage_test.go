@@ -160,7 +160,7 @@ func TestReportAdvisoryDetailsNameMalwareAndEveryAlias(t *testing.T) {
 func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := manifests.Get("security-survey", "1.0.0")
+	manifest, err := manifests.Get("security-survey", "1.0.1")
 	testutil.FailErr(t, "manifest", err)
 	var phase string
 	for _, p := range manifest.PhaseDefs {
@@ -215,4 +215,103 @@ type coverageWorkers struct {
 
 func (w coverageWorkers) ListByWorkflowRunID(context.Context, string, ...wire.WorkerStatus) ([]wire.WorkerTask, error) {
 	return w.tasks, nil
+}
+
+func TestScanAccountCountsDistinctPathsAndSetAsides(t *testing.T) {
+	finding := scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{DriverID: "sast", RuleID: "fixture", Level: wire.FindingLevelHigh, Locations: []wire.SecurityFindingLocation{{URI: "fixture.go"}}})
+	var scans []wire.CodeScan
+	for _, id := range []string{"sast", "sca", "secrets"} {
+		scans = append(scans, wire.CodeScan{ID: id, ScannerID: id, Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoveragePartial, Warnings: []wire.ScanWarning{{Kind: wire.ScanWarningSourceMoved, File: "fixture.go"}}})
+	}
+	scans[0].Findings = []wire.SecurityFinding{finding}
+	id := scanfindings.FindingGroupID(finding)
+	var account runAccount
+	account.scanAccount(scans, nil, nil, []scanfindings.SetAside{{GroupIDs: []string{id}, Reason: "fixture"}, {GroupIDs: []string{id}, Reason: "reviewed fixture"}})
+	if len(account.gaps) != 1 || account.gaps[0].Detail != 1 || account.gaps[0].Count != 3 {
+		t.Fatalf("paths counted per scanner: %+v", account.gaps)
+	}
+	if len(account.inventory.SetAsides) != 1 || account.inventory.SetAsides[0].Groups != 1 {
+		t.Fatalf("overlapping exclusions counted twice: %+v", account.inventory)
+	}
+}
+
+func TestReportCoverageShowsHostCheckForPartialLeg(t *testing.T) {
+	phase := "plan"
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{
+		{
+			ID:    phase,
+			Gates: []string{"worker_cycle_ready"},
+		},
+	}}
+	plan := workflow.FanoutPlan{
+		Phase:       phase,
+		MaxAttempts: 2,
+		Legs: []workflow.FanoutPlanLeg{
+			{ID: "leg-1", AgentType: "security-reviewer", Subject: "Review auth"},
+		},
+	}
+	tasks := []wire.WorkerTask{
+		{
+			ID:             "t1",
+			AgentType:      "security-reviewer",
+			WorkflowPhase:  phase,
+			WorkflowWorkID: "leg-1",
+			Status:         wire.WorkerStatusComplete,
+			Result: &wire.WorkerResult{
+				Status:   "partial",
+				HintCode: "WORKER_EVIDENCE_HANDLE_UNKNOWN",
+				CompletionReport: &wire.WorkerCompletionReport{
+					LegStatus: "partial",
+				},
+			},
+		},
+		{
+			ID:            "helper-1",
+			AgentType:     "scout",
+			WorkflowPhase: phase,
+			Status:        wire.WorkerStatusComplete,
+			Result: &wire.WorkerResult{
+				Status:   "partial",
+				HintCode: "WORKER_EVIDENCE_HANDLE_UNKNOWN",
+				CompletionReport: &wire.WorkerCompletionReport{
+					LegStatus: "partial",
+				},
+			},
+		},
+	}
+	h := &Handler{Deps: Deps{
+		Runs:    coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}},
+		Workers: coverageWorkers{tasks: tasks},
+	}}
+	var a runAccount
+	testutil.FailErr(t, "workAccount", h.workAccount(context.Background(), &a, &wire.WorkflowRun{ID: "run"}, manifest))
+
+	var legItem, helperItem *report.ReportCoverageItem
+	for i := range a.coverage {
+		if strings.Contains(a.coverage[i].Subject, "leg-1") {
+			legItem = &a.coverage[i]
+		}
+		if strings.Contains(a.coverage[i].Subject, "scout") {
+			helperItem = &a.coverage[i]
+		}
+	}
+	if legItem == nil {
+		t.Fatalf("missing coverage item for leg-1 in %+v", a.coverage)
+	}
+	if legItem.Status != "partial" {
+		t.Fatalf("legItem.Status = %q, want partial", legItem.Status)
+	}
+	if !strings.Contains(legItem.Detail, " · host check: Evidence handles") {
+		t.Fatalf("legItem.Detail = %q, want host check suffix", legItem.Detail)
+	}
+
+	if helperItem == nil {
+		t.Fatalf("missing coverage item for helper in %+v", a.coverage)
+	}
+	if helperItem.Status != "partial" {
+		t.Fatalf("helperItem.Status = %q, want partial", helperItem.Status)
+	}
+	if !strings.Contains(helperItem.Detail, " · host check: Evidence handles") {
+		t.Fatalf("helperItem.Detail = %q, want host check suffix", helperItem.Detail)
+	}
 }

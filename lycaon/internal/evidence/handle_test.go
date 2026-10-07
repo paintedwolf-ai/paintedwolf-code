@@ -2,12 +2,14 @@ package evidence_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,23 +43,23 @@ func TestHandleForPath_newestKind(t *testing.T) {
 }
 
 func TestExcerptMatchesHandle_readBody(t *testing.T) {
-	readJSON := `{"path":"f.go","content":"42|  return nil","offset":42,"end_line":42,"limit":1}`
+	readJSON := fmt.Sprintf(`{"path":"f.go","content":%q,"offset":42,"end_line":42,"limit":1}`, hostmarker.FormatNumberedLines([]string{"return nil"}, 42))
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "f.go", "offset": 42, "limit": 1}},
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: readJSON}},
 	})
-	if !evidence.ExcerptMatchesHandle(ev, "read#1", 42, "return nil") {
+	if !evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 42, "return nil") {
 		t.Fatal("expected excerpt match")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 42, "return 1") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 42, "return 1") {
 		t.Fatal("expected excerpt mismatch")
 	}
 }
 
 func TestExcerptMatchesHandle_taggedReadBody(t *testing.T) {
-	readJSON := `{"path":"lycaon/go.mod","content":"1\tmodule github.com/lycaon/lycaon\n2\t\n3\tgo 1.26.4\n","offset":1,"end_line":3,"limit":3,"total_lines":258}`
+	readJSON := fmt.Sprintf(`{"path":"lycaon/go.mod","content":%q,"offset":1,"end_line":3,"limit":3,"total_lines":258}`, hostmarker.FormatNumberedLines([]string{"module github.com/lycaon/lycaon", "", "go 1.26.4"}, 1))
 	tagged := guidance.PrependHandleTag(readJSON, "read#1")
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
@@ -65,13 +67,13 @@ func TestExcerptMatchesHandle_taggedReadBody(t *testing.T) {
 		}},
 		{Role: api.MessageRoleTool, Content: tagged, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: tagged}},
 	})
-	if !evidence.ExcerptMatchesHandle(ev, "read#1", 3, "go 1.26.4") {
+	if !evidence.ExcerptMatchesHandle(ev, "read#1", "lycaon/go.mod", 3, "go 1.26.4") {
 		t.Fatal("host handle tag must not break read payload parsing for in-range excerpt")
 	}
 }
 
 func TestExcerptMatchesHandleAcrossWhitespaceReflow(t *testing.T) {
-	readJSON := `{"path":"a.tsx","content":"35\t    if (el.innerHTML !== html) {\n36\t      el.innerHTML = html;\n37\t    }\n","offset":35,"end_line":37,"limit":3}`
+	readJSON := fmt.Sprintf(`{"path":"a.tsx","content":%q,"offset":35,"end_line":37,"limit":3}`, hostmarker.FormatNumberedLines([]string{"    if (el.innerHTML !== html) {", "      el.innerHTML = html;", "    }"}, 35))
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "a.tsx", "offset": 35, "limit": 3}},
@@ -79,10 +81,10 @@ func TestExcerptMatchesHandleAcrossWhitespaceReflow(t *testing.T) {
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: readJSON}},
 	})
 	reflowed := "if (el.innerHTML !== html) {\n el.innerHTML = html;\n }"
-	if !evidence.ExcerptMatchesHandle(ev, "read#1", 35, reflowed) {
+	if !evidence.ExcerptMatchesHandle(ev, "read#1", "a.tsx", 35, reflowed) {
 		t.Fatal("dedented/reflowed excerpt must verify against the captured body")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 35, "if (el.outerHTML !== html) {") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "a.tsx", 35, "if (el.outerHTML !== html) {") {
 		t.Fatal("a changed identifier must not pass whitespace-tolerant matching")
 	}
 }
@@ -96,10 +98,10 @@ func TestExcerptMatchesHandle_wcCountBody(t *testing.T) {
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: wcJSON}},
 	})
-	if !evidence.ExcerptMatchesHandle(ev, "wc#1", 0, `"bytes":23526,"lines":669`) {
+	if !evidence.ExcerptMatchesHandle(ev, "wc#1", "lycaon/internal/coordinator/assembly/engine.go", 0, `"bytes":23526,"lines":669`) {
 		t.Fatal("a citation of the captured wc count must verify")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "wc#1", 0, `"bytes":23526,"lines":999`) {
+	if evidence.ExcerptMatchesHandle(ev, "wc#1", "lycaon/internal/coordinator/assembly/engine.go", 0, `"bytes":23526,"lines":999`) {
 		t.Fatal("a fabricated count must not verify")
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CloseoutEvidence reads what a session's closeout may cite: its own ledger
@@ -22,24 +23,52 @@ func (c closeoutEvidence) LoadLedger(ctx context.Context, sessionID string) (evi
 }
 
 func (c closeoutEvidence) WorkerLegs(ctx context.Context, parentSessionID string, since time.Time) ([]guidance.EvidenceLeg, error) {
-	if c.m == nil || c.m.workerQueue == nil || c.m.store == nil {
-		return nil, nil
-	}
-	parent, err := c.m.store.Get(ctx, parentSessionID)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := c.m.workerQueue.ListBySession(ctx, parent.ProjectID, parentSessionID)
+	tasks, err := c.m.reviewEvidenceTasks(ctx, parentSessionID, since)
 	if err != nil {
 		return nil, err
 	}
 	legs := make([]guidance.EvidenceLeg, 0, len(tasks))
 	for _, task := range tasks {
-		child := strings.TrimSpace(task.ChildSessionID)
-		if child == "" || (!since.IsZero() && task.CreatedAt.Before(since)) {
-			continue
+		if child := strings.TrimSpace(task.ChildSessionID); child != "" {
+			legs = append(legs, guidance.EvidenceLeg{ChildSessionID: child, LegID: strings.TrimSpace(task.LegID)})
 		}
-		legs = append(legs, guidance.EvidenceLeg{ChildSessionID: child, LegID: strings.TrimSpace(task.LegID)})
 	}
 	return legs, nil
+}
+
+// reviewEvidenceTasks uses workflow ownership when present and intent time otherwise.
+func (m *Manager) reviewEvidenceTasks(ctx context.Context, sessionID string, since time.Time) ([]api.WorkerTask, error) {
+	if m == nil || m.workerQueue == nil || m.store == nil {
+		return nil, nil
+	}
+	parent, err := m.store.Get(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	runID := ""
+	if m.workflows != nil {
+		run, err := m.workflows.GetActive(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if run != nil && !m.workflows.IsAmbientRun(run) {
+			runID = run.ID
+		}
+	}
+	tasks, err := m.workerQueue.ListBySession(ctx, parent.ProjectID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.WorkerTask, 0, len(tasks))
+	for _, task := range tasks {
+		if runID != "" {
+			if task.WorkflowRunID != runID {
+				continue
+			}
+		} else if !since.IsZero() && task.CreatedAt.Before(since) {
+			continue
+		}
+		out = append(out, task)
+	}
+	return out, nil
 }

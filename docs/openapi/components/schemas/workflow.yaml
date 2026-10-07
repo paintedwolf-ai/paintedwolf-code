@@ -711,6 +711,10 @@ components:
       - current_phase_label
       additionalProperties: false
       properties:
+        definition:
+          x-go-pointer: true
+          description: Selected workflow definition, including versions retired from the start catalog.
+          $ref: '#/components/schemas/WorkflowSummary'
         current_phase_label:
           type: string
           description: Host-projected activity label from the active workflow manifest phase.

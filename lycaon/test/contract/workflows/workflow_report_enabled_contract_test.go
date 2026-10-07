@@ -13,9 +13,9 @@ func TestWorkflowSummaryReportEnabledOptIn(t *testing.T) {
 	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
 	contractcheck.FailErr(t, "loadMergedWorkflowCatalog failed", err)
 
-	survey, ok := catalog["security-survey@1.0.0"]
+	survey, ok := catalog["security-survey@1.0.1"]
 	if !ok {
-		t.Fatal("security-survey@1.0.0 missing from catalog")
+		t.Fatal("security-survey@1.0.1 missing from catalog")
 	}
 	if !survey.ReportEnabled() {
 		t.Fatal("security-survey report is disabled")

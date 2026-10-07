@@ -2,6 +2,7 @@ package guidance
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,6 +20,43 @@ const (
 
 // maxUnreadFieldSample bounds the unread members one refusal names.
 const maxUnreadFieldSample = 8
+
+// IsFatalReportDefect reports whether a defect code represents a fatal condition
+// that prevents accepting the report. Missing claims, unaccounted inventory, or
+// invalid document structural invariants are fatal; unreadable fence warnings or
+// advisory notices are non-fatal when substantive fields are retained.
+func IsFatalReportDefect(code string) bool {
+	switch code {
+	case ReportClaimUnreportedCode, ReportInventoryUnaccountedCode, ReportDocumentInvalidCode:
+		return true
+	default:
+		return false
+	}
+}
+
+// AllowedReportFenceKeys lists the top-level member names a report fence may carry.
+func AllowedReportFenceKeys() []string {
+	return append([]string(nil), reportFenceMembers...)
+}
+
+// ExtractOffendingKeys returns unique unrecognized member keys from unread issues.
+func ExtractOffendingKeys(unread []jsonshape.Issue) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, u := range unread {
+		name := strings.TrimSpace(u.Name)
+		if name == "" {
+			name = strings.TrimSpace(u.Pattern)
+		}
+		if name != "" {
+			if _, ok := seen[name]; !ok {
+				seen[name] = struct{}{}
+				out = append(out, name)
+			}
+		}
+	}
+	return out
+}
 
 // ReportFenceUnreadable is the refusal of a report whose JSON has members the
 // report does not take; none when every member was read.

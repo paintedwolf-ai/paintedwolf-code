@@ -19511,6 +19511,9 @@ components:
         text:
           type: string
           description: User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
+        recovery:
+          $ref: '#/components/schemas/PromptRecovery'
+          x-go-pointer: true
         attachments:
           type: array
           maxItems: 8
@@ -25443,6 +25446,7 @@ components:
         - checkpoint_not_found
         - approval_grant_not_found
         - session_not_idle
+        - prompt_recovery_stale
         - rewind_anchor_not_found
         - rewind_anchor_ineligible
         - rewind_blocked
@@ -25666,6 +25670,7 @@ components:
         - grounding_escalated
         - session_spend_ceiling_reached
         - prompt_failed
+        - turn_closeout_tool_call
         - host_fault
         - worker_closeout_exhausted
         - worker_execute_failed
@@ -26699,11 +26704,12 @@ components:
     CompletionReportFindingDisposition:
       type: string
       description: |
-        What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound.
+        What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
       enum:
         - act
         - accept
         - held
+        - unresolved
     CompletionReportFinding:
       x-go-generate: true
       type: object
@@ -27919,6 +27925,51 @@ components:
             Empty means "based on primary." Must be a non-terminal overlay
             (pending, applying, rebasing) on the same parent session, else
             spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
+    CoverageAssessment:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - disposition
+        - reason
+        - cited_evidence
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
+        disposition:
+          type: string
+          enum:
+            - satisfied
+            - covered
+            - immaterial
+            - material_open
+            - essential_open
+        reason:
+          type: string
+        obligations:
+          type: array
+          items:
+            type: string
+        cited_evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitationGroundingCitedEvidence'
+    CoverageReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - assessments
+      properties:
+        revision:
+          type: string
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoverageAssessment'
     WorkerCompletionFinding:
       x-go-generate: true
       type: object
@@ -27969,8 +28020,15 @@ components:
       required:
         - leg_status
       properties:
+        coverage_review:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CoverageReview'
+        declared_leg_status:
+          type: string
+          description: Leg status the worker declared; leg_status is the host-graded status.
         leg_status:
           type: string
+          description: Host-graded leg status.
         files_modified:
           type: array
           items:
@@ -28737,6 +28795,24 @@ components:
             $ref: '#/components/schemas/InvocationReceipt'
         next_cursor:
           type: string
+    PromptRecovery:
+      x-go-generate: true
+      type: object
+      required:
+        - action
+        - after_message_id
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+            - continue
+            - retry
+          description: Continue established progress or retry an interrupted request without progress.
+        after_message_id:
+          type: string
+          format: uuid
+          description: Last visible transcript message observed when choosing recovery. The host rejects stale actions.
     PromptReferencePathFile:
       type: object
       required:
@@ -35017,6 +35093,10 @@ components:
         - current_phase_label
       additionalProperties: false
       properties:
+        definition:
+          x-go-pointer: true
+          description: Selected workflow definition, including versions retired from the start catalog.
+          $ref: '#/components/schemas/WorkflowSummary'
         current_phase_label:
           type: string
           description: Host-projected activity label from the active workflow manifest phase.
@@ -39980,6 +40060,7 @@ components:
         - session_preparation_failed
         - session_spend_ceiling_reached
         - thinking_override_unavailable
+        - turn_closeout_tool_call
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable

@@ -12,8 +12,8 @@ The call has three top-level channels:
 }
 ```
 
-Use exactly the fields declared by `verdict_schema`. `cited_evidence` and `cited_urls` are siblings of `verdict`, never fields inside it. An evidence-handle citation uses the key `handle`; a repository citation uses `path` with optional `line` and `excerpt`. Do not use an `evidence` key.
+Use exactly the fields declared by `verdict_schema`. Adjudication-level `cited_evidence` and `cited_urls` are siblings of `verdict`. An evidence-handle citation uses the key `handle`; a repository citation uses `path` with optional `line` and `excerpt`. Do not use an `evidence` key.
 
-A `claims`-typed verdict field is the one exception with claim-local provenance: each claim is `{id, statement, cited_evidence}`. Those claim citations support the claim, while the top-level citation channels ground the terminal adjudication and reviewer coverage.
+Claims and coverage assessments also carry their own `cited_evidence`; the verdict shape in the active workflow block lists every claim field. Claim citations support the claim, while the top-level citation channels ground the terminal adjudication and reviewer coverage.
 
 On rejection, branch on the tool result `Code:` and its typed details. Correct the named field or citation and resubmit; prose cannot record a verdict or advance the phase.

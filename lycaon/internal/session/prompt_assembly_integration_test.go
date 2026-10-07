@@ -30,7 +30,7 @@ func countRunContextBlocks(msgs []api.Message) int {
 	return n
 }
 
-func TestRunContextInjectsOnceAcrossIterations(t *testing.T) {
+func TestRunContextInjectsEveryIteration(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
@@ -46,7 +46,7 @@ func TestRunContextInjectsOnceAcrossIterations(t *testing.T) {
 	if err := reg.Register("list_dir", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "[]", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "register list_dir", err)
 	}
 	mgr := session.NewManager(store, rec, reg, settings.DefaultSessionLimits())
 	projects := project.NewMemoryRegistry()
@@ -79,12 +79,10 @@ func TestRunContextInjectsOnceAcrossIterations(t *testing.T) {
 		}
 		t.Fatalf("expected at least 2 LLM requests, got %d; offered=%v response=%+v messages=%+v", len(reqs), offered, resp, msgs)
 	}
-	// Count the one-shot block directly.
-	if countRunContextBlocks(reqs[0].Messages) != 1 {
-		t.Fatal("expected run context on first iteration")
-	}
-	if countRunContextBlocks(reqs[1].Messages) != 0 {
-		t.Fatal("expected run context omitted on second iteration")
+	for i, req := range reqs {
+		if got := countRunContextBlocks(req.Messages); got != 1 {
+			t.Fatalf("iteration %d run context blocks = %d, want 1", i, got)
+		}
 	}
 }
 
@@ -127,7 +125,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 	}
 }
 
-func TestWorkerLegOmittedOnSecondIteration(t *testing.T) {
+func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
@@ -172,10 +170,9 @@ func TestWorkerLegOmittedOnSecondIteration(t *testing.T) {
 		}
 		return n
 	}
-	if legBlocks(reqs[0].Messages) != 1 {
-		t.Fatal("expected leg context on first iteration")
-	}
-	if legBlocks(reqs[1].Messages) != 0 {
-		t.Fatal("expected leg context omitted on second iteration")
+	for i, req := range reqs {
+		if got := legBlocks(req.Messages); got != 1 {
+			t.Fatalf("iteration %d worker context blocks = %d, want 1", i, got)
+		}
 	}
 }

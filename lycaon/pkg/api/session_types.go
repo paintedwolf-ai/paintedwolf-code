@@ -360,6 +360,8 @@ const (
 	CompletionReportFindingDispositionAccept CompletionReportFindingDisposition = "accept"
 	// CompletionReportFindingDispositionHeld is a surface found sound.
 	CompletionReportFindingDispositionHeld CompletionReportFindingDisposition = "held"
+	// CompletionReportFindingDispositionUnresolved is an unanswered review question.
+	CompletionReportFindingDispositionUnresolved CompletionReportFindingDisposition = "unresolved"
 )
 
 // CompletionReportAskEffort is how much work a report's ask commits to.
@@ -612,8 +614,7 @@ const (
 	RedactionSourceShapeRule        RedactionSource = "shape_rule"
 	RedactionSourceContainerHarvest RedactionSource = "container_harvest"
 	RedactionSourceRememberedMatch  RedactionSource = "remembered_match"
-	// RedactionSourcePolicy accompanies an observer mask, where the host decided
-	// in advance rather than detecting anything.
+	// RedactionSourcePolicy marks host-declared observer masks.
 	RedactionSourcePolicy RedactionSource = "policy"
 )
 

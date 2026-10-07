@@ -100,3 +100,16 @@ func (d ReviewLoopDef) ClassOf(status string) ClaimClass {
 	}
 	return ClaimOpen
 }
+
+// VerdictCoverageType declares an evidence-backed assessment of review obligations.
+const VerdictCoverageType = "coverage_review"
+
+// CarriesCoverage reports whether this phase assesses coverage.
+func (d ReviewLoopDef) CarriesCoverage() bool {
+	for _, kind := range d.VerdictSchema {
+		if kind == VerdictCoverageType {
+			return true
+		}
+	}
+	return false
+}

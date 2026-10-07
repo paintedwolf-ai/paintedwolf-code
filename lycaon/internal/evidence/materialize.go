@@ -2,6 +2,8 @@ package evidence
 
 import (
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 )
 
 // Span is a line-bounded excerpt within one path, materialized from ledger records.
@@ -60,12 +62,8 @@ func materializeFromRecord(rec Record, want []LineRange) []string {
 }
 
 func lineNumberFromBodyLine(line string) int {
-	m := readBodyLinePrefixRE.FindStringSubmatch(line)
-	if m == nil {
-		return 0
-	}
-	n, err := parseLineNumber(m[1])
-	if err != nil || n <= 0 {
+	n, _, ok := hostmarker.ParseNumberedLine(line)
+	if !ok || n <= 0 {
 		return 0
 	}
 	return n

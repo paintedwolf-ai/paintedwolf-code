@@ -24,21 +24,19 @@ const WorkerSummaryTooLongCode = "WORKER_SUMMARY_TOO_LONG"
 type WorkerSummaryFinalizeOpts struct {
 	// WorkerJobID scopes every transcript read.
 	WorkerJobID                 string
-	MaxChars                    int
-	MaxCitationGroundingRetries int
-	WorkflowHints               *guidance.HintConfig
-	RenderWorkerKick            WorkerKickRenderer
-	ProjectDir                  string
-	ProjectRoots                []projectroot.RootRef
-	ActiveRootID                string
-	AgentType                   string
-	WorkspaceCheck              workercompletion.WorkspaceChangeChecker
-	Ledger                      guidance.EvidenceLedgerReader
+	MaxChars            int
+	MaxGroundingRetries int
+	WorkflowHints       *guidance.HintConfig
+	RenderWorkerKick    WorkerKickRenderer
+	ProjectDir          string
+	ProjectRoots        []projectroot.RootRef
+	ActiveRootID        string
+	AgentType           string
+	WorkspaceCheck      workercompletion.WorkspaceChangeChecker
+	Ledger              guidance.EvidenceLedgerReader
 	// Pipeline is required for blocking worker.report_check Decisions.
 	Pipeline        *oar.GuardPipeline
 	DecisionPending func(ctx context.Context, childSessionID string) bool
-	// RecordGroundingFriction shares the root cycle budget with the coordinator.
-	RecordGroundingFriction func(ctx context.Context, sessionID string) guidance.GroundingFriction
 }
 
 func (o WorkerSummaryFinalizeOpts) decisionPending(ctx context.Context, childSessionID string) bool {
@@ -153,6 +151,9 @@ func FinalizeWorkerSummaryForCanceled(
 				} else if ok {
 					outcome, err := finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "cancel_complete_leg", report, opts)
 					outcome.Status = "partial"
+					if outcome.Report.DeclaredLegStatus == "" {
+						outcome.Report.DeclaredLegStatus = outcome.Report.LegStatus
+					}
 					if outcome.Report.LegStatus == "" || outcome.Report.LegStatus == "complete" {
 						outcome.Report.LegStatus = "partial"
 					}
@@ -247,12 +248,16 @@ func finalizeBoundedReport(
 }
 
 func evaluatedWorkerOutcome(report workercompletion.WorkerCompletionReport, evaluation workercompletion.WorkerSummaryEvalResult, provenance string, hostAssembled bool) WorkerSummaryOutcome {
+	report.DeclaredLegStatus = report.LegStatus
 	status := StateFromLegStatus(report.LegStatus)
 	if status == "" {
 		status = "complete"
 	}
 	if evaluation.Status == "partial" {
 		status = "partial"
+	}
+	if status == string(api.WorkerSummaryStatusPartial) && report.LegStatus == "complete" {
+		report.LegStatus = "partial"
 	}
 	return WorkerSummaryOutcome{Status: status, Summary: report.Brief, Report: report, HintCode: evaluation.HintCode, PolicyFeedback: evaluation.PolicyFeedback(), Grounding: &evaluation.Grounding, Provenance: provenance, HostAssembled: hostAssembled}
 }

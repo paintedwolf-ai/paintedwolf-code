@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -109,8 +111,37 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		if err := runs.commitCommand(commandCtx, active, "fanout_plan", args, vars, nil, "", workflowWorkerMutation{}, nil); err != nil {
 			return "", err
 		}
+		seedFanoutProgress(ctx, runs.Progress, tctx.SessionID, active.ID, plan)
 		return marshalFanoutPlanResult(result)
 	})
+}
+
+// seedFanoutProgress gives a coordinator with no checklist one pending row per
+// planned leg, so the progress gate opens on the plan it just stamped.
+func seedFanoutProgress(ctx context.Context, store progress.RunScopedStore, sessionID, runID string, plan FanoutPlan) {
+	if store == nil {
+		return
+	}
+	switch store.BoundRunID(sessionID) {
+	case "":
+		progress.AdoptActiveRun(ctx, store, sessionID, runID, "")
+	case runID:
+	default:
+		return
+	}
+	prev := store.Get(ctx, sessionID)
+	if !progress.ProgressMissing(prev) {
+		return
+	}
+	labels := make([]string, 0, len(plan.Legs))
+	for _, leg := range plan.Legs {
+		labels = append(labels, leg.ID+" "+leg.Subject)
+	}
+	if err := store.Set(sessionID, progress.SeedChecklist(prev, labels)); err != nil {
+		slog.WarnContext(ctx, "seed fan-out progress", "session", sessionID, "error", err)
+		return
+	}
+	progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID, Prev: prev})
 }
 
 func parseFanoutPlanArgs(args map[string]any) (FanoutPlan, error) {

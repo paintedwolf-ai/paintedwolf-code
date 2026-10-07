@@ -166,6 +166,9 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 		"host_fault": usernotice.ContextFromPromptError(&promptloop.HostFaultError{
 			Tool: "write", CallRan: true, Cause: errors.New("fixture settlement refused"),
 		}),
+		"turn_closeout_tool_call": usernotice.ContextFromPromptError(&promptloop.ProseTurnToolCallError{
+			ProviderID: "fireworks", Model: "glm", Tools: []string{"submit_verdict"}, CloseoutReason: "`submit_verdict` was refused 6 times in a row (SUBMIT_VERDICT_INVALID)",
+		}),
 		"prompt_failed":                usernotice.ContextFromPromptError(errors.New("boom")),
 		"provider_catalog_unavailable": {"provider_id": "fixture", "model": "model"},
 		// HTTP worktree land/bind refusals pass these keys via writeErrorCtx Details.

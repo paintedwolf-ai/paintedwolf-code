@@ -226,3 +226,28 @@ func TestScanCompareWireJSONIndexesResolvedPaths(t *testing.T) {
 		t.Fatal("resolved finding path must index")
 	}
 }
+
+func TestScanGroupsViewIndexesLocationPaths(t *testing.T) {
+	groupBody := `{
+		"scan_id": "scan-1",
+		"view": "groups",
+		"groups": [
+			{
+				"id": "group-1",
+				"rule_id": "r1",
+				"message": "dependency vulnerability",
+				"locations": [
+					{"uri": "lycaon/go.mod", "start_line": 1}
+				]
+			}
+		]
+	}`
+	rec := evidence.BuildEvidenceRecord("", "scan_query", map[string]any{"scan_id": "scan-1", "view": "groups"}, groupBody)
+	if ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Path: "lycaon/go.mod"}); !ok {
+		t.Fatal("group location uri must index in ByPath")
+	}
+	if ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Excerpt: "dependency vulnerability"}); !ok {
+		t.Fatal("group message must ground against captured scan body")
+	}
+}
+

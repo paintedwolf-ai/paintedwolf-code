@@ -127,53 +127,6 @@ func TestCoordinatorCloseoutTranscriptNarrative(t *testing.T) {
 		}
 	})
 
-	t.Run("string cited_evidence entries do not parse", func(t *testing.T) {
-		t.Parallel()
-		content := `{"synthesis":"Yes.","cited_evidence":["pkg/foo.go:1"]}`
-		if _, ok := ParseCoordinatorCompletionReport(content); ok {
-			t.Fatal("string cited_evidence must not parse as closeout report")
-		}
-	})
-
-	t.Run("string cited_evidence entries are unread", func(t *testing.T) {
-		t.Parallel()
-		read, ok := ReadCloseoutReport(`{"synthesis":"Yes.","cited_evidence":["pkg/foo.go:1"]}`, "")
-		if !ok || read.Report.Synthesis != "Yes." || len(read.Report.CitedEvidence) != 0 {
-			t.Fatalf("read = %+v ok=%v", read, ok)
-		}
-		if len(read.Unread) != 1 || read.Unread[0].Path != "cited_evidence[0]" || read.Unread[0].Want != "object" {
-			t.Fatalf("unread = %+v, want the string entry named", read.Unread)
-		}
-	})
-
-	t.Run("fenced json reads as its envelope", func(t *testing.T) {
-		t.Parallel()
-		envelope := `{"synthesis":"Report body.","cited_evidence":[{"path":"a.go","line":1,"excerpt":"x"}]}`
-		read, ok := ReadCloseoutReport("```json\n"+envelope+"\n```", "")
-		if !ok || read.Report.Synthesis != "Report body." || len(read.Report.CitedEvidence) != 1 || len(read.Unread) != 0 {
-			t.Fatalf("read = %+v ok=%v", read, ok)
-		}
-	})
-
-	t.Run("trailing junk after early-closed object salvages first value", func(t *testing.T) {
-		t.Parallel()
-		// The object closes after synthesis and the remaining fields follow it.
-		malformed := `{"synthesis":"## Report\n\nDone.\n\n"}, "cited_evidence":[{"path":"weather_cli.py","line":1,"excerpt":"#!/usr/bin/env python3"}],"cited_urls":[],"artifact_ids":[]}`
-		if _, ok := ParseCoordinatorCompletionReport(malformed); ok {
-			t.Fatal("strict parse must reject trailing junk")
-		}
-		read, ok := ReadCloseoutReport(malformed, "")
-		if !ok || read.Report.Synthesis != "## Report\n\nDone." {
-			t.Fatalf("salvaged read = %+v ok=%v", read, ok)
-		}
-		raw, err := MarshalCoordinatorCompletionReport(read.Report)
-		testutil.FailErr(t, "marshal salvaged report", err)
-		got, ok := CoordinatorCloseoutTranscriptNarrative(raw)
-		if !ok || got != "## Report\n\nDone." {
-			t.Fatalf("narrative = %q ok=%v", got, ok)
-		}
-	})
-
 	t.Run("poisoned nested envelope synthesis does not project", func(t *testing.T) {
 		t.Parallel()
 		// Synthesis holds a malformed envelope verbatim.
@@ -227,6 +180,63 @@ func TestCoordinatorCloseoutTranscriptNarrative(t *testing.T) {
 		}
 	})
 
+	t.Run("plain prose does not project", func(t *testing.T) {
+		t.Parallel()
+		if _, ok := CoordinatorCloseoutTranscriptNarrative("Plain prose, no envelope."); ok {
+			t.Fatal("non-envelope content must not project")
+		}
+	})
+}
+
+func TestReadCloseoutReport_StructureAndVacuousFields(t *testing.T) {
+	t.Parallel()
+
+	t.Run("string cited_evidence entries do not parse", func(t *testing.T) {
+		t.Parallel()
+		content := `{"synthesis":"Yes.","cited_evidence":["pkg/foo.go:1"]}`
+		if _, ok := ParseCoordinatorCompletionReport(content); ok {
+			t.Fatal("string cited_evidence must not parse as closeout report")
+		}
+	})
+
+	t.Run("string cited_evidence entries are unread", func(t *testing.T) {
+		t.Parallel()
+		read, ok := ReadCloseoutReport(`{"synthesis":"Yes.","cited_evidence":["pkg/foo.go:1"]}`, "")
+		if !ok || read.Report.Synthesis != "Yes." || len(read.Report.CitedEvidence) != 0 {
+			t.Fatalf("read = %+v ok=%v", read, ok)
+		}
+		if len(read.Unread) != 1 || read.Unread[0].Path != "cited_evidence[0]" || read.Unread[0].Want != "object" {
+			t.Fatalf("unread = %+v, want the string entry named", read.Unread)
+		}
+	})
+
+	t.Run("fenced json reads as its envelope", func(t *testing.T) {
+		t.Parallel()
+		envelope := `{"synthesis":"Report body.","cited_evidence":[{"path":"a.go","line":1,"excerpt":"x"}]}`
+		read, ok := ReadCloseoutReport("```json\n"+envelope+"\n```", "")
+		if !ok || read.Report.Synthesis != "Report body." || len(read.Report.CitedEvidence) != 1 || len(read.Unread) != 0 {
+			t.Fatalf("read = %+v ok=%v", read, ok)
+		}
+	})
+
+	t.Run("trailing junk after early-closed object salvages first value", func(t *testing.T) {
+		t.Parallel()
+		malformed := `{"synthesis":"## Report\n\nDone.\n\n"}, "cited_evidence":[{"path":"weather_cli.py","line":1,"excerpt":"#!/usr/bin/env python3"}],"cited_urls":[],"artifact_ids":[]}`
+		if _, ok := ParseCoordinatorCompletionReport(malformed); ok {
+			t.Fatal("strict parse must reject trailing junk")
+		}
+		read, ok := ReadCloseoutReport(malformed, "")
+		if !ok || read.Report.Synthesis != "## Report\n\nDone." {
+			t.Fatalf("salvaged read = %+v ok=%v", read, ok)
+		}
+		raw, err := MarshalCoordinatorCompletionReport(read.Report)
+		testutil.FailErr(t, "marshal salvaged report", err)
+		got, ok := CoordinatorCloseoutTranscriptNarrative(raw)
+		if !ok || got != "## Report\n\nDone." {
+			t.Fatalf("narrative = %q ok=%v", got, ok)
+		}
+	})
+
 	t.Run("an untagged report fence is read and hidden", func(t *testing.T) {
 		t.Parallel()
 		answer := "The implementation lives in dedicated packages ([docs/secrets.md:7](docs/secrets.md#L7)).\n\n```sh\n./task check\n```\n\nTools only ever receive a managed reference."
@@ -240,10 +250,20 @@ func TestCoordinatorCloseoutTranscriptNarrative(t *testing.T) {
 		}
 	})
 
-	t.Run("plain prose does not project", func(t *testing.T) {
+	t.Run("vacuous unmapped fields like headline_note null are ignored", func(t *testing.T) {
 		t.Parallel()
-		if _, ok := CoordinatorCloseoutTranscriptNarrative("Plain prose, no envelope."); ok {
-			t.Fatal("non-envelope content must not project")
+		answer := "The security survey is complete."
+		trailer := "```json\n{\n  \"headline\": \"All claims held.\",\n  \"headline_note\": null,\n  \"empty_list\": [],\n  \"empty_map\": {},\n  \"cited_evidence\": [{\"path\": \"a.go\", \"line\": 1}]\n}\n```"
+		read, ok := ReadCloseoutReport(answer+"\n\n"+trailer, "")
+		if !ok {
+			t.Fatalf("failed to read closeout report: %+v", read)
+		}
+		if len(read.Unread) > 0 {
+			t.Fatalf("expected 0 unread issues for vacuous fields, got: %+v", read.Unread)
+		}
+		if read.Report.Headline != "All claims held." {
+			t.Fatalf("headline = %q, want %q", read.Report.Headline, "All claims held.")
 		}
 	})
 }
+

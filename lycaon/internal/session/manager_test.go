@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
@@ -153,9 +154,14 @@ func TestMaxIterationCap(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 
 	_, err = mgr.Prompt(ctx, sess.ID, "infinite loop")
-	var empty *failure.ProviderEmptyCompletionError
-	if !errors.As(err, &empty) {
-		t.Fatalf("tool-only closeout error = %v, want empty completion", err)
+	// The fixture spends its final, tool-less turn on another call; that is
+	// the model's miss, not an empty provider completion.
+	var miss *promptloop.ProseTurnToolCallError
+	if !errors.As(err, &miss) {
+		t.Fatalf("tool-only closeout error = %v, want ProseTurnToolCallError", err)
+	}
+	if _, empty := failure.AsProviderEmptyCompletion(err); empty {
+		t.Fatalf("model's miss attributed to the provider: %v", err)
 	}
 
 	msgs, err := mgr.GetMessages(ctx, sess.ID)

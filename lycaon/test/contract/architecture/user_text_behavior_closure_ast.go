@@ -291,6 +291,7 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	"document_issues":                              true,
 	"agent_skills":                                 true,
 	"rating_questions":                             true,
 	"agent_has_skill_ask_for_a_decision":           true,
@@ -382,6 +383,9 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"retained_citations":           true,
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData
 	"offenders_omitted":            true, // report-document repair: guidance.OffenderHintData
+	"offending_keys":               true, // report-document repair: unread key names
+	"allowed_top_level_keys":       true, // report-document repair: allowed top-level report fence keys
+	"pinned_body_chars":            true, // report-document repair: char count of pinned body
 	"retained_document":            true, // report-document repair: guidance.ReportDocumentFence
 	"run_report":                   true, // report-document repair: the draft delivers its run's report
 	"llm_timeout":                  true,
@@ -411,6 +415,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"request_open":                 true,
 	"review_verdict":               true,
 	"spawnable_reviewers":          true,
+	"review_followup_attempts":     true,
 	// Roster ids from spawn_roster_surface.go, gated on being non-empty.
 	"spawn_read_agent_ids":  true,
 	"spawn_write_agent_ids": true,

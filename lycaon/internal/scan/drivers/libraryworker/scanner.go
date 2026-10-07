@@ -73,7 +73,7 @@ func (s *Scanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Re
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for attempt := 0; attempt < 2; attempt++ {
-		worker, err := s.ensureWorker(ctx, req.ProjectDir)
+		worker, err := s.ensureWorker(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -91,11 +91,11 @@ func (s *Scanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Re
 	return nil, fmt.Errorf("library scan worker unavailable")
 }
 
-func (s *Scanner) ensureWorker(ctx context.Context, dir string) (*resident, error) {
+func (s *Scanner) ensureWorker(ctx context.Context) (*resident, error) {
 	if s.worker != nil && !s.worker.exited() {
 		return s.worker, nil
 	}
-	worker, err := startResident(ctx, dir, s.priority)
+	worker, err := startResident(ctx, s.priority)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ type resident struct {
 	done     <-chan struct{}
 }
 
-func startResident(ctx context.Context, dir string, priority exec.ProcessPriority) (*resident, error) {
+func startResident(ctx context.Context, priority exec.ProcessPriority) (*resident, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("resolve scan worker executable: %w", err)
@@ -136,9 +136,9 @@ func startResident(ctx context.Context, dir string, priority exec.ProcessPriorit
 	stdinReader, stdinWriter := io.Pipe()
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderr := &tailBuffer{limit: stderrTail}
-	// Requests share this process; exchange handles cancellation.
+	// Requests share this process; its working directory outlives individual inputs.
 	pipeline, err := exec.StartPipelineAsync(context.WithoutCancel(ctx), []exec.Stage{{Name: executable, Args: []string{"internal-scan-worker"}}}, exec.ExecOpts{
-		Launch: exec.HostLaunch("library scanner worker"), Dir: dir, NoTimeout: true,
+		Launch: exec.HostLaunch("library scanner worker"), Dir: os.TempDir(), NoTimeout: true,
 		MaxOutputBytes: exec.DefaultMaxScanOutputBytes, Stdin: &exec.StdinSpec{Reader: stdinReader},
 		ProcessPriority: priority,
 	}, stdoutWriter, stderr)

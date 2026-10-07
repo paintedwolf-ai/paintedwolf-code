@@ -21,8 +21,11 @@ import (
 
 const workerTestChildSessionID = "worker-test-child"
 
-func childMessagesLedger(msgs []api.Message) guidance.EvidenceLedgerReader {
-	return ledgertest.ChildMessagesReader("", func(id string) []api.Message {
+func childMessagesLedger(projectDir string, msgs []api.Message) guidance.EvidenceLedgerReader {
+	if projectDir == "" {
+		projectDir = os.TempDir()
+	}
+	return ledgertest.ChildMessagesReader(projectDir, func(id string) []api.Message {
 		if id == workerTestChildSessionID {
 			return msgs
 		}
@@ -34,7 +37,7 @@ func workerSummaryEval(t *testing.T, in workercompletion.WorkerSummaryEvalInput)
 	t.Helper()
 	if in.Ledger == nil && len(in.ChildMessages) > 0 {
 		in.ChildSessionID = workerTestChildSessionID
-		in.Ledger = childMessagesLedger(in.ChildMessages)
+		in.Ledger = childMessagesLedger(in.ProjectDir, in.ChildMessages)
 	}
 	return withWorkerPipeline(t, in)
 }
@@ -687,3 +690,80 @@ func TestWorkerSummaryFeedbackPreservesFrozenCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateWorkerSummaryRewritesCorrectedLines(t *testing.T) {
+	grepJSON := `{
+		"matches": [{
+			"path": "harness_control.go",
+			"line": 33,
+			"content": "target verbatim line to anchor",
+			"context_before": ["line 31", "line 32"]
+		}]
+	}`
+	msgs := []api.Message{
+		{
+			Role: api.MessageRoleAssistant,
+			ToolCalls: []api.ToolCall{
+				{ID: "c1", Name: "grep", Args: map[string]any{"path": "harness_control.go", "pattern": "target"}},
+			},
+		},
+		{
+			Role: api.MessageRoleTool,
+			ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: grepJSON},
+		},
+	}
+	root := t.TempDir()
+	eval, err := workercompletion.EvaluateWorkerSummary(context.Background(), workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+		AgentType:  orchestration.ProfilePathExplorer,
+		ProjectDir: root,
+		Report: workercompletion.WorkerCompletionReport{
+			Brief: "Completed research on harness control.",
+			Findings: []workercompletion.WorkerFinding{
+				{Path: "harness_control.go", Line: 30, Excerpt: "target verbatim line to anchor"},
+			},
+		},
+		ChildMessages: msgs,
+	}))
+	testutil.FailErr(t, "evaluate worker summary", err)
+	if eval.Report.Findings[0].Line != 33 {
+		t.Fatalf("finding line = %d want 33 (corrected from 30)", eval.Report.Findings[0].Line)
+	}
+	var hasCorrectionCheck bool
+	for _, c := range eval.Grounding.Checks {
+		if c.ID == "line_corrections" {
+			hasCorrectionCheck = true
+			break
+		}
+	}
+	if !hasCorrectionCheck {
+		t.Fatal("expected line_corrections advisory check in audit")
+	}
+}
+
+func TestEvaluateWorkerSummaryNoBriefStillChecksCitations(t *testing.T) {
+	eval, err := workercompletion.EvaluateWorkerSummary(context.Background(), workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+		AgentType: orchestration.ProfilePathExplorer,
+		Report: workercompletion.WorkerCompletionReport{
+			Brief: "",
+			Findings: []workercompletion.WorkerFinding{
+				{Path: "unobserved_file.go", Line: 10, Excerpt: "foo bar baz qux"},
+			},
+		},
+		ChildMessages: nil,
+	}))
+	testutil.FailErr(t, "evaluate worker summary", err)
+	if eval.HintCode != "WORKER_TURN_NO_PROSE" && eval.HintCode != "WORKER_EVIDENCE_HANDLE_UNKNOWN" {
+		t.Fatalf("hint code = %q", eval.HintCode)
+	}
+	var hasCitationCheck bool
+	for _, c := range eval.Grounding.Checks {
+		if c.ID == "evidence_handle_unknown" || c.ID == "finding_grounding" || c.ID == "typed_citations" {
+			hasCitationCheck = true
+			break
+		}
+	}
+	if !hasCitationCheck {
+		t.Fatal("expected citation check to be recorded even without brief")
+	}
+}
+

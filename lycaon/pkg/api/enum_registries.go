@@ -39,6 +39,7 @@ func AllCompletionReportFindingDispositions() []CompletionReportFindingDispositi
 		CompletionReportFindingDispositionAct,
 		CompletionReportFindingDispositionAccept,
 		CompletionReportFindingDispositionHeld,
+		CompletionReportFindingDispositionUnresolved,
 	}
 }
 

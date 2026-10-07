@@ -49,10 +49,15 @@ type promptLoopTurnState struct {
 	statusCursorNextOffset *int
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
-	// Blocked streaks track repeated and total rejection codes.
+	// Blocked streaks track repeated and total rejection codes, and the last
+	// refused call so a closeout can name it.
 	consecutiveBlockedBatches int
 	blockedBatchesThisStreak  int
 	blockedStreakCodes        map[string]struct{}
+	blockedTool               string
+	blockedCode               string
+	// closeoutCauseText is the clause the final-turn nudge opened with.
+	closeoutCauseText string
 	proseFinishDelivered      bool
 	spendSoftStopGranted      bool
 	closeoutRetry             closeoutRetryState
@@ -64,6 +69,8 @@ type promptLoopTurnState struct {
 	workerJobID    string
 	// workerBudget follows the ceiling and budget request between rounds.
 	workerBudget workerBudgetWatch
+	// repairCeiling is the round ceiling a grounding retry may reach.
+	repairCeiling int
 	// draftSlotID identifies the draft updated by the current model turn.
 	draftSlotID       string
 	draftSlotAppended bool
@@ -97,11 +104,12 @@ func (st *promptLoopTurnState) workerRunID() string {
 }
 
 // noteBlockedBatch records a no-op batch and checks both streak limits.
-func (st *promptLoopTurnState) noteBlockedBatch(code string) bool {
+func (st *promptLoopTurnState) noteBlockedBatch(code, tool string) bool {
 	if st == nil {
 		return false
 	}
 	st.blockedBatchesThisStreak++
+	st.blockedCode, st.blockedTool = code, tool
 	if st.blockedStreakCodes == nil {
 		st.blockedStreakCodes = map[string]struct{}{}
 	}
@@ -120,6 +128,24 @@ func (st *promptLoopTurnState) clearBlockedStreak() {
 	st.consecutiveBlockedBatches = 0
 	st.blockedBatchesThisStreak = 0
 	st.blockedStreakCodes = nil
+	st.blockedCode, st.blockedTool = "", ""
+}
+
+func (st *promptLoopTurnState) closeoutCauseTextOrEmpty() string {
+	if st == nil {
+		return ""
+	}
+	return st.closeoutCauseText
+}
+
+// closeoutCause pairs the closeout reason with the refused call a blocked
+// streak ended on.
+func (st *promptLoopTurnState) closeoutCause(reason TurnCloseoutReason, cancelReason string) TurnCloseoutCause {
+	cause := TurnCloseoutCause{Reason: reason, CancelReason: cancelReason}
+	if st != nil && reason == TurnCloseoutBlockedLoop {
+		cause.BlockedTool, cause.BlockedCode, cause.BlockedCount = st.blockedTool, st.blockedCode, st.blockedBatchesThisStreak
+	}
+	return cause
 }
 
 func (st *promptLoopTurnState) blockedLoopExhausted() bool {
@@ -159,10 +185,12 @@ func batchMadeProgress(history []api.Message, assistantMessageID string) bool {
 	return !sawToolRow
 }
 
-func batchRejectCode(history []api.Message, assistantMessageID string) string {
+// batchRejectCode returns the first structured rejection in the batch and the
+// tool it refused.
+func batchRejectCode(history []api.Message, assistantMessageID string) (code, tool string) {
 	assistantMessageID = strings.TrimSpace(assistantMessageID)
 	if assistantMessageID == "" {
-		return ""
+		return "", ""
 	}
 	for _, msg := range history {
 		if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {
@@ -172,10 +200,10 @@ func batchRejectCode(history []api.Message, assistantMessageID string) string {
 			continue
 		}
 		if len(msg.ToolResult.Codes) > 0 {
-			return strings.TrimSpace(msg.ToolResult.Codes[0])
+			return strings.TrimSpace(msg.ToolResult.Codes[0]), strings.TrimSpace(msg.ToolResult.Tool)
 		}
 	}
-	return ""
+	return "", ""
 }
 
 type promptLoopAssistantTurnResult struct {
@@ -227,7 +255,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return out, err
 		}
 		if blocked {
-			if refusal != nil && st.noteBlockedBatch(refusal.Code()) {
+			if refusal != nil && st.noteBlockedBatch(refusal.Code(), "") {
 				out.breakLoop = true
 				out.exit = loopExitBlockedLoop
 				return out, nil
@@ -261,8 +289,8 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			st.clearBlockedStreak()
 			st.noteBatchLifecycle(judgeBatch(l.Deps.Tools, st.history, assistantMsg.ID))
 		} else {
-			code := batchRejectCode(st.history, assistantMsg.ID)
-			if !schemaRejectExemptFromBlockedLoop(code) && st.noteBlockedBatch(code) {
+			code, tool := batchRejectCode(st.history, assistantMsg.ID)
+			if !schemaRejectExemptFromBlockedLoop(code) && st.noteBlockedBatch(code, tool) {
 				out.breakLoop = true
 				out.exit = loopExitBlockedLoop
 				return out, nil

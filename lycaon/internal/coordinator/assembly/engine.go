@@ -627,7 +627,7 @@ func (e *AssemblyEngine) appendWorkerLegInject(ctx context.Context, sess *api.Se
 	if err != nil {
 		return nil, fmt.Errorf("worker-leg inject: %w", err)
 	}
-	if strings.TrimSpace(block) == "" || (!e.shouldInjectWorkerLeg(turn, legCtx, block) && len(legCtx.SiblingNotes) == 0) {
+	if strings.TrimSpace(block) == "" {
 		return guidance, nil
 	}
 	hostCtx := legCtx
@@ -738,19 +738,17 @@ func (e *AssemblyEngine) prependCoordinatorRunInject(
 		frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
 	}
 
-	// Workflow state is present only for bound sessions.
+	// Workflow state is request-local and must accompany every bound request.
 	if strings.TrimSpace(runCtx.WorkflowID) != "" {
 		hintCodes := surface.StaticWorkflowHintCodes(runCtx, runCtx.HasComposeDraft)
 		hintCodes = anchor.FilterSuppressedHintCodes(hintCodes, runCtx, pendingKickIDs...)
 		snap := frame.Runtime
-		injectData := inject.BuildActiveWorkflowInjectData(frame)
-		injectData = inject.AttachGateObligations(ctx, injectData, deps.GateFeedback, runCtx.AdvanceWhenGateMet, snap.BlueprintBody)
 		// The binding selects the template stem.
 		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, deps.GateFeedback)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
 		}
-		if strings.TrimSpace(block) != "" && e.shouldInjectRunContext(turn, injectData, hintCodes, block) {
+		if strings.TrimSpace(block) != "" {
 			out = append(out, api.Message{Role: api.MessageRoleSystem, Content: block})
 		}
 		if snap.Blueprint != nil {
@@ -784,7 +782,7 @@ func (e *AssemblyEngine) prependCoordinatorRunInject(
 		if err != nil {
 			return nil, fmt.Errorf("implement-spawn inject: %w", err)
 		}
-		if strings.TrimSpace(block) != "" && e.taskOffered(sess, facts.SurfaceID, facts.RootCount) && e.shouldInjectSpawnRoster(turn, spawnAgents, facts.SurfaceID, facts.RootCount, facts.RepoKnownEmpty, facts.WebSearchEnabled, catalog, toolProfiles, block) {
+		if strings.TrimSpace(block) != "" && e.taskOffered(sess, facts.SurfaceID, facts.RootCount) {
 			out = append(out, api.Message{Role: api.MessageRoleSystem, Content: block})
 		}
 	}
@@ -806,59 +804,6 @@ func (e *AssemblyEngine) workerBoard(
 	turn.BoardBlock = block
 	turn.BoardKey = e.deps().Board.BoardInjectHash(sess.ID)
 	return block, true
-}
-
-func (e *AssemblyEngine) shouldInjectSpawnRoster(
-	turn *TurnAssemblyScratch,
-	allowedAgents []string,
-	surfaceID string,
-	rootCount int,
-	repoKnownEmpty bool,
-	webSearchEnabled bool,
-	catalog *extpacks.EffectiveCatalog,
-	toolProfiles []sandbox.ToolProfile,
-	block string,
-) bool {
-	key := inject.ImplementSpawnInjectFingerprint(allowedAgents, spawn.MaxInFlightTaskWorkers, surfaceID, rootCount, repoKnownEmpty, webSearchEnabled, catalog, toolProfiles)
-	if turn.Iteration == 0 || key != turn.SpawnRosterKey {
-		turn.SpawnRosterKey = key
-		turn.SpawnRosterBlock = block
-		return true
-	}
-	return false
-}
-
-func (e *AssemblyEngine) shouldInjectRunContext(
-	turn *TurnAssemblyScratch,
-	injectData inject.ActiveWorkflowInjectData,
-	hintCodes []string,
-	block string,
-) bool {
-	key := inject.ActiveWorkflowInjectFingerprint(injectData, hintCodes)
-	if turn.Iteration == 0 || key != turn.RunContextKey {
-		turn.RunContextKey = key
-		turn.RunContextBlock = block
-		return true
-	}
-	return false
-}
-
-func (e *AssemblyEngine) shouldInjectWorkerLeg(
-	turn *TurnAssemblyScratch,
-	legCtx inject.WorkerLegContext,
-	block string,
-) bool {
-	stableKey := WorkerLegFingerprint(legCtx)
-	volatileKey := WorkerLegVolatileFingerprint(legCtx)
-	stableChanged := stableKey != turn.WorkerLegKey
-	volatileDeliver := volatileKey != "" && volatileKey != turn.WorkerLegVolatileKey
-	if turn.Iteration == 0 || stableChanged || volatileDeliver {
-		turn.WorkerLegKey = stableKey
-		turn.WorkerLegVolatileKey = volatileKey
-		turn.WorkerLegBlock = block
-		return true
-	}
-	return false
 }
 
 // BeginPromptTurn starts a cached assembly turn for sessionID.

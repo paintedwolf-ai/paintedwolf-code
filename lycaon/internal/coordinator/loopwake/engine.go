@@ -102,6 +102,7 @@ type sessionSleep struct {
 	waitThisTurn     bool
 	waitTriggers     []WaitTrigger
 	processHandles   []string
+	workerHandles    []string
 	// mover identifies who may end the sleep.
 	mover SleepMover
 	// activityID is non-empty exactly while an awaiting_wake lease is open.
@@ -408,6 +409,7 @@ func (l *LoopEngine) settleDurableWaitWake(
 	condition, matched := waitConditionForWake(triggers, waitMatchInput{
 		Wake: wake, CompletingJobID: completingJobID, ProcessHandle: legID,
 		ProcessHandles:    processHandles,
+		WorkerHandles:     workerHandlesFromConditions(lease.Conditions),
 		CycleIdle:         l.workerCycleIdle(ctx, sessionID, completingJobID),
 		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, env),
 		NeedsDecision:     env.HasWorkerDecision(),
@@ -564,6 +566,7 @@ type sleepArm struct {
 	reason         string
 	triggers       []WaitTrigger
 	processHandles []string
+	workerHandles  []string
 	mover          SleepMover
 }
 
@@ -590,6 +593,7 @@ func (l *LoopEngine) enterSleep(ctx context.Context, sessionID string, arm sleep
 	st.reason = strings.TrimSpace(arm.reason)
 	st.waitTriggers = dedupeWaitTriggers(triggers)
 	st.processHandles = normalizeProcessHandles(arm.processHandles)
+	st.workerHandles = normalizeProcessHandles(arm.workerHandles)
 	st.mover = arm.mover
 	opened := openWaitLeaseLocked(st, sessionID, arm.mover)
 	loopLogSleep(sessionID, "arm", arm.reason, st.until)
@@ -846,6 +850,7 @@ func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {
 			cancelSleepTimerLocked(st)
 			st.waitTriggers = nil
 			st.processHandles = nil
+			st.workerHandles = nil
 			closed, hadLease := closeWaitLeaseLocked(st, sessionID)
 			st.mu.Unlock()
 			if hadLease {

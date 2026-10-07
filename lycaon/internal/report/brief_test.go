@@ -81,9 +81,7 @@ func TestBrief_RangeWhenAnOpenAnswerCouldDecide(t *testing.T) {
 	}
 }
 
-// When only the mildest level is certain and an open answer could decide a
-// worse one, the page says the work is not rated rather than stating the mild
-// level as its conclusion.
+// Open answers prevent a conclusive rating.
 func TestBrief_OpenRatingIsNotRated(t *testing.T) {
 	in := briefInput()
 	in.Brief.Best, in.Brief.Worst = 4, 0
@@ -112,7 +110,7 @@ func TestBrief_UnreadFenceIsNamed(t *testing.T) {
 // to do it.
 func TestBrief_CompletenessReasonNamesGapsNotTasks(t *testing.T) {
 	joined := joinRowValues(briefBlocks(testMeasurer(t), briefInput()))
-	want := "The review didn't use the automated scan results, and 1 question is still open. The rating could change."
+	want := "The review didn't use the automated scan results, and 1 question is still open."
 	if !strings.Contains(joined, want) {
 		t.Fatalf("brief = %q, want %q", joined, want)
 	}
@@ -137,6 +135,7 @@ func TestCompleteness_ByKindOfGap(t *testing.T) {
 		{[]ReportGap{{Kind: GapLegsPartial, Count: 1}, {Kind: GapWorkersPartial, Count: 2}}, CompletenessMostly},
 		{[]ReportGap{{Kind: GapScansMoved, Count: 1}, {Kind: GapClaimsOpen, Count: 1}}, CompletenessIncomplete},
 		{[]ReportGap{{Kind: GapInventoryUnaccounted, Count: 3}}, CompletenessIncomplete},
+		{[]ReportGap{{Kind: GapCoverageUnreviewed, Count: 1}}, CompletenessIncomplete},
 		{[]ReportGap{{Kind: GapClaimsOpen, Count: 0}}, CompletenessComplete},
 	}
 	for i, tc := range cases {
@@ -241,7 +240,7 @@ func TestBrief_WithoutARatingStatesCompleteness(t *testing.T) {
 	if strings.Contains(joined, "How serious is it?") || strings.Contains(joined, "risk") {
 		t.Fatalf("brief without a rating = %q, want no rating", joined)
 	}
-	for _, want := range []string{"The check is complete.", "Everything planned was checked. Nothing is open."} {
+	for _, want := range []string{"The check is complete.", "The planned review is complete. Its scope and limitations are documented below."} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("brief = %q, want %q", joined, want)
 		}

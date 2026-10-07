@@ -608,7 +608,6 @@ export function Shell(props: Props) {
           catalogWorkflowRun(
             props.appStore.state.activeWorkflowRun,
             props.appStore.state.workflowRuns,
-            props.appStore.state.workflowCatalog,
           ),
           props.appStore.state.chatHydrationLock,
           showNoProviderBanner(),

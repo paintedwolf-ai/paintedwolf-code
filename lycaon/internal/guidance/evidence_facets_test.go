@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,15 +36,15 @@ func TestBoardGroundingUsesShapeVerifiers(t *testing.T) {
 				Kind:       "record_finding",
 				Shape:      evidence.ShapeFileRegion,
 				Path:       "docs/board/page.md",
-				Body:       []string{"12\tobserved board excerpt"},
+				Body:       []string{hostmarker.FormatNumberedLines([]string{"observed board excerpt"}, 12)},
 				LineRanges: []evidence.LineRange{{Start: 12, End: 12}},
 			},
 		},
 	}
-	if !evidence.ExcerptMatchesHandle(ev, "record_finding#1", 12, "observed board excerpt") {
+	if !evidence.ExcerptMatchesHandle(ev, "record_finding#1", "docs/board/page.md", 12, "observed board excerpt") {
 		t.Fatal("board grounding must verify via shape registry, not kind-specific logic")
 	}
-	if evidence.ExcerptMatchesHandle(ev, "record_finding#1", 12, "fabricated excerpt") {
+	if evidence.ExcerptMatchesHandle(ev, "record_finding#1", "docs/board/page.md", 12, "fabricated excerpt") {
 		t.Fatal("fabricated excerpt must fail shape verification")
 	}
 }

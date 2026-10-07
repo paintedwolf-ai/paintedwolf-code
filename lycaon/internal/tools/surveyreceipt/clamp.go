@@ -2,9 +2,9 @@ package surveyreceipt
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -152,7 +152,8 @@ func clampReadContent(obj map[string]any, maxBytes int) (string, int, bool) {
 	return "", 0, false
 }
 
-// trimReadContentLines keeps whole numbered read lines (N\ttext) within budget.
+// trimReadContentLines keeps whole numbered read lines within budget and
+// reports the last line number kept.
 func trimReadContentLines(content string, budget int) (trimmed string, endLine int, ok bool) {
 	if budget <= 0 || len(content) <= budget {
 		return "", 0, false
@@ -171,10 +172,8 @@ func trimReadContentLines(content string, budget int) (trimmed string, endLine i
 			break
 		}
 		b.WriteString(chunk)
-		if tab := strings.IndexByte(line, '\t'); tab > 0 {
-			if n, err := strconv.Atoi(line[:tab]); err == nil && n > 0 {
-				endLine = n
-			}
+		if n, _, numbered := hostmarker.ParseNumberedLine(line); numbered && n > 0 {
+			endLine = n
 		}
 	}
 	if b.Len() == 0 {

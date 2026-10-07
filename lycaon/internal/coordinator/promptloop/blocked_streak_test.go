@@ -10,7 +10,7 @@ func TestNovelBlockedCodeDoesNotSpendTheAllowance(t *testing.T) {
 		"PROGRESS_ITEM_NOT_CLOSED",
 		"DOOM_LOOP_CODE_REPEAT",
 	} {
-		if st.noteBlockedBatch(code) {
+		if st.noteBlockedBatch(code, "") {
 			t.Fatalf("closed out on blocked batch %d (%s); each Code was new information", i+1, code)
 		}
 	}
@@ -24,15 +24,15 @@ func TestNovelBlockedCodeDoesNotSpendTheAllowance(t *testing.T) {
 
 func TestRepeatedBlockedCodeSpendsTheAllowance(t *testing.T) {
 	st := &promptLoopTurnState{}
-	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED") {
+	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
 		t.Fatal("closed out on the Code's first appearance")
 	}
 	for i := 1; i < BlockedLoopRejectCap; i++ {
-		if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED") {
+		if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
 			t.Fatalf("closed out after %d repeats, want %d", i, BlockedLoopRejectCap)
 		}
 	}
-	if !st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED") {
+	if !st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "") {
 		t.Fatalf("did not close out after %d repeats of one Code", BlockedLoopRejectCap)
 	}
 }
@@ -46,7 +46,7 @@ func TestAlternatingBlockedCodesStillCloseOut(t *testing.T) {
 		if i%2 == 1 {
 			code = "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"
 		}
-		if st.noteBlockedBatch(code) {
+		if st.noteBlockedBatch(code, "") {
 			closed = true
 			break
 		}
@@ -60,11 +60,11 @@ func TestAlternatingBlockedCodesStillCloseOut(t *testing.T) {
 func TestEveryBatchNovelStillHitsAbsoluteCap(t *testing.T) {
 	st := &promptLoopTurnState{}
 	for i := 0; i < BlockedLoopAbsoluteCap-1; i++ {
-		if st.noteBlockedBatch(distinctCode(i)) {
+		if st.noteBlockedBatch(distinctCode(i), "") {
 			t.Fatalf("closed out at batch %d on all-novel Codes; ceiling is %d", i+1, BlockedLoopAbsoluteCap)
 		}
 	}
-	if !st.noteBlockedBatch(distinctCode(BlockedLoopAbsoluteCap)) {
+	if !st.noteBlockedBatch(distinctCode(BlockedLoopAbsoluteCap), "") {
 		t.Fatalf("all-novel Codes never hit the absolute ceiling of %d", BlockedLoopAbsoluteCap)
 	}
 }
@@ -72,13 +72,13 @@ func TestEveryBatchNovelStillHitsAbsoluteCap(t *testing.T) {
 // A batch that runs clears the streak, so a Code is new again afterwards.
 func TestRunningBatchClearsTheStreak(t *testing.T) {
 	st := &promptLoopTurnState{}
-	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED")
-	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED")
+	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "")
+	st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", "")
 	if st.consecutiveBlockedBatches != 1 {
 		t.Fatalf("consecutiveBlockedBatches = %d, want 1", st.consecutiveBlockedBatches)
 	}
 	st.clearBlockedStreak()
-	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED"); st.consecutiveBlockedBatches != 0 {
+	if st.noteBlockedBatch("PROGRESS_ITEM_NOT_CLOSED", ""); st.consecutiveBlockedBatches != 0 {
 		t.Errorf("Code was still charged after a batch ran: %d repeats", st.consecutiveBlockedBatches)
 	}
 	if st.blockedBatchesThisStreak != 1 {

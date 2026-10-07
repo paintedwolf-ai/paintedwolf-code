@@ -52,6 +52,9 @@ func ValidatePhaseTargets(m Manifest) error {
 			if !ok || target.ID == phase.ID || target.ReviewLoop == nil {
 				return fmt.Errorf("phase %q: reconciles_phase must reference a different review phase", phase.ID)
 			}
+			if len(phase.ReviewLoop.CoverageReviewers) > 0 && !target.ReviewLoop.CarriesCoverage() {
+				return fmt.Errorf("phase %q: coverage reviewers require a reconciled coverage verdict", phase.ID)
+			}
 		}
 		for field, target := range map[string]string{"next": phase.Next, "child_next": phase.ChildNext} {
 			target = strings.TrimSpace(target)

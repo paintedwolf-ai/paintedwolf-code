@@ -169,7 +169,6 @@ export async function startWorkflowForSession(
     const reviewed = catalogWorkflowRun(
       appStore.state.activeWorkflowRun,
       appStore.state.workflowRuns,
-      appStore.state.workflowCatalog,
     ) ?? appStore.state.activeWorkflowRun;
     const command = reviewed
       ? {
@@ -205,7 +204,6 @@ export async function exitActiveWorkflow(
 	const active = target ?? catalogWorkflowRun(
 		appStore.state.activeWorkflowRun,
 		appStore.state.workflowRuns,
-		appStore.state.workflowCatalog,
 	) ?? appStore.state.activeWorkflowRun;
   if (!active) return null;
   return mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>

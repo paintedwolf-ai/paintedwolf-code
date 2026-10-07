@@ -102,7 +102,7 @@ func measureCoordinatorInjectBlock(
 		contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
 		return block
 	case "worker_task_assignment":
-		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, inject.WorkerTaskAssignmentInput{
+		input := inject.WorkerTaskAssignmentInput{
 			SessionID:  "sess-inject-test",
 			ProjectDir: t.TempDir(),
 			Charter: api.WorkerTaskCharter{
@@ -112,8 +112,15 @@ func measureCoordinatorInjectBlock(
 			WorkerJobID:  "job-budget-fixture",
 			Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 			MaxToolLoops: 8,
-		})
+		}
+		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
 		contractcheck.FailErr(t, "RenderWorkerTaskAssignment", err)
+		input.CoverageAssignment = promptBudgetCoverageAssignment()
+		coverage, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
+		contractcheck.FailErr(t, "RenderWorkerTaskAssignment coverage", err)
+		if len(coverage) > len(block) {
+			return coverage
+		}
 		return block
 	case "worker_task_preamble":
 		block, err := worker.RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", lycaonRoot,

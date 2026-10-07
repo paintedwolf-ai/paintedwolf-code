@@ -162,9 +162,9 @@ func TestPatternContinuationPreservesScope(t *testing.T) {
 	if len(actions) != 1 || actions[0].Pattern != req.Pattern || actions[0].Path != req.Path {
 		t.Fatalf("actions = %+v", actions)
 	}
-	state, ok := decodeCursor(actions[0].Cursor)
-	if !ok || state.Revision != 7 || state.Scope != cursorScope(req) || state.Position != "src/next.txt" ||
+	state, err := summarizeCursors.Decode(actions[0].Cursor, cursorScope(req))
+	if err != nil || state.Revision != 7 || state.Scope != cursorScope(req) || state.Position != "src/next.txt" ||
 		state.MatchesObserved != 13 || state.MatchingFilesObserved != 4 {
-		t.Fatalf("cursor = %+v %v", state, ok)
+		t.Fatalf("cursor = %+v %v", state, err)
 	}
 }

@@ -74,6 +74,14 @@ func UserIntentBoundary(history []Message) int {
 	return 0
 }
 
+// LastUserIntentMessage returns the most recent visible user intent message.
+func LastUserIntentMessage(history []Message) (Message, bool) {
+	if i := UserIntentBoundary(history); i > 0 {
+		return history[i-1], true
+	}
+	return Message{}, false
+}
+
 // UserTurnOrdinal counts visible user intents; zero means no turn has started.
 func UserTurnOrdinal(history []Message) int {
 	n := 0

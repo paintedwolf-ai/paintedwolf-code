@@ -54,7 +54,7 @@ func ledgerRecordsMatching(projectDir string, finding WorkerFindingInput, ev evi
 		if line > 0 && len(rec.LineRanges) > 0 && !evidence.LineInRanges(line, rec.LineRanges) {
 			continue
 		}
-		if excerpt != "" && !evidence.ExcerptMatchesHandle(ev, handle, 0, excerpt) {
+		if excerpt != "" && !evidence.ExcerptMatchesHandle(ev, handle, rec.Path, 0, excerpt) {
 			continue
 		}
 		out = append(out, handle)

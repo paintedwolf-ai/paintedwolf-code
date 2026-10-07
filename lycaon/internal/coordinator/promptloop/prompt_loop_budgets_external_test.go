@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -338,5 +339,46 @@ func TestLoopWarnsEveryWorkerAtItsRunway(t *testing.T) {
 				t.Fatalf("runway notices = %v want one at %d remaining", remaining, want)
 			}
 		})
+	}
+}
+
+// A grounding retry may use repair rounds past the worker's ceiling.
+func TestGroundingRetryAddsRepairRoundsPastTheCeiling(t *testing.T) {
+	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+		Pattern:    ".*",
+		AlwaysTool: true,
+		ToolCalls:  []llm.MockToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x"}}},
+	}}})
+	store := store.NewMemory()
+	deps := promptloop.StoreDeps(store)
+	deps.Limits = func(_ context.Context, sess *api.Session) settings.SessionLimits {
+		return session.ApplyWorkerMaxToolLoops(settings.DefaultSessionLimits(), sess)
+	}
+	deps.LLM = client
+	deps.Tools = tools.NewStubRegistry()
+	deps.Policy = &recordingToolPolicy{}
+	loop := promptloop.NewPromptLoopForTest(deps)
+	ctx := context.Background()
+	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session in store", err)
+	sess.AgentType = orchestration.ProfilePathExplorer
+	sess.ParentSessionID = "parent-1"
+	sess.MaxToolLoops = 1
+	_, err = loop.Run(ctx, promptloop.PromptRunInput{
+		SessionID: sess.ID, Session: sess, History: userHistory("repair"), ProfileID: "explore_readonly",
+		HostTurn: true, HostSignalID: string(anchor.WorkerCitationGrounding),
+		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+	})
+	testutil.FailErr(t, "loop.Run failed", err)
+	msgs, err := store.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "store.GetMessages failed", err)
+	var assistants int
+	for _, msg := range msgs {
+		if msg.Role == api.MessageRoleAssistant {
+			assistants++
+		}
+	}
+	if assistants != spawn.WorkerRepairRounds {
+		t.Fatalf("assistant messages = %d want %d repair rounds", assistants, spawn.WorkerRepairRounds)
 	}
 }

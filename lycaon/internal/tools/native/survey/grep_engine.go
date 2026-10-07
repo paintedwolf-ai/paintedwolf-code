@@ -48,6 +48,7 @@ type grepFileJob struct {
 }
 
 type grepFileOutcome struct {
+	rel     string
 	matches []grepMatch
 	// globSkipped excludes the file from searched counts.
 	globSkipped      bool
@@ -185,7 +186,7 @@ func (t *GrepTool) grepSurveyOptions(
 		return readFilter == nil || readFilter(projectroot.ScopeRel(target.root, abs), isDir)
 	}
 	opts := sandbox.SurveyOptions{
-		IncludeHidden: includeHidden, Admit: admit,
+		IncludeHidden: includeHidden, Admit: admit, Scope: walkExtra.Scope,
 		PruneNestedVCS: walkExtra.PruneNestedVCS, OnNestedRepoPruned: walkExtra.OnNestedRepoPruned,
 	}
 	return opts, nil
@@ -351,7 +352,11 @@ func (t *GrepTool) forEachGrepCatalogJob(
 			return sourcecatalog.WalkSkip
 		}
 		abs := filepath.Join(target.root.Path, filepath.FromSlash(entry.Path))
-		if walkExtra.Admit != nil && !walkExtra.Admit(catalogRelativePath(entry.Path, inventory.base), abs, entry.IsDir) {
+		walkRel := catalogRelativePath(entry.Path, inventory.base)
+		if walkExtra.Admit != nil && !walkExtra.Admit(walkRel, abs, entry.IsDir) {
+			return sourcecatalog.WalkSkip
+		}
+		if !admitsCatalogEntry(walkExtra.Scope, walkRel, entry.IsDir) {
 			return sourcecatalog.WalkSkip
 		}
 		if readFilter != nil && !readFilter(entry.Path, entry.IsDir) {
@@ -407,6 +412,9 @@ func (s *grepSearch) applyFileOutcome(out grepFileOutcome) error {
 		return nil
 	}
 	s.textScanned++
+	if out.rel != "" {
+		s.noteSubtree(out.rel)
+	}
 	for _, entry := range out.matches {
 		if err := s.acceptMatch(entry); err != nil {
 			return err

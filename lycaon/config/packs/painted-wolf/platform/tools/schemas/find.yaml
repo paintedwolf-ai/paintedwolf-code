@@ -21,4 +21,7 @@ schema:
     max_results:
       type: integer
       description: Page size for literal results[]. Omit on the first unscoped path=\".\" walk — the host returns view digest; set max_results or offset when paging after narrowing.
+    include_ignored:
+      type: boolean
+      description: Walk ignored entries (default true). False prunes them; a path named inside an ignored tree is still walked.
   additionalProperties: false

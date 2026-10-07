@@ -41,6 +41,7 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	m := Manifest{
 		ID:                 strings.TrimSpace(wf.ID),
 		Version:            strings.TrimSpace(wf.Version),
+		Retired:            wf.Retired,
 		Extends:            strings.TrimSpace(wf.Extends),
 		Name:               strings.TrimSpace(wf.Name),
 		Description:        strings.TrimSpace(wf.Description),
@@ -186,10 +187,18 @@ func parseWorkflowControls(workflowID string, raw workflowControls) (ManifestCon
 		if err != nil {
 			return ManifestControls{}, fmt.Errorf("workflow manifest %s: %w", workflowID, err)
 		}
+		retries := 0
+		if raw.Report.Retries != nil {
+			if *raw.Report.Retries <= 0 {
+				return ManifestControls{}, fmt.Errorf("workflow manifest %s: controls.report.retries must be positive", workflowID)
+			}
+			retries = *raw.Report.Retries
+		}
 		controls.Report = &ReportControls{
 			Enabled:       raw.Report.Enabled,
 			FindingsLabel: strings.TrimSpace(raw.Report.FindingsLabel),
 			Brief:         brief,
+			Retries:       retries,
 		}
 	}
 	return controls, nil

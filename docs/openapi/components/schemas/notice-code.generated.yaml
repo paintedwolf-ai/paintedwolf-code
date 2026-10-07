@@ -25,6 +25,7 @@ components:
         - session_preparation_failed
         - session_spend_ceiling_reached
         - thinking_override_unavailable
+        - turn_closeout_tool_call
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable

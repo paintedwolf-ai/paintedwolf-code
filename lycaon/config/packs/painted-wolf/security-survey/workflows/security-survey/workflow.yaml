@@ -1,5 +1,5 @@
 id: security-survey
-version: 1.0.0
+version: 1.0.1
 name: Security
 description: Survey a project against its threat model.
 trigger: /security-survey
@@ -121,6 +121,8 @@ phases:
         verdict: CLAIMED
         threat_model: string
         claims: claims
+        set_asides: set_asides
+        coverage: coverage_review
       claim_statuses:
         claimed: open
     on_enter:
@@ -135,14 +137,17 @@ phases:
     review_loop:
       evidence_key: survey_challenged
       include_scan_inventory: true
+      require_inventory_accounted: true
       reconciles_phase: claims
-      iteration_cap: 1
+      followup_attempts: 2
       required_agents: [skeptic]
+      coverage_reviewers: [skeptic]
       if_spawnable: [web-researcher]
       verdict_schema:
-        verdict: CHALLENGED
+        verdict: CHALLENGED|NEEDS_INVESTIGATION
         challenges: claims
         set_asides: set_asides
+        coverage: coverage_review
       claim_statuses:
         survives: held
         refuted: failed
@@ -170,6 +175,7 @@ controls:
   phase_advance: host
   report:
     enabled: true
+    retries: 5
     brief:
       question: How serious is it?
       dimensions:
@@ -180,6 +186,7 @@ controls:
           values:
             - {id: reachable, label: "Yes"}
             - {id: app_window, label: From the app window}
+            - {id: no_sink, label: No reachable sink}
             - {id: not_reachable, label: "No"}
         - id: outcome
           label: Worst outcome
@@ -226,6 +233,7 @@ controls:
           tone: low
           when:
             - {reachable: [reachable, app_window], outcome: [degraded, limited_misuse, code_runs, data_exposed]}
+            - {reachable: [no_sink, not_reachable], outcome: [degraded, limited_misuse, code_runs, data_exposed]}
         - label: None
           answer: No known risk
           means: Nothing found that needs action.

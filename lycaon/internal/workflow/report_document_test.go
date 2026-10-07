@@ -87,9 +87,9 @@ func validDocument() guidance.CoordinatorCompletionReport {
 		Synthesis: "done",
 		Findings: []guidance.CoordinatorFinding{
 			{ID: "adjudicated", Title: "Rated by the review", Disposition: "act"},
-			{ID: "open", Title: "Still open", Disposition: "accept",
-				Answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
+			{ID: "open", Title: "Still open", Disposition: "unresolved"},
 			{Title: "Sound surface", Disposition: "held"},
+			{ID: "new-risk", Title: "Additional risk", Disposition: "accept", Answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
 		},
 		Ask: &guidance.CoordinatorAsk{Do: "Approve the fix.", Effort: "small"},
 	}
@@ -135,8 +135,8 @@ func TestCheckReportDocument_RefusesMissingFields(t *testing.T) {
 		"held with answers": func(r *guidance.CoordinatorCompletionReport) {
 			r.Findings[2].Answers = map[string]string{"reachable": "reachable"}
 		},
-		"unrated attention":     func(r *guidance.CoordinatorCompletionReport) { r.Findings[1].Answers = nil },
-		"answers over a review": func(r *guidance.CoordinatorCompletionReport) { r.Findings[0].Answers = r.Findings[1].Answers },
+		"unrated attention":     func(r *guidance.CoordinatorCompletionReport) { r.Findings[3].Answers = nil },
+		"answers over a review": func(r *guidance.CoordinatorCompletionReport) { r.Findings[0].Answers = r.Findings[3].Answers },
 		"act without an ask":    func(r *guidance.CoordinatorCompletionReport) { r.Ask = nil },
 		"ask without do":        func(r *guidance.CoordinatorCompletionReport) { r.Ask.Do = "" },
 		"ask effort off-list":   func(r *guidance.CoordinatorCompletionReport) { r.Ask.Effort = "tiny" },
@@ -182,14 +182,14 @@ func TestCheckReportDocument_SeverityNamesTheRatedLevel(t *testing.T) {
 	}
 
 	doc = validDocument()
-	doc.Findings[1].Answers = map[string]string{"reachable": "reachable", "outcome": "code_runs", "attacker": "already_inside"}
+	doc.Findings[3].Answers = map[string]string{"reachable": "reachable", "outcome": "code_runs", "attacker": "already_inside"}
 	for _, sev := range []string{"Moderate", "medium", ""} {
-		doc.Findings[1].Severity = sev
+		doc.Findings[3].Severity = sev
 		if issue := firstIssue(doc, facts); issue.Code != "" {
 			t.Fatalf("severity %q: issue = %+v, want the Moderate level accepted by label or tone", sev, issue)
 		}
 	}
-	doc.Findings[1].Severity = "high"
+	doc.Findings[3].Severity = "high"
 	if !refused(doc) {
 		t.Fatal("a severity the Moderate level does not declare stood")
 	}
@@ -242,6 +242,9 @@ func TestCheckReportDocument_AccountsForTheInventory(t *testing.T) {
 	issue = firstIssue(doc, facts)
 	if issue.Code != guidance.ReportInventoryUnaccountedCode || issue.Count != 1 || !strings.Contains(issue.Offenders[0], "group:c") {
 		t.Fatalf("issue = %+v, want only the group reported outside the fixtures", issue)
+	}
+	if !strings.Contains(issue.Offenders[0], "cmd/main.go") || !strings.Contains(issue.Offenders[0], "internal/y_test.go") {
+		t.Fatalf("offender = %q, want every reported place of the split group listed", issue.Offenders[0])
 	}
 
 	doc.Findings[0].ScanGroupIDs = []string{"group:c"}
@@ -341,5 +344,29 @@ func securityBrief() *workflowdef.Brief {
 			{Label: "Low", Means: "Nothing urgent.", Tone: "low", When: []map[string][]string{{"reachable": {"reachable"}, "outcome": {"degraded"}}}},
 			{Label: "None", Means: "Nothing found that needs action.", Tone: "good"},
 		},
+	}
+}
+
+func TestReportChecksEveryUnratedFindingAndInventoryTogether(t *testing.T) {
+	facts := ReportDocumentFacts{Brief: securityBrief(), Inventory: RunInventory{
+		Settled: true, Groups: []scanfindings.InventoryGroup{{ID: "group:missing", Paths: []string{"src/only.go"}}},
+	}}
+	doc := guidance.CoordinatorCompletionReport{
+		Findings: []guidance.CoordinatorFinding{
+			{ID: "c1", Title: "First", Disposition: "act"},
+			{ID: "c2", Title: "Second", Disposition: "accept"},
+		},
+	}
+	issues := CheckReportDocument(doc, facts)
+	if len(issues) != 4 {
+		t.Fatalf("issues = %+v, want both findings, ask, and inventory", issues)
+	}
+	for i, id := range []string{"c1", "c2"} {
+		if !strings.Contains(issues[i].Reason, id) || !strings.Contains(issues[i].Reason, "answers") {
+			t.Fatalf("finding %s missing from issues: %+v", id, issues)
+		}
+	}
+	if issue := issues[3]; issue.Code != guidance.ReportInventoryUnaccountedCode || !strings.Contains(issue.Offenders[0], "src/only.go") {
+		t.Fatalf("inventory repair lost the single location: %+v", issue)
 	}
 }

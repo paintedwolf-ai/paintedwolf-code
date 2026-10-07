@@ -96,9 +96,10 @@ func LineInRanges(line int, ranges []LineRange) bool {
 
 // ExcerptMatchesHandle reports whether excerpt is a verbatim substring of the handle body
 // and line falls within recorded ranges when any are set.
-func ExcerptMatchesHandle(ev Ledger, handle string, line int, excerpt string) bool {
+func ExcerptMatchesHandle(ev Ledger, handle, path string, line int, excerpt string) bool {
 	ok, _ := VerifyHandle(ev, handle, Claim{
 		Handle:  handle,
+		Path:    path,
 		Line:    line,
 		Excerpt: excerpt,
 	})

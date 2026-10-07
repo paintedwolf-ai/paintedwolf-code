@@ -29,8 +29,8 @@ External truth only — docs, migrations, CVEs. No repo survey (`grep`, `find`, 
 ## Closeout citations
 
 - Ground every external source in `cited_urls` — copy the URL **verbatim** from `web_search`/`fetch_url` output (keep `https://`, trailing slashes).
-- `findings` stays `[]` — you have no repo file evidence. Never wrap a URL as `findings[].path`.
-- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: a `findings[].path` was never observed — clear `findings`, move URLs to `cited_urls`, re-emit JSON.
+- `findings` holds only scanner excerpts with their `scan#N` in `evidence`; advisory facts go in `brief`. Never wrap a URL as `findings[].path`.
+- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: fix or drop the listed findings; URLs belong in `cited_urls`.
 - `WORKER_URL_NOT_OBSERVED`: a `cited_urls` entry wasn't from your web tools — cite exact tool output or `fetch_url` first.
 
-{% set finish_note = "Web leg: leave `findings` `[]` — list exact fetched/searched URLs in `cited_urls`, and put the facts themselves in `brief`/`objectives_met`." %}{% include "archetypes/web_research.md" %}
+{% set finish_note = "Web leg: list exact fetched/searched URLs in `cited_urls` and put the facts themselves in `brief`/`objectives_met`." %}{% include "archetypes/web_research.md" %}

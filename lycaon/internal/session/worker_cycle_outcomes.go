@@ -181,7 +181,7 @@ func (m *Manager) ProjectWorkerFailure(ctx context.Context, task WorkerSummaryIn
 	if failure != nil {
 		risk = strings.TrimSpace(failure.Error())
 	}
-	report := workercompletion.WorkerCompletionReport{LegStatus: "failed"}
+	report := workercompletion.WorkerCompletionReport{LegStatus: "blocked"}
 	if risk != "" {
 		report.RemainingRisk = []string{risk}
 	}

@@ -1,10 +1,12 @@
 package evidence_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,7 +62,7 @@ func TestOperationalToolsProduceFirstClassStructuredEvidence(t *testing.T) {
 			if !ok || rec.Shape != tc.shape || rec.Surface != tc.surface || rec.Fidelity != evidence.FidelityStructured {
 				t.Fatalf("record = %+v ok=%v", rec, ok)
 			}
-			if !evidence.ExcerptMatchesHandle(ev, tc.handle, 0, "value_disclosed") {
+			if !evidence.ExcerptMatchesHandle(ev, tc.handle, "", 0, "value_disclosed") {
 				t.Fatal("structured result body must support a typed excerpt citation")
 			}
 		})
@@ -74,10 +76,10 @@ func TestVerbatimTrivialityFloor(t *testing.T) {
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 			Outcome: api.ToolResultOutcomeCompleted,
-			Content: `{"path":"f.go","content":"1|if x","offset":1,"end_line":1,"limit":1}`,
+			Content: fmt.Sprintf(`{"path":"f.go","content":%q,"offset":1,"end_line":1,"limit":1}`, hostmarker.FormatNumberedLines([]string{"if x"}, 1)),
 		}},
 	})
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 1, "if") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "f.go", 1, "if") {
 		t.Fatal("sub-min-span excerpt must not verify")
 	}
 }

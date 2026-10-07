@@ -1,7 +1,4 @@
-// Package reporttest validates report inputs and loads the shared fixtures for
-// tests in other packages. It is imported only from _test.go files so it stays
-// out of every shipped binary's import graph; tests inside package report use
-// the local loader in render_test.go instead (import cycle).
+// Package reporttest validates shared report fixtures for external tests.
 package reporttest
 
 import (
@@ -156,7 +153,7 @@ func assertBrief(t testing.TB, input report.ReportInput) {
 	}
 	for i, f := range input.Findings {
 		switch f.Disposition {
-		case "", report.DispositionAct, report.DispositionAccept, report.DispositionHeld:
+		case "", report.DispositionAct, report.DispositionAccept, report.DispositionHeld, report.DispositionUnresolved:
 		default:
 			t.Fatalf("findings[%d].disposition = %q", i, f.Disposition)
 		}

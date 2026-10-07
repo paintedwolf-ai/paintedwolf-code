@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"strings"
 
@@ -66,6 +67,32 @@ func TurnCloseoutReasonText(reason TurnCloseoutReason) string {
 	}
 }
 
+// TurnCloseoutCause is what ended the turn early; a blocked loop also names
+// the call the fuse tripped on.
+type TurnCloseoutCause struct {
+	Reason       TurnCloseoutReason
+	CancelReason string
+	BlockedTool  string
+	BlockedCode  string
+	BlockedCount int
+}
+
+// Text states the cause in the clause the closeout nudge opens with.
+func (c TurnCloseoutCause) Text() string {
+	if c.Reason != TurnCloseoutBlockedLoop || c.BlockedCount <= 0 {
+		return TurnCloseoutReasonText(c.Reason)
+	}
+	subject := "the reply"
+	if c.BlockedTool != "" {
+		subject = "`" + c.BlockedTool + "`"
+	}
+	text := fmt.Sprintf("%s was refused %d times in a row", subject, c.BlockedCount)
+	if c.BlockedCode != "" {
+		text += " (" + c.BlockedCode + ")"
+	}
+	return text
+}
+
 // HostNudge carries rendered guidance and its anchor ID.
 type HostNudge struct {
 	Content  string
@@ -76,7 +103,7 @@ type HostNudge struct {
 func (n HostNudge) Empty() bool { return strings.TrimSpace(n.Content) == "" }
 
 // TurnCloseoutNudge renders the internal user nudge for a prose-only finish turn.
-type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, profileID string, reason TurnCloseoutReason, cancelReason string) HostNudge
+type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, profileID string, cause TurnCloseoutCause) HostNudge
 
 // IterationRunwayNudge renders the one-shot heads-up when few tool iterations remain.
 type IterationRunwayNudge func(ctx context.Context, sess *api.Session, profileID string, remaining int) HostNudge
@@ -96,7 +123,7 @@ func (l *PromptLoop) maybeTurnCloseout(
 	if !guard.ProseFinishTurn(sess, iterIndex, maxIter) {
 		return history, nil
 	}
-	return l.appendTurnCloseoutNudge(ctx, sess, sessionID, profileID, history, TurnCloseoutIterationCap, "", st)
+	return l.appendTurnCloseoutNudge(ctx, sess, sessionID, profileID, history, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, st)
 }
 
 // iterationRunwayFires includes the current zero-based iteration in the remaining budget.
@@ -176,11 +203,10 @@ func (l *PromptLoop) appendTurnCloseoutNudge(
 	sess *api.Session,
 	sessionID, profileID string,
 	history []api.Message,
-	reason TurnCloseoutReason,
-	cancelReason string,
+	cause TurnCloseoutCause,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	nudge := l.turnCloseoutNudge(ctx, sess, profileID, reason, cancelReason)
+	nudge := l.turnCloseoutNudge(ctx, sess, profileID, cause)
 	if nudge.Empty() {
 		return history, nil
 	}
@@ -188,7 +214,7 @@ func (l *PromptLoop) appendTurnCloseoutNudge(
 		return history, nil
 	}
 	kind := api.MessageKind("")
-	if reason == TurnCloseoutIterationCap {
+	if cause.Reason == TurnCloseoutIterationCap {
 		kind = api.MessageKindIterationCapCloseout
 	}
 	return l.appendHostNudge(ctx, sessionID, history, nudge, kind, st)
@@ -211,13 +237,12 @@ func (l *PromptLoop) turnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
 	profileID string,
-	reason TurnCloseoutReason,
-	cancelReason string,
+	cause TurnCloseoutCause,
 ) HostNudge {
 	if l == nil || l.Deps.TurnCloseoutNudge == nil {
 		return HostNudge{}
 	}
-	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, profileID, reason, cancelReason)
+	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, profileID, cause)
 	nudge.Content = strings.TrimSpace(nudge.Content)
 	return nudge
 }
@@ -237,9 +262,10 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 	if sess == nil || maxIter <= 0 {
 		return history, "", "", nil
 	}
+	cause := st.closeoutCause(reason, cancelReason)
 	var err error
 	if !skipNudge {
-		history, err = l.appendTurnCloseoutNudge(ctx, sess, sessionID, profileID, history, reason, cancelReason, st)
+		history, err = l.appendTurnCloseoutNudge(ctx, sess, sessionID, profileID, history, cause, st)
 		if err != nil {
 			return history, "", "", err
 		}
@@ -249,6 +275,7 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 		closeoutState = &promptLoopTurnState{}
 	}
 	closeoutState.proseFinish = true
+	closeoutState.closeoutCauseText = cause.Text()
 	iterIndex := closeoutState.turnsRanThisRun
 	assistantMsg, completion, _, err := l.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
 	if err != nil {

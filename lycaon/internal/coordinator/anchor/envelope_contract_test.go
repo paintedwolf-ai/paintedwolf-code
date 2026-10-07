@@ -212,7 +212,8 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"offenders_sample": true, "observed_handles_sample": true, "observed_paths_sample": true,
 		// Report-document repair supplies the refusal's reason, the current document fence,
 		// and whether the draft delivers its run's report.
-		"rejection_reason": true, "offenders_omitted": true, "retained_document": true, "run_report": true,
+		"rejection_reason": true, "offenders_omitted": true, "retained_document": true, "run_report": true, "document_issues": true,
+		"offending_keys": true, "allowed_top_level_keys": true, "pinned_body_chars": true,
 		// QueueWorkerKick supplies these worker fields.
 		"agent_type": true, "leg_id": true, "phase_id": true, "cancel_reason": true,
 		"actual_chars": true, "max_chars": true,
@@ -237,7 +238,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 			// Skip syntax names and local loop bindings.
 			if len(v) <= 2 || v == "forloop" || v == "after" || v == "new_primary" ||
 				v == "attempt" || v == "max_attempts" || v == "drafted_synthesis" || v == "reason_text" ||
-				v == "id" || v == "include" || v == "endif" || v == "endfor" || v == "elif" || v == "else" {
+				v == "issue" || v == "offender" || v == "id" || v == "include" || v == "endif" || v == "endfor" || v == "elif" || v == "else" {
 				continue
 			}
 			if !allowed[v] {

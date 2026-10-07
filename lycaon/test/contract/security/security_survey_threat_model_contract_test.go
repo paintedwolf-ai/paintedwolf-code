@@ -16,7 +16,7 @@ func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
 	t.Parallel()
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := manifests.Get("security-survey", "1.0.0")
+	m, err := manifests.Get("security-survey", "1.0.1")
 	testutil.FailErr(t, "manifests.Get", err)
 	plan, ok := m.PhaseByID("plan")
 	if !ok {
@@ -42,7 +42,7 @@ func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
 	if !ok || challenge.ReviewLoop == nil {
 		t.Fatal("security-survey challenge review_loop missing")
 	}
-	if challenge.ReviewLoop.VerdictSchema["verdict"] != "CHALLENGED" {
+	if challenge.ReviewLoop.VerdictSchema["verdict"] != "CHALLENGED|NEEDS_INVESTIGATION" {
 		t.Fatalf("challenge verdict_schema = %+v", challenge.ReviewLoop.VerdictSchema)
 	}
 	if len(challenge.ReviewLoop.RequiredAgents) != 1 || challenge.ReviewLoop.RequiredAgents[0] != "skeptic" {

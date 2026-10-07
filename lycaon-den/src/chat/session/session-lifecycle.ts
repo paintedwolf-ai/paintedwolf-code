@@ -331,6 +331,7 @@ export async function resumeChatSession(
 }
 
 type SendChatPromptOpts = {
+  recovery?: import("../../api/types.ts").PromptRecovery;
   /** Fires after the pending submission is visible, before any network wait. */
   onPendingSend?: (destination: "transcript" | "queue") => void;
   attachmentLabels?: readonly string[];
@@ -434,6 +435,7 @@ export async function sendChatPrompt(
 
     const accepted = await client.sendPrompt(sessionId, {
       operation_id: operationId,
+      recovery: opts?.recovery,
       text: trimmed,
       attachments: attachmentParts.length > 0 ? attachmentParts : undefined,
       references: referenceParts.length > 0 ? referenceParts : undefined,

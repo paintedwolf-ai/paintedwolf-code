@@ -44,15 +44,10 @@ func ReportSetAsides(report guidance.CoordinatorCompletionReport) []scanfindings
 	return out
 }
 
-// CheckReportDocument lists the requirements a run's closeout document fails,
-// in the order a repair addresses them: every finding states a disposition,
-// rated findings answer the declared questions, an ask accompanies work to do,
-// set-asides name their groups, every unsettled claim is carried, and every
-// scanner group is accounted for. None means the document stands.
+// CheckReportDocument returns document defects in repair order.
 func CheckReportDocument(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) []guidance.ReportDocumentIssue {
-	var out []guidance.ReportDocumentIssue
+	out := checkReportFindings(report, facts)
 	for _, issue := range []guidance.ReportDocumentIssue{
-		checkReportFindings(report, facts),
 		checkReportAsk(report),
 		checkReportSetAsides(report),
 		checkClaimsCarried(report, facts.Claims),
@@ -108,45 +103,64 @@ func ClaimAnswers(claims []RunClaim) map[string]map[string]string {
 	return out
 }
 
-func checkReportFindings(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) guidance.ReportDocumentIssue {
+func checkReportFindings(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) []guidance.ReportDocumentIssue {
 	adjudicated := ClaimAnswers(facts.Claims)
+	var out []guidance.ReportDocumentIssue
 	for _, f := range report.Findings {
-		name := findingName(f)
-		if strings.TrimSpace(f.Title) == "" {
-			return invalid("finding %s has no title; every finding states its conclusion in one line as `title`", name)
-		}
-		switch api.CompletionReportFindingDisposition(f.Disposition) {
-		case api.CompletionReportFindingDispositionAct, api.CompletionReportFindingDispositionAccept:
-		case api.CompletionReportFindingDispositionHeld:
-			if len(f.Answers) > 0 {
-				return invalid("finding %s is held, so it is not rated; remove its answers", name)
+		for _, claim := range facts.Claims {
+			if f.ID != claim.ID {
+				continue
 			}
-			continue
-		case "":
-			return invalid("finding %s has no disposition (want %s)", name, alternatives(api.AllCompletionReportFindingDispositions()))
-		default:
-			return invalid("finding %s has disposition %q (want %s)", name, f.Disposition, alternatives(api.AllCompletionReportFindingDispositions()))
-		}
-		if facts.Brief == nil {
-			if len(f.Answers) > 0 {
-				return invalid("finding %s has answers, but this workflow declares no rating questions", name)
+			if claim.Class == workflowdef.ClaimOpen && f.Disposition != "unresolved" {
+				out = append(out, invalid("finding %q is an open question; use disposition unresolved", f.ID))
 			}
-			continue
-		}
-		answers, isAdjudicated := adjudicated[strings.TrimSpace(f.ID)]
-		if isAdjudicated {
-			if len(f.Answers) > 0 {
-				return invalid("finding %s shares its id with a claim whose answers the review adjudicated; remove the finding's answers", name)
-			}
-		} else {
-			answers = f.Answers
-			if err := facts.Brief.CheckAnswers(answers); err != nil {
-				return invalid("finding %s answers: %v; answer %s", name, err, facts.Brief.DescribeAnswers())
+			if claim.Class != workflowdef.ClaimOpen && f.Disposition == "unresolved" {
+				out = append(out, invalid("finding %q contradicts its resolved claim", f.ID))
 			}
 		}
-		if issue := checkRatedSeverity(name, f.Severity, facts.Brief, answers); issue.Code != "" {
-			return issue
+		if issue := checkReportFinding(f, facts.Brief, adjudicated); issue.Code != "" {
+			out = append(out, issue)
 		}
+	}
+	return out
+}
+
+func checkReportFinding(f guidance.CoordinatorFinding, brief *workflowdef.Brief, adjudicated map[string]map[string]string) guidance.ReportDocumentIssue {
+	name := findingName(f)
+	if strings.TrimSpace(f.Title) == "" {
+		return invalid("finding %s has no title; every finding states its conclusion in one line as `title`", name)
+	}
+	switch api.CompletionReportFindingDisposition(f.Disposition) {
+	case api.CompletionReportFindingDispositionAct, api.CompletionReportFindingDispositionAccept:
+	case api.CompletionReportFindingDispositionHeld, api.CompletionReportFindingDispositionUnresolved:
+		if len(f.Answers) > 0 {
+			return invalid("finding %s is %s, so it is not rated; remove its answers", name, f.Disposition)
+		}
+		return guidance.ReportDocumentIssue{}
+	case "":
+		return invalid("finding %s has no disposition (want %s)", name, alternatives(api.AllCompletionReportFindingDispositions()))
+	default:
+		return invalid("finding %s has disposition %q (want %s)", name, f.Disposition, alternatives(api.AllCompletionReportFindingDispositions()))
+	}
+	if brief == nil {
+		if len(f.Answers) > 0 {
+			return invalid("finding %s has answers, but this workflow declares no rating questions", name)
+		}
+		return guidance.ReportDocumentIssue{}
+	}
+	answers, isAdjudicated := adjudicated[strings.TrimSpace(f.ID)]
+	if isAdjudicated {
+		if len(f.Answers) > 0 {
+			return invalid("finding %s shares its id with a claim whose answers the review adjudicated; remove the finding's answers", name)
+		}
+	} else {
+		answers = f.Answers
+		if err := brief.CheckAnswers(answers); err != nil {
+			return invalid("finding %s answers: %v; answer %s", name, err, brief.DescribeAnswers())
+		}
+	}
+	if issue := checkRatedSeverity(name, f.Severity, brief, answers); issue.Code != "" {
+		return issue
 	}
 	return guidance.ReportDocumentIssue{}
 }
@@ -253,9 +267,15 @@ func checkClaimsCarried(report guidance.CoordinatorCompletionReport, claims []Ru
 }
 
 func checkInventoryAccounted(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) guidance.ReportDocumentIssue {
+	issue, _ := inventoryAccounting(report, facts)
+	return issue
+}
+
+// inventoryAccounting returns the accounting defect and the groups left unaccounted.
+func inventoryAccounting(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) (guidance.ReportDocumentIssue, []scanfindings.InventoryGroup) {
 	inv := facts.Inventory
 	if len(inv.Groups) == 0 {
-		return guidance.ReportDocumentIssue{}
+		return guidance.ReportDocumentIssue{}, nil
 	}
 	reviewed := len(facts.SetAsides)
 	sets := append(append([]scanfindings.SetAside(nil), facts.SetAsides...), ReportSetAsides(report)...)
@@ -266,34 +286,36 @@ func checkInventoryAccounted(report guidance.CoordinatorCompletionReport, facts 
 			Reason:    "these scan_group_ids name no group in this run's scans",
 			Offenders: sampleStrings(account.Unknown, 8),
 			Count:     len(account.Unknown),
-		}
+		}, nil
 	}
 	for i, n := range account.SetAsideCounts[reviewed:] {
 		if n == 0 {
-			return invalid("set_asides[%d] (%q) accounts for no group in this run's scans", i, report.SetAsides[i].Reason)
+			return invalid("set_asides[%d] (%q) accounts for no group in this run's scans", i, report.SetAsides[i].Reason), nil
 		}
 	}
 	left := account.Unaccounted()
 	if len(left) == 0 {
-		return guidance.ReportDocumentIssue{}
+		return guidance.ReportDocumentIssue{}, nil
 	}
 	offenders := make([]string, 0, min(len(left), 8))
 	for _, g := range left[:min(len(left), 8)] {
-		where := ""
-		if len(g.Paths) > 0 {
-			where = " · " + g.Paths[0]
-			if extra := len(g.Paths) - 1; extra > 0 {
-				where += fmt.Sprintf(" +%d", extra)
-			}
-		}
-		offenders = append(offenders, fmt.Sprintf("%s · %s · %s · %s%s", g.ID, g.Scanner, g.Level, g.RuleID, where))
+		offenders = append(offenders, formatInventoryOffender(g))
 	}
 	return guidance.ReportDocumentIssue{
 		Code:      guidance.ReportInventoryUnaccountedCode,
 		Reason:    fmt.Sprintf("%d of %d scanner groups have no assessment and no set-aside", len(left), len(inv.Groups)),
 		Offenders: offenders,
 		Count:     len(left),
+	}, left
+}
+
+// Every location matters when repairing a path selector for a whole group.
+func formatInventoryOffender(g scanfindings.InventoryGroup) string {
+	line := fmt.Sprintf("%s · %s · %s · %s", g.ID, g.Scanner, g.Level, g.RuleID)
+	if len(g.Paths) == 0 {
+		return line
 	}
+	return line + " · " + strings.Join(g.Paths, "; ")
 }
 
 func sampleStrings(in []string, n int) []string {

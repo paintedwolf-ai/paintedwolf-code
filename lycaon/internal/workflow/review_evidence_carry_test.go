@@ -20,7 +20,7 @@ func startSecuritySurveyRun(t *testing.T) (*RunManager, string) {
 	_, err = mgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		OperationID:     "op-" + sess.ID,
 		WorkflowID:      "security-survey",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "Start security-survey", err)
 	return mgr, sess.ID
@@ -88,7 +88,6 @@ func TestStampedReviewVerdictsFollowPhaseOrder(t *testing.T) {
 	}
 }
 
-// A session with no run carries nothing rather than failing the dispatch.
 func TestStampedReviewVerdictsIsInertWithoutARun(t *testing.T) {
 	mgr, _, sessions, sqlDB := newRunManagerForEvents(t, "review-evidence-carry-inert.db")
 	ctx := context.Background()

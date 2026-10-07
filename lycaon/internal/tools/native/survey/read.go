@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -314,7 +315,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	resp := ReadResponse{
 		Path:       path,
 		Mode:       "content",
-		Content:    formatReadContent(page, offset),
+		Content:    hostmarker.FormatNumberedLines(page, offset),
 		TotalLines: totalLines,
 		Offset:     offset,
 		Limit:      limitRes.limit,

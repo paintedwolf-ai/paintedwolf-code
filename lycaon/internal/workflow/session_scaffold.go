@@ -16,8 +16,12 @@ func (m *RunManager) ValidateUserFacingStart(ctx context.Context, projectDir, se
 	if m.Manifests != nil && m.Manifests.CatalogStartable(workflowID, version) {
 		return nil
 	}
-	_, scopes, err := m.Resolver.Resolve(ctx, projectDir, sessionID)
+	registry, scopes, err := m.Resolver.Resolve(ctx, projectDir, sessionID)
 	if err != nil {
+		return workflowdef.ErrUnknownWorkflow
+	}
+	manifest, err := registry.Get(workflowID, version)
+	if err != nil || manifest.Retired {
 		return workflowdef.ErrUnknownWorkflow
 	}
 	switch scopes[workflowdef.ManifestKey(workflowID, version)] {
@@ -35,6 +39,9 @@ func FilterProductCatalogSummaries(rows []api.WorkflowSummary, manifests map[str
 	}
 	out := make([]api.WorkflowSummary, 0, len(rows))
 	for _, row := range rows {
+		if manifest, ok := manifests[workflowdef.ManifestKey(row.ID, row.Version)]; ok && manifest.Retired {
+			continue
+		}
 		if row.Scope != api.WorkflowScopeBundled {
 			out = append(out, row)
 			continue

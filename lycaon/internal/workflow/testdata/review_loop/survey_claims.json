@@ -1,5 +1,7 @@
 {
   "verdict": "CLAIMED",
   "threat_model": "HTTP service; unauthenticated clients on the public internet; session cookie is the auth boundary",
-  "claims": "[{\"id\":\"c1\",\"title\":\"Attacker-controlled id reaches a formatted SQL query\",\"status\":\"claimed\",\"statement\":\"SQLi in internal/store/query.go:88 — attacker-controlled id reaches Sprintf\",\"answers\":{\"reachable\":\"reachable\",\"outcome\":\"data_exposed\",\"attacker\":\"anyone_remote\"},\"cited_evidence\":[{\"path\":\"internal/store/query.go\",\"line\":88,\"excerpt\":\"Sprintf\"}]}]"
+  "claims": "[{\"id\":\"c1\",\"title\":\"Attacker-controlled id reaches a formatted SQL query\",\"status\":\"claimed\",\"statement\":\"SQLi in internal/store/query.go:88 \u2014 attacker-controlled id reaches Sprintf\",\"answers\":{\"reachable\":\"reachable\",\"outcome\":\"data_exposed\",\"attacker\":\"anyone_remote\"},\"cited_evidence\":[{\"path\":\"internal/store/query.go\",\"line\":88,\"excerpt\":\"Sprintf\"}]}]",
+  "set_asides": "[]",
+  "coverage": "{\"revision\":\"fixture\",\"assessments\":[]}"
 }

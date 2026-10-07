@@ -30,10 +30,10 @@ func TestBuildLedgerFromTranscriptUsesOpaqueUndeclaredMCPShape(t *testing.T) {
 	if rec.Kind != evidence.MCPServerKindPrefix+"customfetch" {
 		t.Fatalf("kind = %q", rec.Kind)
 	}
-	if !evidence.ExcerptMatchesHandle(ev, handle, 0, "Observation payload") {
+	if !evidence.ExcerptMatchesHandle(ev, handle, "", 0, "Observation payload") {
 		t.Fatal("expected verbatim excerpt to verify")
 	}
-	if evidence.ExcerptMatchesHandle(ev, handle, 0, "fabricated text") {
+	if evidence.ExcerptMatchesHandle(ev, handle, "", 0, "fabricated text") {
 		t.Fatal("expected fabricated excerpt to fail")
 	}
 }

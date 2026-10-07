@@ -57,6 +57,12 @@ Durable identity and disposable bytes should be separate when content can be rea
 
 Deleting bytes must produce an explainable unavailable state, not make a durable id look as though it never existed.
 
+## Workflow definitions
+
+A workflow run pins its definition by id and version (`durable-db` state), and the host resolves that exact manifest for the run's whole life. A bundled definition is therefore released the moment a run can select it: changing a phase, verdict schema, gate, or report control changes the contract of every run already in flight on that version.
+
+A change to released behaviour ships as a new version beside the old one. The prior version stays in the bundle marked `retired: true`, which removes it from the start catalog and refuses new starts while keeping it resolvable for existing runs and their history. A retired file is frozen at the bytes its release shipped plus that one line; [`retired-definitions.yaml`](../lycaon/test/contract/testdata/workflows/retired-definitions.yaml) pins each retired manifest's digest and the contract suite holds the bundle to it. Engine-level tightening still applies to retired runs where the engine, not the manifest, defines it; the manifest's own contract does not move. Version selection and ordering: [Workflows](workflows.md#review_loop).
+
 ## Bundle wire and generated code
 
 Den and the sidecar ship as one product. `/v1` is their private co-versioned boundary, but every change still moves through one source chain:

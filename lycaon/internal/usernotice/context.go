@@ -24,6 +24,12 @@ type hostFaultNotice interface {
 	NoticeHostFault() (tool string, callRan bool)
 }
 
+// proseTurnToolCallNotice matches final-turn tool-call errors without importing their package.
+type proseTurnToolCallNotice interface {
+	error
+	NoticeProseTurnToolCalls() (tools []string, closeoutReason string)
+}
+
 // spendCeilingNotice matches spend-ceiling prompt errors without importing their package.
 type spendCeilingNotice interface {
 	error
@@ -46,6 +52,19 @@ func ContextFromPromptError(err error) map[string]any {
 	if errors.As(err, &thinking) {
 		out := providerModelContext(thinking.ProviderID, thinking.Model)
 		out["reason"] = trimContextString(thinking.Reason)
+		return out
+	}
+	var proseTurn proseTurnToolCallNotice
+	if errors.As(err, &proseTurn) {
+		tools, reason := proseTurn.NoticeProseTurnToolCalls()
+		out := map[string]any{}
+		if len(tools) > 0 {
+			out["tool"] = trimContextString(tools[0])
+			out["tools"] = trimContextString(strings.Join(tools, ", "))
+		}
+		if reason = trimContextString(reason); reason != "" {
+			out["closeout_reason"] = reason
+		}
 		return out
 	}
 	if e, ok := failure.AsProviderNotConfigured(err); ok && e != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/structrewrite"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -101,7 +102,7 @@ func (t *ReadTool) runSymbol(ctx context.Context, path, text string, args map[st
 		resp.StartLine = startLine
 		resp.EndLine = endLine
 		capture.lines(startLine, endLine)
-		resp.Content = formatReadContent(linesFromMatch(text, matches[0]), startLine)
+		resp.Content = hostmarker.FormatNumberedLines(linesFromMatch(text, matches[0]), startLine)
 		resp.TotalLines = toolkit.CountLines(text)
 	default:
 		resp.Count = len(matches)

@@ -15,7 +15,7 @@ copy:
   what: '{{ paintedwolf.rejection_reason }}: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
   cause: The run's bound scans exist to inform its review, so the report accounts for every scanner group they reported.
   why: A group nobody assessed is not cleared; left unaccounted, the report cannot say the review used its scan results.
-  fix: 'Link each group a finding assesses through that finding''s scan_group_ids, and account for the rest with set_asides: [{scanner, paths, reason}] selects every group one scanner reported entirely inside the path globs (for example test fixtures), or name groups with scan_group_ids. Group ids come from scan_query with view groups on the run''s scan_ids; a scan id is not a group id.'
+  fix: 'Link each group a finding assesses through that finding''s scan_group_ids, and account for the rest with set_asides: [{scanner, paths, reason}] selects every group one scanner reported entirely inside the path globs (for example test fixtures), or name groups with scan_group_ids. Use the group ids and locations in the refusal and retained review evidence; a scan id is not a group id. A group reported partly in fixtures and partly in real code cannot be set aside by paths — assess it in a finding or set it aside by scan_group_ids.'
   instead: Set a group aside only with a reason that holds for every group it selects; assess anything that could affect the rating.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis

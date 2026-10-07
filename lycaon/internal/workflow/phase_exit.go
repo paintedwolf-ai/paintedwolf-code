@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"maps"
+	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -54,12 +54,13 @@ type PhaseExitView struct {
 	// failures: the phase work is what activates them.
 	DormantGates []string
 	// CompleteWhen is a non-gate completion expression, when the phase declares one.
-	CompleteWhen  string
-	VerdictSchema map[string]string
-	// ClaimStatuses are the status words the phase's claims may take.
-	ClaimStatuses []string
-	ReviewLoopKey string
-	ReviewLoopCap int
+	CompleteWhen string
+	// VerdictShape is the rendered verdict_schema a terminal verdict must follow.
+	VerdictShape     string
+	ReviewLoopKey    string
+	ReviewLoopCap    int
+	FollowupAttempts int
+	VerdictExample   string
 	// ReviewAgents is the verdict-owed reviewer roster: required_agents plus the
 	// spawnable if_spawnable subset. A terminal verdict needs a succeeded task()
 	// envelope from each.
@@ -76,10 +77,8 @@ type PhaseGateSnapshot struct {
 	Dormant   bool
 }
 
-// ProjectPhaseExit derives leave steps from phase state.
-// A nil snapshot treats declared gates as open. reviewAgents is the resolved
-// verdict-owed reviewer roster for a review_loop phase (required_agents plus the
-// spawnable if_spawnable subset); empty means the declared roster.
+// ProjectPhaseExit derives phase controls from gates and the resolved reviewer roster.
+// Nil gates remain open; an empty roster uses the phase declaration.
 func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef, gates []PhaseGateSnapshot, reviewAgents []string) PhaseExitView {
 	auth := string(workflowdef.EffectiveAdvancePolicy(manifest, phase))
 	out := PhaseExitView{
@@ -95,12 +94,16 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 		out.Kind = PhaseExitKindReviewLoop
 		out.ReviewLoopKey = strings.TrimSpace(phase.ReviewLoop.EvidenceKey)
 		out.ReviewLoopCap = phase.ReviewLoop.IterationCap
+		if phase.ReviewLoop.FollowupAttempts > 0 {
+			out.ReviewLoopCap = 0
+		}
+		out.FollowupAttempts = phase.ReviewLoop.FollowupAttempts
+		out.VerdictExample = verdictExampleJSON(*phase.ReviewLoop)
 		if len(reviewAgents) == 0 {
 			reviewAgents = dedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
 		out.ReviewAgents = append([]string(nil), reviewAgents...)
-		out.VerdictSchema = maps.Clone(phase.ReviewLoop.VerdictSchema)
-		out.ClaimStatuses = phase.ReviewLoop.StatusWords()
+		out.VerdictShape = VerdictSchemaShape(*phase.ReviewLoop)
 	case phase.HumanApproval != nil:
 		out.Kind = PhaseExitKindHumanApproval
 		out.HumanApproval = true
@@ -181,10 +184,11 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		OpenGates:           append([]string(nil), exit.OpenGates...),
 		DormantGates:        append([]string(nil), exit.DormantGates...),
 		CompleteWhen:        exit.CompleteWhen,
-		VerdictSchema:       maps.Clone(exit.VerdictSchema),
-		ClaimStatuses:       append([]string(nil), exit.ClaimStatuses...),
+		VerdictShape:        exit.VerdictShape,
 		ReviewLoopKey:       exit.ReviewLoopKey,
 		ReviewLoopCap:       exit.ReviewLoopCap,
+		FollowupAttempts:    exit.FollowupAttempts,
+		VerdictExample:      exit.VerdictExample,
 		ReviewAgents:        append([]string(nil), exit.ReviewAgents...),
 		HumanApproval:       exit.HumanApproval,
 		InvokeWorkflowID:    exit.InvokeWorkflowID,
@@ -201,4 +205,12 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		}
 	}
 	return pe
+}
+
+func verdictExampleJSON(def workflowdef.ReviewLoopDef) string {
+	raw, err := json.Marshal(VerdictExample(def))
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }

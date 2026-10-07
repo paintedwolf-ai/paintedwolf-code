@@ -57,3 +57,37 @@ func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 		t.Fatalf("legs without an intent = %+v, want every started leg", all)
 	}
 }
+
+type evidenceWorkflowView struct {
+	recordingWorkflowView
+	run *api.WorkflowRun
+}
+
+func (v *evidenceWorkflowView) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+	return v.run, nil
+}
+
+func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
+	mgr, st := newTestManager(t)
+	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create parent", err)
+	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
+	testutil.FailErr(t, "create reviewer", err)
+	run := &api.WorkflowRun{ID: "review-run", CurrentPhase: "challenge"}
+	mgr.workflows = &evidenceWorkflowView{run: run}
+	before := time.Unix(100, 0)
+	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{
+		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},
+		{ID: "unrelated", ParentSessionID: parent.ID, ChildSessionID: "other", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: "another-run", CreatedAt: before.Add(time.Hour)},
+	}})
+	legs, err := mgr.CloseoutEvidence().WorkerLegs(t.Context(), parent.ID, before.Add(time.Minute))
+	testutil.FailErr(t, "read run evidence", err)
+	if len(legs) != 1 || legs[0].ChildSessionID != child.ID {
+		t.Fatalf("run evidence = %+v", legs)
+	}
+	reviewers, err := mgr.reviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
+	testutil.FailErr(t, "read reviewers without summaries", err)
+	if len(reviewers) != 1 || len(reviewers[0].LegIDs) != 1 || reviewers[0].LegIDs[0] != child.ID {
+		t.Fatalf("reviewer membership = %+v", reviewers)
+	}
+}

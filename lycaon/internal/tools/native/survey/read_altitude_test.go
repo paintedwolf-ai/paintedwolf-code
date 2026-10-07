@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -107,7 +108,7 @@ func TestReadAltitudeLiteralSacredGolden(t *testing.T) {
 	wantResp := ReadResponse{
 		Path:             "main.go",
 		Mode:             "content",
-		Content:          formatReadContent([]string{"package main", ""}, 1),
+		Content:          hostmarker.FormatNumberedLines([]string{"package main", ""}, 1),
 		TotalLines:       3,
 		Offset:           1,
 		Limit:            2,

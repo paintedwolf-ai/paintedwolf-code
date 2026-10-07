@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"sort"
 	"strings"
@@ -36,6 +37,7 @@ type stubSummaryResolver struct {
 	supersededReports              []string
 	fullTranscriptReads            int
 	workerJobTranscriptReads       int
+	promptFunc                     func(ctx context.Context, sessionID, text string) (*promptresult.Result, error)
 	projectDir                     string
 }
 
@@ -55,6 +57,9 @@ func (s *stubSummaryResolver) stampEvidenceHandles() {
 
 func (s *stubSummaryResolver) Prompt(ctx context.Context, sessionID, text string) (*promptresult.Result, error) {
 	s.prompts++
+	if s.promptFunc != nil {
+		return s.promptFunc(ctx, sessionID, text)
+	}
 	if s.promptErr != nil {
 		return nil, s.promptErr
 	}
@@ -455,9 +460,9 @@ func loadWorkerSummaryTestFinalizeOpts(t *testing.T) workercloseout.WorkerSummar
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	return workercloseout.WorkerSummaryFinalizeOpts{
-		MaxCitationGroundingRetries: limits.DefaultCitationGroundingRetries,
-		WorkflowHints:               cfg,
-		Pipeline:                    sessionTestOARPipeline(t),
+		MaxGroundingRetries: limits.DefaultWorkerGroundingRetries,
+		WorkflowHints:       cfg,
+		Pipeline:            sessionTestOARPipeline(t),
 	}
 }
 
@@ -596,7 +601,7 @@ func TestFinalizeCitationGroundingAuditsFullBrief(t *testing.T) {
 	// The citation sits beyond the first 600 bytes.
 	root := t.TempDir()
 	opts := loadWorkerSummaryTestFinalizeOpts(t)
-	opts.MaxCitationGroundingRetries = 1
+	opts.MaxGroundingRetries = 1
 	opts.ProjectDir = root
 	opts.AgentType = "path-explorer"
 
@@ -673,7 +678,7 @@ func TestFinalizeCitationGroundingKickAdvertisesSummaryBudget(t *testing.T) {
 func TestFinalizeCitationGroundingHostAssembledWhenRetriesExhausted(t *testing.T) {
 	root := t.TempDir()
 	opts := loadWorkerSummaryTestFinalizeOpts(t)
-	opts.MaxCitationGroundingRetries = 1
+	opts.MaxGroundingRetries = 1
 	opts.ProjectDir = root
 	opts.AgentType = "path-explorer"
 
@@ -713,7 +718,7 @@ func TestFinalizeCitationGroundingHostAssembledWhenRetriesExhausted(t *testing.T
 func TestFinalizeCitationGroundingDoesNotCertifyWithoutLedger(t *testing.T) {
 	root := t.TempDir()
 	opts := loadWorkerSummaryTestFinalizeOpts(t)
-	opts.MaxCitationGroundingRetries = 1
+	opts.MaxGroundingRetries = 1
 	opts.ProjectDir = root
 	opts.AgentType = "path-explorer"
 
@@ -814,3 +819,57 @@ func TestFinalizeWorkerSummaryPropagatesTrimRetryFailure(t *testing.T) {
 		t.Fatalf("trim retry failure: prompts=%d error=%v", resolver.prompts, err)
 	}
 }
+
+func TestWorkerGroundingBudgetIsPerLeg(t *testing.T) {
+	root := t.TempDir()
+	opts := loadWorkerSummaryTestFinalizeOpts(t)
+	opts.ProjectDir = root
+	opts.AgentType = "path-explorer"
+
+	grepJSON := `{"matches":[{"path":"pkg/main.go","line":1,"content":"package main"}]}`
+
+	makeChildResolver := func() *stubSummaryResolver {
+		r := &stubSummaryResolver{
+			msgs: []api.Message{
+				{
+					Role: api.MessageRoleAssistant,
+					ToolCalls: []api.ToolCall{
+						{ID: "tc1", Name: "grep", Args: map[string]any{"path": ".", "pattern": "main"}},
+					},
+				},
+				{Role: api.MessageRoleTool, Content: grepJSON, ToolResult: &api.ToolResult{Content: grepJSON, Outcome: api.ToolResultOutcomeCompleted}},
+				completeLegJSONRow(t, "", `{"leg_status":"complete","findings":[{"path":"pkg/unread0.go","line":10}],"objectives_met":["found bug"],"remaining_risk":[],"suggested_next_task":"","brief":"Survey issue in handler"}`),
+			},
+		}
+		attempt := 0
+		r.promptFunc = func(ctx context.Context, sessionID, text string) (*promptresult.Result, error) {
+			attempt++
+			r.msgs = append(r.msgs, completeLegJSONRow(t, "", fmt.Sprintf(`{"leg_status":"complete","findings":[{"path":"pkg/unread%d.go","line":10}],"objectives_met":["found bug"],"remaining_risk":[],"suggested_next_task":"","brief":"Survey issue in handler"}`, attempt)))
+			return &promptresult.Result{MessageID: fmt.Sprintf("retry-%d", attempt)}, nil
+		}
+		return r
+	}
+
+	// Leg 1 spends its 3 grounding retries.
+	r1 := makeChildResolver()
+	out1, err1 := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), r1, "child1", "path-explorer", finalizeOpts(r1, "child1", opts))
+	testutil.FailErr(t, "evaluate leg 1", err1)
+	if r1.prompts != limits.DefaultWorkerGroundingRetries {
+		t.Fatalf("leg 1 prompts = %d, want %d", r1.prompts, limits.DefaultWorkerGroundingRetries)
+	}
+	if out1.Status != "partial" || !out1.HostAssembled {
+		t.Fatalf("leg 1 out = %+v, want host-assembled partial after retries", out1)
+	}
+
+	// Leg 2 under same configuration gets its own 3 retries (not exhausted by leg 1).
+	r2 := makeChildResolver()
+	out2, err2 := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), r2, "child2", "path-explorer", finalizeOpts(r2, "child2", opts))
+	testutil.FailErr(t, "evaluate leg 2", err2)
+	if r2.prompts != limits.DefaultWorkerGroundingRetries {
+		t.Fatalf("leg 2 prompts = %d, want %d (must have own retry budget)", r2.prompts, limits.DefaultWorkerGroundingRetries)
+	}
+	if out2.Status != "partial" || !out2.HostAssembled {
+		t.Fatalf("leg 2 out = %+v, want host-assembled partial after retries", out2)
+	}
+}
+

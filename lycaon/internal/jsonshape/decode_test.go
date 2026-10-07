@@ -104,3 +104,33 @@ func TestFieldsListsDeclaredMembers(t *testing.T) {
 		t.Fatalf("Fields = %v", got)
 	}
 }
+
+func TestDecodeIgnoresVacuousUnmappedKeys(t *testing.T) {
+	var got report
+	issues, err := Decode([]byte(`{
+		"findings": [{"title": "A", "line": 12}],
+		"headline_note": null,
+		"notes": null,
+		"empty_str": "",
+		"empty_arr": [],
+		"empty_arr_spaced": [  ],
+		"empty_obj": {},
+		"empty_obj_spaced": {  },
+		"substantive_extra": "needs attention"
+	}`), &got)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	want := report{
+		Findings: []finding{{Title: "A", Line: 12}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("decoded = %+v, want %+v", got, want)
+	}
+	wantIssues := []Issue{
+		{Path: "substantive_extra", Pattern: "substantive_extra", Name: "substantive_extra", Kind: Unknown},
+	}
+	if !reflect.DeepEqual(issues, wantIssues) {
+		t.Fatalf("issues = %+v\nwant %+v", issues, wantIssues)
+	}
+}

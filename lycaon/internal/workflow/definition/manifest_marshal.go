@@ -25,6 +25,7 @@ func manifestToWorkflowFile(m Manifest) workflowFile {
 	wf := workflowFile{
 		ID:      m.ID,
 		Version: m.Version,
+		Retired: m.Retired,
 		Attach:  manifestAttachYAML(m.Attach),
 		Request: manifestRequestYAML(m.Request),
 		// Session storage persists the resolved manifest.
@@ -98,6 +99,10 @@ func manifestControlsYAML(controls ManifestControls) workflowControls {
 			FindingsLabel: controls.Report.FindingsLabel,
 			Brief:         controls.Report.Brief.toYAML(),
 		}
+		if controls.Report.Retries > 0 {
+			r := controls.Report.Retries
+			out.Report.Retries = &r
+		}
 	}
 	return out
 }
@@ -159,8 +164,12 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 	if !p.OnReenter.IsZero() {
 		out.OnReenter = &onReenterYAML{InjectKick: p.OnReenter.InjectKick, ReenterLeg: p.OnReenter.ReenterLeg}
 	}
-	if p.ContentReview != nil || p.Closeout != "" {
+	if p.ContentReview != nil || p.Closeout != "" || p.CloseoutRetries > 0 {
 		out.Controls = &phaseControlsYAML{ContentReview: contentReviewToYAML(p.ContentReview), Closeout: string(p.Closeout)}
+		if p.CloseoutRetries > 0 {
+			r := p.CloseoutRetries
+			out.Controls.Retries = &r
+		}
 	}
 	if p.ParallelTask != nil {
 		out.ParallelTask = &parallelTaskYAML{
@@ -186,9 +195,12 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 	}
 	if p.ReviewLoop != nil {
 		out.ReviewLoop = &reviewLoopYAML{
-			ReconcilesPhase:      p.ReviewLoop.ReconcilesPhase,
-			IncludeScanInventory: p.ReviewLoop.IncludeScanInventory,
-			EvidenceKey:          p.ReviewLoop.EvidenceKey, IterationCap: p.ReviewLoop.IterationCap,
+			ReconcilesPhase:           p.ReviewLoop.ReconcilesPhase,
+			CoverageReviewers:         append([]string(nil), p.ReviewLoop.CoverageReviewers...),
+			FollowupAttempts:          p.ReviewLoop.FollowupAttempts,
+			RequireInventoryAccounted: p.ReviewLoop.RequireInventoryAccounted,
+			IncludeScanInventory:      p.ReviewLoop.IncludeScanInventory,
+			EvidenceKey:               p.ReviewLoop.EvidenceKey, IterationCap: p.ReviewLoop.IterationCap,
 			VerdictSchema:  copyStringMap(p.ReviewLoop.VerdictSchema),
 			RequiredAgents: append([]string(nil), p.ReviewLoop.RequiredAgents...),
 			IfSpawnable:    append([]string(nil), p.ReviewLoop.IfSpawnable...),

@@ -17,20 +17,30 @@ type closeoutReportObservation struct {
 	citations guard.CloseoutGroundingVerdict
 }
 
-// A report the host could not fully read is refused first, since the fields
-// it left out would decide the rest; then embed and citation issues, then the
-// run report's document, then a duplicate report.
+// Document defects precede citation repair, which retains the document fields.
 func (l *PromptLoop) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, report guidance.CoordinatorCompletionReport, unread []jsonshape.Issue, turnTools []string, deliversRunReport bool) (closeoutReportObservation, error) {
 	observation := closeoutReportObservation{facts: oar.NewGuardContext()}
 	gc := observation.facts
 	gc.Surface = strings.TrimSpace(surfaceID)
+	var issues []guidance.ReportDocumentIssue
 	if issue, ok := guidance.ReportFenceUnreadable(unread); ok {
-		putReportFieldRefusal(gc, issue)
+		putReportFieldRefusals(gc, []guidance.ReportDocumentIssue{issue})
 		return observation, nil
 	}
 	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(report.Synthesis); len(embeds) > 0 {
 		gc.RejectObservation = "present_markdown_embed"
 		gc.PutRejectData(guidance.PresentMarkdownEmbedCode, guidance.OffenderHintData(embeds))
+		return observation, nil
+	}
+	if deliversRunReport && l.Deps.CheckRunReportDocument != nil {
+		checked, err := l.Deps.CheckRunReportDocument(ctx, sess.ID, report)
+		if err != nil {
+			return observation, err
+		}
+		issues = append(issues, checked...)
+	}
+	if len(issues) > 0 {
+		putReportFieldRefusals(gc, issues)
 		return observation, nil
 	}
 	if !guard.CoordinatorEvidenceOptional(history, turnTools) {
@@ -46,16 +56,6 @@ func (l *PromptLoop) observeCloseoutReport(ctx context.Context, sess *api.Sessio
 			return observation, nil
 		}
 	}
-	if deliversRunReport && l.Deps.CheckRunReportDocument != nil {
-		issues, err := l.Deps.CheckRunReportDocument(ctx, sess.ID, report)
-		if err != nil {
-			return observation, err
-		}
-		if len(issues) > 0 {
-			putReportFieldRefusal(gc, issues[0])
-			return observation, nil
-		}
-	}
 	if hit, offenders := guidance.CloseoutCitationsSubsetOfPrior(history, report); hit {
 		gc.RejectObservation = "closeout_no_new_evidence"
 		gc.PutRejectData(guidance.CloseoutNoNewEvidenceCode(surfaceID), guidance.OffenderHintData(offenders))
@@ -63,8 +63,9 @@ func (l *PromptLoop) observeCloseoutReport(ctx context.Context, sess *api.Sessio
 	return observation, nil
 }
 
-// putReportFieldRefusal states a refusal of the report's fields for its policy.
-func putReportFieldRefusal(gc *oar.GuardContext, issue guidance.ReportDocumentIssue) {
+// The first defect selects policy; every defect accompanies the repair.
+func putReportFieldRefusals(gc *oar.GuardContext, issues []guidance.ReportDocumentIssue) {
+	issue := issues[0]
 	gc.RejectObservation = guidance.ReportDocumentObservation(issue.Code)
 	data := guidance.OffenderHintData(issue.Offenders)
 	// The issue samples its subjects; the refusal counts every one of them.
@@ -73,5 +74,6 @@ func putReportFieldRefusal(gc *oar.GuardContext, issue guidance.ReportDocumentIs
 		data["offenders_omitted"] = data["offenders_omitted"].(int) + extra
 	}
 	data["rejection_reason"] = issue.Reason
+	data["document_issues"] = issues
 	gc.PutRejectData(issue.Code, data)
 }

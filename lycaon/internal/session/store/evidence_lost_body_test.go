@@ -54,7 +54,7 @@ func TestLoadLedgerKeepsARecordWhoseBodyFileIsMissing(t *testing.T) {
 	if len(got.Body) != 0 {
 		t.Fatalf("a lost body loaded as %q", got.Body)
 	}
-	if evidence.ExcerptMatchesHandle(ev, "read#1", 42, "token check") {
+	if evidence.ExcerptMatchesHandle(ev, "read#1", "src/foo.go", 42, "token check") {
 		t.Fatal("an excerpt matched a body that no longer exists")
 	}
 }

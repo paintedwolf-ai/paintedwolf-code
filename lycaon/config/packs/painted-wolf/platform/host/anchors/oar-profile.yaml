@@ -889,6 +889,18 @@ host_facts:
    type: list<string>
  - name: paintedwolf.offenders_sample
    type: string
+ - name: paintedwolf.unaccounted_group_ids
+   type: list<string>
+ - name: paintedwolf.unaccounted_omitted
+   type: int
+ - name: paintedwolf.regressed_group_ids
+   type: list<string>
+ - name: paintedwolf.cited_handle_ranges
+   type: string
+ - name: paintedwolf.files_searched
+   type: int
+ - name: paintedwolf.largest_subtree
+   type: string
  - name: paintedwolf.offset
    type: string
  - name: paintedwolf.old_string_chars

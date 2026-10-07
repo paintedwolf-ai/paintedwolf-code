@@ -99,7 +99,6 @@ export function ChatTabRail(props: ChatTabRailProps) {
     catalogWorkflowRun(
       props.appStore.state.activeWorkflowRun,
       props.appStore.state.workflowRuns,
-      props.appStore.state.workflowCatalog,
     ),
   );
   const gitChanges = createMemo(() =>

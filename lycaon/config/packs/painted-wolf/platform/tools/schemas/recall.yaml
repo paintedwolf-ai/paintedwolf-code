@@ -6,13 +6,13 @@ description: >-
   this project may already have looked (`widen`). It reads the recorded index,
   not the working tree: use grep or read for files as they are now. Branch on
   the result's `resolution`, never on the row count: `no_match_in_scope` means
-  this scope observed something but not that, `scope_empty` means nothing here
+  this scope contains records, but none matched this query; `scope_empty` means nothing here
   has been observed yet (dispatch or observe it yourself; do not search again),
   `record_deleted` means it existed and is gone, `executor_degraded` is never
   evidence of absence. Do what `next_action` says. Each hit states
   `observed_at` and `currency` — a `changed` hit describes the file as it was,
-  not as it is. Re-asking one question with a different phrasing does not
-  change the answer.
+  not as it is. An unchanged query searches the same recorded scope; fewer
+  terms or corrected filters can recover missed matches.
 schema:
   type: object
   properties:
@@ -20,10 +20,12 @@ schema:
       type: string
       minLength: 1
       description: >-
-        Search terms plus optional filters, combined with AND / OR / NOT and
-        parentheses. Addressing beats searching: handle:read#3 returns that one
+        Search terms plus optional filters. Adjacent terms are ANDed;
+        AND / OR / NOT and parentheses are supported.
+        Addressing beats searching: handle:read#3 returns that one
         observation, which is the surest lookup when a leg, a continuation
-        record, or a compaction banner named its handle. Otherwise narrow with
+        record, or a compaction banner named its handle. handle: matches an
+        exact identifier; use tool:find for find results. Otherwise narrow with
         agent:scout, leg:<id>, session:<id>, tool:read, after:2026-08-01 before
         free text. Also available — kind:evidence, path:src/*.go, url:<url>,
         untrusted:true, verified:false, run:<id>.

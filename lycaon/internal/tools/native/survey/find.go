@@ -91,6 +91,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err != nil {
 		return "", err
 	}
+	includeIgnored := toolkit.BoolArg(args, "include_ignored", true)
 
 	resp := findResponse{Results: []findResult{}, Offset: offset}
 	skipped := 0
@@ -102,7 +103,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if union {
 		for _, root := range roots {
 			if err := t.runFindRoot(ctx, tctx, root, root.Path, projectpaths.QualifyAbs(tctx, root, root.Path),
-				maxDepth, maxResults, offset, nameGlob, entryType, nil, &resp,
+				maxDepth, maxResults, offset, nameGlob, entryType, includeIgnored, nil, &resp,
 				&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {
 				return "", err
 			}
@@ -113,7 +114,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", err
 		}
 		if err := t.runFindRoot(ctx, tctx, resolved.Root, resolved.Abs, resolved.DisplayPath,
-			maxDepth, maxResults, offset, nameGlob, entryType, nil, &resp,
+			maxDepth, maxResults, offset, nameGlob, entryType, includeIgnored, nil, &resp,
 			&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {
 			return "", err
 		}
@@ -175,6 +176,7 @@ func (t *FindTool) runFindRoot(
 	maxDepth, maxResults, offset int,
 	nameGlob string,
 	entryType findEntryType,
+	includeIgnored bool,
 	onMatch func(findResult),
 	resp *findResponse,
 	skipped, matchedTotal *int,
@@ -218,13 +220,17 @@ func (t *FindTool) runFindRoot(
 		return err
 	}
 
+	var ignore sandbox.SurveyScope
+	if !includeIgnored {
+		ignore = newIgnoreScope(root, fullRoot)
+	}
 	return t.walkFindTree(findWalkParams{
 		ctx: ctx, tctx: tctx, root: root, fullRoot: fullRoot,
 		maxDepth: maxDepth, maxResults: maxResults, offset: offset,
 		nameFilter: nameFilter, entryType: entryType,
 		resp:    resp,
 		skipped: skipped, matchedTotal: matchedTotal, truncated: truncated, deeperPathsOmitted: deeperPathsOmitted,
-		catalog: t.Catalog, readFilter: readFilter, onMatch: onMatch,
+		catalog: t.Catalog, readFilter: readFilter, ignore: ignore, onMatch: onMatch,
 	})
 }
 

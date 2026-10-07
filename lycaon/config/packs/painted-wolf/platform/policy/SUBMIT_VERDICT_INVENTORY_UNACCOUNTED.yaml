@@ -1,0 +1,39 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.rejection_code
+    - paintedwolf.rejection_reason
+    - paintedwolf.unaccounted_group_ids
+    - paintedwolf.unaccounted_omitted
+    - paintedwolf.regressed_group_ids
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED"
+effect: block
+copy:
+  what: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.unaccounted_group_ids %}: {{ paintedwolf.unaccounted_group_ids }}{% if paintedwolf.unaccounted_omitted %} and {{ paintedwolf.unaccounted_omitted }} more{% endif %}{% endif %}.'
+  cause: The review must account for every scanner group before the report phase.
+  why: The report phase cannot investigate groups the review left unassessed.
+  fix: '{% if paintedwolf.regressed_group_ids %}This submission dropped the accounting the previous one held for {{ paintedwolf.regressed_group_ids }}; restore it. {% endif %}Account for exactly the listed ids: link assessed groups through claims scan_group_ids, or add set_asides naming them in scan_group_ids with a reason that holds for each. details.unaccounted_groups carries each group''s scanner, rule, and locations; use scan_query only to read a group''s findings. Keep every link and set-aside already submitted and resubmit the complete verdict.'
+  instead: Do not re-page scan_query to rediscover the listed ids, and do not clear a group merely because it was listed.
+x-paintedwolf-category: recoverable
+x-paintedwolf-severity: error
+x-paintedwolf-message: The review leaves scanner groups unaccounted.
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-scenarios:
+  - id: missing_groups
+    vars:
+      rejection_reason: 18 of 241 scanner groups have no assessment and no set-aside
+      unaccounted_group_ids: ['group:sample', 'group:other']
+      unaccounted_omitted: 0
+      regressed_group_ids: []
+    expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'group:sample, group:other', 'scan_group_ids']
+  - id: regressed_groups
+    vars:
+      rejection_reason: 2 of 241 scanner groups have no assessment and no set-aside
+      unaccounted_group_ids: ['group:lost']
+      unaccounted_omitted: 70
+      regressed_group_ids: ['group:lost']
+    expect_contains: ['dropped the accounting the previous one held for group:lost', 'and 70 more']

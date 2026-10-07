@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -409,6 +410,20 @@ func (m *Manager) CitationGroundingRetries() int {
 	return maxRetries
 }
 
+// WorkerGroundingRetries returns in-session evidence-grounding retry budget for workers.
+func (m *Manager) WorkerGroundingRetries() int {
+	maxRetries := compaction.DefaultCompactionConfig().MaxWorkerGroundingRetries
+	if m != nil && m.compactor != nil {
+		if n := m.compactor.Config().MaxWorkerGroundingRetries; n > 0 {
+			maxRetries = n
+		}
+	}
+	if maxRetries <= 0 {
+		maxRetries = limits.DefaultWorkerGroundingRetries
+	}
+	return maxRetries
+}
+
 // WorkerSummaryFinalizeOpts returns host limits for worker survey bounding after child runs.
 func (m *Manager) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Session) workercloseout.WorkerSummaryFinalizeOpts {
 	if m == nil {
@@ -419,15 +434,14 @@ func (m *Manager) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Sessi
 		maxChars = compaction.DefaultCompactionConfig().MaxWorkerSummaryChars
 	}
 	return workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars:                    maxChars,
-		MaxCitationGroundingRetries: m.CitationGroundingRetries(),
-		WorkflowHints:               m.workflowHints,
-		RenderWorkerKick:            m.renderWorkerKick,
-		WorkspaceCheck:              m.workspaceCheck,
-		Ledger:                      m.store,
-		Pipeline:                    m.oarPipeline,
-		RecordGroundingFriction:     m.RecordGroundingFriction,
-		DecisionPending:             m.workerDecisionPending,
+		MaxChars:            maxChars,
+		MaxGroundingRetries: m.WorkerGroundingRetries(),
+		WorkflowHints:       m.workflowHints,
+		RenderWorkerKick:    m.renderWorkerKick,
+		WorkspaceCheck:      m.workspaceCheck,
+		Ledger:              m.store,
+		Pipeline:            m.oarPipeline,
+		DecisionPending:     m.workerDecisionPending,
 	}
 }
 

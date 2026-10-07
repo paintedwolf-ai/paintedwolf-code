@@ -15,7 +15,7 @@ copy:
   what: "The verdict payload does not match the active review phase contract."
   cause: "{{ paintedwolf.review_reason }}"
   why: "The host records only the declared verdict schema and top-level citation channels."
-  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Keep cited_evidence and cited_urls top-level; evidence-handle objects use handle, not evidence."
+  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
   instead: "Correct only the invalid fields and resubmit the current expected call with observed citations."
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error

@@ -132,7 +132,7 @@ func reportVerdict(rec evidence.Record, def workflowdef.ReviewLoopDef) *report.R
 
 	// A set-aside member is accounted in the scanner inventory, not repeated.
 	for field, kind := range def.VerdictSchema {
-		if strings.TrimSpace(kind) == workflowdef.VerdictSetAsidesType {
+		if strings.TrimSpace(kind) == workflowdef.VerdictSetAsidesType || strings.TrimSpace(kind) == workflowdef.VerdictCoverageType {
 			claimed[field] = true
 		}
 	}

@@ -17,8 +17,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestParseSubmitVerdictArgsCoercion(t *testing.T) {
-	verdict, cited, citedURLs, err := parseSubmitVerdictArgs(map[string]any{
+func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {
+	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "ADJUDICATED", "vulnerabilities": workflowdef.VerdictClaimsType, "dismissed": workflowdef.VerdictSetAsidesType}}
+	verdict, cited, citedURLs, err := parseSubmitVerdictArgs(def, map[string]any{
 		"verdict": map[string]any{
 			"verdict":         "ADJUDICATED",
 			"vulnerabilities": []any{},
@@ -34,7 +35,7 @@ func TestParseSubmitVerdictArgsCoercion(t *testing.T) {
 		t.Fatalf("verdict = %q", verdict["verdict"])
 	}
 	if verdict["vulnerabilities"] != "[]" {
-		t.Fatalf("vulnerabilities = %q want coerced JSON text", verdict["vulnerabilities"])
+		t.Fatalf("vulnerabilities = %q want stored JSON array", verdict["vulnerabilities"])
 	}
 	if verdict["dismissed"] != `[{"issue":"x"}]` {
 		t.Fatalf("dismissed = %q", verdict["dismissed"])
@@ -46,10 +47,10 @@ func TestParseSubmitVerdictArgsCoercion(t *testing.T) {
 		t.Fatalf("citedURLs = %+v", citedURLs)
 	}
 
-	if _, _, _, err := parseSubmitVerdictArgs(map[string]any{}); err == nil {
+	if _, _, _, err := parseSubmitVerdictArgs(def, map[string]any{}); err == nil {
 		t.Fatal("expected error for missing verdict object")
 	}
-	if _, _, _, err := parseSubmitVerdictArgs(map[string]any{
+	if _, _, _, err := parseSubmitVerdictArgs(def, map[string]any{
 		"verdict":        map[string]any{"verdict": "X"},
 		"cited_evidence": []any{map[string]any{"line": float64(3)}},
 	}); err == nil {
@@ -75,7 +76,7 @@ func TestParseSubmitVerdictArgsCoercion(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, _, err := parseSubmitVerdictArgs(args); err == nil {
+			if _, _, _, err := parseSubmitVerdictArgs(def, args); err == nil {
 				t.Fatalf("parseSubmitVerdictArgs(%s) unexpectedly succeeded", name)
 			}
 		})
@@ -449,4 +450,21 @@ func requireVerdictRejection(t *testing.T, output string, err error, code string
 		t.Fatalf("verdict refusal: output=%q error=%v want %s", output, err, code)
 	}
 	return reject
+}
+
+func TestVerdictFieldTypesRejectCoercion(t *testing.T) {
+	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "ACCEPTED", "summary": "string", "claims": workflowdef.VerdictClaimsType, "coverage": workflowdef.VerdictCoverageType}}
+	for _, tc := range []struct {
+		field string
+		value any
+	}{
+		{"summary", []any{"claim"}}, {"summary", 1}, {"summary", false}, {"summary", nil},
+		{"claims", "[]"}, {"claims", map[string]any{}}, {"claims", nil},
+		{"coverage", "{}"}, {"coverage", []any{}}, {"coverage", nil},
+	} {
+		_, _, _, err := parseSubmitVerdictArgs(def, map[string]any{"verdict": map[string]any{"verdict": "ACCEPTED", tc.field: tc.value}})
+		if err == nil {
+			t.Errorf("field %s accepted %T", tc.field, tc.value)
+		}
+	}
 }

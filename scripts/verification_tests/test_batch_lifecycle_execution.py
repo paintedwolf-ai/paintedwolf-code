@@ -5,11 +5,21 @@ import signal
 import subprocess
 import sys
 import time
+import unittest
 from unittest.mock import patch
 
 import verification_batch as batch
 import verification_resources as resources
 from verification_tests import support
+
+
+class ForegroundGitEnvironmentTests(unittest.TestCase):
+    def test_caller_git_config_is_kept_and_repeated_application_adds_nothing(self):
+        caller = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.name", "GIT_CONFIG_VALUE_0": "Fixture"}
+        env = resources.foreground_git_environment(caller)
+        self.assertEqual(resources.foreground_git_environment(env), env)
+        pairs = [(env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"]) for i in range(int(env["GIT_CONFIG_COUNT"]))]
+        self.assertEqual(pairs, [("user.name", "Fixture"), *resources.GIT_FOREGROUND_CONFIG])
 
 
 class BatchLifecycleTests(support.BatchFixture):
@@ -408,6 +418,18 @@ print('fixture '+name, flush=True)'''))
         for process in (first, invocation, exclusive):
             self.collect(process)
         self.assertEqual([r["name"] for r in self.records()][-1], "test:exclusive")
+
+    def test_git_under_a_lease_cannot_start_a_detached_daemon(self):
+        for key in ("core.fsmonitor", "gc.autoDetach", "maintenance.autoDetach"):
+            self.git("config", key, "true")
+        self.catalog["resources"]["test:invoke"] = {"locks": ["frontend"], "workers": 1}
+        self.save_catalog()
+        self.queue.resume()
+        self.collect(self.start("build"))
+        self.collect(self.start("test:invoke"))
+        foreground = {"core.fsmonitor": "false", "gc.autoDetach": "false", "maintenance.autoDetach": "false"}
+        self.assertEqual([(r["name"], r["git"]) for r in self.records()],
+                         [("build", foreground), ("test:invoke", foreground)])
 
     def test_executor_crash_keeps_only_surviving_child_resources_reserved(self):
         self.parallel_profiles()

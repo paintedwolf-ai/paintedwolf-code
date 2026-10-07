@@ -23,7 +23,11 @@ func summaryBlocks(ms *measurer, input ReportInput) []block {
 	out = append(out, claimListBlocks(ms, "Overturned by the review", input.Claims, ClaimFailed)...)
 	out = append(out, claimListBlocks(ms, "Confirmed by the review", input.Claims, ClaimHeld)...)
 	out = append(out, soundBlocks(ms, input)...)
-	out = append(out, boxedListBlocks(ms, sectionLimits, notCoveredItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Remaining work", notCoveredItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Scanner limitations", scannerLimitItems(input))...)
+	out = append(out, boxedListBlocks(ms, "Assessed exclusions", exclusionItems(input))...)
+	out = append(out, boxedListBlocks(ms, sectionLimits, input.Limits)...)
+	out = append(out, boxedListBlocks(ms, "Coverage assessment", coverageAssessmentItems(input))...)
 	if len(input.Coverage) > 0 {
 		out = append(out, subsectionTitle(ms, "Recorded coverage"))
 		var records []tableRecord
@@ -55,8 +59,7 @@ func summaryProseRows(ms *measurer, input ReportInput) []measuredRow {
 	return rows
 }
 
-// ratingBlocks show each rated finding's answers and the level they decided,
-// so a reader can check the rating rather than take it.
+// Rating details pair each conclusion with its deciding answers.
 func ratingBlocks(ms *measurer, input ReportInput) []block {
 	b := input.Brief
 	if b == nil || len(b.Rated) == 0 {
@@ -159,61 +162,6 @@ func soundBlocks(ms *measurer, input ReportInput) []block {
 	}
 	out := []block{subsectionTitle(ms, "Examined and sound")}
 	return append(out, newTable(ms, []string{"Finding", "What was sound"}, records, noChipColumn, nil).blocks()...)
-}
-
-// notCoveredItems states everything the work did not cover: the host's gaps
-// with what they touch, the scanner groups set aside and why, the scanner's
-// own standing limits, and the areas the closeout declared it did not examine.
-func notCoveredItems(input ReportInput) []string {
-	var out []string
-	for _, kind := range append(append([]string(nil), gapOrder...), GapScansStanding) {
-		for _, g := range input.Gaps {
-			if g.Kind == kind && g.Count > 0 {
-				if item := gapItem(g); item != "" {
-					out = append(out, item)
-				}
-			}
-		}
-	}
-	if inv := input.Inventory; inv != nil && inv.Total > 0 {
-		out = append(out, fmt.Sprintf("Scanner inventory: %d of %d result groups assessed by a claim or finding, %d set aside, %d unaccounted.",
-			inv.Linked, inv.Total, inv.SetAside, inv.Unaccounted))
-		for _, sa := range inv.SetAsides {
-			out = append(out, fmt.Sprintf("%s set aside: %s.", plural(sa.Groups, "result group", "result groups"), strings.TrimSuffix(sa.Reason, ".")))
-		}
-	}
-	for _, l := range input.Limits {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, "Not examined, per the closeout: "+strings.TrimSuffix(l, ".")+".")
-		}
-	}
-	return out
-}
-
-func gapItem(g ReportGap) string {
-	names := strings.Join(g.Names, ", ")
-	switch g.Kind {
-	case GapInventoryUnaccounted:
-		return fmt.Sprintf("%d of %d scanner result groups have no assessment and no set-aside. Unassessed is not cleared.", g.Count, g.Of)
-	case GapClaimsOpen:
-		return fmt.Sprintf("%s still open: %s.", plural(g.Count, "claim", "claims"), names)
-	case GapLegsUnfinished:
-		return "Planned areas not checked: " + names + "."
-	case GapLegsPartial:
-		return "Areas only partly checked: " + names + "."
-	case GapWorkersPartial:
-		return fmt.Sprintf("%s ended partial: %s.", plural(g.Count, "supporting task", "supporting tasks"), names)
-	case GapScansFailed:
-		return "Scans that failed: " + names + "."
-	case GapScansMoved:
-		return fmt.Sprintf("%s: %s changed while the scan ran and %s not rescanned.",
-			names, plural(g.Detail, "file", "files"), noun(g.Detail, "was", "were"))
-	case GapScansStanding:
-		return fmt.Sprintf("Known scanner limits, the same on every run: %s could not fully analyze %s in %s.",
-			names, plural(g.Detail, "construct", "constructs"), plural(g.DetailFiles, "file", "files"))
-	default:
-		return ""
-	}
 }
 
 // defectItems state each failed check as the check reported it, with a sample

@@ -46,6 +46,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/indexwatch/indexwatch.go":            "O_EXCL destination while copying index file",
 	"lycaon/internal/promptattach/docext/worker.go":       "O_EXCL request file handed to a one-shot extraction worker",
 	"lycaon/internal/scan/drivers/bundled/opengrep_io.go": "O_EXCL report path inside a scan run directory removed on cleanup",
+	"lycaon/internal/sourcesnapshot/materialize_entry.go": "O_EXCL files in a private disposable scan tree; no replacement or durable publication",
 	"lycaon/internal/workspace/overlay_copy.go":           "O_EXCL destination while materializing a fresh overlay tree",
 
 	// Copies into a staging tree the caller promotes or discards whole.

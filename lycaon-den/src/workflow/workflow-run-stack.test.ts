@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkflowRun, WorkflowSummary } from "../api/types.ts";
+import type { WorkflowRun } from "../api/types.ts";
 import {
   catalogWorkflowRun,
   isAmbientRootRun,
@@ -35,11 +35,6 @@ const childImplement: WorkflowRun = {
   created_at: "t",
   updated_at: "t",
 };
-
-const productCatalog: WorkflowSummary[] = [
-  { id: "plan", version: "1.0.0", name: "Plan" },
-  { id: "options", version: "1.0.0", name: "Options" },
-];
 
 describe("workflow-run-stack", () => {
   it("resolveCatalogRun returns catalog parent while child is leaf", () => {
@@ -131,25 +126,9 @@ describe("workflow-run-stack", () => {
     expect(catalogWorkflowRun(ambient, [ambient])).toBeUndefined();
   });
 
-  it("catalogWorkflowRun hides ambient implement missing attach_policy via product catalog", () => {
-    const ambientNoPolicy: WorkflowRun = {
-      id: "run-amb",
-      session_id: "s1",
-      workflow_id: "implement",
-      workflow_version: "1.0.0",
-	  revision: 1,
-      status: "running",
-      current_phase: "work",
-      created_at: "t",
-      updated_at: "t",
-    };
-    // The product catalog hides ambient runs with no visible workflow entry.
-    expect(catalogWorkflowRun(ambientNoPolicy, [ambientNoPolicy])?.id).toBe(
-      "run-amb",
-    );
-    expect(
-      catalogWorkflowRun(ambientNoPolicy, [ambientNoPolicy], productCatalog),
-    ).toBeUndefined();
+  it("keeps a retired workflow visible independently of the start catalog", () => {
+    const retired = { ...parentPlan, workflow_id: "security-survey", workflow_version: "1.0.0" };
+    expect(catalogWorkflowRun(retired, [retired])).toBe(retired);
   });
 
   // session_create identifies the ambient recipe independently of workflow names.

@@ -34,7 +34,7 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 		// Keep the existing paraphrase verdict, but never trace text the ledger
 		// can attribute to a different observation onto this explicit handle.
 		for other := range ev.Handles {
-			if other != handle && ExcerptMatchesHandle(ev, other, out.Line, out.Excerpt) {
+			if other != handle && ExcerptMatchesHandle(ev, other, out.Path, out.Line, out.Excerpt) {
 				return out
 			}
 		}

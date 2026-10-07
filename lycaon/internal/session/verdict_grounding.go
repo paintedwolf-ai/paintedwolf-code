@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -33,7 +34,7 @@ func (m *Manager) EvaluateVerdictGrounding(
 	if err != nil {
 		return guidance.VerdictGroundingEval{}, err
 	}
-	reviewers, err := m.reviewerEvidenceFromHistory(ctx, history, owedAgents)
+	reviewers, err := m.reviewerEvidence(ctx, sessionID, history, owedAgents)
 	if err != nil {
 		return guidance.VerdictGroundingEval{}, err
 	}
@@ -251,49 +252,39 @@ func selectReviewerEvidence(all []guidance.ReviewerEvidence, agents []string) []
 	return out
 }
 
-// reviewerEvidenceFromHistory maps each owed reviewer to its succeeded legs'
-// namespaces and ledgers, using the same boundary and leg-id derivation as the
-// evidence union.
-func (m *Manager) reviewerEvidenceFromHistory(
-	ctx context.Context,
-	history []api.Message,
-	owedAgents []string,
-) ([]guidance.ReviewerEvidence, error) {
-	type legRef struct {
-		legID          string
-		childSessionID string
+// reviewerEvidence resolves completed reviewers from the same dispatch scope as closeout.
+func (m *Manager) reviewerEvidence(ctx context.Context, sessionID string, history []api.Message, owedAgents []string) ([]guidance.ReviewerEvidence, error) {
+	var since time.Time
+	if intent, ok := api.LastUserIntentMessage(history); ok {
+		since = intent.CreatedAt
 	}
-	legsByAgent := map[string][]legRef{}
-	since := api.UserIntentBoundary(history)
-	for _, msg := range history[since:] {
-		ws := msg.WorkerSummary
-		if ws == nil || !api.WorkerSummaryLegSucceeded(ws.Status) {
-			continue
+	tasks, err := m.reviewEvidenceTasks(ctx, sessionID, since)
+	if err != nil {
+		return nil, err
+	}
+	phase := ""
+	if m.workflows != nil {
+		run, err := m.workflows.GetActive(ctx, sessionID)
+		if err != nil {
+			return nil, err
 		}
-		agent := strings.TrimSpace(ws.AgentType)
-		child := strings.TrimSpace(ws.ChildSessionID)
-		if agent == "" || child == "" {
-			continue
+		if run != nil && !m.workflows.IsAmbientRun(run) {
+			phase = run.CurrentPhase
 		}
-		leg := strings.TrimSpace(ws.LegID)
-		if leg == "" {
-			leg = child
-		}
-		legsByAgent[agent] = append(legsByAgent[agent], legRef{legID: leg, childSessionID: child})
 	}
 	out := make([]guidance.ReviewerEvidence, 0, len(owedAgents))
 	for _, agent := range owedAgents {
-		agent = strings.TrimSpace(agent)
-		if agent == "" {
-			continue
-		}
 		r := guidance.ReviewerEvidence{Agent: agent}
-		for _, ref := range legsByAgent[agent] {
-			r.LegIDs = append(r.LegIDs, ref.legID)
-			ledger, err := m.store.LoadLedger(ctx, ref.childSessionID)
+		for _, task := range tasks {
+			if task.AgentType != agent || !api.WorkerReviewSucceeded(task) || task.ChildSessionID == "" || (phase != "" && task.WorkflowPhase != phase) {
+				continue
+			}
+			leg := guidance.EvidenceLeg{ChildSessionID: task.ChildSessionID, LegID: task.LegID}
+			ledger, err := m.store.LoadLedger(ctx, task.ChildSessionID)
 			if err != nil {
 				return nil, err
 			}
+			r.LegIDs = append(r.LegIDs, leg.Namespace())
 			r.Ledgers = append(r.Ledgers, ledger)
 		}
 		out = append(out, r)

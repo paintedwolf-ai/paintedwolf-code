@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/workspace"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WorkspaceBinder creates and destroys per-leg sandbox copies (out-of-repo, git-free).
@@ -37,14 +38,17 @@ func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
 	}
 	bindings := make([]*workspace.Binding, 0, len(legIDs))
 	for _, legID := range legIDs {
-		binding, err := o.workspaces.CreateWorkerWorkspace(ctx, projectDir, legID)
+		leg, err := o.store.GetLeg(ctx, delegationID, legID)
 		if err != nil {
 			o.destroyBindings(bindings)
 			return nil, err
 		}
-		leg, err := o.store.GetLeg(ctx, delegationID, legID)
+		if leg.Status != api.LegStatusPending || leg.WorkspaceID != "" {
+			continue
+		}
+		binding, err := o.workspaces.CreateWorkerWorkspace(ctx, projectDir, legID)
 		if err != nil {
-			o.destroyBindings(append(bindings, binding))
+			o.destroyBindings(bindings)
 			return nil, err
 		}
 		leg.WorkspaceRoot = binding.Root

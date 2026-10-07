@@ -25,3 +25,51 @@ findings:
   - id: repo-fixture-opengrep-rule-fixtures
     path: lycaon/test/testdata/opengrep/
     reason: bundled OpenGrep rule fixture trees (self-matching during rule validation)
+  - id: repo-fixture-secret-placeholders
+    path: lycaon/config/packs/painted-wolf/security/host/secret-placeholders.yaml
+    kind: secret
+    reason: documented sample/placeholder credentials from vendor docs, used to suppress false positives
+  - id: repo-fixture-secretmatch-negatives
+    path: lycaon/internal/secretmatch/testdata/negatives.txt
+    kind: secret
+    reason: near-miss and placeholder shapes that must stay clean under allowlist floors
+  - id: repo-fixture-hostile-project
+    path: lycaon/test/fixtures/e2e/hostile-project/
+    kind: secret
+    reason: E2E hostile-project bait fixture (fake AWS env credentials)
+  - id: repo-fixture-secret-rules-examples
+    path: lycaon/config/runtime/scanners/secret-rules/vendor/kingfisher/rules/
+    kind: secret
+    reason: vendor scanner rule examples contain documentation sample tokens, not real credentials
+  - id: repo-fixture-internal-test-secrets
+    path: lycaon/internal/
+    kind: secret
+    reason: planted fake credentials in Go unit-test files (secretmatch, scan, api, llm, session, mcp, tools, httpaction, diagnostics, app, coordinator test corpora)
+  - id: repo-fixture-den-test-secrets
+    path: lycaon-den/src/
+    kind: secret
+    reason: fake credentials in Den frontend test fixtures (secret span model, editor secret actions)
+  - id: repo-fixture-detection-pack-fixtures
+    path: lycaon/config/packs/painted-wolf/security/host/detection-packs/
+    kind: secret
+    reason: detection-pack rule fixtures carry sample tokens as match examples
+  - id: repo-fixture-secret-mint-fixtures
+    path: lycaon/config/packs/painted-wolf/security/host/secret-mint/
+    kind: secret
+    reason: secret-mint detection fixtures with planted sample keys
+  - id: repo-fixture-vulndb
+    path: lycaon/vulndb/
+    kind: secret
+    reason: vendored vulnerability database entries that quote token shapes from advisories
+  - id: repo-fixture-test-tree-secrets
+    path: lycaon/test/
+    kind: secret
+    reason: security journey E2E test files plant fake credentials for screening assertions
+  - id: repo-fixture-lycaon-testdata
+    path: lycaon/testdata/
+    kind: secret
+    reason: release-halt and other sidecar test fixtures with sample keys
+  - id: repo-fixture-oar-schemas
+    path: schemas/oar/
+    kind: secret
+    reason: vendored Open Agent Rules schemas carry example tokens in manifests

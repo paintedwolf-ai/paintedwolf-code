@@ -85,6 +85,10 @@ const (
 	// ApiErrorCodeSessionNotIdle rewind refused while a turn or worker is still
 	// running
 	ApiErrorCodeSessionNotIdle ApiErrorCode = "session_not_idle"
+	// ApiErrorCodePromptRecoveryStale a Keep going or Retry recovery no longer
+	// matches the chat (turn running, newer messages, or nothing interrupted);
+	// details.reason says which
+	ApiErrorCodePromptRecoveryStale ApiErrorCode = "prompt_recovery_stale"
 	// ApiErrorCodeRewindAnchorNotFound rewind anchor message id is not in the
 	// transcript
 	ApiErrorCodeRewindAnchorNotFound ApiErrorCode = "rewind_anchor_not_found"
@@ -695,6 +699,10 @@ const (
 	ApiErrorCodeSessionSpendCeilingReached ApiErrorCode = "session_spend_ceiling_reached"
 	// ApiErrorCodePromptFailed generic async prompt turn failure (SSE host_error)
 	ApiErrorCodePromptFailed ApiErrorCode = "prompt_failed"
+	// ApiErrorCodeTurnCloseoutToolCall the model answered its final, tool-less
+	// turn with a tool call, which the host did not run, so no summary was
+	// recorded (SSE host_error)
+	ApiErrorCodeTurnCloseoutToolCall ApiErrorCode = "turn_closeout_tool_call"
 	// ApiErrorCodeHostFault the host could not record a tool call's outcome and
 	// stopped the turn (SSE host_error)
 	ApiErrorCodeHostFault ApiErrorCode = "host_fault"
@@ -960,6 +968,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeCheckpointNotFound,
 	ApiErrorCodeApprovalGrantNotFound,
 	ApiErrorCodeSessionNotIdle,
+	ApiErrorCodePromptRecoveryStale,
 	ApiErrorCodeRewindAnchorNotFound,
 	ApiErrorCodeRewindAnchorIneligible,
 	ApiErrorCodeRewindBlocked,
@@ -1183,6 +1192,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeGroundingEscalated,
 	ApiErrorCodeSessionSpendCeilingReached,
 	ApiErrorCodePromptFailed,
+	ApiErrorCodeTurnCloseoutToolCall,
 	ApiErrorCodeHostFault,
 	ApiErrorCodeWorkerCloseoutExhausted,
 	ApiErrorCodeWorkerExecuteFailed,
@@ -1435,6 +1445,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeBackupIncomplete,
 		ApiErrorCodeBackupIncompatible,
 		ApiErrorCodeSessionNotIdle,
+		ApiErrorCodePromptRecoveryStale,
 		ApiErrorCodeRewindBlocked,
 		ApiErrorCodeRewindPlanChanged,
 		ApiErrorCodeFolderExists,
@@ -1593,6 +1604,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeMcpToolPinUnreadable,
 		ApiErrorCodeMcpPersistFailed,
 		ApiErrorCodePromptFailed,
+		ApiErrorCodeTurnCloseoutToolCall,
 		ApiErrorCodeHostFault,
 		ApiErrorCodeWorkerCloseoutExhausted,
 		ApiErrorCodeWorkerExecuteFailed,

@@ -19,7 +19,7 @@ func TestBlockedLoopParksLiveCommandInsteadOfForcingCloseout(t *testing.T) {
 			parked++
 			return true
 		},
-		TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutReason, string) HostNudge {
+		TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
 			closeoutCalls++
 			return HostNudge{Content: "must not run"}
 		},

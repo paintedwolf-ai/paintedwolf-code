@@ -2,6 +2,7 @@ package definition
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -108,6 +109,12 @@ func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
 				return PhaseDef{}, fmt.Errorf("phase %q: invalid controls.closeout %q (want gated)", id, c)
 			}
 			def.Closeout = CloseoutGated
+		}
+		if p.Controls.Retries != nil {
+			if *p.Controls.Retries <= 0 {
+				return PhaseDef{}, fmt.Errorf("phase %q: controls.retries must be positive", id)
+			}
+			def.CloseoutRetries = *p.Controls.Retries
 		}
 	}
 	if len(p.Intake) > 0 {
@@ -248,24 +255,51 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 		return nil, fmt.Errorf("phase %q: review_loop.evidence_key required", phaseID)
 	}
 	cap := raw.IterationCap
-	if cap <= 0 {
+	if raw.FollowupAttempts > 0 {
+		if cap != 0 {
+			return nil, fmt.Errorf("phase %q: followup_attempts replaces iteration_cap", phaseID)
+		}
+	} else if cap <= 0 {
 		cap = 3
 	}
 	agents := uniqueAgentIDs(raw.RequiredAgents)
 	spawnable := uniqueAgentIDs(raw.IfSpawnable)
 	def := &ReviewLoopDef{
-		ReconcilesPhase:      raw.ReconcilesPhase,
-		IncludeScanInventory: raw.IncludeScanInventory,
-		EvidenceKey:          key,
-		IterationCap:         cap,
-		VerdictSchema:        copyStringMap(raw.VerdictSchema),
-		RequiredAgents:       agents,
-		IfSpawnable:          spawnable,
-		BriefLabel:           strings.TrimSpace(raw.BriefLabel),
+		CoverageReviewers:         uniqueAgentIDs(raw.CoverageReviewers),
+		ReconcilesPhase:           raw.ReconcilesPhase,
+		FollowupAttempts:          raw.FollowupAttempts,
+		RequireInventoryAccounted: raw.RequireInventoryAccounted,
+		IncludeScanInventory:      raw.IncludeScanInventory,
+		EvidenceKey:               key,
+		IterationCap:              cap,
+		VerdictSchema:             copyStringMap(raw.VerdictSchema),
+		RequiredAgents:            agents,
+		IfSpawnable:               spawnable,
+		BriefLabel:                strings.TrimSpace(raw.BriefLabel),
 	}
 	statuses, err := parseClaimStatuses(phaseID, raw.ClaimStatuses)
 	if err != nil {
 		return nil, err
+	}
+	coverageFields := 0
+	for _, kind := range def.VerdictSchema {
+		if kind == VerdictCoverageType {
+			coverageFields++
+		}
+	}
+	if coverageFields > 1 {
+		return nil, fmt.Errorf("phase %q: review_loop declares multiple coverage reviews", phaseID)
+	}
+	if def.FollowupAttempts < 0 || def.FollowupAttempts > 4 {
+		return nil, fmt.Errorf("phase %q: followup_attempts must be between 0 and 4", phaseID)
+	}
+	if def.FollowupAttempts > 0 && (!def.CarriesClaims() || !def.CarriesCoverage() || def.ReconcilesPhase == "" || len(agents) == 0 || len(strings.Split(def.VerdictSchema[VerdictDecisionKey], "|")) < 2) {
+		return nil, fmt.Errorf("phase %q: follow-up requires reconciled claims, coverage, a reviewer, and a non-terminal verdict", phaseID)
+	}
+	for _, agent := range def.CoverageReviewers {
+		if !slices.Contains(agents, agent) || !def.CarriesCoverage() || def.ReconcilesPhase == "" {
+			return nil, fmt.Errorf("phase %q: coverage_reviewers requires coverage, reconciles_phase, and required_agents membership", phaseID)
+		}
 	}
 	def.ClaimStatuses = statuses
 	if def.CarriesClaims() && len(statuses) == 0 {

@@ -480,7 +480,7 @@ func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	}
 }
 
-func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
+func TestSessionPromptCacheSecondIterationKeepsRunContext(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
@@ -491,7 +491,7 @@ func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
 		PromptToolLister: prompttest.CoordinatorTools,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
-	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
+	sess := &api.Session{ID: "s1", AgentType: orchestration.ProfileCoordinator, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
 	msgs1, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
@@ -502,8 +502,8 @@ func TestSessionPromptCacheSecondIterationOmitsRunContext(t *testing.T) {
 	msgs2, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
 	testutil.FailErr(t, "rt.BuildCompletionMessages failed", err)
 	runCtxCount2 := countRunContextBlocks(msgs2)
-	if runCtxCount2 >= runCtxCount1 && runCtxCount1 > 0 {
-		t.Fatalf("iteration 2 run context blocks = %d want fewer than %d", runCtxCount2, runCtxCount1)
+	if runCtxCount1 != 1 || runCtxCount2 != 1 {
+		t.Fatalf("each request needs one workflow block: %d -> %d", runCtxCount1, runCtxCount2)
 	}
 }
 
@@ -588,7 +588,7 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 	}
 }
 
-func TestAssemblyImplementSpawnInjectCacheSecondIteration(t *testing.T) {
+func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
@@ -600,9 +600,12 @@ func TestAssemblyImplementSpawnInjectCacheSecondIteration(t *testing.T) {
 		}},
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   stubWorkspaceRootsOne(),
+		LoadedTools:      workerToolsLoaded,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
-	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
+	workspace := t.TempDir()
+	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
+	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
 	msgs1, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
@@ -613,8 +616,8 @@ func TestAssemblyImplementSpawnInjectCacheSecondIteration(t *testing.T) {
 	msgs2, err := rt.BuildCompletionMessages(ctx, sess, nil, nil)
 	testutil.FailErr(t, "rt.BuildCompletionMessages failed", err)
 	count2 := countImplementSpawnBlocks(msgs2)
-	if count2 >= count1 && count1 > 0 {
-		t.Fatalf("iteration 2 implement-spawn blocks = %d want fewer than %d", count2, count1)
+	if count1 != 1 || count2 != 1 {
+		t.Fatalf("implement-spawn blocks = (%d, %d), want one per iteration", count1, count2)
 	}
 }
 

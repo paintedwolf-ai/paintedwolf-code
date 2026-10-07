@@ -7,10 +7,9 @@ import (
 )
 
 // IsCatalogVisible reports whether a manifest may appear in product catalog APIs.
-// Ambient-attach workflows (attach.policy session_create) are excluded; everything
-// else is catalog-visible.
+// Retired definitions remain resolvable for history; ambient workflows attach automatically.
 func (m Manifest) IsCatalogVisible() bool {
-	return m.Attach.Policy != AttachPolicySessionCreate
+	return !m.Retired && m.Attach.Policy != AttachPolicySessionCreate
 }
 
 // DefaultAmbientRef identifies the workflow attached at session create.

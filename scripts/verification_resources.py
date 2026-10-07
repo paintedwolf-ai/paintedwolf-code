@@ -31,6 +31,24 @@ def worker_budget(environment):
     return requested
 
 
+# A detached git daemon inherits the lease and reservation descriptors and outlives the run that
+# started it, which keeps the run admitted after it finishes.
+GIT_FOREGROUND_CONFIG = (("core.fsmonitor", "false"), ("gc.autoDetach", "false"),
+                         ("maintenance.autoDetach", "false"))
+
+
+def foreground_git_environment(environment):
+    env = dict(environment)
+    count = int(env.get("GIT_CONFIG_COUNT", 0))
+    present = {(env.get(f"GIT_CONFIG_KEY_{index}"), env.get(f"GIT_CONFIG_VALUE_{index}")) for index in range(count)}
+    for key, value in GIT_FOREGROUND_CONFIG:
+        if (key, value) not in present:
+            env[f"GIT_CONFIG_KEY_{count}"], env[f"GIT_CONFIG_VALUE_{count}"] = key, value
+            count += 1
+    env["GIT_CONFIG_COUNT"] = str(count)
+    return env
+
+
 def bounded_environment(environment, workers):
     env = dict(environment)
     per_process = int(env.get("GOMAXPROCS", 1))

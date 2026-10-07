@@ -82,10 +82,15 @@ func (q *SQLQueue) ListLiveOverlaysForSession(ctx context.Context, sessionID str
 	return filterLiveOverlays(tasks), nil
 }
 
-// Get returns a task within a bounded lookup.
+// Get returns a task within a bounded lookup for callers without a context.
 func (q *SQLQueue) Get(jobID string) (*api.WorkerTask, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), sqlQueueGetTimeout)
 	defer cancel()
+	return q.Lookup(ctx, jobID)
+}
+
+// Lookup returns a task under the caller's context.
+func (q *SQLQueue) Lookup(ctx context.Context, jobID string) (*api.WorkerTask, bool) {
 	task, ok := q.store.getTask(ctx, jobID)
 	if ok && task != nil {
 		q.mu.Lock()

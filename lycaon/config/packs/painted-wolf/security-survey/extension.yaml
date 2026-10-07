@@ -1,7 +1,7 @@
 manifest_version: 1
 id: painted-wolf/security-survey
 name: Security survey
-version: 1.0.0
+version: 1.0.1
 compatibility:
   extension_api: "^1.0.0"
 dependencies:

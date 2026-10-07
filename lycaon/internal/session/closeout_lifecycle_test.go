@@ -37,6 +37,7 @@ func TestCloseoutPromptBoundary(t *testing.T) {
 		worker    bool
 		newIntent bool
 	}{
+		{name: "recovery continuation", input: PromptInput{Text: "Keep going", Continuation: true}},
 		{name: "host continuation", input: PromptInput{Text: "continue", HostSignal: &PromptHostSignal{}}},
 		{name: "human direction", input: PromptInput{Text: "continue"}, newIntent: true},
 		{name: "artifact direction", input: PromptInput{ArtifactIDs: []string{"artifact"}}, newIntent: true},

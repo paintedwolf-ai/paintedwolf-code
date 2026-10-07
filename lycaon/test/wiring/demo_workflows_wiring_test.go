@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -25,7 +25,8 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	run := startWorkflowRunAt(t, h, ctx, sess, "security-survey", "ingest")
+	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "1.0.1"})
+	testutil.FailErr(t, "start security patch workflow", err)
 	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []workflow.FanoutPlanLeg{
 		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk"},
@@ -42,22 +43,26 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 
 	claimed := map[string]string{
 		"verdict":      "CLAIMED",
+		"set_asides":   "[]",
 		"threat_model": "HTTP service; unauthenticated clients on the public internet; session cookie is the auth boundary",
 		"claims":       `[{"id":"c1","title":"Request id reaches a formatted SQL query","status":"claimed","statement":"SQLi in internal/store/query.go:88 — attacker-controlled id reaches Sprintf","cited_evidence":[{"path":"internal/store/query.go","line":88,"excerpt":"id reaches Sprintf in query.go:88"}]}]`,
 	}
-	// An uncited terminal verdict rejects — the grounding floor is wired in production.
-	uncited := map[string]string{"verdict": "CLAIMED", "threat_model": claimed["threat_model"], "claims": `[{"id":"c1","title":"SQL injection","status":"claimed","statement":"SQLi"}]`}
+	// Coverage citations use production grounding.
+	uncited := map[string]string{"verdict": "CLAIMED", "set_asides": "[]", "threat_model": claimed["threat_model"], "claims": `[{"id":"c1","title":"SQL injection","status":"claimed","statement":"SQLi"}]`}
+	uncited["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
 	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, uncited, nil, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict uncited claims", err)
-	if out.Valid || out.GroundingCode != guidance.VerdictCitationsRequiredCode {
-		t.Fatalf("uncited claims outcome = %+v want %s", out, guidance.VerdictCitationsRequiredCode)
+	if out.Valid || out.GroundingCode == "" {
+		t.Fatalf("unresolved coverage citations outcome = %+v, want grounding refusal", out)
 	}
 
 	testutil.FailErr(t, "seed survey evidence", h.Store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "survey#1", Path: "internal/store/query.go",
+		Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Fidelity: evidence.FidelityStructured,
 		LineRanges: []evidence.LineRange{{Start: 88, End: 88}},
 		Body:       []string{"id reaches Sprintf in query.go:88"},
 	}))
+	claimed["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
 	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, claimed, nil, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict claims", err)
 	if !out.Valid || !out.Terminal {
@@ -65,17 +70,19 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	}
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "challenge")
 
-	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic")
-	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher")
+	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "")
+	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher", "")
 
-	// The challenge phase adjudicates each stamped claim by id, so the report
-	// can say which survived rather than printing a lone verdict word.
+	investigateSecurityQuestion(t, h, ctx, sess, run.ID)
+
+	// Claim ids link review outcomes to report findings.
 	challenged := map[string]string{
 		"verdict": "CHALLENGED",
 		"challenges": `[{"id":"c1","status":"survives","statement":"the id still reaches Sprintf on every request",` +
 			`"cited_evidence":[{"path":"internal/store/query.go","line":88,"excerpt":"id reaches Sprintf in query.go:88"}]}]`,
 		"set_asides": `[]`,
 	}
+	challenged["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
 	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, challenged,
 		[]api.CitationGroundingCitedEvidence{reviewerCitation(skepticChild, "skeptic"), reviewerCitation(researcherChild, "web-researcher")}, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict challenge", err)
@@ -163,4 +170,35 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 			t.Fatalf("topology_stages.%s = %v want complete", stage, entry)
 		}
 	}
+}
+
+func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
+	t.Helper()
+	run, err := h.WorkflowMgr.Get(ctx, runID)
+	testutil.FailErr(t, "load question run", err)
+	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	testutil.FailErr(t, "load question manifest", err)
+	facts, err := h.WorkflowMgr.CoverageFacts(ctx, run, manifest)
+	testutil.FailErr(t, "load question obligations", err)
+	obligations := make([]string, 0, len(facts.Obligations))
+	for _, fact := range facts.Obligations {
+		obligations = append(obligations, fact.ID)
+	}
+	claims, err := json.Marshal([]workflow.VerdictClaim{{ID: "c1", Status: "unresolved", Statement: "Trace the request id into the query", Question: &workflow.ReviewQuestion{MissingFact: "Does the public handler pass the request id unchanged?", Obligations: obligations}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "survey#1"}}}})
+	testutil.FailErr(t, "encode question", err)
+	verdict := map[string]string{"verdict": "NEEDS_INVESTIGATION", "challenges": string(claims), "set_asides": "[]", "coverage": securityCoverageFixture(t, h, ctx, runID)}
+	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	testutil.FailErr(t, "register question", err)
+	if !out.Valid || out.Terminal || out.Attempt != 0 {
+		t.Fatalf("question registration = %+v", out)
+	}
+	verdict["verdict"] = "CHALLENGED"
+	verdict["coverage"] = securityCoverageFixture(t, h, ctx, runID)
+	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	testutil.FailErr(t, "reject uninvestigated question", err)
+	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != "SUBMIT_VERDICT_QUESTION_INVALID" || out.QuestionIssue.Data["reason"] != "investigation_required" {
+		t.Fatalf("uninvestigated question outcome = %+v, want investigation-required rejection", out)
+	}
+	appendSucceededReviewAgent(t, h, ctx, sess, "repo-researcher", "question/c1")
+	appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "question/c1/review")
 }

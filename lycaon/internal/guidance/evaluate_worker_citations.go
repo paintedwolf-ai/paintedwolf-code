@@ -31,6 +31,7 @@ type WorkerFindingInput struct {
 type WorkerCitationEval struct {
 	Code                 string
 	Offenders            []string
+	UnobservedURLs       []string
 	Resolutions          []evidence.Resolution
 	ProseDuplicateTokens []string
 	ProseDuplicateCount  int
@@ -50,11 +51,13 @@ func EvaluateWorkerCitations(
 	narrative WorkerNarrativeInput,
 	ev evidence.Ledger,
 ) WorkerCitationEval {
+	unobservedURLs := citedURLHandleOffenders(citedURLs, ev)
 	resolved, unverifiable, survey, surfaceUngrounded, pageMeasure := resolveWorkerFindingCitations(roots, findings, ev)
 	if len(surfaceUngrounded) > 0 {
 		return WorkerCitationEval{
 			Code:                 SurfaceClaimUngroundedCode,
 			Offenders:            surfaceUngrounded,
+			UnobservedURLs:       unobservedURLs,
 			Resolutions:          resolved,
 			SurveyAdvisoryTokens: survey,
 			SurveyAdvisoryCount:  len(survey),
@@ -64,6 +67,7 @@ func EvaluateWorkerCitations(
 		return WorkerCitationEval{
 			Code:                 PageMeasureUngroundedCode,
 			Offenders:            pageMeasure,
+			UnobservedURLs:       unobservedURLs,
 			Resolutions:          resolved,
 			SurveyAdvisoryTokens: survey,
 			SurveyAdvisoryCount:  len(survey),
@@ -73,19 +77,26 @@ func EvaluateWorkerCitations(
 		return WorkerCitationEval{
 			Code:                 WorkerEvidenceHandleUnknownCode,
 			Offenders:            unverifiable,
+			UnobservedURLs:       unobservedURLs,
 			Resolutions:          resolved,
 			SurveyAdvisoryTokens: survey,
 			SurveyAdvisoryCount:  len(survey),
 		}
 	}
-	if offenders := citedURLHandleOffenders(citedURLs, ev); len(offenders) > 0 {
-		return WorkerCitationEval{Code: WorkerURLNotObservedCode, Offenders: offenders}
+	if len(unobservedURLs) > 0 {
+		return WorkerCitationEval{
+			Code:           WorkerURLNotObservedCode,
+			Offenders:      unobservedURLs,
+			UnobservedURLs: unobservedURLs,
+			Resolutions:    resolved,
+		}
 	}
 	typed := BuildWorkerTypedChannel(roots, ev, findings, citedURLs)
 	proseEval := EvaluateWorkerProseLeaks(narrative, ev, typed)
 	bound := BindAdvisoryTokens(resolved)
 	return WorkerCitationEval{
 		Resolutions:          resolved,
+		UnobservedURLs:       unobservedURLs,
 		ProseDuplicateTokens: proseEval.DuplicateTokens,
 		ProseDuplicateCount:  len(proseEval.DuplicateTokens),
 		ProseAdvisoryTokens:  proseEval.AdvisoryLeakTokens,
@@ -154,19 +165,23 @@ func normalizedReportPath(roots evidence.CitationRoots, raw string, byPath map[s
 	return ""
 }
 
+// resolveWorkerFindingCitations returns one resolution per finding, at the
+// finding's index, so callers can write corrections back by position.
 func resolveWorkerFindingCitations(
 	roots evidence.CitationRoots,
 	findings []WorkerFindingInput,
 	ev evidence.Ledger,
 ) (resolved []evidence.Resolution, unverifiable, surveyAdvisories, surfaceUngrounded, pageMeasure []string) {
+	resolved = make([]evidence.Resolution, len(findings))
 	seen := map[string]struct{}{}
 	surveySeen := map[string]struct{}{}
 	surfaceSeen := map[string]struct{}{}
 	measureSeen := map[string]struct{}{}
-	for _, finding := range findings {
+	for i, finding := range findings {
 		path := strings.TrimSpace(finding.Path)
 		handle := strings.TrimSpace(finding.Evidence)
 		if path == "" && handle == "" {
+			resolved[i] = evidence.Resolution{Verdict: evidence.VerdictUnverifiable}
 			continue
 		}
 		line := finding.Line
@@ -175,15 +190,17 @@ func resolveWorkerFindingCitations(
 			// Survey-grade citations are advisory.
 			if citationResolvesToSurveyRecord(roots, finding, ev) {
 				addOffender(&surveyAdvisories, surveySeen, path)
+				resolved[i] = evidence.Resolution{Path: path, Verdict: evidence.VerdictTraced}
 				continue
 			}
 			addOffender(&unverifiable, seen, path)
+			resolved[i] = evidence.Resolution{Path: path, Verdict: evidence.VerdictUnverifiable}
 			continue
 		}
 		// Bare handles still require ledger membership.
 		if line <= 0 && excerpt == "" {
 			res, found := resolveBareHandleCitation(ev, handle)
-			resolved = append(resolved, res)
+			resolved[i] = res
 			if !found {
 				addOffender(&unverifiable, seen, handle)
 			} else if citationResolvesToSurveyRecord(roots, finding, ev) {
@@ -198,10 +215,11 @@ func resolveWorkerFindingCitations(
 				token = path
 			}
 			addOffender(&surfaceUngrounded, surfaceSeen, token)
+			resolved[i] = evidence.Resolution{Handle: handle, Path: path, Line: line, Excerpt: excerpt, Verdict: evidence.VerdictUnverifiable}
 			continue
 		}
 		res := resolveWorkerFindingCitation(roots, finding, ev)
-		resolved = append(resolved, res)
+		resolved[i] = res
 		if res.Verdict.Grounded() {
 			// Page measurements require captured text.
 			if res.Verdict == evidence.VerdictTraced && isPageMeasureUngrounded(finding, ev, excerpt) {
@@ -465,7 +483,12 @@ func resolveHandleOnlyCitation(ev evidence.Ledger, handle string, line int, exce
 		Line:    line,
 		Excerpt: excerpt,
 	}
-	if evidence.ExcerptMatchesHandle(ev, handle, line, excerpt) {
+	var path string
+	if rec, ok := evidence.ResolveHandle(ev, handle); ok {
+		path = rec.Path
+		out.Path = rec.Path
+	}
+	if evidence.ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
 		out.Verdict = evidence.VerdictMatched
 		return out
 	}
@@ -486,7 +509,11 @@ func excerptMatchesOtherHandle(ev evidence.Ledger, citedHandle string, line int,
 		if handle == citedHandle {
 			continue
 		}
-		if evidence.ExcerptMatchesHandle(ev, handle, line, excerpt) {
+		var otherPath string
+		if rec, ok := evidence.ResolveHandle(ev, handle); ok {
+			otherPath = rec.Path
+		}
+		if evidence.ExcerptMatchesHandle(ev, handle, otherPath, line, excerpt) {
 			return true
 		}
 	}
@@ -570,6 +597,35 @@ func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	data["observed_urls_sample"] = urlReport.Sample
 	data["observed_urls_omitted"] = urlReport.Omitted
 	return data
+}
+
+// citedHandleRangeLimit bounds the handles a refusal describes.
+const citedHandleRangeLimit = 8
+
+// CitedHandleRanges describes the lines each resolved handle observed, for
+// citations whose handle exists but whose line or excerpt did not match.
+func CitedHandleRanges(resolutions []evidence.Resolution, ev evidence.Ledger) string {
+	var parts []string
+	seen := map[string]bool{}
+	for _, res := range resolutions {
+		if res.Verdict != evidence.VerdictUnverifiable || res.Handle == "" || seen[res.Handle] {
+			continue
+		}
+		rec, ok := evidence.ResolveHandle(ev, res.Handle)
+		if !ok || len(rec.LineRanges) == 0 {
+			continue
+		}
+		seen[res.Handle] = true
+		ranges := make([]string, 0, len(rec.LineRanges))
+		for _, r := range rec.LineRanges {
+			ranges = append(ranges, fmt.Sprintf("%d-%d", r.Start, r.End))
+		}
+		parts = append(parts, fmt.Sprintf("%s %s lines %s", res.Handle, rec.Path, strings.Join(ranges, ",")))
+		if len(parts) == citedHandleRangeLimit {
+			break
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 // OffenderHintData maps full offender tokens to bounded hint template vars.

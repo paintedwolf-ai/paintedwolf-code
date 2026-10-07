@@ -1,0 +1,30 @@
+oar: '1.0'
+id: COMPLETE_LEG_COVERAGE_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.detail, paintedwolf.assignment]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "COMPLETE_LEG_COVERAGE_INVALID"
+effect: block
+copy:
+  cause: "{{ paintedwolf.detail }}"
+  why: The assigned coverage review needs an explicit assessment of every current scope fact.
+  fix: >-
+    Return coverage_review using this assignment's facts.revision and one cited assessment
+    per fact. Assess candidate exclusions against the full scope and use native scan_query
+    with view coverage for bounded drilldown. Retain unfinished material or essential work.
+    Current assignment: {{ paintedwolf.assignment }}
+  instead: Repair the coverage assessment and resubmit complete_leg within this leg.
+  what: The coverage assessment is missing, incomplete, or stale.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: complete_leg requires the assigned coverage assessment
+x-paintedwolf-scenarios:
+- id: missing
+  vars:
+    detail: coverage assessment missing
+    assignment: '{"facts":{"revision":"current","obligations":[],"gaps":[]}}'
+  expect_contains:
+  - 'Code: COMPLETE_LEG_COVERAGE_INVALID'
+  - current

@@ -447,3 +447,34 @@ func TestManifestDeclaredIdentifierGrammar(t *testing.T) {
 		}
 	}
 }
+
+func TestParseManifestYAMLControlsRetries(t *testing.T) {
+	m, err := ParseManifestYAML([]byte(`
+id: custom-flow
+version: 1.0.0
+controls:
+  report:
+    enabled: true
+    retries: 5
+phases:
+  - id: step1
+    activity_label: Quick step
+    controls:
+      retries: 1
+  - id: report
+    activity_label: Deliver report
+    gates: [topology_report_delivered]
+`))
+	testutil.FailErr(t, "ParseManifestYAML with retries", err)
+	if m.Controls.Report == nil || m.Controls.Report.Retries != 5 {
+		t.Fatalf("expected Controls.Report.Retries = 5, got %+v", m.Controls.Report)
+	}
+	p1, ok := m.PhaseForRun(nil, "step1")
+	if !ok || p1.CloseoutRetries != 1 {
+		t.Fatalf("expected step1 CloseoutRetries = 1, got %+v", p1)
+	}
+	pReport, ok := m.PhaseForRun(nil, "report")
+	if !ok || pReport.CloseoutRetries != 5 {
+		t.Fatalf("expected report CloseoutRetries = 5 inherited from Controls.Report, got %+v", pReport)
+	}
+}

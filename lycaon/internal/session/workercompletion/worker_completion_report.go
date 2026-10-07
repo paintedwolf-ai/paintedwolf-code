@@ -1,6 +1,7 @@
 package workercompletion
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -27,7 +29,9 @@ const (
 // WorkerCompletionReport is structured worker finish metadata.
 // The host supplies file and evidence fields.
 type WorkerCompletionReport struct {
+	CoverageReview      *api.CoverageReview      `json:"coverage_review,omitempty"`
 	Verification        *verification.Assessment `json:"verification,omitempty"`
+	DeclaredLegStatus   string                   `json:"declared_leg_status,omitempty"`
 	LegStatus           string                   `json:"leg_status"`
 	FilesModified       []string                 `json:"files_modified,omitempty"`
 	ObjectivesMet       []string                 `json:"objectives_met,omitempty"`
@@ -111,12 +115,12 @@ func ReportFromCompleteLegArgs(args map[string]any) (WorkerCompletionReport, boo
 }
 
 // CompleteLegDecoder validates complete_leg arguments.
-func CompleteLegDecoder(args map[string]any) (workertools.CompleteLegRecord, bool) {
+func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolContext) (workertools.CompleteLegRecord, error) {
 	report, ok := ReportFromCompleteLegArgs(args)
 	if !ok {
-		return workertools.CompleteLegRecord{}, false
+		return workertools.CompleteLegRecord{}, &tools.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
-	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, true
+	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, nil
 }
 
 // ParseWorkerCompletionReport extracts envelope-only completion JSON from assistant content.
@@ -140,6 +144,7 @@ func decodeWorkerCompletionReport(candidate string) (WorkerCompletionReport, boo
 
 func (r WorkerCompletionReport) Empty() bool {
 	return strings.TrimSpace(r.LegStatus) == "" &&
+		strings.TrimSpace(r.DeclaredLegStatus) == "" &&
 		len(r.FilesModified) == 0 &&
 		len(r.ObjectivesMet) == 0 &&
 		len(r.RemainingRisk) == 0 &&
@@ -158,6 +163,7 @@ func (r *WorkerCompletionReport) Normalize() {
 
 func (r *WorkerCompletionReport) normalizeListsAndLeg() {
 	r.LegStatus = NormalizeReportLegStatus(r.LegStatus)
+	r.DeclaredLegStatus = NormalizeReportLegStatus(r.DeclaredLegStatus)
 	r.FilesModified = normalizeReportStringList(r.FilesModified, 0)
 	r.ObjectivesMet = normalizeReportStringList(r.ObjectivesMet, 0)
 	r.RemainingRisk = normalizeReportStringList(r.RemainingRisk, 0)

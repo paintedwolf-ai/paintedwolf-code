@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -81,8 +81,9 @@ func pickPackAnchors(pack ContextPack, caps Caps, maxAnchors int) []Anchor {
 
 func windowAnchor(window PackWindow, skeleton []PackSymbol) (Anchor, bool) {
 	anchorAt := func(line int) (Anchor, bool) {
-		excerpt := evidence.StripNumberedLinePrefix(numberedWindowLine(window.Body, line))
-		return Anchor{Path: window.Path, Line: line, Excerpt: excerpt}, line > 0 && usableAnchorExcerpt(excerpt)
+		text, shown := hostmarker.NumberedLineAt(window.Body, line)
+		excerpt := strings.TrimSpace(text)
+		return Anchor{Path: window.Path, Line: line, Excerpt: excerpt}, shown && usableAnchorExcerpt(excerpt)
 	}
 	for _, symbol := range skeleton {
 		if symbol.Path == window.Path && symbol.Line >= window.StartLine && symbol.Line <= window.EndLine {
@@ -97,21 +98,6 @@ func windowAnchor(window PackWindow, skeleton []PackSymbol) (Anchor, bool) {
 		}
 	}
 	return Anchor{}, false
-}
-
-// numberedWindowLine returns the "N: …" row for line from a numberWindowBody.
-func numberedWindowLine(body string, line int) string {
-	if body == "" || line <= 0 {
-		return ""
-	}
-	prefix := fmt.Sprintf("%d:", line)
-	for _, row := range strings.Split(body, "\n") {
-		t := strings.TrimSpace(row)
-		if strings.HasPrefix(t, prefix) {
-			return t
-		}
-	}
-	return ""
 }
 
 func usableAnchorExcerpt(s string) bool {
@@ -157,7 +143,7 @@ func (e *Engine) runFill(ctx context.Context, req Request, gr GatherResult, pack
 		}
 		structure = append(structure, StructureCandidate{
 			RelPath: c.RelPath, Kind: kind,
-			Head: c.Body, StartLine: c.StartLine, LineCount: strings.Count(c.Body, "\n") + 1,
+			Head: c.Body, StartLine: c.StartLine, LineCount: len(strings.Split(c.Body, "\n")),
 			ContentHash: c.ContentHash,
 		})
 	}
@@ -261,7 +247,7 @@ func summarizeCoverage(req Request, gr GatherResult, subtree *SubtreeNode, fr fi
 	}
 	for _, action := range actions {
 		if action.Tool == "summarize" && action.Cursor != "" {
-			if cursor, ok := decodeCursor(action.Cursor); ok && cursor.Scope == cursorScope(req) {
+			if _, err := summarizeCursors.Decode(action.Cursor, cursorScope(req)); err == nil {
 				coverage.NextCursor = action.Cursor
 				break
 			}

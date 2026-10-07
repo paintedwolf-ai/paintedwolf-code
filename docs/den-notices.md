@@ -140,6 +140,7 @@ The codes on `NoticeCode`, the one surface small enough to enumerate. Every one 
 |------|-------|-----------|
 | `prompt_failed` | Couldn't finish that prompt | The turn stopped before a reply was ready; the detail, when there is one, is interpolated |
 | `host_fault` | Painted Wolf Code hit an internal error | The host could not record a tool call's outcome and stopped the turn. The call is named, and the copy says its changes may stand when it ran. Resending is not offered as the fix ([tools.md § Tool lifecycle](tools.md#tool-lifecycle)) |
+| `turn_closeout_tool_call` | Model skipped its closing summary | The turn had ended early and its final turn allowed no tools, but the model answered with a tool call; the call did not run and the reason the turn ended is interpolated |
 | `provider_unreachable` | Could not reach the model host | The request never got through. Nothing reached the model, so nothing was spent |
 | `provider_server_error` | The model provider had a server error | The request arrived and the provider's own service failed it. Not the prompt, and not the local setup |
 | `provider_silent` | Model host went quiet | The request was accepted and nothing came back. It may have run and been billed, the opposite of `provider_unreachable` |

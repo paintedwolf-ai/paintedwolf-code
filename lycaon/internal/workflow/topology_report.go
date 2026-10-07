@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,7 +50,14 @@ func (m *RunManager) MaybeDeliverTopologyReport(ctx context.Context, sessionID, 
 			return nil, false, nil
 		}
 		phase = run.CurrentPhase
-		if len(message.CompletionReport.Defects) > 0 {
+		hasFatal := false
+		for _, defect := range message.CompletionReport.Defects {
+			if guidance.IsFatalReportDefect(string(defect.Code)) {
+				hasFatal = true
+				break
+			}
+		}
+		if hasFatal {
 			settled = reportNotAccepted
 			return nil, false, nil
 		}

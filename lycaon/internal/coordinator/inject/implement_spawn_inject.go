@@ -3,7 +3,6 @@ package inject
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -63,27 +62,4 @@ func RenderImplementSpawnInject(
 		return "", fmt.Errorf("implement-spawn inject missing sentinel %q", ImplementSpawnInjectSentinel)
 	}
 	return block, nil
-}
-
-// ImplementSpawnInjectFingerprint hashes spawn roster inputs.
-func ImplementSpawnInjectFingerprint(allowedAgents []string, maxInFlight int, surfaceID string, rootCount int, repoKnownEmpty bool, webSearchEnabled bool, catalog *extpacks.EffectiveCatalog, toolProfiles []sandbox.ToolProfile) string {
-	surf, err := capability.Resolve(capability.ResolveInput{
-		Profile:          surface.TurnProfile{SurfaceID: strings.TrimSpace(surfaceID)},
-		RootCount:        rootCount,
-		RepoKnownEmpty:   repoKnownEmpty,
-		SpawnAllowlist:   allowedAgents,
-		MaxInFlight:      maxInFlight,
-		WebSearchEnabled: &webSearchEnabled,
-		Catalog:          catalog,
-		ToolProfiles:     toolProfiles,
-	})
-	if err != nil {
-		allowed := append([]string(nil), allowedAgents...)
-		sort.Strings(allowed)
-		return prompts.SpawnRosterFingerprint(prompts.SpawnRosterData{
-			MaxInFlight: maxInFlight,
-			SpawnAgents: []prompts.SpawnAgentView{{ID: strings.Join(allowed, ",")}},
-		}, nil)
-	}
-	return prompts.SpawnRosterFingerprint(surf.Roster, surf.ExcludedDisclosures)
 }

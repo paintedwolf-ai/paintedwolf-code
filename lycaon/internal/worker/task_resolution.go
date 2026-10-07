@@ -14,15 +14,6 @@ const (
 	workerResumeChildUnknownCode = "WORKER_RESUME_CHILD_UNKNOWN"
 )
 
-// PlannedLeg is what a fanout plan fixed for one leg of the active phase.
-type PlannedLeg struct {
-	RunID        string
-	Phase        string
-	AgentType    string
-	Scope        *api.TaskScope
-	MaxToolLoops int
-}
-
 // taskIdentity is a task call with the fields a resumed child or planned leg supplies.
 type taskIdentity struct {
 	AgentType      string
@@ -33,10 +24,7 @@ type taskIdentity struct {
 	Prior *api.WorkerTask
 }
 
-// resolveTaskIdentity fills omitted task fields: a resume keeps its child's
-// agent, scope, planned leg, and ceiling (raised to its unanswered request);
-// a planned leg supplies its agent, scope, and ceiling. Supplied fields that
-// contradict the resumed child reject rather than silently changing it.
+// Resumed children retain their recorded identity and pending budget request.
 func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, args map[string]any, requestedMax int, budget spawn.WorkerToolBudget) (taskIdentity, error) {
 	id := taskIdentity{MaxToolLoops: requestedMax}
 	id.AgentType, _ = args["agent_type"].(string)
@@ -63,7 +51,7 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 		}
 	}
 
-	leg, planned, err := id.plannedLeg(ctx, deps, tctx, id.Prior != nil && !workIDGiven)
+	leg, planned, err := id.workflowWork(ctx, deps, tctx, id.Prior != nil && !workIDGiven)
 	if err != nil {
 		return id, err
 	}
@@ -88,7 +76,6 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 	return id, nil
 }
 
-// inheritFrom carries the resumed child's identity onto the new job.
 func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, childSessionID string, budget spawn.WorkerToolBudget) error {
 	recordedScope := prior.EffectiveScope()
 	switch {
@@ -113,20 +100,18 @@ func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, chil
 	return nil
 }
 
-// plannedLeg looks up the leg a call names or its resumed child belonged to.
-// An inherited leg counts only in the run and phase that planned it; after
-// that phase closes the resume runs unplanned instead of rejecting.
-func (id *taskIdentity) plannedLeg(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (PlannedLeg, bool, error) {
-	if id.WorkflowWorkID == "" || deps.PlannedLeg == nil {
-		return PlannedLeg{}, false, nil
+// Resumed work retains ownership only within its active run and phase.
+func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (spawn.WorkflowWork, bool, error) {
+	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
+		return spawn.WorkflowWork{}, false, nil
 	}
-	leg, ok, err := deps.PlannedLeg(ctx, tctx, id.WorkflowWorkID)
+	leg, ok, err := deps.WorkflowWork(ctx, tctx.SessionID, id.WorkflowWorkID)
 	if err != nil {
-		return PlannedLeg{}, false, err
+		return spawn.WorkflowWork{}, false, err
 	}
 	if inherited && (!ok || leg.RunID != id.Prior.WorkflowRunID || leg.Phase != id.Prior.WorkflowPhase) {
 		id.WorkflowWorkID = ""
-		return PlannedLeg{}, false, nil
+		return spawn.WorkflowWork{}, false, nil
 	}
 	return leg, ok, nil
 }

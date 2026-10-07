@@ -393,7 +393,7 @@ func probeFind(ctx context.Context, boundary *sandbox.Boundary, catalog *sourcec
 	if projectroot.IsUnionDiscoveryPath(relPath) {
 		for _, root := range roots {
 			if err := tool.runFindRoot(ctx, tctx, root, root.Path, projectpaths.QualifyAbs(tctx, root, root.Path),
-				findDepthUnbounded, maxResults, 0, nameGlob, entryType, sampler.add, &resp,
+				findDepthUnbounded, maxResults, 0, nameGlob, entryType, true, sampler.add, &resp,
 				&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {
 				return nil, 0, err
 			}
@@ -404,7 +404,7 @@ func probeFind(ctx context.Context, boundary *sandbox.Boundary, catalog *sourcec
 			return nil, 0, err
 		}
 		if err := tool.runFindRoot(ctx, tctx, resolved.Root, resolved.Abs, resolved.DisplayPath,
-			findDepthUnbounded, maxResults, 0, nameGlob, entryType, sampler.add, &resp,
+			findDepthUnbounded, maxResults, 0, nameGlob, entryType, true, sampler.add, &resp,
 			&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {
 			return nil, 0, err
 		}

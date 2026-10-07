@@ -7,6 +7,8 @@ import (
 
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
 	"github.com/johnfercher/maroto/v2/pkg/props"
+
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 )
 
 // The first page answers, in order: how bad, how complete, what is asked of
@@ -255,6 +257,17 @@ func completenessReason(input ReportInput, level string) string {
 	if len(input.Defects) > 0 {
 		return "This report failed acceptance checks and is not complete."
 	}
+	if input.CoverageFacts != nil {
+		if input.CoverageReview == nil || reviewcoverage.Validate(*input.CoverageFacts, *input.CoverageReview) != nil {
+			return "Coverage has not been accepted for the current review evidence."
+		}
+		if reviewcoverage.Completeness(*input.CoverageReview) == CompletenessIncomplete {
+			return "Essential review work remains unresolved. See remaining work."
+		}
+		if level == CompletenessMostly {
+			return "The review is usable, with material questions still open. See remaining work."
+		}
+	}
 	var parts []string
 	for _, kind := range gapOrder {
 		for _, g := range input.Gaps {
@@ -266,10 +279,9 @@ func completenessReason(input ReportInput, level string) string {
 			}
 		}
 	}
-	rated := input.Brief != nil
 	switch {
 	case level == CompletenessComplete:
-		return "Everything planned was checked. Nothing is open."
+		return "The planned review is complete. Its scope and limitations are documented below."
 	case len(parts) == 0:
 		return ""
 	}
@@ -277,23 +289,19 @@ func completenessReason(input ReportInput, level string) string {
 		parts = parts[:2]
 	}
 	out := sentence(strings.Join(parts, ", and ")) + "."
-	switch {
-	case rated && level == CompletenessIncomplete:
-		out += " The rating could change."
-	case rated:
-		out += " That is unlikely to change the rating."
-	}
 	return out
 }
 
 // gapOrder puts the gaps that leave work incomplete first.
 var gapOrder = []string{
-	GapInventoryUnaccounted, GapClaimsOpen, GapLegsUnfinished, GapScansFailed,
+	GapInventoryUnaccounted, GapCoverageUnreviewed, GapClaimsOpen, GapLegsUnfinished, GapScansFailed,
 	GapLegsPartial, GapWorkersPartial, GapScansMoved,
 }
 
 func gapPhrase(g ReportGap) string {
 	switch g.Kind {
+	case GapCoverageUnreviewed:
+		return "the coverage review couldn't be checked because scans were still running"
 	case GapInventoryUnaccounted:
 		if g.Of > 0 && g.Count < g.Of {
 			return fmt.Sprintf("the review didn't use %d of %d automated scan result groups", g.Count, g.Of)

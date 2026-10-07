@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -65,6 +66,25 @@ func (m *RunManager) workflowRuntimeSnapshot(
 	if workflowdef.RunHasParent(active) && runHasBlueprint(active) && manifest.Blueprint == nil {
 		snap.BlueprintApproval = m.inheritedBlueprintApprovalSnapshot(ctx, active)
 	}
+	for _, phase := range manifest.PhaseDefs {
+		if phase.ID != active.CurrentPhase || phase.ReviewLoop == nil || !phase.ReviewLoop.CarriesCoverage() {
+			continue
+		}
+		facts, err := m.CoverageFacts(ctx, active, manifest)
+		if err != nil {
+			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
+		} else {
+			prior := RunCoverageReview(ReviewVerdicts(ctx, m, active, manifest))
+			raw, marshalErr := json.Marshal(struct {
+				Facts any `json:"facts"`
+				Prior any `json:"prior_review,omitempty"`
+			}{facts, prior})
+			if marshalErr == nil {
+				snap.CoverageReview = string(raw)
+			}
+		}
+		break
+	}
 	var currentGates []PhaseGateSnapshot
 	for _, id := range manifest.Phases {
 		def, ok := manifest.PhaseForRun(active, id)
@@ -102,6 +122,7 @@ func (m *RunManager) workflowRuntimeSnapshot(
 	}
 	if def, ok := manifest.PhaseForRun(active, active.CurrentPhase); ok {
 		snap.ReportDocumentEnabled = manifest.ReportEnabled() && workflowdef.PhaseHasGate(def, "topology_report_delivered")
+		snap.CloseoutRetries = def.CloseoutRetries
 		if brief := manifest.ReportBrief(); snap.ReportDocumentEnabled && brief != nil {
 			snap.ReportRating = &inject.ReportRatingView{Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
 		}

@@ -134,13 +134,14 @@ func FormatCloseoutGroundingReject(
 	if err != nil {
 		return "", err
 	}
-	templateData := make(map[string]any, len(data)+3)
+	templateData := make(map[string]any, len(data)+4)
 	for key, value := range data {
 		templateData[key] = value
 	}
 	templateData["attempt"] = attempt
 	templateData["max_attempts"] = maxAttempts
 	templateData["drafted_synthesis"] = boundedDraftedSynthesis(draftedSynthesis)
+	templateData["pinned_body_chars"] = len(strings.TrimSpace(draftedSynthesis))
 	header := renderHostKickHeader(renderHostKick, kickID, templateData)
 	if header == "" {
 		return reject, nil

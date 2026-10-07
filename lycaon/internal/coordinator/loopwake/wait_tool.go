@@ -53,6 +53,7 @@ type waitSubscription struct {
 	Conditions         []awaitstore.Condition
 	Triggers           []WaitTrigger
 	ProcessHandles     []string
+	WorkerHandles      []string
 	ExplicitConditions bool
 	UntilComplete      bool
 	Bounded            bool
@@ -180,7 +181,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 		}
 		loop.enterSleep(ctx, tctx.SessionID, sleepArm{
 			until: until, untilComplete: request.UntilComplete, reason: reason,
-			triggers: armedTriggers, processHandles: processHandles, mover: SleepMoverHost,
+			triggers: armedTriggers, processHandles: processHandles, workerHandles: request.WorkerHandles, mover: SleepMoverHost,
 		})
 		loop.MarkWaitCalled(tctx.SessionID)
 		if deps.Store != nil {
@@ -258,6 +259,7 @@ func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore
 				request.Conditions = subscription.Conditions
 				request.Triggers = subscription.Triggers
 				request.ProcessHandles = subscription.ProcessHandles
+				request.WorkerHandles = subscription.WorkerHandles
 			}
 			if !request.ExplicitMode {
 				request.UntilComplete = subscription.UntilComplete
@@ -278,6 +280,7 @@ func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore
 	if !request.ExplicitConditions {
 		request.Conditions = append([]awaitstore.Condition(nil), lease.Conditions...)
 		request.Triggers, request.ProcessHandles = triggersFromConditions(request.Conditions)
+		request.WorkerHandles = workerHandlesFromConditions(request.Conditions)
 	}
 	return nil
 }
@@ -305,8 +308,9 @@ func (l *LoopEngine) runtimeWaitSubscription(sessionID string) (waitSubscription
 		Bounded:        bounded,
 		Triggers:       append([]WaitTrigger(nil), state.waitTriggers...),
 		ProcessHandles: append([]string(nil), state.processHandles...),
+		WorkerHandles:  append([]string(nil), state.workerHandles...),
 	}
-	subscription.Conditions = conditionsFromTriggers(subscription.Triggers, subscription.ProcessHandles)
+	subscription.Conditions = conditionsFromTriggers(subscription.Triggers, subscription.ProcessHandles, subscription.WorkerHandles)
 	return subscription, true
 }
 
@@ -405,15 +409,14 @@ func resolveConditions(raw any) (waitSubscription, error) {
 		}
 		condition := awaitstore.Condition{Kind: string(trigger)}
 		if rawHandles, present := obj["handles"]; present {
-			if trigger != WaitTriggerProcessDone {
-				return waitSubscription{}, fmt.Errorf("handles are valid only for process_done")
-			}
 			parsed, err := ResolveProcessHandlesArgs(rawHandles)
 			if err != nil {
 				return waitSubscription{}, err
 			}
 			condition.Handles = parsed
-			handles = append(handles, parsed...)
+			if trigger == WaitTriggerProcessDone {
+				handles = append(handles, parsed...)
+			}
 		}
 		switch trigger {
 		case WaitTriggerHTTPReady:
@@ -434,13 +437,17 @@ func resolveConditions(raw any) (waitSubscription, error) {
 		conditions = append(conditions, condition)
 		triggers = append(triggers, trigger)
 	}
-	return waitSubscription{Conditions: conditions, Triggers: ensureTimerBackstop(triggers), ProcessHandles: normalizeProcessHandles(handles), ExplicitConditions: true}, nil
+	return waitSubscription{
+		Conditions: conditions, Triggers: ensureTimerBackstop(triggers),
+		ProcessHandles: normalizeProcessHandles(handles), WorkerHandles: workerHandlesFromConditions(conditions),
+		ExplicitConditions: true,
+	}, nil
 }
 
 func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	allowed := map[string]bool{"kind": true}
 	switch trigger {
-	case WaitTriggerProcessDone:
+	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone:
 		allowed["handles"] = true
 	case WaitTriggerHTTPReady:
 		for _, field := range []string{"url", "method", "status_min", "status_max", "port"} {
@@ -449,8 +456,7 @@ func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	case WaitTriggerPortReady:
 		allowed["host"] = true
 		allowed["port"] = true
-	case WaitTriggerTimer, WaitTriggerNextWorkerDone, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote,
-		WaitTriggerScanDone:
+	case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone:
 	}
 	for field := range obj {
 		if !allowed[field] {
@@ -566,15 +572,20 @@ func rootSessionID(tctx tools.ToolContext) string {
 	return strings.TrimSpace(tctx.SessionID)
 }
 
-func conditionsFromTriggers(triggers []WaitTrigger, handles []string) []awaitstore.Condition {
+func conditionsFromTriggers(triggers []WaitTrigger, processHandles, workerHandles []string) []awaitstore.Condition {
 	out := make([]awaitstore.Condition, 0, len(triggers))
 	for _, trigger := range triggers {
 		if trigger == WaitTriggerTimer {
 			continue
 		}
 		condition := awaitstore.Condition{Kind: string(trigger)}
-		if trigger == WaitTriggerProcessDone {
-			condition.Handles = append([]string(nil), handles...)
+		switch trigger {
+		case WaitTriggerProcessDone:
+			condition.Handles = append([]string(nil), processHandles...)
+		case WaitTriggerNextWorkerDone:
+			condition.Handles = append([]string(nil), workerHandles...)
+		case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone,
+			WaitTriggerHTTPReady, WaitTriggerPortReady:
 		}
 		out = append(out, condition)
 	}
@@ -591,6 +602,17 @@ func triggersFromConditions(conditions []awaitstore.Condition) ([]WaitTrigger, [
 		}
 	}
 	return ensureTimerBackstop(triggers), normalizeProcessHandles(handles)
+}
+
+// workerHandlesFromConditions lists the task ids a next_worker_done wait named.
+func workerHandlesFromConditions(conditions []awaitstore.Condition) []string {
+	var handles []string
+	for _, condition := range conditions {
+		if condition.Kind == string(WaitTriggerNextWorkerDone) {
+			handles = append(handles, condition.Handles...)
+		}
+	}
+	return normalizeProcessHandles(handles)
 }
 
 func validateProfileConditions(profile string, conditions []awaitstore.Condition, profiles map[string]map[string]bool) error {
@@ -637,7 +659,7 @@ func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.
 		}
 		loop.enterSleep(ctx, lease.SessionID, sleepArm{
 			until: lease.Deadline, untilComplete: lease.UntilComplete, reason: lease.Reason,
-			triggers: triggers, processHandles: handles, mover: SleepMoverHost,
+			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
 		})
 		startConditionMonitor(ctx, loop, store, lease)
 	}

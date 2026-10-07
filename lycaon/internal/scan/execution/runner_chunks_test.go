@@ -39,7 +39,7 @@ func (r *chunkRecorder) Run(_ context.Context, req scanbase.ScanRequest) (*scano
 	for _, p := range req.Paths {
 		findings = append(findings, api.SecurityFinding{RuleID: "r", Locations: []api.SecurityFindingLocation{{URI: p}}})
 	}
-	return &scanoutput.Result{ScannedPaths: req.Paths, FindingsCount: len(findings), Findings: findings, Raw: map[string]any{"engine": "chunky"}}, nil
+	return &scanoutput.Result{ScannedPaths: req.Paths, FindingsCount: len(findings), Findings: findings, SecretIdentities: []scanoutput.SecretIdentity{{FindingIndex: 0, ValueFingerprint: "private-hash"}}, Raw: map[string]any{"engine": "chunky"}}, nil
 }
 
 func newChunkRunner(t *testing.T, engine *chunkRecorder, chunk int) (*Runner, *api.CodeScan) {
@@ -99,6 +99,9 @@ func TestRunInChunksResumesFromKeptChunksAfterAFailure(t *testing.T) {
 	if len(engine.batches) != 4 {
 		t.Fatalf("invocations = %d, want 4: the first chunk was not run again", len(engine.batches))
 	}
+	if len(result.SecretIdentities) != 3 || result.SecretIdentities[0].ValueFingerprint != "private-hash" || result.SecretIdentities[1].FindingIndex != 4 || result.SecretIdentities[2].FindingIndex != 8 {
+		t.Fatalf("resumed secret identities lost or misaligned: %+v", result.SecretIdentities)
+	}
 	if result.FindingsCount != 10 {
 		t.Fatalf("resumed result findings = %d, want 10", result.FindingsCount)
 	}
@@ -123,5 +126,42 @@ func TestChunkPathsSplitsEvenly(t *testing.T) {
 	}
 	if got := chunkPaths(nil, 3); len(got) != 1 || len(got[0]) != 0 {
 		t.Fatalf("empty chunks = %v", got)
+	}
+}
+
+func TestChunkResumeKeepsProjectPathsAcrossExecutionTrees(t *testing.T) {
+	engine := &chunkRecorder{failOn: 2}
+	runner, job := newChunkRunner(t, engine, 1)
+	first := t.TempDir()
+	_, err := runner.runInChunks(t.Context(), job, scanbase.ScanRequest{ProjectDir: first, Paths: []string{filepath.Join(first, "a.go"), filepath.Join(first, "b.go")}})
+	if err == nil {
+		t.Fatal("fixture did not interrupt after the first chunk")
+	}
+	engine.failOn = 0
+	second := t.TempDir()
+	got, err := runner.runInChunks(t.Context(), job, scanbase.ScanRequest{ProjectDir: second, Paths: []string{filepath.Join(second, "a.go"), filepath.Join(second, "b.go")}})
+	testutil.FailErr(t, "resume with another execution tree", err)
+	if len(got.Findings) != 2 || got.Findings[0].Locations[0].URI != "a.go" || got.Findings[1].Locations[0].URI != "b.go" {
+		t.Fatalf("temporary paths survived resume: %+v", got)
+	}
+}
+
+func TestChunkResumeRechecksInputsWhenBatchSizeChanges(t *testing.T) {
+	engine := &chunkRecorder{failOn: 2}
+	runner, job := newChunkRunner(t, engine, 4)
+	req := scanbase.ScanRequest{ProjectDir: job.CanonicalPath, Paths: paths(10)}
+	if _, err := runner.runInChunks(t.Context(), job, req); err == nil {
+		t.Fatal("fixture did not interrupt after the first chunk")
+	}
+	engine.failOn, runner.ChunkFiles = 0, 3
+	result, err := runner.runInChunks(t.Context(), job, req)
+	testutil.FailErr(t, "resume with changed batching", err)
+	if len(result.Findings) != len(req.Paths) || len(engine.batches) != 6 {
+		t.Fatalf("reused a chunk with different inputs: findings=%d batches=%d", len(result.Findings), len(engine.batches))
+	}
+	for i, finding := range result.Findings {
+		if finding.Locations[0].URI != req.Paths[i] {
+			t.Fatalf("path %d duplicated or skipped: %s", i, finding.Locations[0].URI)
+		}
 	}
 }

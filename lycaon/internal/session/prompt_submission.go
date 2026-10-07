@@ -22,6 +22,11 @@ import (
 
 // AdmitPrompt persists a client-authored prompt before coordinator work begins.
 func (m *Manager) AdmitPrompt(ctx context.Context, sessionID, operationID string, requestIdentity any, in PromptInput) (*store.PromptSubmission, bool, error) {
+	if m == nil {
+		return nil, false, fmt.Errorf("prompt manager unavailable")
+	}
+	unlock := m.promptState.LockOperation("admission:" + sessionID)
+	defer unlock()
 	return m.admitPrompt(ctx, sessionID, operationID, store.PromptSubmissionOriginUser, requestIdentity, in)
 }
 
@@ -56,6 +61,12 @@ func (m *Manager) admitPrompt(
 		return existing, false, nil
 	} else if !errors.Is(readErr, store.ErrPromptSubmissionNotFound) {
 		return nil, false, readErr
+	}
+	if in.Recovery != nil {
+		in, err = m.preparePromptRecovery(ctx, sessionID, in)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 	// Reject known limits synchronously so the caller retains its unsent draft.
 	// Execution checks again because earlier queued work can consume the runway.
@@ -181,7 +192,7 @@ func promptRidesQueue(in PromptInput) bool {
 		strings.TrimSpace(in.WritePinRootID) == "" &&
 		len(in.WritePinGlobs) == 0 &&
 		in.HostSignal == nil &&
-		!in.ProseFinish
+		!in.ProseFinish && in.Recovery == nil
 }
 
 // RunPromptSubmission dispatches one admitted receipt in admission order.

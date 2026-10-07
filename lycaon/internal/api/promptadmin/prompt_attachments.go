@@ -81,7 +81,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	allowEmpty := s.Sessions.AcceptsEmptyWorkflowRequest(r.Context(), id)
-	if text == "" && len(req.Attachments) == 0 && len(req.References) == 0 && len(req.Secrets) == 0 && !allowEmpty {
+	if req.Recovery == nil && text == "" && len(req.Attachments) == 0 && len(req.References) == 0 && len(req.Secrets) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, references, or an active workflow request required")
 		return
 	}
@@ -112,6 +112,10 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
 		if errors.Is(err, session.ErrSessionSpendCeiling) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeSessionSpendCeilingReached, usernotice.SpendCeilingContext(err), "chat spend ceiling reached")
+			return
+		}
+		if errors.Is(err, session.ErrPromptRecoveryStale) {
+			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, err.Error())
 			return
 		}
 		var conflict *store.PromptSubmissionConflictError
@@ -173,6 +177,14 @@ func (s *Handler) preparePromptAdmission(
 	userProse string,
 	allowEmpty bool,
 ) (promptAdmission, bool) {
+	if req.Recovery != nil {
+		if len(req.Attachments) != 0 || len(req.References) != 0 || len(req.Secrets) != 0 {
+			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, "Recovery cannot add attachments, references, or secrets; send them as a new message")
+			return promptAdmission{}, false
+		}
+		return promptAdmission{input: session.PromptInput{Text: text, Recovery: req.Recovery}}, true
+	}
+
 	caps := s.Caps
 	previewBudget := promptattach.NewTurnPreviewBudget(caps)
 	ingested, err := promptattach.IngestAttachments(r.Context(), attachStore, caps, previewBudget, s.Video, req.Attachments)
@@ -223,7 +235,7 @@ func (s *Handler) preparePromptAdmission(
 	}
 	return promptAdmission{
 		input: session.PromptInput{
-			Text: text, ArtifactIDs: artifactIDs,
+			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery,
 			SourceContext: refResult.SourceContext(),
 			ContentParts:  PromptContentParts(userProse, ingested.Parts, refResult.Parts, secretParts),
 		},

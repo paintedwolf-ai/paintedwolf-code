@@ -39,7 +39,10 @@ chunk_strategy_default: summarize
 # Worker summary size is derived from the model window.
 max_citation_grounding_retries: 25
 
-# Shared grounding-rejection limits for one turn and closeout cycle.
+# Grounding retries each worker leg may spend on its own report.
+max_worker_grounding_retries: 3
+
+# Coordinator grounding-rejection limits for one turn and closeout cycle.
 max_grounding_rejects_per_turn: 8
 max_grounding_rejects_per_cycle: 4
 

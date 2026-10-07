@@ -307,7 +307,7 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	body, _, err := prompts.DefaultBundledLayout().ReadBundled(ModeTemplateRef(profile.ModeRefs[0]))
 	testutil.FailErr(t, "read review adjudicate mode", err)
 	text := string(body)
-	for _, want := range []string{`"cited_evidence"`, `"handle"`, "never fields inside it", "Do not use an `evidence` key"} {
+	for _, want := range []string{`"cited_evidence"`, `"handle"`, "Claims and coverage assessments also carry their own", "Do not use an `evidence` key"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("review adjudicate mode missing %q", want)
 		}
@@ -317,9 +317,7 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	}
 }
 
-// The memoized shipped accessor must be wired to config.CoordinatorFlow and not
-// to a stale snapshot: parse the named bundled file directly and require the
-// accessor to agree.
+// The shipped accessor and bundled flow definition share one source.
 func TestShippedCoordinatorFlowIsBundledYAML(t *testing.T) {
 	raw, err := config.Read(config.CoordinatorFlow)
 	testutil.FailErr(t, "read bundled coordinator flow", err)

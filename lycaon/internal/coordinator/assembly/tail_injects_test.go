@@ -193,3 +193,39 @@ func TestWorkerPackBoardFollowsHistory(t *testing.T) {
 		t.Fatalf("PromptCacheBreakpoint at %d, want last history message at %d", breakIdx, lastHistoryIdx)
 	}
 }
+
+func TestReportContractSurvivesRepeatedRequestsAndHistoryReplacement(t *testing.T) {
+	eng := prefixStabilityEngine(t)
+	sess := &api.Session{ID: "report-context", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
+	frame := inject.CoordinatorTurnFrame{
+		RunContext: api.CoordinatorRunContext{WorkflowID: "security-survey", RunID: "run-1", CurrentPhase: "report"},
+		Runtime: inject.WorkflowRuntimeSnapshot{
+			ReportDocumentEnabled: true,
+			ReportRating:          &inject.ReportRatingView{Dimensions: []string{"reachable"}, Questions: "Does untrusted input reach the flawed code?"},
+			Phases:                []inject.WorkflowPhaseRow{{ID: "report"}},
+		},
+	}
+	eng.BeginPromptTurn(sess.ID)
+	for i, history := range [][]api.Message{
+		{{Role: api.MessageRoleUser, Content: "review"}},
+		{{Role: api.MessageRoleUser, Content: "review"}, {Role: api.MessageRoleTool, Content: "progress settled"}},
+		{{Role: api.MessageRoleSystem, Content: "compacted history"}},
+	} {
+		eng.Cache().LoadTurn(sess.ID).Iteration = i
+		msgs, err := eng.BuildCompletionMessages(t.Context(), sess, history, &frame)
+		testutil.FailErr(t, "assemble report request", err)
+		if n := countCoordinatorRunContextBlocks(msgs); n != 1 {
+			t.Fatalf("request %d has %d workflow blocks", i, n)
+		}
+		found := false
+		for _, msg := range msgs {
+			if strings.Contains(msg.Content, inject.ActiveWorkflowInjectSentinel) {
+				found = strings.Contains(msg.Content, "### Report document") && strings.Contains(msg.Content, `"disposition"`) &&
+					strings.Contains(msg.Content, "Does untrusted input reach the flawed code?")
+			}
+		}
+		if !found {
+			t.Fatalf("request %d lost its report contract", i)
+		}
+	}
+}

@@ -115,7 +115,7 @@ Some successful tool results include structured state updates such as queue posi
 
 A `claims`-typed member is a JSON array of `{id, title, statement, status, answers, cited_evidence}` ([`review_loop_verdict.go`](../lycaon/internal/workflow/review_loop_verdict.go)): `id` and `statement` are required; the phase that introduces a claim sets its one-line `title`; each `cited_evidence` entry names exactly one of `handle` or `path`. A later phase adjudicates an earlier claim by restating its id with the status word that phase's guidance teaches; the host stores the word and never interprets it.
 
-The rejection details include the active phase, exact expected call shape, and bounded offender or reviewer facts. Correct the named condition and resubmit. A verdict rejection is not a completed review round and does not authorize abandoning the phase exit.
+The rejection details include the active phase, exact expected call shape, and bounded offender or reviewer facts. Independent acceptance failures appear together as typed `repairs` entries, each retaining its code and details; the primary refusal keeps its specific code. Running scans use `SUBMIT_VERDICT_SCANS_PENDING`, distinct from unaccounted groups. Correct the named condition and resubmit. A verdict rejection is not a completed review round and does not authorize abandoning the phase exit.
 
 ## Spawn and history hygiene
 

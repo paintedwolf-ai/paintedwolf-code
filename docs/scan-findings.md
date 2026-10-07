@@ -111,6 +111,8 @@ Security runs and review evidence bind to a content-addressed source snapshot: a
 
 Watcher paths are invalidations, not scan inputs. The host publishes a new generation, diffs its manifest against the generation each scanner last covered, and derives exact upserts and deletions. A scanner without a base takes the generation as its base rather than scanning it. A disappeared watcher path therefore cannot trigger an `lstat`-based scanner failure or widen a scan to a parent directory.
 
+Before execution, an engine receives a private tree materialized from verified snapshot content. Unchanged live bytes are verified before copying; retained content or Git objects supply older versions. Missing captured content fails explicitly as `SCAN_SOURCE_UNAVAILABLE`; it is never replaced by newer bytes or repeatedly retried against the same unavailable version. Temporary trees are removed after execution or cancellation. Explicit deltas materialize only their admitted targets, while full scans use the admitted tree. Findings are normalized back to project-relative coordinates. Working-tree edits during execution do not invalidate the captured review; ordinary cadence observes them as a successor generation.
+
 A dispatch claims its scanner series with its own heartbeat (`claim_heartbeat_at`) for its lifetime. Preparation has no fixed elapsed-time ceiling; its owner can cancel it, and cancellation requeues unfinished claims. A claim whose dispatcher died is recovered when its heartbeat ages out. Every transition is logged under `component=scan_cadence` with each scanner's target named.
 
 ## Automatic scanning is incremental

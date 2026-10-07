@@ -128,6 +128,9 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	input.Gaps = account.gaps
 	input.Checks = account.checks
 	input.Inventory = account.inventory
+	if err := appendCoverageReview(ctx, &input, s.Workflows, run, manifest, phaseVerdicts); err != nil {
+		return report.ReportInput{}, false, err
+	}
 	input.Artifacts = s.artifactsForRun(ctx, run, msgs)
 	return input, true, nil
 }
