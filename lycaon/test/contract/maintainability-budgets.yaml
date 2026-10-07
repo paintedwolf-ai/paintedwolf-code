@@ -9772,7 +9772,7 @@ source_files:
     lycaon-den/src/chat/actions/findings-actions.ts: 27
     lycaon-den/src/chat/actions/git-actions.ts: 376
     lycaon-den/src/chat/actions/git-workspace-status.ts: 56
-    lycaon-den/src/chat/actions/queue-actions.ts: 111
+    lycaon-den/src/chat/actions/queue-actions.ts: 97
     lycaon-den/src/chat/checkpoint/approval-display.ts: 163
     lycaon-den/src/chat/checkpoint/approval-reveal.ts: 31
     lycaon-den/src/chat/checkpoint/approval-review.ts: 8
@@ -11087,7 +11087,7 @@ source_files:
     lycaon-den/src/store/app-state-background-write.ts: 7
     lycaon-den/src/store/app-state-model.ts: 218
     lycaon-den/src/store/app-state-snapshot.ts: 124
-    lycaon-den/src/store/app-state.ts: 754
+    lycaon-den/src/store/app-state.ts: 750
     lycaon-den/src/store/attention-store.ts: 67
     lycaon-den/src/store/board-sync.ts: 39
     lycaon-den/src/store/boot-cache-model.ts: 60
@@ -15604,7 +15604,7 @@ source_files:
     scripts/with-bundled-scanners.sh: 13
     task: 3
 test_directories:
-    lycaon-den/e2e: 175
+    lycaon-den/e2e: 176
     lycaon-den/e2e/fixtures: 2
     lycaon-den/src: 10
     lycaon-den/src-tauri/src: 1
@@ -16320,6 +16320,7 @@ test_files:
     lycaon-den/e2e/prompt.spec.ts: 11
     lycaon-den/e2e/prose-arrival.spec.ts: 34
     lycaon-den/e2e/prose-completion.spec.ts: 47
+    lycaon-den/e2e/queue-send-session-switch.spec.ts: 60
     lycaon-den/e2e/queue-send.spec.ts: 97
     lycaon-den/e2e/reconnect.desktop.spec.ts: 28
     lycaon-den/e2e/reconnect.spec.ts: 9
@@ -16423,7 +16424,7 @@ test_files:
     lycaon-den/src/chat/actions/git-actions.status.test.ts: 99
     lycaon-den/src/chat/actions/git-actions.worktree.test.ts: 83
     lycaon-den/src/chat/actions/git-workspace-status.test.ts: 69
-    lycaon-den/src/chat/actions/queue-actions.test.ts: 203
+    lycaon-den/src/chat/actions/queue-actions.test.ts: 224
     lycaon-den/src/chat/chat.integration.test.ts: 569
     lycaon-den/src/chat/checkpoint/approval-display.test.ts: 177
     lycaon-den/src/chat/checkpoint/approval-reveal.test.ts: 28
@@ -16472,7 +16473,7 @@ test_files:
     lycaon-den/src/chat/recovery/session-recovery.test.ts: 320
     lycaon-den/src/chat/recovery/spend-ceiling-recovery.test.ts: 62
     lycaon-den/src/chat/recovery/turn-outcome.test.ts: 40
-    lycaon-den/src/chat/send/pending-sends.test.ts: 233
+    lycaon-den/src/chat/send/pending-sends.test.ts: 245
     lycaon-den/src/chat/send/prompt-submission-order.test.ts: 114
     lycaon-den/src/chat/session/activity-liveness-invariant.test.ts: 303
     lycaon-den/src/chat/session/mru-switcher-model.test.ts: 101
@@ -22685,7 +22686,7 @@ ts_local_dependencies:
     lycaon-den/src/chat/actions/findings-actions.ts: 3
     lycaon-den/src/chat/actions/git-actions.ts: 7
     lycaon-den/src/chat/actions/git-workspace-status.ts: 3
-    lycaon-den/src/chat/actions/queue-actions.ts: 5
+    lycaon-den/src/chat/actions/queue-actions.ts: 4
     lycaon-den/src/chat/checkpoint/approval-display.ts: 2
     lycaon-den/src/chat/checkpoint/approval-reveal.ts: 1
     lycaon-den/src/chat/checkpoint/approval-review.ts: 0

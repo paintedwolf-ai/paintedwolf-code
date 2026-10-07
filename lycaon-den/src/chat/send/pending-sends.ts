@@ -51,6 +51,11 @@ function reservedHead(draft: QueueDraft): { id: string; text: string } | undefin
   return { id: head.id, text };
 }
 
+/**
+ * A queue_send entry is the transcript seat of the draft's reserved head. A
+ * queued entry of any other kind has handed off to the queue surface. A seat
+ * whose item left the queue was consumed and waits for its echo.
+ */
 export function reconcilePendingOnQueueDraft(
   appStore: AppStore,
   sessionId: string,
@@ -59,18 +64,17 @@ export function reconcilePendingOnQueueDraft(
   const pending = appStore.state.pendingSends[sessionId] ?? [];
   const items = draft.queue_items ?? (draft as { items?: typeof draft.queue_items }).items ?? [];
   const queued = new Set(items.map((item) => item.id));
+  const head = reservedHead(draft);
   const released = pending
     .filter(
       (entry) =>
         queued.has(entry.operationId) &&
-        (entry.kind !== "queue_send" || !draft.sending),
+        (entry.kind !== "queue_send" || entry.operationId !== head?.id),
     )
     .map((entry) => entry.operationId);
   if (released.length > 0) {
     appStore.actions.removePendingSends(sessionId, released);
   }
-
-  const head = reservedHead(draft);
   if (!head) return;
   if (
     pending.some(

@@ -148,6 +148,20 @@ describe("pending sends", () => {
       expect(store.state.pendingSends[SESSION_ID]).toHaveLength(1);
     });
 
+    it("a seat whose item is queued behind another reserved head is released", () => {
+      const store = createAppStore();
+      store.actions.addPendingSend(SESSION_ID, entry("item-2", { kind: "queue_send", state: "accepted" }));
+
+      reconcilePendingOnQueueDraft(store, SESSION_ID, draft({
+        sending: true,
+        queue_items: [
+          { submitted_by: "00000000-0000-4000-8000-000000000002", id: "item-1", text: "later", created_at: "t" },
+          { submitted_by: "00000000-0000-4000-8000-000000000002", id: "item-2", text: "after", created_at: "t" },
+        ],
+      }));
+      expect(ids(store)).toEqual(["item-1"]);
+    });
+
     it("a linked head group is one row carrying the first item's id", () => {
       const store = createAppStore();
 

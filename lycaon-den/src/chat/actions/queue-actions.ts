@@ -2,21 +2,6 @@ import type { LycaonClient } from "../../api/client.ts";
 import type { QueueDraft, QueueMutateRequest } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { LycaonApiError } from "../../api/http.ts";
-import { batch } from "solid-js";
-import { reconcilePendingOnQueueDraft } from "../send/pending-sends.ts";
-
-function installQueueDraft(
-  appStore: AppStore,
-  sessionId: string,
-  epoch: number,
-  draft: QueueDraft,
-): boolean {
-  return batch(() => {
-    if (!appStore.actions.setQueueDraft(sessionId, epoch, draft)) return false;
-    reconcilePendingOnQueueDraft(appStore, sessionId.trim(), draft);
-    return true;
-  });
-}
 
 /** Ignore refreshes older than their triggering event. */
 export async function refreshQueue(
@@ -31,7 +16,7 @@ export async function refreshQueue(
   if (minRevision > 0 && draft.revision < minRevision) {
     return undefined;
   }
-  return installQueueDraft(appStore, sessionId, epoch, draft) ? draft : undefined;
+  return appStore.actions.setQueueDraft(sessionId, epoch, draft) ? draft : undefined;
 }
 
 async function mutateQueue(
@@ -48,7 +33,7 @@ async function mutateQueue(
       ...body,
       expected_revision: expectedRevision,
     });
-    installQueueDraft(appStore, sessionId, epoch, draft);
+    appStore.actions.setQueueDraft(sessionId, epoch, draft);
   } catch (err) {
     if (
       err instanceof LycaonApiError && err.code === "queue_revision_conflict" &&
