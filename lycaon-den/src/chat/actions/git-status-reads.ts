@@ -16,13 +16,14 @@ export type GitProjection = {
   /** Begin order across every projection, so a repository set never regresses to an older read's. */
   order: number;
   sessionViewEpoch: number;
-  /** No newer read, write, board event, scope pin, or session view has replaced this projection. */
+  /** No newer projection, scope pin, or session view (or, for a read, board event) has replaced this one. */
   current: () => boolean;
 };
 
 const gitStatusFlights = new WeakMap<AppStore, Map<string, GitStatusFlight>>();
 const gitProjections = new WeakMap<AppStore, GitProjection>();
 const gitRepoSetOrders = new WeakMap<AppStore, number>();
+const gitWrites = new WeakMap<AppStore, Set<Promise<unknown>>>();
 let gitProjectionOrder = 0;
 const [flightsRevision, setFlightsRevision] = createSignal(0);
 
@@ -32,7 +33,11 @@ export function gitStatusRefreshPending(appStore: AppStore): boolean {
   return (gitStatusFlights.get(appStore)?.size ?? 0) > 0;
 }
 
-export function beginGitProjection(appStore: AppStore): GitProjection {
+/**
+ * A board event during a write does not expire it: board-driven refreshes wait for the
+ * write to settle and then read again, so they cannot publish pre-write status over it.
+ */
+function beginGitProjection(appStore: AppStore, kind: "read" | "write" = "read"): GitProjection {
   const epoch = appStore.state.sessionViewEpoch;
   const pin = appStore.state.gitScopePin;
   const boardEpoch = appStore.state.boardEventEpoch;
@@ -40,11 +45,36 @@ export function beginGitProjection(appStore: AppStore): GitProjection {
     order: ++gitProjectionOrder,
     sessionViewEpoch: epoch,
     current: () => appStore.state.sessionViewEpoch === epoch &&
-      appStore.state.boardEventEpoch === boardEpoch &&
+      (kind === "write" || appStore.state.boardEventEpoch === boardEpoch) &&
       appStore.state.gitScopePin === pin && gitProjections.get(appStore) === projection,
   };
   gitProjections.set(appStore, projection);
   return projection;
+}
+
+/** Runs a write under its own projection; reads that begin meanwhile wait until it settles. */
+export function runGitWrite<T>(appStore: AppStore, write: (projection: GitProjection) => Promise<T>): Promise<T> {
+  const run = write(beginGitProjection(appStore, "write"));
+  let writes = gitWrites.get(appStore);
+  if (!writes) {
+    writes = new Set();
+    gitWrites.set(appStore, writes);
+  }
+  writes.add(run);
+  const settled = () => { writes.delete(run); };
+  run.then(settled, settled);
+  return run;
+}
+
+export function gitWriteInFlight(appStore: AppStore): boolean {
+  return (gitWrites.get(appStore)?.size ?? 0) > 0;
+}
+
+/** Resolves once no write is in flight, including writes that begin while waiting. */
+export async function settleGitWrites(appStore: AppStore): Promise<void> {
+  for (let writes = gitWrites.get(appStore); writes && writes.size > 0;) {
+    await Promise.allSettled([...writes]);
+  }
 }
 
 /**
@@ -102,6 +132,13 @@ export async function refreshGitStatus(
   sessionId?: string,
   options?: GitStatusReadOptions,
 ): Promise<GitWorkspaceStatus | undefined> {
+  if (!options?.projection && gitWriteInFlight(appStore)) {
+    const epoch = appStore.state.sessionViewEpoch;
+    const pin = appStore.state.gitScopePin;
+    await settleGitWrites(appStore);
+    // The caller chose its repository for the view and pin it saw.
+    if (appStore.state.sessionViewEpoch !== epoch || appStore.state.gitScopePin !== pin) return undefined;
+  }
   const key = [
     projectId.trim(),
     sessionId?.trim() ?? "",

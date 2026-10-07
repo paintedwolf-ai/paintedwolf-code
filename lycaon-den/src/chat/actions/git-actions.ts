@@ -2,14 +2,15 @@ import type { LycaonClient } from "../../api/client.ts";
 import type {
   GitBranchEntry,
   GitMutationResult,
+  GitRepoEntry,
   GitWorktreeLandResult,
   GitWorktreeView,
 } from "../../api/types.ts";
 import { loadGitWorkspaceStatus, type GitWorkspaceStatus } from "./git-workspace-status.ts";
 import {
-  beginGitProjection,
   refreshGitRepos,
   refreshGitStatus,
+  runGitWrite,
   unavailableStatus,
   type GitProjection,
 } from "./git-status-reads.ts";
@@ -92,11 +93,16 @@ function applyGitWrite(
   repoId: string,
   sessionId: string | undefined,
   projection: GitProjection,
-  write: Promise<GitMutationResult>,
+  write: () => Promise<GitMutationResult>,
 ): Promise<GitWorkspaceStatus> {
   return publishGitWrite(appStore, client, projectId, sessionId, projection, async () => {
-    const result = await write;
-    invalidateWorkspace(client, projectId);
+    let result: GitMutationResult;
+    try {
+      result = await write();
+    } finally {
+      // A failed write can still change the working tree.
+      invalidateWorkspace(client, projectId);
+    }
     return loadGitWorkspaceStatus(client, projectId, result.repo_id || repoId, sessionId);
   });
 }
@@ -112,7 +118,7 @@ export async function listBranches(
   return view.branches;
 }
 
-export async function checkoutBranch(
+export function checkoutBranch(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
@@ -121,65 +127,64 @@ export async function checkoutBranch(
   create: boolean,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.checkoutGit(projectId, repoId, { branch, create }, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.checkoutGit(projectId, repoId, { branch, create }, sessionId)));
 }
 
-export async function discardAll(
+export function discardAll(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   repoId: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.discardGit(projectId, repoId, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.discardGit(projectId, repoId, sessionId)));
 }
 
-export async function pushChanges(
+export function pushChanges(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   repoId: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.pushGit(projectId, repoId, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.pushGit(projectId, repoId, sessionId)));
 }
 
-export async function pullChanges(
+export function pullChanges(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   repoId: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.pullGit(projectId, repoId, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.pullGit(projectId, repoId, sessionId)));
 }
 
-export async function initRepo(
+export function initRepo(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   rootId: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return publishGitWrite(appStore, client, projectId, sessionId, projection, async () => {
-    const repo = await client.createGitRepo(projectId, { root_id: rootId });
-    invalidateWorkspace(client, projectId);
+  return runGitWrite(appStore, (projection) => publishGitWrite(appStore, client, projectId, sessionId, projection, async () => {
+    let repo: GitRepoEntry;
+    try {
+      repo = await client.createGitRepo(projectId, { root_id: rootId });
+    } finally {
+      invalidateWorkspace(client, projectId);
+    }
     return repo.available && repo.repo_id
       ? loadGitWorkspaceStatus(client, projectId, repo.repo_id, sessionId)
       : unavailableStatus(repo.root_ids);
-  });
+  }));
 }
 
-export async function commitChanges(
+export function commitChanges(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
@@ -187,21 +192,19 @@ export async function commitChanges(
   message: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.commitGit(projectId, repoId, { message }, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.commitGit(projectId, repoId, { message }, sessionId)));
 }
 
-export async function stashChanges(
+export function stashChanges(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   repoId: string,
   sessionId?: string,
 ): Promise<GitWorkspaceStatus> {
-  const projection = beginGitProjection(appStore);
-  return applyGitWrite(appStore, client, projectId, repoId, sessionId, projection,
-    client.stashGit(projectId, repoId, {}, sessionId));
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
+    projection, () => client.stashGit(projectId, repoId, {}, sessionId)));
 }
 
 export async function draftCommitMessage(
@@ -223,7 +226,7 @@ export async function refreshWorktree(
   return client.getGitWorktree(sessionId);
 }
 
-export async function bindWorktree(
+export function bindWorktree(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
@@ -231,60 +234,63 @@ export async function bindWorktree(
   repoId: string,
   branch?: string,
 ): Promise<GitWorktreeView> {
-  const projection = beginGitProjection(appStore);
-  let view: GitWorktreeView;
-  try {
-    view = await client.bindGitWorktree(sessionId, {
-      repo_id: repoId,
-      branch: branch?.trim() || `session/${sessionId}`,
-    });
-  } catch (err) {
-    rereadAfterFailedWrite(appStore, client, projectId, sessionId, projection);
-    throw err;
-  } finally {
-    // A failed create can retain a recoverable binding on the host.
-    invalidateWorkspace(client, projectId, sessionId);
-  }
-  await refreshGitStatus(appStore, client, projectId, sessionId, { projection });
-  return view;
+  return runGitWrite(appStore, async (projection) => {
+    let view: GitWorktreeView;
+    try {
+      view = await client.bindGitWorktree(sessionId, {
+        repo_id: repoId,
+        branch: branch?.trim() || `session/${sessionId}`,
+      });
+    } catch (err) {
+      rereadAfterFailedWrite(appStore, client, projectId, sessionId, projection);
+      throw err;
+    } finally {
+      // A failed create can retain a recoverable binding on the host.
+      invalidateWorkspace(client, projectId, sessionId);
+    }
+    await refreshGitStatus(appStore, client, projectId, sessionId, { projection });
+    return view;
+  });
 }
 
-export async function landWorktree(
+export function landWorktree(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   sessionId: string,
 ): Promise<WorktreeLandOutcome> {
-  const projection = beginGitProjection(appStore);
-  try {
-    return await client.landGitWorktree(sessionId);
-  } catch (err) {
-    if (isWorktreeLandBlocked(err)) {
-      return landBlockedOutcome(err);
+  return runGitWrite(appStore, async (projection) => {
+    try {
+      return await client.landGitWorktree(sessionId);
+    } catch (err) {
+      if (isWorktreeLandBlocked(err)) {
+        return landBlockedOutcome(err);
+      }
+      throw err;
+    } finally {
+      invalidateWorkspace(client, projectId);
+      await refreshGitStatus(appStore, client, projectId, sessionId, { projection }).catch(
+        () => undefined,
+      );
     }
-    throw err;
-  } finally {
-    invalidateWorkspace(client, projectId);
-    await refreshGitStatus(appStore, client, projectId, sessionId, { projection }).catch(
-      () => undefined,
-    );
-  }
+  });
 }
 
-export async function unbindWorktree(
+export function unbindWorktree(
   appStore: AppStore,
   client: LycaonClient,
   projectId: string,
   sessionId: string,
 ): Promise<void> {
-  const projection = beginGitProjection(appStore);
-  try {
-    await client.deleteGitWorktree(sessionId);
-  } catch (err) {
-    rereadAfterFailedWrite(appStore, client, projectId, sessionId, projection);
-    throw err;
-  } finally {
-    invalidateWorkspace(client, projectId, sessionId);
-  }
-  await refreshGitStatus(appStore, client, projectId, sessionId, { projection });
+  return runGitWrite(appStore, async (projection) => {
+    try {
+      await client.deleteGitWorktree(sessionId);
+    } catch (err) {
+      rereadAfterFailedWrite(appStore, client, projectId, sessionId, projection);
+      throw err;
+    } finally {
+      invalidateWorkspace(client, projectId, sessionId);
+    }
+    await refreshGitStatus(appStore, client, projectId, sessionId, { projection });
+  });
 }

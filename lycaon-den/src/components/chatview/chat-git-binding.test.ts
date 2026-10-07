@@ -3,10 +3,11 @@ import { createRoot } from "solid-js";
 import { valueOf } from "../../store/load-state.ts";
 import { createChatGitBinding } from "./chat-git-binding.ts";
 import { gitStatusRefreshPending } from "../../chat/actions/git-status-reads.ts";
+import { maybeRefreshGitAfterBoard } from "../../chat/actions/board-actions.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { stubClient } from "../../test/client-fixture.ts";
-import type { GitMutationResult, GitRepoEntry, GitReposView, GitStatusSummary, Project } from "../../api/types.ts";
+import type { BoardView, GitMutationResult, GitRepoEntry, GitReposView, GitStatusSummary, Project } from "../../api/types.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 
 const REPO_ID = "repo-1";
@@ -268,6 +269,54 @@ describe("chat Git binding", () => {
       }
 
       expect(appStore.state.gitRepos).toEqual(repoSet({ ahead: 0 }).repos);
+      expect(valueOf(appStore.state.gitStatus)?.ahead).toBe(0);
+      expect(reportError).not.toHaveBeenCalled();
+      dispose();
+    });
+  });
+
+  it("keeps a push's status when a board snapshot and its status read arrive mid-push", async () => {
+    let pushed = false;
+    let finishPush: (result: GitMutationResult) => void = () => {};
+    const client = stubClient({
+      pushGit: vi.fn(() => new Promise<GitMutationResult>((resolve) => {
+        finishPush = (result) => {
+          pushed = true;
+          resolve(result);
+        };
+      })),
+      getGitStatus: vi.fn(async () => {
+        const ahead = pushed ? 0 : 1;
+        await Promise.resolve();
+        return summaryOf({ ahead, dirty: !pushed });
+      }),
+      listGitChanges: vi.fn(async () => ({ repo_id: REPO_ID, revision: 1, refreshing: false, files: [] })),
+      listGitRepos: vi.fn(async () => repoSet({ ahead: pushed ? 0 : 1 })),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    const { revision: _revision, refreshing: _refreshing, ...shown } = summaryOf({});
+    appStore.actions.setGitStatus({ ...shown, files: [] });
+    const published = vi.spyOn(appStore.actions, "setGitStatus");
+    const reportError = vi.fn();
+    // A pre-push pulse: the push itself leaves the tree clean.
+    const board = { git: { available: true, repo_id: REPO_ID, label: "app", branch: "main", dirty: true,
+      staged_count: 0, unstaged_count: 1, others: [], others_truncated: 0 } } as unknown as BoardView;
+
+    await createRoot(async (dispose) => {
+      const binding = bindingFor(client, appStore, reportError);
+      binding.onPush();
+      appStore.actions.setBoard(board);
+      const boardRefresh = maybeRefreshGitAfterBoard(appStore, client, "/work/app", [project]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      finishPush({ repo_id: REPO_ID, revision: 2, refreshing: false });
+      await boardRefresh;
+      await vi.waitFor(() => expect(binding.busy()).toBe(false));
+
+      const statuses = published.mock.calls.map(([status]) => status);
+      expect(statuses.length).toBeGreaterThan(0);
+      expect(statuses.every((status) => status.ahead === 0 && !status.dirty)).toBe(true);
       expect(valueOf(appStore.state.gitStatus)?.ahead).toBe(0);
       expect(reportError).not.toHaveBeenCalled();
       dispose();
