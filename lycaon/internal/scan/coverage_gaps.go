@@ -42,7 +42,7 @@ func RunCoverageGaps(scans []api.CodeScan) []ScanGaps {
 		standingFiles := map[string]bool{}
 		for _, w := range s.Warnings {
 			if WarningRetryable(w.Kind) {
-				if file := strings.TrimSpace(w.File); file != "" && !movedFileCovered(s, file, scans) {
+				if file := strings.TrimSpace(w.File); !movedFileCovered(s, file, scans) {
 					gaps.Moved = append(gaps.Moved, file)
 				}
 				continue
@@ -85,11 +85,11 @@ func movedFileCovered(moved api.CodeScan, file string, scans []api.CodeScan) boo
 			continue
 		}
 		if later.Status != api.CodeScanStatusComplete || later.CoverageStatus != api.ScanCoverageComplete {
-			if !onlyStandingGapsExcept(later, file) {
+			if !onlyStandingGaps(later) {
 				continue
 			}
 		}
-		if later.TargetKind == api.ScanTargetPaths && !containsPath(later.TargetPaths, file) {
+		if later.TargetKind == api.ScanTargetPaths && (file == "" || !containsPath(later.TargetPaths, file)) {
 			continue
 		}
 		if movedAgain(later, file) {
@@ -100,9 +100,9 @@ func movedFileCovered(moved api.CodeScan, file string, scans []api.CodeScan) boo
 	return false
 }
 
-// onlyStandingGapsExcept admits a later scan whose partial coverage comes only
+// onlyStandingGaps admits a later scan whose partial coverage comes only
 // from engine limits: its reading of the moved file is still sound.
-func onlyStandingGapsExcept(s api.CodeScan, file string) bool {
+func onlyStandingGaps(s api.CodeScan) bool {
 	if s.Status != api.CodeScanStatusComplete {
 		return false
 	}
@@ -116,7 +116,7 @@ func onlyStandingGapsExcept(s api.CodeScan, file string) bool {
 
 func movedAgain(s api.CodeScan, file string) bool {
 	for _, w := range s.Warnings {
-		if WarningRetryable(w.Kind) && strings.TrimSpace(w.File) == file {
+		if WarningRetryable(w.Kind) && (strings.TrimSpace(w.File) == "" || strings.TrimSpace(w.File) == file) {
 			return true
 		}
 	}

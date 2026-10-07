@@ -129,6 +129,8 @@ type grepSearch struct {
 	parseFailures    []tsparse.FileFailure
 	textScanned      int
 	unreadable       int
+	// subtreeFiles counts searched files per top-level directory.
+	subtreeFiles map[string]int
 	// Drafts overlay disk content; fromEditor counts affected files.
 	drafts     sourceview.DraftOverlay
 	fromEditor atomic.Int64
@@ -162,7 +164,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	relRoot, targets, err := t.resolveGrepTargets(ctx, tctx, args)
 	if err != nil {
-		return "", grepExecutionError(err)
+		return "", grepExecutionError(nil, err)
 	}
 	reportGrepScope(tctx, targets)
 	if opts.structural && strings.TrimSpace(opts.lang) != "" {
@@ -171,7 +173,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 	}
 	if out, guarded, gerr := t.maybeGuardOpenRootScope(ctx, args, tctx, opts); guarded {
-		return out, grepExecutionError(gerr)
+		return out, grepExecutionError(nil, gerr)
 	}
 	offset := toolkit.ClampIntArg(args, "offset", 0, 0, 1_000_000)
 	stats := &grepEngineStats{}
@@ -196,22 +198,26 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if !info.IsDir() {
 			out, err := t.grepSingleFile(ctx, relRoot, target.displayRoot, target.fullRoot, info, opts.includeHidden, search, opts, args)
 			if err != nil {
-				return "", grepExecutionError(err)
+				return "", grepExecutionError(search, err)
 			}
 			if search.resp.Truncated {
 				return out, nil
 			}
 			continue
 		}
-		if err := t.grepWalkTree(ctx, tctx, target, opts.includeHidden, search, sandbox.SurveyOptions{}); err != nil {
-			return "", grepExecutionError(err)
+		walkExtra := sandbox.SurveyOptions{}
+		if !opts.includeIgnored {
+			walkExtra.Scope = newIgnoreScope(target.root, target.fullRoot)
+		}
+		if err := t.grepWalkTree(ctx, tctx, target, opts.includeHidden, search, walkExtra); err != nil {
+			return "", grepExecutionError(search, err)
 		}
 		if search.resp.Truncated {
 			break
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return "", grepExecutionError(err)
+		return "", grepExecutionError(search, err)
 	}
 	return t.finalizeGrepResponse(ctx, relRoot, search, opts, args)
 }
@@ -317,6 +323,7 @@ type grepOptions struct {
 	pattern         string
 	caseInsensitive bool
 	includeHidden   bool
+	includeIgnored  bool
 	structural      bool
 	lang            string
 	maxMatches      int
@@ -356,6 +363,7 @@ func parseGrepArgs(args map[string]any) (grepOptions, error) {
 		pattern:         pattern,
 		caseInsensitive: toolkit.BoolArg(args, "case_insensitive", false),
 		includeHidden:   toolkit.BoolArg(args, "include_hidden", true),
+		includeIgnored:  toolkit.BoolArg(args, "include_ignored", true),
 		structural:      structural,
 		lang:            lang,
 		maxMatches:      maxMatchesArg.Effective,
@@ -458,12 +466,14 @@ func (s *grepSearch) scanFile(ctx context.Context, relSlash string, content []by
 	}
 	if s.structural {
 		s.textScanned++
+		s.noteSubtree(relSlash)
 		if bytesTruncated {
 			s.filesBytesTruncated++
 		}
 		return s.scanStructural(ctx, relSlash, content)
 	}
 	if s.offset > 0 {
+		s.noteSubtree(relSlash)
 		return s.scanPaginatedText(relSlash, content, bytesTruncated)
 	}
 	out := s.scanContent(relSlash, content)
@@ -471,9 +481,32 @@ func (s *grepSearch) scanFile(ctx context.Context, relSlash string, content []by
 	return s.applyFileOutcome(out)
 }
 
+// noteSubtree attributes a searched file to its top-level directory.
+func (s *grepSearch) noteSubtree(rel string) {
+	top := "."
+	if i := strings.IndexByte(rel, '/'); i > 0 {
+		top = rel[:i]
+	}
+	if s.subtreeFiles == nil {
+		s.subtreeFiles = map[string]int{}
+	}
+	s.subtreeFiles[top]++
+}
+
+// largestSubtree names the top-level directory holding the most searched files.
+func (s *grepSearch) largestSubtree() (string, int) {
+	best, count := "", 0
+	for dir, n := range s.subtreeFiles {
+		if n > count || n == count && dir < best {
+			best, count = dir, n
+		}
+	}
+	return best, count
+}
+
 // scanContent matches non-structural text.
 func (s *grepSearch) scanContent(relSlash string, content []byte) grepFileOutcome {
-	out := grepFileOutcome{}
+	out := grepFileOutcome{rel: relSlash}
 	if !s.pathFilter.Match(relSlash) {
 		out.globSkipped = true
 		return out

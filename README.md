@@ -37,7 +37,7 @@ Prerequisites: Go, Bun, Node, and Rust with Cargo, at the versions pinned in `ly
 
 ```bash
 ./task setup-dev     # one-time complete toolchain/dependency setup
-./task check-fast    # local handoff gate
+./task check-fast    # the gate every pull request runs
 ```
 
 Prerequisites, the two-terminal Den dev loop, debug capture, and the full `./task` catalog: [`docs/dev-tasks.md`](docs/dev-tasks.md). Rules for agents working in this repo: [`AGENTS.md`](AGENTS.md).

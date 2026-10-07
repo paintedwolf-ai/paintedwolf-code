@@ -41,24 +41,22 @@ func (m *Manager) turnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
 	profileID string,
-	reason promptloop.TurnCloseoutReason,
-	cancelReason string,
+	cause promptloop.TurnCloseoutCause,
 ) promptloop.HostNudge {
 	if m == nil || sess == nil {
 		return promptloop.HostNudge{}
 	}
-	llmTimeout := reason == promptloop.TurnCloseoutLLMTimeout
 	data := map[string]any{
-		"reason_text": promptloop.TurnCloseoutReasonText(reason),
-		"llm_timeout": llmTimeout,
+		"reason_text": cause.Text(),
+		"llm_timeout": cause.Reason == promptloop.TurnCloseoutLLMTimeout,
 	}
 	if sess.IsWorkerChild() {
 		id := anchor.WorkerCloseout
-		if reason == promptloop.TurnCloseoutCanceled {
+		if cause.Reason == promptloop.TurnCloseoutCanceled {
 			id = anchor.WorkerCancelCloseout
 			data = nil
-			if strings.TrimSpace(cancelReason) != "" {
-				data = map[string]any{"cancel_reason": cancelReason}
+			if strings.TrimSpace(cause.CancelReason) != "" {
+				data = map[string]any{"cancel_reason": cause.CancelReason}
 			}
 		}
 		return m.renderHostNudge(ctx, sess, id, data)

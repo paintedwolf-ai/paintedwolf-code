@@ -155,7 +155,7 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check-fast:workspace must reject an unpinned source tree")
 	}
 	plan := verificationCatalog(t)
-	want := []string{"build", "lint:fast", "den:typecheck", "den:lint", "den:test:fast", "test:short"}
+	want := []string{"build", "lint:fast", "den:typecheck", "den:lint", "den:test:fast", "test:short", "test:contract"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
 	}
@@ -198,7 +198,7 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check:drift must verify OpenAPI bundle generation")
 	}
 	if slices.Contains(plan.Groups["check:drift"], "openapi:diff") {
-		t.Fatal("check:drift must not gate pre-v1 changes on the OpenAPI review report")
+		t.Fatal("check:drift must not gate on the OpenAPI review report; release review owns wire diffs")
 	}
 
 	if !strings.Contains(taskBody(text, "openapi:diff"), "diff-openapi.sh") {

@@ -241,7 +241,7 @@ func (m *Manager) appendUserContinuation(ctx context.Context, sessionID string, 
 	if err := m.appendMessages(ctx, sessionID, msg); err != nil && !errors.Is(err, store.ErrDuplicateMessageID) {
 		return api.Message{}, err
 	}
-	if m.workflows != nil && api.IsUserInstructionMessage(msg) {
+	if m.workflows != nil && in.Recovery == nil && api.IsUserInstructionMessage(msg) {
 		if err := m.workflows.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {
 			return api.Message{}, fmt.Errorf("resolve user feedback from continuation: %w", err)
 		}

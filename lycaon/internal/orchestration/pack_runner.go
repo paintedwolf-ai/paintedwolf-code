@@ -140,6 +140,17 @@ func (o *OrchestratorImpl) setupPackDelegation(
 	state *runState,
 ) (string, []string, error) {
 	wfID, wfVer, wfRunID := workflowFieldsFromState(wf)
+	keys := make([]string, count)
+	for i := range keys {
+		keys[i] = packProbeKey(i)
+	}
+	restored, err := o.restoreWorkflowDelegation(ctx, wfRunID, keys, state)
+	if err != nil {
+		return "", nil, err
+	}
+	if restored != nil {
+		return restored.ID, restored.LegIDs, nil
+	}
 	projectID, err := pipelineProjectID(req)
 	if err != nil {
 		return "", nil, err
@@ -238,6 +249,14 @@ func (o *OrchestratorImpl) dispatchPackLeg(
 	index int,
 	workflowRunID string,
 ) error {
+	leg, err := o.store.GetLeg(ctx, delegationID, legID)
+	if err != nil {
+		return err
+	}
+	if leg.Status != api.LegStatusPending {
+		return nil
+	}
+
 	taskID := runID + ":pack:" + packProbeKey(index)
 	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
 		return err
@@ -253,6 +272,6 @@ func (o *OrchestratorImpl) dispatchPackLeg(
 			return err
 		}
 	}
-	_, err := o.delegation.DispatchLeg(ctx, delegationID, legID, "")
+	_, err = o.delegation.DispatchLeg(ctx, delegationID, legID, "")
 	return err
 }

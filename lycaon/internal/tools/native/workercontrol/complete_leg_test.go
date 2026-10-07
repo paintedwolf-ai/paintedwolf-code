@@ -115,3 +115,17 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
+	rejection := &tools.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
+	handler := workertools.CompleteLegHandler(func(_ context.Context, _ map[string]any, tc tools.ToolContext) (workertools.CompleteLegRecord, error) {
+		if tc.WorkerJobID != "job" {
+			t.Fatal("lost worker identity")
+		}
+		return workertools.CompleteLegRecord{}, rejection
+	})
+	body, err := handler(t.Context(), map[string]any{"leg_status": "complete"}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"})
+	if body != "" || !errors.Is(err, rejection) {
+		t.Fatalf("host rejection became ack: %q, %v", body, err)
+	}
+}

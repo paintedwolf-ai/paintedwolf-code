@@ -24,6 +24,7 @@ const (
 	NoticeCodeSessionPreparationFailed     NoticeCode = "session_preparation_failed"
 	NoticeCodeSessionSpendCeilingReached   NoticeCode = "session_spend_ceiling_reached"
 	NoticeCodeThinkingOverrideUnavailable  NoticeCode = "thinking_override_unavailable"
+	NoticeCodeTurnCloseoutToolCall         NoticeCode = "turn_closeout_tool_call"
 	NoticeCodeUserImageNotVisible          NoticeCode = "user_image_not_visible"
 	NoticeCodeWorkflowActive               NoticeCode = "workflow_active"
 	NoticeCodeWorkflowNotRunnable          NoticeCode = "workflow_not_runnable"

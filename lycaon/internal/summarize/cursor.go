@@ -1,16 +1,14 @@
 package summarize
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"sort"
 	"strings"
-)
 
-const cursorVersion = "v1"
+	"github.com/lycaon/lycaon/internal/pagecursor"
+)
 
 type cursorState struct {
 	Revision              uint64 `json:"r"`
@@ -20,69 +18,31 @@ type cursorState struct {
 	MatchingFilesObserved int    `json:"f,omitempty"`
 }
 
-var cursorMACKey = func() []byte {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		panic(err)
-	}
-	return key
-}()
+var summarizeCursors = pagecursor.For[cursorState]("summarize")
 
 func encodeCursor(revision uint64, scope, position string) string {
 	if revision == 0 || scope == "" || strings.TrimSpace(position) == "" {
 		return ""
 	}
-	raw, err := json.Marshal(cursorState{Revision: revision, Scope: scope, Position: position})
+	token, err := summarizeCursors.Encode(scope, cursorState{Revision: revision, Scope: scope, Position: position})
 	if err != nil {
 		return ""
 	}
-	return sealCursor(raw)
+	return token
 }
 
 func encodePatternCursor(revision uint64, scope, position string, matchesTotal, matchFilesTotal int) string {
 	if revision == 0 || scope == "" || strings.TrimSpace(position) == "" {
 		return ""
 	}
-	raw, err := json.Marshal(cursorState{
+	token, err := summarizeCursors.Encode(scope, cursorState{
 		Revision: revision, Scope: scope, Position: position,
 		MatchesObserved: matchesTotal, MatchingFilesObserved: matchFilesTotal,
 	})
 	if err != nil {
 		return ""
 	}
-	return sealCursor(raw)
-}
-
-func sealCursor(raw []byte) string {
-	payload := base64.RawURLEncoding.EncodeToString(raw)
-	mac := hmac.New(sha256.New, cursorMACKey)
-	_, _ = mac.Write([]byte(payload))
-	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	return cursorVersion + "." + payload + "." + signature
-}
-
-func decodeCursor(cursor string) (cursorState, bool) {
-	cursor = strings.TrimSpace(cursor)
-	parts := strings.Split(cursor, ".")
-	if len(parts) != 3 || parts[0] != cursorVersion {
-		return cursorState{}, false
-	}
-	mac := hmac.New(sha256.New, cursorMACKey)
-	_, _ = mac.Write([]byte(parts[1]))
-	want := mac.Sum(nil)
-	got, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !hmac.Equal(got, want) {
-		return cursorState{}, false
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return cursorState{}, false
-	}
-	var state cursorState
-	if err := json.Unmarshal(raw, &state); err != nil || state.Revision == 0 || state.Scope == "" || strings.TrimSpace(state.Position) == "" {
-		return cursorState{}, false
-	}
-	return state, true
+	return token
 }
 
 func cursorScope(req Request) string {

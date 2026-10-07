@@ -20,6 +20,10 @@ env:
 jobs:
   classify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      actions: read
     outputs:
       publish: ${{ steps.release.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
@@ -41,6 +45,14 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           bash scripts/release-source-validate.sh \
             "${RELEASE_TAG}" "${GITHUB_SHA}" refs/remotes/origin/main
+
+      # Main only advances through the merge queue, which runs the full tier on the
+      # exact commit it lands; a release ships nothing that tier has not passed.
+      - name: Require full-tier verification of the release commit
+        if: ${{ github.ref_type == 'tag' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_verification.py verified "${GITHUB_SHA}"
 
       - name: Classify release
         id: release
@@ -126,7 +138,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # Push CI verifies every commit; the signed build starts with preflight, and
+  # The merge queue verified this commit; the signed build starts with preflight, and
   # nothing leaves the run until ship-gates passes.
   build-release:
     needs: [classify]
@@ -529,7 +541,7 @@ jobs:
           set -euo pipefail
           digest="$(sha256sum release-metadata/latest.json | cut -d ' ' -f1)"
           gh api repos/paintedwolf-ai/paintedwolf-www/dispatches \
-            -f event_type=lycaon-release \
+            -f event_type=painted-wolf-release \
             -F "client_payload[version]=${VERSION}" \
             -F "client_payload[tag]=v${VERSION}" \
             -F "client_payload[channel]=${CHANNEL}" \
@@ -549,6 +561,10 @@ jobs:
         with:
           bun-version-file: .bun-version
 
+      - name: Install the pinned Tauri CLI for pointer signing
+        run: bun install --frozen-lockfile
+        working-directory: lycaon-den
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-metadata
@@ -557,6 +573,8 @@ jobs:
       - name: Activate release channel last
         env:
           CHANNEL: ${{ needs.classify.outputs.channel }}
+          FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}
+          FEED_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.FEED_SIGNING_PRIVATE_KEY_PASSWORD }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -58,11 +59,31 @@ func TestNextActionArgumentsAreExecutableReadRange(t *testing.T) {
 
 func TestOverlappingSourceWindowsUseMarginalBudget(t *testing.T) {
 	caps := DefaultCaps()
-	a := PackWindow{Path: "source.go", StartLine: 1, EndLine: 3, Body: "1: first\n2: second\n3: third\n"}
-	b := PackWindow{Path: "source.go", StartLine: 2, EndLine: 4, Body: "2: second\n3: third\n4: fourth\n"}
+	a := PackWindow{Path: "source.go", StartLine: 1, EndLine: 3, Body: numberWindowBody("first\nsecond\nthird", 1)}
+	b := PackWindow{Path: "source.go", StartLine: 2, EndLine: 4, Body: numberWindowBody("second\nthird\nfourth", 2)}
 	merged := mergeOverlappingWindows([]PackWindow{a, b})
 	if len(merged) != 1 || strings.Count(merged[0].Body, "second") != 1 || windowTokens(caps, merged) >= windowTokens(caps, []PackWindow{a, b}) {
 		t.Fatalf("overlap double-counted: %+v", merged)
+	}
+	if merged[0].Body != numberWindowBody("first\nsecond\nthird\nfourth", 1) {
+		t.Fatalf("merged body = %q", merged[0].Body)
+	}
+}
+
+func TestAdjacentSourceWindowsJoinOnRowBoundaries(t *testing.T) {
+	a := PackWindow{Path: "source.go", StartLine: 1, EndLine: 2, Body: numberWindowBody("first\nsecond", 1)}
+	b := PackWindow{Path: "source.go", StartLine: 3, EndLine: 4, Body: numberWindowBody("third\nfourth", 3)}
+	merged := mergeOverlappingWindows([]PackWindow{a, b})
+	if len(merged) != 1 || merged[0].EndLine != 4 {
+		t.Fatalf("adjacent windows = %+v", merged)
+	}
+	if merged[0].Body != numberWindowBody("first\nsecond\nthird\nfourth", 1) {
+		t.Fatalf("merged body = %q", merged[0].Body)
+	}
+	for line, want := range map[int]string{1: "first", 2: "second", 3: "third", 4: "fourth"} {
+		if text, ok := hostmarker.NumberedLineAt(merged[0].Body, line); !ok || text != want {
+			t.Fatalf("line %d = (%q, %v), want %q", line, text, ok, want)
+		}
 	}
 }
 

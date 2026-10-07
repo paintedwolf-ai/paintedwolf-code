@@ -23,7 +23,7 @@ const (
 	sectionVisuals      = "Visuals"
 	sectionSources      = "Sources"
 	sectionColophon     = "About this document"
-	sectionLimits       = "Not covered"
+	sectionLimits       = "Scope and limits"
 	seeAppendixPointer  = "see appendix"
 )
 
@@ -183,8 +183,6 @@ func factTable(ms *measurer, facts []fact) []measuredRow {
 	return rows
 }
 
-// panelRows paints a ground behind rows and pads them, so a list reads as one
-// boxed statement rather than more prose.
 func panelRows(rows []measuredRow) []measuredRow {
 	if len(rows) == 0 {
 		return nil
@@ -235,8 +233,6 @@ func sourceSpan(path string, start, end int) string {
 	return sourceLocation(path, start)
 }
 
-// clip shortens an excerpt to a quotation. An evidence row locates a record
-// rather than reproducing it.
 func clip(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) <= max {

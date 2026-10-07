@@ -64,6 +64,29 @@ func LoadHintConfigStock() (*HintConfig, error) {
 	return cfg, nil
 }
 
+// HintCodeUILabel returns the ui_label configured for a hint code in its evidence meta, falling back to the code.
+func HintCodeUILabel(code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return ""
+	}
+	cfg, err := LoadHintConfigStock()
+	if err != nil || cfg == nil {
+		return code
+	}
+	ent, ok := cfg.HintCodes[code]
+	if !ok {
+		return code
+	}
+	if ent.Evidence != nil && strings.TrimSpace(ent.Evidence.UILabel) != "" {
+		return strings.TrimSpace(ent.Evidence.UILabel)
+	}
+	if ent.XEvidence != nil && strings.TrimSpace(ent.XEvidence.UILabel) != "" {
+		return strings.TrimSpace(ent.XEvidence.UILabel)
+	}
+	return code
+}
+
 // hintConfigCacheCap matches the policy registry's retained sets.
 const hintConfigCacheCap = 4
 

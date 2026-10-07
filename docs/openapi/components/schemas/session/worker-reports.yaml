@@ -492,11 +492,12 @@ components:
       type: string
       description: >
         What a finding asks for. `act` needs work; `accept` is a risk kept on
-        purpose; `held` is a surface examined and found sound.
+        purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
       enum:
       - act
       - accept
       - held
+      - unresolved
     CompletionReportFinding:
       x-go-generate: true
       type: object

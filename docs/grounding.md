@@ -85,6 +85,7 @@ A citation must name enough structure for the host to resolve the observation:
 |----------|------------|
 | Evidence handle | Resolves the exact observation if it belongs to the allowed evidence union |
 | Path + line/excerpt | Resolves against observed file-region evidence |
+| Handle + path | Resolves when both name the same observation; a handle that contradicts the path is refused |
 | URL | Resolves only when the URL was observed through an admitted tool path |
 | Artifact id | Resolves to a present, permitted visual or report artifact |
 
@@ -97,6 +98,8 @@ Resolution produces one of five verdicts (`internal/evidence/resolve.go`):
 - **bound**: the exact resolver bounced the citation, but the host found exactly one ledger record satisfying every structured field the claim supplied, and adopted its canonical handle;
 - **ambiguous**: more than one ledger record satisfies the claim;
 - **unverifiable**: the host cannot connect the claim to admitted evidence.
+
+Every file-reading tool renders a line as the host's numbered-line grammar (`internal/hostmarker`), and the verifiers read that same grammar back from retained bodies, so an excerpt copied from a read compares against the line's text rather than its rendered number. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
 
 Matched, traced, and bound are grounded; ambiguous and unverifiable block the strict completion paths. Binding exists because a citation can be correct and still fail an exact match (a differently normalized path, a stale ordinal), and refusing it would spend repair budget on a claim the evidence already supports. Where several records fit, the host has no basis for choosing one, and picking would manufacture a provenance the worker never established; that is why `ambiguous` is a separate verdict rather than a tie broken quietly.
 
@@ -120,7 +123,7 @@ Narrative text is advisory during evaluation. Typed citation fields identify the
 
 **Report document repair.** A report's fields (findings, set-asides, ask) are conclusions, not references, so a refusal of them, whether unreadable members or a run report's document rules, is repaired separately: the host keeps the pinned body, shows the whole current document fence, and asks for it back with what is missing added. Document repair has its own small budget (`max_report_document_retries`) and spends none of the citation friction. A citation repair and a document repair each state the attempt budget that actually applies to them. A document still refused when repair is exhausted is stored with every field the host read, never as accepted: its completion record carries every failing requirement as `defects`, unread members first, and the run fails as not accepted ([Workflows § Reports](workflows.md#reports)).
 
-**Which evidence a closeout may cite.** A closeout may cite its own session's observations and those of every worker leg the session dispatched since the current user intent. The legs come from the dispatch records, not from the transcript, so compaction never narrows what a closeout may cite.
+**Which evidence a closeout may cite.** A closeout may cite its own session's observations and those of every worker leg the session dispatched since the current user intent. The legs come from the dispatch records, not from the transcript, so compaction never narrows what a closeout may cite. Explicit workflow runs instead use run-owned dispatch records across phases; their required reviewers come from completed tasks in the review phase. A recovery continuation preserves ordinary implement intent and never cuts off earlier workflow evidence.
 
 ## Mid-turn notes
 

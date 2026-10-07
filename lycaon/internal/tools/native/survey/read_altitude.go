@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
@@ -43,7 +44,7 @@ func buildReadLiteralFullResponse(path, text string) ReadResponse {
 	resp := ReadResponse{
 		Path:       path,
 		Mode:       "content",
-		Content:    formatReadContent(page, 1),
+		Content:    hostmarker.FormatNumberedLines(page, 1),
 		TotalLines: totalLines,
 		Offset:     1,
 		Limit:      totalLines,

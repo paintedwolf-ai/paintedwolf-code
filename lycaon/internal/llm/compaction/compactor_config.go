@@ -50,6 +50,7 @@ type CompactionConfig struct {
 	SummaryOutputTokens              int    `yaml:"summary_output_tokens"`
 	MaxWorkerSummaryChars            int    `yaml:"max_worker_summary_chars"`
 	MaxCitationGroundingRetries      int    `yaml:"max_citation_grounding_retries"`
+	MaxWorkerGroundingRetries        int    `yaml:"max_worker_grounding_retries"`
 	MaxGroundingRejectsPerTurn       int    `yaml:"max_grounding_rejects_per_turn"`
 	MaxGroundingRejectsPerCycle      int    `yaml:"max_grounding_rejects_per_cycle"`
 	MaxToolTurnsAfterCitationReject  int    `yaml:"max_tool_turns_after_citation_reject"`
@@ -205,6 +206,9 @@ func NormalizeConfig(cfg CompactionConfig) (CompactionConfig, error) {
 	// ApplyLiveBudget fills an omitted worker summary cap from the live window.
 	if cfg.MaxCitationGroundingRetries <= 0 {
 		cfg.MaxCitationGroundingRetries = limits.DefaultCitationGroundingRetries
+	}
+	if cfg.MaxWorkerGroundingRetries <= 0 {
+		cfg.MaxWorkerGroundingRetries = limits.DefaultWorkerGroundingRetries
 	}
 	deriveTokenBudgets(&cfg)
 	if cfg.ModelContextWindow > 0 && cfg.HardCeilingPct > 0 {

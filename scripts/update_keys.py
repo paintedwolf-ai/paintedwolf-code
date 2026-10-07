@@ -1,4 +1,9 @@
-"""Signing generations and permanent bridge feed policy."""
+"""Signing generations and permanent bridge feed policy.
+
+Each generation carries two public keys. The artifact key signs release archives in the
+signing environment; the feed key signs channel pointers at publication time and never
+signs code. Clients embed both keys of their generation.
+"""
 from __future__ import annotations
 
 import base64
@@ -9,16 +14,26 @@ from pathlib import Path
 from release_semver import compare, parse
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "packaging/update-keys.json"
+GENERATION_FIELDS = {"generation", "public_key", "feed_public_key", "successor", "bridge_version"}
 
 
-def fingerprint(key: str) -> str:
+def decode_public_key(key: str) -> bytes:
     decoded = base64.b64decode(key, validate=True).decode("ascii").strip().splitlines()
     if len(decoded) != 2:
         raise ValueError("invalid updater public key document")
     raw = base64.b64decode(decoded[1], validate=True)
     if len(raw) != 42 or raw[:2] != b"Ed":
         raise ValueError("invalid updater public key")
-    return hashlib.sha256(raw).hexdigest()
+    return raw
+
+
+def fingerprint(key: str) -> str:
+    return hashlib.sha256(decode_public_key(key)).hexdigest()
+
+
+def key_id(key: str) -> bytes:
+    """The eight-byte minisign key id that every signature names."""
+    return decode_public_key(key)[2:10]
 
 
 def load_registry(path: Path = DEFAULT_REGISTRY) -> dict:
@@ -31,12 +46,13 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> dict:
     seen = set()
     prior_bridge = None
     for number, row in enumerate(rows, 1):
-        if set(row) != {"generation", "public_key", "successor", "bridge_version"} or row["generation"] != number:
+        if set(row) != GENERATION_FIELDS or row["generation"] != number:
             raise ValueError("key generations must be complete and ordered")
-        digest = fingerprint(row["public_key"])
-        if digest in seen:
-            raise ValueError("key generation reuses a public key")
-        seen.add(digest)
+        for field in ("public_key", "feed_public_key"):
+            digest = fingerprint(row[field])
+            if digest in seen:
+                raise ValueError("key generation reuses a public key")
+            seen.add(digest)
         if row["successor"] is None:
             if row["bridge_version"] is not None or number != len(rows):
                 raise ValueError("only the latest key generation may remain open")

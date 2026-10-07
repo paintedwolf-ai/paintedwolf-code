@@ -110,18 +110,18 @@ func TestTaskToolResumeOfUnknownChildRejects(t *testing.T) {
 	}
 }
 
-func TestTaskToolPlannedLegSuppliesOmittedFields(t *testing.T) {
+func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	var boundWorkID string
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Sessions: &fakeTaskSessions{}, Queue: &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-		PlannedLeg: func(_ context.Context, _ tools.ToolContext, workID string) (worker.PlannedLeg, bool, error) {
+		WorkflowWork: func(_ context.Context, _ string, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID != "leg-2" {
-				return worker.PlannedLeg{}, false, nil
+				return spawn.WorkflowWork{}, false, nil
 			}
-			return worker.PlannedLeg{
+			return spawn.WorkflowWork{
 				RunID: "run-1", Phase: "execute", AgentType: "repo-researcher",
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}, MaxToolLoops: 36,
 			}, true, nil
@@ -143,13 +143,14 @@ func TestTaskToolPlannedLegSuppliesOmittedFields(t *testing.T) {
 	}
 }
 
-// A resumed child keeps its planned leg only inside the run and phase that planned it.
-func TestTaskToolResumeKeepsItsLegOnlyInItsPhase(t *testing.T) {
+// A resumed child keeps its work identity only in the owning run and phase.
+func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
 	for _, tc := range []struct {
-		name, phase, wantWorkID string
+		name, phase, priorWorkID, wantWorkID string
 	}{
-		{"same phase", "execute", "leg-1"},
-		{"later phase", "challenge", ""},
+		{"same phase", "execute", "leg-1", "leg-1"},
+		{"review question", "execute", "question/c6", "question/c6"},
+		{"later phase", "challenge", "leg-1", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewDefaultRegistry()
@@ -157,13 +158,13 @@ func TestTaskToolResumeKeepsItsLegOnlyInItsPhase(t *testing.T) {
 			prior := &api.WorkerTask{
 				ID: "prior-job", ChildSessionID: "child-1", AgentType: "repo-researcher",
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}, WorkflowRunID: "run-1",
-				WorkflowPhase: "execute", WorkflowWorkID: "leg-1", MaxToolLoops: 12,
+				WorkflowPhase: "execute", WorkflowWorkID: tc.priorWorkID, MaxToolLoops: 12,
 			}
 			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 				Sessions: &fakeTaskSessions{}, Queue: &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
 				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-				PlannedLeg: func(context.Context, tools.ToolContext, string) (worker.PlannedLeg, bool, error) {
-					return worker.PlannedLeg{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
+				WorkflowWork: func(context.Context, string, string) (spawn.WorkflowWork, bool, error) {
+					return spawn.WorkflowWork{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
 				},
 				BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, workID string, _ *api.WorkerTask) error {
 					boundWorkID = workID

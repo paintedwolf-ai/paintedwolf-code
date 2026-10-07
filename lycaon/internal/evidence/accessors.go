@@ -286,3 +286,63 @@ func (rec *Record) addGrepLine(relPath string, line int, content string) {
 		rec.grepLines[relPath][line] = content
 	}
 }
+
+// LineRangesCover reports whether the line ranges in newRanges completely cover
+// all line ranges in oldRanges. An oldRanges slice with zero ranges counts as covered.
+func LineRangesCover(newRanges, oldRanges []LineRange) bool {
+	if len(oldRanges) == 0 {
+		return true
+	}
+	if len(newRanges) == 0 {
+		return false
+	}
+	mergedNew := mergeLineRanges(newRanges)
+	mergedOld := mergeLineRanges(oldRanges)
+	for _, o := range mergedOld {
+		covered := false
+		for _, n := range mergedNew {
+			if n.Start <= o.Start && n.End >= o.End {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeLineRanges(ranges []LineRange) []LineRange {
+	if len(ranges) <= 1 {
+		return append([]LineRange(nil), ranges...)
+	}
+	sorted := make([]LineRange, 0, len(ranges))
+	for _, r := range ranges {
+		if r.Start > 0 && r.End >= r.Start {
+			sorted = append(sorted, r)
+		}
+	}
+	if len(sorted) <= 1 {
+		return sorted
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Start == sorted[j].Start {
+			return sorted[i].End < sorted[j].End
+		}
+		return sorted[i].Start < sorted[j].Start
+	})
+	out := []LineRange{sorted[0]}
+	for _, next := range sorted[1:] {
+		last := &out[len(out)-1]
+		if next.Start <= last.End+1 {
+			if next.End > last.End {
+				last.End = next.End
+			}
+		} else {
+			out = append(out, next)
+		}
+	}
+	return out
+}
+

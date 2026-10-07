@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -45,13 +46,11 @@ func requiredVerdictFields(def workflowdef.ReviewLoopDef) []string {
 	return out
 }
 
-// VerdictClaim is one entry of a claims-typed verdict field. Each claim cites
-// the evidence that backs its statement, so the adjudication traces per claim.
-// A later phase that restates an earlier claim's id adjudicates it; Status is
-// one of the words that phase declared in claim_statuses.
+// VerdictClaim retains claim identity and cited evidence across review phases.
 type VerdictClaim struct {
-	ScanGroupIDs []string `json:"scan_group_ids,omitempty"`
-	ID           string   `json:"id"`
+	Question     *ReviewQuestion `json:"question,omitempty"`
+	ScanGroupIDs []string        `json:"scan_group_ids,omitempty"`
+	ID           string          `json:"id"`
 	// Title is the claim in one line; the phase that introduces a claim sets it.
 	Title     string `json:"title,omitempty"`
 	Statement string `json:"statement"`
@@ -65,15 +64,13 @@ type VerdictClaim struct {
 // maxClaimTitleRunes bounds a claim title to one line of a report table.
 const maxClaimTitleRunes = 120
 
-// VerdictRules are the run-dependent checks a verdict must also pass: which
-// claim ids earlier phases introduced, and the workflow's rating questions.
+// VerdictRules binds claim validation to run history and the declared rating.
 type VerdictRules struct {
 	KnownClaims map[string]bool
 	Brief       *workflowdef.Brief
 }
 
-// ParseVerdictClaims decodes every claims-typed verdict field. The submit
-// parser coerces array values to compact JSON, so claims arrive as JSON text.
+// ParseVerdictClaims decodes the stored JSON arrays for claim fields.
 func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) (map[string][]VerdictClaim, error) {
 	var out map[string][]VerdictClaim
 	for field, kind := range def.VerdictSchema {
@@ -96,7 +93,12 @@ func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string
 				ReviewLoopVerdictInvalidCode, field)
 		}
 		seen := map[string]struct{}{}
+		words := def.StatusWords()
 		for i, c := range claims {
+			if strings.TrimSpace(c.Status) == "" && len(words) == 1 {
+				// One declared status word is the only valid value.
+				claims[i].Status = words[0]
+			}
 			if strings.TrimSpace(c.ID) == "" || strings.TrimSpace(c.Statement) == "" {
 				return nil, fmt.Errorf("%s: verdict field %q claim %d requires id and statement",
 					ReviewLoopVerdictInvalidCode, field, i)
@@ -109,10 +111,6 @@ func ParseVerdictClaims(def workflowdef.ReviewLoopDef, verdict map[string]string
 			for j, ce := range c.CitedEvidence {
 				if strings.TrimSpace(ce.Handle) == "" && strings.TrimSpace(ce.Path) == "" {
 					return nil, fmt.Errorf("%s: verdict field %q claim %q cited_evidence[%d] requires handle or path",
-						ReviewLoopVerdictInvalidCode, field, c.ID, j)
-				}
-				if strings.TrimSpace(ce.Handle) != "" && strings.TrimSpace(ce.Path) != "" {
-					return nil, fmt.Errorf("%s: verdict field %q claim %q cited_evidence[%d] must use exactly one of handle or path",
 						ReviewLoopVerdictInvalidCode, field, c.ID, j)
 				}
 				if ce.Line < 0 || (ce.Line > 0 && strings.TrimSpace(ce.Path) == "") {
@@ -178,16 +176,16 @@ func ParseVerdictSetAsides(def workflowdef.ReviewLoopDef, verdict map[string]str
 // ValidateReviewLoopVerdict checks the declared verdict schema, then the
 // claims against the phase's statuses and the run's rules.
 func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string]string, rules VerdictRules) error {
+	var issues []error
 	enum := VerdictEnum(def)
-	if len(enum) == 0 {
-		return fmt.Errorf("%s: review_loop verdict_schema declares no verdict enum", ReviewLoopVerdictInvalidCode)
-	}
 	got := strings.TrimSpace(verdict[workflowdef.VerdictDecisionKey])
-	if got == "" {
-		return fmt.Errorf("%s: verdict is empty (want one of %s)", ReviewLoopVerdictInvalidCode, strings.Join(enum, "|"))
-	}
-	if !slices.Contains(enum, got) {
-		return fmt.Errorf("%s: verdict %q not in schema enum %s", ReviewLoopVerdictInvalidCode, got, strings.Join(enum, "|"))
+	switch {
+	case len(enum) == 0:
+		issues = append(issues, fmt.Errorf("%s: review_loop verdict_schema declares no verdict enum", ReviewLoopVerdictInvalidCode))
+	case got == "":
+		issues = append(issues, fmt.Errorf("%s: verdict is empty (want one of %s)", ReviewLoopVerdictInvalidCode, strings.Join(enum, "|")))
+	case !slices.Contains(enum, got):
+		issues = append(issues, fmt.Errorf("%s: verdict %q not in schema enum %s", ReviewLoopVerdictInvalidCode, got, strings.Join(enum, "|")))
 	}
 	var undeclared []string
 	for field := range verdict {
@@ -197,31 +195,38 @@ func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string
 	}
 	if len(undeclared) > 0 {
 		sort.Strings(undeclared)
-		return fmt.Errorf("%s: undeclared verdict field(s): %s", ReviewLoopVerdictInvalidCode, strings.Join(undeclared, ", "))
+		issues = append(issues, fmt.Errorf("%s: undeclared verdict field(s): %s", ReviewLoopVerdictInvalidCode, strings.Join(undeclared, ", ")))
 	}
 	for _, field := range requiredVerdictFields(def) {
 		if strings.TrimSpace(verdict[field]) == "" {
-			return fmt.Errorf("%s: required verdict field %q is empty", ReviewLoopVerdictInvalidCode, field)
+			issues = append(issues, fmt.Errorf("%s: required verdict field %q is empty", ReviewLoopVerdictInvalidCode, field))
 		}
 	}
 	if _, err := ParseVerdictSetAsides(def, verdict); err != nil {
-		return err
+		issues = append(issues, err)
+	}
+	if _, err := ParseVerdictCoverage(def, verdict); err != nil {
+		issues = append(issues, err)
 	}
 	byField, err := ParseVerdictClaims(def, verdict)
 	if err != nil {
-		return err
-	}
-	for _, field := range sortedClaimFields(byField) {
-		for _, c := range byField[field] {
-			if err := validateVerdictClaim(def, field, c, rules); err != nil {
-				return err
+		issues = append(issues, err)
+	} else {
+		for _, field := range sortedClaimFields(byField) {
+			for _, claim := range byField[field] {
+				if err := validateVerdictClaim(def, field, claim, rules); err != nil {
+					issues = append(issues, err)
+				}
 			}
 		}
 	}
-	return nil
+	return errors.Join(issues...)
 }
 
 func validateVerdictClaim(def workflowdef.ReviewLoopDef, field string, c VerdictClaim, rules VerdictRules) error {
+	if c.Question != nil && def.FollowupAttempts == 0 {
+		return fmt.Errorf("%s: this phase does not declare question follow-up", ReviewLoopVerdictInvalidCode)
+	}
 	status := strings.ToLower(strings.TrimSpace(c.Status))
 	if status == "" {
 		return fmt.Errorf("%s: verdict field %q claim %q requires status (one of %s)",
@@ -248,10 +253,7 @@ func validateVerdictClaim(def workflowdef.ReviewLoopDef, field string, c Verdict
 	return nil
 }
 
-// ReviewLoopVerdictTerminal reports whether a validated verdict is the terminal/passing
-// value (the first declared enum value) that satisfies the gate. A non-terminal verdict
-// (e.g. NEEDS_REVISION) re-loops the phase up to iteration_cap. Call only after
-// ValidateReviewLoopVerdict has passed.
+// The first declared decision value is terminal.
 func ReviewLoopVerdictTerminal(def workflowdef.ReviewLoopDef, verdict map[string]string) bool {
 	enum := VerdictEnum(def)
 	if len(enum) == 0 {

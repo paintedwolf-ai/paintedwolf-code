@@ -148,7 +148,13 @@ func typedCitationGrounded(projectDir string, cite TypedCitation, ev evidence.Le
 	}
 	if handle != "" {
 		if line > 0 || excerpt != "" {
-			return evidence.ExcerptMatchesHandle(ev, handle, line, excerpt)
+			p := path
+			if p == "" {
+				if rec, ok := evidence.ResolveHandle(ev, handle); ok {
+					p = rec.Path
+				}
+			}
+			return evidence.ExcerptMatchesHandle(ev, handle, p, line, excerpt)
 		}
 		_, ok := evidence.ResolveHandle(ev, handle)
 		return ok
