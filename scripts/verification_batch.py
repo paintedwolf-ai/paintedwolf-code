@@ -13,7 +13,7 @@ import uuid
 import verification_advisories as advisories
 from verification_history import estimate, read_history
 from verification_plan import compatibility, outcome_exit
-from verification_resources import blocked_reason, order_of
+from verification_resources import blocked_reason, foreground_git_environment, order_of
 from verification_health import annotate, identity, owner_identity, report
 from artifact_paths import artifact_root
 from verification_state import read_json, read_optional, write_json
@@ -166,7 +166,8 @@ def launch(queue, members, environment, lock_file):
         write_json(directory / "plan.json", {"batch": entry, "requests": members})
         for member in members:
             write_json(queue.root / (member["ticket"] + ".batch.json"), {"directory": str(directory), "ticket": ticket})
-        env = {**environment, "PW_TEST_EXECUTION_ROOT": str(queue.root), "PW_TEST_EXECUTION_TICKET": ticket}
+        env = foreground_git_environment(
+            {**environment, "PW_TEST_EXECUTION_ROOT": str(queue.root), "PW_TEST_EXECUTION_TICKET": ticket})
         options = {"start_new_session": True, "pass_fds": (lease.fileno(),)}
         with (directory / "batch.log").open("ab", buffering=0) as log:
             try:

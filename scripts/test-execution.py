@@ -17,8 +17,8 @@ import uuid
 
 from verification_advisories import admission_notice
 from verification_history import record_duration
-from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment, order_of,
-                                    worker_budget)
+from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment,
+                                    foreground_git_environment, order_of, worker_budget)
 from verification_health import identity, owner_identity, report, SAMPLE_SECONDS
 
 if os.name == "nt":
@@ -403,7 +403,7 @@ def run(queue, name, command, spec=EXCLUSIVE):
             lease.write()
         print(admission_notice(queue, queue.status(), name, reservation.entry), file=sys.stderr, flush=True)
         lease.acquire(reservation)
-        env = bounded_environment(os.environ, workers)
+        env = foreground_git_environment(bounded_environment(os.environ, workers))
         if "*" in reservation.entry["locks"]:
             # Cache eviction needs every other operation drained, which only exclusive admission ensures.
             from verification_cache import Maintenance
