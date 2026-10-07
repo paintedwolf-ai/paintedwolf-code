@@ -216,6 +216,7 @@ func (r *WarmRunner) historyRewarm(ctx context.Context, budget int) (spent int) 
 		fr := newFrontier(caps.TurnProbes, maxHitsPerHost)
 		fr.budget = min(caps.TurnProbes, budget-spent)
 		w.runWarmFrontier(ctx, crawler, fr, d, scorer)
+		crawler.wait()
 		w.index.SetWarmState(ctx, stateKey, time.Now().UTC().Format(time.RFC3339))
 		w.index.QueueActivity(ctx, webindex.WarmActivity{
 			Trigger: warmTriggerRewarm, Tier: warmTierCrawl, Topic: host,

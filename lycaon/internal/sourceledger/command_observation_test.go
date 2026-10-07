@@ -57,9 +57,9 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			if ctx.Err() != nil || time.Since(started) >= 2*budget {
 				t.Fatal("optional observation consumed the caller's execution lifetime")
 			}
-			// Timing out one observation must leave the store usable. Recovery gets
-			// the shipped budget and its own lifetime; a fresh inventory on a loaded
-			// host can outlast the shortened ones.
+			// Timing out one observation must leave the store usable. Recovery is a
+			// cold capture, so it runs under the production budget rather than the
+			// shortened one that only bounded the blocked wait.
 			release()
 			ledger.store.observationBudget = testutil.Timeout(commandObservationBudget)
 			revision, root := VerificationState(t.Context(), ledger.store, ledger.root)
